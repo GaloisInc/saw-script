@@ -1850,7 +1850,36 @@ importMatches sc env (C.Let decl : matches) =
 
 
 --------------------------------------------------------------------------------
--- Utilities
+-- Utilities:
+
+-- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
+--     if @mType == Just type'@ then ensure the following
+--         term :: type'
+checkSAWCoreTypeChecks :: (Show i) =>
+  SharedContext -> i -> Term -> Maybe Term -> IO ()
+checkSAWCoreTypeChecks sc ident term mType =
+  do let ident' = show ident
+     result <- SC.scTypeCheck sc Nothing term
+     case result of
+       Right ty1 ->
+         case mType of
+           Nothing  ->
+             pure ()
+           Just ty2 -> do
+             eq <- scConvertible sc True ty1 ty2
+             if eq then
+               pure ()
+             else
+               panic "checkSAWCoreTypeChecks"
+                 [ "Expected type does not match the inferred type:"
+                 , showTerm ty2
+                 ]
+       Left err ->
+           panic "checkSAWCoreTypeChecks"
+             [ "Internal type error when checking " ++ ident'
+             , unlines $ SC.prettyTCError err
+             ]
+
 
 -- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
@@ -1915,6 +1944,8 @@ scCryptolType sc t =
       SC.VRecursorType{} -> Nothing
       SC.VTyTerm{} -> Nothing
 
+--------------------------------------------------------------------------------
+-- exporting functions:
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
@@ -2000,6 +2031,8 @@ exportRecordValue fields v =
   where
     run = SC.runIdentity . force
 
+--------------------------------------------------------------------------------
+-- Supporting Nominal Types:
 
 -- | Generate functions, required by 'NominalType's, to be inserted into the
 --   term environment.
@@ -2295,6 +2328,7 @@ genCodeForEnum sc env nt ctors =
 
   return defn_eachCtor
 
+
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
 --   of the generated SAWCore ENUMNAME__case function to appropriate arguments.
 --
@@ -2407,6 +2441,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
 
   return caseExpr
 
+-- Shared naming cnoventions for Enum support:
+
 identOfEnumType :: C.Name -> Ident
 identOfEnumType nt = newIdent nt "__TY"
 
@@ -2420,33 +2456,3 @@ newIdent name suffix =
        -- FIXME: These generated definitions should not be added to the prelude but to
        --        the module where the Enum (or ...) is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
-
-
-
--- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
---     if @mType == Just type'@ then ensure the following
---         term :: type'
-checkSAWCoreTypeChecks :: (Show i) =>
-  SharedContext -> i -> Term -> Maybe Term -> IO ()
-checkSAWCoreTypeChecks sc ident term mType =
-  do let ident' = show ident
-     result <- SC.scTypeCheck sc Nothing term
-     case result of
-       Right ty1 ->
-         case mType of
-           Nothing  ->
-             pure ()
-           Just ty2 -> do
-             eq <- scConvertible sc True ty1 ty2
-             if eq then
-               pure ()
-             else
-               panic "checkSAWCoreTypeChecks"
-                 [ "Expected type does not match the inferred type:"
-                 , showTerm ty2
-                 ]
-       Left err ->
-           panic "checkSAWCoreTypeChecks"
-             [ "Internal type error when checking " ++ ident'
-             , unlines $ SC.prettyTCError err
-             ]
