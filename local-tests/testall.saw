@@ -1,9 +1,0 @@
-// testall.saw
-
-print "\n\n\nimport test3.cry ...";
-import "test3.cry";
-
-print  "\n\n\nimport test1.cry ...";
-import "test1.cry";
-
-// import "test2.cry";

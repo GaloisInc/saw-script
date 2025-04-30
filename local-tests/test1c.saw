@@ -1,4 +1,0 @@
-// test1c.saw
-
-print "\n\n\nimport test1c.cry ...";
-import "test1c.cry";
