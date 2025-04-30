@@ -11,6 +11,21 @@ Note that build.sh is in any case the recommended way to build.
 
 ## New Features
 
+* SAW now fully supports Cryptol enum definitions.
+  - Currently not implemented is a case default alternative where we
+    bind the whole scrutinee, such as this example:
+
+        case s of
+           C1 ... -> EXP1
+           y      -> EXP2 -- 'y' is free in EXP2
+
+    This, more conventional default alternative, *is* supported:
+
+        case s of
+           C1 ... -> EXP1
+           _      -> EXP2 -- '_' is not used.
+
+
 * SAW now ships with a `hie.yaml` file for haskell-language-server.
 
 * Add new SAWScript commands `term_eval` and `term_eval_unint`.
