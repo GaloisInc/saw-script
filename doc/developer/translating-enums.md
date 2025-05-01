@@ -2,8 +2,8 @@
 
 ## Finding the code
 
-The translation of Cryptol to SAWCore is in the [cryptol-saw-core package](cryptol-saw-core);
-and the core work of translation is in [this module](cryptol-saw-core/src/Verifier/SAW/Cryptol.hs).
+The translation of Cryptol to SAWCore is in the [cryptol-saw-core package](../../cryptol-saw-core);
+and the core work of translation is in [this module](../../cryptol-saw-core/src/Verifier/SAW/Cryptol.hs).
 
 The recent addition of translating Cryptol enum types into SAWCore is
 implemented in that file, two functions in particular:
@@ -121,19 +121,35 @@ arrowsType as b =
     as;
 ```    
     
-In the below, we'll be relying also on `TupleR` (not in the prelude)
-for defining a right-nested product:
+## Translating Enums, by Example.
+
+### NOTE: Representing Products: Abstraction and Representation
+
+In this document, we attempt to focus on the higher level view and not focus
+on the SAWCore API details.  However,
+ - In the SAWCore prelude, there is no representation for (sort 0
+   level) nested (n-ary) products (Tuples are represented as nested
+   pairs and are handled by the parser and primitives.)
+ - We have some abstractions for this in the SAWCore API (e.g., 
+   [SharedTerm.hs](../../saw-core/src/Verifier/SAW/SharedTerm.hs)):
+   - `scTuple`
+   - `scTupleType`
+   - `scTupleSelector` (represents the `tuple . 1` in the concrete syntax)
+
+So as to ignore the details  and allow us to write textual SAWCore in
+what follows, we act as if the following is defined for us. 
 
 ```
-TupleR : ListSort -> sort 0;
-TupleR = ListSort__rec
+TupleType : ListSort -> sort 0;
+TupleType = ListSort__rec
           (\ (_:ListSort) -> sort 0)
           UnitType
           (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (tp * rec));
 ```
 
-## Translating Enums, by Example.
+(In the implementation, it's more complicated, and it is inline, not added to the environment.)
+
 ### Representing Enums
 
 Here we show the translation, part by part.  We will display the
@@ -148,7 +164,7 @@ enum ETT as = C1
 ```
 
 We want an example with constructors of 0, 1, and 2+ arity; we also
-want it to be polymorphic.  `ETT` is similar to the example [here](intTests/test_cryptol_enums/Test2.cry).
+want it to be polymorphic.  `ETT` is similar to the example [here](../../intTests/test_cryptol_enums/Test2.cry).
 
 Because `ETT` is polymorphic over `as`, every definition here will
 also be polymorphic over `as`.  We will be representing the enumerated
@@ -169,9 +185,9 @@ you see the `(as : sort 0)` argument in **all** the above definitions.
 Next, the representation for each element of the sum will be a product:
 
 ```
-ETT__ArgType_C1 (as : sort 0) : sort 0 = TupleR (ETT__ArgType_C1_LS as);
-ETT__ArgType_C2 (as : sort 0) : sort 0 = TupleR (ETT__ArgType_C2_LS as);
-ETT__ArgType_C3 (as : sort 0) : sort 0 = TupleR (ETT__ArgType_C3_LS as);
+ETT__ArgType_C1 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C1_LS as);
+ETT__ArgType_C2 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C2_LS as);
+ETT__ArgType_C3 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C3_LS as);
 ```
 
 Now we can put the above representations into a list of types (`ListSort`):
@@ -256,23 +272,48 @@ We create an application of `ETT_case` to the proper arguments.
 See the code for the gory details, but a couple key things to note are
   * We must determine the type of the `scrutinee`: `ETT T1` 
   * We must determine the type of the whole expression, that is `B`
-This allows us to apply the type arguments for `ETT_case` giving this
+
+This allows us to apply the type arguments for `ETT_case` giving the following:
 
 ```
   ETT_case T1 B (FunsToCons B ...) scrutinee
 ```
-
-Creating the "deconstructing" function for each constructor is relatively straightforward.
 
 Handling defaults like
 
 ```
   case scrutinee  of
      C1     -> RHS1
-     _      -> RHS2
+     _      -> DFLT
 ```
 
-is a little tricky.  Due to the explicit types of SAWCore, we need to
-create custom versions of `RHS2` for each constructor that is
-"defaulted".  Refer to the `importCase` function defined
-[here](cryptol-saw-core/src/Verifier/SAW/Cryptol.hs).
+is a little tricky, we can view the translation of the above, as first translating
+away the defaults to the following:
+
+```
+  case scrutinee  of
+     C1     -> RHS1
+     C2 _   -> DFLT
+     C3 _ _ -> DFLT
+```
+
+And now we would translate the above into a SAWCore `ETT_Case` application that looks like:
+
+```
+  ETT_case 
+    T1                          -- type application, the instantiation of 'a1'
+    B                           -- type application, the result of the whole case
+    RHS1                        -- deconstructor for C1
+    (\(_: Nat)         -> DFLT) -- deconstructor for C2
+    (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
+                                --  - note the 'a1' has been instantiated to T1
+    scrutinee
+  
+``` 
+
+So, without some form of "case defaults" in SAWCore itself, it appears
+that we need to be duplicating code (not duplicating work) for `DFLT` in the various
+deconstructor functions that use `DFLT`.
+
+For further deatails, refer to the `importCase` function defined
+[here](../../cryptol-saw-core/src/Verifier/SAW/Cryptol.hs).
