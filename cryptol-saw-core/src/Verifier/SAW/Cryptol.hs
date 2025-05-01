@@ -43,7 +43,7 @@ module Verifier.SAW.Cryptol
 
   ) where
 
-import Control.Monad (foldM, forM, join, unless)
+import Control.Monad (foldM, forM, join, when, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -1845,30 +1845,38 @@ importMatches sc env (C.Let decl : matches) =
 --------------------------------------------------------------------------------
 -- Utilities:
 
--- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
+-- | assertSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
 --     if @mType == Just type'@ then ensure the following
 --         term :: type'
-checkSAWCoreTypeChecks :: Show i =>
-  SharedContext -> i -> Term -> Maybe Term -> IO ()
-checkSAWCoreTypeChecks sc ident term mType =
+--
+--   This code is used for sanity checks during code generation, like assert.
+--
+--   FIXME: Currently we have made parts of this function un-reachable to
+--     reduce the run-time impact of this check.  A better, long-term,
+--     project-wide solution would be desirable: how to dial up run-time checks for
+--     [integratino] tests, but dial down run-time checks for general use.
+--
+assertSAWCoreTypeChecks :: Show i => SharedContext -> i -> Term -> Maybe Term -> IO ()
+assertSAWCoreTypeChecks sc ident term mType =
   do let ident' = show ident
      result <- SC.scTypeCheck sc Nothing term
      case result of
        Right ty1 ->
-         case mType of
-           Nothing  ->
-             pure ()
-           Just ty2 -> do
-             eq <- scConvertible sc True ty1 ty2
-             if eq then
+           case mType of
+             Nothing  ->
                pure ()
-             else
-               panic "checkSAWCoreTypeChecks"
-                 [ "Expected type does not match the inferred type:"
-                 , showTerm ty2
-                 ]
+             Just ty2 ->
+               when False $
+                 -- N.B. currently unreachable to reduce run-time impact:
+                 do
+                 eq <- scConvertible sc True ty1 ty2
+                 unless eq $
+                   panic "assertSAWCoreTypeChecks"
+                     [ "Expected type does not match the inferred type:"
+                     , showTerm ty2
+                     ]
        Left err ->
-           panic "checkSAWCoreTypeChecks"
+           panic "assertSAWCoreTypeChecks"
              [ "Internal type error when checking " ++ ident'
              , unlines $ SC.prettyTCError err
              ]
@@ -2312,7 +2320,7 @@ genCodeForEnum sc env nt ctors =
 
   scInsertDef sc preludeName case_ident case_type case_rhs
 
-  checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
+  assertSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
 
   -------------------------------------------------------------
   -- There's a bit of 'tedium' in creating the constructors, let's look at our
@@ -2403,7 +2411,7 @@ genCodeForEnum sc env nt ctors =
                     =<< scLambdaList sc (zip paramNames argTypes)
                     =<< scNthInjection ctorNumber
                     =<< scTuple sc paramVars
-        checkSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
+        assertSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
         return (ctorName, ctorBody)
 
   return defn_eachCtor
