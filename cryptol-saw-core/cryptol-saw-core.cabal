@@ -36,6 +36,7 @@ library
     panic,
     sbv,
     template-haskell,
+    unordered-containers,
     text,
     vector,
 

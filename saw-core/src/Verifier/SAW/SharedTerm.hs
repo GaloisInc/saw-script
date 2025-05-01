@@ -263,6 +263,7 @@ module Verifier.SAW.SharedTerm
   , getAllExtSet
   , getConstantSet
   , scInstantiateExt
+  , scPiAbstractExts
   , scAbstractExts
   , scAbstractExtsEtaCollapse
   , scGeneralizeExts
@@ -714,7 +715,7 @@ scBuildCtor ::
   IO Ctor
 scBuildCtor sc d c arg_struct =
   do
-    -- Step 0: allocate a fresh unique varaible index for this constructor
+    -- Step 0: allocate a fresh unique variable index for this constructor
     -- and register its name in the naming environment
     varidx <- scFreshGlobalVar sc
     scRegisterName sc varidx (ModuleIdentifier c)
@@ -1574,16 +1575,21 @@ scConstant sc name rhs ty =
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
+-- FIXME: Regarding comments,
+--  - PROBLEM: the previous and the next function have the same
+--    exact documentation but slightly different types and
+--    implementations.
+--  - SOLUTION: rewrite doc to distinguish the two.
 
 -- | Create an abstract constant with the specified name, body, and
 -- type. The term for the body must not have any loose de Bruijn
 -- indices. If the body contains any ExtCns variables, they will be
 -- abstracted over and reapplied to the resulting constant.
 scConstant' :: SharedContext
-           -> NameInfo -- ^ The name
-           -> Term   -- ^ The body
-           -> Term   -- ^ The type
-           -> IO Term
+            -> NameInfo -- ^ The name
+            -> Term   -- ^ The body
+            -> Term   -- ^ The type
+            -> IO Term
 scConstant' sc nmi rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
@@ -2532,19 +2538,48 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     -- the ExtCns values that appear before it in the original list.
     loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
 
-    -- specical case: outermost variable, no need to abstract
+    -- special case: outermost variable, no need to abstract
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
          scLambda sc (toShortName (ecName ec)) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
-    -- before apply scLambda.  This ensures any dependenices between the
+    -- before apply scLambda.  This ensures any dependencies between the
     -- types are handled correctly.
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
          tp' <- scExtsToLocals sc begin (ecType ec)
          scLambda sc (toShortName (ecName ec)) tp' tm'
+
+    -- base case, convert all the exts in the body of x into deBruijn variables
+    loop [] = scExtsToLocals sc exts x
+
+
+-- | Abstract over the given list of external constants by wrapping
+--   the given term with lambdas and replacing the external constant
+--   occurrences with the appropriate local variables.
+scPiAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
+scPiAbstractExts _ [] x = return x
+scPiAbstractExts sc exts x = loop (zip (inits exts) exts)
+  where
+    -- each pair contains a single ExtCns and a list of all
+    -- the ExtCns values that appear before it in the original list.
+    loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
+
+    -- special case: outermost variable, no need to abstract
+    -- inside the type of ec
+    loop (([],ec):ecs) =
+      do tm' <- loop ecs
+         scPi sc (toShortName (ecName ec)) (ecType ec) tm'
+
+    -- ordinary case. We need to abstract over all the ExtCns in @begin@
+    -- before apply scLambda.  This ensures any dependencies between the
+    -- types are handled correctly.
+    loop ((begin,ec):ecs) =
+      do tm' <- loop ecs
+         tp' <- scExtsToLocals sc begin (ecType ec)
+         scPi sc (toShortName (ecName ec)) tp' tm'
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
@@ -2734,7 +2769,7 @@ scOpenTerm sc nm tp idx body = do
     body' <- instantiateVar sc idx ec_term body
     return (ec, body')
 
--- | `closeTerm closer sc ec body` replaces the external constant `ec` in `body` by
+-- | `closeTerm close sc ec body` replaces the external constant `ec` in `body` by
 --   a new deBruijn variable and binds it using the binding form given by 'close'.
 --   The name and type of the new bound variable are given by the name and type of `ec`.
 scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)

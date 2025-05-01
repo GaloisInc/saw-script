@@ -89,6 +89,10 @@ import qualified Verifier.SAW.TermNet as Net
 type DeBruijnIndex = Int
 type FieldName = Text
 type LocalName = Text
+  -- ^ 'LocalName' is used for pretty printing purposes, but does not affect the semantics of SAWCore terms,
+  -- rather, the 'DeBruijnIndex'-s are what is used to reference variables.
+  -- FIXME: Verify the above statement
+  -- FIXME: Possibly, change to a name that suggests this use.
 
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)

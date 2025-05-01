@@ -1821,8 +1821,14 @@ listSort_length = listSort_cases Nat
                     (\(_:sort 0) (_:ListSort) (n:Nat)-> Succ n);
 
 
+-- An if-then-else that tests if a ListSort is nil
+ifLSNil : (a : sort 1) -> ListSort -> a -> a -> a;
+ifLSNil a l x y =
+  ListSort__rec (\ (_:ListSort) -> a) x (\ (_:sort 0) (_:ListSort) (_:a) -> y) l;
+
+
 --------------------------------------------------------------------------------
--- Nested Either types
+-- FalseProp and Related
 
 -- The false proposition
 FalseProp : Prop;
@@ -1852,10 +1858,9 @@ efq1 a contra =
           (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
           () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
--- An if-then-else that tests if a ListSort is nil
-ifLSNil : (a : sort 1) -> ListSort -> a -> a -> a;
-ifLSNil a l x y =
-  ListSort__rec (\ (_:ListSort) -> a) x (\ (_:sort 0) (_:ListSort) (_:a) -> y) l;
+
+--------------------------------------------------------------------------------
+-- Nested Either types
 
 -- A right-nested sequence of Eithers, defined as
 --   Eithers [] = FalseProp
@@ -1915,6 +1920,32 @@ eithers a =
        (eiths:Eithers (LS_Cons tp (FunsToIns a elims))) ->
        eithers1 tp (FunsToIns a elims) a eiths f rec);
 
+-- EithersV (a simpler version of Eithers): A right-nested sequence of
+-- Either types, defined as
+--   EithersV [] = Void
+--   EithersV (tp:tps) = Either tp (EithersV tps)
+EithersV : ListSort -> sort 0;
+EithersV = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            Void
+            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (Either tp rec));
+
+-- An eliminator for the EithersV type
+eithersV : (a:sort 0) -> (es:FunsTo a) -> EithersV (FunsToIns a es) -> a;
+eithersV a =
+  FunsTo__rec
+    a
+    (\ (es: FunsTo a) -> EithersV (FunsToIns a es) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp : sort 0)                                     -- type arg
+       (f  : tp -> a)                                     --
+       (es : FunsTo a)                                    --
+       (rec: EithersV (FunsToIns a es) -> a)              -- P es
+    ->
+       -- P (FunsTo_Cons a tp f es):
+       either tp (EithersV (FunsToIns a es)) a f rec
+    );
 
 --------------------------------------------------------------------------------
 -- Nested Sigma types

@@ -1,0 +1,14 @@
+import "Test2.cry";
+
+print "cc3:";
+check_term {{ cc3 }};
+
+print "results1:";
+print  {{results1}};
+prove_print abc {{ results1 == ~zero}};
+
+print "results2:";
+print  {{results2}};
+prove_print abc {{ results2 == ~zero}};
+
+print "Done.";
