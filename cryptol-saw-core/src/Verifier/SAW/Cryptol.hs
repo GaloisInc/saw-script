@@ -87,7 +87,7 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.Utils.PP as PP
 import Cryptol.Utils.PP (pretty,pp,(<+>))
 
--- saw-core
+-- saw-core (pkg, AKA 'SAWCore'):
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
@@ -121,10 +121,13 @@ data Env = Env
               --   The actual class dictionary we need is obtained by applying the
               --   given field selectors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
-  , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
+  , envS :: [Term]                 -- ^ SAWCore bound variable environment (for type checking)
               -- FIXME: assuming this environment is to be indexed by De Bruijn indexes?
               -- FIXME: this field appears to be never read
               --   - verify and remove if so.
+              --   - guessing that this would be useful if we want to do a SAWCore type check
+              --     on an expression with free vars (which would be in this @envS@).
+              -- FIXME: if this remains, use Vector instead.
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
@@ -1038,7 +1041,7 @@ primeECPrims =
   , ("ec_twin_mult",   flip scGlobalDef "Cryptol.ec_twin_mult")
   ]
 
--- | Convert a Cryptol expression to a SAW-Core term. Calling
+-- | Convert a Cryptol expression to a SAWCore term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
 -- type that is equivalent (i.e. convertible) with the one returned by
 -- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
@@ -1242,7 +1245,7 @@ importExpr sc env expr =
 
 
 -- | Convert a Cryptol expression with the given type schema to a
--- SAW-Core term. Calling 'scTypeOf' on the result of @'importExpr''
+-- SAWCore term. Calling 'scTypeOf' on the result of @'importExpr''
 -- sc env schema expr@ must yield a type that is equivalent (i.e.
 -- convertible) with the one returned by @'importSchema' sc env
 -- schema@.
@@ -1707,7 +1710,7 @@ tNoUser initialTy =
 
 
 -- | Deconstruct a Cryptol tuple type as a pair according to the
--- saw-core tuple type encoding.
+-- SAWCore tuple type encoding.
 tIsPair :: C.Type -> Maybe (C.Type, C.Type)
 tIsPair t =
   do ts <- C.tIsTuple t
