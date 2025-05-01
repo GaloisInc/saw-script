@@ -8,7 +8,7 @@ and the core work of translation is in [this module](../../cryptol-saw-core/src/
 The recent addition of translating Cryptol enum types into SAWCore is
 implemented in that file, two functions in particular:
 
-  * When an enum declaration is seen, the function `genCodeForNominalTypes` is called which 
+  * When an enum declaration is seen, the function `genCodeForNominalTypes` is called which
     then calls `genCodeForEnum`.
 
   * When importing (translating) expressions with the function
@@ -32,7 +32,7 @@ genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 ```
 
-``` 
+```
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
 --   of the generated SAWCore ENUMNAME__case function to appropriate arguments.
 importCase ::
@@ -54,7 +54,7 @@ Here we capture the design principles and design decisions that the implementati
       improvement, as it gives us injective types (we won't have the
       possibility of two distinct enum types mapping to the same
       SAWCore representation).
-    
+
   * We prefer 1. over 2. over 3:
     1. Using code in the SAWCore prelude.
     2. Generating (type-correct, type-checked) code that is added to
@@ -76,7 +76,7 @@ data ListSort : sort 1
     LS_Nil : ListSort;
     LS_Cons : sort 0 -> ListSort -> ListSort;
   }
-  
+
 ```
 
 For which we also make use of
@@ -117,8 +117,8 @@ arrowsType as b =
   ListSort__rec (\ (_:ListSort) -> sort 0) b
     (\ (a:sort 0) (_:ListSort) (rec:sort 0) -> a -> rec)
     as;
-```    
-    
+```
+
 ## Translating Enums, by Example.
 
 ### NOTE: Representing Products: Abstraction and Representation
@@ -128,14 +128,14 @@ on the SAWCore API details.  However,
  - In the SAWCore prelude, there is no representation for (sort 0
    level) nested (n-ary) products (Tuples are represented as nested
    pairs and are handled by the parser and primitives.)
- - We have some abstractions for this in the SAWCore API (e.g., 
+ - We have some abstractions for this in the SAWCore API (e.g.,
    [SharedTerm.hs](../../saw-core/src/Verifier/SAW/SharedTerm.hs)):
    - `scTuple`
    - `scTupleType`
    - `scTupleSelector` (represents the `tuple . 1` in the concrete syntax)
 
 So as to ignore the details  and allow us to write textual SAWCore in
-what follows, we act as if the following is defined for us. 
+what follows, we act as if the following is defined for us.
 
 ```
 TupleType : ListSort -> sort 0;
@@ -156,45 +156,45 @@ SAWCore in its textual form.
 Here is the cryptol code for the `ETT` (Enum Test Type);
 
 ```
-enum ETT as = C1
+enum ETT ts = C1
             | C2 Nat
-            | C3 Bool as
+            | C3 Bool ts
 ```
 
 We want an example with constructors of 0, 1, and 2+ arity; we also
 want it to be polymorphic.  `ETT` is similar to the example [here](../../intTests/test_cryptol_enums/Test2.cry).
 
-Because `ETT` is polymorphic over `as`, every definition here will
-also be polymorphic over `as`.  We will be representing the enumerated
+Because `ETT` is polymorphic over `ts`, every definition here will
+also be polymorphic over `ts`.  We will be representing the enumerated
 type as---surprise, surprise---a sum of products.  So, first we define
 the three product types for the three constructors:
 
 
 ```
-ETT__ArgType_C1_LS (as : sort 0) : ListSort = LS_Nil;
-ETT__ArgType_C2_LS (as : sort 0) : ListSort = LS_Cons Nat LS_Nil;
-ETT__ArgType_C3_LS (as : sort 0) : ListSort = LS_Cons Bool (LS_Cons as LS_Nil);
+ETT__ArgType_C1_LS (ts : sort 0) : ListSort = LS_Nil;
+ETT__ArgType_C2_LS (ts : sort 0) : ListSort = LS_Cons Nat LS_Nil;
+ETT__ArgType_C3_LS (ts : sort 0) : ListSort = LS_Cons Bool (LS_Cons ts LS_Nil);
 ```
 
 Note that we don't distinguish constructors, every constructor is
 polymorphic on all the type variables in the *enum* definition. Thus
-you see the `(as : sort 0)` argument in **all** the above definitions.
+you see the `(ts : sort 0)` argument in **all** the above definitions.
 
 Next, the representation for each element of the sum will be a product:
 
 ```
-ETT__ArgType_C1 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C1_LS as);
-ETT__ArgType_C2 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C2_LS as);
-ETT__ArgType_C3 (as : sort 0) : sort 0 = TupleType (ETT__ArgType_C3_LS as);
+ETT__ArgType_C1 (ts : sort 0) : sort 0 = TupleType (ETT__ArgType_C1_LS ts);
+ETT__ArgType_C2 (ts : sort 0) : sort 0 = TupleType (ETT__ArgType_C2_LS ts);
+ETT__ArgType_C3 (ts : sort 0) : sort 0 = TupleType (ETT__ArgType_C3_LS ts);
 ```
 
 Now we can put the above representations into a list of types (`ListSort`):
 
 ```
 ETT__LS : sort 0 -> ListSort;
-ETT__LS as = LS_Cons    (ETT__ArgType_C1 as)
-              (LS_Cons  (ETT__ArgType_C2 as)
-               (LS_Cons (ETT__ArgType_C3 as)
+ETT__LS ts = LS_Cons    (ETT__ArgType_C1 ts)
+              (LS_Cons  (ETT__ArgType_C2 ts)
+               (LS_Cons (ETT__ArgType_C3 ts)
                  LS_Nil));
 ```
 
@@ -202,8 +202,8 @@ Now, we can define the SAWCore representation of `ETT` as a
 polymorphic Sum of Products thus:
 
 ```
-ETT : (as : sort 0) -> sort 0;
-ETT as = EithersV (ETT__LS as);
+ETT : (ts : sort 0) -> sort 0;
+ETT ts = EithersV (ETT__LS ts);
 ```
 
 ### Constructing Constructors
@@ -213,21 +213,21 @@ but it's still very tedious creating all the type arguments to pass.
 Note the structure of our three constructors:
 
 ```
-C1 : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
-C1 as x = Left (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+C1 : (ts : sort 0) -> listSortGet (ETT__LS ts) 0 -> ETT ts;
+C1 ts x = Left (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
                x;
 
-C2 : (as : sort 0) -> listSortGet (ETT__LS as) 1 -> ETT as;
-C2 as x =
-  Right (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
-  (Left (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+C2 : (ts : sort 0) -> listSortGet (ETT__LS ts) 1 -> ETT ts;
+C2 ts x =
+  Right (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
+  (Left (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
    x);
 
-C3 : (as : sort 0) -> listSortGet (ETT__LS as) 2 -> ETT as;
-C3 as x =
- Right   (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
-  (Right (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
-   (Left (listSortGet (ETT__LS as) 2) (EithersV (listSortDrop (ETT__LS as) 3))
+C3 : (ts : sort 0) -> listSortGet (ETT__LS ts) 2 -> ETT ts;
+C3 ts x =
+ Right   (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
+  (Right (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
+   (Left (listSortGet (ETT__LS ts) 2) (EithersV (listSortDrop (ETT__LS ts) 3))
    x));
 ```
 
@@ -236,26 +236,26 @@ C3 as x =
 Here is the definition of our function that implements `case` for `ETT`:
 
 ```
-ETT_case  : (as : sort 0)
+ETT_case  : (ts : sort 0)
          -> (b: sort 0)
-         -> (arrowsType (ETT__ArgType_C1_LS as) b)
-         -> (arrowsType (ETT__ArgType_C2_LS as) b)
-         -> (arrowsType (ETT__ArgType_C3_LS as) b)
-         -> ETT as
+         -> (arrowsType (ETT__ArgType_C1_LS ts) b)
+         -> (arrowsType (ETT__ArgType_C2_LS ts) b)
+         -> (arrowsType (ETT__ArgType_C3_LS ts) b)
+         -> ETT ts
          -> b;
 
-ETT_case as b f1 f2 f3 =
+ETT_case ts b f1 f2 f3 =
   eithersV b
-    (FunsTo_Cons b (ETT__ArgType_C1 as) (\(x: ETT__ArgType_C1 as) -> f1)
-    (FunsTo_Cons b (ETT__ArgType_C2 as) (\(x: ETT__ArgType_C2 as) -> f2 x.1)
-    (FunsTo_Cons b (ETT__ArgType_C3 as) (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2)
+    (FunsTo_Cons b (ETT__ArgType_C1 ts) (\(x: ETT__ArgType_C1 ts) -> f1)
+    (FunsTo_Cons b (ETT__ArgType_C2 ts) (\(x: ETT__ArgType_C2 ts) -> f2 x.1)
+    (FunsTo_Cons b (ETT__ArgType_C3 ts) (\(x: ETT__ArgType_C3 ts) -> f3 x.1 x.2)
     (FunsTo_Nil b))));
 ```
 
 See the prelude for details of `FunsTo(FunsTo_Cons,FunsTo_Nil)`.  But
 hopefully this is generally clear from the above defininition.
 Note that this definition is polymorphic on `b`, the result of the
-case expression, as well as on `as` the type arguments of `ETT`.
+case expression, as well as on `ts` the type arguments of `ETT`.
 
 ### Translating Crytpol `case` expressions to SAWCore `ETT_case` applications
 
@@ -268,7 +268,7 @@ For a given case in an Expression,
 ```
 We create an application of `ETT_case` to the proper arguments.
 See the code for the gory details, but a couple key things to note are
-  * We must determine the type of the `scrutinee`: `ETT T1` 
+  * We must determine the type of the `scrutinee`: `ETT T1`
   * We must determine the type of the whole expression, that is `B`
 
 This allows us to apply the type arguments for `ETT_case` giving the following:
@@ -298,7 +298,7 @@ away the defaults to the following:
 And now we would translate the above into a SAWCore `ETT_Case` application that looks like:
 
 ```
-  ETT_case 
+  ETT_case
     T1                          -- type application, the instantiation of 'a1'
     B                           -- type application, the result of the whole case
     RHS1                        -- deconstructor for C1
@@ -306,8 +306,8 @@ And now we would translate the above into a SAWCore `ETT_Case` application that 
     (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
                                 --  - note the 'a1' has been instantiated to T1
     scrutinee
-  
-``` 
+
+```
 
 So, without some form of "case defaults" in SAWCore itself, it appears
 that we need to be duplicating code (not duplicating work) for `DFLT` in the various

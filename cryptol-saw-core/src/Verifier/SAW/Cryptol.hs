@@ -2122,9 +2122,9 @@ genCodeForNominalTypes sc nominalMap env0 =
 --      example there is what is used below to explain the below code
 --      by SAWCore examples.  The running example we use is
 --
---      > enum ETT as = C1
+--      > enum ETT ts = C1
 --      >             | C2 Nat
---      >             | C3 Bool as
+--      >             | C3 Bool ts
 --
 --   FIXME: the uses of 'preludeName' should all be removed and new
 --     definitions should be added to the module name being processed.
@@ -2143,7 +2143,7 @@ genCodeForEnum sc env nt ctors =
   -- Common code to handle type parameters of the nominal type:
   --  - ExtCns are used to capture each of the type variables.
 
-  -- The type parameters (`as` in the example above)
+  -- The type parameters (`ts` in the example above)
   let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
 
@@ -2208,9 +2208,9 @@ genCodeForEnum sc env nt ctors =
   -- SAWCore environment:
   --
   --   > ETT__LS : sort 0 -> ListSort;
-  --   > ETT__LS as = LS_Cons     (scTupleType [])
+  --   > ETT__LS ts = LS_Cons     (scTupleType [])
   --   >               (LS_Cons  (scTupleType [Nat])
-  --   >                (LS_Cons (scTupleType [Bool,as])
+  --   >                (LS_Cons (scTupleType [Bool,ts])
   --   >                  LS_Nil));
 
   --  cheating a little in the above syntax.
@@ -2219,7 +2219,7 @@ genCodeForEnum sc env nt ctors =
 
   -- argTypes_eachCtor is the sum of products matrix for our enum type:
   (argTypes_eachCtor :: [[Term]]) <-
-    -- add tyParamsInfo to env as it is needed to allow `importType`
+    -- add tyParamsInfo to the env as it is needed to allow `importType`
     -- to work:
     do
     env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
@@ -2244,8 +2244,8 @@ genCodeForEnum sc env nt ctors =
   -- Create the definition for the SAWCore sum (to which we map the
   -- enum type).  For the running example we would see this:
   --
-  -- > ETT : (as : sort 0) -> sort 0;
-  -- > ETT as = EithersV (ETT__LS as);
+  -- > ETT : (ts : sort 0) -> sort 0;
+  -- > ETT ts = EithersV (ETT__LS ts);
   --
 
   -- the Typelist(tl) applied to the [free] type arguments.
@@ -2260,18 +2260,18 @@ genCodeForEnum sc env nt ctors =
   -- Create a `case` function specialized to the enum type.
   -- For the running example, we will define this:
   --
-  --   > ETT_case  : (as : sort 0)
+  --   > ETT_case  : (ts : sort 0)
   --   >          -> (b: sort 0)
   --   >          -> (arrowsType []        b)
   --   >          -> (arrowsType [Nat]     b)
-  --   >          -> (arrowsType [Bool,as] b)
-  --   >          -> ETT as
+  --   >          -> (arrowsType [Bool,ts] b)
+  --   >          -> ETT ts
   --   >          -> b;
-  --   > ETT_case as b f1 f2 f3 =
+  --   > ETT_case ts b f1 f2 f3 =
   --   >   eithersV b
-  --   >     (FunsTo_Cons b (ETT__ArgType_C1 as) (\(x: scTupleType []       ) -> f1)
-  --   >     (FunsTo_Cons b (ETT__ArgType_C2 as) (\(x: scTupleType [Nat]    ) -> f2 x.1)
-  --   >     (FunsTo_Cons b (ETT__ArgType_C3 as) (\(x: scTupleType [Bool,as]) -> f3 x.1 x.2)
+  --   >     (FunsTo_Cons b (ETT__ArgType_C1 ts) (\(x: scTupleType []       ) -> f1)
+  --   >     (FunsTo_Cons b (ETT__ArgType_C2 ts) (\(x: scTupleType [Nat]    ) -> f2 x.1)
+  --   >     (FunsTo_Cons b (ETT__ArgType_C3 ts) (\(x: scTupleType [Bool,ts]) -> f3 x.1 x.2)
   --   >     (FunsTo_Nil b))));
   --
   -- Using the same syntax cheats we did above.
@@ -2330,27 +2330,27 @@ genCodeForEnum sc env nt ctors =
   -- running example, the SAWCore constructors we want are these:
   --
   --   > ```
-  --   > C1 : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
-  --   > C1 as x =
-  --   >   Left (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  --   > C1 : (ts : sort 0) -> listSortGet (ETT__LS ts) 0 -> ETT ts;
+  --   > C1 ts x =
+  --   >   Left (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
   --   >        x;
   --   >
-  --   > C2 : (as : sort 0) -> listSortGet (ETT__LS as) 1 -> ETT as;
-  --   > C2 as x =
-  --   >   Right (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
-  --   >   (Left (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+  --   > C2 : (ts : sort 0) -> listSortGet (ETT__LS ts) 1 -> ETT ts;
+  --   > C2 ts x =
+  --   >   Right (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
+  --   >   (Left (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
   --   >    x);
   --   >
-  --   > C3 : (as : sort 0) -> listSortGet (ETT__LS as) 2 -> ETT as;
-  --   > C3 as x =
-  --   >  Right   (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
-  --   >   (Right (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
-  --   >    (Left (listSortGet (ETT__LS as) 2) (EithersV (listSortDrop (ETT__LS as) 3))
+  --   > C3 : (ts : sort 0) -> listSortGet (ETT__LS ts) 2 -> ETT ts;
+  --   > C3 ts x =
+  --   >  Right   (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
+  --   >   (Right (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
+  --   >    (Left (listSortGet (ETT__LS ts) 2) (EithersV (listSortDrop (ETT__LS ts) 3))
   --   >    x));
   --   > ```
   --
   -- One can see that we try to encapsulate all the enum specific data in the
-  -- @ETT__LS as@ structure.
+  -- @ETT__LS ts@ structure.
 
 
 -------------------------------------------------------------
