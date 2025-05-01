@@ -28,7 +28,217 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module SAWCentral.Value where
+module SAWCentral.Value (
+    Value(..),
+
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
+    SAWSimpset,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    SAWRefnset,
+    -- used by SAWCentral.Builtins
+    AIGNetwork(..),
+    -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
+    --    SAWScript.Interpreter and more, SAWServer.SAWServer
+    AIGProxy(..),
+    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.HeapsterBuiltins
+    SAW_CFG(..),
+    -- used by SAWScript.Interpreter, SAWScript.HeapsterBuiltins,
+    --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
+    BuiltinContext(..),
+    -- used by SAWScript.HeapsterBuiltins
+    HeapsterEnv(..), (and the Value type)
+    -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
+    SatResult(..),
+    -- used by SAWScript.Interpreter
+    isVUnit,
+    -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
+    showsProofResult,
+    -- used by SAWCentral.Builtins
+    showsSatResult,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    showsPrecValue,
+    -- used by SAWScript.Interpreter
+    -- XXX: name overlaps with unrelated fn from Data.Parameterized.Nonce
+    --      and should be changed
+    indexValue,
+    -- used by SAWScript.Interpreter
+    lookupValue,
+    -- used by SAWScript.Interpreter
+    tupleLookupValue,
+    -- XXX rename to evaluateTerm
+    evaluate,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    evaluateTypedTerm,
+    -- used by SAWScript.Interpreter
+    toplevelCallCC,
+    -- used by SAWScript.Interpreter
+    toplevelSubshell,
+    -- used by SAWScript.Interpreter
+    proofScriptSubshell,
+    -- used by SAWCentral.Builtins
+    applyValue,
+    -- XXX apparently unused
+    thenValue,
+    -- used by SAWScript.Interpreter
+    bindValue,
+    -- used by SAWScript.Interpreter
+    forValue,
+    -- used by SAWScript.Interpreter
+    LocalBinding(..),
+    -- used by SAWScript.Interpreter
+    LocalEnv,
+    -- used by SAWScript.Interpreter
+    emptyLocal,
+    -- used by SAWScript.Interpreter
+    extendLocal,
+    -- used by SAWScript.Interpreter
+    addTypedef,
+    -- used by SAWScript.REPL.Monad
+    mergeLocalEnv,
+    -- used by SAWCentral.Crucible.LLVM.FFI (XXX: alas), SAWCentral.Builtins,
+    --   SAWScript.Interpreter
+    getMergedEnv,
+    -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
+    --    SAWServer.SAWServer
+    TopLevelRO(..),
+    -- used by ... a lot of places, let's not try to make a list just yet
+    TopLevelRW(..),
+    -- used by ... a lot of places, let's not try to make a list just yet
+    TopLevel(..),
+    -- used by SAWCentral.Builtins, SAWScript.REPL.Monad, SAWScript.Interpreter,
+    --    SAWServer.TopLevel
+    runTopLevel,
+    -- used by SAWScript.Interpreter
+    bracketTopLevel,
+    -- used by ... a lot of places, let's not try to make a list just yet
+    io,
+    -- unused but that probably won't stay that way
+    TopLevelCheckpoint(..),
+    -- used by SAWScript.REPL.Monad
+    makeCheckpoint,
+    -- used by SAWScript.REPL.Monad
+    restoreCheckpoint,
+    -- used by SAWScript.Interpreter
+    checkpoint,
+    -- used by SAWScript.Interpreter
+    proof_checkpoint,
+    -- used in various places in SAWCentral
+    throwTopLevel,
+    -- used by SAWScript.Interpreter plus locally
+    withPosition,
+    -- used by SAWScript.Interpreter and locally in topLevelSubshell
+    withLocalEnv,
+    -- used locally in proofScriptSubshell
+    withLocalEnvProof,
+    -- used by SAWScript.Interpreter plus locally
+    getLocalEnv,
+    -- used in various places in SAWCentral
+    getPosition,
+    -- used all over the place
+    getSharedContext,
+    -- used in SAWCentral.Crucible.JVM.Builtins{,JVM} and SAWScript.AutoMatch
+    getJavaCodebase,
+    -- used in SAWCentral.Builtins
+    getTheoremDB,
+    -- used in SAWCentral.Builtins
+    putTheoremDB,
+    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+    getOptions,
+    -- used in SAWCentral.Prover.Exporter, SAWCentral.Builtins
+    getProxy,
+    -- used in SAWCentral.Crucible.LLVM.{X86,Builtins}
+    getBasicSS,
+    -- used in SAWScript.Interpreter
+    localOptions,
+    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+    printOutLnTop,
+    -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
+    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+    getHandleAlloc,
+    -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
+    -- also accessible via SAWCentral.TopLevel
+    getTopLevelRO,
+    -- used in SAWCentral.Crucible.*.Builtins.hs, SAWCentral.Crucible.X86,
+    --    SAWCentral.Bisimulation, SAWCentral.Builtins,
+    --    SAWScript.Interpreter, SAWScript.AutoMatch,
+    --    SAWServer.Yosys
+    getTopLevelRW,
+    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.LLVM.Builtins,
+    --    SAWCentral.Builtins, SAWScript.Interpreter
+    putTopLevelRW,
+    -- used in various places in SAWCentral
+    returnProof,
+    -- used in various places in SAWCentral
+    recordProof,
+    -- used in SAWCentral.Builtins, SAWScript.Interpreter
+    onSolverCache,
+    -- used by SAWCentral.Crucible.JVM.Builtins*
+    getJVMTrans,
+    -- used by SAWCentral.Crucible.JVM.Builtins*
+    putJVMTrans,
+    -- XXX: apparently unused
+    addJVMTrans,
+    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.Interpreter
+    --    ... the use in LLVM is the abusive insertion done by llvm_compositional_extract
+    --    XXX: we're going to need to clean that up
+    extendEnv,
+    -- used by various places in SAWCentral.Crucible, SAWCentral.Builtins
+    --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
+    CrucibleSetup,
+    -- used in SAWCentral.Crucible.LLVM.*,
+    --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
+    LLVMCrucibleSetupM(..),
+    -- used in SAWCentral.Crucible.*.Builtins
+    throwCrucibleSetup,
+    -- used in SAWCentral.Crucible.LLVM.Skeleton.Builtins,
+    --    SAWCentral.Crucible.LLVM.FFI
+    throwLLVMFun,
+    -- used in SAWCentral.Crucible.*.Builtins, SAWCentral.Builtins
+    getW4Position,
+    -- used by SAWServer.SAWServer, SAWServer.JVMVerify, SAWScript.Interpreter
+    JVMSetup,
+    -- used by SAWCentral.Crucible.JVM.Builtins,
+    --    SAWServer.SAWServer, SAWServer.JVMCrucibleSetup
+    JVMSetupM(..),
+    -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
+    --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
+    MIRSetup,
+    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
+    MIRSetupM(..),
+    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+    --    SAWCentral.Crucible.Common.Vacuity,
+    --    SAWCentral.Bisimulation, SAWCentral.Yosys, SAWCentral.Builtins
+    --    SAWScript.REPL.Monad, SAWScript.Typechecker, SAWScript.Interpreter,
+    --    SAWServer.SAWServer, SAWServer.ProofScript, SAWServer.*Verify,
+    --    SAWServer.VerifyCommon, SAWServer.Yosys, saw-remote-api Main
+    ProofScript(..),
+    -- used by SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+    --    SAWCentral.Crucible.Common.Vacuity,
+    --    SAWCentral.Bisimulation, SAWCentral.Builtins
+    runProofScript,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    scriptTopLevel,
+    -- used by SAWScript.REPL.Monad, SAWScript.Interpreter,
+    --    SAWServer.TopLevel, SAWServer.Eval
+    IsValue(..),
+    -- used by SAWCentral.Builtins,
+    --    SAWScript.Interpreter,
+    --    SAWServer.TopLevel, SAWServer.Eval
+    FromValue(..),
+    -- used in SAWScript.Interpreter
+    -- XXX: probably belongs in SAWSupport
+    underStateT,
+    -- used only locally
+    -- XXX: probably belongs in SAWSupport
+    --underReaderT,
+    -- used in SAWScript.Interpreter
+    -- XXX: probably belongs in SAWSupport
+    underExceptT,
+    -- used in SAWScript.Interpreter
+    addTrace,
+    -- used by SAWCentral.Crucible.LLVM.Skeleton.Builtins
+    SkeletonState(..), skelArgs
+ ) where
 
 import Prelude hiding (fail)
 
