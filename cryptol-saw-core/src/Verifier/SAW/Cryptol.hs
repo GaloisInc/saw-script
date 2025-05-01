@@ -1997,7 +1997,7 @@ exportValue ty v = case ty of
   TV.TVNominal _ _ fields ->
     case fields of
       TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
-      TV.TVEnum {}     -> error "exportValue: TODO enum"
+      TV.TVEnum {}     -> error ("exportValue: TODO enum: " ++ show v)
       TV.TVAbstract {} -> error "exportValue: TODO abstract types"
 
 
@@ -2349,7 +2349,7 @@ genCodeForEnum sc env nt ctors =
       do
       -- Create needed SawCore types for the Left/Right constructors
       -- (each Either in the nested Either's needs a pair of types):
-      tps <- forM [0 .. numCtors-1] $ \i->
+      tps <- Vector.generateM numCtors $ \i->
                do
                typeLeft  <- do
                             n <- scNat sc (fromIntegral i)
@@ -2369,12 +2369,12 @@ genCodeForEnum sc env nt ctors =
         scInjectRight :: Int -> Term -> IO Term
         scInjectRight n x | n < 0     = return x
                           | otherwise = do
-                              y <- scRight (fst (tps!!n)) (snd (tps!!n)) x
+                              y <- scRight (fst (tps Vector.! n)) (snd (tps Vector.! n)) x
                               scInjectRight (n-1) y
 
         scNthInjection :: Int -> Term -> IO Term
         scNthInjection n x = do
-                             y <- scLeft (fst (tps!!n)) (snd (tps!!n)) x
+                             y <- scLeft (fst (tps Vector.! n)) (snd (tps Vector.! n)) x
                              scInjectRight (n-1) y
 
       return scNthInjection
