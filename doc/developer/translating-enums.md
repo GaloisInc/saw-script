@@ -29,7 +29,6 @@ Snippits of these are here:
 --          used by other generated sawcore code, so we don't need to
 --          return this information back to the Cryptol environment(s).
 genCodeForEnum ::
-  (HasCallStack) =>
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 ```
 
@@ -37,7 +36,6 @@ genCodeForEnum ::
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
 --   of the generated SAWCore ENUMNAME__case function to appropriate arguments.
 importCase ::
-  (HasCallStack) =>
   SharedContext -> Env ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
 ```

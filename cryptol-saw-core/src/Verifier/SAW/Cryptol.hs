@@ -2506,11 +2506,36 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               , show $ PP.ppList $ map PP.pp (map fst nts)
               ]
 
-  -- now create one alternative ( 'CaseAlt') for each ctor:
+  -- now create one alternative ('CaseAlt') for each ctor:
   alts <- forM ctors $ \ctor->
             case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
               Just a  -> return a
               Nothing -> useDefaultAlt ctor
+
+  {- |
+  What we just did is, in terms of the running ETT example above, this:
+
+  Given this Cryptol
+    > case scrutinee  of
+    >   C1     -> RHS1
+    >   _      -> DFLT
+  we transform it into this Cryptol
+    > case scrutinee  of
+    >   C1     -> RHS1
+    >   C2 _   -> DFLT
+    >   C3 _ _ -> DFLT
+
+  And what we will do next is transform this last into this SAWCore:
+
+    > ETT_case
+    >   T1                          -- type application, the instantiation of 'a1'
+    >   B                           -- type application, the result of the whole case
+    >   RHS1                        -- deconstructor for C1
+    >   (\(_: Nat)         -> DFLT) -- deconstructor for C2
+    >   (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
+    >                               --  - note the 'a1' has been instantiated to T1
+    >   scrutinee
+  -}
 
   -- translate each CaseAlt into a Cryptol function:
   let funcs = map (\(C.CaseAlt as body)->
