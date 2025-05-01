@@ -2541,8 +2541,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
   -}
 
   -- translate each CaseAlt into a Cryptol function:
-  let funcs = map (\(C.CaseAlt as body)->
-                      foldr (\(n,t) e-> C.EAbs n t e) body as)
+  let funcs = map (\(C.CaseAlt xs body)->
+                      foldr (\(n,t) e-> C.EAbs n t e) body xs)
                   alts
 
   -- the Cryptol to SAWCore translations:
