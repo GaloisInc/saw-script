@@ -1706,7 +1706,7 @@ tNoUser initialTy =
     t -> t
 
 
--- | Deconstruct a cryptol tuple type as a pair according to the
+-- | Deconstruct a Cryptol tuple type as a pair according to the
 -- saw-core tuple type encoding.
 tIsPair :: C.Type -> Maybe (C.Type, C.Type)
 tIsPair t =
@@ -2099,17 +2099,17 @@ genCodeForNominalTypes sc nominalMap env0 =
 --    - This action does two things
 --       1. Returns the names & definitions of the constructors of the enum.
 --          This fits with the code for other nominals, needed because
---          the "rest" of cryptol code to be translated needs to see the
+--          the "rest" of Cryptol code to be translated needs to see the
 --          constructors in the Cryptol environments.
 --       2. It adds many other definitions to the SAWCore environment
 --          (in the sc :: SharedContext).  These definitions are only
---          used by other generated sawcore code, so we don't need to
+--          used by other generated SAWCore code, so we don't need to
 --          return this information back to the Cryptol environment(s).
 --
 --    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
 --      description of this translation at a more abstract level.  The
 --      example there is what is used below to explain the below code
---      by SawCore examples.  The running example we use is
+--      by SAWCore examples.  The running example we use is
 --
 --      > enum ETT as = C1
 --      >             | C2 Nat
@@ -2203,7 +2203,7 @@ genCodeForEnum sc env nt ctors =
   --   >                  LS_Nil));
 
   --  cheating a little in the above syntax.
-  --   - scTupleType is not sawcore, it represents what's created with `scTupleType' function
+  --   - scTupleType is not SAWCore, it represents what's created with `scTupleType' function
   --   - using list syntax for the ListSort lists that are the arguments to the above.
 
   -- argTypes_eachCtor is the sum of products matrix for our enum type:
@@ -2347,7 +2347,7 @@ genCodeForEnum sc env nt ctors =
 
   scNthInjection <-
       do
-      -- Create needed SawCore types for the Left/Right constructors
+      -- Create needed SAWCore types for the Left/Right constructors
       -- (each Either in the nested Either's needs a pair of types):
       tps <- Vector.generateM numCtors $ \i->
                do
