@@ -1575,7 +1575,11 @@ scConstant sc name rhs ty =
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
--- FIXME:MT:doc: prev & next have same doc, but slightly diff type & implem.
+-- FIXME: Regarding comments,
+--  - PROBLEM: the previous and the next function have the same
+--    exact documentation but slightly different types and
+--    implementations.
+--  - SOLUTION: rewrite doc to distinguish the two.
 
 -- | Create an abstract constant with the specified name, body, and
 -- type. The term for the body must not have any loose de Bruijn

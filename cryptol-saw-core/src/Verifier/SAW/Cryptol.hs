@@ -43,7 +43,7 @@ module Verifier.SAW.Cryptol
 
   ) where
 
-import Control.Monad (foldM, join, unless)
+import Control.Monad (foldM, forM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -85,7 +85,7 @@ import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.Utils.PP as PP
-import Cryptol.Utils.PP (pretty)
+import Cryptol.Utils.PP (pretty,pp,(<+>))
 
 -- saw-core
 import qualified Verifier.SAW.Simulator.Concrete as SC
@@ -292,7 +292,7 @@ importPC sc pc =
     C.PValidFloat      -> panic "importPC PValidFloat" []
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
-importType :: (HasCallStack) => SharedContext -> Env -> C.Type -> IO Term
+importType :: HasCallStack => SharedContext -> Env -> C.Type -> IO Term
 importType sc env ty =
   case ty of
     C.TVar tvar ->
@@ -302,10 +302,8 @@ importType sc env ty =
                          Just (t, j) -> incVars sc 0 j t
                          Nothing ->
                            panic
-                             ("importType TVBound: TV '"
-                              ++ pretty v
-                              ++"' is not in type environment")
-                             [show v]
+                             "importType TVBound"
+                             [show $ "TV" <+> PP.quotes (pp v) <+> "is not in type environment"]
     C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
@@ -1044,7 +1042,7 @@ primeECPrims =
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
 -- type that is equivalent (i.e. convertible) with the one returned by
 -- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
-importExpr :: (HasCallStack) => SharedContext -> Env -> C.Expr -> IO Term
+importExpr :: HasCallStack => SharedContext -> Env -> C.Expr -> IO Term
 importExpr sc env expr =
   case expr of
     C.EList es t ->
@@ -1252,7 +1250,7 @@ importExpr sc env expr =
 -- Essentially, this function should be used when the expression's type is known
 -- (such as with a type annotation), and 'importExpr' should be used when the
 -- type must be inferred.
-importExpr' :: (HasCallStack) => SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
+importExpr' :: HasCallStack => SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
     C.ETuple es ->
@@ -1321,9 +1319,7 @@ importExpr' sc env schema expr =
     C.ELocated _ e ->
       importExpr' sc env schema e
 
-    C.ECase {} -> fallback
-                  -- FIXME: Not sure using fallback is correct here.
-
+    C.ECase     {} -> fallback
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
     C.ESet      {} -> fallback
@@ -1707,8 +1703,6 @@ tNoUser initialTy =
         if null params then C.TRec (C.ntFields fs)
                        else panic "tNoUser" ["Nominal type with parameters"]
                         -- XXX: We should instantiate, see #2019
-                        -- XXX: What about Enums?
-                        --   Which also have type params, #2019 again.
     t -> t
 
 
@@ -1854,7 +1848,7 @@ importMatches sc env (C.Let decl : matches) =
 -- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
 --     if @mType == Just type'@ then ensure the following
 --         term :: type'
-checkSAWCoreTypeChecks :: (Show i) =>
+checkSAWCoreTypeChecks :: Show i =>
   SharedContext -> i -> Term -> Maybe Term -> IO ()
 checkSAWCoreTypeChecks sc ident term mType =
   do let ident' = show ident
@@ -2039,17 +2033,17 @@ exportRecordValue fields v =
 --   - For 'C.Struct', make identity functions that take the record which
 --     the newtype wraps.
 --
---   - For 'C.Abstract', no functions need be produced.
+--   - For 'C.Abstract', no functions need to be produced.
 --
---   - 'C.Enum' will will create these definitions
+--   - 'C.Enum' will will create these definitions:
 --     - multiple constructor functions (added to Cryptol Env)
---     - a number of 'internal' only SAWCore definitions
+--     - a number of 'internal' only SAWCore definitions:
 --       - case function for the type (not used directly by Cryptol code).
 --       - multiple definitions that define the Enum's representation
 --         type in SAWCore
 
 genCodeForNominalTypes ::
-  (HasCallStack) =>
+  HasCallStack =>
   SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genCodeForNominalTypes sc nominalMap env0 =
   foldM updateEnvForNominal env0 nominalMap
@@ -2104,10 +2098,9 @@ genCodeForNominalTypes sc nominalMap env0 =
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
 --       1. Returns the names & definitions of the constructors of the enum.
---          This fit with the code for other nominals, needed because
+--          This fits with the code for other nominals, needed because
 --          the "rest" of cryptol code to be translated needs to see the
---          onstructors in the Cryptol environments.
---
+--          constructors in the Cryptol environments.
 --       2. It adds many other definitions to the SAWCore environment
 --          (in the sc :: SharedContext).  These definitions are only
 --          used by other generated sawcore code, so we don't need to
@@ -2128,7 +2121,7 @@ genCodeForNominalTypes sc nominalMap env0 =
 --     resolve.)
 --
 genCodeForEnum ::
-  (HasCallStack) =>
+  HasCallStack =>
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt ctors =
   do
@@ -2139,14 +2132,15 @@ genCodeForEnum sc env nt ctors =
   -- Common code to handle type parameters of the nominal type:
   --  - ExtCns are used to capture each of the type variables.
 
+  -- The type parameters (`as` in the example above)
   let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
 
   -- | the kinds of the type Params:
-  tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
+  tyParamsKinds <- forM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
   -- | the type Params captured using ExtCns:
-  tyParamsECs   <- flip mapM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
+  tyParamsECs   <- forM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
                    scFreshEC sc nm k
   -- | create references to the type Params:
   tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
@@ -2210,15 +2204,15 @@ genCodeForEnum sc env nt ctors =
 
   --  cheating a little in the above syntax.
   --   - scTupleType is not sawcore, it represents what's created with `scTupleType' function
-  --   - using list syntax for th ListSort lists that are the arguments to the above.
+  --   - using list syntax for the ListSort lists that are the arguments to the above.
 
-  -- argTypes_eachCtor is the sum of products matrix for our enumtype:
+  -- argTypes_eachCtor is the sum of products matrix for our enum type:
   (argTypes_eachCtor :: [[Term]]) <-
     -- add tyParamsInfo to env as it is needed to allow `importType`
     -- to work:
     do
     env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
-    flip mapM ctors $ \c->
+    forM ctors $ \c->
       mapM (\t-> do
               t' <- importType sc env' t
                 -- here ^, type params are De Bruijn's
@@ -2228,7 +2222,7 @@ genCodeForEnum sc env nt ctors =
            (C.ecFields c)
 
   -- map the list of types to the product type:
-  represType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
+  represType_eachCtor <- forM argTypes_eachCtor $ \ts ->
                            scTupleType sc ts
 
   tl_rhs   <- addTypeAbstractions =<< scMakeListSort represType_eachCtor
@@ -2301,11 +2295,11 @@ genCodeForEnum sc env nt ctors =
 
       let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
       funcTypes <- mkAltFuncTypes b
-      funcDefs  <- flip mapM (zip3 funcVars represType_eachCtor ctors) $
+      funcDefs  <- forM (zip3 funcVars represType_eachCtor ctors) $
                      \(funcVar,ty,ctor) ->
                          do
                          let n = length (C.ecFields ctor)
-                         funcArgs <- flip mapM [1..n] $ \i->
+                         funcArgs <- forM [1..n] $ \i->
                                        scTupleSelector sc x i n
                          body <- scApplyAll sc funcVar funcArgs
                          scLambda sc "x" ty body
@@ -2355,7 +2349,7 @@ genCodeForEnum sc env nt ctors =
       do
       -- Create needed SawCore types for the Left/Right constructors
       -- (each Either in the nested Either's needs a pair of types):
-      tps <- flip mapM [0 .. numCtors-1] $ \i->
+      tps <- forM [0 .. numCtors-1] $ \i->
                do
                typeLeft  <- do
                             n <- scNat sc (fromIntegral i)
@@ -2388,7 +2382,7 @@ genCodeForEnum sc env nt ctors =
   -------------------------------------------------------------
   -- Create the definition for each constructor:
   defn_eachCtor <-
-    flip mapM (zip argTypes_eachCtor ctors) $
+    forM (zip argTypes_eachCtor ctors) $
         \(argTypes, ctor)->
         do
         let
@@ -2424,22 +2418,22 @@ genCodeForEnum sc env nt ctors =
 --
 --       >  case S of
 --       >    C1 ... -> E
---       >    y      -> E[y]  -- y == S   <- NOT IMPLEMD YET
+--       >    y      -> E[y]  -- y == S   <- NOT IMPLEMENTED YET
 --
 importCase ::
-  (HasCallStack) =>
+  HasCallStack =>
   SharedContext -> Env ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
 importCase sc env b scrutinee altsMap mDfltAlt =
   do
   let scrutineeTy = fastTypeOf (envC env) scrutinee
   (nm,ctors,tyParams,tyArgs) <- case scrutineeTy of
-      C.TNominal (NominalType {ntName=nm, ntParams=tyParams, ntDef=C.Enum ctors})
-                 tyArgs ->
+      (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))
+        ->
           return (nm,ctors,tyParams,tyArgs)
       _ ->
           panic "importCase"
-            [ "`case` expression scrutinee does not have an Enum type"
+            [ "`case` expression scrutinee is not an Enum type"
             , pretty scrutineeTy
             ]
 
@@ -2458,7 +2452,7 @@ importCase sc env b scrutinee altsMap mDfltAlt =
       --     (the code cannot be shared as the arity and types for each constructor
       --     will be different).
 
-      useDefaultAlt :: (HasCallStack) => C.EnumCon -> IO C.CaseAlt
+      useDefaultAlt :: HasCallStack => C.EnumCon -> IO C.CaseAlt
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase"
@@ -2505,7 +2499,7 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               ]
 
   -- now create one alternative ( 'CaseAlt') for each ctor:
-  alts <- flip mapM ctors $ \ctor->
+  alts <- forM ctors $ \ctor->
             case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
               Just a  -> return a
               Nothing -> useDefaultAlt ctor

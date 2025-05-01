@@ -11,8 +11,9 @@ Note that build.sh is in any case the recommended way to build.
 
 ## New Features
 
-* SAW now fully supports Cryptol enum definitions.
-  - Currently not implemented is a case default alternative where we
+* SAW now supports importing Cryptol code that uses enums.
+
+  - One missing feature is supporting case default alternatives where we
     bind the whole scrutinee, such as this example:
 
         case s of
@@ -25,6 +26,7 @@ Note that build.sh is in any case the recommended way to build.
            C1 ... -> EXP1
            _      -> EXP2 -- '_' is not used.
 
+    And case expressions that don't need a default case are supported.
 
 * SAW now ships with a `hie.yaml` file for haskell-language-server.
 
