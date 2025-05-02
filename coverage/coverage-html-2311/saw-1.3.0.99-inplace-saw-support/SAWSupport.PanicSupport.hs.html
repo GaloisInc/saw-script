@@ -139,7 +139,7 @@ span.spaces    { background: white }
 <span class="lineno">  120 </span>--
 <span class="lineno">  121 </span>--   The argument of the constructor is the component name to use
 <span class="lineno">  122 </span>--   with the panic message.
-<span class="lineno">  123 </span>data SAWPanic = SAWPanic Text
+<span class="lineno">  123 </span>newtype SAWPanic = SAWPanic Text
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>-- | Trigger a panic. This is called by each library's panic function;
 <span class="lineno">  126 </span>--   the first argument should be the component name, and the second
