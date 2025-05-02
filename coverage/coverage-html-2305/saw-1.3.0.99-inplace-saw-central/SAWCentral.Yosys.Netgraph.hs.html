@@ -1,0 +1,289 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Yosys.Netgraph
+<span class="lineno">    3 </span>Description : Translating graphs of Yosys cells into SAWCore
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : sbreese
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# Language TemplateHaskell #-}
+<span class="lineno">   10 </span>{-# Language OverloadedStrings #-}
+<span class="lineno">   11 </span>{-# Language RecordWildCards #-}
+<span class="lineno">   12 </span>{-# Language ViewPatterns #-}
+<span class="lineno">   13 </span>{-# Language LambdaCase #-}
+<span class="lineno">   14 </span>{-# Language MultiWayIf #-}
+<span class="lineno">   15 </span>{-# Language TupleSections #-}
+<span class="lineno">   16 </span>{-# Language ScopedTypeVariables #-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCentral.Yosys.Netgraph where
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import Control.Lens.TH (makeLenses)
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import Control.Lens (at, (^.))
+<span class="lineno">   23 </span>import Control.Monad (forM, foldM)
+<span class="lineno">   24 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   25 </span>import Control.Exception (throw)
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import qualified Data.Maybe as Maybe
+<span class="lineno">   28 </span>import qualified Data.List as List
+<span class="lineno">   29 </span>import Data.Map (Map)
+<span class="lineno">   30 </span>import qualified Data.Map as Map
+<span class="lineno">   31 </span>import Data.Text (Text)
+<span class="lineno">   32 </span>import qualified Data.Text as Text
+<span class="lineno">   33 </span>import qualified Data.Graph as Graph
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>import qualified SAWCore.SharedTerm as SC
+<span class="lineno">   36 </span>import qualified SAWCore.Name as SC
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import qualified Cryptol.TypeCheck.Type as C
+<span class="lineno">   39 </span>import qualified Cryptol.Utils.Ident as C
+<span class="lineno">   40 </span>import qualified Cryptol.Utils.RecordMap as C
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import SAWCentral.Yosys.Utils
+<span class="lineno">   43 </span>import SAWCentral.Yosys.IR
+<span class="lineno">   44 </span>import SAWCentral.Yosys.Cell
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>cellToEdges :: (Ord b, Eq b) =&gt; Cell [b] -&gt; [(b, [b])]
+<span class="lineno">   47 </span><span class="decl"><span class="nottickedoff">cellToEdges c = (, inputBits) &lt;$&gt; outputBits</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="nottickedoff">inputBits = List.nub . mconcat . Map.elems $ cellInputConnections c</span>
+<span class="lineno">   50 </span><span class="spaces">    </span><span class="nottickedoff">outputBits = List.nub . mconcat . Map.elems $ cellOutputConnections c</span></span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>--------------------------------------------------------------------------------
+<span class="lineno">   53 </span>-- ** Building a network graph from a Yosys module
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>data Netgraph b = Netgraph
+<span class="lineno">   56 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netgraphGraph</span></span></span> :: Graph.Graph
+<span class="lineno">   57 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_netgraphNodeFromVertex</span></span></span> :: Graph.Vertex -&gt; ((Text, Cell [b]), b, [b])
+<span class="lineno">   58 </span>  -- , _netgraphVertexFromKey :: Bitrep -&gt; Maybe Graph.Vertex
+<span class="lineno">   59 </span>  }
+<span class="lineno">   60 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''Netgraph</span></span></span></span></span></span></span></span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>moduleNetgraph :: Module -&gt; Netgraph Bitrep
+<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">moduleNetgraph m =</span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="istickedoff">bitsFromInputPorts :: [Bitrep]</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">bitsFromInputPorts = (&lt;&gt; [BitrepZero, BitrepOne])</span>
+<span class="lineno">   67 </span><span class="spaces">      </span><span class="istickedoff">. List.nub</span>
+<span class="lineno">   68 </span><span class="spaces">      </span><span class="istickedoff">. mconcat</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="istickedoff">( \(_, p) -&gt;</span>
+<span class="lineno">   71 </span><span class="spaces">          </span><span class="istickedoff">case p ^. portDirection of</span>
+<span class="lineno">   72 </span><span class="spaces">            </span><span class="istickedoff">DirectionInput -&gt; Just $ p ^. portBits</span>
+<span class="lineno">   73 </span><span class="spaces">            </span><span class="istickedoff">DirectionInout -&gt; <span class="nottickedoff">Just $ p ^. portBits</span></span>
+<span class="lineno">   74 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">   75 </span><span class="spaces">      </span><span class="istickedoff">)</span>
+<span class="lineno">   76 </span><span class="spaces">      </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">   77 </span><span class="spaces">      </span><span class="istickedoff">$ m ^. modulePorts --</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">cellToNodes :: (Text, Cell [Bitrep]) -&gt; [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]</span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff">cellToNodes (nm, c)</span>
+<span class="lineno">   80 </span><span class="spaces">      </span><span class="istickedoff">| c ^. cellType == CellTypeDff = ((nm, c), , []) &lt;$&gt; outputBits</span>
+<span class="lineno">   81 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlyfalse">c ^. cellType == CellTypeFf</span> = <span class="nottickedoff">((nm, c), , []) &lt;$&gt; outputBits</span></span>
+<span class="lineno">   82 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = ((<span class="nottickedoff">nm</span>, c), , inputBits) &lt;$&gt; outputBits</span>
+<span class="lineno">   83 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">   84 </span><span class="spaces">        </span><span class="istickedoff">inputBits :: [Bitrep]</span>
+<span class="lineno">   85 </span><span class="spaces">        </span><span class="istickedoff">inputBits =</span>
+<span class="lineno">   86 </span><span class="spaces">          </span><span class="istickedoff">filter (not . flip elem bitsFromInputPorts)</span>
+<span class="lineno">   87 </span><span class="spaces">          </span><span class="istickedoff">. List.nub</span>
+<span class="lineno">   88 </span><span class="spaces">          </span><span class="istickedoff">. mconcat</span>
+<span class="lineno">   89 </span><span class="spaces">          </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">   90 </span><span class="spaces">          </span><span class="istickedoff">( \(p, bits) -&gt;</span>
+<span class="lineno">   91 </span><span class="spaces">              </span><span class="istickedoff">case c ^. cellPortDirections . at p of</span>
+<span class="lineno">   92 </span><span class="spaces">                </span><span class="istickedoff">Just DirectionInput -&gt; Just bits</span>
+<span class="lineno">   93 </span><span class="spaces">                </span><span class="istickedoff">Just DirectionInout -&gt; <span class="nottickedoff">Just bits</span></span>
+<span class="lineno">   94 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">   95 </span><span class="spaces">          </span><span class="istickedoff">)</span>
+<span class="lineno">   96 </span><span class="spaces">          </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">   97 </span><span class="spaces">          </span><span class="istickedoff">$ c ^. cellConnections</span>
+<span class="lineno">   98 </span><span class="spaces">        </span><span class="istickedoff">outputBits :: [Bitrep]</span>
+<span class="lineno">   99 </span><span class="spaces">        </span><span class="istickedoff">outputBits = List.nub</span>
+<span class="lineno">  100 </span><span class="spaces">          </span><span class="istickedoff">. mconcat</span>
+<span class="lineno">  101 </span><span class="spaces">          </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">  102 </span><span class="spaces">          </span><span class="istickedoff">( \(p, bits) -&gt;</span>
+<span class="lineno">  103 </span><span class="spaces">              </span><span class="istickedoff">case c ^. cellPortDirections . at p of</span>
+<span class="lineno">  104 </span><span class="spaces">                </span><span class="istickedoff">Just DirectionOutput -&gt; Just bits</span>
+<span class="lineno">  105 </span><span class="spaces">                </span><span class="istickedoff">Just DirectionInout -&gt; <span class="nottickedoff">Just bits</span></span>
+<span class="lineno">  106 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  107 </span><span class="spaces">          </span><span class="istickedoff">)</span>
+<span class="lineno">  108 </span><span class="spaces">          </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">  109 </span><span class="spaces">          </span><span class="istickedoff">$ c ^. cellConnections</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">nodes = concatMap cellToNodes . Map.assocs $ m ^. moduleCells</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">(_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey)</span>
+<span class="lineno">  112 </span><span class="spaces">      </span><span class="istickedoff">= Graph.graphFromEdges nodes</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">in Netgraph{..}</span></span>
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>--------------------------------------------------------------------------------
+<span class="lineno">  116 </span>-- ** Building a SAWCore term from a network graph
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>data ConvertedModule = ConvertedModule
+<span class="lineno">  119 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_convertedModuleTerm</span></span></span> :: SC.Term
+<span class="lineno">  120 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_convertedModuleType</span></span></span> :: SC.Term
+<span class="lineno">  121 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_convertedModuleCryptolType</span></span></span> :: C.Type
+<span class="lineno">  122 </span>  }
+<span class="lineno">  123 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''ConvertedModule</span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>lookupPatternTerm ::
+<span class="lineno">  126 </span>  (MonadIO m, Ord b, Show b) =&gt;
+<span class="lineno">  127 </span>  SC.SharedContext -&gt;
+<span class="lineno">  128 </span>  YosysBitvecConsumer -&gt;
+<span class="lineno">  129 </span>  [b] -&gt;
+<span class="lineno">  130 </span>  Map [b] SC.Term -&gt;
+<span class="lineno">  131 </span>  m SC.Term
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">lookupPatternTerm sc loc pat ts =</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup pat ts of</span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">Just t -&gt; pure t</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff">one &lt;- liftIO $ SC.scNat sc 1</span>
+<span class="lineno">  137 </span><span class="spaces">      </span><span class="istickedoff">boolty &lt;- liftIO $ SC.scBoolType sc</span>
+<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff">many &lt;- liftIO . SC.scNat sc . fromIntegral $ length pat</span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">onety &lt;- liftIO $ SC.scBitvector sc 1</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">bits &lt;- forM pat $ \b -&gt; do</span>
+<span class="lineno">  141 </span><span class="spaces">        </span><span class="istickedoff">case Map.lookup [b] ts of</span>
+<span class="lineno">  142 </span><span class="spaces">          </span><span class="istickedoff">Just t -&gt; pure t</span>
+<span class="lineno">  143 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc</span></span>
+<span class="lineno">  144 </span><span class="spaces">      </span><span class="istickedoff">vecBits &lt;- liftIO $ SC.scVector sc onety bits</span>
+<span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">liftIO $ SC.scJoin sc many one boolty vecBits</span></span>
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>-- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
+<span class="lineno">  148 </span>-- generated from the rest of the netgraph.
+<span class="lineno">  149 </span>netgraphToTerms ::
+<span class="lineno">  150 </span>  (MonadIO m, Ord b, Show b) =&gt;
+<span class="lineno">  151 </span>  SC.SharedContext -&gt;
+<span class="lineno">  152 </span>  Map Text ConvertedModule -&gt;
+<span class="lineno">  153 </span>  Netgraph b -&gt;
+<span class="lineno">  154 </span>  Map [b] SC.Term -&gt;
+<span class="lineno">  155 </span>  m (Map [b] SC.Term)
+<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">netgraphToTerms sc env ng inputs</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)</span></span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do</span></span>
+<span class="lineno">  159 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throw $ YosysError &quot;Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit&quot;</span></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = do</span>
+<span class="lineno">  161 </span><span class="spaces">      </span><span class="istickedoff">let sorted = reverseTopSort $ ng ^. netgraphGraph</span>
+<span class="lineno">  162 </span><span class="spaces">      </span><span class="istickedoff">foldM</span>
+<span class="lineno">  163 </span><span class="spaces">        </span><span class="istickedoff">( \acc v -&gt; do</span>
+<span class="lineno">  164 </span><span class="spaces">            </span><span class="istickedoff">let ((cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v</span>
+<span class="lineno">  165 </span><span class="spaces">            </span><span class="istickedoff">let outputFields = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span>
+<span class="lineno">  166 </span><span class="spaces">            </span><span class="istickedoff">if</span>
+<span class="lineno">  167 </span><span class="spaces">              </span><span class="istickedoff">-- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state</span>
+<span class="lineno">  168 </span><span class="spaces">              </span><span class="istickedoff">| c ^. cellType == CellTypeDff</span>
+<span class="lineno">  169 </span><span class="spaces">              </span><span class="istickedoff">, Just dffout &lt;- Map.lookup &quot;Q&quot; $ c ^. cellConnections -&gt; do</span>
+<span class="lineno">  170 </span><span class="spaces">                  </span><span class="istickedoff">r &lt;- lookupPatternTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(YosysBitvecConsumerCell cnm &quot;Q&quot;)</span> dffout acc</span>
+<span class="lineno">  171 </span><span class="spaces">                  </span><span class="istickedoff">ts &lt;- deriveTermsByIndices sc dffout r</span>
+<span class="lineno">  172 </span><span class="spaces">                  </span><span class="istickedoff">pure $ Map.union ts acc</span>
+<span class="lineno">  173 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlyfalse">c ^. cellType == CellTypeFf</span></span>
+<span class="lineno">  174 </span><span class="spaces">              </span><span class="istickedoff">, Just ffout &lt;- <span class="nottickedoff">Map.lookup &quot;Q&quot; $ c ^. cellConnections</span> -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  175 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">r &lt;- lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;Q&quot;) ffout acc</span></span>
+<span class="lineno">  176 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">ts &lt;- deriveTermsByIndices sc ffout r</span></span>
+<span class="lineno">  177 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure $ Map.union ts acc</span></span>
+<span class="lineno">  178 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
+<span class="lineno">  179 </span><span class="spaces">                  </span><span class="istickedoff">args &lt;- fmap Map.fromList . forM (Map.assocs $ cellInputConnections c) $ \(inm, i) -&gt; do -- for each input bit pattern</span>
+<span class="lineno">  180 </span><span class="spaces">                    </span><span class="istickedoff">-- if we can find that pattern exactly, great! use that term</span>
+<span class="lineno">  181 </span><span class="spaces">                    </span><span class="istickedoff">-- otherwise, find each individual bit and append the terms</span>
+<span class="lineno">  182 </span><span class="spaces">                    </span><span class="istickedoff">(inm,) &lt;$&gt; lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerCell cnm inm)</span> i acc</span>
+<span class="lineno">  183 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  184 </span><span class="spaces">                  </span><span class="istickedoff">r &lt;- primCellToTerm sc c args &gt;&gt;= \case</span>
+<span class="lineno">  185 </span><span class="spaces">                    </span><span class="istickedoff">Just r -&gt; pure r</span>
+<span class="lineno">  186 </span><span class="spaces">                    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  187 </span><span class="spaces">                      </span><span class="istickedoff">let submoduleName = asUserType $ c ^. cellType in</span>
+<span class="lineno">  188 </span><span class="spaces">                      </span><span class="istickedoff">case Map.lookup submoduleName env of</span>
+<span class="lineno">  189 </span><span class="spaces">                        </span><span class="istickedoff">Just cm -&gt; do</span>
+<span class="lineno">  190 </span><span class="spaces">                          </span><span class="istickedoff">r &lt;- cryptolRecord sc args</span>
+<span class="lineno">  191 </span><span class="spaces">                          </span><span class="istickedoff">liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r</span>
+<span class="lineno">  192 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  193 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">throw $ YosysErrorNoSuchSubmodule  submoduleName cnm</span></span>
+<span class="lineno">  194 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  195 </span><span class="spaces">                  </span><span class="istickedoff">-- once we've built a term, insert it along with each of its bits</span>
+<span class="lineno">  196 </span><span class="spaces">                  </span><span class="istickedoff">ts &lt;- forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -&gt; do</span>
+<span class="lineno">  197 </span><span class="spaces">                    </span><span class="istickedoff">t &lt;- cryptolRecordSelect sc outputFields r o</span>
+<span class="lineno">  198 </span><span class="spaces">                    </span><span class="istickedoff">deriveTermsByIndices sc out t</span>
+<span class="lineno">  199 </span><span class="spaces">                  </span><span class="istickedoff">pure $ Map.union (Map.unions ts) acc</span>
+<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">)</span>
+<span class="lineno">  201 </span><span class="spaces">        </span><span class="istickedoff">inputs</span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">sorted</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>convertModule ::
+<span class="lineno">  205 </span>  MonadIO m =&gt;
+<span class="lineno">  206 </span>  SC.SharedContext -&gt;
+<span class="lineno">  207 </span>  Map Text ConvertedModule -&gt;
+<span class="lineno">  208 </span>  Module -&gt;
+<span class="lineno">  209 </span>  m ConvertedModule
+<span class="lineno">  210 </span><span class="decl"><span class="istickedoff">convertModule sc env m = do</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">let ng = moduleNetgraph m</span>
+<span class="lineno">  212 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">let inputPorts = moduleInputPorts m</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="istickedoff">let outputPorts = moduleOutputPorts m</span>
+<span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">inputFields &lt;- forM inputPorts</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">(\inp -&gt; do</span>
+<span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff">liftIO . SC.scBitvector sc . fromIntegral $ length inp</span>
+<span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">)</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">outputFields &lt;- forM outputPorts</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">(\out -&gt; do</span>
+<span class="lineno">  222 </span><span class="spaces">        </span><span class="istickedoff">liftIO . SC.scBitvector sc . fromIntegral $ length out</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">)</span>
+<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">inputRecordType &lt;- cryptolRecordType sc inputFields</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">outputRecordType &lt;- cryptolRecordType sc outputFields</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">inputRecordEC &lt;- liftIO $ SC.scFreshEC sc &quot;input&quot; inputRecordType</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">inputRecord &lt;- liftIO $ SC.scExtCns sc inputRecordEC</span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">derivedInputs &lt;- forM (Map.assocs inputPorts) $ \(nm, inp) -&gt; do</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">deriveTermsByIndices sc inp t</span>
+<span class="lineno">  232 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">zeroTerm &lt;- liftIO $ SC.scBvConst sc 1 0</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">oneTerm &lt;- liftIO $ SC.scBvConst sc 1 1</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">oneBitType &lt;- liftIO $ SC.scBitvector sc 1</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="istickedoff">xMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read X bit&quot;</span>
+<span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">xTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, xMsg]</span>
+<span class="lineno">  238 </span><span class="spaces">  </span><span class="istickedoff">zMsg &lt;- liftIO $ SC.scString sc &quot;Attempted to read Z bit&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">zTerm &lt;- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName &quot;error&quot;) [oneBitType, zMsg]</span>
+<span class="lineno">  240 </span><span class="spaces">  </span><span class="istickedoff">let inputs = Map.unions $ mconcat</span>
+<span class="lineno">  241 </span><span class="spaces">        </span><span class="istickedoff">[ [ Map.fromList</span>
+<span class="lineno">  242 </span><span class="spaces">            </span><span class="istickedoff">[ ( [BitrepZero], zeroTerm)</span>
+<span class="lineno">  243 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepOne], <span class="nottickedoff">oneTerm</span> )</span>
+<span class="lineno">  244 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepX], <span class="nottickedoff">xTerm</span> )</span>
+<span class="lineno">  245 </span><span class="spaces">            </span><span class="istickedoff">, ( [BitrepZ], <span class="nottickedoff">zTerm</span> )</span>
+<span class="lineno">  246 </span><span class="spaces">            </span><span class="istickedoff">]</span>
+<span class="lineno">  247 </span><span class="spaces">          </span><span class="istickedoff">]</span>
+<span class="lineno">  248 </span><span class="spaces">        </span><span class="istickedoff">, derivedInputs</span>
+<span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">terms &lt;- netgraphToTerms sc env ng inputs</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">outputRecord &lt;- cryptolRecord sc =&lt;&lt; mapForWithKeyM outputPorts</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">(\onm out -&gt; lookupPatternTerm sc <span class="nottickedoff">(YosysBitvecConsumerOutputPort onm)</span> out terms)</span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- liftIO $ SC.scFun sc inputRecordType outputRecordType</span>
+<span class="lineno">  257 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">let cty = C.tFun</span>
+<span class="lineno">  260 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs inputPorts)</span>
+<span class="lineno">  261 </span><span class="spaces">        </span><span class="istickedoff">(C.tRec . C.recordFromFields $ toCryptol &lt;$&gt; Map.assocs outputPorts)</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">pure ConvertedModule</span>
+<span class="lineno">  263 </span><span class="spaces">    </span><span class="istickedoff">{ _convertedModuleTerm = t</span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleType = ty</span>
+<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">, _convertedModuleCryptolType = cty</span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+
+</pre>
+</body>
+</html>
