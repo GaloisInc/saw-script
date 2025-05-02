@@ -25,7 +25,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 8
+  CABAL_CACHE_VERSION: 9
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
