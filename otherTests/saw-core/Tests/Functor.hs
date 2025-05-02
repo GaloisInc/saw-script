@@ -22,9 +22,7 @@ import SAWCore.Term.Functor
 -- There are three properties of Term/TermF/FlatTermF that the
 -- Eq, Ord, and Hashable instances are supposed to respect:
 --    1. Comparison is up to alpha equivalence.
---    2. Comparison also ignores the second element (definition)
---       of TermF Constant, I guess because it might not be there.
---    3. The STApp (shared) and Unshared cases of Term are not
+--    2. The STApp (shared) and Unshared cases of Term are not
 --       distinguished.
 --
 -- And of course Eq, Ord, and Hashable need to be mutually consistent:
@@ -88,14 +86,6 @@ checkEq a b = do
   let f c = (show a, show b, c)
   check (f "Eq") $ a == b
   check (f "Ord") $ compare a b == EQ
-  check (f "Hashable") $ hash a == hash b
-
--- | Variant check that two values are equal, dropping the Ord check.
---   XXX: hack for saw-script #2290, remove when that's fixed
-checkEq' :: (Show t, Eq t, Ord t, Hashable t) => t -> t -> Result
-checkEq' a b = do
-  let f c = (show a, show b, c)
-  check (f "Eq") $ a == b
   check (f "Hashable") $ hash a == hash b
 
 -- | Check that a comparison is as expected.
@@ -195,20 +185,15 @@ instance TestIt Term where
         testOne depth' $ Lambda lnBar t localvar
         testOne depth' $ Pi lnFoo t t
         testOne depth' $ Pi lnBar t localvar
-        -- XXX: disabled until someone fixes saw-script #2290
-{-
         testTwo depth' EQ (Lambda lnFoo t t) (Lambda lnBar t t)
         testTwo depth' EQ (Pi lnFoo t t) (Pi lnBar t t)
-        testTwo depth' EQ (Constant ecFoo (Just t)) (Constant ecFoo Nothing)
--}
+        testTwo depth' GT (Constant ecFoo (Just t)) (Constant ecFoo Nothing)
 
   testTwo depth comp t1 t2 = do
       -- check that they compare as expected
       checkComparison comp t1 t2
       -- build and test more stuff
       when (depth < 2 && comp /= EQ) $ do
-        -- XXX: disabled until someone fixes saw-script #2290
-{-
         let depth' = depth + 1
         -- check that the variable name doesn't affect the comparison
         testTwo depth' comp (Lambda lnFoo t1 t1) (Lambda lnFoo t2 t2)
@@ -217,7 +202,6 @@ instance TestIt Term where
         testTwo depth' comp (Pi lnFoo t1 t1) (Pi lnFoo t2 t2)
         testTwo depth' comp (Pi lnFoo t1 t1) (Pi lnBar t2 t2)
         testTwo depth' comp (Pi lnBar t1 t1) (Pi lnFoo t2 t2)
--}
         pure ()
 
 -- | Run some tests
@@ -232,16 +216,6 @@ tests = do
   seedTwo zero one
   seedTwo one zero
   seedTwo one unit
-  -- XXX: until someone fixes saw-script #2290, lambdas, pis, and
-  -- constants work as long as you only inspect equality and only at
-  -- the Term level, so do some special case checks to enforce that.
-  -- When #2290 is fixed, enable the general cases above and remove
-  -- these.
-  let zero' = Unshared $ FTermF zero
-      one' = Unshared $ FTermF one
-  checkEq' (Unshared $ Lambda lnFoo zero' one') (Unshared $ Lambda lnBar zero' one') 
-  checkEq' (Unshared $ Pi lnFoo zero' one') (Unshared $ Pi lnBar zero' one') 
-  checkEq' (Unshared $ Constant ecFoo (Just zero')) (Unshared $ Constant ecFoo Nothing)
 
 -- | Wrap the tests in Tasty.
 runTests :: TestTree

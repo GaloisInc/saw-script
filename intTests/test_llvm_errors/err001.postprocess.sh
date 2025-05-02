@@ -6,4 +6,4 @@ awk '
    /^ ------/ { look = !look }
    look { sub("x: [0-9]+", "x: NNN", $0) }
    { print }
-'
+' | sed 's,\(solverStatsGoalSize.=.\)[0-9N]*,\1N,g'
