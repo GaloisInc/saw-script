@@ -120,7 +120,7 @@ import qualified Panic as Panic
 --
 --   The argument of the constructor is the component name to use
 --   with the panic message.
-data SAWPanic = SAWPanic Text
+newtype SAWPanic = SAWPanic Text
 
 -- | Trigger a panic. This is called by each library's panic function;
 --   the first argument should be the component name, and the second
