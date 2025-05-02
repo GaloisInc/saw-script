@@ -4,7 +4,7 @@ Integration tests for SAWScript
 Running tests
 -------------
 
-The integration tests are exposed as [cabal test suite](../saw-script.cabal)
+The integration tests are exposed as the [cabal test suite](../saw.cabal)
 `integration_tests`. The default tests can be run with:
 
 ```

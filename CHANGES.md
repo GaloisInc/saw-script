@@ -266,7 +266,7 @@ This release supports [version
 * SAW now implements Heapster, which allows extracting functional specifications
   of memory-safe C programs to Coq. There is now a family of experimental
   `heapster_*` commands that support this. For more information, refer to the
-  [Heapster README](heapster-saw/README.md).
+  [Heapster README](heapster/README.md).
 
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic
@@ -427,7 +427,7 @@ Several improvements have been made to JVM verification:
   "current" status, so that `enable_experimental` is no longer
   necessary for JVM verification.
 
-* The RPC API now includes methods for Java verification, as described [here](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawjvmload-class-command).
+* The RPC API now includes methods for Java verification, as described [here](https://github.com/GaloisInc/saw-script/blob/master/saw-server/docs/SAW.rst#sawjvmload-class-command).
 
 A new `enable_lax_pointer_ordering` function exists, which relaxes the
 restrictions that Crucible imposes on comparisons between pointers from

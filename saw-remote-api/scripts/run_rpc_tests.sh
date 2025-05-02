@@ -4,7 +4,7 @@ set -euo pipefail
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-pushd $DIR/../python
+pushd $DIR/../../saw-python
 
 NUM_FAILS=0
 function run_test {

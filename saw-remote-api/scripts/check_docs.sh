@@ -4,7 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 echo "Checking saw-remote-api docs (SAW.rst) are up-to-date with server"
 
-cd $DIR/../docs
+cd $DIR/../../saw-server/docs
 
 export SAW_SERVER=$(which saw-remote-api)
 if [[ ! -x "$SAW_SERVER" ]]; then

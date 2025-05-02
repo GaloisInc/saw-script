@@ -1,0 +1,109 @@
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
+
+module SAWScript.AutoMatch.Cryptol where
+
+import SAWScript.AutoMatch.Declaration hiding (Name)
+import SAWScript.AutoMatch.Util
+import SAWScript.AutoMatch.Interaction
+
+import Control.Monad
+import Control.Monad.Free
+import qualified Data.ByteString as BS (readFile)
+import Data.List hiding (sort)
+import Data.Maybe
+import Data.Ord
+import Data.Text (Text)
+
+import Cryptol.Eval (EvalOpts(..))
+import qualified Cryptol.ModuleSystem as M
+import Cryptol.ModuleSystem.Name
+import Cryptol.Utils.Ident (identText)
+import Cryptol.Utils.Logger (quietLogger)
+import qualified Cryptol.TypeCheck.AST as AST
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
+import Cryptol.Utils.PP
+
+import CryptolSAWCore.CryptolEnv( meSolverConfig )
+
+
+-- | Parse a Cryptol module into a list of declarations
+--   Yields an Interaction so that we can talk to the user about what went wrong
+getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
+getDeclsCryptol path = do
+   let evalOpts = EvalOpts quietLogger defaultPPOpts
+   modEnv <- M.initialModuleEnv
+   let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
+   (result, warnings) <-
+     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
+     M.loadModuleByPath path (minp s)
+   return $ do
+      forM_ warnings $ liftF . flip Warning () . pretty
+      case result of
+         Left err -> liftF $ Failure True (pretty err) Nothing
+         Right ((_, top), _) ->
+            case top of
+              AST.TCTopSignature {} ->
+                 liftF $ Failure True "Expected a module but found an intreface" Nothing
+              AST.TCTopModule AST.Module { mDecls } ->
+                let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $
+                      \(AST.Decl{dName, dSignature, dDefinition}) -> do
+                         funcName <- sourceName dName
+                         argNames <- mapM sourceName =<< tupleLambdaBindings =<< declDefExpr dDefinition
+                         (argTypes, retType) <- tupleFunctionType (AST.sType dSignature)
+                         return $ Decl funcName retType (zipWith Arg argNames argTypes)
+                in return $ Just (stdDecls :: [Decl])
+
+-- All this is just sifting through the Cryptol typechecker's AST to get the information we want:
+
+-- Things will break if Cryptol's internals shift the way they desugar tuple bindings in declarations:
+-- Currently, a declaration like @foo (a,b,c) = ...@ turns into something
+-- like @foo = \x -> ... where a = x.0.; b = x.1; c = x.2@
+-- We rely on this behavior to parse out the information we need.
+
+-- | We don't care about recursive bindings, so we flatten them out
+flattenDeclGroup :: AST.DeclGroup -> [AST.Decl]
+flattenDeclGroup (AST.Recursive decls)   = decls
+flattenDeclGroup (AST.NonRecursive decl) = [decl]
+
+-- | If the expression is a tuple projection, get the name of the tuple and the index projected
+tupleSelInfo :: AST.Expr -> Maybe (AST.Name, Int)
+tupleSelInfo (AST.ESel (AST.EVar name) (AST.TupleSel i _)) = return (name, i)
+tupleSelInfo _                                             = Nothing
+
+-- | If an expression is a where binding, get all its local declarations
+whereBindings :: AST.Expr -> Maybe [AST.Decl]
+whereBindings (AST.EWhere _ bindings) = return $ concatMap flattenDeclGroup bindings
+whereBindings _                       = Nothing
+
+-- | Find the expression inside a definition
+--   We can't handle primitives currently
+declDefExpr :: AST.DeclDef -> Maybe AST.Expr
+declDefExpr = \case
+   AST.DPrim            -> Nothing
+   AST.DForeign _ mexpr -> mexpr
+   AST.DExpr expr       -> Just expr
+
+-- | If a lambda is of the form @\(a,b,...,z) -> ...)@ then give the list of names bound in the tuple
+tupleLambdaBindings :: AST.Expr -> Maybe [AST.Name]
+tupleLambdaBindings (AST.EAbs tupleName _ whereClause) = do
+   bindings <- whereBindings whereClause
+   return . map snd . sortBy (comparing fst) . catMaybes . for bindings $
+      \AST.Decl{dDefinition, dName} -> do
+         (from, index) <- tupleSelInfo =<< declDefExpr dDefinition
+         guard (from == tupleName)
+         return (index, dName)
+tupleLambdaBindings (AST.ETAbs _ expr)     = tupleLambdaBindings expr   --   \
+tupleLambdaBindings (AST.EProofAbs _ expr) = tupleLambdaBindings expr   --    >- drill down past casts & type abstractions
+tupleLambdaBindings _ = Nothing
+
+-- | If the type given is of the form @(a,b,...,y) -> z@ then give the pair of arguments and result
+tupleFunctionType :: AST.Type -> Maybe ([AST.Type], AST.Type)
+tupleFunctionType (AST.TCon (AST.TC AST.TCFun) [AST.TCon (AST.TC (AST.TCTuple _)) inputs, output]) = return (inputs, output)
+tupleFunctionType _                                                                                = Nothing
+
+-- | Find the name from the source if one exists
+sourceName :: Name -> Maybe Text
+sourceName nm = Just (identText (nameIdent nm))

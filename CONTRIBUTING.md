@@ -136,7 +136,9 @@ The procedure for this is:
 
 - Commit your changes first (so the commit hash recorded in the new
   hie.yaml reflects your changes)
-- Run mkhie.sh
+- Run mkhie.sh: `./mkhie.sh > hie.yaml.new; mv hie.yaml.new hie.yaml`
+  (doing it in two steps prevents git from spuriously reporting that the
+  tree is dirty)
 - Examine the diff to hie.yaml in case something broke
 - Commit hie.yaml with a commit message like "Regen hie.yaml"
 
@@ -208,6 +210,10 @@ The top-level repository directories are:
 
 * `cve-reports` - Infrastructure for security audits of dependencies.
 
+* `vim-saw` - Support bits for using vim.
+
+* `saw-version` - A library encapsulating the build version data.
+
 * `rme` - A library implementing a Reed-Muller Expansion datatype for
   representing Boolean formulas.
 
@@ -230,14 +236,22 @@ The top-level repository directories are:
   solver queries using the [What4](https://github.com/GaloisInc/what4)
   library.
 
-* `heapster-saw` - The Heapster tool.
+* `heapster` - The Heapster tool.
 
-* `src` - A library containing the bulk of SAW, including the SAWScript interpreter.
+* `saw-central` - A library containing the bulk of SAW.
+
+* `saw-script` - A library containing the SAWScript interpreter.
+
+* `saw-server` - Library source for a server that provides a remote API to
+  SAW based on JSON-RPC.
 
 * `saw` - Source for the `saw` executable.
 
-* `saw-remote-api` - Source for a server that provides a remote API to
-  SAW based on JSON-RPC, and a Python client for that API.
+* `saw-remote-api` - Executable entry point to serve the remote API.
+
+* `saw-tools` - Additional executables.
+
+* `saw-python` - a Python client for the remote API.
 
 * `crucible-mir-comp` - Support library for crux-mir-comp.
 
@@ -250,6 +264,8 @@ The top-level repository directories are:
 
 * `s2nTests` - Additional tests for SAWScript, confirming that
   verifications involving the s2n library continue to work.
+
+* `otherTests` - Some further tests for individual components.
 
 * `dist-newstyle` - Transient build directory used by `cabal`.
 
@@ -293,14 +309,14 @@ Other user-facing documentation includes the top-level
 not all) of the assorted other READMEs and change logs scattered about
 the saw-script tree.
 The most notable of these are the
-[saw-remote-api/python/README.md](README) and
-[saw-remote-api/python/CHANGES.md](change log)
+[saw-python/README.md](README) and
+[saw-python/CHANGES.md](change log)
 for the Python bindings.
 Systematizing these so that the intended user-facing documents are
 easily found is on the near-term agenda.
 
 Other developer-facing documentation includes assorted other READMEs and
-change logs, the [saw-remote-api/docs](remote API documentation),
+change logs, the [saw-server/docs](remote API documentation),
 this file, its supplements [doc/developer/developer.md](developer.md)
 and assorted other notes found in [doc/internal](doc/internal).
 The eventual goal is also to be able to generate an internals manual

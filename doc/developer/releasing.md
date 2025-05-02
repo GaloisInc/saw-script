@@ -31,7 +31,7 @@ The release process is:
 
 2. Create a draft release on GitHub
 3. Make a commit on the `release-n.n` branch updating the version in the
-   `saw-script.cabal` file to `n.n`. This will trigger a build.
+   `saw.cabal` file to `n.n`. This will trigger a build.
 4. Once the build is done, download the release artifacts from the
    outputs of the build. These are `.zip` files containing `.tar.gz` and
    `.sig` files.

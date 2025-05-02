@@ -73,25 +73,33 @@ haddock() {
   # option, so it won't currently serve. (Also for some reason it
   # currently demands --internal in place of --haddock-internal.)
   #
+  # (Every component you want docs for needs to be listed explicitly,
+  # not just every package.)  
+  #
   # We use --haddock-internal because the point of generating the
   # haddocks for SAW (which doesn't have an external-facing library
   # interface) is to serve as an internals reference.
-  local PACKAGES='
+  local COMPONENTS='
     rme
-    saw-core
-    cryptol-saw-core
-    saw-core-what4
-    saw-core-sbv
-    saw-core-aig
-    saw-core-coq
-    heapster-saw
-    saw-script
-    saw-remote-api
+    saw:saw-version
+    saw:saw-core
+    saw:cryptol-saw-core
+    saw:saw-core-what4
+    saw:saw-core-sbv
+    saw:saw-core-aig
+    saw:saw-core-coq
+    saw:heapster
+    saw:saw-central
+    saw:saw-script
+    saw:saw-server
+    saw:saw
+    saw:saw-remote-api
+    saw:extcore-info
+    saw:verif-viewer
     crucible-mir-comp
     crux-mir-comp
-    verif-viewer
   '
-  cabal v2-haddock --haddock-internal --disable-documentation $PACKAGES
+  cabal v2-haddock --haddock-internal --disable-documentation $COMPONENTS
 }
 
 # Gather and tar up all HPC coverage files and binaries
@@ -181,7 +189,7 @@ zip_dist_with_solvers() {
 }
 
 output() { echo "::set-output name=$1::$2"; }
-ver() { grep Version saw-script.cabal | awk '{print $2}'; }
+ver() { grep '^Version' saw.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }
 set_files() { output changed-files "$(files_since "$1" "$2")"; }
 files_since() {

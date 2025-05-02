@@ -25,7 +25,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 7
+  CABAL_CACHE_VERSION: 8
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -182,6 +182,7 @@ jobs:
             integration_tests
             test-sawcore
             cryptol-saw-core-tc-test
+            saw-core-coq-tests
             prover_tests
           dest: dist-tests
 
@@ -509,7 +510,7 @@ jobs:
         shell: bash
         run: opam exec -- make -j
 
-      - working-directory: heapster-saw/examples
+      - working-directory: heapster/examples
         shell: bash
         run: opam exec -- make -j
 
@@ -526,7 +527,7 @@ jobs:
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
-              cd saw-remote-api/python/
+              cd saw-python/
               poetry install
               poetry run mypy --install-types --non-interactive saw_client/ || true
               poetry run mypy --install-types --non-interactive saw_client/
@@ -552,8 +553,8 @@ jobs:
 
       - uses: actions/setup-python@v2
         with:
-          # Ensure that this matches saw-remote-api/python/mypy.ini file
-          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          # Ensure that this matches saw-python/mypy.ini file
+          # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
       - uses: abatilo/actions-poetry@v2.0.0
@@ -846,8 +847,8 @@ jobs:
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: actions/setup-python@v2
         with:
-          # Ensure that this matches saw-remote-api/python/mypy.ini file
-          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          # Ensure that this matches saw-python/mypy.ini file
+          # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'

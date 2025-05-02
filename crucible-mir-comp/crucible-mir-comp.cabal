@@ -1,9 +1,10 @@
+cabal-version:       3.0
 name:                crucible-mir-comp
 version:             0.1
 -- synopsis:
 -- description:
 homepage:            https://github.com/GaloisInc/saw-script/blob/master/crucible-mir-comp/README.md
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Joshua Gancher,
                      Rob Dockins,
@@ -14,7 +15,6 @@ maintainer:          spernsteiner@galois.com
 copyright:           2017-2023 Galois, Inc.
 category:            Web
 build-type:          Simple
-cabal-version:       >=1.10
 extra-source-files:  README.md
 
 library
@@ -40,10 +40,10 @@ library
                  what4,
 
                  -- internal subpackages in the saw tree
-                 cryptol-saw-core,
-                 saw-core,
-                 saw-core-what4,
-                 saw-script
+                 saw:saw-core,
+                 saw:cryptol-saw-core,
+                 saw:saw-core-what4,
+                 saw:saw-central
 
   hs-source-dirs: src
   exposed-modules: Mir.Compositional.Builder

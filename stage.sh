@@ -19,7 +19,7 @@ done
 
 DATE=`date +%F`
 # Get 'Version' from the .cabal file.
-VERSION=`grep Version saw-script.cabal | awk '{print $2}'`
+VERSION=`grep Version saw.cabal | awk '{print $2}'`
 
 # Warn if 'SYSTEM_DESC' is not defined. The 'SYSTEM_DESC' env var is
 # defined as part of the Jenkins node configuration on the Linux
