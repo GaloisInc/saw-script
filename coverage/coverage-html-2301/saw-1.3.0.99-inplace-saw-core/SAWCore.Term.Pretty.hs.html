@@ -546,7 +546,7 @@ span.spaces    { background: white }
 <span class="lineno">  527 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
 <span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">Primitive ec  -&gt; annotate <span class="nottickedoff">PrimitiveStyle</span> &lt;$&gt; ppBestName (ModuleIdentifier (primName ec))</span>
 <span class="lineno">  529 </span><span class="spaces">    </span><span class="istickedoff">UnitValue     -&gt; <span class="nottickedoff">return &quot;(-empty-)&quot;</span></span>
-<span class="lineno">  530 </span><span class="spaces">    </span><span class="istickedoff">UnitType      -&gt; <span class="nottickedoff">return &quot;#(-empty-)&quot;</span></span>
+<span class="lineno">  530 </span><span class="spaces">    </span><span class="istickedoff">UnitType      -&gt; return &quot;#(-empty-)&quot;</span>
 <span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">PairValue x y -&gt; ppPair prec &lt;$&gt; ppTerm' <span class="nottickedoff">PrecTerm</span> x &lt;*&gt; ppTerm' PrecCommas y</span>
 <span class="lineno">  532 </span><span class="spaces">    </span><span class="istickedoff">PairType x y  -&gt; ppPairType prec &lt;$&gt; ppTerm' PrecApp x &lt;*&gt; ppTerm' PrecProd y</span>
 <span class="lineno">  533 </span><span class="spaces">    </span><span class="istickedoff">PairLeft t    -&gt; ppProj &quot;1&quot; &lt;$&gt; ppTerm' PrecArg t</span>
@@ -586,14 +586,14 @@ span.spaces    { background: white }
 <span class="lineno">  567 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">DataTypeApp dt params args -&gt;</span>
 <span class="lineno">  569 </span><span class="spaces">      </span><span class="istickedoff">do dnm &lt;- ppBestName (ModuleIdentifier (primName dt))</span>
-<span class="lineno">  570 </span><span class="spaces">         </span><span class="istickedoff">ppAppList <span class="nottickedoff">prec</span> (annotate <span class="nottickedoff">DataTypeStyle</span> dnm) &lt;$&gt; mapM <span class="nottickedoff">(ppTerm' PrecArg)</span> (params ++ args)</span>
+<span class="lineno">  570 </span><span class="spaces">         </span><span class="istickedoff">ppAppList prec (annotate <span class="nottickedoff">DataTypeStyle</span> dnm) &lt;$&gt; mapM (ppTerm' PrecArg) (params ++ args)</span>
 <span class="lineno">  571 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  572 </span><span class="spaces">    </span><span class="istickedoff">RecordType alist -&gt;</span>
 <span class="lineno">  573 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppRecord True &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' PrecTerm t) alist</span></span>
 <span class="lineno">  574 </span><span class="spaces">    </span><span class="istickedoff">RecordValue alist -&gt;</span>
 <span class="lineno">  575 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppRecord False &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; ppTerm' PrecTerm t) alist</span></span>
 <span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">RecordProj e fld -&gt; <span class="nottickedoff">ppProj fld &lt;$&gt; ppTerm' PrecArg e</span></span>
-<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; <span class="nottickedoff">return (viaShow h &lt;&gt; viaShow s)</span></span>
+<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; return (viaShow h &lt;&gt; viaShow s)</span>
 <span class="lineno">  578 </span><span class="spaces">    </span><span class="istickedoff">NatLit i -&gt; ppNat &lt;$&gt; (ppOpts &lt;$&gt; ask) &lt;*&gt; return (toInteger i)</span>
 <span class="lineno">  579 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue (asBoolType -&gt; Just _) args</span>
 <span class="lineno">  580 </span><span class="spaces">      </span><span class="istickedoff">| Just bits &lt;- <span class="nottickedoff">mapM asBool $ V.toList args</span> -&gt;</span>
@@ -724,7 +724,7 @@ span.spaces    { background: white }
 <span class="lineno">  705 </span><span class="spaces">    </span><span class="istickedoff">FTermF UnitType -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  706 </span><span class="spaces">    </span><span class="istickedoff">FTermF (CtorApp _ [] []) -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  707 </span><span class="spaces">    </span><span class="istickedoff">FTermF (DataTypeApp _ [] []) -&gt; False</span>
-<span class="lineno">  708 </span><span class="spaces">    </span><span class="istickedoff">FTermF Sort{} -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  708 </span><span class="spaces">    </span><span class="istickedoff">FTermF Sort{} -&gt; False</span>
 <span class="lineno">  709 </span><span class="spaces">    </span><span class="istickedoff">FTermF NatLit{} -&gt; False</span>
 <span class="lineno">  710 </span><span class="spaces">    </span><span class="istickedoff">FTermF (ArrayValue _ v) | <span class="nottickedoff">V.length v == 0</span> -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  711 </span><span class="spaces">    </span><span class="istickedoff">FTermF StringLit{} -&gt; <span class="nottickedoff">False</span></span>

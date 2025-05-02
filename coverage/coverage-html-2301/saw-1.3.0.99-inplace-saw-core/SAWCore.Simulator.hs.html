@@ -226,7 +226,7 @@ span.spaces    { background: white }
 <span class="lineno">  207 </span><span class="spaces">                                </span><span class="istickedoff">ty &lt;- evalType ety</span>
 <span class="lineno">  208 </span><span class="spaces">                                </span><span class="istickedoff">pure (v,<span class="nottickedoff">ty</span>)</span>
 <span class="lineno">  209 </span><span class="spaces">             </span><span class="istickedoff">d   &lt;- traverse evalType (recursorDataType r)</span>
-<span class="lineno">  210 </span><span class="spaces">             </span><span class="istickedoff">ps  &lt;- traverse <span class="nottickedoff">recEval</span> (recursorParams r)</span>
+<span class="lineno">  210 </span><span class="spaces">             </span><span class="istickedoff">ps  &lt;- traverse recEval (recursorParams r)</span>
 <span class="lineno">  211 </span><span class="spaces">             </span><span class="istickedoff">m   &lt;- recEval (recursorMotive r)</span>
 <span class="lineno">  212 </span><span class="spaces">             </span><span class="istickedoff">mty &lt;- evalType (recursorMotiveTy r)</span>
 <span class="lineno">  213 </span><span class="spaces">             </span><span class="istickedoff">es  &lt;- traverse f (recursorElims r)</span>
@@ -302,10 +302,10 @@ span.spaces    { background: white }
 <span class="lineno">  283 </span>  Env l -&gt;
 <span class="lineno">  284 </span>  EvalM l (Env l)
 <span class="lineno">  285 </span><span class="decl"><span class="istickedoff">processRecArgs (p:ps) args (VPiType _ _ body) env =</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do tp' &lt;- applyPiBody body (ready p)</span></span>
-<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">processRecArgs ps args tp' env</span></span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">do tp' &lt;- applyPiBody body (ready p)</span>
+<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff">processRecArgs ps args tp' env</span>
 <span class="lineno">  288 </span><span class="spaces"></span><span class="istickedoff">processRecArgs [] (x:xs) (VPiType _ tp body) env =</span>
-<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">do tp' &lt;- applyPiBody body <span class="nottickedoff">x</span></span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">do tp' &lt;- applyPiBody body x</span>
 <span class="lineno">  290 </span><span class="spaces">     </span><span class="istickedoff">processRecArgs [] xs tp' ((x,<span class="nottickedoff">tp</span>):env)</span>
 <span class="lineno">  291 </span><span class="spaces"></span><span class="istickedoff">processRecArgs [] [] _ env = pure env</span>
 <span class="lineno">  292 </span><span class="spaces"></span><span class="istickedoff">processRecArgs _ _ _ _ = <span class="nottickedoff">panic &quot;processRegArgs&quot; [&quot;Expected Pi type!&quot;::String]</span></span></span>
