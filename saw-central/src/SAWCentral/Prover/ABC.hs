@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module SAWCentral.Prover.ABC
   ( proveABC
   , w4AbcAIGER
@@ -220,8 +221,9 @@ parseDimacsSolution vars ls = map lkup vars
     parseLine line =
       case words line of
         _:ws -> ws
-        [] -> panic "parseDimacsSolution"
-                    ["DIMACS solution has line with no values"]
+        [] -> panic "parseDimacsSolution" [
+                  "DIMACS solution has line with no values"
+              ]
 
 writeAIGWithMapping :: AIG.IsAIG l g => g s -> l s -> FilePath -> IO [Int]
 writeAIGWithMapping be l path = do

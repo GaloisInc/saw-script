@@ -62,6 +62,33 @@ library saw-version
 
 
 ------------------------------------------------------------
+-- saw-support
+
+-- Support material shared by the rest of SAW.
+library saw-support
+  default-language: Haskell2010
+  visibility: public
+
+  build-depends:
+    -- upstream packages from hackage
+    base >= 4.9,
+    panic,
+    text,
+
+    -- packages in git submodules
+    -- (none)
+
+    -- internal packages in the saw tree
+    saw-version
+
+  hs-source-dirs: saw-support/src
+  exposed-modules:
+     SAWSupport.PanicSupport
+
+  GHC-options: -Wall -Werror -Wcompat
+
+
+------------------------------------------------------------
 -- saw-core
 
 -- The SAWCore intermediate language
@@ -87,7 +114,6 @@ library saw-core
     modern-uri >= 0.3.2 && < 0.4,
     MonadRandom,
     mtl,
-    panic,
     pretty,
     prettyprinter >= 1.7.0,
     prettyprinter-ansi-terminal >= 1.1.2,
@@ -106,7 +132,8 @@ library saw-core
     parameterized-utils,
 
     -- internal subpackages in the saw tree
-    rme
+    rme,
+    saw:saw-support,
 
   hs-source-dirs: saw-core/src
   exposed-modules:
@@ -150,6 +177,7 @@ library saw-core
      SAWCore.Change
      SAWCore.Utils
   other-modules:
+     SAWCore.Panic
      SAWCore.UnionFind
 
   GHC-options: -Wall -Werror -Wcompat
@@ -192,7 +220,6 @@ library cryptol-saw-core
     integer-gmp,
     modern-uri,
     mtl,
-    panic,
     sbv,
     template-haskell,
     text,
@@ -205,6 +232,7 @@ library cryptol-saw-core
     what4,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: cryptol-saw-core/src
@@ -212,11 +240,12 @@ library cryptol-saw-core
      CryptolSAWCore.Cryptol
      CryptolSAWCore.CryptolEnv
      CryptolSAWCore.Monadify
-     CryptolSAWCore.Panic
      CryptolSAWCore.Prelude
      CryptolSAWCore.PreludeM
      CryptolSAWCore.Simpset
      CryptolSAWCore.TypedTerm
+  other-modules:
+     CryptolSAWCore.Panic
   -- GHC-options: -Wall -Werror
   GHC-options: -Wall
 
@@ -289,11 +318,16 @@ library saw-core-aig
     aig,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: saw-core-aig/src
+
   exposed-modules:
      SAWCoreAIG.BitBlast
+  other-modules:
+     SAWCoreAIG.Panic
+
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
@@ -321,12 +355,17 @@ library saw-core-sbv
     vector,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: saw-core-sbv/src
+
   exposed-modules:
      SAWCoreSBV.SBV
      SAWCoreSBV.SWord
+  other-modules:
+     SAWCoreSBV.Panic
+
   GHC-options: -Wall -Werror -Wcompat
 
 
@@ -349,7 +388,6 @@ library saw-core-what4
     indexed-traversable,
     lens,
     mtl,
-    panic,
     reflection,
     text,
     transformers,
@@ -360,6 +398,7 @@ library saw-core-what4
     what4,
 
     -- internal sublibaries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: saw-core-what4/src
@@ -367,8 +406,9 @@ library saw-core-what4
      SAWCoreWhat4.What4
      SAWCoreWhat4.FirstOrder
      SAWCoreWhat4.PosNat
-     SAWCoreWhat4.Panic
      SAWCoreWhat4.ReturnTrip
+  other-modules:
+     SAWCoreWhat4.Panic
 
   GHC-options: -Wall -Werror
 
@@ -419,6 +459,7 @@ library heapster
     what4,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: heapster/src
@@ -446,6 +487,7 @@ library heapster
     Heapster.UntypedAST
     Heapster.Widening
   other-modules:
+    Heapster.Panic
     Heapster.PatternMatchUtil
   GHC-options: -Wall
   build-tool-depends:
@@ -485,7 +527,6 @@ library saw-central
     , mtl >= 2.1
     , old-locale
     , old-time
-    , panic
     , pretty
     , prettyprinter
     , process
@@ -541,6 +582,7 @@ library saw-central
 
       -- internal subpackages/sublibraries in the saw tree
     , rme
+    , saw:saw-support
     , saw:saw-core
     , saw:saw-core-aig
     , saw:saw-core-coq
@@ -676,7 +718,6 @@ library saw-script
     , IfElse
     , lens
     , mtl >= 2.1
-    , panic
     , pretty
     , prettyprinter
     , pretty-show
@@ -700,6 +741,7 @@ library saw-script
 
       -- internal sublibraries in the saw tree
     , saw:saw-version
+    , saw:saw-support
     , saw:saw-core
     , saw:cryptol-saw-core
     , saw:saw-core-coq
@@ -720,7 +762,6 @@ library saw-script
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
-    SAWScript.Panic
     SAWScript.Parser
     SAWScript.Search
     SAWScript.Token
@@ -734,6 +775,9 @@ library saw-script
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.REPL.Trie
+
+  other-modules:
+    SAWScript.Panic
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

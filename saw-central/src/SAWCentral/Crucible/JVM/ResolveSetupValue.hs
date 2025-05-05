@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -31,6 +32,7 @@ module SAWCentral.Crucible.JVM.ResolveSetupValue
 import           Control.Lens
 import qualified Control.Monad.Catch as X
 import qualified Data.BitVector.Sized as BV
+import qualified Data.Text as Text
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
@@ -121,7 +123,10 @@ typeOfSetupValue _cc env _nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
-        Nothing -> panic "JVMSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
+        Nothing ->
+            panic "JVMSetup (in typeOfSetupValue)" [
+                "Unresolved prestate variable: " <> Text.pack (show i)
+            ]
         Just (_, alloc) -> return (allocationType alloc)
     MS.SetupTerm tt ->
       case ttType tt of
@@ -154,8 +159,11 @@ typeOfSetupValue _cc env _nameEnv val =
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
   case Map.lookup i env of
-    Nothing -> panic "JVMSetup" ["Unresolved prestate variable:" ++ show i]
     Just x -> x
+    Nothing ->
+      panic "JVMSetup (in lookupAllocIndex" [
+          "Unresolved prestate variable: " <> Text.pack (show i)
+      ]
 
 -- | Translate a SetupValue into a Crucible JVM value, resolving
 -- references

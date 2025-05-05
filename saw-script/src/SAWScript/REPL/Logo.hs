@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {- |
 Module      : SAWScript.REPL.Logo
 Description :

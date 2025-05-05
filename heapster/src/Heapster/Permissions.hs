@@ -79,7 +79,6 @@ import Data.Parameterized.Pair
 import Prettyprinter as PP
 import Prettyprinter.Render.String (renderString)
 
-import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.DataLayout
@@ -88,8 +87,9 @@ import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
 import SAWCore.SharedTerm hiding (Constant)
 import SAWCore.OpenTerm
-import Heapster.NamedMb
 
+import Heapster.Panic
+import Heapster.NamedMb
 import Heapster.CruUtil
 
 import GHC.Stack
@@ -6334,7 +6334,7 @@ unfoldConjPerm npn args off
   , TrueRepr <- nameIsConjRepr npn' =
     [Perm_NamedConj npn' args' off']
 unfoldConjPerm _ _ _ =
-  panic "unfoldConjPerm" []
+  panic "unfoldConjPerm" ["unfoldPerm did not produce a Conj"]
 
 -- | Test if two expressions are definitely unequal
 exprsUnequal :: PermExpr a -> PermExpr a -> Bool
@@ -7498,13 +7498,13 @@ abstractVars ns a =
 -- of, along with those variables that were abstracted out of it
 data AbsObj a = forall ctx. AbsObj (RAssign ExprVar ctx) (Closed (Mb ctx a))
 
--- | Find all free variables of an expresssion and abstract them out. Note that
+-- | Find all free variables of an expression and abstract them out. Note that
 -- this should always succeed, if 'freeVars' is implemented correctly.
 abstractFreeVars :: (AbstractVars a, FreeVars a) => a -> AbsObj a
 abstractFreeVars a
   | Some ns <- freeVarsRAssign a
   , Just cl_mb_a <- abstractVars ns a = AbsObj ns cl_mb_a
-abstractFreeVars _ = panic "abstractFreeVars" []
+abstractFreeVars _ = panic "abstractFreeVars" ["freeVars failed"]
 
 
 -- | Try to close an expression by calling 'abstractPEVars' with an empty list
@@ -8371,8 +8371,9 @@ requireNamedPerm :: PermEnv -> NamedPermName ns args a -> NamedPerm ns args a
 requireNamedPerm env npn
   | Just np <- lookupNamedPerm env npn = np
 requireNamedPerm _ npn =
-  panic "requireNamedPerm" ["named perm does not exist: "
-                            ++ namedPermNameName npn]
+  panic "requireNamedPerm" [
+      "Named perm does not exist: " ++ namedPermNameName npn
+  ]
 
 -- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
 lookupNamedShape :: PermEnv -> String -> Maybe SomeNamedShape
@@ -8746,7 +8747,7 @@ getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where
 deletePerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
 deletePerm x p =
   over (varPerm x) $ \p' ->
-  if p' == p then ValPerm_True else panic "deletePerm" []
+  if p' == p then ValPerm_True else panic "deletePerm" ["Permission didn't match"]
 
 -- | Push a new distinguished permission onto the top of the stack
 pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)

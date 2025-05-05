@@ -239,14 +239,14 @@ addToCType _ txt s = case s of
 read' :: Read a => Text -> a
 read' txt = case readMaybe txt' of
     Just x -> x
-    Nothing -> panic "Lexer" ["Failed to decode string or number literal", txt']
+    Nothing -> panic "Lexer" ["Failed to decode string or number literal", txt]
   where txt' = Text.unpack txt
 
 -- read a binary integer
 readBin :: Text -> Integer
 readBin s = case readInt 2 isDigit cvt (Text.unpack s') of
               [(a, "")] -> a
-              _         -> panic "Lexer" ["Cannot read a binary number from: ", show s]
+              _         -> panic "Lexer" ["Cannot read a binary number from: ", s]
   where cvt c = ord c - ord '0'
         isDigit c = c == '0' || c == '1'
         s' | "0b" `Text.isPrefixOf` s = Text.drop 2 s
@@ -376,10 +376,10 @@ scanTokens filename str = go (startPos, str) Normal
             InCType pos _ ->
                 (tok, Just (Error, pos, "Unclosed ctype block"))
         AlexError (pos, _) ->
-            let line' = show $ apLine pos
-                col' = show $ apCol pos
+            let line' = Text.pack $ show $ apLine pos
+                col' = Text.pack $ show $ apCol pos
             in
-            panic "Lexer" [line' ++ ":" ++ col' ++ ": unspecified lexical error"]
+            panic "Lexer" [line' <> ":" <> col' <> ": unspecified lexical error"]
         AlexSkip inp' len ->
             go inp' s
         AlexToken inp' len act ->

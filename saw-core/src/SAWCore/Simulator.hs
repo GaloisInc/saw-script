@@ -50,8 +50,7 @@ import qualified Data.Text as Text
 import Data.Traversable
 import GHC.Stack
 
-import SAWCore.Utils (panic)
-
+import SAWCore.Panic (panic)
 import SAWCore.Module
 import SAWCore.Name
 import SAWCore.SharedTerm
@@ -226,7 +225,7 @@ evalTermF cfg lam recEval tf env =
                               allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready r,rTy)]
                               lam (ctorIotaTemplate ctor) allArgs
 
-                        | otherwise -> panic "evalRecursorApp" ["could not find info for constructor", show ctor]
+                        | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
                       Nothing -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
                _ -> simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)
 
@@ -256,7 +255,7 @@ evalTermF cfg lam recEval tf env =
 
     toTValue :: HasCallStack => Value l -> TValue l
     toTValue (TValue x) = x
-    toTValue t = panic "toTValue" ["Not a type value", show t]
+    toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _ps args) =
@@ -276,7 +275,7 @@ evalTermF cfg lam recEval tf env =
 
 
 processRecArgs ::
-  VMonadLazy l =>
+  (VMonadLazy l, Show (Extra l)) =>
   [Value l] ->
   [Thunk l] ->
   TValue l ->
@@ -289,7 +288,11 @@ processRecArgs [] (x:xs) (VPiType _ tp body) env =
   do tp' <- applyPiBody body x
      processRecArgs [] xs tp' ((x,tp):env)
 processRecArgs [] [] _ env = pure env
-processRecArgs _ _ _ _ = panic "processRegArgs" ["Expected Pi type!"::String]
+processRecArgs _ _ ty _ =
+  panic "processRegArgs" [
+     "Expected Pi type!",
+     "Found: " <> Text.pack (show ty) 
+  ]
 
 
 {-# SPECIALIZE evalGlobal ::
@@ -377,7 +380,7 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
     primitive pn =
       case Map.lookup (primName pn) prims of
         Just v  -> evalPrim (primHandler pn) pn v
-        Nothing -> panic "evalGlobal'" ["Unimplemented global", show (primName pn)]
+        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText (primName pn)]
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
@@ -639,4 +642,6 @@ evalPrim fallback pn = loop [] (primType pn)
     loop _env _tp (Prims.Prim m) = m
     loop _env _tp (Prims.PrimValue v) = pure v
 
-    loop _env _tp _p = panic "evalPrim" ["type mismatch in primitive", Text.unpack (identText (primName pn))]
+    loop _env _tp _p =
+      panic "evalPrim" [
+          "Type mismatch in primitive: " <>  identText (primName pn)]

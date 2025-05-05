@@ -119,7 +119,6 @@ import SAWCentral.Builtins
 import SAWCentral.Crucible.LLVM.Builtins
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 
-import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
 import qualified SAWCore.Term.Pretty as Pretty
 import Heapster.CruUtil
 import Heapster.HintExtract
@@ -134,6 +133,9 @@ import Heapster.LLVMGlobalConst
 import SAWCentral.Prover.Exporter
 import SAWCoreCoq.Coq
 import Prettyprinter
+
+import SAWScript.Panic
+
 
 -- | Build the SAW core term for the type @TpDesc@
 tpDescTypeM :: MonadIO m => SharedContext -> m Term

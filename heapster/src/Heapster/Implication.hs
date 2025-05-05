@@ -62,7 +62,8 @@ import SAWCore.Term.Functor (Ident)
 import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
-import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
+
+import Heapster.Panic
 import Heapster.CruUtil
 import Heapster.PatternMatchUtil
 import Heapster.Permissions

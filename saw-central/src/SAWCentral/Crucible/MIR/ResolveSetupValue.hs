@@ -309,7 +309,10 @@ typeOfSetupValue mcc env nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
-        Nothing -> panic "MIRSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
+        Nothing ->
+           panic "MIRSetup (in typeOfSetupValue)" [
+               "Unresolved prestate variable: " <> Text.pack (show i)
+           ]
         Just (Some alloc) ->
           return $ Mir.TyRef (alloc^.maMirType) (alloc^.maMutbl)
     MS.SetupTerm tt ->
@@ -335,7 +338,9 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupSlice slice ->
       case slice of
         MirSetupSliceRaw{} ->
-          panic "typeOfSetupValue" ["MirSetupSliceRaw not yet implemented"]
+          panic "MIRSetup (in typeOfSetupValue)" [
+              "MirSetupSliceRaw not yet implemented"
+          ]
         MirSetupSlice sliceInfo arrRef ->
           typeOfSliceFromArrayRef sliceInfo arrRef
         MirSetupSliceRange sliceInfo arrRef _ _ ->
@@ -350,9 +355,12 @@ typeOfSetupValue mcc env nameEnv val =
         X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
       pure tTy
 
+    MS.SetupElem _ _ _ ->
+      panic "MIRSetup (in typeOfSetupValue)" ["elems not yet implemented"]
+    MS.SetupField _ _ _ ->
+      panic "MIRSetup (in typeOfSetupValue)" ["fields not yet implemented"]
+
     MS.SetupNull empty                -> absurd empty
-    MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
-    MS.SetupField _ _ _               -> panic "typeOfSetupValue" ["fields not yet implemented"]
     MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
   where
@@ -381,8 +389,11 @@ typeOfSetupValue mcc env nameEnv val =
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
   case Map.lookup i env of
-    Nothing -> panic "MIRSetup" ["Unresolved prestate variable:" ++ show i]
     Just x -> x
+    Nothing ->
+        panic "MIRSetup (in lookupAllocIndex)" [
+            "Unresolved prestate variable: " <> Text.pack (show i)
+        ]
 
 -- | Translate a SetupValue into a Crucible MIR value, resolving
 -- references
@@ -420,12 +431,12 @@ resolveSetupVal mcc env tyenv nameEnv val =
               [variant] ->
                 pure variant
               _ ->
-                panic "resolveSetupVal"
-                      [ "Encountered struct Adt with " ++
-                        show (length variants) ++
-                        " variants:"
-                      , show nm
-                      ]
+                panic "resolveSetupVal" [
+                    "Encountered struct Adt with " <>
+                        Text.pack (show (length variants)) <>
+                        " variants: ",
+                    "   " <> Text.pack (show nm)
+                ]
 
           -- Next, resolve the field values and check that they have the
           -- expected types.
@@ -441,15 +452,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
           let structTpr = StructRepr (FC.fmapFC fieldShapeType fldShpAssn)
           pure $ MIRVal structShp (AnyValue structTpr valAssn)
         Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
-          panic "resolveSetupVal"
-                [ "Expected struct type, received enum:"
-                , show nm
-                ]
+          panic "resolveSetupVal" [
+              "Expected struct type, received enum: " <> Text.pack (show nm)
+          ]
         Mir.Adt nm Mir.Union _ _ _ _ _ ->
-          panic "resolveSetupVal"
-                [ "Expected struct type, received union:"
-                , show nm
-                ]
+          panic "resolveSetupVal" [
+              "Expected struct type, received union: " <> Text.pack (show nm)
+          ]
     MS.SetupEnum enum_ ->
       case enum_ of
         MirSetupEnumVariant adt variant variantIdxInt flds ->
@@ -504,11 +513,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 case W4.testEquality expectedFldAssn actualFldAssn of
                   Just r -> pure r
                   Nothing ->
-                    panic "resolveSetupVal"
-                          [ "Enum field shape mismatch"
-                          , "Expected: " ++ show expectedFldAssn
-                          , "Actual: " ++ show actualFldAssn
-                          ]
+                    panic "resolveSetupVal" [
+                        "Enum field shape mismatch",
+                        "Expected: " <> Text.pack (show expectedFldAssn),
+                        "Actual: " <> Text.pack (show actualFldAssn)
+                    ]
 
               -- Finally, construct a MIRVal.
               let enumVal =
@@ -517,15 +526,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       Ctx.:> RV (injectVariant sym variantTprs variantIdx actualValAssn)
               pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
             Mir.Adt nm Mir.Struct _ _ _ _ _ ->
-              panic "resolveSetupVal"
-                    [ "Expected enum type, received struct:"
-                    , show nm
-                    ]
+              panic "resolveSetupVal" [
+                  "Expected enum type, received struct: " <> Text.pack (show nm)
+              ]
             Mir.Adt nm Mir.Union _ _ _ _ _ ->
-              panic "resolveSetupVal"
-                    [ "Expected enum type, received union:"
-                    , show nm
-                    ]
+              panic "resolveSetupVal" [
+                  "Expected enum type, received union: " <> Text.pack (show nm)
+              ]
         -- See Note [Symbolic enums] in SAWCentral.Crucible.MIR.Setup.Value for
         -- more information on the approach used to resolve symbolic enum
         -- values.
@@ -535,10 +542,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
               -- `repr(transparent)` enum values use MirSetupEnumVariant rather
               -- than MirSetupEnumSymbolic. See the Haddocks for
               -- MirSetupEnumSymbolic for an explanation.
-              panic "resolveSetupVal"
-                    [ "Symbolic enum of type " ++ show (adt ^. Mir.adtname)
-                    , "that uses MirSetupEnumSymbolic rather than MirSetupEnumVarianr"
-                    ]
+              panic "resolveSetupVal" [
+                  "Symbolic enum of type " <> Text.pack (show (adt ^. Mir.adtname)),
+                  "that uses MirSetupEnumSymbolic rather than MirSetupEnumVariant"
+              ]
             Mir.Adt nm (Mir.Enum discrTp) variants _ _ _ _ -> do
               -- Resolve the discriminant value and ensure that it has an
               -- integral type.
@@ -589,11 +596,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 case W4.testEquality expectedVariantShps actualVariantShps of
                   Just r -> pure r
                   Nothing ->
-                    panic "resolveSetupVal"
-                          [ "Enum variant shape mismatch"
-                          , "Expected: " ++ show expectedVariantShps
-                          , "Actual: " ++ show actualVariantShps
-                          ]
+                    panic "resolveSetupVal" [
+                        "Enum variant shape mismatch",
+                        "Expected: " <> Text.pack (show expectedVariantShps),
+                        "Actual: " <> Text.pack (show actualVariantShps)
+                    ]
 
               -- Finally, construct a MIRVal.
               let enumVal =
@@ -602,15 +609,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       Ctx.:> RV branchAssn
               pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
             Mir.Adt nm Mir.Struct _ _ _ _ _ ->
-              panic "resolveSetupVal"
-                    [ "Expected enum type, received struct:"
-                    , show nm
-                    ]
+              panic "resolveSetupVal" [
+                  "Expected enum type, received struct: " <> Text.pack (show nm)
+              ]
             Mir.Adt nm Mir.Union _ _ _ _ _ ->
-              panic "resolveSetupVal"
-                    [ "Expected enum type, received union:"
-                    , show nm
-                    ]
+              panic "resolveSetupVal" [
+                  "Expected enum type, received union: " <> Text.pack (show nm)
+              ]
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
@@ -1495,10 +1500,10 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
       case testRefShape referenceShp of
         Just irs -> pure irs
         Nothing ->
-          panic "doPointsTo"
-                [ "Unexpected non-reference type:"
-                , show $ PP.pretty $ shapeMirTy referenceShp
-                ]
+          panic "doPointsTo" [
+              "Unexpected non-reference type: ",
+              "   " <> Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)
+          ]
     referent <- firstPointsToReferent referents
     MIRVal referentShp referentVal <-
       resolveSetupVal cc env tyenv nameEnv referent
@@ -1509,11 +1514,11 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
       case W4.testEquality referenceInnerTy (shapeType referentShp) of
         Just r -> pure r
         Nothing ->
-          panic "doPointsTo"
-                [ "Unexpected type mismatch between reference and referent"
-                , "Reference type: " ++ show referenceInnerTy
-                , "Referent type:  " ++ show (shapeType referentShp)
-                ]
+          panic "doPointsTo" [
+              "Unexpected type mismatch between reference and referent",
+              "Reference type: " <> Text.pack (show referenceInnerTy),
+              "Referent type:  " <> Text.pack (show (shapeType referentShp))
+          ]
     Mir.writeMirRefIO bak globals iTypes referenceVal referentVal
   where
     iTypes = cc ^. mccIntrinsicTypes
@@ -1661,10 +1666,9 @@ getEnumVariantDiscr variant =
     Just discr ->
       discr
     Nothing ->
-      panic "getEnumVariantDiscr"
-            [ "discrval not set for variant:"
-            , show (variant ^. Mir.vname)
-            ]
+      panic "getEnumVariantDiscr" [
+          "discrval not set for variant: " <> Text.pack (show (variant ^. Mir.vname))
+      ]
 
 -- | An enum's discriminant should have an integral type such as @isize@ or
 -- @i8@, which this function checks. If this is not the case, this function will
@@ -1674,10 +1678,10 @@ testDiscriminantIsBV discrShp =
   case testBVShape discrShp of
     Just ibvs -> ibvs
     Nothing ->
-      panic "testDiscriminantIsBV"
-            [ "Unexpected non-integral discriminant type:"
-            , show $ PP.pretty $ shapeMirTy discrShp
-            ]
+      panic "testDiscriminantIsBV" [
+          "Unexpected non-integral discriminant type:",
+          "   " <> Text.pack (show $ PP.pretty $ shapeMirTy discrShp)
+      ]
 
 -- | Compute the index of a variant as an 'Ctx.Index'. If the index is out of
 -- range, this function will panic.
@@ -1691,9 +1695,9 @@ variantIntIndex adtNm variantIdx variantsSize =
     Just someIdx ->
       someIdx
     Nothing ->
-      panic "variantIntIndex"
-            [ "Enum variant index out of range"
-            , "Enum: " ++ show adtNm
-            , "Index: " ++ show variantIdx
-            , "Number of variants: " ++ show variantsSize
-            ]
+      panic "variantIntIndex" [
+          "Enum variant index out of range",
+          "Enum: " <> Text.pack (show adtNm),
+          "Index: " <> Text.pack (show variantIdx),
+          "Number of variants: " <> Text.pack (show variantsSize)
+      ]

@@ -33,6 +33,7 @@ import Control.Monad (filterM, forM, forM_, unless, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.BitVector.Sized as BV
 import Data.Either (partitionEithers)
+import qualified Data.Text as Text
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
 import Data.IORef (IORef, modifyIORef)
@@ -149,10 +150,10 @@ checkMutableAllocPostconds opts sc cc cs = do
           Just IsRefShape{} ->
             pure $ Some $ MirReferenceMuxConcrete refVal
           Nothing ->
-            panic "checkMutableAllocPostconds"
-                  [ "Unexpected non-reference type:"
-                  , show $ PP.pretty $ shapeMirTy refShp
-                  ])
+            panic "checkMutableAllocPostconds" [
+                "Unexpected non-reference type:",
+                "   " <> Text.pack (show $ PP.pretty $ shapeMirTy refShp)
+            ])
       (cs ^. MS.csPostState ^. MS.csPointsTos)
 
   -- Check if a `mir_alloc_mut`-computed allocation isn't used in a
@@ -253,10 +254,10 @@ cmpRefMuxConcretely sym (Mir.MirReferenceMux fmt1) (Mir.MirReferenceMux fmt2) =
         [(x, p)] ->
           if Just True == W4.asConstantPred p
           then x
-          else panic "cmpRefMuxConcretely"
-                     [ "FancyMuxTree leaf with symbolic predicate"
-                     , show $ W4.printSymExpr p
-                     ]
+          else panic "cmpRefMuxConcretely" [
+                   "FancyMuxTree leaf with symbolic predicate",
+                   "   " <> Text.pack (show $ W4.printSymExpr p)
+               ]
         [] ->
           panic "cmpRefMuxConcretely" ["FancyMuxTree with no leaves"]
         (_:_) ->
@@ -392,11 +393,11 @@ cmpSymBVConcretely _ symBV1 symBV2
   , Just bv2 <- W4.asBV symBV2
   = PC.fromOrdering $ compare bv1 bv2
   | otherwise
-  = panic "cmpSymBVConcretely"
-          [ "SymBV not concrete"
-          , show $ W4.printSymExpr symBV1
-          , show $ W4.printSymExpr symBV2
-          ]
+  = panic "cmpSymBVConcretely" [
+        "SymBV not concrete",
+        "symBV1: " <> Text.pack (show $ W4.printSymExpr symBV1),
+        "symBV2: " <> Text.pack (show $ W4.printSymExpr symBV2)
+    ]
 
 -- | An infix version of 'PC.joinOrderingF' that is right associative, allowing
 -- it to be chained together more easily. See
@@ -991,10 +992,10 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
        case testRefShape referenceShp of
          Just irs -> pure irs
          Nothing ->
-           panic "learnPointsTo"
-                 [ "Unexpected non-reference type:"
-                 , show $ PP.pretty $ shapeMirTy referenceShp
-                 ]
+           panic "learnPointsTo" [
+               "Unexpected non-reference type:",
+               "   " <> Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)
+           ]
      let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
      referentVal <- firstPointsToReferent referents
      v <- liftIO $ Mir.readMirRefIO bak globals iTypes
@@ -1097,12 +1098,11 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
               [variant] ->
                 pure variant
               _ ->
-                panic "matchArg"
-                      [ "Encountered struct Adt with " ++
-                        show (length variants) ++
-                        " variants:"
-                      , show $ adt ^. Mir.adtname
-                      ]
+                let len' = Text.pack (show (length variants)) in
+                panic "matchArg" [
+                    "Encountered struct Adt with " <> len' <> " variants:",
+                    "   " <> Text.pack (show $ adt ^. Mir.adtname)
+                ]
           let ys = variant ^.. Mir.vfields . each . Mir.fty
           matchFields sym xsFldShps xs ys zs
 

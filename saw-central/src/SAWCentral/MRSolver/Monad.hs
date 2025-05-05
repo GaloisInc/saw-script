@@ -50,7 +50,6 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
-import SAWCore.Utils (panic) -- XXX why is this using a different library's panic hook?
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
@@ -59,6 +58,8 @@ import SAWCore.SharedTerm
 import SAWCore.Module (Def(..))
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
+
+import SAWCentral.Panic
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)
 import SAWCentral.Value (TopLevel)
@@ -738,7 +739,7 @@ mrGlobalTermUnfold :: Ident -> MRM t Term
 mrGlobalTermUnfold ident =
   (defBody <$> liftSC1 scRequireDef ident) >>= \case
   Just body -> return body
-  Nothing -> panic "mrGlobalTermUnfold" ["Definition " ++ show ident ++
+  Nothing -> panic "mrGlobalTermUnfold" ["Definition " <> identText ident <>
                                          " does not have a body"]
 
 -- | Apply a named global to a list of arguments and beta-reduce in Mr. Monad
@@ -1232,7 +1233,7 @@ mrSubstLowerEVars t_top =
               let my_panic :: () -> a
                   my_panic () =
                     panic "mrSubstLowerEVars"
-                    ["Unexpected evar application: " ++ show t]
+                    ["Unexpected evar application: " <> T.pack (show t)]
               let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs
               t' <- (Map.lookup evar <$> liftIO (readIORef lower_map)) >>= \case
                 Just (y, cargs_expected) ->

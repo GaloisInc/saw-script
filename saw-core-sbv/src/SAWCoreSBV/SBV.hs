@@ -77,7 +77,7 @@ import SAWCore.FiniteValue
             , fovVec, firstOrderTypeOf, asFirstOrderType
             )
 
-import SAWCore.Utils (panic)
+import SAWCoreSBV.Panic
 
 data SBV
 
@@ -327,7 +327,7 @@ selectV merger maxValue valueFn vx =
   case svAsInteger vx of
     Just i
       | i >= 0    -> valueFn (fromInteger i)
-      | otherwise -> panic "selectV" ["expected nonnegative integer", show i]
+      | otherwise -> panic "selectV" ["Expected nonnegative integer; found " <> Text.pack (show i)]
     Nothing -> impl (intSizeOf vx) 0
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
@@ -536,7 +536,7 @@ streamGetOp =
     VBVToNat _ w ->
       do ilv <- toWord w
          selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
-    v -> panic "SBV.streamGetOp" ["Expected Nat value", show v]
+    v -> panic "streamGetOp" ["Expected Nat value; got " <> Text.pack (show v)]
 
 
 lookupSStream :: SValue -> Natural -> IO SValue
@@ -600,7 +600,7 @@ muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
                   muxBVal tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
-muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch", show tp]
+muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch; found " <> Text.pack (show tp)]
 
 ------------------------------------------------------------
 -- External interface

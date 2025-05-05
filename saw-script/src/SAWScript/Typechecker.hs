@@ -1751,7 +1751,7 @@ checkStmt env tenv ctx stmt =
       ln = case ctx of
           TopLevel -> Located "<toplevel>" "<toplevel>" pos
           ProofScript -> Located "<proofscript>" "<proofscript>" pos
-          _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
+          _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
       ctxtype = TyCon pos (ContextCon ctx) []
   in
   evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)

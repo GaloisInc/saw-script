@@ -321,7 +321,7 @@ primCellToMap sc c args = case c ^. cellType of
     connWidthNat :: Text -> Natural
     connWidthNat onm =
       case Map.lookup onm $ c ^. cellConnections of
-        Nothing -> panic "cellToTerm" [Text.unpack $ mconcat ["Missing expected output name for ", nm, " cell"]]
+        Nothing -> panic "cellToTerm" ["Missing expected output name for " <> nm <> " cell"]
         Just bits -> fromIntegral $ length bits
     connWidth :: Text -> m SC.Term
     connWidth onm = liftIO . SC.scNat sc $ connWidthNat onm
@@ -329,7 +329,7 @@ primCellToMap sc c args = case c ^. cellType of
 
     input :: Text -> m CellTerm
     input inpNm = case Map.lookup inpNm args of
-      Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
+      Nothing -> panic "cellToTerm" [nm <> " missing input " <> inpNm]
       Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
     output :: CellTerm -> m (Maybe (Map Text SC.Term))

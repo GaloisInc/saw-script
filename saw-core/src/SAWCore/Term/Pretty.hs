@@ -69,9 +69,9 @@ import Text.URI
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import SAWCore.Panic (panic)
 import SAWCore.Name
 import SAWCore.Term.Functor
-import SAWCore.Utils (panic)
 import SAWCore.Recognizer
 
 --------------------------------------------------------------------------------
@@ -550,7 +550,7 @@ ppFlatTermF prec tf =
                     do cnm <- ppBestName (ModuleIdentifier (primName ec))
                        case Map.lookup (primVarIndex ec) fs_pp of
                          Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
-                         Nothing -> panic "ppFlatTerm" ["missing constructor", show cnm]
+                         Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
          return $
            ppAppList prec (annotate RecursorStyle (nm <> "#rec"))
              (params_pp ++ [motive_pp, tupled f_pps])
@@ -596,7 +596,10 @@ ppBitsToHex (b8:b4:b2:b1:bits') =
         toInt False = 0
 ppBitsToHex [] = ""
 ppBitsToHex bits =
-  panic "ppBitsToHex" ["length of bit list is not a multiple of 4", show bits]
+  panic "ppBitsToHex" [
+      "length of bit list " <> bits' <> " is not a multiple of 4"
+  ]
+  where bits' = Text.pack (show bits)
 
 -- | Pretty-print a name, using the best unambiguous alias from the
 -- naming environment.

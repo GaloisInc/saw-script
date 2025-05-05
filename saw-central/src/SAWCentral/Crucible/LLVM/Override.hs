@@ -1619,11 +1619,12 @@ matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
                        -- correctly.
                        LeqProof <- case testLeq (addNat bfOffset rhsWidth) bfWidth of
                          Just prf -> pure prf
-                         Nothing -> panic
-                           "llvm_points_to_bitfield: Unexpected bitfield field offset"
-                           [ "Field offset: " ++ show bfOffset
-                           , "RHS value width: " ++ show rhsWidth
-                           , "Bitvector width: " ++ show bfWidth
+                         Nothing ->
+                           panic "llvm_points_to_bitfield (in matchPointsToBitfieldValue)" [
+                               "Unexpected bitfield field offset",
+                               "Field offset: " <> pack (show bfOffset),
+                               "RHS value width: " <> pack (show rhsWidth),
+                               "Bitvector width: " <> pack (show bfWidth)
                            ]
 
                        -- Finally, select the subsequence of bits from the

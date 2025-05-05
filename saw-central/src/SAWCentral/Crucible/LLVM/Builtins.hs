@@ -288,10 +288,11 @@ resolveSpecName nm =
             _:parentName' -> parentName'
             -- TODO: Give a proper error message here instead of panicking,
             -- and document __breakpoint__ naming requirements. See #2097.
-            [] -> panic "resolveSpecName"
-                        [ "__breakpoint__ function not followed by #<parent_name>"
-                        , "See https://github.com/GaloisInc/saw-script/issues/2097"
-                        ] in
+            [] -> panic "resolveSpecName" [
+                      "__breakpoint__ function not followed by #<parent_name>",
+                      "See https://github.com/GaloisInc/saw-script/issues/2097"
+                  ]
+    in
     return
       ( fnName
       , Just parentName
@@ -1266,7 +1267,9 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz md fresh initialization)
 lookupMemGlobal :: Crucible.GlobalVar tp -> Crucible.SymGlobalState sym -> Crucible.RegValue sym tp
 lookupMemGlobal mvar globals =
   fromMaybe
-    (panic "SAWCentral.Crucible.LLVM.X86.pushFreshReturnAddress" ["LLVM Memory global not found"])
+    -- this used to claim it happens in pushFreshReturnAddress from X86.hs,
+    -- which seems to be possible but far from the only entry point...
+    (panic "lookupMemGlobal" ["LLVM Memory global not found: " <> Text.pack (show $ pretty mvar)])
     (Crucible.lookupGlobal mvar globals)
 
 ppAbortedResult :: LLVMCrucibleContext arch
@@ -1574,10 +1577,20 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
                do Crucible.SomeHandle h <- registerOverride opts cc simCtx top_loc mdMap lemmas
                   case (testEquality argTys (Crucible.handleArgTypes h),
                         testEquality retTy (Crucible.handleReturnType h)) of
-                    (Nothing, _) -> panic ("Argument type mismatch when refining specification for " ++ fstr)
-                                           [ show argTys, show h ]
-                    (_, Nothing) -> panic ("Return type mismatch when refining specification for " ++ fstr)
-                                           [ show retTy, show h ]
+                    (Nothing, _) ->
+                        panic "refineSimulate" [
+                            "Argument type mismatch when refining specification for " <>
+                                Text.pack fstr,
+                            "Argument types: " <> Text.pack (show argTys),
+                            "Handle: " <> Text.pack (show h)
+                        ]
+                    (_, Nothing) ->
+                        panic "refineSimulate" [
+                            "Return type mismatch when refining specification for " <>
+                                Text.pack fstr,
+                            "Return type: " <> Text.pack (show retTy),
+                            "Handle: " <> Text.pack (show h)
+                        ]
                     (Just Refl, Just Refl) ->
                       do liftIO $
                           for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
@@ -2282,10 +2295,10 @@ constructExpandedSetupValue cc sc loc t =
     -- See https://github.com/GaloisInc/saw-script/issues/1879 for why it is
     -- tricky to support opaque pointers here.
     Crucible.PtrOpaqueType  ->
-      panic "SAWCentral.Crucible.LLVM.Builtins.constructExpandedSetupValue"
-            [ "llvm_fresh_expanded_val does not support opaque pointers"
-            , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1879"
-            ]
+      panic "constructExpandedSetupValue" [
+          "llvm_fresh_expanded_val does not support opaque pointers",
+          "Please report this at: https://github.com/GaloisInc/saw-script/issues/1879"
+      ]
   where failUnsupportedType tyName = throwCrucibleSetup loc $ unwords
           ["llvm_fresh_expanded_var: " ++ tyName ++ " not supported"]
 

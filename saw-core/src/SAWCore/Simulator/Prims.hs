@@ -77,12 +77,11 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWCore.Panic (panic)
 import SAWCore.Term.Functor (Ident, primType, primName)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
 import qualified SAWCore.Prim as Prim
-
-import qualified SAWCore.Utils as Panic (panic)
 
 
 -- | A utility type for implementing primitive functions.
@@ -392,10 +391,6 @@ constMap bp = Map.fromList
   , ("Prelude.arrayRangeEq", arrayRangeEqOp bp)
   ]
 
--- | Call this function to indicate that a programming error has
--- occurred, e.g. a datatype invariant has been violated.
-panic :: HasCallStack => String -> a
-panic msg = Panic.panic "SAWCore.Simulator.Prims" [msg]
 
 ------------------------------------------------------------
 -- Value accessors and constructors
@@ -405,7 +400,7 @@ vNat n = VNat n
 
 toBool :: Show (Extra l) => Value l -> VBool l
 toBool (VBool b) = b
-toBool x = panic $ unwords ["SAWCore.Simulator.toBool", show x]
+toBool x = panic "toBool" ["Not boolean: " <> Text.pack (show x)]
 
 
 type Pack l   = Vector (VBool l) -> MWord l
@@ -415,18 +410,18 @@ toWord :: (HasCallStack, VMonad l, Show (Extra l))
        => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
 toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
-toWord _ x = panic $ unwords ["SAWCore.Simulator.toWord", show x]
+toWord _ x = panic "toWord" ["Not word or vector: " <> Text.pack (show x)]
 
 toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
            => Value l -> VWord l -> MBool l
 toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
-toWordPred x = panic $ unwords ["SAWCore.Simulator.toWordPred", show x]
+toWordPred x = panic "toWordPred" ["Not function: " <> Text.pack (show x)]
 
 toBits :: (HasCallStack, VMonad l, Show (Extra l))
        => Unpack l -> Value l -> EvalM l (Vector (VBool l))
 toBits unpack (VWord w) = unpack w
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
-toBits _ x = panic $ unwords ["SAWCore.Simulator.toBits", show x]
+toBits _ x = panic  "toBits" ["Not vector: " <> Text.pack (show x)]
 
 toVector :: (HasCallStack, VMonad l, Show (Extra l))
          => Unpack l -> Value l -> ExceptT Text (EvalM l) (Vector (Thunk l))
@@ -442,7 +437,7 @@ vecIdx err v n =
 
 toArray :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MArray l
 toArray (VArray f) = return f
-toArray x = panic $ unwords ["SAWCore.Simulator.toArray", show x]
+toArray x = panic "toArray" ["Not array: " <> Text.pack (show x)]
 
 ------------------------------------------------------------
 -- Standard operator types
@@ -496,7 +491,7 @@ selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> Vector b -> a
 selectV mux maxValue valueFn v = impl len 0
   where
     len = V.length v
-    err = panic "selectV: impossible"
+    err = panic "selectV" ["Guarded access is out of range"]
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 x = valueFn x
     impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
@@ -537,13 +532,13 @@ natSizeMaybe val =
   case val of
     VNat n -> Just $ widthNat n
     VBVToNat n _ -> Just $ fromIntegral n -- TODO, remove this fromIntegral
-    VIntToNat _ -> panic "natSize: symbolic integer (TODO)"
+    VIntToNat _ -> panic "natSizeMaybe" ["Got symbolic integer (TODO)"] -- XXX
     _ -> Nothing
 
 -- | Return the number of bits necessary to represent the given value,
 -- which should be a value of type Nat, calling 'panic' if this cannot be done.
 natSize :: (HasCallStack, Show (Extra l)) => Value l -> Natural
-natSize val = fromMaybe (panic $ "natSize: expected Nat, got: " ++ show val)
+natSize val = fromMaybe (panic "natSize" ["expected Nat, got: " <> Text.pack (show val)])
                         (natSizeMaybe val)
 
 -- | A primitive that requires a natural argument, returning its value as a
@@ -566,11 +561,11 @@ natToWord :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
              Natural -> Value l -> MWord l
 natToWord bp w val =
   unless (w <= fromIntegral (maxBound :: Int))
-         (panic "natToWord" ["width too large", show w]) >>
+         (panic "natToWord" ["width too large: " <> Text.pack (show w)]) >>
   -- TODO, remove the calls to fromIntegral below
   case val of
     VNat n -> bpBvLit bp (fromIntegral w) (toInteger n)
-    VIntToNat _i -> panic "natToWord of VIntToNat TODO!"
+    VIntToNat _i -> panic "natToWord" ["Reached VIntToNat: TODO!"]
     VBVToNat xsize v ->
       do x <- toWord (bpPack bp) v
          case compare xsize (fromIntegral w) of
@@ -579,7 +574,7 @@ natToWord bp w val =
            LT -> -- zero-extend x to width w
              do pad <- bpBvLit bp (fromIntegral w - xsize) 0
                 bpBvJoin bp pad x
-    _ -> panic $ "natToWord: expected Nat, got: " ++ show val
+    _ -> panic "natToWord" ["expected Nat, got: " <> Text.pack (show val)]
 
 -- | A primitive which is a unary operation on a natural argument.
 -- The second argument gives how to modify the size in bits of this operation's
@@ -765,7 +760,7 @@ bytesToStringOp bp =
                           zeroBits
 
     asBool :: VBool l -> Bool
-    asBool vb = fromMaybe (panic "bytesToStringOp: Nothing VBool")
+    asBool vb = fromMaybe (panic "bytesToStringOp" ["bpAsBool of VBool gave Nothing"])
                           (bpAsBool bp vb)
 
 equalStringOp :: VMonad l => BasePrims l -> Prim l
@@ -791,8 +786,9 @@ genOp =
   strictFun $ \f -> Prim $
     do let g i = delay $ apply f (ready (VNat (fromIntegral i)))
        if toInteger n > toInteger (maxBound :: Int) then
-         panic ("SAWCore.Simulator.gen: vector size too large: " ++ show n)
-         else liftM VVector $ V.generateM (fromIntegral n) g
+         panic "genOp" ["Vector size too large: " <> Text.pack (show n)]
+       else
+         liftM VVector $ V.generateM (fromIntegral n) g
 
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
@@ -819,7 +815,7 @@ atWithDefaultOp bp =
             lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
           _ -> throwE "atOp: expected vector"
 
-      VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "atWithDefault: symbolic integer TODO"
+      VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "atWithDefault" ["Got symbolic integer:  TODO"]
 
       _ -> throwE $ "atOp: expected Nat, got " <> Text.pack (show idx)
 
@@ -866,7 +862,7 @@ updOp bp =
            iv' <- V.mapM (liftM toBool . force) iv
            selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
 
-      VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "updOp: symbolic integer TODO"
+      VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "updOp" ["Got symbolic integer: TODO"]
 
       _ -> throwE $ "updOp: expected Nat, got " <> Text.pack (show idx)
 
@@ -1001,7 +997,8 @@ expByNatOp bp =
 
     -- This can't really be implemented, we should throw an unsupported exception
     -- of some kind instead
-    VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "expByNat: symbolic integer"
+    -- XXX: don't panic please
+    VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "expByNatOp" ["Got symbolic integer"]
 
     VNat n ->
       do let loop acc [] = return acc
@@ -1016,7 +1013,7 @@ expByNatOp bp =
              w = toInteger (widthNat n)
 
          if w > toInteger (maxBound :: Int) then
-           panic "expByNatOp" ["Exponent too large", show n]
+           panic "expByNatOp" ["Exponent too large: " <> Text.pack (show n)]
          else
            lift (loop one [ testBit n (fromInteger i) | i <- reverse [ 0 .. w-1 ]])
 
@@ -1080,7 +1077,8 @@ shiftOp bp vecOp wordIntOp wordOp =
             VWord <$> wordOp zb xw iw
           _ -> throwE $ "shiftOp: " <> Text.pack (show xs)
 
-      VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "shiftOp: symbolic integer TODO"
+      VIntToNat _i | bpIsSymbolicEvaluator bp ->
+        panic "shiftOp" ["Got symbolic integer: TODO"]
 
       _ -> throwE $ "shiftOp: " <> Text.pack (show y)
   where
@@ -1126,7 +1124,8 @@ rotateOp bp vecOp wordIntOp wordOp =
           VWord xw -> lift (VWord <$> wordOp xw iw)
           _ -> throwE $ "rotateOp: " <> Text.pack (show xs)
 
-      VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "rotateOp: symbolic integer TODO"
+      VIntToNat _i | bpIsSymbolicEvaluator bp ->
+        panic "rotateOp" ["Got symbolic integer: TODO"]
 
       _ -> throwE $ "rotateOp: " <> Text.pack (show y)
   where
@@ -1325,7 +1324,7 @@ muxValue bp tp0 b = value tp0
                               (Just v1, Just v2) ->
                                  do v <- thunk tp v1 v2
                                     pure (f,v)
-                              _ -> panic "muxValue" ["Record field missing!", show f]
+                              _ -> panic "muxValue" ["Record field missing: " <> f]
          VRecordValue <$> traverse build fs
 
     value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)
@@ -1357,8 +1356,10 @@ muxValue bp tp0 b = value tp0
     value _ (TValue x)        (TValue y)        = TValue <$> tvalue x y
 
     value tp x                y                 =
-      panic $ "SAWCore.Simulator.Prims.iteOp: malformed arguments: " <>
-         show x <> " " <> show y <> " " <> show tp
+      panic "muxValue / value" [
+         "Malformed arguments: " <> Text.pack (show x) <> " " <> Text.pack (show y),
+         "Type: " <> Text.pack (show tp)
+      ]
 
     ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
 
@@ -1378,14 +1379,21 @@ muxValue bp tp0 b = value tp0
     ctorArgs (VPiType _nm _t1 (VDependentPi _)) [] _ _ =
       unsupportedPrimitive "muxValue" "cannot mux constructors with dependent types"
 
-    ctorArgs _ _ _ _ =
-      panic $ "SAWCore.Simulator.Prims.iteOp: constructor arguments mismtch"
+    ctorArgs ty ps xs ys =
+      panic "muxValue / ctorArgs" [
+          "Constructor arguments mismatch",
+          "Remaining type is: " <> Text.pack (show ty),
+          Text.pack (show $ length ps) <> " ps (sorry, cannot show the contents)",
+          Text.pack (show $ length xs) <> " xs (sorry, cannot show the contents)",
+          Text.pack (show $ length ys) <> " ys (sorry, cannot show the contents)"
+      ]
 
     tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
     tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
     tvalue x                 y                 =
-      panic $ "SAWCore.Simulator.Prims.iteOp: malformed arguments: "
-      ++ show x ++ " " ++ show y
+      panic "muxValue / tvalue" [
+          "Malformed arguments: " <> Text.pack (show x) <> " " <> Text.pack (show y)
+      ]
 
     toVector' :: Value l -> EvalM l (Vector (Thunk l))
     toVector' v =
@@ -1395,7 +1403,14 @@ muxValue bp tp0 b = value tp0
     thunks :: TValue l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
     thunks tp xv yv
       | V.length xv == V.length yv = V.zipWithM (thunk tp) xv yv
-      | otherwise                  = panic "SAWCore.Simulator.Prims.iteOp: malformed arguments"
+      | otherwise =
+          panic "muxValue / thunks" [
+              "Malformed arguments",
+              "Length of xv: " <> Text.pack (show $ length xv),
+              "Length of yv: " <> Text.pack (show $ length yv),
+              "Type is: " <> Text.pack (show tp),
+              "(sorry, cannot show xv and yv themselves)"
+          ]
 
     thunk :: TValue l -> Thunk l -> Thunk l -> EvalM l (Thunk l)
     thunk tp x y = delay $

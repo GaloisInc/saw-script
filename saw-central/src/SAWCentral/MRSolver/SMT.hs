@@ -30,6 +30,8 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWCentral.MRSolver.SMT where
 
 import Data.Maybe
+import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Control.Monad (MonadPlus(..), (>=>), (<=<), when, unless, foldM)
@@ -47,7 +49,6 @@ import Prettyprinter
 import Data.Reflection
 import Data.Parameterized.BoolRepr
 
-import SAWCore.Utils (panic) -- XXX why is this using a different library's panic hook?
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
@@ -61,6 +62,8 @@ import SAWCore.Simulator.Value
 import SAWCore.Simulator.TermModel
 import SAWCore.Simulator.Prims
 import SAWCore.FiniteValue
+
+import SAWCentral.Panic
 import SAWCentral.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
 import SAWCentral.MRSolver.Term
@@ -149,7 +152,7 @@ mkReflProof sc b =
      eq_tp <- scDataTypeApp sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
      return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm
 
-mkDummyProofValue :: String -> IO (Thunk TermModel)
+mkDummyProofValue :: Text -> IO (Thunk TermModel)
 mkDummyProofValue op =
   delay $ return $ panic op ["Unexpected evaluation of proof object"]
 
@@ -164,10 +167,10 @@ iteWithProofOp sc cfg =
     Right b -> mkReflProof sc b >>= apply x_fun . ready
     Left b_trm ->
       do let ?recordEC = \_ec -> return ()
-         eq_true <- mkDummyProofValue "iteWithProofOp"
+         eq_true <- mkDummyProofValue "iteWithProofOp / true"
          x <- apply x_fun eq_true
          x_trm <- readBackValue sc cfg tp x
-         eq_false <- mkDummyProofValue "iteWithProofOp"
+         eq_false <- mkDummyProofValue "iteWithProofOp / false"
          y <- apply y_fun eq_false
          y_trm <- readBackValue sc cfg tp y
          tp_trm <- readBackTValue sc cfg tp
@@ -525,8 +528,10 @@ injReprComp (InjReprNum steps1) (InjReprNum steps2) =
 injReprComp (InjReprPair r1_l r1_r) (InjReprPair r2_l r2_r) =
   InjReprPair (injReprComp r1_l r2_l) (injReprComp r1_r r2_r)
 injReprComp r1 r2 =
-  panic "injReprComp" ["Representations do not compose: " ++
-                       show r1 ++ " and " ++ show r2]
+  panic "injReprComp" [
+      "Representations do not compose: " <>
+          Text.pack (show r1) <> " and " <> Text.pack (show r2)
+  ]
 
 -- | Apply a 'InjectiveRepr' to convert an element of the representation type
 -- @tp_r@ to the type @tp@ that it represents
