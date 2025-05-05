@@ -34,11 +34,11 @@
             "s": "output"
           },
           "connections": {
-            "a": [ 5 ],
-            "b": [ 9 ],
+            "a": [ 2 ],
+            "b": [ 6 ],
             "cin": [ "0" ],
             "cout": [ 14 ],
-            "s": [ 13 ]
+            "s": [ 10 ]
           }
         },
         "full1": {
@@ -56,11 +56,11 @@
             "s": "output"
           },
           "connections": {
-            "a": [ 4 ],
-            "b": [ 8 ],
+            "a": [ 3 ],
+            "b": [ 7 ],
             "cin": [ 14 ],
             "cout": [ 15 ],
-            "s": [ 12 ]
+            "s": [ 11 ]
           }
         },
         "full2": {
@@ -78,11 +78,11 @@
             "s": "output"
           },
           "connections": {
-            "a": [ 3 ],
-            "b": [ 7 ],
+            "a": [ 4 ],
+            "b": [ 8 ],
             "cin": [ 15 ],
             "cout": [ 16 ],
-            "s": [ 11 ]
+            "s": [ 12 ]
           }
         },
         "full3": {
@@ -100,24 +100,24 @@
             "s": "output"
           },
           "connections": {
-            "a": [ 2 ],
-            "b": [ 6 ],
+            "a": [ 5 ],
+            "b": [ 9 ],
             "cin": [ 16 ],
             "cout": [ 17 ],
-            "s": [ 10 ]
+            "s": [ 13 ]
           }
         }
       },
       "netnames": {
         "$auto$ghdl.cc:764:import_module$2": {
           "hide_name": 1,
-          "bits": [ 13 ],
+          "bits": [ 10 ],
           "attributes": {
           }
         },
         "$auto$ghdl.cc:764:import_module$4": {
           "hide_name": 1,
-          "bits": [ 12 ],
+          "bits": [ 11 ],
           "attributes": {
           }
         },
@@ -135,7 +135,7 @@
         },
         "$auto$ghdl.cc:764:import_module$8": {
           "hide_name": 1,
-          "bits": [ 10 ],
+          "bits": [ 13 ],
           "attributes": {
           }
         },
