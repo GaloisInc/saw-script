@@ -83,7 +83,7 @@ visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
     -- write a spec for e.g. `f(arr, &arr[i], i)`, where the second reference
     -- is offset from the first by a symbolic integer value, then we'd need to
     -- visit exprs from some suffix of each MirReference.
-    go (MirReferenceRepr _) _ = return ()
+    go MirReferenceRepr _ = return ()
     go tpr _ = error $ "visitRegValueExprs: unsupported: " ++ show tpr
 
     forMWithRepr_ :: forall ctx m f. Monad m =>

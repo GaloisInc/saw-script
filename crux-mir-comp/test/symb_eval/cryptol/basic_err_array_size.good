@@ -4,7 +4,7 @@ failures:
 
 ---- basic_err_array_size/<DISAMB>::test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   test/symb_eval/cryptol/basic_err_array_size.rs:8:52: 8:62: error: in basic_err_array_size/<DISAMB>::test[0]
+[Crux]   test/symb_eval/cryptol/basic_err_array_size.rs:8:32: 8:63: error: in basic_err_array_size/<DISAMB>::test[0]
 [Crux]   error loading "arrayArg": type mismatch in argument 0: Cryptol type [2][8] does not match Rust type u8: array length 2 does not match 3
 
 [Crux] Overall status: Invalid.

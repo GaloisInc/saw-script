@@ -7,7 +7,7 @@ failures:
 
 ---- override_test_indep/<DISAMB>::use_f2[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/override_test_indep.rs:57:5: 57:29: error: in override_test_indep/<DISAMB>::use_f2[0]
+[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/override_test_indep.rs:57:5: 57:29: error: in override_test_indep/<DISAMB>::use_f2[0]
 [Crux]   MIR assertion at test/symb_eval/comp/override_test_indep.rs:57:5:
 [Crux]   	d < 10
 

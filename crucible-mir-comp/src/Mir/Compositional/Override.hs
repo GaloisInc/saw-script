@@ -84,7 +84,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 printSpec ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     MethodSpec ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym (MirSlice (BVType 8)))
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
     let bytes = Text.encodeUtf8 $ Text.pack str
@@ -92,12 +92,13 @@ printSpec ms = do
     sym <- getSymInterface
     len <- liftIO $ W4.bvLit sym knownRepr (BV.mkBV knownRepr $ fromIntegral $ BS.length bytes)
 
+    let w8 = knownNat @8
     byteVals <- forM (BS.unpack bytes) $ \b -> do
-        liftIO $ W4.bvLit sym (knownNat @8) (BV.mkBV knownRepr $ fromIntegral b)
+        liftIO $ W4.bvLit sym w8 (BV.mkBV w8 $ fromIntegral b)
 
     let vec = MirVector_Vector $ V.fromList byteVals
-    let vecRef = newConstMirRef sym knownRepr vec
-    ptr <- subindexMirRefSim knownRepr vecRef =<<
+    let vecRef = newConstMirRef sym (MirVectorRepr (BVRepr w8)) vec
+    ptr <- subindexMirRefSim MirReferenceRepr vecRef =<<
         liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     return $ Empty :> RV ptr :> RV len
 
@@ -442,7 +443,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
         M.Ty ->
         M.Mutability ->
         TypeRepr tp' ->
-        MirReferenceMux sym tp' ->
+        MirReferenceMux sym ->
         MS.AllocIndex ->
         -- | The expected offset of `ref` past the start of the allocation.
         Int ->
@@ -481,7 +482,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
         -- allocation.
         offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $
             fromIntegral $ negate refOffset
-        ref' <- lift $ mirRef_offsetWrapSim tpr ref offsetSym
+        ref' <- lift $ mirRef_offsetWrapSim ref offsetSym
 
         m <- use MS.setupValueSub
         case Map.lookup alloc m of

@@ -78,9 +78,7 @@ cryptolOverrides ::
 cryptolOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
-  , Empty
-      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
-      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
+  , Empty :> MirSliceRepr :> MirSliceRepr
       <- cfgArgTypes cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_load" (cfgReturnType cfg) $ do
@@ -94,11 +92,7 @@ cryptolOverrides _symOnline cs name cfg
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
   | hasInstPrefix ["crucible", "cryptol", "override_"] explodedName
-  , Empty
-      :> UnitRepr
-      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
-      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
-      <- cfgArgTypes cfg
+  , Empty :> UnitRepr :> MirSliceRepr :> MirSliceRepr <- cfgArgTypes cfg
   , UnitRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_override_" UnitRepr $ do
@@ -143,8 +137,8 @@ cryptolLoad ::
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
-    RegValue sym (MirSlice (BVType 8)) ->
-    RegValue sym (MirSlice (BVType 8)) ->
+    RegValue sym MirSlice ->
+    RegValue sym MirSlice ->
     OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
 cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"
@@ -170,7 +164,7 @@ cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 loadString ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    RegValue sym (MirSlice (BVType 8)) ->
+    RegValue sym MirSlice ->
     String ->
     OverrideSim (p sym) sym MIR rtp a r Text
 loadString str desc = getString str >>= \x -> case x of
@@ -183,8 +177,8 @@ cryptolOverride ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     M.Collection ->
     MirHandle ->
-    RegValue sym (MirSlice (BVType 8)) ->
-    RegValue sym (MirSlice (BVType 8)) ->
+    RegValue sym MirSlice ->
+    RegValue sym MirSlice ->
     OverrideSim (p sym) sym MIR rtp a r ()
 cryptolOverride col (MirHandle _ sig fh) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"

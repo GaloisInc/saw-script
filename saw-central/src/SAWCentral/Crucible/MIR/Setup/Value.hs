@@ -145,7 +145,7 @@ data MirPointer sym tp = MirPointer
     { _mpType :: TypeRepr tp
     , _mpMutbl :: M.Mutability
     , _mpMirType :: M.Ty
-    , _mpRef :: MirReferenceMux sym tp
+    , _mpRef :: MirReferenceMux sym
     }
 
 -- | A enum-related MIR 'SetupValue'.

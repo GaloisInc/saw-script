@@ -94,7 +94,7 @@ data StateExtra sym t = StateExtra
 data FoundRef sym tp = FoundRef
     { _frAlloc :: MS.AllocIndex
     , _frAllocSpec :: MirAllocSpec tp
-    , _frRef :: MirReferenceMux sym tp
+    , _frRef :: MirReferenceMux sym
     }
 
 initMethodSpecBuilder ::
@@ -229,7 +229,7 @@ builderNew cs defId =
 -- be overwritten with a fresh symbolic variable.
 addArg :: forall sym p t st fs rtp args ret tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    TypeRepr tp -> MirReferenceMux sym tp -> MethodSpecBuilder sym t ->
+    TypeRepr tp -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb =
   ovrWithBackend $ \bak ->
@@ -283,7 +283,7 @@ addArg tpr argRef msb =
 -- dereferencing `argRef`.
 setReturn :: forall sym t st fs p rtp args ret tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    TypeRepr tp -> MirReferenceMux sym tp -> MethodSpecBuilder sym t ->
+    TypeRepr tp -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 setReturn tpr argRef msb =
   ovrWithBackend $ \bak ->
@@ -736,7 +736,7 @@ regToSetup bak p eval shp rv = go shp rv
         -- Offset backward by `idx` to get a pointer to the start of the accessible
         -- allocation.
         offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral $ negate idx
-        startRef <- lift $ mirRef_offsetWrapSim tpr ref offsetSym
+        startRef <- lift $ mirRef_offsetWrapSim ref offsetSym
 
         -- Casting &T -> &mut T is undefined behavior, so we can safely mark
         -- Immut refs as Immut.  But casting *const T -> *mut T is allowed, so
@@ -773,7 +773,7 @@ regToSetup bak p eval shp rv = go shp rv
 
 refToAlloc :: forall sym bak t st fs tp p rtp args ret.
     (IsSymBackend sym bak, sym ~ W4.ExprBuilder t st fs) =>
-    bak -> PrePost -> M.Mutability -> M.Ty -> TypeRepr tp -> MirReferenceMux sym tp -> Int ->
+    bak -> PrePost -> M.Mutability -> M.Ty -> TypeRepr tp -> MirReferenceMux sym -> Int ->
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex
 refToAlloc bak p mutbl ty tpr ref len = do
     refs <- use $ msbPrePost p . seRefs
@@ -803,7 +803,7 @@ refToAlloc bak p mutbl ty tpr ref len = do
     -- error, since it means some allocations might be aliased under some
     -- assignments to the symbolic variables but not under others.
     lookupAlloc ::
-        MirReferenceMux sym tp ->
+        MirReferenceMux sym ->
         [Some (FoundRef sym)] ->
         IO (Maybe MS.AllocIndex)
     lookupAlloc _ref [] = return Nothing

@@ -632,7 +632,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
         MirSetupSliceRaw{} ->
           panic "resolveSetupVal" ["MirSetupSliceRaw not yet implemented"]
         MirSetupSlice sliceInfo arrRef -> do
-          SetupSliceFromArrayRef _elemTpr sliceShp refVal len <-
+          SetupSliceFromArrayRef sliceShp refVal len <-
             resolveSetupSliceFromArrayRef bak sliceInfo arrRef
           lenVal <- usizeBvLit sym len
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal Ctx.:> RV lenVal)
@@ -640,13 +640,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
           unless (start <= end) $
             fail $ "slice index starts at " ++ show start
                 ++ " but ends at " ++ show end
-          SetupSliceFromArrayRef elemTpr sliceShp refVal0 len <-
+          SetupSliceFromArrayRef sliceShp refVal0 len <-
             resolveSetupSliceFromArrayRef bak sliceInfo arrRef
           unless (end <= len) $
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
           startBV <- usizeBvLit sym start
-          refVal1 <- Mir.mirRef_offsetIO bak iTypes elemTpr refVal0 startBV
+          refVal1 <- Mir.mirRef_offsetIO bak iTypes refVal0 startBV
           lenVal <- usizeBvLit sym $ end - start
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
@@ -796,7 +796,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           zeroBV <- usizeBvLit sym 0
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
-          pure $ SetupSliceFromArrayRef elemTpr sliceShp refVal len
+          pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> X.throwM $ MIRSliceNonReference $ shapeMirTy arrRefShp
 
     -- Resolve a transparent struct or enum value.
@@ -833,9 +833,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
 -- 'resolveSetupSliceFromArrayRef'.
 data SetupSliceFromArrayRef where
   SetupSliceFromArrayRef ::
-    TypeRepr tp {- ^ The array's element type -} ->
-    TypeShape (Mir.MirSlice tp) {- ^ The overall shape of the slice -} ->
-    Mir.MirReferenceMux Sym tp {- ^ The reference to the array -} ->
+    TypeShape Mir.MirSlice {- ^ The overall shape of the slice -} ->
+    Mir.MirReferenceMux Sym {- ^ The reference to the array -} ->
     Int {- ^ The array length -} ->
     SetupSliceFromArrayRef
 
@@ -1465,11 +1464,12 @@ doAlloc cc globals (Some ma) =
 
      -- Create an uninitialized `MirVector_PartialVector` of length 1 and
      -- return a pointer to its element.
-     ref <- Mir.newMirRefIO sym halloc (Mir.MirVectorRepr tpr)
+     let vecRepr = Mir.MirVectorRepr tpr
+     ref <- Mir.newMirRefIO sym halloc vecRepr
 
      one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
      vec <- Mir.mirVector_uninitIO bak one
-     globals' <- Mir.writeMirRefIO bak globals iTypes ref vec
+     globals' <- Mir.writeMirRefIO bak globals iTypes vecRepr ref vec
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
      ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
@@ -1519,7 +1519,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
               "Reference type: " <> Text.pack (show referenceInnerTy),
               "Referent type:  " <> Text.pack (show (shapeType referentShp))
           ]
-    Mir.writeMirRefIO bak globals iTypes referenceVal referentVal
+    Mir.writeMirRefIO bak globals iTypes referenceInnerTy referenceVal referentVal
   where
     iTypes = cc ^. mccIntrinsicTypes
     tyenv = MS.csAllocations mspec
@@ -1645,11 +1645,11 @@ staticRefMux ::
   W4.IsSymExprBuilder sym =>
   sym ->
   GlobalVar tp ->
-  Mir.MirReferenceMux sym tp
+  Mir.MirReferenceMux sym
 staticRefMux sym gv =
   Mir.MirReferenceMux $
   Mir.toFancyMuxTree sym $
-  Mir.MirReference (Mir.GlobalVar_RefRoot gv) Mir.Empty_RefPath
+  Mir.MirReference (globalType gv) (Mir.GlobalVar_RefRoot gv) Mir.Empty_RefPath
 
 -- | Compute the 'Mir.Ty' of a reference to a 'Mir.Static' value.
 staticTyRef :: Mir.Static -> Mir.Ty
