@@ -25,7 +25,6 @@ import qualified Data.Char as Char
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text (Text)
 import Data.Word (Word8)
 import Text.Read (readMaybe)
 
@@ -79,7 +78,7 @@ $cntrl       = [$large \@\[\\\]\^\_]
 $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $gapchar+ \\
-@string      = $graphic # [\"\\] | " " | @escape | @gap
+@string      = $graphic # [\"\\] | " " | @escape
 @code        = ($codechar # \}) | \} ($codechar # \})
 @ctype       = ($codechar # \|) | \| ($codechar # \})
 @num         = @decimal | 0[bB] @binary | 0[oO] @octal | 0[xX] @hexadecimal
@@ -105,8 +104,10 @@ sawTokens :-
 
 <string> {
 @string                          { addToString }
+@gap                             ;
 \"                               { endString   }
-\\.                              { addToString }
+\n                               { lexFail "Invalid multiline string" }
+\\.                              { lexFail "Invalid character escape in string" }
 }
 
 <0> {
@@ -122,6 +123,9 @@ $whitechar+                      ;
 0[bB] @binary                    { addon readBin  TNum      }
 0[oO] @octal                     { addon read'    TNum      }
 0[xX] @hexadecimal               { addon read'    TNum      }
+0[bB]                            { lexFail "binary literal with no contents" }
+0[oO]                            { lexFail "octal literal with no contents" }
+0[xX]                            { lexFail "hexadecimal literal with no contents" }
 .                                { plain          TUnknown  }
 }
 
@@ -146,6 +150,7 @@ type Action = Pos -> Text -> LexS -> ([Token Pos], LexS)
 plain ::                   (Pos -> Text -> Token Pos)   -> Action
 xform :: (Text -> Text) -> (Pos -> Text -> Token Pos)   -> Action
 addon :: (Text -> a) -> (Pos -> Text -> a -> Token Pos) -> Action
+lexFail :: Text -> Action
 
 addToComment, startComment, endComment :: Action
 addToCode, startCode, endCode :: Action
@@ -155,6 +160,7 @@ addToCType, startCType, endCType :: Action
 plain   tok pos txt = \s -> ([tok pos txt], s)         -- ^ just the contents
 xform f tok pos txt = \s -> ([tok pos (f txt)], s)     -- ^ transform contents
 addon f tok pos txt = \s -> ([tok pos txt (f txt)], s) -- ^ also variant contents
+lexFail msg pos txt = \_ -> ([], LexFailed msg pos txt)
 
 startComment p txt s = ([], InComment p stack chunks done)
   where (stack,chunks, done) = case s of
@@ -275,6 +281,7 @@ data LexS
   | InString !Pos Text LexS
   | InCode   !Pos Text
   | InCType  !Pos Text
+  | LexFailed Text !Pos Text
   deriving (Show)
 
 stateToInt Normal = 0
@@ -283,6 +290,12 @@ stateToInt (InLineComment {}) = linecomment
 stateToInt (InString {}) = string
 stateToInt (InCode {}) = code
 stateToInt (InCType {}) = ctype
+stateToInt (LexFailed msg pos _) = panic "stateToInt"
+  [ "called on lex failure state, message"
+  , Text.pack $ show msg
+  , "position"
+  , Text.pack $ show pos
+  ]
 
 -- initial position
 startPos :: AlexPos
@@ -348,7 +361,7 @@ alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
 -- read the text of a file, passing in the filename for use in positions
-scanTokens :: FilePath -> Text -> ([Token Pos], OptMsg)
+scanTokens :: FilePath -> Text -> LexResult
 scanTokens filename str = go (startPos, str) Normal
   where
     fillPos pos height width =
@@ -364,22 +377,24 @@ scanTokens filename str = go (startPos, str) Normal
                        tok = [TEOF pos' "EOF"]
                    in case s of
             Normal ->
-                (tok, Nothing)
+                Right (tok, Nothing)
             InLineComment pos _ _ ->
-                (tok, Just (Warn, pos', "Missing newline at end of file"))
+                Right (tok, Just (Warn, pos', "Missing newline at end of file"))
             InComment pos _ _ _ ->
-                (tok, Just (Error, pos, "Unclosed block comment"))
+                Left (Error, pos, "Unclosed block comment")
             InString pos _ _ ->
-                (tok, Just (Error, pos, "Unterminated string"))
+                Left (Error, pos, "Unterminated string")
             InCode pos _ ->
-                (tok, Just (Error, pos, "Unclosed cryptol block"))
+                Left (Error, pos, "Unclosed cryptol block")
             InCType pos _ ->
-                (tok, Just (Error, pos, "Unclosed ctype block"))
+                Left (Error, pos, "Unclosed ctype block")
+            LexFailed msg pos _ -> -- should never happen, but this is its semantics anyway
+                Left (Error, pos, msg)
         AlexError (pos, _) ->
             let line' = Text.pack $ show $ apLine pos
                 col' = Text.pack $ show $ apCol pos
             in
-            panic "Lexer" [line' <> ":" <> col' <> ": unspecified lexical error"]
+            panic "Lexer" [line' <> ":" <> col' <> ": no possible token matched"]
         AlexSkip inp' len ->
             go inp' s
         AlexToken inp' len act ->
@@ -390,9 +405,11 @@ scanTokens filename str = go (startPos, str) Normal
                     last : lines -> (length lines, Text.length last)
                 pos' = fillPos pos height width
             in
-            let (t, s') = act pos' text s
-                (ts, mmsg) = go inp' s'
-            in (t ++ ts, mmsg)
+            case act pos' text s of
+              (t, LexFailed msg pos _rest) -> Left (Error, pos, msg)
+              (t, s') -> case go inp' s' of
+                Left x -> Left x
+                Right (ts, mmsg) -> Right (t ++ ts, mmsg)
 
 -- | Type to hold a diagnostic message (error or warning).
 --
@@ -400,13 +417,15 @@ scanTokens filename str = go (startPos, str) Normal
 -- printing infrastructure. It's here only to shorten the type
 -- signatures below, and represents the possibility of having
 -- generated a message.
-type OptMsg = Maybe (Verbosity, Pos, Text)
+type DiagMsg = (Verbosity, Pos, Text)
+type OptMsg = Maybe DiagMsg
+type LexResult = Either DiagMsg ([Token Pos], OptMsg)
 
 -- entry point
-lexSAW :: FilePath -> Text -> ([Token Pos], OptMsg)
+lexSAW :: FilePath -> Text -> LexResult
 lexSAW f text = scanTokens f text
 
 -- alternate monadic entry point (XXX: does this have any value?)
-scan :: Monad m => FilePath -> Text -> m ([Token Pos], OptMsg)
+scan :: Monad m => FilePath -> Text -> m LexResult
 scan f = return . lexSAW f
 }

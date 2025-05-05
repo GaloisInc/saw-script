@@ -35,12 +35,12 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
-import SAWCentral.Position (getPos)
+import SAWCentral.Position (getPos, Pos)
+import SAWScript.Token (Token)
 
 import Cryptol.Parser (ParseError())
 
-import Control.Exception (throwIO)
-import Control.Monad (guard, void, when)
+import Control.Monad (guard, void)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
@@ -166,17 +166,22 @@ runCommand c = case c of
     putStrLn ("\t" ++ intercalate ", " cmds)
 
 
+lexSAW :: String -> Text.Text -> REPL [Token Pos]
+lexSAW fileName str = do
+  -- XXX wrap printing of positions in the message-printing infrastructure
+  case SAWScript.Lexer.lexSAW fileName str of
+    Left (_, pos, msg) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Nothing) -> pure tokens'
+    Right (_, Just (SAWCentral.Options.Error, pos, msg)) ->
+         fail $ show pos ++ ": " ++ Text.unpack msg
+    Right (tokens', Just _) -> pure tokens'
+
 typeOfCmd :: String -> REPL ()
 typeOfCmd str
   | null str = do io $ putStrLn "[error] :type requires an argument"
   | otherwise =
-  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
-     case optmsg of
-       Nothing -> return ()
-       Just (_vrb, pos, msg) -> do
-         -- XXX wrap printing of positions in the message-printing infrastructure
-         let msg' = show pos ++ ": " ++ Text.unpack msg
-         io $ putStrLn msg'
+  do tokens <- lexSAW replFileName (Text.pack str)
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
@@ -197,16 +202,7 @@ searchCmd :: String -> REPL ()
 searchCmd str
   | null str = do io $ putStrLn $ "[error] :search requires at least one argument"
   | otherwise =
-  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
-     case optmsg of
-       Nothing -> return ()
-       Just (vrb, pos, msg) -> do
-         -- XXX wrap printing of positions in the message-printing infrastructure
-         let msg' = show pos ++ ": " ++ Text.unpack msg
-         io $ putStrLn msg'
-         -- XXX this prints twice, fix it up when we do the message-printing cleanup
-         when (vrb == SAWCentral.Options.Error) $
-             io $ throwIO $ userError msg'
+  do tokens <- lexSAW replFileName (Text.pack str)
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
        Left err -> fail (show err)
        Right pat -> return pat
@@ -293,13 +289,7 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
-  case optmsg of
-    Nothing -> return ()
-    Just (_vrb, pos, msg) -> do
-      -- XXX wrap printing of positions in the message-printing infrastructure
-      let msg' = show pos ++ ": " ++ Text.unpack msg
-      io $ putStrLn msg'
+  tokens <- lexSAW replFileName (Text.pack str)
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->

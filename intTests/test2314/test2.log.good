@@ -1,0 +1,5 @@
+ Loading file "test2.saw"
+ Stack trace:
+test2.saw:2:2-2:2: Invalid multiline string
+
+FAILED
