@@ -30,37 +30,21 @@ span.spaces    { background: white }
 <span class="lineno">   11 </span>SAW-specific declarations should be stored in separate modules.
 <span class="lineno">   12 </span>-}
 <span class="lineno">   13 </span>
-<span class="lineno">   14 </span>{-# LANGUAGE Trustworthy, TemplateHaskell #-}
+<span class="lineno">   14 </span>{-# LANGUAGE Trustworthy #-}
 <span class="lineno">   15 </span>
 <span class="lineno">   16 </span>module SAWCore.Utils
 <span class="lineno">   17 </span>  ( internalError
-<span class="lineno">   18 </span>  , panic
-<span class="lineno">   19 </span>  , sumBy
-<span class="lineno">   20 </span>  ) where
-<span class="lineno">   21 </span>
-<span class="lineno">   22 </span>import Data.Foldable
-<span class="lineno">   23 </span>
-<span class="lineno">   24 </span>import Panic hiding (panic)
-<span class="lineno">   25 </span>import qualified Panic as Panic
+<span class="lineno">   18 </span>  , sumBy
+<span class="lineno">   19 </span>  ) where
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>import Data.Foldable
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>sumBy :: (Foldable t, Num b) =&gt; (a -&gt; b) -&gt; t a -&gt; b
+<span class="lineno">   24 </span><span class="decl"><span class="nottickedoff">sumBy f = foldl' fn 0</span>
+<span class="lineno">   25 </span><span class="spaces">  </span><span class="nottickedoff">where fn e v = e + f v</span></span>
 <span class="lineno">   26 </span>
-<span class="lineno">   27 </span>sumBy :: (Foldable t, Num b) =&gt; (a -&gt; b) -&gt; t a -&gt; b
-<span class="lineno">   28 </span><span class="decl"><span class="nottickedoff">sumBy f = foldl' fn 0</span>
-<span class="lineno">   29 </span><span class="spaces">  </span><span class="nottickedoff">where fn e v = e + f v</span></span>
-<span class="lineno">   30 </span>
-<span class="lineno">   31 </span>internalError :: String -&gt; a
-<span class="lineno">   32 </span><span class="decl"><span class="nottickedoff">internalError msg = error $ &quot;internal: &quot; ++ msg</span></span>
-<span class="lineno">   33 </span>
-<span class="lineno">   34 </span>data SawCore = SawCore
-<span class="lineno">   35 </span>
-<span class="lineno">   36 </span>panic :: HasCallStack =&gt; String -&gt; [String] -&gt; a
-<span class="lineno">   37 </span><span class="decl"><span class="nottickedoff">panic = Panic.panic SawCore</span></span>
-<span class="lineno">   38 </span>
-<span class="lineno">   39 </span>instance PanicComponent SawCore where
-<span class="lineno">   40 </span>  <span class="decl"><span class="nottickedoff">panicComponentName _ = &quot;SawCore&quot;</span></span>
-<span class="lineno">   41 </span>  <span class="decl"><span class="nottickedoff">panicComponentIssues _ = &quot;https://github.com/GaloisInc/saw-script/issues&quot;</span></span>
-<span class="lineno">   42 </span>
-<span class="lineno">   43 </span>  {-# Noinline panicComponentRevision #-}
-<span class="lineno">   44 </span>  <span class="decl"><span class="nottickedoff">panicComponentRevision = $useGitRevision</span></span>
+<span class="lineno">   27 </span>internalError :: String -&gt; a
+<span class="lineno">   28 </span><span class="decl"><span class="nottickedoff">internalError msg = error $ &quot;internal: &quot; ++ msg</span></span>
 
 </pre>
 </body>

@@ -238,101 +238,102 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUserType t -&gt; t</span>
 <span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">CellTypeUnsupportedPrimitive t -&gt; <span class="nottickedoff">t</span></span>
 <span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  222 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;asUserType&quot;</span></span>
-<span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[  &quot;Expected a user defined type, but got a primitive type: &quot;</span></span>
-<span class="lineno">  224 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ show cellType ]</span></span></span>
-<span class="lineno">  225 </span>
-<span class="lineno">  226 </span>-- | A cell within an HDL module.
-<span class="lineno">  227 </span>data Cell bs = Cell
-<span class="lineno">  228 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable
-<span class="lineno">  229 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellType</span></span></span> :: CellType -- ^ The cell type
-<span class="lineno">  230 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellParameters</span></span></span> :: Map Text Text -- ^ Metadata parameters
-<span class="lineno">  231 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellAttributes</span></span></span> :: Aeson.Value -- currently unused
-<span class="lineno">  232 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellPortDirections</span></span></span> :: Map Text Direction -- ^ Direction for each cell connection
-<span class="lineno">  233 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellConnections</span></span></span> :: Map Text bs -- ^ Bitrep for each cell connection
-<span class="lineno">  234 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
-<span class="lineno">  235 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Cell</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  236 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON (Cell [Bitrep])</span></span></span></span> where
-<span class="lineno">  237 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;cell&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- o Aeson..:? &quot;hide_name&quot; &gt;&gt;= \case</span>
-<span class="lineno">  239 </span><span class="spaces">      </span><span class="istickedoff">Just (Aeson.Number 1) -&gt; pure <span class="nottickedoff">True</span></span>
-<span class="lineno">  240 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; pure <span class="nottickedoff">False</span></span>
-<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
-<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
-<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..: &quot;attributes&quot;</span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
-<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
-<span class="lineno">  247 </span>
-<span class="lineno">  248 </span>-- | A single HDL module.
-<span class="lineno">  249 </span>data Module = Module
-<span class="lineno">  250 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Aeson.Value -- currently unused
-<span class="lineno">  251 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
-<span class="lineno">  252 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
-<span class="lineno">  253 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  254 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  255 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
-<span class="lineno">  256 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..: &quot;attributes&quot;</span>
-<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- o Aeson..: &quot;ports&quot;</span>
-<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- o Aeson..: &quot;cells&quot;</span>
-<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  261 </span>
-<span class="lineno">  262 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
-<span class="lineno">  263 </span>data YosysIR = YosysIR
-<span class="lineno">  264 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
-<span class="lineno">  265 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
-<span class="lineno">  266 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  267 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
-<span class="lineno">  268 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
-<span class="lineno">  269 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
-<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- o Aeson..: &quot;creator&quot;</span>
-<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- o Aeson..: &quot;modules&quot;</span>
-<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
-<span class="lineno">  273 </span>
-<span class="lineno">  274 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
-<span class="lineno">  275 </span>loadYosysIR :: MonadIO m =&gt; FilePath -&gt; m YosysIR
-<span class="lineno">  276 </span><span class="decl"><span class="istickedoff">loadYosysIR p = liftIO $ Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
-<span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throw . YosysError $ Text.pack err</span></span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
-<span class="lineno">  279 </span>
-<span class="lineno">  280 </span>-- | Return the patterns for all of the input ports of a module
-<span class="lineno">  281 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  282 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
-<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
-<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
-<span class="lineno">  286 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
-<span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
-<span class="lineno">  288 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
-<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>-- | Return the patterns for all of the output ports of a module
-<span class="lineno">  294 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
-<span class="lineno">  295 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
-<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
-<span class="lineno">  299 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout</span>
-<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
-<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
-<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">)</span>
-<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
-<span class="lineno">  305 </span>
-<span class="lineno">  306 </span>-- | Return the patterns for all of the input connections of a cell
-<span class="lineno">  307 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
-<span class="lineno">  308 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
-<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter (\d -&gt; d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
-<span class="lineno">  311 </span>
-<span class="lineno">  312 </span>-- | Return the patterns for all of the output connections of a cell
-<span class="lineno">  313 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
-<span class="lineno">  314 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
-<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
+<span class="lineno">  222 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;asUserType&quot; [</span></span>
+<span class="lineno">  223 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Expected a user defined type, but got a primitive type: &quot; &lt;&gt;</span></span>
+<span class="lineno">  224 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show cellType)</span></span>
+<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  226 </span>
+<span class="lineno">  227 </span>-- | A cell within an HDL module.
+<span class="lineno">  228 </span>data Cell bs = Cell
+<span class="lineno">  229 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellHideName</span></span></span> :: Bool -- ^ Whether the cell's name is human-readable
+<span class="lineno">  230 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellType</span></span></span> :: CellType -- ^ The cell type
+<span class="lineno">  231 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellParameters</span></span></span> :: Map Text Text -- ^ Metadata parameters
+<span class="lineno">  232 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellAttributes</span></span></span> :: Aeson.Value -- currently unused
+<span class="lineno">  233 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellPortDirections</span></span></span> :: Map Text Direction -- ^ Direction for each cell connection
+<span class="lineno">  234 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cellConnections</span></span></span> :: Map Text bs -- ^ Bitrep for each cell connection
+<span class="lineno">  235 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
+<span class="lineno">  236 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Cell</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  237 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON (Cell [Bitrep])</span></span></span></span> where
+<span class="lineno">  238 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;cell&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">_cellHideName &lt;- o Aeson..:? &quot;hide_name&quot; &gt;&gt;= \case</span>
+<span class="lineno">  240 </span><span class="spaces">      </span><span class="istickedoff">Just (Aeson.Number 1) -&gt; pure <span class="nottickedoff">True</span></span>
+<span class="lineno">  241 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; pure <span class="nottickedoff">False</span></span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">_cellType &lt;- o Aeson..: &quot;type&quot;</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">_cellParameters &lt;- o Aeson..: &quot;parameters&quot;</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">_cellAttributes &lt;- o Aeson..: &quot;attributes&quot;</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">_cellPortDirections &lt;- o Aeson..: &quot;port_directions&quot;</span>
+<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">_cellConnections &lt;- o Aeson..: &quot;connections&quot;</span>
+<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">pure Cell{<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">..</span></span></span></span>}</span></span>
+<span class="lineno">  248 </span>
+<span class="lineno">  249 </span>-- | A single HDL module.
+<span class="lineno">  250 </span>data Module = Module
+<span class="lineno">  251 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleAttributes</span></span></span> :: Aeson.Value -- currently unused
+<span class="lineno">  252 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modulePorts</span></span></span> :: Map Text Port
+<span class="lineno">  253 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_moduleCells</span></span></span> :: Map Text (Cell [Bitrep])
+<span class="lineno">  254 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  255 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''Module</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  256 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON Module</span></span></span></span> where
+<span class="lineno">  257 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;module&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">_moduleAttributes &lt;- o Aeson..: &quot;attributes&quot;</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">_modulePorts &lt;- o Aeson..: &quot;ports&quot;</span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">_moduleCells &lt;- o Aeson..: &quot;cells&quot;</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">pure Module{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  262 </span>
+<span class="lineno">  263 </span>-- | A collection of multiple HDL modules (possibly with dependencies on each other).
+<span class="lineno">  264 </span>data YosysIR = YosysIR
+<span class="lineno">  265 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysCreator</span></span></span> :: Text
+<span class="lineno">  266 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_yosysModules</span></span></span> :: Map Text Module
+<span class="lineno">  267 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  268 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''YosysIR</span></span></span></span></span></span></span>
+<span class="lineno">  269 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Aeson.FromJSON YosysIR</span></span></span></span> where
+<span class="lineno">  270 </span>  <span class="decl"><span class="istickedoff">parseJSON = Aeson.withObject <span class="nottickedoff">&quot;yosys&quot;</span> $ \o -&gt; do</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">_yosysCreator &lt;- o Aeson..: &quot;creator&quot;</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">_yosysModules &lt;- o Aeson..: &quot;modules&quot;</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">pure YosysIR{<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span></span>
+<span class="lineno">  274 </span>
+<span class="lineno">  275 </span>-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
+<span class="lineno">  276 </span>loadYosysIR :: MonadIO m =&gt; FilePath -&gt; m YosysIR
+<span class="lineno">  277 </span><span class="decl"><span class="istickedoff">loadYosysIR p = liftIO $ Aeson.eitherDecodeFileStrict p &gt;&gt;= \case</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throw . YosysError $ Text.pack err</span></span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">Right ir -&gt; pure ir</span></span>
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | Return the patterns for all of the input ports of a module
+<span class="lineno">  282 </span>moduleInputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  283 </span><span class="decl"><span class="istickedoff">moduleInputPorts m =</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
+<span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout</span>
+<span class="lineno">  288 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
+<span class="lineno">  289 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>-- | Return the patterns for all of the output ports of a module
+<span class="lineno">  295 </span>moduleOutputPorts :: Module -&gt; Map Text [Bitrep]
+<span class="lineno">  296 </span><span class="decl"><span class="istickedoff">moduleOutputPorts m =</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">. Maybe.mapMaybe</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">( \(nm, ip) -&gt;</span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff">if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff">then Just (nm, ip ^. portBits)</span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="istickedoff">else Nothing</span>
+<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">)</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">. Map.assocs</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">$ m ^. modulePorts</span></span>
+<span class="lineno">  306 </span>
+<span class="lineno">  307 </span>-- | Return the patterns for all of the input connections of a cell
+<span class="lineno">  308 </span>cellInputConnections :: Cell [b] -&gt; Map Text [b]
+<span class="lineno">  309 </span><span class="decl"><span class="istickedoff">cellInputConnections c = Map.intersection (c ^. cellConnections) inp</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">inp = Map.filter (\d -&gt; d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>-- | Return the patterns for all of the output connections of a cell
+<span class="lineno">  314 </span>cellOutputConnections :: Ord b =&gt; Cell [b] -&gt; Map Text [b]
+<span class="lineno">  315 </span><span class="decl"><span class="istickedoff">cellOutputConnections c = Map.intersection (c ^. cellConnections) out</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">out = Map.filter (\d -&gt; d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections</span></span>
 
 </pre>
 </body>

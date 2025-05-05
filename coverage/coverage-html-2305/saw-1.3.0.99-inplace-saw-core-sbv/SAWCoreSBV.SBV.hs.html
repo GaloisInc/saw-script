@@ -96,7 +96,7 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span>            , fovVec, firstOrderTypeOf, asFirstOrderType
 <span class="lineno">   78 </span>            )
 <span class="lineno">   79 </span>
-<span class="lineno">   80 </span>import SAWCore.Utils (panic)
+<span class="lineno">   80 </span>import SAWCoreSBV.Panic
 <span class="lineno">   81 </span>
 <span class="lineno">   82 </span>data SBV
 <span class="lineno">   83 </span>
@@ -346,7 +346,7 @@ span.spaces    { background: white }
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">case svAsInteger vx of</span>
 <span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">Just i</span>
 <span class="lineno">  329 </span><span class="spaces">      </span><span class="nottickedoff">| i &gt;= 0    -&gt; valueFn (fromInteger i)</span>
-<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise -&gt; panic &quot;selectV&quot; [&quot;expected nonnegative integer&quot;, show i]</span>
+<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise -&gt; panic &quot;selectV&quot; [&quot;Expected nonnegative integer; found &quot; &lt;&gt; Text.pack (show i)]</span>
 <span class="lineno">  331 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; impl (intSizeOf vx) 0</span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">  333 </span><span class="spaces">    </span><span class="nottickedoff">impl _ x | x &gt; maxValue || x &lt; 0 = valueFn maxValue</span>
@@ -555,7 +555,7 @@ span.spaces    { background: white }
 <span class="lineno">  536 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _ w -&gt;</span>
 <span class="lineno">  537 </span><span class="spaces">      </span><span class="nottickedoff">do ilv &lt;- toWord w</span>
 <span class="lineno">  538 </span><span class="spaces">         </span><span class="nottickedoff">selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv</span>
-<span class="lineno">  539 </span><span class="spaces">    </span><span class="nottickedoff">v -&gt; panic &quot;SBV.streamGetOp&quot; [&quot;Expected Nat value&quot;, show v]</span></span>
+<span class="lineno">  539 </span><span class="spaces">    </span><span class="nottickedoff">v -&gt; panic &quot;streamGetOp&quot; [&quot;Expected Nat value; got &quot; &lt;&gt; Text.pack (show v)]</span></span>
 <span class="lineno">  540 </span>
 <span class="lineno">  541 </span>
 <span class="lineno">  542 </span>lookupSStream :: SValue -&gt; Natural -&gt; IO SValue
@@ -619,7 +619,7 @@ span.spaces    { background: white }
 <span class="lineno">  600 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal tp c xi yi</span>
 <span class="lineno">  601 </span><span class="spaces">     </span><span class="nottickedoff">r &lt;- newIORef Map.empty</span>
 <span class="lineno">  602 </span><span class="spaces">     </span><span class="nottickedoff">return (SStream f r)</span>
-<span class="lineno">  603 </span><span class="spaces"></span><span class="nottickedoff">muxSbvExtra tp _ _ _ = panic &quot;muxSbvExtra&quot; [&quot;Type mismatch&quot;, show tp]</span></span>
+<span class="lineno">  603 </span><span class="spaces"></span><span class="nottickedoff">muxSbvExtra tp _ _ _ = panic &quot;muxSbvExtra&quot; [&quot;Type mismatch; found &quot; &lt;&gt; Text.pack (show tp)]</span></span>
 <span class="lineno">  604 </span>
 <span class="lineno">  605 </span>------------------------------------------------------------
 <span class="lineno">  606 </span>-- External interface

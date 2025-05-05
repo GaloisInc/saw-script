@@ -98,17 +98,17 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span>import Prettyprinter as PP
 <span class="lineno">   80 </span>import Prettyprinter.Render.String (renderString)
 <span class="lineno">   81 </span>
-<span class="lineno">   82 </span>import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
-<span class="lineno">   83 </span>import Lang.Crucible.Types
-<span class="lineno">   84 </span>import Lang.Crucible.FunctionHandle
-<span class="lineno">   85 </span>import Lang.Crucible.LLVM.DataLayout
-<span class="lineno">   86 </span>import Lang.Crucible.LLVM.MemModel
-<span class="lineno">   87 </span>import Lang.Crucible.LLVM.Bytes
-<span class="lineno">   88 </span>import Lang.Crucible.CFG.Core
-<span class="lineno">   89 </span>import SAWCore.SharedTerm hiding (Constant)
-<span class="lineno">   90 </span>import SAWCore.OpenTerm
-<span class="lineno">   91 </span>import Heapster.NamedMb
-<span class="lineno">   92 </span>
+<span class="lineno">   82 </span>import Lang.Crucible.Types
+<span class="lineno">   83 </span>import Lang.Crucible.FunctionHandle
+<span class="lineno">   84 </span>import Lang.Crucible.LLVM.DataLayout
+<span class="lineno">   85 </span>import Lang.Crucible.LLVM.MemModel
+<span class="lineno">   86 </span>import Lang.Crucible.LLVM.Bytes
+<span class="lineno">   87 </span>import Lang.Crucible.CFG.Core
+<span class="lineno">   88 </span>import SAWCore.SharedTerm hiding (Constant)
+<span class="lineno">   89 </span>import SAWCore.OpenTerm
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>import Heapster.Panic
+<span class="lineno">   92 </span>import Heapster.NamedMb
 <span class="lineno">   93 </span>import Heapster.CruUtil
 <span class="lineno">   94 </span>
 <span class="lineno">   95 </span>import GHC.Stack
@@ -6353,7 +6353,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6334 </span><span class="spaces">  </span><span class="nottickedoff">, TrueRepr &lt;- nameIsConjRepr npn' =</span>
 <span class="lineno"> 6335 </span><span class="spaces">    </span><span class="nottickedoff">[Perm_NamedConj npn' args' off']</span>
 <span class="lineno"> 6336 </span><span class="spaces"></span><span class="nottickedoff">unfoldConjPerm _ _ _ =</span>
-<span class="lineno"> 6337 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;unfoldConjPerm&quot; []</span></span>
+<span class="lineno"> 6337 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;unfoldConjPerm&quot; [&quot;unfoldPerm did not produce a Conj&quot;]</span></span>
 <span class="lineno"> 6338 </span>
 <span class="lineno"> 6339 </span>-- | Test if two expressions are definitely unequal
 <span class="lineno"> 6340 </span>exprsUnequal :: PermExpr a -&gt; PermExpr a -&gt; Bool
@@ -7517,13 +7517,13 @@ span.spaces    { background: white }
 <span class="lineno"> 7498 </span>-- of, along with those variables that were abstracted out of it
 <span class="lineno"> 7499 </span>data AbsObj a = forall ctx. AbsObj (RAssign ExprVar ctx) (Closed (Mb ctx a))
 <span class="lineno"> 7500 </span>
-<span class="lineno"> 7501 </span>-- | Find all free variables of an expresssion and abstract them out. Note that
+<span class="lineno"> 7501 </span>-- | Find all free variables of an expression and abstract them out. Note that
 <span class="lineno"> 7502 </span>-- this should always succeed, if 'freeVars' is implemented correctly.
 <span class="lineno"> 7503 </span>abstractFreeVars :: (AbstractVars a, FreeVars a) =&gt; a -&gt; AbsObj a
 <span class="lineno"> 7504 </span><span class="decl"><span class="nottickedoff">abstractFreeVars a</span>
 <span class="lineno"> 7505 </span><span class="spaces">  </span><span class="nottickedoff">| Some ns &lt;- freeVarsRAssign a</span>
 <span class="lineno"> 7506 </span><span class="spaces">  </span><span class="nottickedoff">, Just cl_mb_a &lt;- abstractVars ns a = AbsObj ns cl_mb_a</span>
-<span class="lineno"> 7507 </span><span class="spaces"></span><span class="nottickedoff">abstractFreeVars _ = panic &quot;abstractFreeVars&quot; []</span></span>
+<span class="lineno"> 7507 </span><span class="spaces"></span><span class="nottickedoff">abstractFreeVars _ = panic &quot;abstractFreeVars&quot; [&quot;freeVars failed&quot;]</span></span>
 <span class="lineno"> 7508 </span>
 <span class="lineno"> 7509 </span>
 <span class="lineno"> 7510 </span>-- | Try to close an expression by calling 'abstractPEVars' with an empty list
@@ -8390,395 +8390,396 @@ span.spaces    { background: white }
 <span class="lineno"> 8371 </span><span class="decl"><span class="nottickedoff">requireNamedPerm env npn</span>
 <span class="lineno"> 8372 </span><span class="spaces">  </span><span class="nottickedoff">| Just np &lt;- lookupNamedPerm env npn = np</span>
 <span class="lineno"> 8373 </span><span class="spaces"></span><span class="nottickedoff">requireNamedPerm _ npn =</span>
-<span class="lineno"> 8374 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;requireNamedPerm&quot; [&quot;named perm does not exist: &quot;</span>
-<span class="lineno"> 8375 </span><span class="spaces">                            </span><span class="nottickedoff">++ namedPermNameName npn]</span></span>
-<span class="lineno"> 8376 </span>
-<span class="lineno"> 8377 </span>-- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
-<span class="lineno"> 8378 </span>lookupNamedShape :: PermEnv -&gt; String -&gt; Maybe SomeNamedShape
-<span class="lineno"> 8379 </span><span class="decl"><span class="nottickedoff">lookupNamedShape env nm =</span>
-<span class="lineno"> 8380 </span><span class="spaces">  </span><span class="nottickedoff">find (\case SomeNamedShape nmsh -&gt;</span>
-<span class="lineno"> 8381 </span><span class="spaces">                </span><span class="nottickedoff">nm == namedShapeName nmsh) (permEnvNamedShapes env)</span></span>
-<span class="lineno"> 8382 </span>
-<span class="lineno"> 8383 </span>-- | Look up the permissions and translation for a 'GlobalSymbol' at a
-<span class="lineno"> 8384 </span>-- particular machine word width
-<span class="lineno"> 8385 </span>lookupGlobalSymbol :: PermEnv -&gt; GlobalSymbol -&gt; NatRepr w -&gt;
-<span class="lineno"> 8386 </span>                      Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)
-<span class="lineno"> 8387 </span><span class="decl"><span class="nottickedoff">lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where</span>
-<span class="lineno"> 8388 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [PermEnvGlobalEntry] -&gt; GlobalSymbol -&gt; NatRepr w -&gt;</span>
-<span class="lineno"> 8389 </span><span class="spaces">            </span><span class="nottickedoff">Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)</span>
-<span class="lineno"> 8390 </span><span class="spaces">  </span><span class="nottickedoff">helper  (PermEnvGlobalEntry sym'</span>
-<span class="lineno"> 8391 </span><span class="spaces">            </span><span class="nottickedoff">(p :: ValuePerm (LLVMPointerType w')) tr:_) sym w</span>
-<span class="lineno"> 8392 </span><span class="spaces">    </span><span class="nottickedoff">| sym' == sym</span>
-<span class="lineno"> 8393 </span><span class="spaces">    </span><span class="nottickedoff">, Just Refl &lt;- testEquality w (knownNat :: NatRepr w') =</span>
-<span class="lineno"> 8394 </span><span class="spaces">      </span><span class="nottickedoff">Just (p, tr)</span>
-<span class="lineno"> 8395 </span><span class="spaces">  </span><span class="nottickedoff">helper (_:entries) sym w = helper entries sym w</span>
-<span class="lineno"> 8396 </span><span class="spaces">  </span><span class="nottickedoff">helper [] _ _ = Nothing</span></span>
-<span class="lineno"> 8397 </span>
-<span class="lineno"> 8398 </span>-- | Look up all hints associated with a 'BlockID' in a function
-<span class="lineno"> 8399 </span>lookupBlockHints :: PermEnv -&gt; FnHandle init ret -&gt; Assignment CtxRepr blocks -&gt;
-<span class="lineno"> 8400 </span>                    BlockID blocks args -&gt; [BlockHintSort args]
-<span class="lineno"> 8401 </span><span class="decl"><span class="nottickedoff">lookupBlockHints env h blocks blkID =</span>
-<span class="lineno"> 8402 </span><span class="spaces">  </span><span class="nottickedoff">mapMaybe (\hint -&gt; case hint of</span>
-<span class="lineno"> 8403 </span><span class="spaces">               </span><span class="nottickedoff">Hint_Block (BlockHint h' blocks' blkID' sort)</span>
-<span class="lineno"> 8404 </span><span class="spaces">                 </span><span class="nottickedoff">| Just Refl &lt;- testEquality (handleID h') (handleID h)</span>
-<span class="lineno"> 8405 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blocks' blocks</span>
-<span class="lineno"> 8406 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blkID blkID' -&gt;</span>
-<span class="lineno"> 8407 </span><span class="spaces">                   </span><span class="nottickedoff">return sort</span>
-<span class="lineno"> 8408 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; Nothing) $</span>
-<span class="lineno"> 8409 </span><span class="spaces">  </span><span class="nottickedoff">permEnvHints env</span></span>
-<span class="lineno"> 8410 </span>
-<span class="lineno"> 8411 </span>-- | Look up all hints with sort 'BlockEntryHintSort' for a given function
-<span class="lineno"> 8412 </span>lookupBlockEntryHints :: PermEnv -&gt; FnHandle init ret -&gt;
-<span class="lineno"> 8413 </span>                         Assignment CtxRepr blocks -&gt;
-<span class="lineno"> 8414 </span>                         [Some (BlockHint blocks init ret)]
-<span class="lineno"> 8415 </span><span class="decl"><span class="nottickedoff">lookupBlockEntryHints env h blocks =</span>
-<span class="lineno"> 8416 </span><span class="spaces">  </span><span class="nottickedoff">mapMaybe (\hint -&gt; case hint of</span>
-<span class="lineno"> 8417 </span><span class="spaces">               </span><span class="nottickedoff">Hint_Block blk_hint@(BlockHint h' blocks' _blkID'</span>
-<span class="lineno"> 8418 </span><span class="spaces">                                    </span><span class="nottickedoff">(BlockEntryHintSort _ _ _))</span>
-<span class="lineno"> 8419 </span><span class="spaces">                 </span><span class="nottickedoff">| Just Refl &lt;- testEquality (handleID h') (handleID h)</span>
-<span class="lineno"> 8420 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blocks' blocks -&gt;</span>
-<span class="lineno"> 8421 </span><span class="spaces">                   </span><span class="nottickedoff">return $ Some blk_hint</span>
-<span class="lineno"> 8422 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; Nothing) $</span>
-<span class="lineno"> 8423 </span><span class="spaces">  </span><span class="nottickedoff">permEnvHints env</span></span>
-<span class="lineno"> 8424 </span>
-<span class="lineno"> 8425 </span>-- | Test if a 'BlockID' in a 'CFG' has a hint with sort 'GenPermsHintSort'
-<span class="lineno"> 8426 </span>lookupBlockGenPermsHint :: PermEnv -&gt; FnHandle init ret -&gt;
-<span class="lineno"> 8427 </span>                           Assignment CtxRepr blocks -&gt; BlockID blocks args -&gt;
-<span class="lineno"> 8428 </span>                           Bool
-<span class="lineno"> 8429 </span><span class="decl"><span class="nottickedoff">lookupBlockGenPermsHint env h blocks blkID =</span>
-<span class="lineno"> 8430 </span><span class="spaces">  </span><span class="nottickedoff">any (\case GenPermsHintSort -&gt; True</span>
-<span class="lineno"> 8431 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; False) $</span>
-<span class="lineno"> 8432 </span><span class="spaces">  </span><span class="nottickedoff">lookupBlockHints env h blocks blkID</span></span>
-<span class="lineno"> 8433 </span>
-<span class="lineno"> 8434 </span>-- | Test if a 'BlockID' in a 'CFG' has a hint with sort 'JoinPointHintSort'
-<span class="lineno"> 8435 </span>lookupBlockJoinPointHint :: PermEnv -&gt; FnHandle init ret -&gt;
-<span class="lineno"> 8436 </span>                            Assignment CtxRepr blocks -&gt; BlockID blocks args -&gt;
-<span class="lineno"> 8437 </span>                            Bool
-<span class="lineno"> 8438 </span><span class="decl"><span class="nottickedoff">lookupBlockJoinPointHint env h blocks blkID =</span>
-<span class="lineno"> 8439 </span><span class="spaces">  </span><span class="nottickedoff">any (\case JoinPointHintSort -&gt; True</span>
-<span class="lineno"> 8440 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; False) $</span>
-<span class="lineno"> 8441 </span><span class="spaces">  </span><span class="nottickedoff">lookupBlockHints env h blocks blkID</span></span>
-<span class="lineno"> 8442 </span>
+<span class="lineno"> 8374 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;requireNamedPerm&quot; [</span>
+<span class="lineno"> 8375 </span><span class="spaces">      </span><span class="nottickedoff">&quot;Named perm does not exist: &quot; ++ namedPermNameName npn</span>
+<span class="lineno"> 8376 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8377 </span>
+<span class="lineno"> 8378 </span>-- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
+<span class="lineno"> 8379 </span>lookupNamedShape :: PermEnv -&gt; String -&gt; Maybe SomeNamedShape
+<span class="lineno"> 8380 </span><span class="decl"><span class="nottickedoff">lookupNamedShape env nm =</span>
+<span class="lineno"> 8381 </span><span class="spaces">  </span><span class="nottickedoff">find (\case SomeNamedShape nmsh -&gt;</span>
+<span class="lineno"> 8382 </span><span class="spaces">                </span><span class="nottickedoff">nm == namedShapeName nmsh) (permEnvNamedShapes env)</span></span>
+<span class="lineno"> 8383 </span>
+<span class="lineno"> 8384 </span>-- | Look up the permissions and translation for a 'GlobalSymbol' at a
+<span class="lineno"> 8385 </span>-- particular machine word width
+<span class="lineno"> 8386 </span>lookupGlobalSymbol :: PermEnv -&gt; GlobalSymbol -&gt; NatRepr w -&gt;
+<span class="lineno"> 8387 </span>                      Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)
+<span class="lineno"> 8388 </span><span class="decl"><span class="nottickedoff">lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where</span>
+<span class="lineno"> 8389 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [PermEnvGlobalEntry] -&gt; GlobalSymbol -&gt; NatRepr w -&gt;</span>
+<span class="lineno"> 8390 </span><span class="spaces">            </span><span class="nottickedoff">Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)</span>
+<span class="lineno"> 8391 </span><span class="spaces">  </span><span class="nottickedoff">helper  (PermEnvGlobalEntry sym'</span>
+<span class="lineno"> 8392 </span><span class="spaces">            </span><span class="nottickedoff">(p :: ValuePerm (LLVMPointerType w')) tr:_) sym w</span>
+<span class="lineno"> 8393 </span><span class="spaces">    </span><span class="nottickedoff">| sym' == sym</span>
+<span class="lineno"> 8394 </span><span class="spaces">    </span><span class="nottickedoff">, Just Refl &lt;- testEquality w (knownNat :: NatRepr w') =</span>
+<span class="lineno"> 8395 </span><span class="spaces">      </span><span class="nottickedoff">Just (p, tr)</span>
+<span class="lineno"> 8396 </span><span class="spaces">  </span><span class="nottickedoff">helper (_:entries) sym w = helper entries sym w</span>
+<span class="lineno"> 8397 </span><span class="spaces">  </span><span class="nottickedoff">helper [] _ _ = Nothing</span></span>
+<span class="lineno"> 8398 </span>
+<span class="lineno"> 8399 </span>-- | Look up all hints associated with a 'BlockID' in a function
+<span class="lineno"> 8400 </span>lookupBlockHints :: PermEnv -&gt; FnHandle init ret -&gt; Assignment CtxRepr blocks -&gt;
+<span class="lineno"> 8401 </span>                    BlockID blocks args -&gt; [BlockHintSort args]
+<span class="lineno"> 8402 </span><span class="decl"><span class="nottickedoff">lookupBlockHints env h blocks blkID =</span>
+<span class="lineno"> 8403 </span><span class="spaces">  </span><span class="nottickedoff">mapMaybe (\hint -&gt; case hint of</span>
+<span class="lineno"> 8404 </span><span class="spaces">               </span><span class="nottickedoff">Hint_Block (BlockHint h' blocks' blkID' sort)</span>
+<span class="lineno"> 8405 </span><span class="spaces">                 </span><span class="nottickedoff">| Just Refl &lt;- testEquality (handleID h') (handleID h)</span>
+<span class="lineno"> 8406 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blocks' blocks</span>
+<span class="lineno"> 8407 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blkID blkID' -&gt;</span>
+<span class="lineno"> 8408 </span><span class="spaces">                   </span><span class="nottickedoff">return sort</span>
+<span class="lineno"> 8409 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; Nothing) $</span>
+<span class="lineno"> 8410 </span><span class="spaces">  </span><span class="nottickedoff">permEnvHints env</span></span>
+<span class="lineno"> 8411 </span>
+<span class="lineno"> 8412 </span>-- | Look up all hints with sort 'BlockEntryHintSort' for a given function
+<span class="lineno"> 8413 </span>lookupBlockEntryHints :: PermEnv -&gt; FnHandle init ret -&gt;
+<span class="lineno"> 8414 </span>                         Assignment CtxRepr blocks -&gt;
+<span class="lineno"> 8415 </span>                         [Some (BlockHint blocks init ret)]
+<span class="lineno"> 8416 </span><span class="decl"><span class="nottickedoff">lookupBlockEntryHints env h blocks =</span>
+<span class="lineno"> 8417 </span><span class="spaces">  </span><span class="nottickedoff">mapMaybe (\hint -&gt; case hint of</span>
+<span class="lineno"> 8418 </span><span class="spaces">               </span><span class="nottickedoff">Hint_Block blk_hint@(BlockHint h' blocks' _blkID'</span>
+<span class="lineno"> 8419 </span><span class="spaces">                                    </span><span class="nottickedoff">(BlockEntryHintSort _ _ _))</span>
+<span class="lineno"> 8420 </span><span class="spaces">                 </span><span class="nottickedoff">| Just Refl &lt;- testEquality (handleID h') (handleID h)</span>
+<span class="lineno"> 8421 </span><span class="spaces">                 </span><span class="nottickedoff">, Just Refl &lt;- testEquality blocks' blocks -&gt;</span>
+<span class="lineno"> 8422 </span><span class="spaces">                   </span><span class="nottickedoff">return $ Some blk_hint</span>
+<span class="lineno"> 8423 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; Nothing) $</span>
+<span class="lineno"> 8424 </span><span class="spaces">  </span><span class="nottickedoff">permEnvHints env</span></span>
+<span class="lineno"> 8425 </span>
+<span class="lineno"> 8426 </span>-- | Test if a 'BlockID' in a 'CFG' has a hint with sort 'GenPermsHintSort'
+<span class="lineno"> 8427 </span>lookupBlockGenPermsHint :: PermEnv -&gt; FnHandle init ret -&gt;
+<span class="lineno"> 8428 </span>                           Assignment CtxRepr blocks -&gt; BlockID blocks args -&gt;
+<span class="lineno"> 8429 </span>                           Bool
+<span class="lineno"> 8430 </span><span class="decl"><span class="nottickedoff">lookupBlockGenPermsHint env h blocks blkID =</span>
+<span class="lineno"> 8431 </span><span class="spaces">  </span><span class="nottickedoff">any (\case GenPermsHintSort -&gt; True</span>
+<span class="lineno"> 8432 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; False) $</span>
+<span class="lineno"> 8433 </span><span class="spaces">  </span><span class="nottickedoff">lookupBlockHints env h blocks blkID</span></span>
+<span class="lineno"> 8434 </span>
+<span class="lineno"> 8435 </span>-- | Test if a 'BlockID' in a 'CFG' has a hint with sort 'JoinPointHintSort'
+<span class="lineno"> 8436 </span>lookupBlockJoinPointHint :: PermEnv -&gt; FnHandle init ret -&gt;
+<span class="lineno"> 8437 </span>                            Assignment CtxRepr blocks -&gt; BlockID blocks args -&gt;
+<span class="lineno"> 8438 </span>                            Bool
+<span class="lineno"> 8439 </span><span class="decl"><span class="nottickedoff">lookupBlockJoinPointHint env h blocks blkID =</span>
+<span class="lineno"> 8440 </span><span class="spaces">  </span><span class="nottickedoff">any (\case JoinPointHintSort -&gt; True</span>
+<span class="lineno"> 8441 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; False) $</span>
+<span class="lineno"> 8442 </span><span class="spaces">  </span><span class="nottickedoff">lookupBlockHints env h blocks blkID</span></span>
 <span class="lineno"> 8443 </span>
-<span class="lineno"> 8444 </span>----------------------------------------------------------------------
-<span class="lineno"> 8445 </span>-- * Permission Sets
-<span class="lineno"> 8446 </span>----------------------------------------------------------------------
-<span class="lineno"> 8447 </span>
-<span class="lineno"> 8448 </span>-- FIXME: revisit all the operations in this section and remove those that we no
-<span class="lineno"> 8449 </span>-- longer need
-<span class="lineno"> 8450 </span>
-<span class="lineno"> 8451 </span>-- | A permission set associates permissions with expression variables, and also
-<span class="lineno"> 8452 </span>-- has a stack of \&quot;distinguished permissions\&quot; that are used for intro rules
-<span class="lineno"> 8453 </span>data PermSet ps = PermSet { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_varPermMap</span></span></span> :: NameMap ValuePerm,
-<span class="lineno"> 8454 </span>                            <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_distPerms</span></span></span> :: DistPerms ps }
-<span class="lineno"> 8455 </span>
-<span class="lineno"> 8456 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''PermSet</span></span></span></span></span>
-<span class="lineno"> 8457 </span>
-<span class="lineno"> 8458 </span>-- | Get all variables that have permissions set in a 'PermSet'
-<span class="lineno"> 8459 </span>permSetVars :: PermSet ps -&gt; [SomeName CrucibleType]
-<span class="lineno"> 8460 </span><span class="decl"><span class="nottickedoff">permSetVars =</span>
-<span class="lineno"> 8461 </span><span class="spaces">  </span><span class="nottickedoff">map (\case (NameAndElem n _) -&gt;</span>
-<span class="lineno"> 8462 </span><span class="spaces">               </span><span class="nottickedoff">SomeName n) . NameMap.assocs . view varPermMap</span></span>
-<span class="lineno"> 8463 </span>
-<span class="lineno"> 8464 </span>-- | Build a 'PermSet' with only distinguished permissions
-<span class="lineno"> 8465 </span>distPermSet :: DistPerms ps -&gt; PermSet ps
-<span class="lineno"> 8466 </span><span class="decl"><span class="nottickedoff">distPermSet perms = PermSet NameMap.empty perms</span></span>
-<span class="lineno"> 8467 </span>
-<span class="lineno"> 8468 </span>-- | The lens for the permissions associated with a given variable
-<span class="lineno"> 8469 </span>varPerm :: ExprVar a -&gt; Lens' (PermSet ps) (ValuePerm a)
-<span class="lineno"> 8470 </span><span class="decl"><span class="nottickedoff">varPerm x =</span>
-<span class="lineno"> 8471 </span><span class="spaces">  </span><span class="nottickedoff">lens</span>
-<span class="lineno"> 8472 </span><span class="spaces">  </span><span class="nottickedoff">(\(PermSet nmap _) -&gt;</span>
-<span class="lineno"> 8473 </span><span class="spaces">    </span><span class="nottickedoff">case NameMap.lookup x nmap of</span>
-<span class="lineno"> 8474 </span><span class="spaces">      </span><span class="nottickedoff">Just p -&gt; p</span>
-<span class="lineno"> 8475 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; ValPerm_True)</span>
-<span class="lineno"> 8476 </span><span class="spaces">  </span><span class="nottickedoff">(\(PermSet nmap ps) p -&gt; PermSet (NameMap.insert x p nmap) ps)</span></span>
-<span class="lineno"> 8477 </span>
-<span class="lineno"> 8478 </span>-- | Set the primary permission for a variable, assuming it is currently the
-<span class="lineno"> 8479 </span>-- trivial permission @true@
-<span class="lineno"> 8480 </span>setVarPerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
-<span class="lineno"> 8481 </span><span class="decl"><span class="nottickedoff">setVarPerm x p =</span>
-<span class="lineno"> 8482 </span><span class="spaces">  </span><span class="nottickedoff">over (varPerm x) $ \p' -&gt;</span>
-<span class="lineno"> 8483 </span><span class="spaces">  </span><span class="nottickedoff">case p' of</span>
-<span class="lineno"> 8484 </span><span class="spaces">    </span><span class="nottickedoff">ValPerm_True -&gt; p</span>
-<span class="lineno"> 8485 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; panic &quot;setVarPerm&quot; [&quot;permission for variable already set!&quot;]</span></span>
-<span class="lineno"> 8486 </span>
-<span class="lineno"> 8487 </span>-- | Get a permission list for multiple variables
-<span class="lineno"> 8488 </span>varPermsMulti :: RAssign Name ns -&gt; PermSet ps -&gt; DistPerms ns
-<span class="lineno"> 8489 </span><span class="decl"><span class="nottickedoff">varPermsMulti MNil _ = DistPermsNil</span>
-<span class="lineno"> 8490 </span><span class="spaces"></span><span class="nottickedoff">varPermsMulti (ns :&gt;: n) ps =</span>
-<span class="lineno"> 8491 </span><span class="spaces">  </span><span class="nottickedoff">DistPermsCons (varPermsMulti ns ps) n (ps ^. varPerm n)</span></span>
-<span class="lineno"> 8492 </span>
-<span class="lineno"> 8493 </span>-- | Get a permission list for all variable permissions
-<span class="lineno"> 8494 </span>permSetAllVarPerms :: PermSet ps -&gt; Some DistPerms
-<span class="lineno"> 8495 </span><span class="decl"><span class="nottickedoff">permSetAllVarPerms perm_set =</span>
-<span class="lineno"> 8496 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(NameAndElem x p) (Some perms) -&gt; Some (DistPermsCons perms x p))</span>
-<span class="lineno"> 8497 </span><span class="spaces">  </span><span class="nottickedoff">(Some DistPermsNil) (NameMap.assocs $ _varPermMap perm_set)</span></span>
-<span class="lineno"> 8498 </span>
-<span class="lineno"> 8499 </span>-- | A determined vars clause says that the variable on the right-hand side is
-<span class="lineno"> 8500 </span>-- determined (as in the description of 'determinedVars') if all those on the
-<span class="lineno"> 8501 </span>-- left-hand side are. Note that this is an if and not an iff, as there may be
-<span class="lineno"> 8502 </span>-- other ways to mark that RHS variable determined.
-<span class="lineno"> 8503 </span>data DetVarsClause =
-<span class="lineno"> 8504 </span>  DetVarsClause (NameSet CrucibleType) (SomeName CrucibleType)
-<span class="lineno"> 8505 </span>
-<span class="lineno"> 8506 </span>-- | Union a 'NameSet' to the left-hand side of a 'DetVarsClause'
-<span class="lineno"> 8507 </span>detVarsClauseAddLHS :: NameSet CrucibleType -&gt; DetVarsClause -&gt; DetVarsClause
-<span class="lineno"> 8508 </span><span class="decl"><span class="nottickedoff">detVarsClauseAddLHS names (DetVarsClause lhs rhs) =</span>
-<span class="lineno"> 8509 </span><span class="spaces">  </span><span class="nottickedoff">DetVarsClause (NameSet.union lhs names) rhs</span></span>
-<span class="lineno"> 8510 </span>
-<span class="lineno"> 8511 </span>-- | Add a single variable to the left-hand side of a 'DetVarsClause'
-<span class="lineno"> 8512 </span>detVarsClauseAddLHSVar :: ExprVar a -&gt; DetVarsClause -&gt; DetVarsClause
-<span class="lineno"> 8513 </span><span class="decl"><span class="nottickedoff">detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =</span>
-<span class="lineno"> 8514 </span><span class="spaces">  </span><span class="nottickedoff">DetVarsClause (NameSet.insert n lhs) rhs</span></span>
-<span class="lineno"> 8515 </span>
-<span class="lineno"> 8516 </span>newtype SeenDetVarsClauses :: CrucibleType -&gt; Type where
-<span class="lineno"> 8517 </span>  SeenDetVarsClauses :: [DetVarsClause] -&gt; SeenDetVarsClauses tp
-<span class="lineno"> 8518 </span>
-<span class="lineno"> 8519 </span>-- | Generic function to compute the 'DetVarsClause's for a permission
-<span class="lineno"> 8520 </span>class GetDetVarsClauses a where
-<span class="lineno"> 8521 </span>  getDetVarsClauses ::
-<span class="lineno"> 8522 </span>    a -&gt; ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
-<span class="lineno"> 8523 </span>                              [DetVarsClause]
-<span class="lineno"> 8524 </span>
-<span class="lineno"> 8525 </span>instance GetDetVarsClauses a =&gt; GetDetVarsClauses [a] where
-<span class="lineno"> 8526 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses l = concat &lt;$&gt; mapM getDetVarsClauses l</span></span>
-<span class="lineno"> 8527 </span>
-<span class="lineno"> 8528 </span>instance GetDetVarsClauses (ExprVar a) where
-<span class="lineno"> 8529 </span>  -- If x has not been visited yet, then return a clause stating that x is
-<span class="lineno"> 8530 </span>  -- determined and add all variables that are potentially determined by the
-<span class="lineno"> 8531 </span>  -- current permissions on x
-<span class="lineno"> 8532 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses x =</span>
-<span class="lineno"> 8533 </span><span class="spaces">    </span><span class="nottickedoff">do seen_vars &lt;- get</span>
-<span class="lineno"> 8534 </span><span class="spaces">       </span><span class="nottickedoff">perms &lt;- ask</span>
-<span class="lineno"> 8535 </span><span class="spaces">       </span><span class="nottickedoff">perm_clauses &lt;- case NameMap.lookup x seen_vars of</span>
-<span class="lineno"> 8536 </span><span class="spaces">         </span><span class="nottickedoff">Just (SeenDetVarsClauses perm_clauses) -&gt; return perm_clauses</span>
-<span class="lineno"> 8537 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; do perm_clauses &lt;- getDetVarsClauses (perms ^. varPerm x)</span>
-<span class="lineno"> 8538 </span><span class="spaces">                       </span><span class="nottickedoff">modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))</span>
-<span class="lineno"> 8539 </span><span class="spaces">                       </span><span class="nottickedoff">return perm_clauses</span>
-<span class="lineno"> 8540 </span><span class="spaces">       </span><span class="nottickedoff">return (DetVarsClause NameSet.empty (SomeName x) :</span>
-<span class="lineno"> 8541 </span><span class="spaces">               </span><span class="nottickedoff">map (detVarsClauseAddLHSVar x) perm_clauses)</span></span>
-<span class="lineno"> 8542 </span>
-<span class="lineno"> 8543 </span>instance GetDetVarsClauses (PermExpr a) where
-<span class="lineno"> 8544 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses e</span>
-<span class="lineno"> 8545 </span><span class="spaces">    </span><span class="nottickedoff">| isDeterminingExpr e =</span>
-<span class="lineno"> 8546 </span><span class="spaces">      </span><span class="nottickedoff">concat &lt;$&gt; mapM (\(SomeName n) -&gt;</span>
-<span class="lineno"> 8547 </span><span class="spaces">                        </span><span class="nottickedoff">getDetVarsClauses n) (NameSet.toList $ freeVars e)</span>
-<span class="lineno"> 8548 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
-<span class="lineno"> 8549 </span>
+<span class="lineno"> 8444 </span>
+<span class="lineno"> 8445 </span>----------------------------------------------------------------------
+<span class="lineno"> 8446 </span>-- * Permission Sets
+<span class="lineno"> 8447 </span>----------------------------------------------------------------------
+<span class="lineno"> 8448 </span>
+<span class="lineno"> 8449 </span>-- FIXME: revisit all the operations in this section and remove those that we no
+<span class="lineno"> 8450 </span>-- longer need
+<span class="lineno"> 8451 </span>
+<span class="lineno"> 8452 </span>-- | A permission set associates permissions with expression variables, and also
+<span class="lineno"> 8453 </span>-- has a stack of \&quot;distinguished permissions\&quot; that are used for intro rules
+<span class="lineno"> 8454 </span>data PermSet ps = PermSet { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_varPermMap</span></span></span> :: NameMap ValuePerm,
+<span class="lineno"> 8455 </span>                            <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_distPerms</span></span></span> :: DistPerms ps }
+<span class="lineno"> 8456 </span>
+<span class="lineno"> 8457 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''PermSet</span></span></span></span></span>
+<span class="lineno"> 8458 </span>
+<span class="lineno"> 8459 </span>-- | Get all variables that have permissions set in a 'PermSet'
+<span class="lineno"> 8460 </span>permSetVars :: PermSet ps -&gt; [SomeName CrucibleType]
+<span class="lineno"> 8461 </span><span class="decl"><span class="nottickedoff">permSetVars =</span>
+<span class="lineno"> 8462 </span><span class="spaces">  </span><span class="nottickedoff">map (\case (NameAndElem n _) -&gt;</span>
+<span class="lineno"> 8463 </span><span class="spaces">               </span><span class="nottickedoff">SomeName n) . NameMap.assocs . view varPermMap</span></span>
+<span class="lineno"> 8464 </span>
+<span class="lineno"> 8465 </span>-- | Build a 'PermSet' with only distinguished permissions
+<span class="lineno"> 8466 </span>distPermSet :: DistPerms ps -&gt; PermSet ps
+<span class="lineno"> 8467 </span><span class="decl"><span class="nottickedoff">distPermSet perms = PermSet NameMap.empty perms</span></span>
+<span class="lineno"> 8468 </span>
+<span class="lineno"> 8469 </span>-- | The lens for the permissions associated with a given variable
+<span class="lineno"> 8470 </span>varPerm :: ExprVar a -&gt; Lens' (PermSet ps) (ValuePerm a)
+<span class="lineno"> 8471 </span><span class="decl"><span class="nottickedoff">varPerm x =</span>
+<span class="lineno"> 8472 </span><span class="spaces">  </span><span class="nottickedoff">lens</span>
+<span class="lineno"> 8473 </span><span class="spaces">  </span><span class="nottickedoff">(\(PermSet nmap _) -&gt;</span>
+<span class="lineno"> 8474 </span><span class="spaces">    </span><span class="nottickedoff">case NameMap.lookup x nmap of</span>
+<span class="lineno"> 8475 </span><span class="spaces">      </span><span class="nottickedoff">Just p -&gt; p</span>
+<span class="lineno"> 8476 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; ValPerm_True)</span>
+<span class="lineno"> 8477 </span><span class="spaces">  </span><span class="nottickedoff">(\(PermSet nmap ps) p -&gt; PermSet (NameMap.insert x p nmap) ps)</span></span>
+<span class="lineno"> 8478 </span>
+<span class="lineno"> 8479 </span>-- | Set the primary permission for a variable, assuming it is currently the
+<span class="lineno"> 8480 </span>-- trivial permission @true@
+<span class="lineno"> 8481 </span>setVarPerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
+<span class="lineno"> 8482 </span><span class="decl"><span class="nottickedoff">setVarPerm x p =</span>
+<span class="lineno"> 8483 </span><span class="spaces">  </span><span class="nottickedoff">over (varPerm x) $ \p' -&gt;</span>
+<span class="lineno"> 8484 </span><span class="spaces">  </span><span class="nottickedoff">case p' of</span>
+<span class="lineno"> 8485 </span><span class="spaces">    </span><span class="nottickedoff">ValPerm_True -&gt; p</span>
+<span class="lineno"> 8486 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; panic &quot;setVarPerm&quot; [&quot;permission for variable already set!&quot;]</span></span>
+<span class="lineno"> 8487 </span>
+<span class="lineno"> 8488 </span>-- | Get a permission list for multiple variables
+<span class="lineno"> 8489 </span>varPermsMulti :: RAssign Name ns -&gt; PermSet ps -&gt; DistPerms ns
+<span class="lineno"> 8490 </span><span class="decl"><span class="nottickedoff">varPermsMulti MNil _ = DistPermsNil</span>
+<span class="lineno"> 8491 </span><span class="spaces"></span><span class="nottickedoff">varPermsMulti (ns :&gt;: n) ps =</span>
+<span class="lineno"> 8492 </span><span class="spaces">  </span><span class="nottickedoff">DistPermsCons (varPermsMulti ns ps) n (ps ^. varPerm n)</span></span>
+<span class="lineno"> 8493 </span>
+<span class="lineno"> 8494 </span>-- | Get a permission list for all variable permissions
+<span class="lineno"> 8495 </span>permSetAllVarPerms :: PermSet ps -&gt; Some DistPerms
+<span class="lineno"> 8496 </span><span class="decl"><span class="nottickedoff">permSetAllVarPerms perm_set =</span>
+<span class="lineno"> 8497 </span><span class="spaces">  </span><span class="nottickedoff">foldr (\(NameAndElem x p) (Some perms) -&gt; Some (DistPermsCons perms x p))</span>
+<span class="lineno"> 8498 </span><span class="spaces">  </span><span class="nottickedoff">(Some DistPermsNil) (NameMap.assocs $ _varPermMap perm_set)</span></span>
+<span class="lineno"> 8499 </span>
+<span class="lineno"> 8500 </span>-- | A determined vars clause says that the variable on the right-hand side is
+<span class="lineno"> 8501 </span>-- determined (as in the description of 'determinedVars') if all those on the
+<span class="lineno"> 8502 </span>-- left-hand side are. Note that this is an if and not an iff, as there may be
+<span class="lineno"> 8503 </span>-- other ways to mark that RHS variable determined.
+<span class="lineno"> 8504 </span>data DetVarsClause =
+<span class="lineno"> 8505 </span>  DetVarsClause (NameSet CrucibleType) (SomeName CrucibleType)
+<span class="lineno"> 8506 </span>
+<span class="lineno"> 8507 </span>-- | Union a 'NameSet' to the left-hand side of a 'DetVarsClause'
+<span class="lineno"> 8508 </span>detVarsClauseAddLHS :: NameSet CrucibleType -&gt; DetVarsClause -&gt; DetVarsClause
+<span class="lineno"> 8509 </span><span class="decl"><span class="nottickedoff">detVarsClauseAddLHS names (DetVarsClause lhs rhs) =</span>
+<span class="lineno"> 8510 </span><span class="spaces">  </span><span class="nottickedoff">DetVarsClause (NameSet.union lhs names) rhs</span></span>
+<span class="lineno"> 8511 </span>
+<span class="lineno"> 8512 </span>-- | Add a single variable to the left-hand side of a 'DetVarsClause'
+<span class="lineno"> 8513 </span>detVarsClauseAddLHSVar :: ExprVar a -&gt; DetVarsClause -&gt; DetVarsClause
+<span class="lineno"> 8514 </span><span class="decl"><span class="nottickedoff">detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =</span>
+<span class="lineno"> 8515 </span><span class="spaces">  </span><span class="nottickedoff">DetVarsClause (NameSet.insert n lhs) rhs</span></span>
+<span class="lineno"> 8516 </span>
+<span class="lineno"> 8517 </span>newtype SeenDetVarsClauses :: CrucibleType -&gt; Type where
+<span class="lineno"> 8518 </span>  SeenDetVarsClauses :: [DetVarsClause] -&gt; SeenDetVarsClauses tp
+<span class="lineno"> 8519 </span>
+<span class="lineno"> 8520 </span>-- | Generic function to compute the 'DetVarsClause's for a permission
+<span class="lineno"> 8521 </span>class GetDetVarsClauses a where
+<span class="lineno"> 8522 </span>  getDetVarsClauses ::
+<span class="lineno"> 8523 </span>    a -&gt; ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
+<span class="lineno"> 8524 </span>                              [DetVarsClause]
+<span class="lineno"> 8525 </span>
+<span class="lineno"> 8526 </span>instance GetDetVarsClauses a =&gt; GetDetVarsClauses [a] where
+<span class="lineno"> 8527 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses l = concat &lt;$&gt; mapM getDetVarsClauses l</span></span>
+<span class="lineno"> 8528 </span>
+<span class="lineno"> 8529 </span>instance GetDetVarsClauses (ExprVar a) where
+<span class="lineno"> 8530 </span>  -- If x has not been visited yet, then return a clause stating that x is
+<span class="lineno"> 8531 </span>  -- determined and add all variables that are potentially determined by the
+<span class="lineno"> 8532 </span>  -- current permissions on x
+<span class="lineno"> 8533 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses x =</span>
+<span class="lineno"> 8534 </span><span class="spaces">    </span><span class="nottickedoff">do seen_vars &lt;- get</span>
+<span class="lineno"> 8535 </span><span class="spaces">       </span><span class="nottickedoff">perms &lt;- ask</span>
+<span class="lineno"> 8536 </span><span class="spaces">       </span><span class="nottickedoff">perm_clauses &lt;- case NameMap.lookup x seen_vars of</span>
+<span class="lineno"> 8537 </span><span class="spaces">         </span><span class="nottickedoff">Just (SeenDetVarsClauses perm_clauses) -&gt; return perm_clauses</span>
+<span class="lineno"> 8538 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; do perm_clauses &lt;- getDetVarsClauses (perms ^. varPerm x)</span>
+<span class="lineno"> 8539 </span><span class="spaces">                       </span><span class="nottickedoff">modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))</span>
+<span class="lineno"> 8540 </span><span class="spaces">                       </span><span class="nottickedoff">return perm_clauses</span>
+<span class="lineno"> 8541 </span><span class="spaces">       </span><span class="nottickedoff">return (DetVarsClause NameSet.empty (SomeName x) :</span>
+<span class="lineno"> 8542 </span><span class="spaces">               </span><span class="nottickedoff">map (detVarsClauseAddLHSVar x) perm_clauses)</span></span>
+<span class="lineno"> 8543 </span>
+<span class="lineno"> 8544 </span>instance GetDetVarsClauses (PermExpr a) where
+<span class="lineno"> 8545 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses e</span>
+<span class="lineno"> 8546 </span><span class="spaces">    </span><span class="nottickedoff">| isDeterminingExpr e =</span>
+<span class="lineno"> 8547 </span><span class="spaces">      </span><span class="nottickedoff">concat &lt;$&gt; mapM (\(SomeName n) -&gt;</span>
+<span class="lineno"> 8548 </span><span class="spaces">                        </span><span class="nottickedoff">getDetVarsClauses n) (NameSet.toList $ freeVars e)</span>
+<span class="lineno"> 8549 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
 <span class="lineno"> 8550 </span>
-<span class="lineno"> 8551 </span>instance GetDetVarsClauses (PermExprs as) where
-<span class="lineno"> 8552 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses PExprs_Nil = return []</span>
-<span class="lineno"> 8553 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (PExprs_Cons es e) =</span>
-<span class="lineno"> 8554 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses es &lt;*&gt; getDetVarsClauses e</span></span>
-<span class="lineno"> 8555 </span>
-<span class="lineno"> 8556 </span>instance GetDetVarsClauses (ValuePerm a) where
-<span class="lineno"> 8557 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (ValPerm_Eq e) = getDetVarsClauses e</span>
-<span class="lineno"> 8558 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerm_Conj ps) = concat &lt;$&gt; mapM getDetVarsClauses ps</span>
-<span class="lineno"> 8559 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: For named perms, we currently require the offset to have no free</span>
-<span class="lineno"> 8560 </span><span class="spaces">  </span><span class="nottickedoff">-- vars, as a simplification, but this could maybe be loosened...?</span>
-<span class="lineno"> 8561 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerm_Named _ args off)</span>
-<span class="lineno"> 8562 </span><span class="spaces">    </span><span class="nottickedoff">| NameSet.null (freeVars off) = getDetVarsClauses args</span>
-<span class="lineno"> 8563 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
-<span class="lineno"> 8564 </span>
-<span class="lineno"> 8565 </span>instance GetDetVarsClauses (ValuePerms as) where
-<span class="lineno"> 8566 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses ValPerms_Nil = return []</span>
-<span class="lineno"> 8567 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerms_Cons ps p) =</span>
-<span class="lineno"> 8568 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses ps &lt;*&gt; getDetVarsClauses p</span></span>
-<span class="lineno"> 8569 </span>
-<span class="lineno"> 8570 </span>instance GetDetVarsClauses (AtomicPerm a) where
-<span class="lineno"> 8571 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (Perm_LLVMField fp) = getDetVarsClauses fp</span>
-<span class="lineno"> 8572 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMArray ap) = getDetVarsClauses ap</span>
-<span class="lineno"> 8573 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMBlock bp) = getDetVarsClauses bp</span>
-<span class="lineno"> 8574 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMBlockShape sh) = getDetVarsClauses sh</span>
-<span class="lineno"> 8575 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMFrame frame_perm) =</span>
-<span class="lineno"> 8576 </span><span class="spaces">    </span><span class="nottickedoff">concat &lt;$&gt; mapM (getDetVarsClauses . fst) frame_perm</span>
-<span class="lineno"> 8577 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LOwned _ _ _ _ _) = return []</span>
-<span class="lineno"> 8578 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LOwnedSimple _ lops) =</span>
-<span class="lineno"> 8579 </span><span class="spaces">    </span><span class="nottickedoff">getDetVarsClauses $ RL.map exprAndPermPerm lops</span>
-<span class="lineno"> 8580 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
-<span class="lineno"> 8581 </span>
-<span class="lineno"> 8582 </span>instance (1 &lt;= w, KnownNat w, 1 &lt;= sz, KnownNat sz) =&gt;
-<span class="lineno"> 8583 </span>         GetDetVarsClauses (LLVMFieldPerm w sz) where
-<span class="lineno"> 8584 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMFieldPerm {..}) =</span>
-<span class="lineno"> 8585 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars llvmFieldOffset)) &lt;$&gt; concat &lt;$&gt;</span>
-<span class="lineno"> 8586 </span><span class="spaces">    </span><span class="nottickedoff">sequence [getDetVarsClauses llvmFieldRW,</span>
-<span class="lineno"> 8587 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmFieldLifetime,</span>
-<span class="lineno"> 8588 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmFieldContents]</span></span>
-<span class="lineno"> 8589 </span>
-<span class="lineno"> 8590 </span>instance (1 &lt;= w, KnownNat w) =&gt; GetDetVarsClauses (LLVMArrayPerm w) where
-<span class="lineno"> 8591 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMArrayPerm {..}) =</span>
-<span class="lineno"> 8592 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS $</span>
-<span class="lineno"> 8593 </span><span class="spaces">         </span><span class="nottickedoff">NameSet.unions [freeVars llvmArrayOffset, freeVars llvmArrayLen,</span>
-<span class="lineno"> 8594 </span><span class="spaces">                         </span><span class="nottickedoff">freeVars llvmArrayBorrows]) &lt;$&gt; concat &lt;$&gt;</span>
-<span class="lineno"> 8595 </span><span class="spaces">    </span><span class="nottickedoff">sequence [getDetVarsClauses llvmArrayRW,</span>
-<span class="lineno"> 8596 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmArrayLifetime,</span>
-<span class="lineno"> 8597 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmArrayCellShape]</span></span>
-<span class="lineno"> 8598 </span>
-<span class="lineno"> 8599 </span>instance (1 &lt;= w, KnownNat w) =&gt; GetDetVarsClauses (LLVMBlockPerm w) where
-<span class="lineno"> 8600 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMBlockPerm {..}) =</span>
-<span class="lineno"> 8601 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS $</span>
-<span class="lineno"> 8602 </span><span class="spaces">         </span><span class="nottickedoff">NameSet.unions [freeVars llvmBlockOffset, freeVars llvmBlockLen]) &lt;$&gt;</span>
-<span class="lineno"> 8603 </span><span class="spaces">    </span><span class="nottickedoff">concat &lt;$&gt; sequence [getDetVarsClauses llvmBlockRW,</span>
-<span class="lineno"> 8604 </span><span class="spaces">                         </span><span class="nottickedoff">getDetVarsClauses llvmBlockLifetime,</span>
-<span class="lineno"> 8605 </span><span class="spaces">                         </span><span class="nottickedoff">getShapeDetVarsClauses llvmBlockShape]</span></span>
-<span class="lineno"> 8606 </span>
-<span class="lineno"> 8607 </span>instance GetDetVarsClauses (LLVMFieldShape w) where
-<span class="lineno"> 8608 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMFieldShape p) = getDetVarsClauses p</span></span>
-<span class="lineno"> 8609 </span>
-<span class="lineno"> 8610 </span>-- | Compute the 'DetVarsClause's for a block permission with the given shape
-<span class="lineno"> 8611 </span>getShapeDetVarsClauses ::
-<span class="lineno"> 8612 </span>  (1 &lt;= w, KnownNat w) =&gt; PermExpr (LLVMShapeType w) -&gt;
-<span class="lineno"> 8613 </span>  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
-<span class="lineno"> 8614 </span><span class="decl"><span class="nottickedoff">getShapeDetVarsClauses (PExpr_Var x) =</span>
-<span class="lineno"> 8615 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses x</span>
-<span class="lineno"> 8616 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =</span>
-<span class="lineno"> 8617 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: maybe also include the variables determined by the modalities?</span>
-<span class="lineno"> 8618 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses args</span>
-<span class="lineno"> 8619 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_EqShape len e) =</span>
-<span class="lineno"> 8620 </span><span class="spaces">  </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars len)) &lt;$&gt; getDetVarsClauses e</span>
-<span class="lineno"> 8621 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =</span>
-<span class="lineno"> 8622 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: maybe also include the variables determined by the modalities?</span>
-<span class="lineno"> 8623 </span><span class="spaces">  </span><span class="nottickedoff">getShapeDetVarsClauses sh</span>
-<span class="lineno"> 8624 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_FieldShape fldsh) = getDetVarsClauses fldsh</span>
-<span class="lineno"> 8625 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_ArrayShape len _ sh) =</span>
-<span class="lineno"> 8626 </span><span class="spaces">  </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars len)) &lt;$&gt; getDetVarsClauses sh</span>
-<span class="lineno"> 8627 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_TupShape sh) = getShapeDetVarsClauses sh</span>
-<span class="lineno"> 8628 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_SeqShape sh1 sh2)</span>
-<span class="lineno"> 8629 </span><span class="spaces">  </span><span class="nottickedoff">| isJust $ llvmShapeLength sh1 =</span>
-<span class="lineno"> 8630 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses sh1 &lt;*&gt; getDetVarsClauses sh2</span>
-<span class="lineno"> 8631 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses _ = return []</span></span>
-<span class="lineno"> 8632 </span>
+<span class="lineno"> 8551 </span>
+<span class="lineno"> 8552 </span>instance GetDetVarsClauses (PermExprs as) where
+<span class="lineno"> 8553 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses PExprs_Nil = return []</span>
+<span class="lineno"> 8554 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (PExprs_Cons es e) =</span>
+<span class="lineno"> 8555 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses es &lt;*&gt; getDetVarsClauses e</span></span>
+<span class="lineno"> 8556 </span>
+<span class="lineno"> 8557 </span>instance GetDetVarsClauses (ValuePerm a) where
+<span class="lineno"> 8558 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (ValPerm_Eq e) = getDetVarsClauses e</span>
+<span class="lineno"> 8559 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerm_Conj ps) = concat &lt;$&gt; mapM getDetVarsClauses ps</span>
+<span class="lineno"> 8560 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: For named perms, we currently require the offset to have no free</span>
+<span class="lineno"> 8561 </span><span class="spaces">  </span><span class="nottickedoff">-- vars, as a simplification, but this could maybe be loosened...?</span>
+<span class="lineno"> 8562 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerm_Named _ args off)</span>
+<span class="lineno"> 8563 </span><span class="spaces">    </span><span class="nottickedoff">| NameSet.null (freeVars off) = getDetVarsClauses args</span>
+<span class="lineno"> 8564 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
+<span class="lineno"> 8565 </span>
+<span class="lineno"> 8566 </span>instance GetDetVarsClauses (ValuePerms as) where
+<span class="lineno"> 8567 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses ValPerms_Nil = return []</span>
+<span class="lineno"> 8568 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (ValPerms_Cons ps p) =</span>
+<span class="lineno"> 8569 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses ps &lt;*&gt; getDetVarsClauses p</span></span>
+<span class="lineno"> 8570 </span>
+<span class="lineno"> 8571 </span>instance GetDetVarsClauses (AtomicPerm a) where
+<span class="lineno"> 8572 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (Perm_LLVMField fp) = getDetVarsClauses fp</span>
+<span class="lineno"> 8573 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMArray ap) = getDetVarsClauses ap</span>
+<span class="lineno"> 8574 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMBlock bp) = getDetVarsClauses bp</span>
+<span class="lineno"> 8575 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMBlockShape sh) = getDetVarsClauses sh</span>
+<span class="lineno"> 8576 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LLVMFrame frame_perm) =</span>
+<span class="lineno"> 8577 </span><span class="spaces">    </span><span class="nottickedoff">concat &lt;$&gt; mapM (getDetVarsClauses . fst) frame_perm</span>
+<span class="lineno"> 8578 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LOwned _ _ _ _ _) = return []</span>
+<span class="lineno"> 8579 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses (Perm_LOwnedSimple _ lops) =</span>
+<span class="lineno"> 8580 </span><span class="spaces">    </span><span class="nottickedoff">getDetVarsClauses $ RL.map exprAndPermPerm lops</span>
+<span class="lineno"> 8581 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses _ = return []</span></span>
+<span class="lineno"> 8582 </span>
+<span class="lineno"> 8583 </span>instance (1 &lt;= w, KnownNat w, 1 &lt;= sz, KnownNat sz) =&gt;
+<span class="lineno"> 8584 </span>         GetDetVarsClauses (LLVMFieldPerm w sz) where
+<span class="lineno"> 8585 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMFieldPerm {..}) =</span>
+<span class="lineno"> 8586 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars llvmFieldOffset)) &lt;$&gt; concat &lt;$&gt;</span>
+<span class="lineno"> 8587 </span><span class="spaces">    </span><span class="nottickedoff">sequence [getDetVarsClauses llvmFieldRW,</span>
+<span class="lineno"> 8588 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmFieldLifetime,</span>
+<span class="lineno"> 8589 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmFieldContents]</span></span>
+<span class="lineno"> 8590 </span>
+<span class="lineno"> 8591 </span>instance (1 &lt;= w, KnownNat w) =&gt; GetDetVarsClauses (LLVMArrayPerm w) where
+<span class="lineno"> 8592 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMArrayPerm {..}) =</span>
+<span class="lineno"> 8593 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS $</span>
+<span class="lineno"> 8594 </span><span class="spaces">         </span><span class="nottickedoff">NameSet.unions [freeVars llvmArrayOffset, freeVars llvmArrayLen,</span>
+<span class="lineno"> 8595 </span><span class="spaces">                         </span><span class="nottickedoff">freeVars llvmArrayBorrows]) &lt;$&gt; concat &lt;$&gt;</span>
+<span class="lineno"> 8596 </span><span class="spaces">    </span><span class="nottickedoff">sequence [getDetVarsClauses llvmArrayRW,</span>
+<span class="lineno"> 8597 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmArrayLifetime,</span>
+<span class="lineno"> 8598 </span><span class="spaces">              </span><span class="nottickedoff">getDetVarsClauses llvmArrayCellShape]</span></span>
+<span class="lineno"> 8599 </span>
+<span class="lineno"> 8600 </span>instance (1 &lt;= w, KnownNat w) =&gt; GetDetVarsClauses (LLVMBlockPerm w) where
+<span class="lineno"> 8601 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMBlockPerm {..}) =</span>
+<span class="lineno"> 8602 </span><span class="spaces">    </span><span class="nottickedoff">map (detVarsClauseAddLHS $</span>
+<span class="lineno"> 8603 </span><span class="spaces">         </span><span class="nottickedoff">NameSet.unions [freeVars llvmBlockOffset, freeVars llvmBlockLen]) &lt;$&gt;</span>
+<span class="lineno"> 8604 </span><span class="spaces">    </span><span class="nottickedoff">concat &lt;$&gt; sequence [getDetVarsClauses llvmBlockRW,</span>
+<span class="lineno"> 8605 </span><span class="spaces">                         </span><span class="nottickedoff">getDetVarsClauses llvmBlockLifetime,</span>
+<span class="lineno"> 8606 </span><span class="spaces">                         </span><span class="nottickedoff">getShapeDetVarsClauses llvmBlockShape]</span></span>
+<span class="lineno"> 8607 </span>
+<span class="lineno"> 8608 </span>instance GetDetVarsClauses (LLVMFieldShape w) where
+<span class="lineno"> 8609 </span>  <span class="decl"><span class="nottickedoff">getDetVarsClauses (LLVMFieldShape p) = getDetVarsClauses p</span></span>
+<span class="lineno"> 8610 </span>
+<span class="lineno"> 8611 </span>-- | Compute the 'DetVarsClause's for a block permission with the given shape
+<span class="lineno"> 8612 </span>getShapeDetVarsClauses ::
+<span class="lineno"> 8613 </span>  (1 &lt;= w, KnownNat w) =&gt; PermExpr (LLVMShapeType w) -&gt;
+<span class="lineno"> 8614 </span>  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
+<span class="lineno"> 8615 </span><span class="decl"><span class="nottickedoff">getShapeDetVarsClauses (PExpr_Var x) =</span>
+<span class="lineno"> 8616 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses x</span>
+<span class="lineno"> 8617 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =</span>
+<span class="lineno"> 8618 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: maybe also include the variables determined by the modalities?</span>
+<span class="lineno"> 8619 </span><span class="spaces">  </span><span class="nottickedoff">getDetVarsClauses args</span>
+<span class="lineno"> 8620 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_EqShape len e) =</span>
+<span class="lineno"> 8621 </span><span class="spaces">  </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars len)) &lt;$&gt; getDetVarsClauses e</span>
+<span class="lineno"> 8622 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =</span>
+<span class="lineno"> 8623 </span><span class="spaces">  </span><span class="nottickedoff">-- FIXME: maybe also include the variables determined by the modalities?</span>
+<span class="lineno"> 8624 </span><span class="spaces">  </span><span class="nottickedoff">getShapeDetVarsClauses sh</span>
+<span class="lineno"> 8625 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_FieldShape fldsh) = getDetVarsClauses fldsh</span>
+<span class="lineno"> 8626 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_ArrayShape len _ sh) =</span>
+<span class="lineno"> 8627 </span><span class="spaces">  </span><span class="nottickedoff">map (detVarsClauseAddLHS (freeVars len)) &lt;$&gt; getDetVarsClauses sh</span>
+<span class="lineno"> 8628 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_TupShape sh) = getShapeDetVarsClauses sh</span>
+<span class="lineno"> 8629 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses (PExpr_SeqShape sh1 sh2)</span>
+<span class="lineno"> 8630 </span><span class="spaces">  </span><span class="nottickedoff">| isJust $ llvmShapeLength sh1 =</span>
+<span class="lineno"> 8631 </span><span class="spaces">    </span><span class="nottickedoff">(++) &lt;$&gt; getDetVarsClauses sh1 &lt;*&gt; getDetVarsClauses sh2</span>
+<span class="lineno"> 8632 </span><span class="spaces"></span><span class="nottickedoff">getShapeDetVarsClauses _ = return []</span></span>
 <span class="lineno"> 8633 </span>
-<span class="lineno"> 8634 </span>-- | Compute all the variables whose values are /determined/ by the permissions
-<span class="lineno"> 8635 </span>-- on the given input variables, other than those variables themselves. The
-<span class="lineno"> 8636 </span>-- intuitive idea is that permission @x:p@ determines the value of @y@ iff there
-<span class="lineno"> 8637 </span>-- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
-<span class="lineno"> 8638 </span>determinedVars :: PermSet ps -&gt; RAssign ExprVar ns -&gt; [SomeName CrucibleType]
-<span class="lineno"> 8639 </span><span class="decl"><span class="nottickedoff">determinedVars top_perms vars =</span>
-<span class="lineno"> 8640 </span><span class="spaces">  </span><span class="nottickedoff">let vars_map = NameMap.fromList $</span>
-<span class="lineno"> 8641 </span><span class="spaces">        </span><span class="nottickedoff">mapToList (\v -&gt; NameAndElem v (SeenDetVarsClauses [])) vars</span>
-<span class="lineno"> 8642 </span><span class="spaces">      </span><span class="nottickedoff">vars_set = NameSet.fromList $ mapToList SomeName vars</span>
-<span class="lineno"> 8643 </span><span class="spaces">      </span><span class="nottickedoff">multigraph =</span>
-<span class="lineno"> 8644 </span><span class="spaces">        </span><span class="nottickedoff">evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $</span>
-<span class="lineno"> 8645 </span><span class="spaces">                                                  </span><span class="nottickedoff">varPermsMulti vars top_perms))</span>
-<span class="lineno"> 8646 </span><span class="spaces">                   </span><span class="nottickedoff">top_perms)</span>
-<span class="lineno"> 8647 </span><span class="spaces">        </span><span class="nottickedoff">vars_map in</span>
-<span class="lineno"> 8648 </span><span class="spaces">  </span><span class="nottickedoff">evalState (determinedVarsForGraph multigraph) vars_set</span>
-<span class="lineno"> 8649 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 8650 </span><span class="spaces">    </span><span class="nottickedoff">-- Find all variables that are not already marked as determined in our</span>
-<span class="lineno"> 8651 </span><span class="spaces">    </span><span class="nottickedoff">-- NameSet state but that are determined given the current determined</span>
-<span class="lineno"> 8652 </span><span class="spaces">    </span><span class="nottickedoff">-- variables, mark these variables as determined, and then repeat, returning</span>
-<span class="lineno"> 8653 </span><span class="spaces">    </span><span class="nottickedoff">-- all variables that are found in order</span>
-<span class="lineno"> 8654 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForGraph :: [DetVarsClause] -&gt;</span>
-<span class="lineno"> 8655 </span><span class="spaces">                              </span><span class="nottickedoff">State (NameSet CrucibleType)</span>
-<span class="lineno"> 8656 </span><span class="spaces">                                    </span><span class="nottickedoff">[SomeName CrucibleType]</span>
-<span class="lineno"> 8657 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForGraph graph =</span>
-<span class="lineno"> 8658 </span><span class="spaces">      </span><span class="nottickedoff">do det_vars &lt;- concat &lt;$&gt; mapM determinedVarsForClause graph</span>
-<span class="lineno"> 8659 </span><span class="spaces">         </span><span class="nottickedoff">if det_vars == [] then return [] else</span>
-<span class="lineno"> 8660 </span><span class="spaces">           </span><span class="nottickedoff">(det_vars ++) &lt;$&gt; determinedVarsForGraph graph</span>
-<span class="lineno"> 8661 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 8662 </span><span class="spaces">    </span><span class="nottickedoff">-- If the LHS of a clause has become determined but its RHS is not, return</span>
-<span class="lineno"> 8663 </span><span class="spaces">    </span><span class="nottickedoff">-- its RHS, otherwise return nothing</span>
-<span class="lineno"> 8664 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForClause :: DetVarsClause -&gt;</span>
-<span class="lineno"> 8665 </span><span class="spaces">                               </span><span class="nottickedoff">State (NameSet CrucibleType)</span>
-<span class="lineno"> 8666 </span><span class="spaces">                                     </span><span class="nottickedoff">[SomeName CrucibleType]</span>
-<span class="lineno"> 8667 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =</span>
-<span class="lineno"> 8668 </span><span class="spaces">      </span><span class="nottickedoff">do det_vars &lt;- get</span>
-<span class="lineno"> 8669 </span><span class="spaces">         </span><span class="nottickedoff">if not (NameSet.member rhs_var det_vars) &amp;&amp;</span>
-<span class="lineno"> 8670 </span><span class="spaces">            </span><span class="nottickedoff">nameSetIsSubsetOf lhs_vars det_vars</span>
-<span class="lineno"> 8671 </span><span class="spaces">           </span><span class="nottickedoff">then modify (NameSet.insert rhs_var) &gt;&gt; return [SomeName rhs_var]</span>
-<span class="lineno"> 8672 </span><span class="spaces">           </span><span class="nottickedoff">else return []</span></span>
-<span class="lineno"> 8673 </span>
-<span class="lineno"> 8674 </span>-- | Compute the transitive free variables of the permissions on some input list
-<span class="lineno"> 8675 </span>-- @ns@ of variables, which includes all variables @ns1@ that are free in the
-<span class="lineno"> 8676 </span>-- permissions associated with @ns@, all the variables @ns2@ free in the
-<span class="lineno"> 8677 </span>-- permissions of @ns1@, etc. Every variable in the returned list is guaranteed
-<span class="lineno"> 8678 </span>-- to be listed /after/ (i.e., to the right of where) it is used.
-<span class="lineno"> 8679 </span>varPermsTransFreeVars :: RAssign ExprVar ns -&gt; PermSet ps -&gt;
-<span class="lineno"> 8680 </span>                         Some (RAssign ExprVar)
-<span class="lineno"> 8681 </span><span class="decl"><span class="nottickedoff">varPermsTransFreeVars =</span>
-<span class="lineno"> 8682 </span><span class="spaces">  </span><span class="nottickedoff">helper NameSet.empty . mapToList SomeName</span>
-<span class="lineno"> 8683 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 8684 </span><span class="spaces">    </span><span class="nottickedoff">helper :: NameSet CrucibleType -&gt; [SomeName CrucibleType] -&gt; PermSet ps -&gt;</span>
-<span class="lineno"> 8685 </span><span class="spaces">              </span><span class="nottickedoff">Some (RAssign ExprVar)</span>
-<span class="lineno"> 8686 </span><span class="spaces">    </span><span class="nottickedoff">helper seen_vars ns perms =</span>
-<span class="lineno"> 8687 </span><span class="spaces">      </span><span class="nottickedoff">let seen_vars' =</span>
-<span class="lineno"> 8688 </span><span class="spaces">            </span><span class="nottickedoff">foldr (\(SomeName n) -&gt; NameSet.insert n) seen_vars ns</span>
-<span class="lineno"> 8689 </span><span class="spaces">          </span><span class="nottickedoff">free_vars =</span>
-<span class="lineno"> 8690 </span><span class="spaces">            </span><span class="nottickedoff">NameSet.unions $</span>
-<span class="lineno"> 8691 </span><span class="spaces">            </span><span class="nottickedoff">map (\(SomeName n) -&gt; freeVars (perms ^. varPerm n)) ns</span>
-<span class="lineno"> 8692 </span><span class="spaces">          </span><span class="nottickedoff">new_vars = NameSet.difference free_vars seen_vars' in</span>
-<span class="lineno"> 8693 </span><span class="spaces">      </span><span class="nottickedoff">case toList new_vars of</span>
-<span class="lineno"> 8694 </span><span class="spaces">        </span><span class="nottickedoff">[] -&gt; Some MNil</span>
-<span class="lineno"> 8695 </span><span class="spaces">        </span><span class="nottickedoff">new_ns -&gt;</span>
-<span class="lineno"> 8696 </span><span class="spaces">          </span><span class="nottickedoff">case (namesListToNames new_ns, helper seen_vars' new_ns perms) of</span>
-<span class="lineno"> 8697 </span><span class="spaces">            </span><span class="nottickedoff">(SomeRAssign ns', Some rest) -&gt;</span>
-<span class="lineno"> 8698 </span><span class="spaces">              </span><span class="nottickedoff">Some $ append ns' rest</span></span>
-<span class="lineno"> 8699 </span>
+<span class="lineno"> 8634 </span>
+<span class="lineno"> 8635 </span>-- | Compute all the variables whose values are /determined/ by the permissions
+<span class="lineno"> 8636 </span>-- on the given input variables, other than those variables themselves. The
+<span class="lineno"> 8637 </span>-- intuitive idea is that permission @x:p@ determines the value of @y@ iff there
+<span class="lineno"> 8638 </span>-- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
+<span class="lineno"> 8639 </span>determinedVars :: PermSet ps -&gt; RAssign ExprVar ns -&gt; [SomeName CrucibleType]
+<span class="lineno"> 8640 </span><span class="decl"><span class="nottickedoff">determinedVars top_perms vars =</span>
+<span class="lineno"> 8641 </span><span class="spaces">  </span><span class="nottickedoff">let vars_map = NameMap.fromList $</span>
+<span class="lineno"> 8642 </span><span class="spaces">        </span><span class="nottickedoff">mapToList (\v -&gt; NameAndElem v (SeenDetVarsClauses [])) vars</span>
+<span class="lineno"> 8643 </span><span class="spaces">      </span><span class="nottickedoff">vars_set = NameSet.fromList $ mapToList SomeName vars</span>
+<span class="lineno"> 8644 </span><span class="spaces">      </span><span class="nottickedoff">multigraph =</span>
+<span class="lineno"> 8645 </span><span class="spaces">        </span><span class="nottickedoff">evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $</span>
+<span class="lineno"> 8646 </span><span class="spaces">                                                  </span><span class="nottickedoff">varPermsMulti vars top_perms))</span>
+<span class="lineno"> 8647 </span><span class="spaces">                   </span><span class="nottickedoff">top_perms)</span>
+<span class="lineno"> 8648 </span><span class="spaces">        </span><span class="nottickedoff">vars_map in</span>
+<span class="lineno"> 8649 </span><span class="spaces">  </span><span class="nottickedoff">evalState (determinedVarsForGraph multigraph) vars_set</span>
+<span class="lineno"> 8650 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 8651 </span><span class="spaces">    </span><span class="nottickedoff">-- Find all variables that are not already marked as determined in our</span>
+<span class="lineno"> 8652 </span><span class="spaces">    </span><span class="nottickedoff">-- NameSet state but that are determined given the current determined</span>
+<span class="lineno"> 8653 </span><span class="spaces">    </span><span class="nottickedoff">-- variables, mark these variables as determined, and then repeat, returning</span>
+<span class="lineno"> 8654 </span><span class="spaces">    </span><span class="nottickedoff">-- all variables that are found in order</span>
+<span class="lineno"> 8655 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForGraph :: [DetVarsClause] -&gt;</span>
+<span class="lineno"> 8656 </span><span class="spaces">                              </span><span class="nottickedoff">State (NameSet CrucibleType)</span>
+<span class="lineno"> 8657 </span><span class="spaces">                                    </span><span class="nottickedoff">[SomeName CrucibleType]</span>
+<span class="lineno"> 8658 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForGraph graph =</span>
+<span class="lineno"> 8659 </span><span class="spaces">      </span><span class="nottickedoff">do det_vars &lt;- concat &lt;$&gt; mapM determinedVarsForClause graph</span>
+<span class="lineno"> 8660 </span><span class="spaces">         </span><span class="nottickedoff">if det_vars == [] then return [] else</span>
+<span class="lineno"> 8661 </span><span class="spaces">           </span><span class="nottickedoff">(det_vars ++) &lt;$&gt; determinedVarsForGraph graph</span>
+<span class="lineno"> 8662 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 8663 </span><span class="spaces">    </span><span class="nottickedoff">-- If the LHS of a clause has become determined but its RHS is not, return</span>
+<span class="lineno"> 8664 </span><span class="spaces">    </span><span class="nottickedoff">-- its RHS, otherwise return nothing</span>
+<span class="lineno"> 8665 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForClause :: DetVarsClause -&gt;</span>
+<span class="lineno"> 8666 </span><span class="spaces">                               </span><span class="nottickedoff">State (NameSet CrucibleType)</span>
+<span class="lineno"> 8667 </span><span class="spaces">                                     </span><span class="nottickedoff">[SomeName CrucibleType]</span>
+<span class="lineno"> 8668 </span><span class="spaces">    </span><span class="nottickedoff">determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =</span>
+<span class="lineno"> 8669 </span><span class="spaces">      </span><span class="nottickedoff">do det_vars &lt;- get</span>
+<span class="lineno"> 8670 </span><span class="spaces">         </span><span class="nottickedoff">if not (NameSet.member rhs_var det_vars) &amp;&amp;</span>
+<span class="lineno"> 8671 </span><span class="spaces">            </span><span class="nottickedoff">nameSetIsSubsetOf lhs_vars det_vars</span>
+<span class="lineno"> 8672 </span><span class="spaces">           </span><span class="nottickedoff">then modify (NameSet.insert rhs_var) &gt;&gt; return [SomeName rhs_var]</span>
+<span class="lineno"> 8673 </span><span class="spaces">           </span><span class="nottickedoff">else return []</span></span>
+<span class="lineno"> 8674 </span>
+<span class="lineno"> 8675 </span>-- | Compute the transitive free variables of the permissions on some input list
+<span class="lineno"> 8676 </span>-- @ns@ of variables, which includes all variables @ns1@ that are free in the
+<span class="lineno"> 8677 </span>-- permissions associated with @ns@, all the variables @ns2@ free in the
+<span class="lineno"> 8678 </span>-- permissions of @ns1@, etc. Every variable in the returned list is guaranteed
+<span class="lineno"> 8679 </span>-- to be listed /after/ (i.e., to the right of where) it is used.
+<span class="lineno"> 8680 </span>varPermsTransFreeVars :: RAssign ExprVar ns -&gt; PermSet ps -&gt;
+<span class="lineno"> 8681 </span>                         Some (RAssign ExprVar)
+<span class="lineno"> 8682 </span><span class="decl"><span class="nottickedoff">varPermsTransFreeVars =</span>
+<span class="lineno"> 8683 </span><span class="spaces">  </span><span class="nottickedoff">helper NameSet.empty . mapToList SomeName</span>
+<span class="lineno"> 8684 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 8685 </span><span class="spaces">    </span><span class="nottickedoff">helper :: NameSet CrucibleType -&gt; [SomeName CrucibleType] -&gt; PermSet ps -&gt;</span>
+<span class="lineno"> 8686 </span><span class="spaces">              </span><span class="nottickedoff">Some (RAssign ExprVar)</span>
+<span class="lineno"> 8687 </span><span class="spaces">    </span><span class="nottickedoff">helper seen_vars ns perms =</span>
+<span class="lineno"> 8688 </span><span class="spaces">      </span><span class="nottickedoff">let seen_vars' =</span>
+<span class="lineno"> 8689 </span><span class="spaces">            </span><span class="nottickedoff">foldr (\(SomeName n) -&gt; NameSet.insert n) seen_vars ns</span>
+<span class="lineno"> 8690 </span><span class="spaces">          </span><span class="nottickedoff">free_vars =</span>
+<span class="lineno"> 8691 </span><span class="spaces">            </span><span class="nottickedoff">NameSet.unions $</span>
+<span class="lineno"> 8692 </span><span class="spaces">            </span><span class="nottickedoff">map (\(SomeName n) -&gt; freeVars (perms ^. varPerm n)) ns</span>
+<span class="lineno"> 8693 </span><span class="spaces">          </span><span class="nottickedoff">new_vars = NameSet.difference free_vars seen_vars' in</span>
+<span class="lineno"> 8694 </span><span class="spaces">      </span><span class="nottickedoff">case toList new_vars of</span>
+<span class="lineno"> 8695 </span><span class="spaces">        </span><span class="nottickedoff">[] -&gt; Some MNil</span>
+<span class="lineno"> 8696 </span><span class="spaces">        </span><span class="nottickedoff">new_ns -&gt;</span>
+<span class="lineno"> 8697 </span><span class="spaces">          </span><span class="nottickedoff">case (namesListToNames new_ns, helper seen_vars' new_ns perms) of</span>
+<span class="lineno"> 8698 </span><span class="spaces">            </span><span class="nottickedoff">(SomeRAssign ns', Some rest) -&gt;</span>
+<span class="lineno"> 8699 </span><span class="spaces">              </span><span class="nottickedoff">Some $ append ns' rest</span></span>
 <span class="lineno"> 8700 </span>
-<span class="lineno"> 8701 </span>-- | Initialize the primary permission of a variable to the given permission if
-<span class="lineno"> 8702 </span>-- the variable is not yet set
-<span class="lineno"> 8703 </span>initVarPermWith :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
-<span class="lineno"> 8704 </span><span class="decl"><span class="nottickedoff">initVarPermWith x p =</span>
-<span class="lineno"> 8705 </span><span class="spaces">  </span><span class="nottickedoff">over varPermMap $ \nmap -&gt;</span>
-<span class="lineno"> 8706 </span><span class="spaces">  </span><span class="nottickedoff">if NameMap.member x nmap then nmap else NameMap.insert x p nmap</span></span>
-<span class="lineno"> 8707 </span>
-<span class="lineno"> 8708 </span>-- | Initialize the primary permission of a variable to @true@ if it is not set
-<span class="lineno"> 8709 </span>initVarPerm :: ExprVar a -&gt; PermSet ps -&gt; PermSet ps
-<span class="lineno"> 8710 </span><span class="decl"><span class="nottickedoff">initVarPerm x =</span>
-<span class="lineno"> 8711 </span><span class="spaces">  </span><span class="nottickedoff">initVarPermWith x ValPerm_True</span></span>
-<span class="lineno"> 8712 </span>
-<span class="lineno"> 8713 </span>-- | Set the primary permissions for a sequence of variables to @true@
-<span class="lineno"> 8714 </span>initVarPerms :: RAssign Name (as :: RList CrucibleType) -&gt; PermSet ps -&gt;
-<span class="lineno"> 8715 </span>                PermSet ps
-<span class="lineno"> 8716 </span><span class="decl"><span class="nottickedoff">initVarPerms MNil perms = perms</span>
-<span class="lineno"> 8717 </span><span class="spaces"></span><span class="nottickedoff">initVarPerms (ns :&gt;: n) perms = initVarPerms ns $ initVarPerm n perms</span></span>
-<span class="lineno"> 8718 </span>
-<span class="lineno"> 8719 </span>-- | The lens for a particular distinguished perm, checking that it is indeed
-<span class="lineno"> 8720 </span>-- associated with the given variable
-<span class="lineno"> 8721 </span>distPerm :: Member ps a -&gt; ExprVar a -&gt; Lens' (PermSet ps) (ValuePerm a)
-<span class="lineno"> 8722 </span><span class="decl"><span class="nottickedoff">distPerm memb x = distPerms . nthVarPerm memb x</span></span>
-<span class="lineno"> 8723 </span>
-<span class="lineno"> 8724 </span>-- | The lens for the distinguished perm at the top of the stack, checking that
-<span class="lineno"> 8725 </span>-- it has the given variable
-<span class="lineno"> 8726 </span>topDistPerm :: ExprVar a -&gt; Lens' (PermSet (ps :&gt; a)) (ValuePerm a)
-<span class="lineno"> 8727 </span><span class="decl"><span class="nottickedoff">topDistPerm x = distPerms . distPermsHead x</span></span>
-<span class="lineno"> 8728 </span>
-<span class="lineno"> 8729 </span>-- | Modify the distinguished permission stack of a 'PermSet'
-<span class="lineno"> 8730 </span>modifyDistPerms :: (DistPerms ps1 -&gt; DistPerms ps2) -&gt;
-<span class="lineno"> 8731 </span>                   PermSet ps1 -&gt; PermSet ps2
-<span class="lineno"> 8732 </span><span class="decl"><span class="nottickedoff">modifyDistPerms f (PermSet perms dperms) = PermSet perms $ f dperms</span></span>
-<span class="lineno"> 8733 </span>
-<span class="lineno"> 8734 </span>-- | Get all the permissions in the permission set as a sequence of
-<span class="lineno"> 8735 </span>-- distinguished permissions
-<span class="lineno"> 8736 </span>getAllPerms :: PermSet ps -&gt; Some DistPerms
-<span class="lineno"> 8737 </span><span class="decl"><span class="nottickedoff">getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where</span>
-<span class="lineno"> 8738 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [NameAndElem ValuePerm] -&gt; Some DistPerms</span>
-<span class="lineno"> 8739 </span><span class="spaces">  </span><span class="nottickedoff">helper [] = Some DistPermsNil</span>
-<span class="lineno"> 8740 </span><span class="spaces">  </span><span class="nottickedoff">helper (NameAndElem x p : xps) =</span>
-<span class="lineno"> 8741 </span><span class="spaces">    </span><span class="nottickedoff">case helper xps of</span>
-<span class="lineno"> 8742 </span><span class="spaces">      </span><span class="nottickedoff">Some ps -&gt; Some $ DistPermsCons ps x p</span></span>
-<span class="lineno"> 8743 </span>
-<span class="lineno"> 8744 </span>-- | Delete permission @x:p@ from the permission set, assuming @x@ has precisely
-<span class="lineno"> 8745 </span>-- permissions @p@, replacing it with @x:true@
-<span class="lineno"> 8746 </span>deletePerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
-<span class="lineno"> 8747 </span><span class="decl"><span class="nottickedoff">deletePerm x p =</span>
-<span class="lineno"> 8748 </span><span class="spaces">  </span><span class="nottickedoff">over (varPerm x) $ \p' -&gt;</span>
-<span class="lineno"> 8749 </span><span class="spaces">  </span><span class="nottickedoff">if p' == p then ValPerm_True else panic &quot;deletePerm&quot; []</span></span>
-<span class="lineno"> 8750 </span>
-<span class="lineno"> 8751 </span>-- | Push a new distinguished permission onto the top of the stack
-<span class="lineno"> 8752 </span>pushPerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet (ps :&gt; a)
-<span class="lineno"> 8753 </span><span class="decl"><span class="nottickedoff">pushPerm x p (PermSet nmap ps) = PermSet nmap (DistPermsCons ps x p)</span></span>
-<span class="lineno"> 8754 </span>
-<span class="lineno"> 8755 </span>-- | Pop the top distinguished permission off of the stack
-<span class="lineno"> 8756 </span>popPerm :: ExprVar a -&gt; PermSet (ps :&gt; a) -&gt; (PermSet ps, ValuePerm a)
-<span class="lineno"> 8757 </span><span class="decl"><span class="nottickedoff">popPerm x (PermSet nmap pstk) =</span>
-<span class="lineno"> 8758 </span><span class="spaces">  </span><span class="nottickedoff">(PermSet nmap (pstk ^. distPermsTail), pstk ^. distPermsHead x)</span></span>
-<span class="lineno"> 8759 </span>
-<span class="lineno"> 8760 </span>-- | Drop the top distinguished permission on the stack
-<span class="lineno"> 8761 </span>dropPerm :: ExprVar a -&gt; PermSet (ps :&gt; a) -&gt; PermSet ps
-<span class="lineno"> 8762 </span><span class="decl"><span class="nottickedoff">dropPerm x = fst . popPerm x</span></span>
+<span class="lineno"> 8701 </span>
+<span class="lineno"> 8702 </span>-- | Initialize the primary permission of a variable to the given permission if
+<span class="lineno"> 8703 </span>-- the variable is not yet set
+<span class="lineno"> 8704 </span>initVarPermWith :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
+<span class="lineno"> 8705 </span><span class="decl"><span class="nottickedoff">initVarPermWith x p =</span>
+<span class="lineno"> 8706 </span><span class="spaces">  </span><span class="nottickedoff">over varPermMap $ \nmap -&gt;</span>
+<span class="lineno"> 8707 </span><span class="spaces">  </span><span class="nottickedoff">if NameMap.member x nmap then nmap else NameMap.insert x p nmap</span></span>
+<span class="lineno"> 8708 </span>
+<span class="lineno"> 8709 </span>-- | Initialize the primary permission of a variable to @true@ if it is not set
+<span class="lineno"> 8710 </span>initVarPerm :: ExprVar a -&gt; PermSet ps -&gt; PermSet ps
+<span class="lineno"> 8711 </span><span class="decl"><span class="nottickedoff">initVarPerm x =</span>
+<span class="lineno"> 8712 </span><span class="spaces">  </span><span class="nottickedoff">initVarPermWith x ValPerm_True</span></span>
+<span class="lineno"> 8713 </span>
+<span class="lineno"> 8714 </span>-- | Set the primary permissions for a sequence of variables to @true@
+<span class="lineno"> 8715 </span>initVarPerms :: RAssign Name (as :: RList CrucibleType) -&gt; PermSet ps -&gt;
+<span class="lineno"> 8716 </span>                PermSet ps
+<span class="lineno"> 8717 </span><span class="decl"><span class="nottickedoff">initVarPerms MNil perms = perms</span>
+<span class="lineno"> 8718 </span><span class="spaces"></span><span class="nottickedoff">initVarPerms (ns :&gt;: n) perms = initVarPerms ns $ initVarPerm n perms</span></span>
+<span class="lineno"> 8719 </span>
+<span class="lineno"> 8720 </span>-- | The lens for a particular distinguished perm, checking that it is indeed
+<span class="lineno"> 8721 </span>-- associated with the given variable
+<span class="lineno"> 8722 </span>distPerm :: Member ps a -&gt; ExprVar a -&gt; Lens' (PermSet ps) (ValuePerm a)
+<span class="lineno"> 8723 </span><span class="decl"><span class="nottickedoff">distPerm memb x = distPerms . nthVarPerm memb x</span></span>
+<span class="lineno"> 8724 </span>
+<span class="lineno"> 8725 </span>-- | The lens for the distinguished perm at the top of the stack, checking that
+<span class="lineno"> 8726 </span>-- it has the given variable
+<span class="lineno"> 8727 </span>topDistPerm :: ExprVar a -&gt; Lens' (PermSet (ps :&gt; a)) (ValuePerm a)
+<span class="lineno"> 8728 </span><span class="decl"><span class="nottickedoff">topDistPerm x = distPerms . distPermsHead x</span></span>
+<span class="lineno"> 8729 </span>
+<span class="lineno"> 8730 </span>-- | Modify the distinguished permission stack of a 'PermSet'
+<span class="lineno"> 8731 </span>modifyDistPerms :: (DistPerms ps1 -&gt; DistPerms ps2) -&gt;
+<span class="lineno"> 8732 </span>                   PermSet ps1 -&gt; PermSet ps2
+<span class="lineno"> 8733 </span><span class="decl"><span class="nottickedoff">modifyDistPerms f (PermSet perms dperms) = PermSet perms $ f dperms</span></span>
+<span class="lineno"> 8734 </span>
+<span class="lineno"> 8735 </span>-- | Get all the permissions in the permission set as a sequence of
+<span class="lineno"> 8736 </span>-- distinguished permissions
+<span class="lineno"> 8737 </span>getAllPerms :: PermSet ps -&gt; Some DistPerms
+<span class="lineno"> 8738 </span><span class="decl"><span class="nottickedoff">getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where</span>
+<span class="lineno"> 8739 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [NameAndElem ValuePerm] -&gt; Some DistPerms</span>
+<span class="lineno"> 8740 </span><span class="spaces">  </span><span class="nottickedoff">helper [] = Some DistPermsNil</span>
+<span class="lineno"> 8741 </span><span class="spaces">  </span><span class="nottickedoff">helper (NameAndElem x p : xps) =</span>
+<span class="lineno"> 8742 </span><span class="spaces">    </span><span class="nottickedoff">case helper xps of</span>
+<span class="lineno"> 8743 </span><span class="spaces">      </span><span class="nottickedoff">Some ps -&gt; Some $ DistPermsCons ps x p</span></span>
+<span class="lineno"> 8744 </span>
+<span class="lineno"> 8745 </span>-- | Delete permission @x:p@ from the permission set, assuming @x@ has precisely
+<span class="lineno"> 8746 </span>-- permissions @p@, replacing it with @x:true@
+<span class="lineno"> 8747 </span>deletePerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet ps
+<span class="lineno"> 8748 </span><span class="decl"><span class="nottickedoff">deletePerm x p =</span>
+<span class="lineno"> 8749 </span><span class="spaces">  </span><span class="nottickedoff">over (varPerm x) $ \p' -&gt;</span>
+<span class="lineno"> 8750 </span><span class="spaces">  </span><span class="nottickedoff">if p' == p then ValPerm_True else panic &quot;deletePerm&quot; [&quot;Permission didn't match&quot;]</span></span>
+<span class="lineno"> 8751 </span>
+<span class="lineno"> 8752 </span>-- | Push a new distinguished permission onto the top of the stack
+<span class="lineno"> 8753 </span>pushPerm :: ExprVar a -&gt; ValuePerm a -&gt; PermSet ps -&gt; PermSet (ps :&gt; a)
+<span class="lineno"> 8754 </span><span class="decl"><span class="nottickedoff">pushPerm x p (PermSet nmap ps) = PermSet nmap (DistPermsCons ps x p)</span></span>
+<span class="lineno"> 8755 </span>
+<span class="lineno"> 8756 </span>-- | Pop the top distinguished permission off of the stack
+<span class="lineno"> 8757 </span>popPerm :: ExprVar a -&gt; PermSet (ps :&gt; a) -&gt; (PermSet ps, ValuePerm a)
+<span class="lineno"> 8758 </span><span class="decl"><span class="nottickedoff">popPerm x (PermSet nmap pstk) =</span>
+<span class="lineno"> 8759 </span><span class="spaces">  </span><span class="nottickedoff">(PermSet nmap (pstk ^. distPermsTail), pstk ^. distPermsHead x)</span></span>
+<span class="lineno"> 8760 </span>
+<span class="lineno"> 8761 </span>-- | Drop the top distinguished permission on the stack
+<span class="lineno"> 8762 </span>dropPerm :: ExprVar a -&gt; PermSet (ps :&gt; a) -&gt; PermSet ps
+<span class="lineno"> 8763 </span><span class="decl"><span class="nottickedoff">dropPerm x = fst . popPerm x</span></span>
 
 </pre>
 </body>

@@ -279,7 +279,7 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">readPrimName' vi t' =</span>
 <span class="lineno">  261 </span><span class="spaces">      </span><span class="istickedoff">do EC _ nmi tp &lt;- readEC' vi t'</span>
 <span class="lineno">  262 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
-<span class="lineno">  263 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt; pure (PrimName vi ident <span class="nottickedoff">tp</span>)</span>
+<span class="lineno">  263 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt; pure (PrimName vi ident tp)</span>
 <span class="lineno">  264 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: primitive name must be a module identifier&quot; ++ show nmi</span></span>
 <span class="lineno">  265 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">readEC' :: VarIndex -&gt; Term -&gt; ReadM (ExtCns Term)</span>

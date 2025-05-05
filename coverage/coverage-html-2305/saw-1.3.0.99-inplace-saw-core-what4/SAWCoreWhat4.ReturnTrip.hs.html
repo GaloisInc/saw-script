@@ -82,418 +82,418 @@ span.spaces    { background: white }
 <span class="lineno">   63 </span>
 <span class="lineno">   64 </span>import qualified SAWCore.SharedTerm as SC
 <span class="lineno">   65 </span>import qualified SAWCore.TypedAST as SC
-<span class="lineno">   66 </span>import           SAWCore.Utils (panic) -- XXX why is this using another library's panic?
-<span class="lineno">   67 </span>
-<span class="lineno">   68 </span>data SAWCoreState n
-<span class="lineno">   69 </span>  = SAWCoreState
-<span class="lineno">   70 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_ctx</span></span></span>       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
-<span class="lineno">   71 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_inputs</span></span></span>    :: IORef (Seq (SC.ExtCns SC.Term ))
-<span class="lineno">   72 </span>      -- ^ a record of all the symbolic input variables created so far,
-<span class="lineno">   73 </span>      --   in the order they were created
-<span class="lineno">   74 </span>
-<span class="lineno">   75 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_symMap</span></span></span> :: IORef (Map Word64 (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term))
-<span class="lineno">   76 </span>      -- ^ What to do with uninterpreted functions.
-<span class="lineno">   77 </span>      -- The key is the &quot;indexValue&quot; of the &quot;symFunId&quot; for the function
-<span class="lineno">   78 </span>
-<span class="lineno">   79 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache</span></span></span> :: B.IdxCache n SAWExpr
-<span class="lineno">   80 </span>      -- ^ cache mapping a What4 variable nonce to its corresponding SAWCore term.
-<span class="lineno">   81 </span>
-<span class="lineno">   82 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache_r</span></span></span> :: IORef (IntMap (Some (B.Expr n)))
-<span class="lineno">   83 </span>      -- ^ reverse cache mapping a SAWCore TermIndex to its corresponding What4 variable.
-<span class="lineno">   84 </span>      -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
-<span class="lineno">   85 </span>      -- SAWCore terms and What4 variables.
-<span class="lineno">   86 </span>
-<span class="lineno">   87 </span>    }
-<span class="lineno">   88 </span>
-<span class="lineno">   89 </span>newSAWCoreState ::
-<span class="lineno">   90 </span>  SC.SharedContext -&gt;
-<span class="lineno">   91 </span>  IO (SAWCoreState n)
-<span class="lineno">   92 </span><span class="decl"><span class="istickedoff">newSAWCoreState sc =</span>
-<span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">do inpr &lt;- newIORef <span class="nottickedoff">Seq.empty</span></span>
-<span class="lineno">   94 </span><span class="spaces">     </span><span class="istickedoff">ch   &lt;- B.newIdxCache</span>
-<span class="lineno">   95 </span><span class="spaces">     </span><span class="istickedoff">ch_r &lt;- newIORef IntMap.empty</span>
-<span class="lineno">   96 </span><span class="spaces">     </span><span class="istickedoff">mr   &lt;- newIORef <span class="nottickedoff">Map.empty</span></span>
-<span class="lineno">   97 </span><span class="spaces">     </span><span class="istickedoff">return SAWCoreState</span>
-<span class="lineno">   98 </span><span class="spaces">            </span><span class="istickedoff">{ saw_ctx = sc</span>
-<span class="lineno">   99 </span><span class="spaces">            </span><span class="istickedoff">, saw_inputs = inpr</span>
-<span class="lineno">  100 </span><span class="spaces">            </span><span class="istickedoff">, saw_symMap = mr</span>
-<span class="lineno">  101 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache = ch</span>
-<span class="lineno">  102 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache_r = ch_r</span>
-<span class="lineno">  103 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
-<span class="lineno">  104 </span>
-<span class="lineno">  105 </span>data SAWExpr (bt :: BaseType) where
-<span class="lineno">  106 </span>  SAWExpr :: !SC.Term -&gt; SAWExpr bt
-<span class="lineno">  107 </span>
-<span class="lineno">  108 </span>  -- This is a term that represents an integer, but has an
-<span class="lineno">  109 </span>  -- implicit integer-to-real conversion.
-<span class="lineno">  110 </span>  IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -&gt; SAWExpr BaseRealType
-<span class="lineno">  111 </span>
-<span class="lineno">  112 </span>getInputs :: SAWCoreState n -&gt; IO (Seq (SC.ExtCns SC.Term))
-<span class="lineno">  113 </span><span class="decl"><span class="nottickedoff">getInputs st = readIORef (saw_inputs st)</span></span>
-<span class="lineno">  114 </span>
-<span class="lineno">  115 </span>baseSCType ::
-<span class="lineno">  116 </span>  sym -&gt;
-<span class="lineno">  117 </span>  SC.SharedContext -&gt;
-<span class="lineno">  118 </span>  BaseTypeRepr tp -&gt;
-<span class="lineno">  119 </span>  IO SC.Term
-<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">baseSCType sym sc bt =</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">case bt of</span>
-<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr -&gt; SC.scBoolType sc</span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w -&gt; SC.scBitvector sc $ fromIntegral (natValue w)</span>
-<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">SC.scIntegerType sc</span></span>
-<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr indexTypes range</span>
-<span class="lineno">  126 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- indexTypes -&gt;</span>
-<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
-<span class="lineno">  128 </span><span class="spaces">           </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
-<span class="lineno">  129 </span><span class="spaces">           </span><span class="istickedoff">SC.scArrayType sc sc_idx_type sc_elm_type</span>
-<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
-<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support multidimensional Arrays: baseSCType&quot;</span></span>
-<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">BaseFloatRepr _ -&gt;</span>
-<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support IEEE-754 floating point values: baseSCType&quot;</span></span>
-<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">BaseStringRepr _ -&gt;</span>
-<span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support string values: baseSCType&quot;</span></span>
-<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">BaseComplexRepr  -&gt;</span>
-<span class="lineno">  137 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support complex values: baseSCType&quot;</span></span>
-<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr     -&gt;</span>
-<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values: baseSCType&quot;</span></span>
-<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">BaseStructRepr ts -&gt;</span>
-<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">SC.scTupleType sc =&lt;&lt; baseSCTypes ts</span></span>
-<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">baseSCTypes :: Ctx.Assignment BaseTypeRepr args -&gt; IO [SC.Term]</span>
-<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes Ctx.Empty = return []</span></span>
-<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes (xs Ctx.:&gt; x) =</span></span>
-<span class="lineno">  146 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do ts &lt;- baseSCTypes xs</span></span>
-<span class="lineno">  147 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">t &lt;- baseSCType sym sc x</span></span>
-<span class="lineno">  148 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ts ++ [t])</span></span></span>
-<span class="lineno">  149 </span>
-<span class="lineno">  150 </span>-- | Create a new symbolic variable.
-<span class="lineno">  151 </span>sawCreateVar :: SAWCoreState n
-<span class="lineno">  152 </span>             -&gt; Text -- ^ the name of the variable
-<span class="lineno">  153 </span>             -&gt; SC.Term
-<span class="lineno">  154 </span>             -&gt; IO SC.Term
-<span class="lineno">  155 </span><span class="decl"><span class="istickedoff">sawCreateVar st nm tp = do</span>
-<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_ctx st</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">ec &lt;- SC.scFreshEC sc nm tp</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- SC.scFlatTermF sc (SC.ExtCns ec)</span>
-<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_inputs st) <span class="nottickedoff">(\xs -&gt; xs Seq.|&gt; ec)</span></span>
-<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">return t</span></span>
-<span class="lineno">  161 </span>
-<span class="lineno">  162 </span>bindSAWTerm ::
-<span class="lineno">  163 </span>  B.ExprBuilder n st fs -&gt;
-<span class="lineno">  164 </span>  SAWCoreState n -&gt;
-<span class="lineno">  165 </span>  BaseTypeRepr bt -&gt;
-<span class="lineno">  166 </span>  SC.Term -&gt;
-<span class="lineno">  167 </span>  IO (B.Expr n bt)
-<span class="lineno">  168 </span><span class="decl"><span class="istickedoff">bindSAWTerm sym st bt t = do</span>
-<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">ch_r &lt;- readIORef $ saw_elt_cache_r st</span>
-<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">let midx =</span>
-<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff">case t of</span>
-<span class="lineno">  172 </span><span class="spaces">          </span><span class="istickedoff">SC.STApp { SC.stAppIndex = idx } -&gt; Just idx</span>
-<span class="lineno">  173 </span><span class="spaces">          </span><span class="istickedoff">SC.Unshared _ -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">case midx &gt;&gt;= flip IntMap.lookup ch_r of</span>
-<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">Just (Some var) -&gt; do</span>
-<span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff">Just Refl &lt;- return $ testEquality bt (B.exprType var)</span>
-<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff">return var</span>
-<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff">sbVar@(B.BoundVarExpr bv) &lt;- freshConstant sym emptySymbol bt</span>
-<span class="lineno">  180 </span><span class="spaces">      </span><span class="istickedoff">B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)</span>
-<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff">case midx of</span>
-<span class="lineno">  182 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; modifyIORef' (saw_elt_cache_r st) $ IntMap.insert i (Some sbVar)</span>
-<span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure ()</span></span>
-<span class="lineno">  184 </span><span class="spaces">      </span><span class="istickedoff">return sbVar</span></span>
-<span class="lineno">  185 </span>
-<span class="lineno">  186 </span>-- | Register an interpretation for a symbolic function. This is not
-<span class="lineno">  187 </span>-- used during simulation, but rather, when we translate Crucible
-<span class="lineno">  188 </span>-- values back into SAW. The interpretation function takes a list of
-<span class="lineno">  189 </span>-- arguments in regular (left-to-right) order.
-<span class="lineno">  190 </span>sawRegisterSymFunInterp ::
-<span class="lineno">  191 </span>  SAWCoreState n -&gt;
-<span class="lineno">  192 </span>  B.ExprSymFn n args ret -&gt;
-<span class="lineno">  193 </span>  (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term) -&gt;
-<span class="lineno">  194 </span>  IO ()
-<span class="lineno">  195 </span><span class="decl"><span class="istickedoff">sawRegisterSymFunInterp st f i =</span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_symMap st) <span class="nottickedoff">(Map.insert (indexValue (B.symFnId f)) i)</span></span></span>
-<span class="lineno">  197 </span>
-<span class="lineno">  198 </span>toSC :: B.ExprBuilder n st fs -&gt; SAWCoreState n -&gt; B.Expr n tp -&gt; IO SC.Term
-<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">toSC sym st elt = evaluateExpr sym st (saw_ctx st) (saw_elt_cache st) elt</span></span>
-<span class="lineno">  200 </span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>import           SAWCoreWhat4.Panic
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>data SAWCoreState n
+<span class="lineno">   70 </span>  = SAWCoreState
+<span class="lineno">   71 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_ctx</span></span></span>       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
+<span class="lineno">   72 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_inputs</span></span></span>    :: IORef (Seq (SC.ExtCns SC.Term ))
+<span class="lineno">   73 </span>      -- ^ a record of all the symbolic input variables created so far,
+<span class="lineno">   74 </span>      --   in the order they were created
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_symMap</span></span></span> :: IORef (Map Word64 (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term))
+<span class="lineno">   77 </span>      -- ^ What to do with uninterpreted functions.
+<span class="lineno">   78 </span>      -- The key is the &quot;indexValue&quot; of the &quot;symFunId&quot; for the function
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache</span></span></span> :: B.IdxCache n SAWExpr
+<span class="lineno">   81 </span>      -- ^ cache mapping a What4 variable nonce to its corresponding SAWCore term.
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache_r</span></span></span> :: IORef (IntMap (Some (B.Expr n)))
+<span class="lineno">   84 </span>      -- ^ reverse cache mapping a SAWCore TermIndex to its corresponding What4 variable.
+<span class="lineno">   85 </span>      -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
+<span class="lineno">   86 </span>      -- SAWCore terms and What4 variables.
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>    }
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>newSAWCoreState ::
+<span class="lineno">   91 </span>  SC.SharedContext -&gt;
+<span class="lineno">   92 </span>  IO (SAWCoreState n)
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">newSAWCoreState sc =</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">do inpr &lt;- newIORef <span class="nottickedoff">Seq.empty</span></span>
+<span class="lineno">   95 </span><span class="spaces">     </span><span class="istickedoff">ch   &lt;- B.newIdxCache</span>
+<span class="lineno">   96 </span><span class="spaces">     </span><span class="istickedoff">ch_r &lt;- newIORef IntMap.empty</span>
+<span class="lineno">   97 </span><span class="spaces">     </span><span class="istickedoff">mr   &lt;- newIORef <span class="nottickedoff">Map.empty</span></span>
+<span class="lineno">   98 </span><span class="spaces">     </span><span class="istickedoff">return SAWCoreState</span>
+<span class="lineno">   99 </span><span class="spaces">            </span><span class="istickedoff">{ saw_ctx = sc</span>
+<span class="lineno">  100 </span><span class="spaces">            </span><span class="istickedoff">, saw_inputs = inpr</span>
+<span class="lineno">  101 </span><span class="spaces">            </span><span class="istickedoff">, saw_symMap = mr</span>
+<span class="lineno">  102 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache = ch</span>
+<span class="lineno">  103 </span><span class="spaces">            </span><span class="istickedoff">, saw_elt_cache_r = ch_r</span>
+<span class="lineno">  104 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>data SAWExpr (bt :: BaseType) where
+<span class="lineno">  107 </span>  SAWExpr :: !SC.Term -&gt; SAWExpr bt
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>  -- This is a term that represents an integer, but has an
+<span class="lineno">  110 </span>  -- implicit integer-to-real conversion.
+<span class="lineno">  111 </span>  IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -&gt; SAWExpr BaseRealType
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>getInputs :: SAWCoreState n -&gt; IO (Seq (SC.ExtCns SC.Term))
+<span class="lineno">  114 </span><span class="decl"><span class="nottickedoff">getInputs st = readIORef (saw_inputs st)</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>baseSCType ::
+<span class="lineno">  117 </span>  sym -&gt;
+<span class="lineno">  118 </span>  SC.SharedContext -&gt;
+<span class="lineno">  119 </span>  BaseTypeRepr tp -&gt;
+<span class="lineno">  120 </span>  IO SC.Term
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">baseSCType sym sc bt =</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">case bt of</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr -&gt; SC.scBoolType sc</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w -&gt; SC.scBitvector sc $ fromIntegral (natValue w)</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">SC.scIntegerType sc</span></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr indexTypes range</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- indexTypes -&gt;</span>
+<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">do sc_idx_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc idx_type</span>
+<span class="lineno">  129 </span><span class="spaces">           </span><span class="istickedoff">sc_elm_type &lt;- baseSCType <span class="nottickedoff">sym</span> sc range</span>
+<span class="lineno">  130 </span><span class="spaces">           </span><span class="istickedoff">SC.scArrayType sc sc_idx_type sc_elm_type</span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  132 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support multidimensional Arrays: baseSCType&quot;</span></span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">BaseFloatRepr _ -&gt;</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support IEEE-754 floating point values: baseSCType&quot;</span></span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">BaseStringRepr _ -&gt;</span>
+<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support string values: baseSCType&quot;</span></span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">BaseComplexRepr  -&gt;</span>
+<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support complex values: baseSCType&quot;</span></span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr     -&gt;</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values: baseSCType&quot;</span></span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">BaseStructRepr ts -&gt;</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">SC.scTupleType sc =&lt;&lt; baseSCTypes ts</span></span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">baseSCTypes :: Ctx.Assignment BaseTypeRepr args -&gt; IO [SC.Term]</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes Ctx.Empty = return []</span></span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">baseSCTypes (xs Ctx.:&gt; x) =</span></span>
+<span class="lineno">  147 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do ts &lt;- baseSCTypes xs</span></span>
+<span class="lineno">  148 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">t &lt;- baseSCType sym sc x</span></span>
+<span class="lineno">  149 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ts ++ [t])</span></span></span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>-- | Create a new symbolic variable.
+<span class="lineno">  152 </span>sawCreateVar :: SAWCoreState n
+<span class="lineno">  153 </span>             -&gt; Text -- ^ the name of the variable
+<span class="lineno">  154 </span>             -&gt; SC.Term
+<span class="lineno">  155 </span>             -&gt; IO SC.Term
+<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">sawCreateVar st nm tp = do</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">ec &lt;- SC.scFreshEC sc nm tp</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- SC.scFlatTermF sc (SC.ExtCns ec)</span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_inputs st) <span class="nottickedoff">(\xs -&gt; xs Seq.|&gt; ec)</span></span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">return t</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>bindSAWTerm ::
+<span class="lineno">  164 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno">  165 </span>  SAWCoreState n -&gt;
+<span class="lineno">  166 </span>  BaseTypeRepr bt -&gt;
+<span class="lineno">  167 </span>  SC.Term -&gt;
+<span class="lineno">  168 </span>  IO (B.Expr n bt)
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">bindSAWTerm sym st bt t = do</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">ch_r &lt;- readIORef $ saw_elt_cache_r st</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">let midx =</span>
+<span class="lineno">  172 </span><span class="spaces">        </span><span class="istickedoff">case t of</span>
+<span class="lineno">  173 </span><span class="spaces">          </span><span class="istickedoff">SC.STApp { SC.stAppIndex = idx } -&gt; Just idx</span>
+<span class="lineno">  174 </span><span class="spaces">          </span><span class="istickedoff">SC.Unshared _ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">case midx &gt;&gt;= flip IntMap.lookup ch_r of</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">Just (Some var) -&gt; do</span>
+<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff">Just Refl &lt;- return $ testEquality bt (B.exprType var)</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff">return var</span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  180 </span><span class="spaces">      </span><span class="istickedoff">sbVar@(B.BoundVarExpr bv) &lt;- freshConstant sym emptySymbol bt</span>
+<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff">B.insertIdxValue (saw_elt_cache st) (B.bvarId bv) (SAWExpr t)</span>
+<span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff">case midx of</span>
+<span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">Just i -&gt; modifyIORef' (saw_elt_cache_r st) $ IntMap.insert i (Some sbVar)</span>
+<span class="lineno">  184 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure ()</span></span>
+<span class="lineno">  185 </span><span class="spaces">      </span><span class="istickedoff">return sbVar</span></span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>-- | Register an interpretation for a symbolic function. This is not
+<span class="lineno">  188 </span>-- used during simulation, but rather, when we translate Crucible
+<span class="lineno">  189 </span>-- values back into SAW. The interpretation function takes a list of
+<span class="lineno">  190 </span>-- arguments in regular (left-to-right) order.
+<span class="lineno">  191 </span>sawRegisterSymFunInterp ::
+<span class="lineno">  192 </span>  SAWCoreState n -&gt;
+<span class="lineno">  193 </span>  B.ExprSymFn n args ret -&gt;
+<span class="lineno">  194 </span>  (SC.SharedContext -&gt; [SC.Term] -&gt; IO SC.Term) -&gt;
+<span class="lineno">  195 </span>  IO ()
+<span class="lineno">  196 </span><span class="decl"><span class="istickedoff">sawRegisterSymFunInterp st f i =</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_symMap st) <span class="nottickedoff">(Map.insert (indexValue (B.symFnId f)) i)</span></span></span>
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>toSC :: B.ExprBuilder n st fs -&gt; SAWCoreState n -&gt; B.Expr n tp -&gt; IO SC.Term
+<span class="lineno">  200 </span><span class="decl"><span class="istickedoff">toSC sym st elt = evaluateExpr sym st (saw_ctx st) (saw_elt_cache st) elt</span></span>
 <span class="lineno">  201 </span>
-<span class="lineno">  202 </span>-- | Create a Real SAWELT value from a Rational.
-<span class="lineno">  203 </span>--
-<span class="lineno">  204 </span>-- This fails on non-integer expressions.
-<span class="lineno">  205 </span>scRealLit ::
-<span class="lineno">  206 </span>  sym -&gt;
-<span class="lineno">  207 </span>  SC.SharedContext -&gt;
-<span class="lineno">  208 </span>  Rational -&gt;
-<span class="lineno">  209 </span>  IO (SAWExpr BaseRealType)
-<span class="lineno">  210 </span><span class="decl"><span class="nottickedoff">scRealLit sym sc r</span>
-<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">| denominator r /= 1 =</span>
-<span class="lineno">  212 </span><span class="spaces">    </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span>
-<span class="lineno">  213 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno">  214 </span><span class="spaces">    </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; scIntLit sc (numerator r)</span></span>
-<span class="lineno">  215 </span>
-<span class="lineno">  216 </span>-- | Create a SAWCore term with type 'Integer' from a Haskell Integer.
-<span class="lineno">  217 </span>scIntLit :: SC.SharedContext -&gt; Integer -&gt; IO (SAWExpr BaseIntegerType)
-<span class="lineno">  218 </span><span class="decl"><span class="nottickedoff">scIntLit sc i</span>
-<span class="lineno">  219 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt;= 0 =</span>
-<span class="lineno">  220 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger i))</span>
-<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno">  222 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntNeg sc =&lt;&lt; SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger (negate i)))</span></span>
-<span class="lineno">  223 </span>
-<span class="lineno">  224 </span>scBvLit :: SC.SharedContext -&gt; NatRepr w -&gt; BV.BV w -&gt; IO (SAWExpr (BaseBVType w))
-<span class="lineno">  225 </span><span class="decl"><span class="istickedoff">scBvLit sc w bv = SAWExpr &lt;$&gt; SC.scBvConst sc (natValue w) (BV.asUnsigned bv)</span></span>
-<span class="lineno">  226 </span>
+<span class="lineno">  202 </span>
+<span class="lineno">  203 </span>-- | Create a Real SAWELT value from a Rational.
+<span class="lineno">  204 </span>--
+<span class="lineno">  205 </span>-- This fails on non-integer expressions.
+<span class="lineno">  206 </span>scRealLit ::
+<span class="lineno">  207 </span>  sym -&gt;
+<span class="lineno">  208 </span>  SC.SharedContext -&gt;
+<span class="lineno">  209 </span>  Rational -&gt;
+<span class="lineno">  210 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  211 </span><span class="decl"><span class="nottickedoff">scRealLit sym sc r</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">| denominator r /= 1 =</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; scIntLit sc (numerator r)</span></span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>-- | Create a SAWCore term with type 'Integer' from a Haskell Integer.
+<span class="lineno">  218 </span>scIntLit :: SC.SharedContext -&gt; Integer -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  219 </span><span class="decl"><span class="nottickedoff">scIntLit sc i</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt;= 0 =</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger i))</span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="nottickedoff">SAWExpr &lt;$&gt; (SC.scIntNeg sc =&lt;&lt; SC.scNatToInt sc =&lt;&lt; SC.scNat sc (fromInteger (negate i)))</span></span>
+<span class="lineno">  224 </span>
+<span class="lineno">  225 </span>scBvLit :: SC.SharedContext -&gt; NatRepr w -&gt; BV.BV w -&gt; IO (SAWExpr (BaseBVType w))
+<span class="lineno">  226 </span><span class="decl"><span class="istickedoff">scBvLit sc w bv = SAWExpr &lt;$&gt; SC.scBvConst sc (natValue w) (BV.asUnsigned bv)</span></span>
 <span class="lineno">  227 </span>
-<span class="lineno">  228 </span>scRealCmpop ::
-<span class="lineno">  229 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseBoolType)) -&gt;
-<span class="lineno">  230 </span>  sym -&gt;
-<span class="lineno">  231 </span>  SC.SharedContext -&gt;
-<span class="lineno">  232 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  228 </span>
+<span class="lineno">  229 </span>scRealCmpop ::
+<span class="lineno">  230 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseBoolType)) -&gt;
+<span class="lineno">  231 </span>  sym -&gt;
+<span class="lineno">  232 </span>  SC.SharedContext -&gt;
 <span class="lineno">  233 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  234 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  235 </span><span class="decl"><span class="nottickedoff">scRealCmpop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
-<span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">intOp sc x y</span>
-<span class="lineno">  237 </span><span class="spaces"></span><span class="nottickedoff">scRealCmpop _ sym _ _ _ =</span>
-<span class="lineno">  238 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
-<span class="lineno">  239 </span>
-<span class="lineno">  240 </span>scRealBinop ::
-<span class="lineno">  241 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseIntegerType)) -&gt;
-<span class="lineno">  242 </span>  sym -&gt;
-<span class="lineno">  243 </span>  SC.SharedContext -&gt;
-<span class="lineno">  244 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  234 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  235 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">scRealCmpop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
+<span class="lineno">  237 </span><span class="spaces">  </span><span class="nottickedoff">intOp sc x y</span>
+<span class="lineno">  238 </span><span class="spaces"></span><span class="nottickedoff">scRealCmpop _ sym _ _ _ =</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>scRealBinop ::
+<span class="lineno">  242 </span>  (SC.SharedContext -&gt; SAWExpr BaseIntegerType -&gt; SAWExpr BaseIntegerType -&gt; IO (SAWExpr BaseIntegerType)) -&gt;
+<span class="lineno">  243 </span>  sym -&gt;
+<span class="lineno">  244 </span>  SC.SharedContext -&gt;
 <span class="lineno">  245 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  246 </span>  IO (SAWExpr BaseRealType)
-<span class="lineno">  247 </span><span class="decl"><span class="nottickedoff">scRealBinop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
-<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; intOp sc x y</span>
-<span class="lineno">  249 </span><span class="spaces"></span><span class="nottickedoff">scRealBinop _ sym _ _ _ =</span>
-<span class="lineno">  250 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
-<span class="lineno">  251 </span>
+<span class="lineno">  246 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  247 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  248 </span><span class="decl"><span class="nottickedoff">scRealBinop intOp _ sc (IntToRealSAWExpr x) (IntToRealSAWExpr y) =</span>
+<span class="lineno">  249 </span><span class="spaces">  </span><span class="nottickedoff">IntToRealSAWExpr &lt;$&gt; intOp sc x y</span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="nottickedoff">scRealBinop _ sym _ _ _ =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span>
 <span class="lineno">  252 </span>
-<span class="lineno">  253 </span>scIntBinop ::
-<span class="lineno">  254 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
-<span class="lineno">  255 </span>  SC.SharedContext -&gt;
-<span class="lineno">  256 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>scIntBinop ::
+<span class="lineno">  255 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
+<span class="lineno">  256 </span>  SC.SharedContext -&gt;
 <span class="lineno">  257 </span>  SAWExpr BaseIntegerType -&gt;
-<span class="lineno">  258 </span>  IO (SAWExpr BaseIntegerType)
-<span class="lineno">  259 </span><span class="decl"><span class="nottickedoff">scIntBinop intOp sc (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
-<span class="lineno">  261 </span>
-<span class="lineno">  262 </span>scIntCmpop ::
-<span class="lineno">  263 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
-<span class="lineno">  264 </span>  SC.SharedContext -&gt;
-<span class="lineno">  265 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  258 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  259 </span>  IO (SAWExpr BaseIntegerType)
+<span class="lineno">  260 </span><span class="decl"><span class="nottickedoff">scIntBinop intOp sc (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="nottickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
+<span class="lineno">  262 </span>
+<span class="lineno">  263 </span>scIntCmpop ::
+<span class="lineno">  264 </span>  (SC.SharedContext -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) {- ^ operation on integers -} -&gt;
+<span class="lineno">  265 </span>  SC.SharedContext -&gt;
 <span class="lineno">  266 </span>  SAWExpr BaseIntegerType -&gt;
-<span class="lineno">  267 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  268 </span><span class="decl"><span class="istickedoff">scIntCmpop intOp sc (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
-<span class="lineno">  270 </span>
-<span class="lineno">  271 </span>scAddReal ::
-<span class="lineno">  272 </span>  sym -&gt;
-<span class="lineno">  273 </span>  SC.SharedContext -&gt;
-<span class="lineno">  274 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  267 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  268 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  269 </span><span class="decl"><span class="istickedoff">scIntCmpop intOp sc (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">SAWExpr &lt;$&gt; intOp sc x y</span></span>
+<span class="lineno">  271 </span>
+<span class="lineno">  272 </span>scAddReal ::
+<span class="lineno">  273 </span>  sym -&gt;
+<span class="lineno">  274 </span>  SC.SharedContext -&gt;
 <span class="lineno">  275 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  276 </span>  IO (SAWExpr BaseRealType)
-<span class="lineno">  277 </span><span class="decl"><span class="nottickedoff">scAddReal = scRealBinop scAddInt</span></span>
-<span class="lineno">  278 </span>
-<span class="lineno">  279 </span>scAddInt :: SC.SharedContext
-<span class="lineno">  280 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  276 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  277 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">scAddReal = scRealBinop scAddInt</span></span>
+<span class="lineno">  279 </span>
+<span class="lineno">  280 </span>scAddInt :: SC.SharedContext
 <span class="lineno">  281 </span>            -&gt; SAWExpr BaseIntegerType
-<span class="lineno">  282 </span>            -&gt; IO (SAWExpr BaseIntegerType)
-<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">scAddInt = scIntBinop SC.scIntAdd</span></span>
-<span class="lineno">  284 </span>
+<span class="lineno">  282 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  283 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  284 </span><span class="decl"><span class="nottickedoff">scAddInt = scIntBinop SC.scIntAdd</span></span>
 <span class="lineno">  285 </span>
-<span class="lineno">  286 </span>scMulReal ::
-<span class="lineno">  287 </span>  sym -&gt;
-<span class="lineno">  288 </span>  SC.SharedContext -&gt;
-<span class="lineno">  289 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>scMulReal ::
+<span class="lineno">  288 </span>  sym -&gt;
+<span class="lineno">  289 </span>  SC.SharedContext -&gt;
 <span class="lineno">  290 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  291 </span>  IO (SAWExpr BaseRealType)
-<span class="lineno">  292 </span><span class="decl"><span class="nottickedoff">scMulReal = scRealBinop scMulInt</span></span>
-<span class="lineno">  293 </span>
-<span class="lineno">  294 </span>scMulInt ::    SC.SharedContext
-<span class="lineno">  295 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  291 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  292 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  293 </span><span class="decl"><span class="nottickedoff">scMulReal = scRealBinop scMulInt</span></span>
+<span class="lineno">  294 </span>
+<span class="lineno">  295 </span>scMulInt ::    SC.SharedContext
 <span class="lineno">  296 </span>            -&gt; SAWExpr BaseIntegerType
-<span class="lineno">  297 </span>            -&gt; IO (SAWExpr BaseIntegerType)
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">scMulInt = scIntBinop SC.scIntMul</span></span>
-<span class="lineno">  299 </span>
-<span class="lineno">  300 </span>scIteReal ::
-<span class="lineno">  301 </span>  sym -&gt;
-<span class="lineno">  302 </span>  SC.SharedContext -&gt;
-<span class="lineno">  303 </span>  SC.Term -&gt;
-<span class="lineno">  304 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  297 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  298 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  299 </span><span class="decl"><span class="nottickedoff">scMulInt = scIntBinop SC.scIntMul</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>scIteReal ::
+<span class="lineno">  302 </span>  sym -&gt;
+<span class="lineno">  303 </span>  SC.SharedContext -&gt;
+<span class="lineno">  304 </span>  SC.Term -&gt;
 <span class="lineno">  305 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  306 </span>  IO (SAWExpr BaseRealType)
-<span class="lineno">  307 </span><span class="decl"><span class="nottickedoff">scIteReal sym sc p = scRealBinop (\sc' -&gt; scIteInt sc' p) sym sc</span></span>
-<span class="lineno">  308 </span>
-<span class="lineno">  309 </span>scIteInt :: SC.SharedContext
-<span class="lineno">  310 </span>            -&gt; SC.Term
-<span class="lineno">  311 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  306 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  307 </span>  IO (SAWExpr BaseRealType)
+<span class="lineno">  308 </span><span class="decl"><span class="nottickedoff">scIteReal sym sc p = scRealBinop (\sc' -&gt; scIteInt sc' p) sym sc</span></span>
+<span class="lineno">  309 </span>
+<span class="lineno">  310 </span>scIteInt :: SC.SharedContext
+<span class="lineno">  311 </span>            -&gt; SC.Term
 <span class="lineno">  312 </span>            -&gt; SAWExpr BaseIntegerType
-<span class="lineno">  313 </span>            -&gt; IO (SAWExpr BaseIntegerType)
-<span class="lineno">  314 </span><span class="decl"><span class="nottickedoff">scIteInt sc p = scIntBinop</span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="nottickedoff">(\sc' x y -&gt; SC.scIntegerType sc &gt;&gt;= \tp -&gt; SC.scIte sc' tp p x y)</span>
-<span class="lineno">  316 </span><span class="spaces">    </span><span class="nottickedoff">sc</span></span>
-<span class="lineno">  317 </span>
-<span class="lineno">  318 </span>scIte ::
-<span class="lineno">  319 </span>  sym -&gt;
-<span class="lineno">  320 </span>  SC.SharedContext -&gt;
-<span class="lineno">  321 </span>  BaseTypeRepr tp -&gt;
-<span class="lineno">  322 </span>  SAWExpr BaseBoolType -&gt;
-<span class="lineno">  323 </span>  SAWExpr tp -&gt;
+<span class="lineno">  313 </span>            -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  314 </span>            -&gt; IO (SAWExpr BaseIntegerType)
+<span class="lineno">  315 </span><span class="decl"><span class="nottickedoff">scIteInt sc p = scIntBinop</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="nottickedoff">(\sc' x y -&gt; SC.scIntegerType sc &gt;&gt;= \tp -&gt; SC.scIte sc' tp p x y)</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="nottickedoff">sc</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>scIte ::
+<span class="lineno">  320 </span>  sym -&gt;
+<span class="lineno">  321 </span>  SC.SharedContext -&gt;
+<span class="lineno">  322 </span>  BaseTypeRepr tp -&gt;
+<span class="lineno">  323 </span>  SAWExpr BaseBoolType -&gt;
 <span class="lineno">  324 </span>  SAWExpr tp -&gt;
-<span class="lineno">  325 </span>  IO (SAWExpr tp)
-<span class="lineno">  326 </span><span class="decl"><span class="istickedoff">scIte sym sc tp (SAWExpr p) x y =</span>
-<span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scIteReal sym sc p x y</span></span>
-<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">scIteInt sc p x y</span></span>
-<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff">do tp' &lt;- baseSCType <span class="nottickedoff">sym</span> sc tp</span>
-<span class="lineno">  332 </span><span class="spaces">         </span><span class="istickedoff">x' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> x</span>
-<span class="lineno">  333 </span><span class="spaces">         </span><span class="istickedoff">y' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> y</span>
-<span class="lineno">  334 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scIte sc tp' p x' y'</span></span>
-<span class="lineno">  335 </span>
+<span class="lineno">  325 </span>  SAWExpr tp -&gt;
+<span class="lineno">  326 </span>  IO (SAWExpr tp)
+<span class="lineno">  327 </span><span class="decl"><span class="istickedoff">scIte sym sc tp (SAWExpr p) x y =</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scIteReal sym sc p x y</span></span>
+<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">scIteInt sc p x y</span></span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  332 </span><span class="spaces">      </span><span class="istickedoff">do tp' &lt;- baseSCType <span class="nottickedoff">sym</span> sc tp</span>
+<span class="lineno">  333 </span><span class="spaces">         </span><span class="istickedoff">x' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> x</span>
+<span class="lineno">  334 </span><span class="spaces">         </span><span class="istickedoff">y' &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> y</span>
+<span class="lineno">  335 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scIte sc tp' p x' y'</span></span>
 <span class="lineno">  336 </span>
-<span class="lineno">  337 </span>scRealEq ::
-<span class="lineno">  338 </span>  sym -&gt;
-<span class="lineno">  339 </span>  SC.SharedContext -&gt;
-<span class="lineno">  340 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  337 </span>
+<span class="lineno">  338 </span>scRealEq ::
+<span class="lineno">  339 </span>  sym -&gt;
+<span class="lineno">  340 </span>  SC.SharedContext -&gt;
 <span class="lineno">  341 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  342 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">scRealEq = scRealCmpop scIntEq</span></span>
-<span class="lineno">  344 </span>
-<span class="lineno">  345 </span>scIntEq :: SC.SharedContext
-<span class="lineno">  346 </span>        -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  342 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  343 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  344 </span><span class="decl"><span class="nottickedoff">scRealEq = scRealCmpop scIntEq</span></span>
+<span class="lineno">  345 </span>
+<span class="lineno">  346 </span>scIntEq :: SC.SharedContext
 <span class="lineno">  347 </span>        -&gt; SAWExpr BaseIntegerType
-<span class="lineno">  348 </span>        -&gt; IO (SAWExpr BaseBoolType)
-<span class="lineno">  349 </span><span class="decl"><span class="istickedoff">scIntEq = scIntCmpop SC.scIntEq</span></span>
-<span class="lineno">  350 </span>
-<span class="lineno">  351 </span>scBoolEq ::
-<span class="lineno">  352 </span>  SC.SharedContext -&gt;
-<span class="lineno">  353 </span>  SAWExpr BaseBoolType -&gt;
+<span class="lineno">  348 </span>        -&gt; SAWExpr BaseIntegerType
+<span class="lineno">  349 </span>        -&gt; IO (SAWExpr BaseBoolType)
+<span class="lineno">  350 </span><span class="decl"><span class="istickedoff">scIntEq = scIntCmpop SC.scIntEq</span></span>
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>scBoolEq ::
+<span class="lineno">  353 </span>  SC.SharedContext -&gt;
 <span class="lineno">  354 </span>  SAWExpr BaseBoolType -&gt;
-<span class="lineno">  355 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  356 </span><span class="decl"><span class="istickedoff">scBoolEq sc (SAWExpr x) (SAWExpr y) = SAWExpr &lt;$&gt; SC.scBoolEq sc x y</span></span>
-<span class="lineno">  357 </span>
-<span class="lineno">  358 </span>scEq ::
-<span class="lineno">  359 </span>  sym -&gt;
-<span class="lineno">  360 </span>  SC.SharedContext -&gt;
-<span class="lineno">  361 </span>  BaseTypeRepr tp -&gt;
-<span class="lineno">  362 </span>  SAWExpr tp -&gt;
+<span class="lineno">  355 </span>  SAWExpr BaseBoolType -&gt;
+<span class="lineno">  356 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  357 </span><span class="decl"><span class="istickedoff">scBoolEq sc (SAWExpr x) (SAWExpr y) = SAWExpr &lt;$&gt; SC.scBoolEq sc x y</span></span>
+<span class="lineno">  358 </span>
+<span class="lineno">  359 </span>scEq ::
+<span class="lineno">  360 </span>  sym -&gt;
+<span class="lineno">  361 </span>  SC.SharedContext -&gt;
+<span class="lineno">  362 </span>  BaseTypeRepr tp -&gt;
 <span class="lineno">  363 </span>  SAWExpr tp -&gt;
-<span class="lineno">  364 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  365 </span><span class="decl"><span class="istickedoff">scEq sym sc tp x y =</span>
-<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
-<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr    -&gt; scBoolEq sc x y</span>
-<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scRealEq sym sc x y</span></span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; scIntEq sc x y</span>
-<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr idxTypes range</span>
-<span class="lineno">  371 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- <span class="nottickedoff">idxTypes</span> -&gt;</span>
-<span class="lineno">  372 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let SAWExpr x' = x</span></span>
-<span class="lineno">  373 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">let SAWExpr y' = y</span></span>
-<span class="lineno">  374 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_idx_type &lt;- baseSCType sym sc idx_type</span></span>
-<span class="lineno">  375 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_elm_type &lt;- baseSCType sym sc range</span></span>
-<span class="lineno">  376 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayEq sc sc_idx_type sc_elm_type x' y'</span></span>
-<span class="lineno">  377 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
-<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported multidimensional array type:&quot; ++ show tp)</span></span>
-<span class="lineno">  379 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w    -&gt;</span>
-<span class="lineno">  380 </span><span class="spaces">      </span><span class="istickedoff">do let SAWExpr x' = x</span>
-<span class="lineno">  381 </span><span class="spaces">         </span><span class="istickedoff">let SAWExpr y' = y</span>
-<span class="lineno">  382 </span><span class="spaces">         </span><span class="istickedoff">w' &lt;- SC.scNat sc $ fromIntegral (natValue w)</span>
-<span class="lineno">  383 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvEq sc w' x' y'</span>
-<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported type:&quot; ++ show tp)</span></span></span>
-<span class="lineno">  385 </span>
+<span class="lineno">  364 </span>  SAWExpr tp -&gt;
+<span class="lineno">  365 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  366 </span><span class="decl"><span class="istickedoff">scEq sym sc tp x y =</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">BaseBoolRepr    -&gt; scBoolEq sc x y</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">BaseRealRepr    -&gt; <span class="nottickedoff">scRealEq sym sc x y</span></span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">BaseIntegerRepr -&gt; scIntEq sc x y</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">BaseArrayRepr idxTypes range</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff">| Ctx.Empty Ctx.:&gt; idx_type &lt;- <span class="nottickedoff">idxTypes</span> -&gt;</span>
+<span class="lineno">  373 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let SAWExpr x' = x</span></span>
+<span class="lineno">  374 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">let SAWExpr y' = y</span></span>
+<span class="lineno">  375 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_idx_type &lt;- baseSCType sym sc idx_type</span></span>
+<span class="lineno">  376 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc_elm_type &lt;- baseSCType sym sc range</span></span>
+<span class="lineno">  377 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">SAWExpr &lt;$&gt; SC.scArrayEq sc sc_idx_type sc_elm_type x' y'</span></span>
+<span class="lineno">  378 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  379 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported multidimensional array type:&quot; ++ show tp)</span></span>
+<span class="lineno">  380 </span><span class="spaces">    </span><span class="istickedoff">BaseBVRepr w    -&gt;</span>
+<span class="lineno">  381 </span><span class="spaces">      </span><span class="istickedoff">do let SAWExpr x' = x</span>
+<span class="lineno">  382 </span><span class="spaces">         </span><span class="istickedoff">let SAWExpr y' = y</span>
+<span class="lineno">  383 </span><span class="spaces">         </span><span class="istickedoff">w' &lt;- SC.scNat sc $ fromIntegral (natValue w)</span>
+<span class="lineno">  384 </span><span class="spaces">         </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvEq sc w' x' y'</span>
+<span class="lineno">  385 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">unsupported sym (&quot;SAW backend: equality comparison on unsupported type:&quot; ++ show tp)</span></span></span>
 <span class="lineno">  386 </span>
-<span class="lineno">  387 </span>scRealLe, scRealLt ::
-<span class="lineno">  388 </span>  sym -&gt;
-<span class="lineno">  389 </span>  SC.SharedContext -&gt;
-<span class="lineno">  390 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>scRealLe, scRealLt ::
+<span class="lineno">  389 </span>  sym -&gt;
+<span class="lineno">  390 </span>  SC.SharedContext -&gt;
 <span class="lineno">  391 </span>  SAWExpr BaseRealType -&gt;
-<span class="lineno">  392 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  393 </span><span class="decl"><span class="nottickedoff">scRealLe = scRealCmpop scIntLe</span></span>
-<span class="lineno">  394 </span><span class="decl"><span class="nottickedoff">scRealLt = scRealCmpop scIntLt</span></span>
-<span class="lineno">  395 </span>
-<span class="lineno">  396 </span>scIntLe, scIntLt ::
-<span class="lineno">  397 </span>  SC.SharedContext -&gt;
-<span class="lineno">  398 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  392 </span>  SAWExpr BaseRealType -&gt;
+<span class="lineno">  393 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  394 </span><span class="decl"><span class="nottickedoff">scRealLe = scRealCmpop scIntLe</span></span>
+<span class="lineno">  395 </span><span class="decl"><span class="nottickedoff">scRealLt = scRealCmpop scIntLt</span></span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>scIntLe, scIntLt ::
+<span class="lineno">  398 </span>  SC.SharedContext -&gt;
 <span class="lineno">  399 </span>  SAWExpr BaseIntegerType -&gt;
-<span class="lineno">  400 </span>  IO (SAWExpr BaseBoolType)
-<span class="lineno">  401 </span><span class="decl"><span class="nottickedoff">scIntLe = scIntCmpop SC.scIntLe</span></span>
-<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">scIntLt = scIntCmpop SC.scIntLt</span></span>
-<span class="lineno">  403 </span>
-<span class="lineno">  404 </span>scBvAdd ::
-<span class="lineno">  405 </span>  SC.SharedContext -&gt;
-<span class="lineno">  406 </span>  NatRepr w -&gt;
-<span class="lineno">  407 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  400 </span>  SAWExpr BaseIntegerType -&gt;
+<span class="lineno">  401 </span>  IO (SAWExpr BaseBoolType)
+<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">scIntLe = scIntCmpop SC.scIntLe</span></span>
+<span class="lineno">  403 </span><span class="decl"><span class="nottickedoff">scIntLt = scIntCmpop SC.scIntLt</span></span>
+<span class="lineno">  404 </span>
+<span class="lineno">  405 </span>scBvAdd ::
+<span class="lineno">  406 </span>  SC.SharedContext -&gt;
+<span class="lineno">  407 </span>  NatRepr w -&gt;
 <span class="lineno">  408 </span>  SAWExpr (BaseBVType w) -&gt;
-<span class="lineno">  409 </span>  IO (SAWExpr (BaseBVType w))
-<span class="lineno">  410 </span><span class="decl"><span class="istickedoff">scBvAdd sc w (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
-<span class="lineno">  412 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAdd sc n x y</span></span>
-<span class="lineno">  413 </span>
-<span class="lineno">  414 </span>scBvNot ::
-<span class="lineno">  415 </span>  SC.SharedContext -&gt;
-<span class="lineno">  416 </span>  NatRepr w -&gt;
-<span class="lineno">  417 </span>  SAWExpr (BaseBVType w) -&gt;
-<span class="lineno">  418 </span>  IO (SAWExpr (BaseBVType w))
-<span class="lineno">  419 </span><span class="decl"><span class="istickedoff">scBvNot sc w (SAWExpr x) =</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
-<span class="lineno">  421 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvNot sc n x</span></span>
-<span class="lineno">  422 </span>
-<span class="lineno">  423 </span>scBvMul ::
-<span class="lineno">  424 </span>  SC.SharedContext -&gt;
-<span class="lineno">  425 </span>  NatRepr w -&gt;
-<span class="lineno">  426 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  409 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  410 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  411 </span><span class="decl"><span class="istickedoff">scBvAdd sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  413 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAdd sc n x y</span></span>
+<span class="lineno">  414 </span>
+<span class="lineno">  415 </span>scBvNot ::
+<span class="lineno">  416 </span>  SC.SharedContext -&gt;
+<span class="lineno">  417 </span>  NatRepr w -&gt;
+<span class="lineno">  418 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  419 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  420 </span><span class="decl"><span class="istickedoff">scBvNot sc w (SAWExpr x) =</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  422 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvNot sc n x</span></span>
+<span class="lineno">  423 </span>
+<span class="lineno">  424 </span>scBvMul ::
+<span class="lineno">  425 </span>  SC.SharedContext -&gt;
+<span class="lineno">  426 </span>  NatRepr w -&gt;
 <span class="lineno">  427 </span>  SAWExpr (BaseBVType w) -&gt;
-<span class="lineno">  428 </span>  IO (SAWExpr (BaseBVType w))
-<span class="lineno">  429 </span><span class="decl"><span class="istickedoff">scBvMul sc w (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
-<span class="lineno">  431 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvMul sc n x y</span></span>
-<span class="lineno">  432 </span>
-<span class="lineno">  433 </span>scBvAnd ::
-<span class="lineno">  434 </span>  SC.SharedContext -&gt;
-<span class="lineno">  435 </span>  NatRepr w -&gt;
-<span class="lineno">  436 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  428 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  429 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  430 </span><span class="decl"><span class="istickedoff">scBvMul sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  431 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  432 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvMul sc n x y</span></span>
+<span class="lineno">  433 </span>
+<span class="lineno">  434 </span>scBvAnd ::
+<span class="lineno">  435 </span>  SC.SharedContext -&gt;
+<span class="lineno">  436 </span>  NatRepr w -&gt;
 <span class="lineno">  437 </span>  SAWExpr (BaseBVType w) -&gt;
-<span class="lineno">  438 </span>  IO (SAWExpr (BaseBVType w))
-<span class="lineno">  439 </span><span class="decl"><span class="istickedoff">scBvAnd sc w (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  440 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
-<span class="lineno">  441 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAnd sc n x y</span></span>
-<span class="lineno">  442 </span>
-<span class="lineno">  443 </span>scBvXor ::
-<span class="lineno">  444 </span>  SC.SharedContext -&gt;
-<span class="lineno">  445 </span>  NatRepr w -&gt;
-<span class="lineno">  446 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  438 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  439 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  440 </span><span class="decl"><span class="istickedoff">scBvAnd sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  441 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  442 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvAnd sc n x y</span></span>
+<span class="lineno">  443 </span>
+<span class="lineno">  444 </span>scBvXor ::
+<span class="lineno">  445 </span>  SC.SharedContext -&gt;
+<span class="lineno">  446 </span>  NatRepr w -&gt;
 <span class="lineno">  447 </span>  SAWExpr (BaseBVType w) -&gt;
-<span class="lineno">  448 </span>  IO (SAWExpr (BaseBVType w))
-<span class="lineno">  449 </span><span class="decl"><span class="istickedoff">scBvXor sc w (SAWExpr x) (SAWExpr y) =</span>
-<span class="lineno">  450 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
-<span class="lineno">  451 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvXor sc n x y</span></span>
-<span class="lineno">  452 </span>
-<span class="lineno">  453 </span>termOfSAWExpr ::
-<span class="lineno">  454 </span>  sym -&gt;
-<span class="lineno">  455 </span>  SC.SharedContext -&gt;
-<span class="lineno">  456 </span>  SAWExpr tp -&gt; IO SC.Term
-<span class="lineno">  457 </span><span class="decl"><span class="istickedoff">termOfSAWExpr sym _sc expr =</span>
-<span class="lineno">  458 </span><span class="spaces">  </span><span class="istickedoff">case expr of</span>
-<span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">SAWExpr t -&gt; return t</span>
-<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">IntToRealSAWExpr _</span>
-<span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span></span>
-<span class="lineno">  462 </span>
-<span class="lineno">  463 </span>applyExprSymFn ::
-<span class="lineno">  464 </span>  forall n st fs args ret.
-<span class="lineno">  465 </span>  B.ExprBuilder n st fs -&gt;
-<span class="lineno">  466 </span>  SAWCoreState n -&gt;
-<span class="lineno">  467 </span>  SC.SharedContext -&gt;
-<span class="lineno">  468 </span>  B.ExprSymFn n args ret -&gt;
-<span class="lineno">  469 </span>  Ctx.Assignment SAWExpr args -&gt;
-<span class="lineno">  470 </span>  IO (SAWExpr ret)
-<span class="lineno">  471 </span><span class="decl"><span class="nottickedoff">applyExprSymFn sym st sc fn args =</span>
-<span class="lineno">  472 </span><span class="spaces">  </span><span class="nottickedoff">do mp &lt;- readIORef (saw_symMap st)</span>
-<span class="lineno">  473 </span><span class="spaces">     </span><span class="nottickedoff">mk &lt;-</span>
-<span class="lineno">  474 </span><span class="spaces">       </span><span class="nottickedoff">case Map.lookup (indexValue (B.symFnId fn)) mp of</span>
-<span class="lineno">  475 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; panic &quot;SAWCore.applyExprSymFn&quot;</span>
-<span class="lineno">  476 </span><span class="spaces">                    </span><span class="nottickedoff">[ &quot;Unknown symbolic function.&quot;</span>
-<span class="lineno">  477 </span><span class="spaces">                    </span><span class="nottickedoff">, &quot;*** Name: &quot; ++ show fn</span>
+<span class="lineno">  448 </span>  SAWExpr (BaseBVType w) -&gt;
+<span class="lineno">  449 </span>  IO (SAWExpr (BaseBVType w))
+<span class="lineno">  450 </span><span class="decl"><span class="istickedoff">scBvXor sc w (SAWExpr x) (SAWExpr y) =</span>
+<span class="lineno">  451 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- SC.scNat sc (natValue w)</span>
+<span class="lineno">  452 </span><span class="spaces">     </span><span class="istickedoff">SAWExpr &lt;$&gt; SC.scBvXor sc n x y</span></span>
+<span class="lineno">  453 </span>
+<span class="lineno">  454 </span>termOfSAWExpr ::
+<span class="lineno">  455 </span>  sym -&gt;
+<span class="lineno">  456 </span>  SC.SharedContext -&gt;
+<span class="lineno">  457 </span>  SAWExpr tp -&gt; IO SC.Term
+<span class="lineno">  458 </span><span class="decl"><span class="istickedoff">termOfSAWExpr sym _sc expr =</span>
+<span class="lineno">  459 </span><span class="spaces">  </span><span class="istickedoff">case expr of</span>
+<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">SAWExpr t -&gt; return t</span>
+<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">IntToRealSAWExpr _</span>
+<span class="lineno">  462 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">unsupported sym &quot;SAW backend does not support real values&quot;</span></span></span>
+<span class="lineno">  463 </span>
+<span class="lineno">  464 </span>applyExprSymFn ::
+<span class="lineno">  465 </span>  forall n st fs args ret.
+<span class="lineno">  466 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno">  467 </span>  SAWCoreState n -&gt;
+<span class="lineno">  468 </span>  SC.SharedContext -&gt;
+<span class="lineno">  469 </span>  B.ExprSymFn n args ret -&gt;
+<span class="lineno">  470 </span>  Ctx.Assignment SAWExpr args -&gt;
+<span class="lineno">  471 </span>  IO (SAWExpr ret)
+<span class="lineno">  472 </span><span class="decl"><span class="nottickedoff">applyExprSymFn sym st sc fn args =</span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="nottickedoff">do mp &lt;- readIORef (saw_symMap st)</span>
+<span class="lineno">  474 </span><span class="spaces">     </span><span class="nottickedoff">mk &lt;-</span>
+<span class="lineno">  475 </span><span class="spaces">       </span><span class="nottickedoff">case Map.lookup (indexValue (B.symFnId fn)) mp of</span>
+<span class="lineno">  476 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; panic &quot;applyExprSymFn&quot; [</span>
+<span class="lineno">  477 </span><span class="spaces">                        </span><span class="nottickedoff">&quot;Unknown symbolic function &quot; &lt;&gt; Text.pack (show fn)</span>
 <span class="lineno">  478 </span><span class="spaces">                    </span><span class="nottickedoff">]</span>
 <span class="lineno">  479 </span><span class="spaces">         </span><span class="nottickedoff">Just mk -&gt; return mk</span>
 <span class="lineno">  480 </span><span class="spaces">     </span><span class="nottickedoff">ts &lt;- evaluateAsgn args</span>

@@ -319,7 +319,7 @@ span.spaces    { background: white }
 <span class="lineno">  300 </span><span class="spaces">            </span><span class="istickedoff">(Lambda _ t1 x1, Lambda nm t2 x2) -&gt;</span>
 <span class="lineno">  301 </span><span class="spaces">              </span><span class="istickedoff">match <span class="nottickedoff">depth</span> <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= match (depth + 1) ((nm, t2) : env) x1 x2</span>
 <span class="lineno">  302 </span><span class="spaces">            </span><span class="istickedoff">(Pi _ t1 x1, Pi nm t2 x2) -&gt;</span>
-<span class="lineno">  303 </span><span class="spaces">              </span><span class="istickedoff">match depth <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= match <span class="nottickedoff">(depth + 1)</span> <span class="nottickedoff">((nm, t2) : env)</span> x1 x2</span>
+<span class="lineno">  303 </span><span class="spaces">              </span><span class="istickedoff">match depth <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= <span class="nottickedoff">match (depth + 1) ((nm, t2) : env) x1 x2</span></span>
 <span class="lineno">  304 </span><span class="spaces">            </span><span class="istickedoff">(App _ _, FTermF (NatLit n)) -&gt;</span>
 <span class="lineno">  305 </span><span class="spaces">              </span><span class="istickedoff">-- add deferred constraint</span>
 <span class="lineno">  306 </span><span class="spaces">              </span><span class="istickedoff">return (MatchState m ((x, <span class="nottickedoff">n</span>) : <span class="nottickedoff">cs</span>))</span>

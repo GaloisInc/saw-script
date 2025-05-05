@@ -17,28 +17,19 @@ span.spaces    { background: white }
 <span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
 </pre>
 <pre>
-<span class="lineno">    1 </span>{-# LANGUAGE Trustworthy #-}
-<span class="lineno">    2 </span>{-# LANGUAGE TemplateHaskell #-}
-<span class="lineno">    3 </span>
-<span class="lineno">    4 </span>module SAWCoreWhat4.Panic
-<span class="lineno">    5 </span>  ( panic
-<span class="lineno">    6 </span>  ) where
-<span class="lineno">    7 </span>
-<span class="lineno">    8 </span>import Panic hiding (panic)
-<span class="lineno">    9 </span>import qualified Panic
-<span class="lineno">   10 </span>
-<span class="lineno">   11 </span>data SAWCoreWhat4 = SAWCoreWhat4
-<span class="lineno">   12 </span>
-<span class="lineno">   13 </span>panic :: HasCallStack =&gt; String -&gt; [String] -&gt; a
-<span class="lineno">   14 </span><span class="decl"><span class="nottickedoff">panic = Panic.panic SAWCoreWhat4</span></span>
-<span class="lineno">   15 </span>
-<span class="lineno">   16 </span>instance PanicComponent SAWCoreWhat4 where
-<span class="lineno">   17 </span>  <span class="decl"><span class="nottickedoff">panicComponentName _ = &quot;SAWCoreWhat4&quot;</span></span>
-<span class="lineno">   18 </span>  <span class="decl"><span class="nottickedoff">panicComponentIssues _ = &quot;https://github.com/GaloisInc/saw-script/issues&quot;</span></span>
-<span class="lineno">   19 </span>
-<span class="lineno">   20 </span>  {-# Noinline panicComponentRevision #-}
-<span class="lineno">   21 </span>  <span class="decl"><span class="nottickedoff">panicComponentRevision = $useGitRevision</span></span>
-<span class="lineno">   22 </span>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>module SAWCoreWhat4.Panic (panic) where
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import Data.Text (Text)
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>import SAWSupport.PanicSupport
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>-- | Raise a fatal error. See commentary in PanicSupport.
+<span class="lineno">   10 </span>--   Arguments are &quot;location&quot; (one string) and &quot;description&quot; (multiple
+<span class="lineno">   11 </span>--   strings).
+<span class="lineno">   12 </span>panic :: HasCallStack =&gt; Text -&gt; [Text] -&gt; a
+<span class="lineno">   13 </span><span class="decl"><span class="nottickedoff">panic loc msgs = doPanic &quot;saw-core-what4&quot; loc msgs</span></span>
 
 </pre>
 </body>
