@@ -3,8 +3,8 @@ m <- yosys_import "test.json";
 
 let {{
   cryfull :  {a : [4], b : [4], c_in : [1]} -> {c_out : [1], sum : [4]}
-  cryfull inp = { c_out = cout, sum = reverse s }
-    where (cout, s) = splitAt (zext (reverse inp.a) + zext (reverse inp.b) + zext inp.c_in)
+  cryfull inp = { c_out = cout, sum = s }
+    where (cout, s) = splitAt (zext inp.a + zext inp.b + zext inp.c_in)
 }};
 
 prove_print w4 {{ m.fulladd === cryfull }};
