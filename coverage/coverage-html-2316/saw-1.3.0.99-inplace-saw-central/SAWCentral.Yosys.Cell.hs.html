@@ -1,0 +1,392 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Yosys.Cell
+<span class="lineno">    3 </span>Description : Translating Yosys cells into SAWCore
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : sbreese
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# Language OverloadedStrings #-}
+<span class="lineno">   10 </span>{-# Language MultiWayIf #-}
+<span class="lineno">   11 </span>{-# Language ScopedTypeVariables #-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWCentral.Yosys.Cell where
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>import Control.Lens ((^.))
+<span class="lineno">   16 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Data.Char (digitToInt)
+<span class="lineno">   19 </span>import Data.Map (Map)
+<span class="lineno">   20 </span>import qualified Data.Map as Map
+<span class="lineno">   21 </span>import Data.Text (Text)
+<span class="lineno">   22 </span>import qualified Data.Text as Text
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import Numeric.Natural (Natural)
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import qualified SAWCore.SharedTerm as SC
+<span class="lineno">   27 </span>import qualified SAWCore.Name as SC
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import SAWCentral.Panic (panic)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import SAWCentral.Yosys.Utils
+<span class="lineno">   32 </span>import SAWCentral.Yosys.IR
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>-- | A SAWCore bitvector term along with its width and whether it should be interpreted as signed.
+<span class="lineno">   35 </span>data CellTerm = CellTerm
+<span class="lineno">   36 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">cellTermTerm</span></span></span> :: SC.Term
+<span class="lineno">   37 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">cellTermWidth</span></span></span> :: Natural
+<span class="lineno">   38 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">cellTermSigned</span></span></span> :: Bool
+<span class="lineno">   39 </span>  }
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>cellTermNat :: forall m. MonadIO m =&gt; SC.SharedContext -&gt; CellTerm -&gt; m SC.Term
+<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">cellTermNat sc (CellTerm { cellTermTerm = t, cellTermWidth = w }) = liftIO $ SC.scBvToNat sc w t</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- | Apply the appropriate (possibly signed) extension or truncation to make the given bitvector
+<span class="lineno">   45 </span>-- match the given width.
+<span class="lineno">   46 </span>extTrunc :: forall m. MonadIO m =&gt; SC.SharedContext -&gt; Natural -&gt; CellTerm -&gt; m CellTerm
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">extTrunc sc width (CellTerm { cellTermTerm = t, cellTermWidth = bvw, cellTermSigned = signed}) = do</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="istickedoff">wterm &lt;- liftIO $ SC.scNat sc width</span>
+<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">bvwterm &lt;- liftIO $ SC.scNat sc bvw</span>
+<span class="lineno">   50 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- if</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlyfalse">bvw &gt; width</span> -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">   52 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">diffterm &lt;- liftIO . SC.scNat sc $ bvw - width</span></span>
+<span class="lineno">   53 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scBvTrunc sc diffterm wterm t</span></span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlyfalse">width &gt; bvw &amp;&amp; signed</span> -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">   55 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">bvwpredterm &lt;- liftIO . SC.scNat sc $ bvw - 1</span></span>
+<span class="lineno">   56 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">diffterm &lt;- liftIO . SC.scNat sc $ width - bvw</span></span>
+<span class="lineno">   57 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scBvSExt sc diffterm bvwpredterm t</span></span>
+<span class="lineno">   58 </span><span class="spaces">    </span><span class="istickedoff">| width &gt; bvw &amp;&amp; not signed -&gt; do</span>
+<span class="lineno">   59 </span><span class="spaces">        </span><span class="istickedoff">diffterm &lt;- liftIO . SC.scNat sc $ width - bvw</span>
+<span class="lineno">   60 </span><span class="spaces">        </span><span class="istickedoff">liftIO $ SC.scBvUExt sc diffterm bvwterm t</span>
+<span class="lineno">   61 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure t</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">pure $ CellTerm res width <span class="nottickedoff">signed</span></span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- | Given two bitvectors, extend the narrower bitvector to match the wider.
+<span class="lineno">   65 </span>extMax :: forall m. MonadIO m =&gt; SC.SharedContext -&gt; CellTerm -&gt; CellTerm -&gt; m (CellTerm, CellTerm)
+<span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">extMax sc c1 c2 = do</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="nottickedoff">w1 = cellTermWidth c1</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="nottickedoff">w2 = cellTermWidth c2</span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="nottickedoff">w = max w1 w2</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="nottickedoff">res1 &lt;- extTrunc sc w c1</span>
+<span class="lineno">   72 </span><span class="spaces">  </span><span class="nottickedoff">res2 &lt;- extTrunc sc w c2</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">pure (res1, res2)</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>liftUnary :: forall m.
+<span class="lineno">   76 </span>  MonadIO m =&gt;
+<span class="lineno">   77 </span>  SC.SharedContext -&gt;
+<span class="lineno">   78 </span>  (SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; -- (w : Nat) -&gt; [w] -&gt; [w]
+<span class="lineno">   79 </span>  CellTerm -&gt; m CellTerm
+<span class="lineno">   80 </span><span class="decl"><span class="istickedoff">liftUnary sc f c@(CellTerm { cellTermTerm = t }) = do</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">wt &lt;- liftIO . SC.scNat sc $ cellTermWidth c</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- liftIO $ f wt t</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">pure $ c { cellTermTerm = res }</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>liftBinary :: forall m.
+<span class="lineno">   86 </span>  MonadIO m =&gt;
+<span class="lineno">   87 </span>  SC.SharedContext -&gt;
+<span class="lineno">   88 </span>  (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; -- (w : Nat) -&gt; [w] -&gt; [w] -&gt; [w]
+<span class="lineno">   89 </span>  CellTerm -&gt; CellTerm -&gt; m CellTerm
+<span class="lineno">   90 </span><span class="decl"><span class="istickedoff">liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) = do</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">wt &lt;- liftIO . SC.scNat sc $ cellTermWidth c1</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- liftIO $ f wt t1 t2</span>
+<span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">pure $ c1 { cellTermTerm = res }</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>liftBinaryCmp :: forall m.
+<span class="lineno">   96 </span>  MonadIO m =&gt;
+<span class="lineno">   97 </span>  SC.SharedContext -&gt;
+<span class="lineno">   98 </span>  (SC.Term -&gt; SC.Term -&gt; SC.Term -&gt; IO SC.Term) -&gt; -- (w : Nat) -&gt; [w] -&gt; [w] -&gt; Bool
+<span class="lineno">   99 </span>  CellTerm -&gt; CellTerm -&gt; m SC.Term
+<span class="lineno">  100 </span><span class="decl"><span class="nottickedoff">liftBinaryCmp sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) = do</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="nottickedoff">wt &lt;- liftIO . SC.scNat sc $ cellTermWidth c1</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ f wt t1 t2</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>-- | Given a primitive Yosys cell and a map of terms for its arguments, construct a record term representing the output.
+<span class="lineno">  105 </span>-- If the provided cell is not a primitive, return Nothing.
+<span class="lineno">  106 </span>primCellToTerm ::
+<span class="lineno">  107 </span>  forall m b.
+<span class="lineno">  108 </span>  MonadIO m =&gt;
+<span class="lineno">  109 </span>  SC.SharedContext -&gt;
+<span class="lineno">  110 </span>  Cell [b] {- ^ Cell type -} -&gt;
+<span class="lineno">  111 </span>  Map Text SC.Term {- ^ Mapping of input names to input terms -} -&gt;
+<span class="lineno">  112 </span>  m (Maybe SC.Term)
+<span class="lineno">  113 </span><span class="decl"><span class="istickedoff">primCellToTerm sc c args = do</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- primCellToMap sc c args</span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">mt &lt;- traverse (cryptolRecord <span class="nottickedoff">sc</span>) mm</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">traverse (validateTerm sc <span class="nottickedoff">typeCheckMsg</span>) mt</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">typeCheckMsg :: Text</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">typeCheckMsg = mconcat</span></span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;translating a cell with type \&quot;&quot;</span></span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, Text.pack $ show $ c ^. cellType</span></span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;\&quot;&quot;</span></span>
+<span class="lineno">  123 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>primCellToMap ::
+<span class="lineno">  126 </span>  forall m b.
+<span class="lineno">  127 </span>  MonadIO m =&gt;
+<span class="lineno">  128 </span>  SC.SharedContext -&gt;
+<span class="lineno">  129 </span>  Cell [b] {- ^ Cell type -} -&gt;
+<span class="lineno">  130 </span>  Map Text SC.Term {- ^ Mapping of input names to input terms -} -&gt;
+<span class="lineno">  131 </span>  m (Maybe (Map Text SC.Term))
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">primCellToMap sc c args = case c ^. cellType of</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNot -&gt; bvUnaryOp . liftUnary sc $ SC.scBvNot sc</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">CellTypePos -&gt; do</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- input &quot;A&quot;</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">output res</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNeg -&gt; <span class="nottickedoff">bvUnaryOp . liftUnary sc $ SC.scBvNeg sc</span></span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">CellTypeAnd -&gt; bvBinaryOp . liftBinary sc $ SC.scBvAnd sc</span>
+<span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">CellTypeOr -&gt; bvBinaryOp . liftBinary sc $ SC.scBvOr sc</span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">CellTypeXor -&gt; bvBinaryOp . liftBinary sc $ SC.scBvXor sc</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">CellTypeXnor -&gt; <span class="nottickedoff">bvBinaryOp . liftBinary sc $ \w x y -&gt; do</span></span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">r &lt;- SC.scBvXor sc w x y</span></span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">SC.scBvNot sc w r</span></span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceAnd -&gt; <span class="nottickedoff">bvReduce True =&lt;&lt; do</span></span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;and&quot;</span></span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceOr -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceXor -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;xor&quot;</span></span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceXnor -&gt; <span class="nottickedoff">bvReduce True =&lt;&lt; do</span></span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">boolTy &lt;- liftIO $ SC.scBoolType sc</span></span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">xEC &lt;- liftIO $ SC.scFreshEC sc &quot;x&quot; boolTy</span></span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">x &lt;- liftIO $ SC.scExtCns sc xEC</span></span>
+<span class="lineno">  154 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">yEC &lt;- liftIO $ SC.scFreshEC sc &quot;y&quot; boolTy</span></span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">y &lt;- liftIO $ SC.scExtCns sc yEC</span></span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">r &lt;- liftIO $ SC.scXor sc x y</span></span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scNot sc r</span></span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scAbstractExts sc [xEC, yEC] res</span></span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceBool -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">CellTypeShl -&gt; do</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">ta &lt;- fmap cellTermTerm $ input &quot;A&quot;</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">nb &lt;- cellTermNat sc =&lt;&lt; input &quot;B&quot;</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">w &lt;- outputWidth</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- liftIO $ SC.scBvShl sc w ta nb</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">output (CellTerm res (connWidthNat &quot;A&quot;) <span class="nottickedoff">(connSigned &quot;A&quot;)</span>)</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">CellTypeShr -&gt; do</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">ta &lt;- fmap cellTermTerm $ input &quot;A&quot;</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">nb &lt;- cellTermNat sc =&lt;&lt; input &quot;B&quot;</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">w &lt;- outputWidth</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- liftIO $ SC.scBvShr sc w ta nb</span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">output (CellTerm res (connWidthNat &quot;A&quot;) <span class="nottickedoff">(connSigned &quot;A&quot;)</span>)</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">CellTypeSshl -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ta &lt;- fmap cellTermTerm $ input &quot;A&quot;</span></span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nb &lt;- cellTermNat sc =&lt;&lt; input &quot;B&quot;</span></span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">w &lt;- outputWidth</span></span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scBvShl sc w ta nb</span></span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output (CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;A&quot;))</span></span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">CellTypeSshr -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ta &lt;- fmap cellTermTerm $ input &quot;A&quot;</span></span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nb &lt;- cellTermNat sc =&lt;&lt; input &quot;B&quot;</span></span>
+<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">w &lt;- outputWidth</span></span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scBvSShr sc w ta nb</span></span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output (CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;A&quot;))</span></span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$shift&quot; -&gt; _</span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">CellTypeShiftx -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  187 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let w = max (connWidthNat &quot;A&quot;) (connWidthNat &quot;B&quot;)</span></span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">wt &lt;- liftIO $ SC.scNat sc w</span></span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">CellTerm ta _ _ &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span></span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">CellTerm tb _ _ &lt;- extTrunc sc w =&lt;&lt; input &quot;B&quot;</span></span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">zero &lt;- liftIO $ SC.scBvConst sc w 0</span></span>
+<span class="lineno">  192 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tbn &lt;- liftIO $ SC.scBvToNat sc w tb</span></span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tbneg &lt;- liftIO $ SC.scBvNeg sc wt tb</span></span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tbnegn &lt;- liftIO $ SC.scBvToNat sc w tbneg</span></span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">cond &lt;- liftIO $ SC.scBvSGe sc wt tb zero</span></span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tcase &lt;- liftIO $ SC.scBvShr sc wt ta tbn</span></span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ecase &lt;- liftIO $ SC.scBvShl sc wt ta tbnegn</span></span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- liftIO . SC.scBitvector sc $ connWidthNat &quot;A&quot;</span></span>
+<span class="lineno">  199 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- if connSigned &quot;B&quot;</span></span>
+<span class="lineno">  200 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">then liftIO $ SC.scIte sc ty cond tcase ecase</span></span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">else pure tcase</span></span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output (CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;A&quot;))</span></span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">CellTypeLt -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc</span></span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">CellTypeLe -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc</span></span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">CellTypeGt -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc</span></span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">CellTypeGe -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGe sc</span></span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">CellTypeEq -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc</span></span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNe -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ \w x y -&gt; do</span></span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">r &lt;- SC.scBvEq sc w x y</span></span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">SC.scNot sc r</span></span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">CellTypeEqx -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc</span></span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNex -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ \w x y -&gt; do</span></span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">r &lt;- SC.scBvEq sc w x y</span></span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">SC.scNot sc r</span></span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">CellTypeAdd -&gt; bvBinaryOp . liftBinary sc $ SC.scBvAdd sc</span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">CellTypeSub -&gt; bvBinaryOp . liftBinary sc $ SC.scBvSub sc</span>
+<span class="lineno">  217 </span><span class="spaces">  </span><span class="istickedoff">CellTypeMul -&gt; <span class="nottickedoff">bvBinaryOp . liftBinary sc $ SC.scBvMul sc</span></span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">CellTypeDiv -&gt; <span class="nottickedoff">bvBinaryOp . liftBinary sc $ SC.scBvUDiv sc</span></span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">CellTypeMod -&gt; <span class="nottickedoff">bvBinaryOp . liftBinary sc $ SC.scBvURem sc</span></span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$modfloor&quot; -&gt; _</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">CellTypeLogicNot -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">w &lt;- connWidth &quot;A&quot;</span></span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ta &lt;- cellTermTerm &lt;$&gt; input &quot;A&quot;</span></span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">anz &lt;- liftIO $ SC.scBvNonzero sc w ta</span></span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scNot sc anz</span></span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">outputBit res</span></span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">CellTypeLogicAnd -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ \w x y -&gt; do</span></span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">xnz &lt;- liftIO $ SC.scBvNonzero sc w x</span></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ynz &lt;- liftIO $ SC.scBvNonzero sc w y</span></span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scAnd sc xnz ynz</span></span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">CellTypeLogicOr -&gt; <span class="nottickedoff">bvBinaryCmp . liftBinaryCmp sc $ \w x y -&gt; do</span></span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">xnz &lt;- liftIO $ SC.scBvNonzero sc w x</span></span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ynz &lt;- liftIO $ SC.scBvNonzero sc w y</span></span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scOr sc xnz ynz</span></span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">CellTypeMux -&gt; do</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">ta &lt;- cellTermTerm &lt;$&gt; input &quot;A&quot;</span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">tb &lt;- cellTermTerm &lt;$&gt; input &quot;B&quot;</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">ts &lt;- cellTermTerm &lt;$&gt; input &quot;S&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">swidth &lt;- connWidth &quot;S&quot;</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">snz &lt;- liftIO $ SC.scBvNonzero sc swidth ts</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">let width = connWidthNat &quot;Y&quot;</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">ty &lt;- liftIO $ SC.scBitvector sc width</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- liftIO $ SC.scIte sc ty snz tb ta</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">output $ CellTerm res (connWidthNat &quot;A&quot;) <span class="nottickedoff">(connSigned &quot;A&quot;)</span></span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">CellTypePmux -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ta &lt;- cellTermTerm &lt;$&gt; input &quot;A&quot;</span></span>
+<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tb &lt;- cellTermTerm &lt;$&gt; input &quot;B&quot;</span></span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ts &lt;- cellTermTerm &lt;$&gt; input &quot;S&quot;</span></span>
+<span class="lineno">  249 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">width &lt;- connWidth &quot;A&quot;</span></span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">widthBv &lt;- liftIO . SC.scBitvector sc $ connWidthNat &quot;A&quot;</span></span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">swidth &lt;- connWidth &quot;S&quot;</span></span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">bool &lt;- liftIO $ SC.scBoolType sc</span></span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nat &lt;- liftIO $ SC.scNatType sc</span></span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">splitb &lt;- liftIO $ SC.scSplit sc swidth width bool tb</span></span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">zero &lt;- liftIO $ SC.scNat sc 0</span></span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">accTy &lt;- liftIO $ SC.scPairType sc nat widthBv</span></span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">defaultAcc &lt;- liftIO $ SC.scPairValue sc zero ta</span></span>
+<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">bitEC &lt;- liftIO $ SC.scFreshEC sc &quot;bit&quot; bool</span></span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">accEC &lt;- liftIO $ SC.scFreshEC sc &quot;acc&quot; accTy</span></span>
+<span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fun &lt;- liftIO . SC.scAbstractExts sc [bitEC, accEC] =&lt;&lt; do</span></span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bit &lt;- liftIO $ SC.scExtCns sc bitEC</span></span>
+<span class="lineno">  264 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">acc &lt;- liftIO $ SC.scExtCns sc accEC</span></span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">idx &lt;- liftIO $ SC.scPairLeft sc acc</span></span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">aval &lt;- liftIO $ SC.scPairRight sc acc</span></span>
+<span class="lineno">  267 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bval &lt;- liftIO $ SC.scAtWithDefault sc swidth widthBv aval splitb idx</span></span>
+<span class="lineno">  268 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">newidx &lt;- liftIO $ SC.scAddNat sc idx width</span></span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">newval &lt;- liftIO $ SC.scIte sc widthBv bit bval aval</span></span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scPairValue sc newidx newval</span></span>
+<span class="lineno">  271 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">resPair &lt;- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]</span></span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scPairRight sc resPair</span></span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output $ CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;Y&quot;)</span></span>
+<span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">CellTypeBmux -&gt; do</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">ia &lt;- input &quot;A&quot;</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">is &lt;- input &quot;S&quot;</span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">let swidth = cellTermWidth is</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">let ywidth = connWidthNat &quot;Y&quot;</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">-- Split input A into chunks</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">chunks &lt;- liftIO (SC.scNat sc (2 ^ swidth))</span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">ywidth' &lt;- liftIO (SC.scNat sc ywidth)</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">bool &lt;- liftIO (SC.scBoolType sc)</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">splitA &lt;- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))</span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">-- Select chunk from output</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">outputType &lt;- liftIO (SC.scBitvector sc ywidth)</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">ixWidth &lt;- liftIO (SC.scNat sc swidth)</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">elt &lt;- liftIO (SC.scBvAt sc chunks outputType ixWidth splitA (cellTermTerm is))</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">output (CellTerm elt ywidth <span class="nottickedoff">(connSigned &quot;Y&quot;)</span>)</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$demux&quot; -&gt; _</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$lut&quot; -&gt; _</span>
+<span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$slice&quot; -&gt; _</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$concat&quot; -&gt; _</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="istickedoff">CellTypeDff -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">CellTypeUnsupportedPrimitive _ -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">CellTypeUserType _ -&gt; pure Nothing</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">nm :: Text</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nm = Text.pack $ show $ c ^. cellType</span></span>
+<span class="lineno">  302 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">textBinNat :: Text -&gt; Natural</span>
+<span class="lineno">  304 </span><span class="spaces">    </span><span class="istickedoff">textBinNat = fromIntegral . Text.foldl' (\a x -&gt; digitToInt x + a * 2) 0</span>
+<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">connSigned :: Text -&gt; Bool</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">connSigned onm =</span>
+<span class="lineno">  307 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (onm &lt;&gt; &quot;_SIGNED&quot;) $ c ^. cellParameters of</span>
+<span class="lineno">  308 </span><span class="spaces">        </span><span class="istickedoff">Just t -&gt; textBinNat t &gt; 0</span>
+<span class="lineno">  309 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat :: Text -&gt; Natural</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">connWidthNat onm =</span>
+<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup onm $ c ^. cellConnections of</span>
+<span class="lineno">  313 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [Text.unpack $ mconcat [&quot;Missing expected output name for &quot;, nm, &quot; cell&quot;]]</span></span>
+<span class="lineno">  314 </span><span class="spaces">        </span><span class="istickedoff">Just bits -&gt; fromIntegral $ length bits</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">connWidth :: Text -&gt; m SC.Term</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">connWidth onm = liftIO . SC.scNat sc $ connWidthNat onm</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">outputWidth = connWidth &quot;Y&quot;</span>
+<span class="lineno">  318 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">input :: Text -&gt; m CellTerm</span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">input inpNm = case Map.lookup inpNm args of</span>
+<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;cellToTerm&quot; [Text.unpack $ mconcat [nm, &quot; missing input &quot;, inpNm]]</span></span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">Just a -&gt; pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)</span>
+<span class="lineno">  323 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">output :: CellTerm -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  325 </span><span class="spaces">    </span><span class="istickedoff">output (CellTerm ct cw _) = do</span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">let res = CellTerm ct cw <span class="nottickedoff">(connSigned &quot;Y&quot;)</span></span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="istickedoff">CellTerm t _ _ &lt;- extTrunc sc (connWidthNat &quot;Y&quot;) res</span>
+<span class="lineno">  328 </span><span class="spaces">      </span><span class="istickedoff">pure . Just $ Map.fromList</span>
+<span class="lineno">  329 </span><span class="spaces">        </span><span class="istickedoff">[ (&quot;Y&quot;, t)</span>
+<span class="lineno">  330 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  331 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">outputBit :: SC.Term -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">outputBit res = do</span></span>
+<span class="lineno">  334 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bool &lt;- liftIO $ SC.scBoolType sc</span></span>
+<span class="lineno">  335 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">vres &lt;- liftIO $ SC.scSingle sc bool res</span></span>
+<span class="lineno">  336 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure . Just $ Map.fromList</span></span>
+<span class="lineno">  337 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ (&quot;Y&quot;, vres)</span></span>
+<span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  339 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">-- convert input to big endian</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp :: (CellTerm -&gt; m CellTerm) -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">bvUnaryOp f = do</span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff">t &lt;- input &quot;A&quot;</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">res &lt;- f t</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">output res</span>
+<span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to output width</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp :: (CellTerm -&gt; CellTerm -&gt; m CellTerm) -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryOp f = do</span>
+<span class="lineno">  349 </span><span class="spaces">      </span><span class="istickedoff">let w = connWidthNat &quot;Y&quot;</span>
+<span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff">ta &lt;- extTrunc sc w =&lt;&lt; input &quot;A&quot;</span>
+<span class="lineno">  351 </span><span class="spaces">      </span><span class="istickedoff">tb &lt;- extTrunc sc w =&lt;&lt; input &quot;B&quot;</span>
+<span class="lineno">  352 </span><span class="spaces">      </span><span class="istickedoff">res &lt;- f ta tb</span>
+<span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff">output res</span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff">-- extend inputs to max input width, output is a single bit</span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">bvBinaryCmp :: (CellTerm -&gt; CellTerm -&gt; m SC.Term) -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">bvBinaryCmp f = do</span></span>
+<span class="lineno">  357 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ta &lt;- input &quot;A&quot;</span></span>
+<span class="lineno">  358 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tb &lt;- input &quot;B&quot;</span></span>
+<span class="lineno">  359 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">res &lt;- uncurry f =&lt;&lt; extMax sc ta tb</span></span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">outputBit res</span></span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">bvReduce :: Bool -&gt; SC.Term -&gt; m (Maybe (Map Text SC.Term))</span>
+<span class="lineno">  362 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">bvReduce boolIdentity boolFun = do</span></span>
+<span class="lineno">  363 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">CellTerm t _ _ &lt;- input &quot;A&quot;</span></span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">w &lt;- connWidth &quot;A&quot;</span></span>
+<span class="lineno">  365 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">boolTy &lt;- liftIO $ SC.scBoolType sc</span></span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">identity &lt;- liftIO $ SC.scBool sc boolIdentity</span></span>
+<span class="lineno">  367 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
+<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bit &lt;- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span></span>
+<span class="lineno">  369 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">outputBit bit</span></span></span>
+
+</pre>
+</body>
+</html>
