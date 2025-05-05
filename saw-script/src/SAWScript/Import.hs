@@ -28,19 +28,24 @@ loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
   printOutLn opts Info $ "Loading file " ++ show fname
   ftext <- TextIO.readFile fname
-  let (tokens, optmsg) = lexSAW fname ftext
-  case optmsg of
-      Nothing -> return ()
-      Just (vrb, pos, txt) -> do
-          -- XXX: the print functions should take care of printing the position
-          -- (clean this up when we clean out the printing infrastructure)
+  -- XXX: the print functions should take care of printing the position
+  -- (clean this up when we clean out the printing infrastructure)
+  -- XXX: the print functions should also take care of exiting on an error
+  -- (immediately or later). For now, throw errors and print anything else.
+  case lexSAW fname ftext of
+    Left (_, pos, txt) -> do
+      let txt' = show pos ++ ": " ++ Text.unpack txt
+      throwIO $ userError txt'
+
+    Right (tokens, optmsg) -> do
+      case optmsg of
+        Nothing -> return ()
+        Just (vrb, pos, txt) -> do
           let txt' = show pos ++ ": " ++ Text.unpack txt
-          -- XXX: the print functions should also take care of exiting on an error
-          -- (immediately or later). For now, throw errors and print anything else.
           case vrb of
-              Error -> throwIO $ userError txt'
-              _ -> printOutLn opts vrb txt'
-  either throwIO return (parseFile tokens)
+            Error -> throwIO $ userError txt'
+            _ -> printOutLn opts vrb txt'
+      either throwIO return (parseFile tokens)
 
 parseFile :: [Token Pos] -> Either ParseError [Stmt]
 parseFile tokens = do

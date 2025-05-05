@@ -1,0 +1,5 @@
+ Loading file "test3.saw"
+ Stack trace:
+test3.saw:1:1-1:3: Unclosed block comment
+
+FAILED
