@@ -290,7 +290,8 @@ fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIden
 deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
 deriveTermsByIndices sc rep t = do
   boolty <- liftIO $ SC.scBoolType sc
-  telems <- forM [0..length rep - 1] $ \index -> do
+  -- Yosys uses little-endian order while saw uses big-endian (msb at index 0), so reverse indices
+  telems <- forM (reverse [0..length rep - 1]) $ \index -> do
     tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
     idx <- liftIO . SC.scNat sc $ fromIntegral index
     bit <- liftIO $ SC.scAt sc tlen boolty t idx

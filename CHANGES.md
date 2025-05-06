@@ -38,6 +38,12 @@ Note that build.sh is in any case the recommended way to build.
 
 ## Bug fixes
 
+* Functions imported with `yosys_import` now use a non-reversed bit
+  ordering. All bit indices in Yosys JSON files are now treated as
+  indexing from the right. Arithmetic operations treat the right-most
+  bit (Yosys index 0) as the least significant, and are translated
+  without using `reverse`.
+
 * Invoking the Cryptol `error` function in SAW now preserves the error message
   instead of throwing it away.
 
