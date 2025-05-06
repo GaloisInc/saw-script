@@ -17,8 +17,9 @@ Thanks for helping to make SAW better for everyone!
 :caption: Contents
 
 overview
-structure-of-sawscript
+installing-saw
 invoking-saw
+structure-of-sawscript
 cryptol-and-its-role-in-saw
 loading-code
 analyzing-hardware-circuits-using-yosys
