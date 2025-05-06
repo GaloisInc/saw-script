@@ -96,7 +96,7 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span>            , fovVec, firstOrderTypeOf, asFirstOrderType
 <span class="lineno">   78 </span>            )
 <span class="lineno">   79 </span>
-<span class="lineno">   80 </span>import SAWCore.Utils (panic)
+<span class="lineno">   80 </span>import SAWCoreSBV.Panic
 <span class="lineno">   81 </span>
 <span class="lineno">   82 </span>data SBV
 <span class="lineno">   83 </span>
@@ -130,16 +130,16 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">Prims.BasePrims</span>
 <span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">{ Prims.bpIsSymbolicEvaluator = True</span>
 <span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAsBool  = svAsBool</span>
-<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = svUnpack</span>
-<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = pure1 symFromBits</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = pure2 svAt</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = <span class="nottickedoff">svUnpack</span></span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = <span class="nottickedoff">pure1 symFromBits</span></span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">pure2 svAt</span></span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 literalSWord</span>
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = <span class="nottickedoff">intSizeOf</span></span>
-<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = pure2 svJoin</span>
-<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = pure3 svSlice</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = <span class="nottickedoff">pure2 svJoin</span></span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 svSlice</span></span>
 <span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = pure3 svIte</span>
-<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = pure3 svIte</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxInt   = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxArray = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpMuxArray&quot;</span></span>
 <span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxExtra = <span class="nottickedoff">muxSbvExtra</span></span>
@@ -147,7 +147,7 @@ span.spaces    { background: white }
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpTrue   = svTrue</span>
 <span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = svFalse</span>
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 svNot</span>
-<span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 svAnd</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = <span class="nottickedoff">pure2 svAnd</span></span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 svOr</span></span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 svEqual</span></span>
@@ -251,10 +251,10 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span>--
 <span class="lineno">  233 </span>
 <span class="lineno">  234 </span>bitVector :: Int -&gt; Integer -&gt; SWord
-<span class="lineno">  235 </span><span class="decl"><span class="istickedoff">bitVector w i = literalSWord w i</span></span>
+<span class="lineno">  235 </span><span class="decl"><span class="nottickedoff">bitVector w i = literalSWord w i</span></span>
 <span class="lineno">  236 </span>
 <span class="lineno">  237 </span>symFromBits :: Vector SBool -&gt; SWord
-<span class="lineno">  238 </span><span class="decl"><span class="istickedoff">symFromBits v = V.foldl svJoin (bitVector 0 0) (V.map svToWord1 v)</span></span>
+<span class="lineno">  238 </span><span class="decl"><span class="nottickedoff">symFromBits v = V.foldl svJoin (bitVector 0 0) (V.map svToWord1 v)</span></span>
 <span class="lineno">  239 </span>
 <span class="lineno">  240 </span>toMaybeBool :: SValue -&gt; Maybe SBool
 <span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">toMaybeBool (VBool b) = Just b</span>
@@ -346,7 +346,7 @@ span.spaces    { background: white }
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">case svAsInteger vx of</span>
 <span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">Just i</span>
 <span class="lineno">  329 </span><span class="spaces">      </span><span class="nottickedoff">| i &gt;= 0    -&gt; valueFn (fromInteger i)</span>
-<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise -&gt; panic &quot;selectV&quot; [&quot;expected nonnegative integer&quot;, show i]</span>
+<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise -&gt; panic &quot;selectV&quot; [&quot;Expected nonnegative integer; found &quot; &lt;&gt; Text.pack (show i)]</span>
 <span class="lineno">  331 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; impl (intSizeOf vx) 0</span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">  333 </span><span class="spaces">    </span><span class="nottickedoff">impl _ x | x &gt; maxValue || x &lt; 0 = valueFn maxValue</span>
@@ -361,10 +361,10 @@ span.spaces    { background: white }
 <span class="lineno">  342 </span>
 <span class="lineno">  343 </span>-- Big-endian version of svTestBit
 <span class="lineno">  344 </span>svAt :: SWord -&gt; Int -&gt; SBool
-<span class="lineno">  345 </span><span class="decl"><span class="istickedoff">svAt x i = svTestBit x (intSizeOf x - 1 - i)</span></span>
+<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">svAt x i = svTestBit x (intSizeOf x - 1 - i)</span></span>
 <span class="lineno">  346 </span>
 <span class="lineno">  347 </span>svUnpack :: SWord -&gt; IO (Vector SBool)
-<span class="lineno">  348 </span><span class="decl"><span class="istickedoff">svUnpack x = return (V.generate (intSizeOf x) (svAt x))</span></span>
+<span class="lineno">  348 </span><span class="decl"><span class="nottickedoff">svUnpack x = return (V.generate (intSizeOf x) (svAt x))</span></span>
 <span class="lineno">  349 </span>
 <span class="lineno">  350 </span>asWordList :: [SValue] -&gt; Maybe [SWord]
 <span class="lineno">  351 </span><span class="decl"><span class="nottickedoff">asWordList = go id</span>
@@ -374,8 +374,8 @@ span.spaces    { background: white }
 <span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">go _ _ = Nothing</span></span>
 <span class="lineno">  356 </span>
 <span class="lineno">  357 </span>svSlice :: Int -&gt; Int -&gt; SWord -&gt; SWord
-<span class="lineno">  358 </span><span class="decl"><span class="istickedoff">svSlice i j x = svExtract (w - i - 1) (w - i - j) x</span>
-<span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">where w = intSizeOf x</span></span>
+<span class="lineno">  358 </span><span class="decl"><span class="nottickedoff">svSlice i j x = svExtract (w - i - 1) (w - i - j) x</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="nottickedoff">where w = intSizeOf x</span></span>
 <span class="lineno">  360 </span>
 <span class="lineno">  361 </span>----------------------------------------
 <span class="lineno">  362 </span>-- Shift operations
@@ -555,7 +555,7 @@ span.spaces    { background: white }
 <span class="lineno">  536 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _ w -&gt;</span>
 <span class="lineno">  537 </span><span class="spaces">      </span><span class="nottickedoff">do ilv &lt;- toWord w</span>
 <span class="lineno">  538 </span><span class="spaces">         </span><span class="nottickedoff">selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv</span>
-<span class="lineno">  539 </span><span class="spaces">    </span><span class="nottickedoff">v -&gt; panic &quot;SBV.streamGetOp&quot; [&quot;Expected Nat value&quot;, show v]</span></span>
+<span class="lineno">  539 </span><span class="spaces">    </span><span class="nottickedoff">v -&gt; panic &quot;streamGetOp&quot; [&quot;Expected Nat value; got &quot; &lt;&gt; Text.pack (show v)]</span></span>
 <span class="lineno">  540 </span>
 <span class="lineno">  541 </span>
 <span class="lineno">  542 </span>lookupSStream :: SValue -&gt; Natural -&gt; IO SValue
@@ -619,7 +619,7 @@ span.spaces    { background: white }
 <span class="lineno">  600 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal tp c xi yi</span>
 <span class="lineno">  601 </span><span class="spaces">     </span><span class="nottickedoff">r &lt;- newIORef Map.empty</span>
 <span class="lineno">  602 </span><span class="spaces">     </span><span class="nottickedoff">return (SStream f r)</span>
-<span class="lineno">  603 </span><span class="spaces"></span><span class="nottickedoff">muxSbvExtra tp _ _ _ = panic &quot;muxSbvExtra&quot; [&quot;Type mismatch&quot;, show tp]</span></span>
+<span class="lineno">  603 </span><span class="spaces"></span><span class="nottickedoff">muxSbvExtra tp _ _ _ = panic &quot;muxSbvExtra&quot; [&quot;Type mismatch; found &quot; &lt;&gt; Text.pack (show tp)]</span></span>
 <span class="lineno">  604 </span>
 <span class="lineno">  605 </span>------------------------------------------------------------
 <span class="lineno">  606 </span>-- External interface
@@ -782,9 +782,9 @@ span.spaces    { background: white }
 <span class="lineno">  763 </span><span class="spaces">    </span><span class="istickedoff">FOTArray{} -&gt;</span>
 <span class="lineno">  764 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail &quot;FOTArray unimplemented for backend&quot;</span></span>
 <span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt;</span>
-<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">do let f i t = newVars (nm ++ &quot;.&quot; ++ show i) t</span>
-<span class="lineno">  767 </span><span class="spaces">         </span><span class="istickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.imapM f (V.fromList ts)</span>
-<span class="lineno">  768 </span><span class="spaces">         </span><span class="istickedoff">pure (TupleLabel labels, vTuple &lt;$&gt; traverse (fmap ready) (V.toList vals))</span>
+<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let f i t = newVars (nm ++ &quot;.&quot; ++ show i) t</span></span>
+<span class="lineno">  767 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(labels, vals) &lt;- V.unzip &lt;$&gt; V.imapM f (V.fromList ts)</span></span>
+<span class="lineno">  768 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (TupleLabel labels, vTuple &lt;$&gt; traverse (fmap ready) (V.toList vals))</span></span>
 <span class="lineno">  769 </span><span class="spaces">    </span><span class="istickedoff">FOTRec tm -&gt;</span>
 <span class="lineno">  770 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let f k t = newVars (nm ++ &quot;.&quot; ++ Text.unpack k) t</span></span>
 <span class="lineno">  771 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(labels, vals) &lt;- unzipMap &lt;$&gt; (Map.traverseWithKey f tm)</span></span>
@@ -820,7 +820,7 @@ span.spaces    { background: white }
 <span class="lineno">  801 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">where vs = map getLabel (V.toList ns)</span></span>
 <span class="lineno">  802 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">t  = firstOrderTypeOf (getLabel n)</span></span>
 <span class="lineno">  803 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  804 </span><span class="spaces">  </span><span class="istickedoff">getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)</span>
+<span class="lineno">  804 </span><span class="spaces">  </span><span class="istickedoff">getLabel (TupleLabel ns) = <span class="nottickedoff">FOVTuple $ map getLabel (V.toList ns)</span></span>
 <span class="lineno">  805 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RecLabel ns) = <span class="nottickedoff">FOVRec $ fmap getLabel ns</span></span>
 <span class="lineno">  806 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  807 </span><span class="spaces">  </span><span class="istickedoff">cvKind cv =</span>

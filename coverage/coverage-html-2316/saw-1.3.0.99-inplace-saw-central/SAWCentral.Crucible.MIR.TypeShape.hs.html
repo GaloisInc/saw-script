@@ -98,7 +98,7 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span>             -- ^ Is the reference mutable or immutable?
 <span class="lineno">   80 </span>             -&gt; TypeRepr tp
 <span class="lineno">   81 </span>             -- ^ The Crucible representation of the pointee type
-<span class="lineno">   82 </span>             -&gt; TypeShape (MirReferenceType tp)
+<span class="lineno">   82 </span>             -&gt; TypeShape MirReferenceType
 <span class="lineno">   83 </span>    -- | A shape for a slice reference of type @&amp;[T]@ or @&amp;str@, which is
 <span class="lineno">   84 </span>    -- represented in @crucible-mir@ as a 'MirSlice', i.e., a 'StructType'
 <span class="lineno">   85 </span>    -- where:
@@ -124,7 +124,7 @@ span.spaces    { background: white }
 <span class="lineno">  105 </span>               -- ^ Is the reference mutable or immutable?
 <span class="lineno">  106 </span>               -&gt; TypeRepr tp
 <span class="lineno">  107 </span>               -- ^ The Crucible representation of the element type.
-<span class="lineno">  108 </span>               -&gt; TypeShape (MirSlice tp)
+<span class="lineno">  108 </span>               -&gt; TypeShape MirSlice
 <span class="lineno">  109 </span>    -- | A shape for an enum type. Like 'StructShape', this is indexed by
 <span class="lineno">  110 </span>    -- 'AnyType', so code that matches on 'EnumShape' may need to further match
 <span class="lineno">  111 </span>    -- on the 'VariantShape's in order to bring additional type information into
@@ -325,8 +325,8 @@ span.spaces    { background: white }
 <span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">go (StructShape _ _ _flds) = AnyRepr</span>
 <span class="lineno">  307 </span><span class="spaces">    </span><span class="istickedoff">go (EnumShape _ _ _ _ _variants) = AnyRepr</span>
 <span class="lineno">  308 </span><span class="spaces">    </span><span class="istickedoff">go (TransparentShape _ shp) = go shp</span>
-<span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">go (RefShape _ _ _ tpr) = MirReferenceRepr tpr</span>
-<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">go (SliceShape _ _ _ tpr) = MirSliceRepr tpr</span>
+<span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">go (RefShape _ _ _ _) = MirReferenceRepr</span>
+<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">go (SliceShape _ _ _ _) = MirSliceRepr</span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">go (FnPtrShape _ args ret) = <span class="nottickedoff">FunctionHandleRepr args ret</span></span></span>
 <span class="lineno">  312 </span>
 <span class="lineno">  313 </span>fieldShapeType :: FieldShape tp -&gt; TypeRepr tp
@@ -405,7 +405,7 @@ span.spaces    { background: white }
 <span class="lineno">  386 </span>             -- ^ Is the reference mutable or immutable?
 <span class="lineno">  387 </span>             -&gt; TypeRepr tp
 <span class="lineno">  388 </span>             -- ^ The Crucible representation of the pointee type
-<span class="lineno">  389 </span>             -&gt; IsRefShape (MirReferenceType tp)
+<span class="lineno">  389 </span>             -&gt; IsRefShape MirReferenceType
 <span class="lineno">  390 </span>
 <span class="lineno">  391 </span>-- | Check that a 'TypeShape' is equal to a 'RefShape'. If so, return 'Just' a
 <span class="lineno">  392 </span>-- witness of that equality. Otherwise, return 'Nothing'.
@@ -421,7 +421,7 @@ span.spaces    { background: white }
 <span class="lineno">  402 </span>    M.Ty -&gt;
 <span class="lineno">  403 </span>    M.Mutability -&gt;
 <span class="lineno">  404 </span>    TypeRepr tp -&gt;
-<span class="lineno">  405 </span>    (TypeShape (MirReferenceType tp), TypeShape UsizeType)
+<span class="lineno">  405 </span>    (TypeShape MirReferenceType, TypeShape UsizeType)
 <span class="lineno">  406 </span><span class="decl"><span class="nottickedoff">sliceShapeParts referentTy refMutbl referentTpr =</span>
 <span class="lineno">  407 </span><span class="spaces">    </span><span class="nottickedoff">( RefShape refTy referentTy refMutbl referentTpr</span>
 <span class="lineno">  408 </span><span class="spaces">    </span><span class="nottickedoff">, PrimShape usizeTy BaseUsizeRepr</span>

@@ -847,14 +847,14 @@ span.spaces    { background: white }
 <span class="lineno">  828 </span>read' :: Read a =&gt; Text -&gt; a
 <span class="lineno">  829 </span>read' txt = case readMaybe txt' of
 <span class="lineno">  830 </span>    Just x -&gt; x
-<span class="lineno">  831 </span>    Nothing -&gt; panic &quot;Lexer&quot; [&quot;Failed to decode string or number literal&quot;, txt']
+<span class="lineno">  831 </span>    Nothing -&gt; panic &quot;Lexer&quot; [&quot;Failed to decode string or number literal&quot;, txt]
 <span class="lineno">  832 </span>  where txt' = Text.unpack txt
 <span class="lineno">  833 </span>
 <span class="lineno">  834 </span>-- read a binary integer
 <span class="lineno">  835 </span>readBin :: Text -&gt; Integer
 <span class="lineno">  836 </span>readBin s = case readInt 2 isDigit cvt (Text.unpack s') of
 <span class="lineno">  837 </span>              [(a, &quot;&quot;)] -&gt; a
-<span class="lineno">  838 </span>              _         -&gt; panic &quot;Lexer&quot; [&quot;Cannot read a binary number from: &quot;, show s]
+<span class="lineno">  838 </span>              _         -&gt; panic &quot;Lexer&quot; [&quot;Cannot read a binary number from: &quot;, s]
 <span class="lineno">  839 </span>  where cvt c = ord c - ord '0'
 <span class="lineno">  840 </span>        isDigit c = c == '0' || c == '1'
 <span class="lineno">  841 </span>        s' | &quot;0b&quot; `Text.isPrefixOf` s = Text.drop 2 s
@@ -984,10 +984,10 @@ span.spaces    { background: white }
 <span class="lineno">  965 </span>            InCType pos _ -&gt;
 <span class="lineno">  966 </span>                (tok, Just (Error, pos, &quot;Unclosed ctype block&quot;))
 <span class="lineno">  967 </span>        AlexError (pos, _) -&gt;
-<span class="lineno">  968 </span>            let line' = show $ apLine pos
-<span class="lineno">  969 </span>                col' = show $ apCol pos
+<span class="lineno">  968 </span>            let line' = Text.pack $ show $ apLine pos
+<span class="lineno">  969 </span>                col' = Text.pack $ show $ apCol pos
 <span class="lineno">  970 </span>            in
-<span class="lineno">  971 </span>            panic &quot;Lexer&quot; [line' ++ &quot;:&quot; ++ col' ++ &quot;: unspecified lexical error&quot;]
+<span class="lineno">  971 </span>            panic &quot;Lexer&quot; [line' &lt;&gt; &quot;:&quot; &lt;&gt; col' &lt;&gt; &quot;: unspecified lexical error&quot;]
 <span class="lineno">  972 </span>        AlexSkip inp' len -&gt;
 <span class="lineno">  973 </span>            go inp' s
 <span class="lineno">  974 </span>        AlexToken inp' len act -&gt;

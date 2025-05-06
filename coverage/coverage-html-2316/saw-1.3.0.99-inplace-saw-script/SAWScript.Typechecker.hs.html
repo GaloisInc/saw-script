@@ -1770,7 +1770,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1751 </span><span class="spaces">      </span><span class="istickedoff">ln = case ctx of</span>
 <span class="lineno"> 1752 </span><span class="spaces">          </span><span class="istickedoff">TopLevel -&gt; Located <span class="nottickedoff">&quot;&lt;toplevel&gt;&quot;</span> &quot;&lt;toplevel&gt;&quot; pos</span>
 <span class="lineno"> 1753 </span><span class="spaces">          </span><span class="istickedoff">ProofScript -&gt; <span class="nottickedoff">Located &quot;&lt;proofscript&gt;&quot; &quot;&lt;proofscript&gt;&quot; pos</span></span>
-<span class="lineno"> 1754 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;checkStmt&quot; [&quot;Invalid monad context &quot; ++ pShow ctx]</span></span>
+<span class="lineno"> 1754 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;checkStmt&quot; [&quot;Invalid monad context &quot; &lt;&gt; Text.pack (pShow ctx)]</span></span>
 <span class="lineno"> 1755 </span><span class="spaces">      </span><span class="istickedoff">ctxtype = TyCon pos (ContextCon ctx) []</span>
 <span class="lineno"> 1756 </span><span class="spaces">  </span><span class="istickedoff">in</span>
 <span class="lineno"> 1757 </span><span class="spaces">  </span><span class="istickedoff">evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)</span></span>

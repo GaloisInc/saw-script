@@ -1638,802 +1638,803 @@ span.spaces    { background: white }
 <span class="lineno"> 1619 </span><span class="spaces">                       </span><span class="istickedoff">-- correctly.</span>
 <span class="lineno"> 1620 </span><span class="spaces">                       </span><span class="istickedoff">LeqProof &lt;- case testLeq (addNat bfOffset rhsWidth) bfWidth of</span>
 <span class="lineno"> 1621 </span><span class="spaces">                         </span><span class="istickedoff">Just prf -&gt; pure prf</span>
-<span class="lineno"> 1622 </span><span class="spaces">                         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic</span></span>
-<span class="lineno"> 1623 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;llvm_points_to_bitfield: Unexpected bitfield field offset&quot;</span></span>
-<span class="lineno"> 1624 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Field offset: &quot; ++ show bfOffset</span></span>
-<span class="lineno"> 1625 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value width: &quot; ++ show rhsWidth</span></span>
-<span class="lineno"> 1626 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitvector width: &quot; ++ show bfWidth</span></span>
-<span class="lineno"> 1627 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1628 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1629 </span><span class="spaces">                       </span><span class="istickedoff">-- Finally, select the subsequence of bits from the</span>
-<span class="lineno"> 1630 </span><span class="spaces">                       </span><span class="istickedoff">-- bitfield corresponding to the field. In the `y`</span>
-<span class="lineno"> 1631 </span><span class="spaces">                       </span><span class="istickedoff">-- example, the means selecting `0bY` from `0b????Y???`.</span>
-<span class="lineno"> 1632 </span><span class="spaces">                       </span><span class="istickedoff">bfFieldBV &lt;- liftIO $ W4.bvSelect sym bfOffset rhsWidth bfBV</span>
-<span class="lineno"> 1633 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1634 </span><span class="spaces">                       </span><span class="istickedoff">-- Match the selected field against the RHS value.</span>
-<span class="lineno"> 1635 </span><span class="spaces">                       </span><span class="istickedoff">let field_val = Crucible.LLVMValInt bfBlk bfFieldBV</span>
-<span class="lineno"> 1636 </span><span class="spaces">                       </span><span class="istickedoff">pure Nothing &lt;* matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> <span class="nottickedoff">prepost</span> md field_val <span class="nottickedoff">memTy</span> val</span>
-<span class="lineno"> 1637 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1638 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno"> 1639 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size&quot;</span></span>
-<span class="lineno"> 1640 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitvector width: &quot; ++ show bfWidth</span></span>
-<span class="lineno"> 1641 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value width: &quot; ++ show rhsWidth</span></span>
-<span class="lineno"> 1642 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1643 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno"> 1644 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: The bitfield must be a bitvector&quot;</span></span>
-<span class="lineno"> 1645 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitfield value: &quot; ++ show (Crucible.ppTermExpr res_val)</span></span>
-<span class="lineno"> 1646 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1647 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1648 </span><span class="spaces">         </span><span class="istickedoff">-- When we have a concrete failure, we do a little more computation to</span>
-<span class="lineno"> 1649 </span><span class="spaces">         </span><span class="istickedoff">-- try and find out why.</span>
-<span class="lineno"> 1650 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr</span></span></span>
-<span class="lineno"> 1651 </span>
-<span class="lineno"> 1652 </span>-- | Give a general summary of why a call to 'Crucible.loadRaw' in
-<span class="lineno"> 1653 </span>-- @matchPointsTo{Bitfield}Value@ failed. This is used for error-message
-<span class="lineno"> 1654 </span>-- purposes.
-<span class="lineno"> 1655 </span>summarizeBadLoad ::
-<span class="lineno"> 1656 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 1657 </span>  Crucible.MemType -&gt;
-<span class="lineno"> 1658 </span>  PrePost -&gt;
-<span class="lineno"> 1659 </span>  LLVMPtr wptr -&gt;
-<span class="lineno"> 1660 </span>  [PP.Doc ann]
-<span class="lineno"> 1661 </span><span class="decl"><span class="istickedoff">summarizeBadLoad cc memTy prepost ptr =</span>
-<span class="lineno"> 1662 </span><span class="spaces"> </span><span class="istickedoff">let <span class="nottickedoff">dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)</span></span>
-<span class="lineno"> 1663 </span><span class="spaces">     </span><span class="istickedoff">sz = Crucible.memTypeSize <span class="nottickedoff">dataLayout</span> memTy</span>
-<span class="lineno"> 1664 </span><span class="spaces"> </span><span class="istickedoff">in map (PP.pretty . unwords)</span>
-<span class="lineno"> 1665 </span><span class="spaces">    </span><span class="istickedoff">[ [ &quot;When reading through pointer:&quot;, show (Crucible.ppPtr ptr) ]</span>
-<span class="lineno"> 1666 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;in the &quot;, MS.stateCond prepost, &quot;of an override&quot; ]</span>
-<span class="lineno"> 1667 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;Tried to read something of size:&quot;</span>
-<span class="lineno"> 1668 </span><span class="spaces">      </span><span class="istickedoff">, show (Crucible.bytesToInteger sz)</span>
-<span class="lineno"> 1669 </span><span class="spaces">      </span><span class="istickedoff">]</span>
-<span class="lineno"> 1670 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;And type:&quot;, show (Crucible.ppMemType memTy) ]</span>
-<span class="lineno"> 1671 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
-<span class="lineno"> 1672 </span>
-<span class="lineno"> 1673 </span>-- | Give a summary of why a call to 'Crucible.loadRaw' in
-<span class="lineno"> 1674 </span>-- @matchPointsTo{Bitfield}Value@ concretely failed. This is used for
-<span class="lineno"> 1675 </span>-- error-message purposes.
-<span class="lineno"> 1676 </span>describeConcreteMemoryLoadFailure ::
-<span class="lineno"> 1677 </span>  Crucible.MemImpl Sym -&gt;
-<span class="lineno"> 1678 </span>  [PP.Doc ann] {- A summary of why the load failed -} -&gt;
-<span class="lineno"> 1679 </span>  LLVMPtr w -&gt;
-<span class="lineno"> 1680 </span>  PP.Doc ann
-<span class="lineno"> 1681 </span><span class="decl"><span class="nottickedoff">describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do</span>
-<span class="lineno"> 1682 </span><span class="spaces">  </span><span class="nottickedoff">let (blk, _offset) = Crucible.llvmPointerView ptr</span>
-<span class="lineno"> 1683 </span><span class="spaces">  </span><span class="nottickedoff">PP.vcat . (badLoadSummary ++) $</span>
-<span class="lineno"> 1684 </span><span class="spaces">    </span><span class="nottickedoff">case W4.asNat blk of</span>
-<span class="lineno"> 1685 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; [&quot;&lt;Read from unknown allocation&gt;&quot;]</span>
-<span class="lineno"> 1686 </span><span class="spaces">      </span><span class="nottickedoff">Just blk' -&gt;</span>
-<span class="lineno"> 1687 </span><span class="spaces">        </span><span class="nottickedoff">let possibleAllocs =</span>
-<span class="lineno"> 1688 </span><span class="spaces">              </span><span class="nottickedoff">Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)</span>
-<span class="lineno"> 1689 </span><span class="spaces">        </span><span class="nottickedoff">in [ PP.pretty $ unwords</span>
-<span class="lineno"> 1690 </span><span class="spaces">             </span><span class="nottickedoff">[ &quot;Found&quot;</span>
-<span class="lineno"> 1691 </span><span class="spaces">             </span><span class="nottickedoff">, show (length possibleAllocs)</span>
-<span class="lineno"> 1692 </span><span class="spaces">             </span><span class="nottickedoff">, &quot;possibly matching allocation(s):&quot;</span>
-<span class="lineno"> 1693 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
-<span class="lineno"> 1694 </span><span class="spaces">           </span><span class="nottickedoff">, bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)</span>
-<span class="lineno"> 1695 </span><span class="spaces">             </span><span class="nottickedoff">-- TODO: remove 'viaShow' when crucible switches to prettyprinter</span>
-<span class="lineno"> 1696 </span><span class="spaces">           </span><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1697 </span>        -- This information tends to be overwhelming, but might be useful?
-<span class="lineno"> 1698 </span>        -- We should brainstorm about better ways of presenting it.
-<span class="lineno"> 1699 </span>        -- PP.&lt;$$&gt; PP.text (unwords [ &quot;Here are the details on why reading&quot;
-<span class="lineno"> 1700 </span>        --                          , &quot;from each matching write failed&quot;
-<span class="lineno"> 1701 </span>        --                          ])
-<span class="lineno"> 1702 </span>        -- PP.&lt;$$&gt; PP.text (show err)
-<span class="lineno"> 1703 </span>
-<span class="lineno"> 1704 </span>------------------------------------------------------------------------
-<span class="lineno"> 1705 </span>
-<span class="lineno"> 1706 </span>-- | Process an @llvm_equal@ statement from the precondition
-<span class="lineno"> 1707 </span>-- section of the CrucibleSetup block.
-<span class="lineno"> 1708 </span>learnEqual ::
-<span class="lineno"> 1709 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 1710 </span>  Options                                          -&gt;
-<span class="lineno"> 1711 </span>  SharedContext                                    -&gt;
-<span class="lineno"> 1712 </span>  LLVMCrucibleContext arch                            -&gt;
-<span class="lineno"> 1713 </span>  MS.CrucibleMethodSpecIR (LLVM arch)                             -&gt;
-<span class="lineno"> 1714 </span>  MS.ConditionMetadata                             -&gt;
-<span class="lineno"> 1715 </span>  PrePost                                          -&gt;
-<span class="lineno"> 1716 </span>  SetupValue (LLVM arch)       {- ^ first value to compare  -} -&gt;
-<span class="lineno"> 1717 </span>  SetupValue (LLVM arch)       {- ^ second value to compare -} -&gt;
-<span class="lineno"> 1718 </span>  OverrideMatcher (LLVM arch) md ()
-<span class="lineno"> 1719 </span><span class="decl"><span class="istickedoff">learnEqual opts sc cc spec md prepost v1 v2 = do</span>
-<span class="lineno"> 1720 </span><span class="spaces">  </span><span class="istickedoff">(_, val1) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> v1</span>
-<span class="lineno"> 1721 </span><span class="spaces">  </span><span class="istickedoff">(_, val2) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">spec</span> v2</span>
-<span class="lineno"> 1722 </span><span class="spaces">  </span><span class="istickedoff">p         &lt;- liftIO (equalValsPred cc val1 val2)</span>
-<span class="lineno"> 1723 </span><span class="spaces">  </span><span class="istickedoff">let name = &quot;equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
-<span class="lineno"> 1724 </span><span class="spaces">  </span><span class="istickedoff">let loc = MS.conditionLoc md</span>
-<span class="lineno"> 1725 </span><span class="spaces">  </span><span class="istickedoff">addAssert p <span class="nottickedoff">md</span> (Crucible.SimError loc (Crucible.AssertFailureSimError name &quot;&quot;))</span></span>
-<span class="lineno"> 1726 </span>
-<span class="lineno"> 1727 </span>-- | Process an @llvm_precond@ statement from the precondition
-<span class="lineno"> 1728 </span>-- section of the CrucibleSetup block.
-<span class="lineno"> 1729 </span>learnPred ::
-<span class="lineno"> 1730 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
-<span class="lineno"> 1731 </span>  SharedContext                                                       -&gt;
-<span class="lineno"> 1732 </span>  LLVMCrucibleContext arch                                               -&gt;
-<span class="lineno"> 1733 </span>  MS.ConditionMetadata                                                -&gt;
-<span class="lineno"> 1734 </span>  PrePost                                                             -&gt;
-<span class="lineno"> 1735 </span>  Term             {- ^ the precondition to learn                  -} -&gt;
-<span class="lineno"> 1736 </span>  OverrideMatcher (LLVM arch) md ()
-<span class="lineno"> 1737 </span><span class="decl"><span class="istickedoff">learnPred sc cc md prepost t =</span>
-<span class="lineno"> 1738 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- instantiateExtResolveSAWPred sc cc t</span>
-<span class="lineno"> 1739 </span><span class="spaces">     </span><span class="istickedoff">let loc = MS.conditionLoc md</span>
-<span class="lineno"> 1740 </span><span class="spaces">     </span><span class="istickedoff">addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) &quot;&quot;))</span></span>
-<span class="lineno"> 1741 </span>
-<span class="lineno"> 1742 </span>instantiateExtResolveSAWPred ::
-<span class="lineno"> 1743 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
-<span class="lineno"> 1744 </span>  SharedContext -&gt;
-<span class="lineno"> 1745 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 1746 </span>  Term -&gt;
-<span class="lineno"> 1747 </span>  OverrideMatcher (LLVM arch) md (W4.Pred Sym)
-<span class="lineno"> 1748 </span><span class="decl"><span class="istickedoff">instantiateExtResolveSAWPred sc cc cond = do</span>
-<span class="lineno"> 1749 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
-<span class="lineno"> 1750 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ resolveSAWPred cc =&lt;&lt; scInstantiateExt sc sub cond</span></span>
-<span class="lineno"> 1751 </span>
-<span class="lineno"> 1752 </span>instantiateExtResolveSAWSymBV ::
-<span class="lineno"> 1753 </span>  (?w4EvalTactic :: W4EvalTactic, 1 &lt;= w) =&gt;
-<span class="lineno"> 1754 </span>  SharedContext -&gt;
-<span class="lineno"> 1755 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 1756 </span>  NatRepr w -&gt;
-<span class="lineno"> 1757 </span>  Term -&gt;
-<span class="lineno"> 1758 </span>  OverrideMatcher (LLVM arch) md (W4.SymBV Sym w)
-<span class="lineno"> 1759 </span><span class="decl"><span class="istickedoff">instantiateExtResolveSAWSymBV sc cc w tm = do</span>
-<span class="lineno"> 1760 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
-<span class="lineno"> 1761 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ resolveSAWSymBV cc w =&lt;&lt; scInstantiateExt sc sub tm</span></span>
-<span class="lineno"> 1762 </span>
-<span class="lineno"> 1763 </span>------------------------------------------------------------------------
-<span class="lineno"> 1764 </span>
-<span class="lineno"> 1765 </span>-- | Invalidate all mutable memory that was allocated in the method spec
-<span class="lineno"> 1766 </span>-- precondition, either through explicit calls to @llvm_alloc@ or to
-<span class="lineno"> 1767 </span>-- @llvm_alloc_global@. As an optimization, a memory allocation that
-<span class="lineno"> 1768 </span>-- is overwritten by a postcondition memory write is not invalidated.
-<span class="lineno"> 1769 </span>-- Return a map containing the overwritten memory allocations.
-<span class="lineno"> 1770 </span>invalidateMutableAllocs ::
-<span class="lineno"> 1771 </span>  ( ?lc :: Crucible.TypeContext
-<span class="lineno"> 1772 </span>  , ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 1773 </span>  , ?w4EvalTactic :: W4EvalTactic
-<span class="lineno"> 1774 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
-<span class="lineno"> 1775 </span>  , Crucible.HasLLVMAnn Sym
-<span class="lineno"> 1776 </span>  ) =&gt;
-<span class="lineno"> 1777 </span>  Options -&gt;
-<span class="lineno"> 1778 </span>  SharedContext -&gt;
-<span class="lineno"> 1779 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 1780 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
-<span class="lineno"> 1781 </span>  OverrideMatcher (LLVM arch) RW (Map (W4.SymNat Sym) Text)
-<span class="lineno"> 1782 </span><span class="decl"><span class="istickedoff">invalidateMutableAllocs opts sc cc cs =</span>
-<span class="lineno"> 1783 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 1784 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 1785 </span><span class="spaces">  </span><span class="istickedoff">mem &lt;- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc</span>
-<span class="lineno"> 1786 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- use setupValueSub</span>
-<span class="lineno"> 1787 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1788 </span><span class="spaces">  </span><span class="istickedoff">let mutableAllocs =</span>
-<span class="lineno"> 1789 </span><span class="spaces">        </span><span class="istickedoff">Map.filter (view isMut) $</span>
-<span class="lineno"> 1790 </span><span class="spaces">        </span><span class="istickedoff">Map.filter (not . view allocSpecFresh) $</span>
-<span class="lineno"> 1791 </span><span class="spaces">        </span><span class="istickedoff">cs ^. MS.csPreState . MS.csAllocs</span>
-<span class="lineno"> 1792 </span><span class="spaces">      </span><span class="istickedoff">allocPtrs = catMaybes $ map</span>
-<span class="lineno"> 1793 </span><span class="spaces">        </span><span class="istickedoff">(\case</span>
-<span class="lineno"> 1794 </span><span class="spaces">          </span><span class="istickedoff">(ptr, spec)</span>
-<span class="lineno"> 1795 </span><span class="spaces">            </span><span class="istickedoff">| Just sz &lt;- asUnsignedConcreteBv (_allocSpecBytes spec) -&gt;</span>
-<span class="lineno"> 1796 </span><span class="spaces">              </span><span class="istickedoff">Just</span>
-<span class="lineno"> 1797 </span><span class="spaces">                </span><span class="istickedoff">( ptr</span>
-<span class="lineno"> 1798 </span><span class="spaces">                </span><span class="istickedoff">, fromIntegral sz</span>
-<span class="lineno"> 1799 </span><span class="spaces">                </span><span class="istickedoff">, mconcat</span>
-<span class="lineno"> 1800 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;state of memory allocated in precondition (at &quot;</span>
-<span class="lineno"> 1801 </span><span class="spaces">                  </span><span class="istickedoff">, pack . show . W4.plSourceLoc . MS.conditionLoc</span>
-<span class="lineno"> 1802 </span><span class="spaces">                      </span><span class="istickedoff">$ spec ^. allocSpecMd</span>
-<span class="lineno"> 1803 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;) not described in postcondition&quot;</span>
-<span class="lineno"> 1804 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
-<span class="lineno"> 1805 </span><span class="spaces">                </span><span class="istickedoff">)</span>
-<span class="lineno"> 1806 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; Nothing)</span>
-<span class="lineno"> 1807 </span><span class="spaces">        </span><span class="istickedoff">(Map.elems (Map.intersectionWith (,) sub mutableAllocs))</span>
-<span class="lineno"> 1808 </span><span class="spaces">      </span><span class="istickedoff">mtrans = ccLLVMModuleTrans cc</span>
-<span class="lineno"> 1809 </span><span class="spaces">      </span><span class="istickedoff">gimap = view Crucible.globalInitMap mtrans</span>
-<span class="lineno"> 1810 </span><span class="spaces">      </span><span class="istickedoff">mutableGlobals = cs ^. MS.csGlobalAllocs</span>
-<span class="lineno"> 1811 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1812 </span><span class="spaces">  </span><span class="istickedoff">globalPtrs &lt;- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal loc s@(L.Symbol st)) -&gt;</span>
-<span class="lineno"> 1813 </span><span class="spaces">    </span><span class="istickedoff">case Map.lookup s gimap of</span>
-<span class="lineno"> 1814 </span><span class="spaces">      </span><span class="istickedoff">Just (_, Right (mt, _)) -&gt; do</span>
-<span class="lineno"> 1815 </span><span class="spaces">        </span><span class="istickedoff">ptr &lt;- Crucible.doResolveGlobal <span class="nottickedoff">bak</span> mem s</span>
-<span class="lineno"> 1816 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just</span>
-<span class="lineno"> 1817 </span><span class="spaces">          </span><span class="istickedoff">( ptr</span>
-<span class="lineno"> 1818 </span><span class="spaces">          </span><span class="istickedoff">, Crucible.memTypeSize <span class="nottickedoff">(Crucible.llvmDataLayout ?lc)</span> mt</span>
-<span class="lineno"> 1819 </span><span class="spaces">          </span><span class="istickedoff">, mconcat</span>
-<span class="lineno"> 1820 </span><span class="spaces">            </span><span class="istickedoff">[ &quot;state of mutable global variable \&quot;&quot;</span>
-<span class="lineno"> 1821 </span><span class="spaces">            </span><span class="istickedoff">, pack st</span>
-<span class="lineno"> 1822 </span><span class="spaces">            </span><span class="istickedoff">, &quot;\&quot; (allocated at &quot;</span>
-<span class="lineno"> 1823 </span><span class="spaces">            </span><span class="istickedoff">, pack . show $ W4.plSourceLoc loc</span>
-<span class="lineno"> 1824 </span><span class="spaces">            </span><span class="istickedoff">, &quot;) not described in postcondition&quot;</span>
-<span class="lineno"> 1825 </span><span class="spaces">            </span><span class="istickedoff">]</span>
-<span class="lineno"> 1826 </span><span class="spaces">          </span><span class="istickedoff">)</span>
-<span class="lineno"> 1827 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno"> 1828 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1829 </span><span class="spaces">  </span><span class="istickedoff">-- set of (concrete base pointer, size) for each postcondition memory write</span>
-<span class="lineno"> 1830 </span><span class="spaces">  </span><span class="istickedoff">postPtrs &lt;- Set.fromList &lt;$&gt; catMaybes &lt;$&gt; traverse</span>
-<span class="lineno"> 1831 </span><span class="spaces">    </span><span class="istickedoff">(\case</span>
-<span class="lineno"> 1832 </span><span class="spaces">      </span><span class="istickedoff">LLVMPointsTo _loc _cond ptr val -&gt; case val of</span>
-<span class="lineno"> 1833 </span><span class="spaces">        </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
-<span class="lineno"> 1834 </span><span class="spaces">          </span><span class="istickedoff">(_, Crucible.LLVMPointer blk _) &lt;- resolveSetupValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> cs Crucible.PtrRepr ptr</span>
-<span class="lineno"> 1835 </span><span class="spaces">          </span><span class="istickedoff">memTy &lt;- exceptToFail $</span>
-<span class="lineno"> 1836 </span><span class="spaces">                     </span><span class="istickedoff">typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">(MS.csAllocations cs)</span> <span class="nottickedoff">(MS.csTypeNames cs)</span> val'</span>
-<span class="lineno"> 1837 </span><span class="spaces">          </span><span class="istickedoff">sz &lt;- Crucible.storageTypeSize &lt;$&gt; Crucible.toStorableType memTy</span>
-<span class="lineno"> 1838 </span><span class="spaces">          </span><span class="istickedoff">return $ Just (W4.asNat blk, sz)</span>
-<span class="lineno"> 1839 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue{} -&gt; return <span class="nottickedoff">Nothing</span></span>
-<span class="lineno"> 1840 </span><span class="spaces">      </span><span class="istickedoff">LLVMPointsToBitfield _loc ptr fieldName _val -&gt; do</span>
-<span class="lineno"> 1841 </span><span class="spaces">        </span><span class="istickedoff">(bfIndex, Crucible.LLVMPointer blk _) &lt;-</span>
-<span class="lineno"> 1842 </span><span class="spaces">          </span><span class="istickedoff">resolveSetupValueBitfield <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> cs ptr fieldName</span>
-<span class="lineno"> 1843 </span><span class="spaces">        </span><span class="istickedoff">let memTy = biBitfieldType bfIndex</span>
-<span class="lineno"> 1844 </span><span class="spaces">        </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
-<span class="lineno"> 1845 </span><span class="spaces">        </span><span class="istickedoff">let sz = Crucible.storageTypeSize storTy</span>
-<span class="lineno"> 1846 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just (W4.asNat blk, sz))</span>
-<span class="lineno"> 1847 </span><span class="spaces">    </span><span class="istickedoff">(cs ^. MS.csPostState ^. MS.csPointsTos)</span>
-<span class="lineno"> 1848 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1849 </span><span class="spaces">  </span><span class="istickedoff">-- partition allocations into those overwritten by a postcondition write</span>
-<span class="lineno"> 1850 </span><span class="spaces">  </span><span class="istickedoff">-- and those not overwritten</span>
-<span class="lineno"> 1851 </span><span class="spaces">  </span><span class="istickedoff">let (overwritten_ptrs, danglingPtrs) = partition</span>
-<span class="lineno"> 1852 </span><span class="spaces">        </span><span class="istickedoff">(\((Crucible.LLVMPointer blk _), sz, _) -&gt;</span>
-<span class="lineno"> 1853 </span><span class="spaces">          </span><span class="istickedoff">Set.member (W4.asNat blk, sz) postPtrs)</span>
-<span class="lineno"> 1854 </span><span class="spaces">        </span><span class="istickedoff">(allocPtrs ++ globalPtrs)</span>
-<span class="lineno"> 1855 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1856 </span><span class="spaces">  </span><span class="istickedoff">let overwritten_allocs = Map.fromList $ map</span>
-<span class="lineno"> 1857 </span><span class="spaces">        </span><span class="istickedoff">(\((Crucible.LLVMPointer blk _), _, msg) -&gt; (blk, <span class="nottickedoff">msg</span>))</span>
-<span class="lineno"> 1858 </span><span class="spaces">        </span><span class="istickedoff">overwritten_ptrs</span>
-<span class="lineno"> 1859 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1860 </span><span class="spaces">  </span><span class="istickedoff">-- invalidate each allocation that is not overwritten by a postcondition write</span>
-<span class="lineno"> 1861 </span><span class="spaces">  </span><span class="istickedoff">mem' &lt;- foldM (\m (ptr, sz, msg) -&gt;</span>
-<span class="lineno"> 1862 </span><span class="spaces">                    </span><span class="istickedoff">liftIO $ Crucible.doInvalidate bak ?ptrWidth m ptr msg</span>
-<span class="lineno"> 1863 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; W4.bvLit sym ?ptrWidth (Crucible.bytesToBV ?ptrWidth sz)</span>
-<span class="lineno"> 1864 </span><span class="spaces">                </span><span class="istickedoff">) mem danglingPtrs</span>
-<span class="lineno"> 1865 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1866 </span><span class="spaces">  </span><span class="istickedoff">writeGlobal (Crucible.llvmMemVar $ ccLLVMContext cc) mem'</span>
-<span class="lineno"> 1867 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1868 </span><span class="spaces">  </span><span class="istickedoff">return overwritten_allocs</span></span>
-<span class="lineno"> 1869 </span>
-<span class="lineno"> 1870 </span>------------------------------------------------------------------------
-<span class="lineno"> 1871 </span>
-<span class="lineno"> 1872 </span>-- | Perform an allocation as indicated by an @llvm_alloc@ or
-<span class="lineno"> 1873 </span>-- @llvm_fresh_pointer@ statement from the postcondition section.
-<span class="lineno"> 1874 </span>executeAllocation ::
-<span class="lineno"> 1875 </span>  ( ?lc :: Crucible.TypeContext
-<span class="lineno"> 1876 </span>  , ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 1877 </span>  , ?w4EvalTactic :: W4EvalTactic
-<span class="lineno"> 1878 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
-<span class="lineno"> 1879 </span>  , Crucible.HasLLVMAnn Sym
-<span class="lineno"> 1880 </span>  ) =&gt;
-<span class="lineno"> 1881 </span>  Options                        -&gt;
-<span class="lineno"> 1882 </span>  SharedContext -&gt;
-<span class="lineno"> 1883 </span>  LLVMCrucibleContext arch          -&gt;
-<span class="lineno"> 1884 </span>  (AllocIndex, LLVMAllocSpec) -&gt;
-<span class="lineno"> 1885 </span>  OverrideMatcher (LLVM arch) RW ()
-<span class="lineno"> 1886 </span><span class="decl"><span class="nottickedoff">executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz md fresh initialization)</span>
-<span class="lineno"> 1887 </span><span class="spaces">  </span><span class="nottickedoff">| fresh =</span>
-<span class="lineno"> 1888 </span><span class="spaces">  </span><span class="nottickedoff">do ptr &lt;- liftIO $ executeFreshPointer cc var</span>
-<span class="lineno"> 1889 </span><span class="spaces">     </span><span class="nottickedoff">OM (setupValueSub %= Map.insert var ptr)</span>
-<span class="lineno"> 1890 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno"> 1891 </span><span class="spaces">  </span><span class="nottickedoff">ccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 1892 </span><span class="spaces">     </span><span class="nottickedoff">{-</span>
-<span class="lineno"> 1893 </span><span class="spaces">     </span><span class="nottickedoff">memTy &lt;- case Crucible.asMemType symTy of</span>
-<span class="lineno"> 1894 </span><span class="spaces">                </span><span class="nottickedoff">Just memTy -&gt; return memTy</span>
-<span class="lineno"> 1895 </span><span class="spaces">                </span><span class="nottickedoff">Nothing    -&gt; fail &quot;executAllocation: failed to resolve type&quot;</span>
-<span class="lineno"> 1896 </span><span class="spaces">                </span><span class="nottickedoff">-}</span>
-<span class="lineno"> 1897 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ printOutLn opts Debug $ unwords [&quot;executeAllocation:&quot;, show var, show memTy]</span>
-<span class="lineno"> 1898 </span><span class="spaces">     </span><span class="nottickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
-<span class="lineno"> 1899 </span><span class="spaces">     </span><span class="nottickedoff">mem &lt;- readGlobal memVar</span>
-<span class="lineno"> 1900 </span><span class="spaces">     </span><span class="nottickedoff">sz' &lt;- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz</span>
-<span class="lineno"> 1901 </span><span class="spaces">     </span><span class="nottickedoff">let loc = MS.conditionLoc md</span>
-<span class="lineno"> 1902 </span><span class="spaces">     </span><span class="nottickedoff">let l = show (W4.plSourceLoc loc) ++ &quot; (Poststate)&quot;</span>
-<span class="lineno"> 1903 </span><span class="spaces">     </span><span class="nottickedoff">(ptr, mem') &lt;- liftIO $ doAllocSymInit bak mem mut alignment sz' l initialization</span>
-<span class="lineno"> 1904 </span><span class="spaces">     </span><span class="nottickedoff">writeGlobal memVar mem'</span>
-<span class="lineno"> 1905 </span><span class="spaces">     </span><span class="nottickedoff">assignVar cc md var ptr</span></span>
-<span class="lineno"> 1906 </span>
-<span class="lineno"> 1907 </span>doAllocSymInit ::
-<span class="lineno"> 1908 </span>  ( ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 1909 </span>  , Crucible.IsSymInterface sym
-<span class="lineno"> 1910 </span>  , Crucible.HasPtrWidth wptr
-<span class="lineno"> 1911 </span>  , Crucible.HasLLVMAnn sym
-<span class="lineno"> 1912 </span>  , IsSymBackend sym bak
-<span class="lineno"> 1913 </span>  ) =&gt;
-<span class="lineno"> 1914 </span>  bak -&gt;
-<span class="lineno"> 1915 </span>  Crucible.MemImpl sym -&gt;
-<span class="lineno"> 1916 </span>  Crucible.Mutability -&gt;
-<span class="lineno"> 1917 </span>  Crucible.Alignment -&gt;
-<span class="lineno"> 1918 </span>  W4.SymBV sym wptr {- ^ allocation size -} -&gt;
-<span class="lineno"> 1919 </span>  String {- ^ source location for use in error messages -} -&gt;
-<span class="lineno"> 1920 </span>  LLVMAllocSpecInit {- ^ allocation initialization policy -} -&gt;
-<span class="lineno"> 1921 </span>  IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
-<span class="lineno"> 1922 </span><span class="decl"><span class="istickedoff">doAllocSymInit bak mem mut alignment sz loc initialization  = do</span>
-<span class="lineno"> 1923 </span><span class="spaces">  </span><span class="istickedoff">(ptr, mem') &lt;- Crucible.doMalloc bak Crucible.HeapAlloc mut loc mem sz alignment</span>
-<span class="lineno"> 1924 </span><span class="spaces">  </span><span class="istickedoff">mem'' &lt;- case initialization of</span>
-<span class="lineno"> 1925 </span><span class="spaces">    </span><span class="istickedoff">LLVMAllocSpecSymbolicInitialization -&gt; do</span>
-<span class="lineno"> 1926 </span><span class="spaces">      </span><span class="istickedoff">arr &lt;- W4.freshConstant</span>
-<span class="lineno"> 1927 </span><span class="spaces">        </span><span class="istickedoff">(backendGetSym bak)</span>
-<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff">(W4.systemSymbol &quot;arr!&quot;)</span>
-<span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff">(W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))</span>
-<span class="lineno"> 1930 </span><span class="spaces">      </span><span class="istickedoff">Crucible.doArrayConstStore bak mem' ptr alignment arr sz</span>
-<span class="lineno"> 1931 </span><span class="spaces">    </span><span class="istickedoff">LLVMAllocSpecNoInitialization -&gt; return mem'</span>
-<span class="lineno"> 1932 </span><span class="spaces">  </span><span class="istickedoff">return (ptr, mem'')</span></span>
-<span class="lineno"> 1933 </span>
-<span class="lineno"> 1934 </span>------------------------------------------------------------------------
-<span class="lineno"> 1935 </span>
-<span class="lineno"> 1936 </span>-- | Update the simulator state based on the postconditions from the
-<span class="lineno"> 1937 </span>-- procedure specification.
-<span class="lineno"> 1938 </span>executeSetupCondition ::
-<span class="lineno"> 1939 </span>  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 1940 </span>  Options                    -&gt;
-<span class="lineno"> 1941 </span>  SharedContext              -&gt;
-<span class="lineno"> 1942 </span>  LLVMCrucibleContext arch     -&gt;
-<span class="lineno"> 1943 </span>  MS.CrucibleMethodSpecIR (LLVM arch)       -&gt;
-<span class="lineno"> 1944 </span>  MS.SetupCondition (LLVM arch) -&gt;
-<span class="lineno"> 1945 </span>  OverrideMatcher (LLVM arch) RW ()
-<span class="lineno"> 1946 </span><span class="decl"><span class="istickedoff">executeSetupCondition opts sc cc spec =</span>
-<span class="lineno"> 1947 </span><span class="spaces">  </span><span class="istickedoff">\case</span>
-<span class="lineno"> 1948 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Equal md val1 val2 -&gt;</span>
-<span class="lineno"> 1949 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">executeEqual opts sc cc spec md val1 val2</span></span>
-<span class="lineno"> 1950 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Pred md tm -&gt; executePred sc cc <span class="nottickedoff">md</span> tm</span>
-<span class="lineno"> 1951 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Ghost md var val -&gt; executeGhost sc <span class="nottickedoff">md</span> var val</span></span>
-<span class="lineno"> 1952 </span>
-<span class="lineno"> 1953 </span>------------------------------------------------------------------------
-<span class="lineno"> 1954 </span>
-<span class="lineno"> 1955 </span>-- | Process a &quot;points_to&quot; statement from the postcondition section of
-<span class="lineno"> 1956 </span>-- the CrucibleSetup block. First we compute the value indicated by
-<span class="lineno"> 1957 </span>-- 'val', and then write it to the address indicated by 'ptr'.
-<span class="lineno"> 1958 </span>executePointsTo ::
-<span class="lineno"> 1959 </span>  ( ?lc :: Crucible.TypeContext
-<span class="lineno"> 1960 </span>  , ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 1961 </span>  , ?w4EvalTactic :: W4EvalTactic
-<span class="lineno"> 1962 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
-<span class="lineno"> 1963 </span>  , Crucible.HasLLVMAnn Sym
-<span class="lineno"> 1964 </span>  ) =&gt;
-<span class="lineno"> 1965 </span>  Options                    -&gt;
-<span class="lineno"> 1966 </span>  SharedContext              -&gt;
-<span class="lineno"> 1967 </span>  LLVMCrucibleContext arch     -&gt;
-<span class="lineno"> 1968 </span>  MS.CrucibleMethodSpecIR (LLVM arch)       -&gt;
-<span class="lineno"> 1969 </span>  Map (W4.SymNat Sym) Text -&gt;
-<span class="lineno"> 1970 </span>  PointsTo (LLVM arch)       -&gt;
-<span class="lineno"> 1971 </span>  OverrideMatcher (LLVM arch) RW ()
-<span class="lineno"> 1972 </span><span class="decl"><span class="istickedoff">executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr val) =</span>
-<span class="lineno"> 1973 </span><span class="spaces">  </span><span class="istickedoff">do (_, ptr') &lt;- resolveSetupValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec Crucible.PtrRepr ptr</span>
-<span class="lineno"> 1974 </span><span class="spaces">     </span><span class="istickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
-<span class="lineno"> 1975 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal memVar</span>
-<span class="lineno"> 1976 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1977 </span><span class="spaces">     </span><span class="istickedoff">-- In case the types are different (from llvm_points_to_untyped)</span>
-<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">-- then the load type should be determined by the rhs.</span>
-<span class="lineno"> 1979 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- OM (use <span class="nottickedoff">setupValueSub</span>)</span>
-<span class="lineno"> 1980 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
-<span class="lineno"> 1981 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
-<span class="lineno"> 1982 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
-<span class="lineno"> 1983 </span><span class="spaces">     </span><span class="istickedoff">val' &lt;- liftIO $ case val of</span>
-<span class="lineno"> 1984 </span><span class="spaces">       </span><span class="istickedoff">ConcreteSizeValue val'' -&gt; ConcreteSizeValue &lt;$&gt; instantiateSetupValue sc s val''</span>
-<span class="lineno"> 1985 </span><span class="spaces">       </span><span class="istickedoff">SymbolicSizeValue arr sz -&gt;</span>
-<span class="lineno"> 1986 </span><span class="spaces">         </span><span class="istickedoff">SymbolicSizeValue &lt;$&gt; ttTermLens (scInstantiateExt sc s) arr &lt;*&gt; ttTermLens (scInstantiateExt <span class="nottickedoff">sc</span> s) sz</span>
-<span class="lineno"> 1987 </span><span class="spaces">     </span><span class="istickedoff">cond' &lt;- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond</span>
-<span class="lineno"> 1988 </span><span class="spaces">     </span><span class="istickedoff">let Crucible.LLVMPointer blk _ = ptr'</span>
-<span class="lineno"> 1989 </span><span class="spaces">     </span><span class="istickedoff">let invalidate_msg = Map.lookup blk overwritten_allocs</span>
-<span class="lineno"> 1990 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1991 </span><span class="spaces">     </span><span class="istickedoff">mem' &lt;- liftIO $ storePointsToValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">m</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> mem cond' ptr' val' invalidate_msg</span>
-<span class="lineno"> 1992 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal memVar mem'</span>
-<span class="lineno"> 1993 </span><span class="spaces"></span><span class="istickedoff">executePointsTo opts sc cc spec _overwritten_allocs (LLVMPointsToBitfield _loc ptr fieldName val) =</span>
-<span class="lineno"> 1994 </span><span class="spaces">  </span><span class="istickedoff">do (bfIndex, ptr') &lt;- resolveSetupValueBitfield <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec ptr fieldName</span>
-<span class="lineno"> 1995 </span><span class="spaces">     </span><span class="istickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
-<span class="lineno"> 1996 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal memVar</span>
-<span class="lineno"> 1997 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1998 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- OM (use <span class="nottickedoff">setupValueSub</span>)</span>
-<span class="lineno"> 1999 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
-<span class="lineno"> 2000 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
-<span class="lineno"> 2001 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
-<span class="lineno"> 2002 </span><span class="spaces">     </span><span class="istickedoff">val' &lt;- liftIO $ instantiateSetupValue sc s val</span>
-<span class="lineno"> 2003 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2004 </span><span class="spaces">     </span><span class="istickedoff">mem' &lt;- liftIO $ storePointsToBitfieldValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">m</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> mem ptr' bfIndex val'</span>
-<span class="lineno"> 2005 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal memVar mem'</span></span>
-<span class="lineno"> 2006 </span>
-<span class="lineno"> 2007 </span>storePointsToValue ::
-<span class="lineno"> 2008 </span>  ( ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 2009 </span>  , ?w4EvalTactic :: W4EvalTactic
-<span class="lineno"> 2010 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
-<span class="lineno"> 2011 </span>  , Crucible.HasLLVMAnn Sym
-<span class="lineno"> 2012 </span>  ) =&gt;
-<span class="lineno"> 2013 </span>  Options -&gt;
-<span class="lineno"> 2014 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2015 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
-<span class="lineno"> 2016 </span>  Map AllocIndex (MS.AllocSpec (LLVM arch)) -&gt;
-<span class="lineno"> 2017 </span>  Map AllocIndex (MS.TypeName (LLVM arch)) -&gt;
-<span class="lineno"> 2018 </span>  Crucible.MemImpl Sym -&gt;
-<span class="lineno"> 2019 </span>  Maybe (W4.Pred Sym) -&gt;
-<span class="lineno"> 2020 </span>  LLVMPtr (Crucible.ArchWidth arch) -&gt;
-<span class="lineno"> 2021 </span>  LLVMPointsToValue arch -&gt;
-<span class="lineno"> 2022 </span>  Maybe Text -&gt;
-<span class="lineno"> 2023 </span>  IO (Crucible.MemImpl Sym)
-<span class="lineno"> 2024 </span><span class="decl"><span class="istickedoff">storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =</span>
-<span class="lineno"> 2025 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 2026 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 2027 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2028 </span><span class="spaces">  </span><span class="istickedoff">let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)</span>
-<span class="lineno"> 2029 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2030 </span><span class="spaces">  </span><span class="istickedoff">smt_array_memory_model_enabled &lt;- W4.getOpt</span>
-<span class="lineno"> 2031 </span><span class="spaces">    </span><span class="istickedoff">=&lt;&lt; W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)</span>
-<span class="lineno"> 2032 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2033 </span><span class="spaces">  </span><span class="istickedoff">let store_op = \mem -&gt; case val of</span>
-<span class="lineno"> 2034 </span><span class="spaces">        </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
-<span class="lineno"> 2035 </span><span class="spaces">          </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue cc tyenv <span class="nottickedoff">nameEnv</span> val'</span>
-<span class="lineno"> 2036 </span><span class="spaces">          </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
-<span class="lineno"> 2037 </span><span class="spaces">          </span><span class="istickedoff">case val' of</span>
-<span class="lineno"> 2038 </span><span class="spaces">            </span><span class="istickedoff">SetupTerm tm</span>
-<span class="lineno"> 2039 </span><span class="spaces">              </span><span class="istickedoff">| Crucible.storageTypeSize storTy &gt; 16</span>
-<span class="lineno"> 2040 </span><span class="spaces">              </span><span class="istickedoff">, <span class="tickonlyfalse">smt_array_memory_model_enabled</span> -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2041 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">arr_tm &lt;- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm</span></span>
-<span class="lineno"> 2042 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">st &lt;- sawCoreState sym</span></span>
-<span class="lineno"> 2043 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">arr &lt;- bindSAWTerm</span></span>
-<span class="lineno"> 2044 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">sym st</span></span>
-<span class="lineno"> 2045 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(W4.BaseArrayRepr</span></span>
-<span class="lineno"> 2046 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)</span></span>
-<span class="lineno"> 2047 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(W4.BaseBVRepr (W4.knownNat @8)))</span></span>
-<span class="lineno"> 2048 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">arr_tm</span></span>
-<span class="lineno"> 2049 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">sz &lt;- W4.bvLit</span></span>
-<span class="lineno"> 2050 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">sym</span></span>
-<span class="lineno"> 2051 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">?ptrWidth</span></span>
-<span class="lineno"> 2052 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)</span></span>
-<span class="lineno"> 2053 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Crucible.doArrayConstStore bak mem ptr alignment arr sz</span></span>
-<span class="lineno"> 2054 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; do</span>
-<span class="lineno"> 2055 </span><span class="spaces">              </span><span class="istickedoff">val'' &lt;- X.handle <span class="nottickedoff">(handleException opts)</span> $</span>
-<span class="lineno"> 2056 </span><span class="spaces">                </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
-<span class="lineno"> 2057 </span><span class="spaces">              </span><span class="istickedoff">Crucible.storeConstRaw bak mem ptr storTy alignment val''</span>
-<span class="lineno"> 2058 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue arr_tm sz_tm -&gt; do</span>
-<span class="lineno"> 2059 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno"> 2060 </span><span class="spaces">          </span><span class="istickedoff">arr &lt;- bindSAWTerm</span>
-<span class="lineno"> 2061 </span><span class="spaces">            </span><span class="istickedoff">sym st</span>
-<span class="lineno"> 2062 </span><span class="spaces">            </span><span class="istickedoff">(W4.BaseArrayRepr</span>
-<span class="lineno"> 2063 </span><span class="spaces">              </span><span class="istickedoff">(Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)</span>
-<span class="lineno"> 2064 </span><span class="spaces">              </span><span class="istickedoff">(W4.BaseBVRepr (W4.knownNat @8)))</span>
-<span class="lineno"> 2065 </span><span class="spaces">            </span><span class="istickedoff">(ttTerm arr_tm)</span>
-<span class="lineno"> 2066 </span><span class="spaces">          </span><span class="istickedoff">sz &lt;- resolveSAWSymBV cc ?ptrWidth $ ttTerm sz_tm</span>
-<span class="lineno"> 2067 </span><span class="spaces">          </span><span class="istickedoff">Crucible.doArrayConstStore bak mem ptr alignment arr sz</span>
-<span class="lineno"> 2068 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2069 </span><span class="spaces">  </span><span class="istickedoff">case maybe_cond of</span>
-<span class="lineno"> 2070 </span><span class="spaces">    </span><span class="istickedoff">Just cond -&gt; case maybe_invalidate_msg of</span>
-<span class="lineno"> 2071 </span><span class="spaces">      </span><span class="istickedoff">Just invalidate_msg -&gt; do</span>
-<span class="lineno"> 2072 </span><span class="spaces">        </span><span class="istickedoff">let invalidate_op = \mem -&gt; do</span>
-<span class="lineno"> 2073 </span><span class="spaces">              </span><span class="istickedoff">sz &lt;- case val of</span>
-<span class="lineno"> 2074 </span><span class="spaces">                </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
-<span class="lineno"> 2075 </span><span class="spaces">                  </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
-<span class="lineno"> 2076 </span><span class="spaces">                  </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
-<span class="lineno"> 2077 </span><span class="spaces">                  </span><span class="istickedoff">W4.bvLit</span>
-<span class="lineno"> 2078 </span><span class="spaces">                    </span><span class="istickedoff">sym</span>
-<span class="lineno"> 2079 </span><span class="spaces">                    </span><span class="istickedoff">?ptrWidth</span>
-<span class="lineno"> 2080 </span><span class="spaces">                    </span><span class="istickedoff">(Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)</span>
-<span class="lineno"> 2081 </span><span class="spaces">                </span><span class="istickedoff">SymbolicSizeValue{} -&gt; <span class="nottickedoff">fail $ unwords</span></span>
-<span class="lineno"> 2082 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;internal error:&quot;</span></span>
-<span class="lineno"> 2083 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;unsupported conditional invalidation of symbolic size points-to value&quot;</span></span>
-<span class="lineno"> 2084 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, show (PP.pretty val)</span></span>
-<span class="lineno"> 2085 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2086 </span><span class="spaces">              </span><span class="istickedoff">Crucible.doInvalidate bak ?ptrWidth mem ptr <span class="nottickedoff">invalidate_msg</span> sz</span>
-<span class="lineno"> 2087 </span><span class="spaces">        </span><span class="istickedoff">Crucible.mergeWriteOperations bak base_mem cond store_op invalidate_op</span>
-<span class="lineno"> 2088 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2089 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Crucible.doConditionalWriteOperation bak base_mem cond store_op</span></span>
-<span class="lineno"> 2090 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; store_op base_mem</span></span>
-<span class="lineno"> 2091 </span>
-<span class="lineno"> 2092 </span>-- | Like 'storePointsToValue', but specifically geared towards the needs
-<span class="lineno"> 2093 </span>-- of fields within bitfields. In particular, this performs all of the
-<span class="lineno"> 2094 </span>-- necessary bit-twiddling on the LHS (a bitfield) to store the RHS value in
-<span class="lineno"> 2095 </span>-- the right place in the bitfield.
-<span class="lineno"> 2096 </span>storePointsToBitfieldValue ::
-<span class="lineno"> 2097 </span>  ( ?memOpts :: Crucible.MemOptions
-<span class="lineno"> 2098 </span>  , ?w4EvalTactic :: W4EvalTactic
-<span class="lineno"> 2099 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
-<span class="lineno"> 2100 </span>  , Crucible.HasLLVMAnn Sym
-<span class="lineno"> 2101 </span>  ) =&gt;
-<span class="lineno"> 2102 </span>  Options -&gt;
-<span class="lineno"> 2103 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2104 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
-<span class="lineno"> 2105 </span>  Map AllocIndex (MS.AllocSpec (LLVM arch)) -&gt;
-<span class="lineno"> 2106 </span>  Map AllocIndex (MS.TypeName (LLVM arch)) -&gt;
-<span class="lineno"> 2107 </span>  Crucible.MemImpl Sym -&gt;
-<span class="lineno"> 2108 </span>  LLVMPtr (Crucible.ArchWidth arch) -&gt;
-<span class="lineno"> 2109 </span>  BitfieldIndex -&gt;
-<span class="lineno"> 2110 </span>  SetupValue (LLVM arch) -&gt;
-<span class="lineno"> 2111 </span>  IO (Crucible.MemImpl Sym)
-<span class="lineno"> 2112 </span><span class="decl"><span class="istickedoff">storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =</span>
-<span class="lineno"> 2113 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 2114 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 2115 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2116 </span><span class="spaces">  </span><span class="istickedoff">let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)</span>
-<span class="lineno"> 2117 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2118 </span><span class="spaces">  </span><span class="istickedoff">smt_array_memory_model_enabled &lt;- W4.getOpt</span>
-<span class="lineno"> 2119 </span><span class="spaces">    </span><span class="istickedoff">=&lt;&lt; W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)</span>
-<span class="lineno"> 2120 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2121 </span><span class="spaces">  </span><span class="istickedoff">-- Unlike in storePointsToValue, we compute the MemTy/StorageType not from</span>
-<span class="lineno"> 2122 </span><span class="spaces">  </span><span class="istickedoff">-- the RHS value, but from the BitfieldIndex. This is because we need to</span>
-<span class="lineno"> 2123 </span><span class="spaces">  </span><span class="istickedoff">-- load the entire bitfield, which can be larger than the size of the RHS</span>
-<span class="lineno"> 2124 </span><span class="spaces">  </span><span class="istickedoff">-- value.</span>
-<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff">let memTy = biBitfieldType bfIndex</span>
-<span class="lineno"> 2126 </span><span class="spaces">  </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
-<span class="lineno"> 2127 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2128 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
-<span class="lineno"> 2129 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm _tm</span>
-<span class="lineno"> 2130 </span><span class="spaces">      </span><span class="istickedoff">| smt_array_memory_model_enabled -&gt;</span>
-<span class="lineno"> 2131 </span><span class="spaces">        </span><span class="istickedoff">-- See #1540.</span>
-<span class="lineno"> 2132 </span><span class="spaces">        </span><span class="istickedoff">fail $ unlines</span>
-<span class="lineno"> 2133 </span><span class="spaces">          </span><span class="istickedoff">[ &quot;llvm_points_to_bitfield currently does not work in&quot;</span>
-<span class="lineno"> 2134 </span><span class="spaces">          </span><span class="istickedoff">, &quot;combination with the enable_smt_array_memory_model option.&quot;</span>
-<span class="lineno"> 2135 </span><span class="spaces">          </span><span class="istickedoff">]</span>
-<span class="lineno"> 2136 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; do</span>
-<span class="lineno"> 2137 </span><span class="spaces">      </span><span class="istickedoff">-- Resolve the RHS value as an LLVMVal.</span>
-<span class="lineno"> 2138 </span><span class="spaces">      </span><span class="istickedoff">rhsVal &lt;- X.handle <span class="nottickedoff">(handleException opts)</span> $</span>
-<span class="lineno"> 2139 </span><span class="spaces">        </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">base_mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val</span>
-<span class="lineno"> 2140 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2141 </span><span class="spaces">      </span><span class="istickedoff">-- Load the bitfield that `ptr` points to.</span>
-<span class="lineno"> 2142 </span><span class="spaces">      </span><span class="istickedoff">bfLoadedVal &lt;- Crucible.loadRaw sym base_mem ptr storTy alignment</span>
-<span class="lineno"> 2143 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2144 </span><span class="spaces">      </span><span class="istickedoff">-- Assert that the bitfield was loaded successfully. If not, abort.</span>
-<span class="lineno"> 2145 </span><span class="spaces">      </span><span class="istickedoff">let badLoadSummary = summarizeBadLoad <span class="nottickedoff">cc</span> <span class="nottickedoff">memTy</span> <span class="nottickedoff">PreState</span> <span class="nottickedoff">ptr</span></span>
-<span class="lineno"> 2146 </span><span class="spaces">      </span><span class="istickedoff">bfVal &lt;- case bfLoadedVal of</span>
-<span class="lineno"> 2147 </span><span class="spaces">        </span><span class="istickedoff">Crucible.NoErr p res_val -&gt; do</span>
-<span class="lineno"> 2148 </span><span class="spaces">          </span><span class="istickedoff">let rsn = Crucible.AssertFailureSimError &quot;Error loading bitvector&quot; $</span>
-<span class="lineno"> 2149 </span><span class="spaces">                    </span><span class="istickedoff">show badLoadSummary</span>
-<span class="lineno"> 2150 </span><span class="spaces">          </span><span class="istickedoff">Crucible.assert bak p rsn</span>
-<span class="lineno"> 2151 </span><span class="spaces">          </span><span class="istickedoff">pure res_val</span>
-<span class="lineno"> 2152 </span><span class="spaces">        </span><span class="istickedoff">Crucible.Err _p -&gt;</span>
-<span class="lineno"> 2153 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ show $ describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr</span></span>
-<span class="lineno"> 2154 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2155 </span><span class="spaces">      </span><span class="istickedoff">case (bfVal, rhsVal) of</span>
-<span class="lineno"> 2156 </span><span class="spaces">        </span><span class="istickedoff">-- This will only work if:</span>
-<span class="lineno"> 2157 </span><span class="spaces">        </span><span class="istickedoff">--</span>
-<span class="lineno"> 2158 </span><span class="spaces">        </span><span class="istickedoff">-- * Both the bitfield and the RHS value are bitvectors, and</span>
-<span class="lineno"> 2159 </span><span class="spaces">        </span><span class="istickedoff">-- * The width of the RHS type is less than or equal to the width</span>
-<span class="lineno"> 2160 </span><span class="spaces">        </span><span class="istickedoff">--   of the bitfield type.</span>
-<span class="lineno"> 2161 </span><span class="spaces">        </span><span class="istickedoff">--</span>
-<span class="lineno"> 2162 </span><span class="spaces">        </span><span class="istickedoff">-- We check these criteria in this case.</span>
-<span class="lineno"> 2163 </span><span class="spaces">        </span><span class="istickedoff">(Crucible.LLVMValInt bfBlk bfBV, Crucible.LLVMValInt _rhsBlk rhsBV)</span>
-<span class="lineno"> 2164 </span><span class="spaces">          </span><span class="istickedoff">-&gt; let bfWidth = W4.bvWidth bfBV</span>
-<span class="lineno"> 2165 </span><span class="spaces">                 </span><span class="istickedoff">rhsWidth = W4.bvWidth rhsBV in</span>
-<span class="lineno"> 2166 </span><span class="spaces">             </span><span class="istickedoff">case testLeq (incNat rhsWidth) bfWidth of</span>
-<span class="lineno"> 2167 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2168 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno"> 2169 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size&quot;</span></span>
-<span class="lineno"> 2170 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitvector width: &quot; ++ show bfWidth</span></span>
-<span class="lineno"> 2171 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value width: &quot; ++ show rhsWidth</span></span>
-<span class="lineno"> 2172 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2173 </span><span class="spaces">               </span><span class="istickedoff">Just LeqProof -&gt;</span>
-<span class="lineno"> 2174 </span><span class="spaces">                 </span><span class="istickedoff">do -- Here is where we perform the bit-twiddling needed</span>
-<span class="lineno"> 2175 </span><span class="spaces">                    </span><span class="istickedoff">-- to store the RHS value in the bitfield. We will use</span>
-<span class="lineno"> 2176 </span><span class="spaces">                    </span><span class="istickedoff">-- this as a running example:</span>
-<span class="lineno"> 2177 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2178 </span><span class="spaces">                    </span><span class="istickedoff">--   struct s {</span>
-<span class="lineno"> 2179 </span><span class="spaces">                    </span><span class="istickedoff">--     int32_t w;</span>
-<span class="lineno"> 2180 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t x1:1;</span>
-<span class="lineno"> 2181 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t x2:2;</span>
-<span class="lineno"> 2182 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t y:1;</span>
-<span class="lineno"> 2183 </span><span class="spaces">                    </span><span class="istickedoff">--     int32_t z;</span>
-<span class="lineno"> 2184 </span><span class="spaces">                    </span><span class="istickedoff">--   };</span>
-<span class="lineno"> 2185 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2186 </span><span class="spaces">                    </span><span class="istickedoff">-- Let us imagine that we are setting the `y` field to</span>
-<span class="lineno"> 2187 </span><span class="spaces">                    </span><span class="istickedoff">-- be 1.</span>
-<span class="lineno"> 2188 </span><span class="spaces">                    </span><span class="istickedoff">let -- The offset (in bits) of the field within the</span>
-<span class="lineno"> 2189 </span><span class="spaces">                        </span><span class="istickedoff">-- bitfield. For `y`, this is 3 (x1's offset is 0</span>
-<span class="lineno"> 2190 </span><span class="spaces">                        </span><span class="istickedoff">-- and `x2`'s offset is 1).</span>
-<span class="lineno"> 2191 </span><span class="spaces">                        </span><span class="istickedoff">bfOffset   = biFieldOffset bfIndex</span>
-<span class="lineno"> 2192 </span><span class="spaces">                        </span><span class="istickedoff">bfOffsetBV = BV.mkBV bfWidth $ fromIntegral bfOffset</span>
-<span class="lineno"> 2193 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2194 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the nth bit (zero-indexed) is</span>
-<span class="lineno"> 2195 </span><span class="spaces">                        </span><span class="istickedoff">-- set, where n equals the size of the field</span>
-<span class="lineno"> 2196 </span><span class="spaces">                        </span><span class="istickedoff">-- (in bits) within the bitfield. Since `y` is</span>
-<span class="lineno"> 2197 </span><span class="spaces">                        </span><span class="istickedoff">-- 1-bit, this would make `fieldBitsBV` be</span>
-<span class="lineno"> 2198 </span><span class="spaces">                        </span><span class="istickedoff">-- 0b00000010, or 2.</span>
-<span class="lineno"> 2199 </span><span class="spaces">                        </span><span class="istickedoff">fieldBitsBV = BV.bit' bfWidth $</span>
-<span class="lineno"> 2200 </span><span class="spaces">                                      </span><span class="istickedoff">fromIntegral $ biFieldSize bfIndex</span>
-<span class="lineno"> 2201 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2202 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the (n-1) least significant bits</span>
-<span class="lineno"> 2203 </span><span class="spaces">                        </span><span class="istickedoff">-- set to 1, where n equals the value of</span>
-<span class="lineno"> 2204 </span><span class="spaces">                        </span><span class="istickedoff">-- `fieldBitsBV`. For `y`, `leastBitsBV` would be</span>
-<span class="lineno"> 2205 </span><span class="spaces">                        </span><span class="istickedoff">-- equal to 0b00000001, or 1.</span>
-<span class="lineno"> 2206 </span><span class="spaces">                        </span><span class="istickedoff">leastBitsBV = BV.sub bfWidth fieldBitsBV (BV.one bfWidth)</span>
-<span class="lineno"> 2207 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2208 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the bits corresponding to the</span>
-<span class="lineno"> 2209 </span><span class="spaces">                        </span><span class="istickedoff">-- field within the bitfield set to 1, and all</span>
-<span class="lineno"> 2210 </span><span class="spaces">                        </span><span class="istickedoff">-- other bits are set to 0. For `y`, `bitmaskBV`</span>
-<span class="lineno"> 2211 </span><span class="spaces">                        </span><span class="istickedoff">-- would be equal to 0b00001000, or 8.</span>
-<span class="lineno"> 2212 </span><span class="spaces">                        </span><span class="istickedoff">bitmaskBV = BV.shl bfWidth leastBitsBV $ fromIntegral bfOffset</span>
-<span class="lineno"> 2213 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2214 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the bits corresponding to the</span>
-<span class="lineno"> 2215 </span><span class="spaces">                        </span><span class="istickedoff">-- field within the bitfield set to 0, and all</span>
-<span class="lineno"> 2216 </span><span class="spaces">                        </span><span class="istickedoff">-- other bits are set to 1. For `y`, `compBitmaskBV`</span>
-<span class="lineno"> 2217 </span><span class="spaces">                        </span><span class="istickedoff">-- would be equal to 0b11110111, or 247.</span>
-<span class="lineno"> 2218 </span><span class="spaces">                        </span><span class="istickedoff">compBitmaskBV = BV.complement bfWidth bitmaskBV</span>
-<span class="lineno"> 2219 </span><span class="spaces">                    </span><span class="istickedoff">compBitmaskSymBV &lt;- W4.bvLit sym bfWidth compBitmaskBV</span>
-<span class="lineno"> 2220 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2221 </span><span class="spaces">                    </span><span class="istickedoff">-- Clear all of the bits in the bitfield</span>
-<span class="lineno"> 2222 </span><span class="spaces">                    </span><span class="istickedoff">-- corresponding to the field, leaving all other bits</span>
-<span class="lineno"> 2223 </span><span class="spaces">                    </span><span class="istickedoff">-- unchanged. If the original bitvector was 0b????????,</span>
-<span class="lineno"> 2224 </span><span class="spaces">                    </span><span class="istickedoff">-- then `bfBV'` is 0b????0???.</span>
-<span class="lineno"> 2225 </span><span class="spaces">                    </span><span class="istickedoff">bfBV' &lt;- W4.bvAndBits sym bfBV compBitmaskSymBV</span>
-<span class="lineno"> 2226 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2227 </span><span class="spaces">                    </span><span class="istickedoff">-- Zero-extend the RHS value to be the same width as</span>
-<span class="lineno"> 2228 </span><span class="spaces">                    </span><span class="istickedoff">-- the bitfield. In our running example, we</span>
-<span class="lineno"> 2229 </span><span class="spaces">                    </span><span class="istickedoff">-- zero-extend 0b1 (1) to 0b00000001.</span>
-<span class="lineno"> 2230 </span><span class="spaces">                    </span><span class="istickedoff">rhsBV' &lt;- W4.bvZext sym bfWidth rhsBV</span>
-<span class="lineno"> 2231 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2232 </span><span class="spaces">                    </span><span class="istickedoff">-- Left-shift the zero-extended RHS value such that</span>
-<span class="lineno"> 2233 </span><span class="spaces">                    </span><span class="istickedoff">-- its contents are in the same position as the field</span>
-<span class="lineno"> 2234 </span><span class="spaces">                    </span><span class="istickedoff">-- in the bitfield. In our running example, `rhsBV''`</span>
-<span class="lineno"> 2235 </span><span class="spaces">                    </span><span class="istickedoff">-- is 0b00001000, or 8.</span>
-<span class="lineno"> 2236 </span><span class="spaces">                    </span><span class="istickedoff">rhsBV'' &lt;- W4.bvShl sym rhsBV' =&lt;&lt; W4.bvLit sym bfWidth bfOffsetBV</span>
-<span class="lineno"> 2237 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2238 </span><span class="spaces">                    </span><span class="istickedoff">-- Finally, set the bits in the bitfield to the RHS</span>
-<span class="lineno"> 2239 </span><span class="spaces">                    </span><span class="istickedoff">-- value with a bitwise-XOR operation. (We could just as</span>
-<span class="lineno"> 2240 </span><span class="spaces">                    </span><span class="istickedoff">-- well use bitwise-OR, but bitwise-XOR plays nicer with</span>
-<span class="lineno"> 2241 </span><span class="spaces">                    </span><span class="istickedoff">-- how What4 represents bitvectors). In our running</span>
-<span class="lineno"> 2242 </span><span class="spaces">                    </span><span class="istickedoff">-- example, `bfBV''` is 0b????1???.</span>
-<span class="lineno"> 2243 </span><span class="spaces">                    </span><span class="istickedoff">bfBV'' &lt;- W4.bvXorBits sym bfBV' rhsBV''</span>
-<span class="lineno"> 2244 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2245 </span><span class="spaces">                    </span><span class="istickedoff">-- Store the bitfield's value back to memory.</span>
-<span class="lineno"> 2246 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2247 </span><span class="spaces">                    </span><span class="istickedoff">-- Bear in mind that this whole process is repeated once per</span>
-<span class="lineno"> 2248 </span><span class="spaces">                    </span><span class="istickedoff">-- field, even if the fields all reside within the same</span>
-<span class="lineno"> 2249 </span><span class="spaces">                    </span><span class="istickedoff">-- bitfield. See #1541 for an alternative approach that</span>
-<span class="lineno"> 2250 </span><span class="spaces">                    </span><span class="istickedoff">-- would optimize this further.</span>
-<span class="lineno"> 2251 </span><span class="spaces">                    </span><span class="istickedoff">let bfVal' = Crucible.LLVMValInt bfBlk bfBV''</span>
-<span class="lineno"> 2252 </span><span class="spaces">                    </span><span class="istickedoff">Crucible.storeConstRaw bak base_mem ptr storTy alignment bfVal'</span>
-<span class="lineno"> 2253 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno"> 2254 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors&quot;</span></span>
-<span class="lineno"> 2255 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitfield value: &quot; ++ show (Crucible.ppTermExpr bfVal)</span></span>
-<span class="lineno"> 2256 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value: &quot; ++ show (MS.ppSetupValue val)</span></span>
-<span class="lineno"> 2257 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno"> 2258 </span>
+<span class="lineno"> 1622 </span><span class="spaces">                         </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1623 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">panic &quot;llvm_points_to_bitfield (in matchPointsToBitfieldValue)&quot; [</span></span>
+<span class="lineno"> 1624 </span><span class="spaces">                               </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected bitfield field offset&quot;,</span></span>
+<span class="lineno"> 1625 </span><span class="spaces">                               </span><span class="istickedoff"><span class="nottickedoff">&quot;Field offset: &quot; &lt;&gt; pack (show bfOffset),</span></span>
+<span class="lineno"> 1626 </span><span class="spaces">                               </span><span class="istickedoff"><span class="nottickedoff">&quot;RHS value width: &quot; &lt;&gt; pack (show rhsWidth),</span></span>
+<span class="lineno"> 1627 </span><span class="spaces">                               </span><span class="istickedoff"><span class="nottickedoff">&quot;Bitvector width: &quot; &lt;&gt; pack (show bfWidth)</span></span>
+<span class="lineno"> 1628 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1629 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1630 </span><span class="spaces">                       </span><span class="istickedoff">-- Finally, select the subsequence of bits from the</span>
+<span class="lineno"> 1631 </span><span class="spaces">                       </span><span class="istickedoff">-- bitfield corresponding to the field. In the `y`</span>
+<span class="lineno"> 1632 </span><span class="spaces">                       </span><span class="istickedoff">-- example, the means selecting `0bY` from `0b????Y???`.</span>
+<span class="lineno"> 1633 </span><span class="spaces">                       </span><span class="istickedoff">bfFieldBV &lt;- liftIO $ W4.bvSelect sym bfOffset rhsWidth bfBV</span>
+<span class="lineno"> 1634 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1635 </span><span class="spaces">                       </span><span class="istickedoff">-- Match the selected field against the RHS value.</span>
+<span class="lineno"> 1636 </span><span class="spaces">                       </span><span class="istickedoff">let field_val = Crucible.LLVMValInt bfBlk bfFieldBV</span>
+<span class="lineno"> 1637 </span><span class="spaces">                       </span><span class="istickedoff">pure Nothing &lt;* matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> <span class="nottickedoff">prepost</span> md field_val <span class="nottickedoff">memTy</span> val</span>
+<span class="lineno"> 1638 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1639 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 1640 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size&quot;</span></span>
+<span class="lineno"> 1641 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitvector width: &quot; ++ show bfWidth</span></span>
+<span class="lineno"> 1642 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value width: &quot; ++ show rhsWidth</span></span>
+<span class="lineno"> 1643 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1644 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 1645 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: The bitfield must be a bitvector&quot;</span></span>
+<span class="lineno"> 1646 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitfield value: &quot; ++ show (Crucible.ppTermExpr res_val)</span></span>
+<span class="lineno"> 1647 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1648 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1649 </span><span class="spaces">         </span><span class="istickedoff">-- When we have a concrete failure, we do a little more computation to</span>
+<span class="lineno"> 1650 </span><span class="spaces">         </span><span class="istickedoff">-- try and find out why.</span>
+<span class="lineno"> 1651 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr</span></span></span>
+<span class="lineno"> 1652 </span>
+<span class="lineno"> 1653 </span>-- | Give a general summary of why a call to 'Crucible.loadRaw' in
+<span class="lineno"> 1654 </span>-- @matchPointsTo{Bitfield}Value@ failed. This is used for error-message
+<span class="lineno"> 1655 </span>-- purposes.
+<span class="lineno"> 1656 </span>summarizeBadLoad ::
+<span class="lineno"> 1657 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 1658 </span>  Crucible.MemType -&gt;
+<span class="lineno"> 1659 </span>  PrePost -&gt;
+<span class="lineno"> 1660 </span>  LLVMPtr wptr -&gt;
+<span class="lineno"> 1661 </span>  [PP.Doc ann]
+<span class="lineno"> 1662 </span><span class="decl"><span class="istickedoff">summarizeBadLoad cc memTy prepost ptr =</span>
+<span class="lineno"> 1663 </span><span class="spaces"> </span><span class="istickedoff">let <span class="nottickedoff">dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)</span></span>
+<span class="lineno"> 1664 </span><span class="spaces">     </span><span class="istickedoff">sz = Crucible.memTypeSize <span class="nottickedoff">dataLayout</span> memTy</span>
+<span class="lineno"> 1665 </span><span class="spaces"> </span><span class="istickedoff">in map (PP.pretty . unwords)</span>
+<span class="lineno"> 1666 </span><span class="spaces">    </span><span class="istickedoff">[ [ &quot;When reading through pointer:&quot;, show (Crucible.ppPtr ptr) ]</span>
+<span class="lineno"> 1667 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;in the &quot;, MS.stateCond prepost, &quot;of an override&quot; ]</span>
+<span class="lineno"> 1668 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;Tried to read something of size:&quot;</span>
+<span class="lineno"> 1669 </span><span class="spaces">      </span><span class="istickedoff">, show (Crucible.bytesToInteger sz)</span>
+<span class="lineno"> 1670 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno"> 1671 </span><span class="spaces">    </span><span class="istickedoff">, [ &quot;And type:&quot;, show (Crucible.ppMemType memTy) ]</span>
+<span class="lineno"> 1672 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno"> 1673 </span>
+<span class="lineno"> 1674 </span>-- | Give a summary of why a call to 'Crucible.loadRaw' in
+<span class="lineno"> 1675 </span>-- @matchPointsTo{Bitfield}Value@ concretely failed. This is used for
+<span class="lineno"> 1676 </span>-- error-message purposes.
+<span class="lineno"> 1677 </span>describeConcreteMemoryLoadFailure ::
+<span class="lineno"> 1678 </span>  Crucible.MemImpl Sym -&gt;
+<span class="lineno"> 1679 </span>  [PP.Doc ann] {- A summary of why the load failed -} -&gt;
+<span class="lineno"> 1680 </span>  LLVMPtr w -&gt;
+<span class="lineno"> 1681 </span>  PP.Doc ann
+<span class="lineno"> 1682 </span><span class="decl"><span class="nottickedoff">describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do</span>
+<span class="lineno"> 1683 </span><span class="spaces">  </span><span class="nottickedoff">let (blk, _offset) = Crucible.llvmPointerView ptr</span>
+<span class="lineno"> 1684 </span><span class="spaces">  </span><span class="nottickedoff">PP.vcat . (badLoadSummary ++) $</span>
+<span class="lineno"> 1685 </span><span class="spaces">    </span><span class="nottickedoff">case W4.asNat blk of</span>
+<span class="lineno"> 1686 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; [&quot;&lt;Read from unknown allocation&gt;&quot;]</span>
+<span class="lineno"> 1687 </span><span class="spaces">      </span><span class="nottickedoff">Just blk' -&gt;</span>
+<span class="lineno"> 1688 </span><span class="spaces">        </span><span class="nottickedoff">let possibleAllocs =</span>
+<span class="lineno"> 1689 </span><span class="spaces">              </span><span class="nottickedoff">Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)</span>
+<span class="lineno"> 1690 </span><span class="spaces">        </span><span class="nottickedoff">in [ PP.pretty $ unwords</span>
+<span class="lineno"> 1691 </span><span class="spaces">             </span><span class="nottickedoff">[ &quot;Found&quot;</span>
+<span class="lineno"> 1692 </span><span class="spaces">             </span><span class="nottickedoff">, show (length possibleAllocs)</span>
+<span class="lineno"> 1693 </span><span class="spaces">             </span><span class="nottickedoff">, &quot;possibly matching allocation(s):&quot;</span>
+<span class="lineno"> 1694 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
+<span class="lineno"> 1695 </span><span class="spaces">           </span><span class="nottickedoff">, bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)</span>
+<span class="lineno"> 1696 </span><span class="spaces">             </span><span class="nottickedoff">-- TODO: remove 'viaShow' when crucible switches to prettyprinter</span>
+<span class="lineno"> 1697 </span><span class="spaces">           </span><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1698 </span>        -- This information tends to be overwhelming, but might be useful?
+<span class="lineno"> 1699 </span>        -- We should brainstorm about better ways of presenting it.
+<span class="lineno"> 1700 </span>        -- PP.&lt;$$&gt; PP.text (unwords [ &quot;Here are the details on why reading&quot;
+<span class="lineno"> 1701 </span>        --                          , &quot;from each matching write failed&quot;
+<span class="lineno"> 1702 </span>        --                          ])
+<span class="lineno"> 1703 </span>        -- PP.&lt;$$&gt; PP.text (show err)
+<span class="lineno"> 1704 </span>
+<span class="lineno"> 1705 </span>------------------------------------------------------------------------
+<span class="lineno"> 1706 </span>
+<span class="lineno"> 1707 </span>-- | Process an @llvm_equal@ statement from the precondition
+<span class="lineno"> 1708 </span>-- section of the CrucibleSetup block.
+<span class="lineno"> 1709 </span>learnEqual ::
+<span class="lineno"> 1710 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 1711 </span>  Options                                          -&gt;
+<span class="lineno"> 1712 </span>  SharedContext                                    -&gt;
+<span class="lineno"> 1713 </span>  LLVMCrucibleContext arch                            -&gt;
+<span class="lineno"> 1714 </span>  MS.CrucibleMethodSpecIR (LLVM arch)                             -&gt;
+<span class="lineno"> 1715 </span>  MS.ConditionMetadata                             -&gt;
+<span class="lineno"> 1716 </span>  PrePost                                          -&gt;
+<span class="lineno"> 1717 </span>  SetupValue (LLVM arch)       {- ^ first value to compare  -} -&gt;
+<span class="lineno"> 1718 </span>  SetupValue (LLVM arch)       {- ^ second value to compare -} -&gt;
+<span class="lineno"> 1719 </span>  OverrideMatcher (LLVM arch) md ()
+<span class="lineno"> 1720 </span><span class="decl"><span class="istickedoff">learnEqual opts sc cc spec md prepost v1 v2 = do</span>
+<span class="lineno"> 1721 </span><span class="spaces">  </span><span class="istickedoff">(_, val1) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> v1</span>
+<span class="lineno"> 1722 </span><span class="spaces">  </span><span class="istickedoff">(_, val2) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">spec</span> v2</span>
+<span class="lineno"> 1723 </span><span class="spaces">  </span><span class="istickedoff">p         &lt;- liftIO (equalValsPred cc val1 val2)</span>
+<span class="lineno"> 1724 </span><span class="spaces">  </span><span class="istickedoff">let name = &quot;equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
+<span class="lineno"> 1725 </span><span class="spaces">  </span><span class="istickedoff">let loc = MS.conditionLoc md</span>
+<span class="lineno"> 1726 </span><span class="spaces">  </span><span class="istickedoff">addAssert p <span class="nottickedoff">md</span> (Crucible.SimError loc (Crucible.AssertFailureSimError name &quot;&quot;))</span></span>
+<span class="lineno"> 1727 </span>
+<span class="lineno"> 1728 </span>-- | Process an @llvm_precond@ statement from the precondition
+<span class="lineno"> 1729 </span>-- section of the CrucibleSetup block.
+<span class="lineno"> 1730 </span>learnPred ::
+<span class="lineno"> 1731 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
+<span class="lineno"> 1732 </span>  SharedContext                                                       -&gt;
+<span class="lineno"> 1733 </span>  LLVMCrucibleContext arch                                               -&gt;
+<span class="lineno"> 1734 </span>  MS.ConditionMetadata                                                -&gt;
+<span class="lineno"> 1735 </span>  PrePost                                                             -&gt;
+<span class="lineno"> 1736 </span>  Term             {- ^ the precondition to learn                  -} -&gt;
+<span class="lineno"> 1737 </span>  OverrideMatcher (LLVM arch) md ()
+<span class="lineno"> 1738 </span><span class="decl"><span class="istickedoff">learnPred sc cc md prepost t =</span>
+<span class="lineno"> 1739 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- instantiateExtResolveSAWPred sc cc t</span>
+<span class="lineno"> 1740 </span><span class="spaces">     </span><span class="istickedoff">let loc = MS.conditionLoc md</span>
+<span class="lineno"> 1741 </span><span class="spaces">     </span><span class="istickedoff">addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) &quot;&quot;))</span></span>
+<span class="lineno"> 1742 </span>
+<span class="lineno"> 1743 </span>instantiateExtResolveSAWPred ::
+<span class="lineno"> 1744 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
+<span class="lineno"> 1745 </span>  SharedContext -&gt;
+<span class="lineno"> 1746 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 1747 </span>  Term -&gt;
+<span class="lineno"> 1748 </span>  OverrideMatcher (LLVM arch) md (W4.Pred Sym)
+<span class="lineno"> 1749 </span><span class="decl"><span class="istickedoff">instantiateExtResolveSAWPred sc cc cond = do</span>
+<span class="lineno"> 1750 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
+<span class="lineno"> 1751 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ resolveSAWPred cc =&lt;&lt; scInstantiateExt sc sub cond</span></span>
+<span class="lineno"> 1752 </span>
+<span class="lineno"> 1753 </span>instantiateExtResolveSAWSymBV ::
+<span class="lineno"> 1754 </span>  (?w4EvalTactic :: W4EvalTactic, 1 &lt;= w) =&gt;
+<span class="lineno"> 1755 </span>  SharedContext -&gt;
+<span class="lineno"> 1756 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 1757 </span>  NatRepr w -&gt;
+<span class="lineno"> 1758 </span>  Term -&gt;
+<span class="lineno"> 1759 </span>  OverrideMatcher (LLVM arch) md (W4.SymBV Sym w)
+<span class="lineno"> 1760 </span><span class="decl"><span class="istickedoff">instantiateExtResolveSAWSymBV sc cc w tm = do</span>
+<span class="lineno"> 1761 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
+<span class="lineno"> 1762 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ resolveSAWSymBV cc w =&lt;&lt; scInstantiateExt sc sub tm</span></span>
+<span class="lineno"> 1763 </span>
+<span class="lineno"> 1764 </span>------------------------------------------------------------------------
+<span class="lineno"> 1765 </span>
+<span class="lineno"> 1766 </span>-- | Invalidate all mutable memory that was allocated in the method spec
+<span class="lineno"> 1767 </span>-- precondition, either through explicit calls to @llvm_alloc@ or to
+<span class="lineno"> 1768 </span>-- @llvm_alloc_global@. As an optimization, a memory allocation that
+<span class="lineno"> 1769 </span>-- is overwritten by a postcondition memory write is not invalidated.
+<span class="lineno"> 1770 </span>-- Return a map containing the overwritten memory allocations.
+<span class="lineno"> 1771 </span>invalidateMutableAllocs ::
+<span class="lineno"> 1772 </span>  ( ?lc :: Crucible.TypeContext
+<span class="lineno"> 1773 </span>  , ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 1774 </span>  , ?w4EvalTactic :: W4EvalTactic
+<span class="lineno"> 1775 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+<span class="lineno"> 1776 </span>  , Crucible.HasLLVMAnn Sym
+<span class="lineno"> 1777 </span>  ) =&gt;
+<span class="lineno"> 1778 </span>  Options -&gt;
+<span class="lineno"> 1779 </span>  SharedContext -&gt;
+<span class="lineno"> 1780 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 1781 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
+<span class="lineno"> 1782 </span>  OverrideMatcher (LLVM arch) RW (Map (W4.SymNat Sym) Text)
+<span class="lineno"> 1783 </span><span class="decl"><span class="istickedoff">invalidateMutableAllocs opts sc cc cs =</span>
+<span class="lineno"> 1784 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 1785 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 1786 </span><span class="spaces">  </span><span class="istickedoff">mem &lt;- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc</span>
+<span class="lineno"> 1787 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- use setupValueSub</span>
+<span class="lineno"> 1788 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1789 </span><span class="spaces">  </span><span class="istickedoff">let mutableAllocs =</span>
+<span class="lineno"> 1790 </span><span class="spaces">        </span><span class="istickedoff">Map.filter (view isMut) $</span>
+<span class="lineno"> 1791 </span><span class="spaces">        </span><span class="istickedoff">Map.filter (not . view allocSpecFresh) $</span>
+<span class="lineno"> 1792 </span><span class="spaces">        </span><span class="istickedoff">cs ^. MS.csPreState . MS.csAllocs</span>
+<span class="lineno"> 1793 </span><span class="spaces">      </span><span class="istickedoff">allocPtrs = catMaybes $ map</span>
+<span class="lineno"> 1794 </span><span class="spaces">        </span><span class="istickedoff">(\case</span>
+<span class="lineno"> 1795 </span><span class="spaces">          </span><span class="istickedoff">(ptr, spec)</span>
+<span class="lineno"> 1796 </span><span class="spaces">            </span><span class="istickedoff">| Just sz &lt;- asUnsignedConcreteBv (_allocSpecBytes spec) -&gt;</span>
+<span class="lineno"> 1797 </span><span class="spaces">              </span><span class="istickedoff">Just</span>
+<span class="lineno"> 1798 </span><span class="spaces">                </span><span class="istickedoff">( ptr</span>
+<span class="lineno"> 1799 </span><span class="spaces">                </span><span class="istickedoff">, fromIntegral sz</span>
+<span class="lineno"> 1800 </span><span class="spaces">                </span><span class="istickedoff">, mconcat</span>
+<span class="lineno"> 1801 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;state of memory allocated in precondition (at &quot;</span>
+<span class="lineno"> 1802 </span><span class="spaces">                  </span><span class="istickedoff">, pack . show . W4.plSourceLoc . MS.conditionLoc</span>
+<span class="lineno"> 1803 </span><span class="spaces">                      </span><span class="istickedoff">$ spec ^. allocSpecMd</span>
+<span class="lineno"> 1804 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;) not described in postcondition&quot;</span>
+<span class="lineno"> 1805 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
+<span class="lineno"> 1806 </span><span class="spaces">                </span><span class="istickedoff">)</span>
+<span class="lineno"> 1807 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; Nothing)</span>
+<span class="lineno"> 1808 </span><span class="spaces">        </span><span class="istickedoff">(Map.elems (Map.intersectionWith (,) sub mutableAllocs))</span>
+<span class="lineno"> 1809 </span><span class="spaces">      </span><span class="istickedoff">mtrans = ccLLVMModuleTrans cc</span>
+<span class="lineno"> 1810 </span><span class="spaces">      </span><span class="istickedoff">gimap = view Crucible.globalInitMap mtrans</span>
+<span class="lineno"> 1811 </span><span class="spaces">      </span><span class="istickedoff">mutableGlobals = cs ^. MS.csGlobalAllocs</span>
+<span class="lineno"> 1812 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1813 </span><span class="spaces">  </span><span class="istickedoff">globalPtrs &lt;- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal loc s@(L.Symbol st)) -&gt;</span>
+<span class="lineno"> 1814 </span><span class="spaces">    </span><span class="istickedoff">case Map.lookup s gimap of</span>
+<span class="lineno"> 1815 </span><span class="spaces">      </span><span class="istickedoff">Just (_, Right (mt, _)) -&gt; do</span>
+<span class="lineno"> 1816 </span><span class="spaces">        </span><span class="istickedoff">ptr &lt;- Crucible.doResolveGlobal <span class="nottickedoff">bak</span> mem s</span>
+<span class="lineno"> 1817 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just</span>
+<span class="lineno"> 1818 </span><span class="spaces">          </span><span class="istickedoff">( ptr</span>
+<span class="lineno"> 1819 </span><span class="spaces">          </span><span class="istickedoff">, Crucible.memTypeSize <span class="nottickedoff">(Crucible.llvmDataLayout ?lc)</span> mt</span>
+<span class="lineno"> 1820 </span><span class="spaces">          </span><span class="istickedoff">, mconcat</span>
+<span class="lineno"> 1821 </span><span class="spaces">            </span><span class="istickedoff">[ &quot;state of mutable global variable \&quot;&quot;</span>
+<span class="lineno"> 1822 </span><span class="spaces">            </span><span class="istickedoff">, pack st</span>
+<span class="lineno"> 1823 </span><span class="spaces">            </span><span class="istickedoff">, &quot;\&quot; (allocated at &quot;</span>
+<span class="lineno"> 1824 </span><span class="spaces">            </span><span class="istickedoff">, pack . show $ W4.plSourceLoc loc</span>
+<span class="lineno"> 1825 </span><span class="spaces">            </span><span class="istickedoff">, &quot;) not described in postcondition&quot;</span>
+<span class="lineno"> 1826 </span><span class="spaces">            </span><span class="istickedoff">]</span>
+<span class="lineno"> 1827 </span><span class="spaces">          </span><span class="istickedoff">)</span>
+<span class="lineno"> 1828 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno"> 1829 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1830 </span><span class="spaces">  </span><span class="istickedoff">-- set of (concrete base pointer, size) for each postcondition memory write</span>
+<span class="lineno"> 1831 </span><span class="spaces">  </span><span class="istickedoff">postPtrs &lt;- Set.fromList &lt;$&gt; catMaybes &lt;$&gt; traverse</span>
+<span class="lineno"> 1832 </span><span class="spaces">    </span><span class="istickedoff">(\case</span>
+<span class="lineno"> 1833 </span><span class="spaces">      </span><span class="istickedoff">LLVMPointsTo _loc _cond ptr val -&gt; case val of</span>
+<span class="lineno"> 1834 </span><span class="spaces">        </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
+<span class="lineno"> 1835 </span><span class="spaces">          </span><span class="istickedoff">(_, Crucible.LLVMPointer blk _) &lt;- resolveSetupValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> cs Crucible.PtrRepr ptr</span>
+<span class="lineno"> 1836 </span><span class="spaces">          </span><span class="istickedoff">memTy &lt;- exceptToFail $</span>
+<span class="lineno"> 1837 </span><span class="spaces">                     </span><span class="istickedoff">typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">(MS.csAllocations cs)</span> <span class="nottickedoff">(MS.csTypeNames cs)</span> val'</span>
+<span class="lineno"> 1838 </span><span class="spaces">          </span><span class="istickedoff">sz &lt;- Crucible.storageTypeSize &lt;$&gt; Crucible.toStorableType memTy</span>
+<span class="lineno"> 1839 </span><span class="spaces">          </span><span class="istickedoff">return $ Just (W4.asNat blk, sz)</span>
+<span class="lineno"> 1840 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue{} -&gt; return <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 1841 </span><span class="spaces">      </span><span class="istickedoff">LLVMPointsToBitfield _loc ptr fieldName _val -&gt; do</span>
+<span class="lineno"> 1842 </span><span class="spaces">        </span><span class="istickedoff">(bfIndex, Crucible.LLVMPointer blk _) &lt;-</span>
+<span class="lineno"> 1843 </span><span class="spaces">          </span><span class="istickedoff">resolveSetupValueBitfield <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> cs ptr fieldName</span>
+<span class="lineno"> 1844 </span><span class="spaces">        </span><span class="istickedoff">let memTy = biBitfieldType bfIndex</span>
+<span class="lineno"> 1845 </span><span class="spaces">        </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
+<span class="lineno"> 1846 </span><span class="spaces">        </span><span class="istickedoff">let sz = Crucible.storageTypeSize storTy</span>
+<span class="lineno"> 1847 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just (W4.asNat blk, sz))</span>
+<span class="lineno"> 1848 </span><span class="spaces">    </span><span class="istickedoff">(cs ^. MS.csPostState ^. MS.csPointsTos)</span>
+<span class="lineno"> 1849 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1850 </span><span class="spaces">  </span><span class="istickedoff">-- partition allocations into those overwritten by a postcondition write</span>
+<span class="lineno"> 1851 </span><span class="spaces">  </span><span class="istickedoff">-- and those not overwritten</span>
+<span class="lineno"> 1852 </span><span class="spaces">  </span><span class="istickedoff">let (overwritten_ptrs, danglingPtrs) = partition</span>
+<span class="lineno"> 1853 </span><span class="spaces">        </span><span class="istickedoff">(\((Crucible.LLVMPointer blk _), sz, _) -&gt;</span>
+<span class="lineno"> 1854 </span><span class="spaces">          </span><span class="istickedoff">Set.member (W4.asNat blk, sz) postPtrs)</span>
+<span class="lineno"> 1855 </span><span class="spaces">        </span><span class="istickedoff">(allocPtrs ++ globalPtrs)</span>
+<span class="lineno"> 1856 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1857 </span><span class="spaces">  </span><span class="istickedoff">let overwritten_allocs = Map.fromList $ map</span>
+<span class="lineno"> 1858 </span><span class="spaces">        </span><span class="istickedoff">(\((Crucible.LLVMPointer blk _), _, msg) -&gt; (blk, <span class="nottickedoff">msg</span>))</span>
+<span class="lineno"> 1859 </span><span class="spaces">        </span><span class="istickedoff">overwritten_ptrs</span>
+<span class="lineno"> 1860 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1861 </span><span class="spaces">  </span><span class="istickedoff">-- invalidate each allocation that is not overwritten by a postcondition write</span>
+<span class="lineno"> 1862 </span><span class="spaces">  </span><span class="istickedoff">mem' &lt;- foldM (\m (ptr, sz, msg) -&gt;</span>
+<span class="lineno"> 1863 </span><span class="spaces">                    </span><span class="istickedoff">liftIO $ Crucible.doInvalidate bak ?ptrWidth m ptr msg</span>
+<span class="lineno"> 1864 </span><span class="spaces">                      </span><span class="istickedoff">=&lt;&lt; W4.bvLit sym ?ptrWidth (Crucible.bytesToBV ?ptrWidth sz)</span>
+<span class="lineno"> 1865 </span><span class="spaces">                </span><span class="istickedoff">) mem danglingPtrs</span>
+<span class="lineno"> 1866 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1867 </span><span class="spaces">  </span><span class="istickedoff">writeGlobal (Crucible.llvmMemVar $ ccLLVMContext cc) mem'</span>
+<span class="lineno"> 1868 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1869 </span><span class="spaces">  </span><span class="istickedoff">return overwritten_allocs</span></span>
+<span class="lineno"> 1870 </span>
+<span class="lineno"> 1871 </span>------------------------------------------------------------------------
+<span class="lineno"> 1872 </span>
+<span class="lineno"> 1873 </span>-- | Perform an allocation as indicated by an @llvm_alloc@ or
+<span class="lineno"> 1874 </span>-- @llvm_fresh_pointer@ statement from the postcondition section.
+<span class="lineno"> 1875 </span>executeAllocation ::
+<span class="lineno"> 1876 </span>  ( ?lc :: Crucible.TypeContext
+<span class="lineno"> 1877 </span>  , ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 1878 </span>  , ?w4EvalTactic :: W4EvalTactic
+<span class="lineno"> 1879 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+<span class="lineno"> 1880 </span>  , Crucible.HasLLVMAnn Sym
+<span class="lineno"> 1881 </span>  ) =&gt;
+<span class="lineno"> 1882 </span>  Options                        -&gt;
+<span class="lineno"> 1883 </span>  SharedContext -&gt;
+<span class="lineno"> 1884 </span>  LLVMCrucibleContext arch          -&gt;
+<span class="lineno"> 1885 </span>  (AllocIndex, LLVMAllocSpec) -&gt;
+<span class="lineno"> 1886 </span>  OverrideMatcher (LLVM arch) RW ()
+<span class="lineno"> 1887 </span><span class="decl"><span class="nottickedoff">executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz md fresh initialization)</span>
+<span class="lineno"> 1888 </span><span class="spaces">  </span><span class="nottickedoff">| fresh =</span>
+<span class="lineno"> 1889 </span><span class="spaces">  </span><span class="nottickedoff">do ptr &lt;- liftIO $ executeFreshPointer cc var</span>
+<span class="lineno"> 1890 </span><span class="spaces">     </span><span class="nottickedoff">OM (setupValueSub %= Map.insert var ptr)</span>
+<span class="lineno"> 1891 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1892 </span><span class="spaces">  </span><span class="nottickedoff">ccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 1893 </span><span class="spaces">     </span><span class="nottickedoff">{-</span>
+<span class="lineno"> 1894 </span><span class="spaces">     </span><span class="nottickedoff">memTy &lt;- case Crucible.asMemType symTy of</span>
+<span class="lineno"> 1895 </span><span class="spaces">                </span><span class="nottickedoff">Just memTy -&gt; return memTy</span>
+<span class="lineno"> 1896 </span><span class="spaces">                </span><span class="nottickedoff">Nothing    -&gt; fail &quot;executAllocation: failed to resolve type&quot;</span>
+<span class="lineno"> 1897 </span><span class="spaces">                </span><span class="nottickedoff">-}</span>
+<span class="lineno"> 1898 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ printOutLn opts Debug $ unwords [&quot;executeAllocation:&quot;, show var, show memTy]</span>
+<span class="lineno"> 1899 </span><span class="spaces">     </span><span class="nottickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
+<span class="lineno"> 1900 </span><span class="spaces">     </span><span class="nottickedoff">mem &lt;- readGlobal memVar</span>
+<span class="lineno"> 1901 </span><span class="spaces">     </span><span class="nottickedoff">sz' &lt;- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz</span>
+<span class="lineno"> 1902 </span><span class="spaces">     </span><span class="nottickedoff">let loc = MS.conditionLoc md</span>
+<span class="lineno"> 1903 </span><span class="spaces">     </span><span class="nottickedoff">let l = show (W4.plSourceLoc loc) ++ &quot; (Poststate)&quot;</span>
+<span class="lineno"> 1904 </span><span class="spaces">     </span><span class="nottickedoff">(ptr, mem') &lt;- liftIO $ doAllocSymInit bak mem mut alignment sz' l initialization</span>
+<span class="lineno"> 1905 </span><span class="spaces">     </span><span class="nottickedoff">writeGlobal memVar mem'</span>
+<span class="lineno"> 1906 </span><span class="spaces">     </span><span class="nottickedoff">assignVar cc md var ptr</span></span>
+<span class="lineno"> 1907 </span>
+<span class="lineno"> 1908 </span>doAllocSymInit ::
+<span class="lineno"> 1909 </span>  ( ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 1910 </span>  , Crucible.IsSymInterface sym
+<span class="lineno"> 1911 </span>  , Crucible.HasPtrWidth wptr
+<span class="lineno"> 1912 </span>  , Crucible.HasLLVMAnn sym
+<span class="lineno"> 1913 </span>  , IsSymBackend sym bak
+<span class="lineno"> 1914 </span>  ) =&gt;
+<span class="lineno"> 1915 </span>  bak -&gt;
+<span class="lineno"> 1916 </span>  Crucible.MemImpl sym -&gt;
+<span class="lineno"> 1917 </span>  Crucible.Mutability -&gt;
+<span class="lineno"> 1918 </span>  Crucible.Alignment -&gt;
+<span class="lineno"> 1919 </span>  W4.SymBV sym wptr {- ^ allocation size -} -&gt;
+<span class="lineno"> 1920 </span>  String {- ^ source location for use in error messages -} -&gt;
+<span class="lineno"> 1921 </span>  LLVMAllocSpecInit {- ^ allocation initialization policy -} -&gt;
+<span class="lineno"> 1922 </span>  IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
+<span class="lineno"> 1923 </span><span class="decl"><span class="istickedoff">doAllocSymInit bak mem mut alignment sz loc initialization  = do</span>
+<span class="lineno"> 1924 </span><span class="spaces">  </span><span class="istickedoff">(ptr, mem') &lt;- Crucible.doMalloc bak Crucible.HeapAlloc mut loc mem sz alignment</span>
+<span class="lineno"> 1925 </span><span class="spaces">  </span><span class="istickedoff">mem'' &lt;- case initialization of</span>
+<span class="lineno"> 1926 </span><span class="spaces">    </span><span class="istickedoff">LLVMAllocSpecSymbolicInitialization -&gt; do</span>
+<span class="lineno"> 1927 </span><span class="spaces">      </span><span class="istickedoff">arr &lt;- W4.freshConstant</span>
+<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff">(backendGetSym bak)</span>
+<span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff">(W4.systemSymbol &quot;arr!&quot;)</span>
+<span class="lineno"> 1930 </span><span class="spaces">        </span><span class="istickedoff">(W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))</span>
+<span class="lineno"> 1931 </span><span class="spaces">      </span><span class="istickedoff">Crucible.doArrayConstStore bak mem' ptr alignment arr sz</span>
+<span class="lineno"> 1932 </span><span class="spaces">    </span><span class="istickedoff">LLVMAllocSpecNoInitialization -&gt; return mem'</span>
+<span class="lineno"> 1933 </span><span class="spaces">  </span><span class="istickedoff">return (ptr, mem'')</span></span>
+<span class="lineno"> 1934 </span>
+<span class="lineno"> 1935 </span>------------------------------------------------------------------------
+<span class="lineno"> 1936 </span>
+<span class="lineno"> 1937 </span>-- | Update the simulator state based on the postconditions from the
+<span class="lineno"> 1938 </span>-- procedure specification.
+<span class="lineno"> 1939 </span>executeSetupCondition ::
+<span class="lineno"> 1940 </span>  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 1941 </span>  Options                    -&gt;
+<span class="lineno"> 1942 </span>  SharedContext              -&gt;
+<span class="lineno"> 1943 </span>  LLVMCrucibleContext arch     -&gt;
+<span class="lineno"> 1944 </span>  MS.CrucibleMethodSpecIR (LLVM arch)       -&gt;
+<span class="lineno"> 1945 </span>  MS.SetupCondition (LLVM arch) -&gt;
+<span class="lineno"> 1946 </span>  OverrideMatcher (LLVM arch) RW ()
+<span class="lineno"> 1947 </span><span class="decl"><span class="istickedoff">executeSetupCondition opts sc cc spec =</span>
+<span class="lineno"> 1948 </span><span class="spaces">  </span><span class="istickedoff">\case</span>
+<span class="lineno"> 1949 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Equal md val1 val2 -&gt;</span>
+<span class="lineno"> 1950 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">executeEqual opts sc cc spec md val1 val2</span></span>
+<span class="lineno"> 1951 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Pred md tm -&gt; executePred sc cc <span class="nottickedoff">md</span> tm</span>
+<span class="lineno"> 1952 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Ghost md var val -&gt; executeGhost sc <span class="nottickedoff">md</span> var val</span></span>
+<span class="lineno"> 1953 </span>
+<span class="lineno"> 1954 </span>------------------------------------------------------------------------
+<span class="lineno"> 1955 </span>
+<span class="lineno"> 1956 </span>-- | Process a &quot;points_to&quot; statement from the postcondition section of
+<span class="lineno"> 1957 </span>-- the CrucibleSetup block. First we compute the value indicated by
+<span class="lineno"> 1958 </span>-- 'val', and then write it to the address indicated by 'ptr'.
+<span class="lineno"> 1959 </span>executePointsTo ::
+<span class="lineno"> 1960 </span>  ( ?lc :: Crucible.TypeContext
+<span class="lineno"> 1961 </span>  , ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 1962 </span>  , ?w4EvalTactic :: W4EvalTactic
+<span class="lineno"> 1963 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+<span class="lineno"> 1964 </span>  , Crucible.HasLLVMAnn Sym
+<span class="lineno"> 1965 </span>  ) =&gt;
+<span class="lineno"> 1966 </span>  Options                    -&gt;
+<span class="lineno"> 1967 </span>  SharedContext              -&gt;
+<span class="lineno"> 1968 </span>  LLVMCrucibleContext arch     -&gt;
+<span class="lineno"> 1969 </span>  MS.CrucibleMethodSpecIR (LLVM arch)       -&gt;
+<span class="lineno"> 1970 </span>  Map (W4.SymNat Sym) Text -&gt;
+<span class="lineno"> 1971 </span>  PointsTo (LLVM arch)       -&gt;
+<span class="lineno"> 1972 </span>  OverrideMatcher (LLVM arch) RW ()
+<span class="lineno"> 1973 </span><span class="decl"><span class="istickedoff">executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr val) =</span>
+<span class="lineno"> 1974 </span><span class="spaces">  </span><span class="istickedoff">do (_, ptr') &lt;- resolveSetupValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec Crucible.PtrRepr ptr</span>
+<span class="lineno"> 1975 </span><span class="spaces">     </span><span class="istickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
+<span class="lineno"> 1976 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal memVar</span>
+<span class="lineno"> 1977 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">-- In case the types are different (from llvm_points_to_untyped)</span>
+<span class="lineno"> 1979 </span><span class="spaces">     </span><span class="istickedoff">-- then the load type should be determined by the rhs.</span>
+<span class="lineno"> 1980 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- OM (use <span class="nottickedoff">setupValueSub</span>)</span>
+<span class="lineno"> 1981 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
+<span class="lineno"> 1982 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
+<span class="lineno"> 1983 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
+<span class="lineno"> 1984 </span><span class="spaces">     </span><span class="istickedoff">val' &lt;- liftIO $ case val of</span>
+<span class="lineno"> 1985 </span><span class="spaces">       </span><span class="istickedoff">ConcreteSizeValue val'' -&gt; ConcreteSizeValue &lt;$&gt; instantiateSetupValue sc s val''</span>
+<span class="lineno"> 1986 </span><span class="spaces">       </span><span class="istickedoff">SymbolicSizeValue arr sz -&gt;</span>
+<span class="lineno"> 1987 </span><span class="spaces">         </span><span class="istickedoff">SymbolicSizeValue &lt;$&gt; ttTermLens (scInstantiateExt sc s) arr &lt;*&gt; ttTermLens (scInstantiateExt <span class="nottickedoff">sc</span> s) sz</span>
+<span class="lineno"> 1988 </span><span class="spaces">     </span><span class="istickedoff">cond' &lt;- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond</span>
+<span class="lineno"> 1989 </span><span class="spaces">     </span><span class="istickedoff">let Crucible.LLVMPointer blk _ = ptr'</span>
+<span class="lineno"> 1990 </span><span class="spaces">     </span><span class="istickedoff">let invalidate_msg = Map.lookup blk overwritten_allocs</span>
+<span class="lineno"> 1991 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1992 </span><span class="spaces">     </span><span class="istickedoff">mem' &lt;- liftIO $ storePointsToValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">m</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> mem cond' ptr' val' invalidate_msg</span>
+<span class="lineno"> 1993 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal memVar mem'</span>
+<span class="lineno"> 1994 </span><span class="spaces"></span><span class="istickedoff">executePointsTo opts sc cc spec _overwritten_allocs (LLVMPointsToBitfield _loc ptr fieldName val) =</span>
+<span class="lineno"> 1995 </span><span class="spaces">  </span><span class="istickedoff">do (bfIndex, ptr') &lt;- resolveSetupValueBitfield <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec ptr fieldName</span>
+<span class="lineno"> 1996 </span><span class="spaces">     </span><span class="istickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
+<span class="lineno"> 1997 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal memVar</span>
+<span class="lineno"> 1998 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1999 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- OM (use <span class="nottickedoff">setupValueSub</span>)</span>
+<span class="lineno"> 2000 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
+<span class="lineno"> 2001 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
+<span class="lineno"> 2002 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
+<span class="lineno"> 2003 </span><span class="spaces">     </span><span class="istickedoff">val' &lt;- liftIO $ instantiateSetupValue sc s val</span>
+<span class="lineno"> 2004 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2005 </span><span class="spaces">     </span><span class="istickedoff">mem' &lt;- liftIO $ storePointsToBitfieldValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">m</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> mem ptr' bfIndex val'</span>
+<span class="lineno"> 2006 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal memVar mem'</span></span>
+<span class="lineno"> 2007 </span>
+<span class="lineno"> 2008 </span>storePointsToValue ::
+<span class="lineno"> 2009 </span>  ( ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 2010 </span>  , ?w4EvalTactic :: W4EvalTactic
+<span class="lineno"> 2011 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+<span class="lineno"> 2012 </span>  , Crucible.HasLLVMAnn Sym
+<span class="lineno"> 2013 </span>  ) =&gt;
+<span class="lineno"> 2014 </span>  Options -&gt;
+<span class="lineno"> 2015 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2016 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
+<span class="lineno"> 2017 </span>  Map AllocIndex (MS.AllocSpec (LLVM arch)) -&gt;
+<span class="lineno"> 2018 </span>  Map AllocIndex (MS.TypeName (LLVM arch)) -&gt;
+<span class="lineno"> 2019 </span>  Crucible.MemImpl Sym -&gt;
+<span class="lineno"> 2020 </span>  Maybe (W4.Pred Sym) -&gt;
+<span class="lineno"> 2021 </span>  LLVMPtr (Crucible.ArchWidth arch) -&gt;
+<span class="lineno"> 2022 </span>  LLVMPointsToValue arch -&gt;
+<span class="lineno"> 2023 </span>  Maybe Text -&gt;
+<span class="lineno"> 2024 </span>  IO (Crucible.MemImpl Sym)
+<span class="lineno"> 2025 </span><span class="decl"><span class="istickedoff">storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =</span>
+<span class="lineno"> 2026 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 2027 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 2028 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2029 </span><span class="spaces">  </span><span class="istickedoff">let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)</span>
+<span class="lineno"> 2030 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2031 </span><span class="spaces">  </span><span class="istickedoff">smt_array_memory_model_enabled &lt;- W4.getOpt</span>
+<span class="lineno"> 2032 </span><span class="spaces">    </span><span class="istickedoff">=&lt;&lt; W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)</span>
+<span class="lineno"> 2033 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2034 </span><span class="spaces">  </span><span class="istickedoff">let store_op = \mem -&gt; case val of</span>
+<span class="lineno"> 2035 </span><span class="spaces">        </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
+<span class="lineno"> 2036 </span><span class="spaces">          </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue cc tyenv <span class="nottickedoff">nameEnv</span> val'</span>
+<span class="lineno"> 2037 </span><span class="spaces">          </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
+<span class="lineno"> 2038 </span><span class="spaces">          </span><span class="istickedoff">case val' of</span>
+<span class="lineno"> 2039 </span><span class="spaces">            </span><span class="istickedoff">SetupTerm tm</span>
+<span class="lineno"> 2040 </span><span class="spaces">              </span><span class="istickedoff">| Crucible.storageTypeSize storTy &gt; 16</span>
+<span class="lineno"> 2041 </span><span class="spaces">              </span><span class="istickedoff">, <span class="tickonlyfalse">smt_array_memory_model_enabled</span> -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno"> 2042 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">arr_tm &lt;- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm</span></span>
+<span class="lineno"> 2043 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">st &lt;- sawCoreState sym</span></span>
+<span class="lineno"> 2044 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">arr &lt;- bindSAWTerm</span></span>
+<span class="lineno"> 2045 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">sym st</span></span>
+<span class="lineno"> 2046 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(W4.BaseArrayRepr</span></span>
+<span class="lineno"> 2047 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)</span></span>
+<span class="lineno"> 2048 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(W4.BaseBVRepr (W4.knownNat @8)))</span></span>
+<span class="lineno"> 2049 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">arr_tm</span></span>
+<span class="lineno"> 2050 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">sz &lt;- W4.bvLit</span></span>
+<span class="lineno"> 2051 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">sym</span></span>
+<span class="lineno"> 2052 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">?ptrWidth</span></span>
+<span class="lineno"> 2053 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)</span></span>
+<span class="lineno"> 2054 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Crucible.doArrayConstStore bak mem ptr alignment arr sz</span></span>
+<span class="lineno"> 2055 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; do</span>
+<span class="lineno"> 2056 </span><span class="spaces">              </span><span class="istickedoff">val'' &lt;- X.handle <span class="nottickedoff">(handleException opts)</span> $</span>
+<span class="lineno"> 2057 </span><span class="spaces">                </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
+<span class="lineno"> 2058 </span><span class="spaces">              </span><span class="istickedoff">Crucible.storeConstRaw bak mem ptr storTy alignment val''</span>
+<span class="lineno"> 2059 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue arr_tm sz_tm -&gt; do</span>
+<span class="lineno"> 2060 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno"> 2061 </span><span class="spaces">          </span><span class="istickedoff">arr &lt;- bindSAWTerm</span>
+<span class="lineno"> 2062 </span><span class="spaces">            </span><span class="istickedoff">sym st</span>
+<span class="lineno"> 2063 </span><span class="spaces">            </span><span class="istickedoff">(W4.BaseArrayRepr</span>
+<span class="lineno"> 2064 </span><span class="spaces">              </span><span class="istickedoff">(Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)</span>
+<span class="lineno"> 2065 </span><span class="spaces">              </span><span class="istickedoff">(W4.BaseBVRepr (W4.knownNat @8)))</span>
+<span class="lineno"> 2066 </span><span class="spaces">            </span><span class="istickedoff">(ttTerm arr_tm)</span>
+<span class="lineno"> 2067 </span><span class="spaces">          </span><span class="istickedoff">sz &lt;- resolveSAWSymBV cc ?ptrWidth $ ttTerm sz_tm</span>
+<span class="lineno"> 2068 </span><span class="spaces">          </span><span class="istickedoff">Crucible.doArrayConstStore bak mem ptr alignment arr sz</span>
+<span class="lineno"> 2069 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2070 </span><span class="spaces">  </span><span class="istickedoff">case maybe_cond of</span>
+<span class="lineno"> 2071 </span><span class="spaces">    </span><span class="istickedoff">Just cond -&gt; case maybe_invalidate_msg of</span>
+<span class="lineno"> 2072 </span><span class="spaces">      </span><span class="istickedoff">Just invalidate_msg -&gt; do</span>
+<span class="lineno"> 2073 </span><span class="spaces">        </span><span class="istickedoff">let invalidate_op = \mem -&gt; do</span>
+<span class="lineno"> 2074 </span><span class="spaces">              </span><span class="istickedoff">sz &lt;- case val of</span>
+<span class="lineno"> 2075 </span><span class="spaces">                </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
+<span class="lineno"> 2076 </span><span class="spaces">                  </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
+<span class="lineno"> 2077 </span><span class="spaces">                  </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
+<span class="lineno"> 2078 </span><span class="spaces">                  </span><span class="istickedoff">W4.bvLit</span>
+<span class="lineno"> 2079 </span><span class="spaces">                    </span><span class="istickedoff">sym</span>
+<span class="lineno"> 2080 </span><span class="spaces">                    </span><span class="istickedoff">?ptrWidth</span>
+<span class="lineno"> 2081 </span><span class="spaces">                    </span><span class="istickedoff">(Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)</span>
+<span class="lineno"> 2082 </span><span class="spaces">                </span><span class="istickedoff">SymbolicSizeValue{} -&gt; <span class="nottickedoff">fail $ unwords</span></span>
+<span class="lineno"> 2083 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;internal error:&quot;</span></span>
+<span class="lineno"> 2084 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;unsupported conditional invalidation of symbolic size points-to value&quot;</span></span>
+<span class="lineno"> 2085 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, show (PP.pretty val)</span></span>
+<span class="lineno"> 2086 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2087 </span><span class="spaces">              </span><span class="istickedoff">Crucible.doInvalidate bak ?ptrWidth mem ptr <span class="nottickedoff">invalidate_msg</span> sz</span>
+<span class="lineno"> 2088 </span><span class="spaces">        </span><span class="istickedoff">Crucible.mergeWriteOperations bak base_mem cond store_op invalidate_op</span>
+<span class="lineno"> 2089 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2090 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Crucible.doConditionalWriteOperation bak base_mem cond store_op</span></span>
+<span class="lineno"> 2091 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; store_op base_mem</span></span>
+<span class="lineno"> 2092 </span>
+<span class="lineno"> 2093 </span>-- | Like 'storePointsToValue', but specifically geared towards the needs
+<span class="lineno"> 2094 </span>-- of fields within bitfields. In particular, this performs all of the
+<span class="lineno"> 2095 </span>-- necessary bit-twiddling on the LHS (a bitfield) to store the RHS value in
+<span class="lineno"> 2096 </span>-- the right place in the bitfield.
+<span class="lineno"> 2097 </span>storePointsToBitfieldValue ::
+<span class="lineno"> 2098 </span>  ( ?memOpts :: Crucible.MemOptions
+<span class="lineno"> 2099 </span>  , ?w4EvalTactic :: W4EvalTactic
+<span class="lineno"> 2100 </span>  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+<span class="lineno"> 2101 </span>  , Crucible.HasLLVMAnn Sym
+<span class="lineno"> 2102 </span>  ) =&gt;
+<span class="lineno"> 2103 </span>  Options -&gt;
+<span class="lineno"> 2104 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2105 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
+<span class="lineno"> 2106 </span>  Map AllocIndex (MS.AllocSpec (LLVM arch)) -&gt;
+<span class="lineno"> 2107 </span>  Map AllocIndex (MS.TypeName (LLVM arch)) -&gt;
+<span class="lineno"> 2108 </span>  Crucible.MemImpl Sym -&gt;
+<span class="lineno"> 2109 </span>  LLVMPtr (Crucible.ArchWidth arch) -&gt;
+<span class="lineno"> 2110 </span>  BitfieldIndex -&gt;
+<span class="lineno"> 2111 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno"> 2112 </span>  IO (Crucible.MemImpl Sym)
+<span class="lineno"> 2113 </span><span class="decl"><span class="istickedoff">storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =</span>
+<span class="lineno"> 2114 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 2115 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 2116 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2117 </span><span class="spaces">  </span><span class="istickedoff">let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)</span>
+<span class="lineno"> 2118 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2119 </span><span class="spaces">  </span><span class="istickedoff">smt_array_memory_model_enabled &lt;- W4.getOpt</span>
+<span class="lineno"> 2120 </span><span class="spaces">    </span><span class="istickedoff">=&lt;&lt; W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)</span>
+<span class="lineno"> 2121 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2122 </span><span class="spaces">  </span><span class="istickedoff">-- Unlike in storePointsToValue, we compute the MemTy/StorageType not from</span>
+<span class="lineno"> 2123 </span><span class="spaces">  </span><span class="istickedoff">-- the RHS value, but from the BitfieldIndex. This is because we need to</span>
+<span class="lineno"> 2124 </span><span class="spaces">  </span><span class="istickedoff">-- load the entire bitfield, which can be larger than the size of the RHS</span>
+<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff">-- value.</span>
+<span class="lineno"> 2126 </span><span class="spaces">  </span><span class="istickedoff">let memTy = biBitfieldType bfIndex</span>
+<span class="lineno"> 2127 </span><span class="spaces">  </span><span class="istickedoff">storTy &lt;- Crucible.toStorableType memTy</span>
+<span class="lineno"> 2128 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2129 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno"> 2130 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm _tm</span>
+<span class="lineno"> 2131 </span><span class="spaces">      </span><span class="istickedoff">| smt_array_memory_model_enabled -&gt;</span>
+<span class="lineno"> 2132 </span><span class="spaces">        </span><span class="istickedoff">-- See #1540.</span>
+<span class="lineno"> 2133 </span><span class="spaces">        </span><span class="istickedoff">fail $ unlines</span>
+<span class="lineno"> 2134 </span><span class="spaces">          </span><span class="istickedoff">[ &quot;llvm_points_to_bitfield currently does not work in&quot;</span>
+<span class="lineno"> 2135 </span><span class="spaces">          </span><span class="istickedoff">, &quot;combination with the enable_smt_array_memory_model option.&quot;</span>
+<span class="lineno"> 2136 </span><span class="spaces">          </span><span class="istickedoff">]</span>
+<span class="lineno"> 2137 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; do</span>
+<span class="lineno"> 2138 </span><span class="spaces">      </span><span class="istickedoff">-- Resolve the RHS value as an LLVMVal.</span>
+<span class="lineno"> 2139 </span><span class="spaces">      </span><span class="istickedoff">rhsVal &lt;- X.handle <span class="nottickedoff">(handleException opts)</span> $</span>
+<span class="lineno"> 2140 </span><span class="spaces">        </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">base_mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno"> 2141 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2142 </span><span class="spaces">      </span><span class="istickedoff">-- Load the bitfield that `ptr` points to.</span>
+<span class="lineno"> 2143 </span><span class="spaces">      </span><span class="istickedoff">bfLoadedVal &lt;- Crucible.loadRaw sym base_mem ptr storTy alignment</span>
+<span class="lineno"> 2144 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2145 </span><span class="spaces">      </span><span class="istickedoff">-- Assert that the bitfield was loaded successfully. If not, abort.</span>
+<span class="lineno"> 2146 </span><span class="spaces">      </span><span class="istickedoff">let badLoadSummary = summarizeBadLoad <span class="nottickedoff">cc</span> <span class="nottickedoff">memTy</span> <span class="nottickedoff">PreState</span> <span class="nottickedoff">ptr</span></span>
+<span class="lineno"> 2147 </span><span class="spaces">      </span><span class="istickedoff">bfVal &lt;- case bfLoadedVal of</span>
+<span class="lineno"> 2148 </span><span class="spaces">        </span><span class="istickedoff">Crucible.NoErr p res_val -&gt; do</span>
+<span class="lineno"> 2149 </span><span class="spaces">          </span><span class="istickedoff">let rsn = Crucible.AssertFailureSimError &quot;Error loading bitvector&quot; $</span>
+<span class="lineno"> 2150 </span><span class="spaces">                    </span><span class="istickedoff">show badLoadSummary</span>
+<span class="lineno"> 2151 </span><span class="spaces">          </span><span class="istickedoff">Crucible.assert bak p rsn</span>
+<span class="lineno"> 2152 </span><span class="spaces">          </span><span class="istickedoff">pure res_val</span>
+<span class="lineno"> 2153 </span><span class="spaces">        </span><span class="istickedoff">Crucible.Err _p -&gt;</span>
+<span class="lineno"> 2154 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ show $ describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr</span></span>
+<span class="lineno"> 2155 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2156 </span><span class="spaces">      </span><span class="istickedoff">case (bfVal, rhsVal) of</span>
+<span class="lineno"> 2157 </span><span class="spaces">        </span><span class="istickedoff">-- This will only work if:</span>
+<span class="lineno"> 2158 </span><span class="spaces">        </span><span class="istickedoff">--</span>
+<span class="lineno"> 2159 </span><span class="spaces">        </span><span class="istickedoff">-- * Both the bitfield and the RHS value are bitvectors, and</span>
+<span class="lineno"> 2160 </span><span class="spaces">        </span><span class="istickedoff">-- * The width of the RHS type is less than or equal to the width</span>
+<span class="lineno"> 2161 </span><span class="spaces">        </span><span class="istickedoff">--   of the bitfield type.</span>
+<span class="lineno"> 2162 </span><span class="spaces">        </span><span class="istickedoff">--</span>
+<span class="lineno"> 2163 </span><span class="spaces">        </span><span class="istickedoff">-- We check these criteria in this case.</span>
+<span class="lineno"> 2164 </span><span class="spaces">        </span><span class="istickedoff">(Crucible.LLVMValInt bfBlk bfBV, Crucible.LLVMValInt _rhsBlk rhsBV)</span>
+<span class="lineno"> 2165 </span><span class="spaces">          </span><span class="istickedoff">-&gt; let bfWidth = W4.bvWidth bfBV</span>
+<span class="lineno"> 2166 </span><span class="spaces">                 </span><span class="istickedoff">rhsWidth = W4.bvWidth rhsBV in</span>
+<span class="lineno"> 2167 </span><span class="spaces">             </span><span class="istickedoff">case testLeq (incNat rhsWidth) bfWidth of</span>
+<span class="lineno"> 2168 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2169 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 2170 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size&quot;</span></span>
+<span class="lineno"> 2171 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitvector width: &quot; ++ show bfWidth</span></span>
+<span class="lineno"> 2172 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value width: &quot; ++ show rhsWidth</span></span>
+<span class="lineno"> 2173 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2174 </span><span class="spaces">               </span><span class="istickedoff">Just LeqProof -&gt;</span>
+<span class="lineno"> 2175 </span><span class="spaces">                 </span><span class="istickedoff">do -- Here is where we perform the bit-twiddling needed</span>
+<span class="lineno"> 2176 </span><span class="spaces">                    </span><span class="istickedoff">-- to store the RHS value in the bitfield. We will use</span>
+<span class="lineno"> 2177 </span><span class="spaces">                    </span><span class="istickedoff">-- this as a running example:</span>
+<span class="lineno"> 2178 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2179 </span><span class="spaces">                    </span><span class="istickedoff">--   struct s {</span>
+<span class="lineno"> 2180 </span><span class="spaces">                    </span><span class="istickedoff">--     int32_t w;</span>
+<span class="lineno"> 2181 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t x1:1;</span>
+<span class="lineno"> 2182 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t x2:2;</span>
+<span class="lineno"> 2183 </span><span class="spaces">                    </span><span class="istickedoff">--     uint8_t y:1;</span>
+<span class="lineno"> 2184 </span><span class="spaces">                    </span><span class="istickedoff">--     int32_t z;</span>
+<span class="lineno"> 2185 </span><span class="spaces">                    </span><span class="istickedoff">--   };</span>
+<span class="lineno"> 2186 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2187 </span><span class="spaces">                    </span><span class="istickedoff">-- Let us imagine that we are setting the `y` field to</span>
+<span class="lineno"> 2188 </span><span class="spaces">                    </span><span class="istickedoff">-- be 1.</span>
+<span class="lineno"> 2189 </span><span class="spaces">                    </span><span class="istickedoff">let -- The offset (in bits) of the field within the</span>
+<span class="lineno"> 2190 </span><span class="spaces">                        </span><span class="istickedoff">-- bitfield. For `y`, this is 3 (x1's offset is 0</span>
+<span class="lineno"> 2191 </span><span class="spaces">                        </span><span class="istickedoff">-- and `x2`'s offset is 1).</span>
+<span class="lineno"> 2192 </span><span class="spaces">                        </span><span class="istickedoff">bfOffset   = biFieldOffset bfIndex</span>
+<span class="lineno"> 2193 </span><span class="spaces">                        </span><span class="istickedoff">bfOffsetBV = BV.mkBV bfWidth $ fromIntegral bfOffset</span>
+<span class="lineno"> 2194 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2195 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the nth bit (zero-indexed) is</span>
+<span class="lineno"> 2196 </span><span class="spaces">                        </span><span class="istickedoff">-- set, where n equals the size of the field</span>
+<span class="lineno"> 2197 </span><span class="spaces">                        </span><span class="istickedoff">-- (in bits) within the bitfield. Since `y` is</span>
+<span class="lineno"> 2198 </span><span class="spaces">                        </span><span class="istickedoff">-- 1-bit, this would make `fieldBitsBV` be</span>
+<span class="lineno"> 2199 </span><span class="spaces">                        </span><span class="istickedoff">-- 0b00000010, or 2.</span>
+<span class="lineno"> 2200 </span><span class="spaces">                        </span><span class="istickedoff">fieldBitsBV = BV.bit' bfWidth $</span>
+<span class="lineno"> 2201 </span><span class="spaces">                                      </span><span class="istickedoff">fromIntegral $ biFieldSize bfIndex</span>
+<span class="lineno"> 2202 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2203 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the (n-1) least significant bits</span>
+<span class="lineno"> 2204 </span><span class="spaces">                        </span><span class="istickedoff">-- set to 1, where n equals the value of</span>
+<span class="lineno"> 2205 </span><span class="spaces">                        </span><span class="istickedoff">-- `fieldBitsBV`. For `y`, `leastBitsBV` would be</span>
+<span class="lineno"> 2206 </span><span class="spaces">                        </span><span class="istickedoff">-- equal to 0b00000001, or 1.</span>
+<span class="lineno"> 2207 </span><span class="spaces">                        </span><span class="istickedoff">leastBitsBV = BV.sub bfWidth fieldBitsBV (BV.one bfWidth)</span>
+<span class="lineno"> 2208 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2209 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the bits corresponding to the</span>
+<span class="lineno"> 2210 </span><span class="spaces">                        </span><span class="istickedoff">-- field within the bitfield set to 1, and all</span>
+<span class="lineno"> 2211 </span><span class="spaces">                        </span><span class="istickedoff">-- other bits are set to 0. For `y`, `bitmaskBV`</span>
+<span class="lineno"> 2212 </span><span class="spaces">                        </span><span class="istickedoff">-- would be equal to 0b00001000, or 8.</span>
+<span class="lineno"> 2213 </span><span class="spaces">                        </span><span class="istickedoff">bitmaskBV = BV.shl bfWidth leastBitsBV $ fromIntegral bfOffset</span>
+<span class="lineno"> 2214 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2215 </span><span class="spaces">                        </span><span class="istickedoff">-- A bitmask with the bits corresponding to the</span>
+<span class="lineno"> 2216 </span><span class="spaces">                        </span><span class="istickedoff">-- field within the bitfield set to 0, and all</span>
+<span class="lineno"> 2217 </span><span class="spaces">                        </span><span class="istickedoff">-- other bits are set to 1. For `y`, `compBitmaskBV`</span>
+<span class="lineno"> 2218 </span><span class="spaces">                        </span><span class="istickedoff">-- would be equal to 0b11110111, or 247.</span>
+<span class="lineno"> 2219 </span><span class="spaces">                        </span><span class="istickedoff">compBitmaskBV = BV.complement bfWidth bitmaskBV</span>
+<span class="lineno"> 2220 </span><span class="spaces">                    </span><span class="istickedoff">compBitmaskSymBV &lt;- W4.bvLit sym bfWidth compBitmaskBV</span>
+<span class="lineno"> 2221 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2222 </span><span class="spaces">                    </span><span class="istickedoff">-- Clear all of the bits in the bitfield</span>
+<span class="lineno"> 2223 </span><span class="spaces">                    </span><span class="istickedoff">-- corresponding to the field, leaving all other bits</span>
+<span class="lineno"> 2224 </span><span class="spaces">                    </span><span class="istickedoff">-- unchanged. If the original bitvector was 0b????????,</span>
+<span class="lineno"> 2225 </span><span class="spaces">                    </span><span class="istickedoff">-- then `bfBV'` is 0b????0???.</span>
+<span class="lineno"> 2226 </span><span class="spaces">                    </span><span class="istickedoff">bfBV' &lt;- W4.bvAndBits sym bfBV compBitmaskSymBV</span>
+<span class="lineno"> 2227 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2228 </span><span class="spaces">                    </span><span class="istickedoff">-- Zero-extend the RHS value to be the same width as</span>
+<span class="lineno"> 2229 </span><span class="spaces">                    </span><span class="istickedoff">-- the bitfield. In our running example, we</span>
+<span class="lineno"> 2230 </span><span class="spaces">                    </span><span class="istickedoff">-- zero-extend 0b1 (1) to 0b00000001.</span>
+<span class="lineno"> 2231 </span><span class="spaces">                    </span><span class="istickedoff">rhsBV' &lt;- W4.bvZext sym bfWidth rhsBV</span>
+<span class="lineno"> 2232 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2233 </span><span class="spaces">                    </span><span class="istickedoff">-- Left-shift the zero-extended RHS value such that</span>
+<span class="lineno"> 2234 </span><span class="spaces">                    </span><span class="istickedoff">-- its contents are in the same position as the field</span>
+<span class="lineno"> 2235 </span><span class="spaces">                    </span><span class="istickedoff">-- in the bitfield. In our running example, `rhsBV''`</span>
+<span class="lineno"> 2236 </span><span class="spaces">                    </span><span class="istickedoff">-- is 0b00001000, or 8.</span>
+<span class="lineno"> 2237 </span><span class="spaces">                    </span><span class="istickedoff">rhsBV'' &lt;- W4.bvShl sym rhsBV' =&lt;&lt; W4.bvLit sym bfWidth bfOffsetBV</span>
+<span class="lineno"> 2238 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2239 </span><span class="spaces">                    </span><span class="istickedoff">-- Finally, set the bits in the bitfield to the RHS</span>
+<span class="lineno"> 2240 </span><span class="spaces">                    </span><span class="istickedoff">-- value with a bitwise-XOR operation. (We could just as</span>
+<span class="lineno"> 2241 </span><span class="spaces">                    </span><span class="istickedoff">-- well use bitwise-OR, but bitwise-XOR plays nicer with</span>
+<span class="lineno"> 2242 </span><span class="spaces">                    </span><span class="istickedoff">-- how What4 represents bitvectors). In our running</span>
+<span class="lineno"> 2243 </span><span class="spaces">                    </span><span class="istickedoff">-- example, `bfBV''` is 0b????1???.</span>
+<span class="lineno"> 2244 </span><span class="spaces">                    </span><span class="istickedoff">bfBV'' &lt;- W4.bvXorBits sym bfBV' rhsBV''</span>
+<span class="lineno"> 2245 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2246 </span><span class="spaces">                    </span><span class="istickedoff">-- Store the bitfield's value back to memory.</span>
+<span class="lineno"> 2247 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2248 </span><span class="spaces">                    </span><span class="istickedoff">-- Bear in mind that this whole process is repeated once per</span>
+<span class="lineno"> 2249 </span><span class="spaces">                    </span><span class="istickedoff">-- field, even if the fields all reside within the same</span>
+<span class="lineno"> 2250 </span><span class="spaces">                    </span><span class="istickedoff">-- bitfield. See #1541 for an alternative approach that</span>
+<span class="lineno"> 2251 </span><span class="spaces">                    </span><span class="istickedoff">-- would optimize this further.</span>
+<span class="lineno"> 2252 </span><span class="spaces">                    </span><span class="istickedoff">let bfVal' = Crucible.LLVMValInt bfBlk bfBV''</span>
+<span class="lineno"> 2253 </span><span class="spaces">                    </span><span class="istickedoff">Crucible.storeConstRaw bak base_mem ptr storTy alignment bfVal'</span>
+<span class="lineno"> 2254 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 2255 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors&quot;</span></span>
+<span class="lineno"> 2256 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;Bitfield value: &quot; ++ show (Crucible.ppTermExpr bfVal)</span></span>
+<span class="lineno"> 2257 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;RHS value: &quot; ++ show (MS.ppSetupValue val)</span></span>
+<span class="lineno"> 2258 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno"> 2259 </span>
-<span class="lineno"> 2260 </span>------------------------------------------------------------------------
-<span class="lineno"> 2261 </span>
+<span class="lineno"> 2260 </span>
+<span class="lineno"> 2261 </span>------------------------------------------------------------------------
 <span class="lineno"> 2262 </span>
-<span class="lineno"> 2263 </span>-- | Process an @llvm_equal@ statement from the postcondition
-<span class="lineno"> 2264 </span>-- section of the CrucibleSetup block.
-<span class="lineno"> 2265 </span>executeEqual ::
-<span class="lineno"> 2266 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 2267 </span>  Options                                          -&gt;
-<span class="lineno"> 2268 </span>  SharedContext                                    -&gt;
-<span class="lineno"> 2269 </span>  LLVMCrucibleContext arch                           -&gt;
-<span class="lineno"> 2270 </span>  MS.CrucibleMethodSpecIR (LLVM arch)                             -&gt;
-<span class="lineno"> 2271 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno"> 2272 </span>  SetupValue (LLVM arch)       {- ^ first value to compare  -} -&gt;
-<span class="lineno"> 2273 </span>  SetupValue (LLVM arch)       {- ^ second value to compare -} -&gt;
-<span class="lineno"> 2274 </span>  OverrideMatcher (LLVM arch) md ()
-<span class="lineno"> 2275 </span><span class="decl"><span class="nottickedoff">executeEqual opts sc cc spec md v1 v2 = do</span>
-<span class="lineno"> 2276 </span><span class="spaces">  </span><span class="nottickedoff">(_, val1) &lt;- resolveSetupValueLLVM opts cc sc spec v1</span>
-<span class="lineno"> 2277 </span><span class="spaces">  </span><span class="nottickedoff">(_, val2) &lt;- resolveSetupValueLLVM opts cc sc spec v2</span>
-<span class="lineno"> 2278 </span><span class="spaces">  </span><span class="nottickedoff">p         &lt;- liftIO (equalValsPred cc val1 val2)</span>
-<span class="lineno"> 2279 </span><span class="spaces">  </span><span class="nottickedoff">addAssume p md</span></span>
-<span class="lineno"> 2280 </span>
-<span class="lineno"> 2281 </span>-- | Process an @llvm_postcond@ statement from the postcondition
-<span class="lineno"> 2282 </span>-- section of the CrucibleSetup block.
-<span class="lineno"> 2283 </span>executePred ::
-<span class="lineno"> 2284 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
-<span class="lineno"> 2285 </span>  SharedContext -&gt;
-<span class="lineno"> 2286 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2287 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno"> 2288 </span>  TypedTerm {- ^ the term to assert as a postcondition -} -&gt;
-<span class="lineno"> 2289 </span>  OverrideMatcher (LLVM arch) md ()
-<span class="lineno"> 2290 </span><span class="decl"><span class="istickedoff">executePred sc cc md tt =</span>
-<span class="lineno"> 2291 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- instantiateExtResolveSAWPred sc cc (ttTerm tt)</span>
-<span class="lineno"> 2292 </span><span class="spaces">     </span><span class="istickedoff">addAssume p <span class="nottickedoff">md</span></span></span>
-<span class="lineno"> 2293 </span>
-<span class="lineno"> 2294 </span>------------------------------------------------------------------------
-<span class="lineno"> 2295 </span>
-<span class="lineno"> 2296 </span>-- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
-<span class="lineno"> 2297 </span>-- be NULL.
-<span class="lineno"> 2298 </span>executeFreshPointer ::
-<span class="lineno"> 2299 </span>  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =&gt;
-<span class="lineno"> 2300 </span>  LLVMCrucibleContext arch {-  Cruible context       -} -&gt;
-<span class="lineno"> 2301 </span>  AllocIndex      {- ^ SetupVar allocation ID -} -&gt;
-<span class="lineno"> 2302 </span>  IO (LLVMPtr (Crucible.ArchWidth arch)) {- ^ Symbolic pointer value -}
-<span class="lineno"> 2303 </span><span class="decl"><span class="istickedoff">executeFreshPointer cc (AllocIndex i) =</span>
-<span class="lineno"> 2304 </span><span class="spaces">  </span><span class="istickedoff">do let mkName base = W4.systemSymbol (base ++ show i ++ &quot;!&quot;)</span>
-<span class="lineno"> 2305 </span><span class="spaces">         </span><span class="istickedoff">sym         = cc^.ccSym</span>
-<span class="lineno"> 2306 </span><span class="spaces">     </span><span class="istickedoff">blk &lt;- W4.freshNat sym (mkName &quot;blk&quot;)</span>
-<span class="lineno"> 2307 </span><span class="spaces">     </span><span class="istickedoff">off &lt;- W4.freshConstant sym (mkName &quot;off&quot;) (W4.BaseBVRepr Crucible.PtrWidth)</span>
-<span class="lineno"> 2308 </span><span class="spaces">     </span><span class="istickedoff">return (Crucible.LLVMPointer blk off)</span></span>
-<span class="lineno"> 2309 </span>
-<span class="lineno"> 2310 </span>------------------------------------------------------------------------
-<span class="lineno"> 2311 </span>
-<span class="lineno"> 2312 </span>-- | Map the given substitution over all 'SetupTerm' constructors in
-<span class="lineno"> 2313 </span>-- the given 'SetupValue'.
-<span class="lineno"> 2314 </span>instantiateSetupValue ::
-<span class="lineno"> 2315 </span>  SharedContext     -&gt;
-<span class="lineno"> 2316 </span>  Map VarIndex Term -&gt;
-<span class="lineno"> 2317 </span>  SetupValue (LLVM arch)        -&gt;
-<span class="lineno"> 2318 </span>  IO (SetupValue (LLVM arch))
-<span class="lineno"> 2319 </span><span class="decl"><span class="istickedoff">instantiateSetupValue sc s v =</span>
-<span class="lineno"> 2320 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno"> 2321 </span><span class="spaces">    </span><span class="istickedoff">SetupVar{}               -&gt; return v</span>
-<span class="lineno"> 2322 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm tt             -&gt; SetupTerm     &lt;$&gt; doTerm tt</span>
-<span class="lineno"> 2323 </span><span class="spaces">    </span><span class="istickedoff">SetupStruct p vs         -&gt; <span class="nottickedoff">SetupStruct p &lt;$&gt; mapM (instantiateSetupValue sc s) vs</span></span>
-<span class="lineno"> 2324 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () vs         -&gt; SetupArray () &lt;$&gt; mapM (instantiateSetupValue <span class="nottickedoff">sc</span> s) vs</span>
-<span class="lineno"> 2325 </span><span class="spaces">    </span><span class="istickedoff">SetupElem{}              -&gt; return v</span>
-<span class="lineno"> 2326 </span><span class="spaces">    </span><span class="istickedoff">SetupField{}             -&gt; return v</span>
-<span class="lineno"> 2327 </span><span class="spaces">    </span><span class="istickedoff">SetupCast{}              -&gt; <span class="nottickedoff">return v</span></span>
-<span class="lineno"> 2328 </span><span class="spaces">    </span><span class="istickedoff">SetupUnion{}             -&gt; <span class="nottickedoff">return v</span></span>
-<span class="lineno"> 2329 </span><span class="spaces">    </span><span class="istickedoff">SetupNull{}              -&gt; <span class="nottickedoff">return v</span></span>
-<span class="lineno"> 2330 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobal{}            -&gt; return v</span>
-<span class="lineno"> 2331 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobalInitializer{} -&gt; return v</span>
-<span class="lineno"> 2332 </span><span class="spaces">    </span><span class="istickedoff">SetupMux empty _ _ _     -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2333 </span><span class="spaces">    </span><span class="istickedoff">SetupEnum  empty         -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2334 </span><span class="spaces">    </span><span class="istickedoff">SetupTuple empty _       -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2335 </span><span class="spaces">    </span><span class="istickedoff">SetupSlice empty         -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2336 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2337 </span><span class="spaces">    </span><span class="istickedoff">doTerm (TypedTerm schema t) = TypedTerm schema &lt;$&gt; scInstantiateExt sc s t</span></span>
-<span class="lineno"> 2338 </span>
-<span class="lineno"> 2339 </span>------------------------------------------------------------------------
-<span class="lineno"> 2340 </span>
-<span class="lineno"> 2341 </span>resolveSetupValueLLVM ::
-<span class="lineno"> 2342 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 2343 </span>  Options -&gt;
-<span class="lineno"> 2344 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2345 </span>  SharedContext -&gt;
-<span class="lineno"> 2346 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
-<span class="lineno"> 2347 </span>  SetupValue (LLVM arch) -&gt;
-<span class="lineno"> 2348 </span>  OverrideMatcher (LLVM arch) md (Crucible.MemType, LLVMVal)
-<span class="lineno"> 2349 </span><span class="decl"><span class="istickedoff">resolveSetupValueLLVM opts cc sc spec sval =</span>
-<span class="lineno"> 2350 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
-<span class="lineno"> 2351 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
-<span class="lineno"> 2352 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))</span>
-<span class="lineno"> 2353 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations spec</span>
-<span class="lineno"> 2354 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames spec</span>
-<span class="lineno"> 2355 </span><span class="spaces">     </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue cc tyenv nameEnv sval</span>
-<span class="lineno"> 2356 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue sc s sval</span>
-<span class="lineno"> 2357 </span><span class="spaces">     </span><span class="istickedoff">lval  &lt;- liftIO $ resolveSetupVal cc mem m tyenv nameEnv sval' `X.catch` <span class="nottickedoff">handleException opts</span></span>
-<span class="lineno"> 2358 </span><span class="spaces">     </span><span class="istickedoff">return (memTy, lval)</span></span>
-<span class="lineno"> 2359 </span>
-<span class="lineno"> 2360 </span>resolveSetupValue ::
-<span class="lineno"> 2361 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 2362 </span>  Options -&gt;
-<span class="lineno"> 2363 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2364 </span>  SharedContext -&gt;
-<span class="lineno"> 2365 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
-<span class="lineno"> 2366 </span>  Crucible.TypeRepr tp -&gt;
-<span class="lineno"> 2367 </span>  SetupValue (LLVM arch) -&gt;
-<span class="lineno"> 2368 </span>  OverrideMatcher (LLVM arch) md (Crucible.MemType, Crucible.RegValue Sym tp)
-<span class="lineno"> 2369 </span><span class="decl"><span class="istickedoff">resolveSetupValue opts cc sc spec tp sval =</span>
-<span class="lineno"> 2370 </span><span class="spaces">  </span><span class="istickedoff">do (memTy, lval) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc sc spec sval</span>
-<span class="lineno"> 2371 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 2372 </span><span class="spaces">     </span><span class="istickedoff">val &lt;- liftIO $ Crucible.unpackMemValue <span class="nottickedoff">sym</span> tp lval</span>
-<span class="lineno"> 2373 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">memTy</span>, val)</span></span>
-<span class="lineno"> 2374 </span>
-<span class="lineno"> 2375 </span>-- | Like 'resolveSetupValueLLVM', but specifically geared towards the needs
-<span class="lineno"> 2376 </span>-- of fields within bitfields. See the Haddocks for 'resolveSetupValBitfield'
-<span class="lineno"> 2377 </span>-- for the salient details.
-<span class="lineno"> 2378 </span>resolveSetupValueBitfieldLLVM ::
-<span class="lineno"> 2379 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 2380 </span>  Options -&gt;
-<span class="lineno"> 2381 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2382 </span>  SharedContext -&gt;
-<span class="lineno"> 2383 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
-<span class="lineno"> 2384 </span>  SetupValue (LLVM arch) -&gt;
-<span class="lineno"> 2385 </span>  String -&gt;
-<span class="lineno"> 2386 </span>  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMVal)
-<span class="lineno"> 2387 </span><span class="decl"><span class="istickedoff">resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName =</span>
-<span class="lineno"> 2388 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
-<span class="lineno"> 2389 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use <span class="nottickedoff">termSub</span>)</span>
-<span class="lineno"> 2390 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))</span>
-<span class="lineno"> 2391 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations spec</span>
-<span class="lineno"> 2392 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames spec</span>
-<span class="lineno"> 2393 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">s</span> sval</span>
-<span class="lineno"> 2394 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ resolveSetupValBitfield cc <span class="nottickedoff">mem</span> m tyenv nameEnv sval' fieldName `X.catch` <span class="nottickedoff">handleException opts</span></span></span>
-<span class="lineno"> 2395 </span>
-<span class="lineno"> 2396 </span>-- | Like 'resolveSetupValue', but specifically geared towards the needs
-<span class="lineno"> 2397 </span>-- of fields within bitfields. Note that the LHS value must be a pointer, so
-<span class="lineno"> 2398 </span>-- there is no need to pass a 'Crucible.TypeRepr' here. Moreover, the second
-<span class="lineno"> 2399 </span>-- return value is always specialized to 'LLVMPtr'. See also the Haddocks for
-<span class="lineno"> 2400 </span>-- 'resolveSetupValueBitfieldLLVM' for other differences.
-<span class="lineno"> 2401 </span>resolveSetupValueBitfield ::
-<span class="lineno"> 2402 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno"> 2403 </span>  Options -&gt;
-<span class="lineno"> 2404 </span>  LLVMCrucibleContext arch -&gt;
-<span class="lineno"> 2405 </span>  SharedContext -&gt;
-<span class="lineno"> 2406 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
-<span class="lineno"> 2407 </span>  SetupValue (LLVM arch) -&gt;
-<span class="lineno"> 2408 </span>  String -&gt;
-<span class="lineno"> 2409 </span>  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMPtr (Crucible.ArchWidth arch))
-<span class="lineno"> 2410 </span><span class="decl"><span class="istickedoff">resolveSetupValueBitfield opts cc sc spec sval fieldName =</span>
-<span class="lineno"> 2411 </span><span class="spaces">  </span><span class="istickedoff">do (bfIndex, lval) &lt;- resolveSetupValueBitfieldLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec sval fieldName</span>
-<span class="lineno"> 2412 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 2413 </span><span class="spaces">     </span><span class="istickedoff">val &lt;- liftIO $ Crucible.unpackMemValue <span class="nottickedoff">sym</span> Crucible.PtrRepr lval</span>
-<span class="lineno"> 2414 </span><span class="spaces">     </span><span class="istickedoff">pure (bfIndex, val)</span></span>
-<span class="lineno"> 2415 </span>
-<span class="lineno"> 2416 </span>enableSMTArrayMemoryModel :: W4.ConfigOption W4.BaseBoolType
-<span class="lineno"> 2417 </span><span class="decl"><span class="istickedoff">enableSMTArrayMemoryModel = (W4.configOption W4.knownRepr &quot;smt-array-memory-model&quot;)</span></span>
+<span class="lineno"> 2263 </span>
+<span class="lineno"> 2264 </span>-- | Process an @llvm_equal@ statement from the postcondition
+<span class="lineno"> 2265 </span>-- section of the CrucibleSetup block.
+<span class="lineno"> 2266 </span>executeEqual ::
+<span class="lineno"> 2267 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 2268 </span>  Options                                          -&gt;
+<span class="lineno"> 2269 </span>  SharedContext                                    -&gt;
+<span class="lineno"> 2270 </span>  LLVMCrucibleContext arch                           -&gt;
+<span class="lineno"> 2271 </span>  MS.CrucibleMethodSpecIR (LLVM arch)                             -&gt;
+<span class="lineno"> 2272 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno"> 2273 </span>  SetupValue (LLVM arch)       {- ^ first value to compare  -} -&gt;
+<span class="lineno"> 2274 </span>  SetupValue (LLVM arch)       {- ^ second value to compare -} -&gt;
+<span class="lineno"> 2275 </span>  OverrideMatcher (LLVM arch) md ()
+<span class="lineno"> 2276 </span><span class="decl"><span class="nottickedoff">executeEqual opts sc cc spec md v1 v2 = do</span>
+<span class="lineno"> 2277 </span><span class="spaces">  </span><span class="nottickedoff">(_, val1) &lt;- resolveSetupValueLLVM opts cc sc spec v1</span>
+<span class="lineno"> 2278 </span><span class="spaces">  </span><span class="nottickedoff">(_, val2) &lt;- resolveSetupValueLLVM opts cc sc spec v2</span>
+<span class="lineno"> 2279 </span><span class="spaces">  </span><span class="nottickedoff">p         &lt;- liftIO (equalValsPred cc val1 val2)</span>
+<span class="lineno"> 2280 </span><span class="spaces">  </span><span class="nottickedoff">addAssume p md</span></span>
+<span class="lineno"> 2281 </span>
+<span class="lineno"> 2282 </span>-- | Process an @llvm_postcond@ statement from the postcondition
+<span class="lineno"> 2283 </span>-- section of the CrucibleSetup block.
+<span class="lineno"> 2284 </span>executePred ::
+<span class="lineno"> 2285 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
+<span class="lineno"> 2286 </span>  SharedContext -&gt;
+<span class="lineno"> 2287 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2288 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno"> 2289 </span>  TypedTerm {- ^ the term to assert as a postcondition -} -&gt;
+<span class="lineno"> 2290 </span>  OverrideMatcher (LLVM arch) md ()
+<span class="lineno"> 2291 </span><span class="decl"><span class="istickedoff">executePred sc cc md tt =</span>
+<span class="lineno"> 2292 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- instantiateExtResolveSAWPred sc cc (ttTerm tt)</span>
+<span class="lineno"> 2293 </span><span class="spaces">     </span><span class="istickedoff">addAssume p <span class="nottickedoff">md</span></span></span>
+<span class="lineno"> 2294 </span>
+<span class="lineno"> 2295 </span>------------------------------------------------------------------------
+<span class="lineno"> 2296 </span>
+<span class="lineno"> 2297 </span>-- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
+<span class="lineno"> 2298 </span>-- be NULL.
+<span class="lineno"> 2299 </span>executeFreshPointer ::
+<span class="lineno"> 2300 </span>  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =&gt;
+<span class="lineno"> 2301 </span>  LLVMCrucibleContext arch {-  Cruible context       -} -&gt;
+<span class="lineno"> 2302 </span>  AllocIndex      {- ^ SetupVar allocation ID -} -&gt;
+<span class="lineno"> 2303 </span>  IO (LLVMPtr (Crucible.ArchWidth arch)) {- ^ Symbolic pointer value -}
+<span class="lineno"> 2304 </span><span class="decl"><span class="istickedoff">executeFreshPointer cc (AllocIndex i) =</span>
+<span class="lineno"> 2305 </span><span class="spaces">  </span><span class="istickedoff">do let mkName base = W4.systemSymbol (base ++ show i ++ &quot;!&quot;)</span>
+<span class="lineno"> 2306 </span><span class="spaces">         </span><span class="istickedoff">sym         = cc^.ccSym</span>
+<span class="lineno"> 2307 </span><span class="spaces">     </span><span class="istickedoff">blk &lt;- W4.freshNat sym (mkName &quot;blk&quot;)</span>
+<span class="lineno"> 2308 </span><span class="spaces">     </span><span class="istickedoff">off &lt;- W4.freshConstant sym (mkName &quot;off&quot;) (W4.BaseBVRepr Crucible.PtrWidth)</span>
+<span class="lineno"> 2309 </span><span class="spaces">     </span><span class="istickedoff">return (Crucible.LLVMPointer blk off)</span></span>
+<span class="lineno"> 2310 </span>
+<span class="lineno"> 2311 </span>------------------------------------------------------------------------
+<span class="lineno"> 2312 </span>
+<span class="lineno"> 2313 </span>-- | Map the given substitution over all 'SetupTerm' constructors in
+<span class="lineno"> 2314 </span>-- the given 'SetupValue'.
+<span class="lineno"> 2315 </span>instantiateSetupValue ::
+<span class="lineno"> 2316 </span>  SharedContext     -&gt;
+<span class="lineno"> 2317 </span>  Map VarIndex Term -&gt;
+<span class="lineno"> 2318 </span>  SetupValue (LLVM arch)        -&gt;
+<span class="lineno"> 2319 </span>  IO (SetupValue (LLVM arch))
+<span class="lineno"> 2320 </span><span class="decl"><span class="istickedoff">instantiateSetupValue sc s v =</span>
+<span class="lineno"> 2321 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno"> 2322 </span><span class="spaces">    </span><span class="istickedoff">SetupVar{}               -&gt; return v</span>
+<span class="lineno"> 2323 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm tt             -&gt; SetupTerm     &lt;$&gt; doTerm tt</span>
+<span class="lineno"> 2324 </span><span class="spaces">    </span><span class="istickedoff">SetupStruct p vs         -&gt; <span class="nottickedoff">SetupStruct p &lt;$&gt; mapM (instantiateSetupValue sc s) vs</span></span>
+<span class="lineno"> 2325 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () vs         -&gt; SetupArray () &lt;$&gt; mapM (instantiateSetupValue <span class="nottickedoff">sc</span> s) vs</span>
+<span class="lineno"> 2326 </span><span class="spaces">    </span><span class="istickedoff">SetupElem{}              -&gt; return v</span>
+<span class="lineno"> 2327 </span><span class="spaces">    </span><span class="istickedoff">SetupField{}             -&gt; return v</span>
+<span class="lineno"> 2328 </span><span class="spaces">    </span><span class="istickedoff">SetupCast{}              -&gt; <span class="nottickedoff">return v</span></span>
+<span class="lineno"> 2329 </span><span class="spaces">    </span><span class="istickedoff">SetupUnion{}             -&gt; <span class="nottickedoff">return v</span></span>
+<span class="lineno"> 2330 </span><span class="spaces">    </span><span class="istickedoff">SetupNull{}              -&gt; <span class="nottickedoff">return v</span></span>
+<span class="lineno"> 2331 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobal{}            -&gt; return v</span>
+<span class="lineno"> 2332 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobalInitializer{} -&gt; return v</span>
+<span class="lineno"> 2333 </span><span class="spaces">    </span><span class="istickedoff">SetupMux empty _ _ _     -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2334 </span><span class="spaces">    </span><span class="istickedoff">SetupEnum  empty         -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2335 </span><span class="spaces">    </span><span class="istickedoff">SetupTuple empty _       -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2336 </span><span class="spaces">    </span><span class="istickedoff">SetupSlice empty         -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2337 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2338 </span><span class="spaces">    </span><span class="istickedoff">doTerm (TypedTerm schema t) = TypedTerm schema &lt;$&gt; scInstantiateExt sc s t</span></span>
+<span class="lineno"> 2339 </span>
+<span class="lineno"> 2340 </span>------------------------------------------------------------------------
+<span class="lineno"> 2341 </span>
+<span class="lineno"> 2342 </span>resolveSetupValueLLVM ::
+<span class="lineno"> 2343 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 2344 </span>  Options -&gt;
+<span class="lineno"> 2345 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2346 </span>  SharedContext -&gt;
+<span class="lineno"> 2347 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
+<span class="lineno"> 2348 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno"> 2349 </span>  OverrideMatcher (LLVM arch) md (Crucible.MemType, LLVMVal)
+<span class="lineno"> 2350 </span><span class="decl"><span class="istickedoff">resolveSetupValueLLVM opts cc sc spec sval =</span>
+<span class="lineno"> 2351 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
+<span class="lineno"> 2352 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
+<span class="lineno"> 2353 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))</span>
+<span class="lineno"> 2354 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations spec</span>
+<span class="lineno"> 2355 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames spec</span>
+<span class="lineno"> 2356 </span><span class="spaces">     </span><span class="istickedoff">memTy &lt;- exceptToFail $ typeOfSetupValue cc tyenv nameEnv sval</span>
+<span class="lineno"> 2357 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue sc s sval</span>
+<span class="lineno"> 2358 </span><span class="spaces">     </span><span class="istickedoff">lval  &lt;- liftIO $ resolveSetupVal cc mem m tyenv nameEnv sval' `X.catch` <span class="nottickedoff">handleException opts</span></span>
+<span class="lineno"> 2359 </span><span class="spaces">     </span><span class="istickedoff">return (memTy, lval)</span></span>
+<span class="lineno"> 2360 </span>
+<span class="lineno"> 2361 </span>resolveSetupValue ::
+<span class="lineno"> 2362 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 2363 </span>  Options -&gt;
+<span class="lineno"> 2364 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2365 </span>  SharedContext -&gt;
+<span class="lineno"> 2366 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
+<span class="lineno"> 2367 </span>  Crucible.TypeRepr tp -&gt;
+<span class="lineno"> 2368 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno"> 2369 </span>  OverrideMatcher (LLVM arch) md (Crucible.MemType, Crucible.RegValue Sym tp)
+<span class="lineno"> 2370 </span><span class="decl"><span class="istickedoff">resolveSetupValue opts cc sc spec tp sval =</span>
+<span class="lineno"> 2371 </span><span class="spaces">  </span><span class="istickedoff">do (memTy, lval) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc sc spec sval</span>
+<span class="lineno"> 2372 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
+<span class="lineno"> 2373 </span><span class="spaces">     </span><span class="istickedoff">val &lt;- liftIO $ Crucible.unpackMemValue <span class="nottickedoff">sym</span> tp lval</span>
+<span class="lineno"> 2374 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">memTy</span>, val)</span></span>
+<span class="lineno"> 2375 </span>
+<span class="lineno"> 2376 </span>-- | Like 'resolveSetupValueLLVM', but specifically geared towards the needs
+<span class="lineno"> 2377 </span>-- of fields within bitfields. See the Haddocks for 'resolveSetupValBitfield'
+<span class="lineno"> 2378 </span>-- for the salient details.
+<span class="lineno"> 2379 </span>resolveSetupValueBitfieldLLVM ::
+<span class="lineno"> 2380 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 2381 </span>  Options -&gt;
+<span class="lineno"> 2382 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2383 </span>  SharedContext -&gt;
+<span class="lineno"> 2384 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
+<span class="lineno"> 2385 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno"> 2386 </span>  String -&gt;
+<span class="lineno"> 2387 </span>  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMVal)
+<span class="lineno"> 2388 </span><span class="decl"><span class="istickedoff">resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName =</span>
+<span class="lineno"> 2389 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
+<span class="lineno"> 2390 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use <span class="nottickedoff">termSub</span>)</span>
+<span class="lineno"> 2391 </span><span class="spaces">     </span><span class="istickedoff">mem &lt;- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))</span>
+<span class="lineno"> 2392 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations spec</span>
+<span class="lineno"> 2393 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames spec</span>
+<span class="lineno"> 2394 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">s</span> sval</span>
+<span class="lineno"> 2395 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ resolveSetupValBitfield cc <span class="nottickedoff">mem</span> m tyenv nameEnv sval' fieldName `X.catch` <span class="nottickedoff">handleException opts</span></span></span>
+<span class="lineno"> 2396 </span>
+<span class="lineno"> 2397 </span>-- | Like 'resolveSetupValue', but specifically geared towards the needs
+<span class="lineno"> 2398 </span>-- of fields within bitfields. Note that the LHS value must be a pointer, so
+<span class="lineno"> 2399 </span>-- there is no need to pass a 'Crucible.TypeRepr' here. Moreover, the second
+<span class="lineno"> 2400 </span>-- return value is always specialized to 'LLVMPtr'. See also the Haddocks for
+<span class="lineno"> 2401 </span>-- 'resolveSetupValueBitfieldLLVM' for other differences.
+<span class="lineno"> 2402 </span>resolveSetupValueBitfield ::
+<span class="lineno"> 2403 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno"> 2404 </span>  Options -&gt;
+<span class="lineno"> 2405 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 2406 </span>  SharedContext -&gt;
+<span class="lineno"> 2407 </span>  MS.CrucibleMethodSpecIR (LLVM arch) -&gt;
+<span class="lineno"> 2408 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno"> 2409 </span>  String -&gt;
+<span class="lineno"> 2410 </span>  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMPtr (Crucible.ArchWidth arch))
+<span class="lineno"> 2411 </span><span class="decl"><span class="istickedoff">resolveSetupValueBitfield opts cc sc spec sval fieldName =</span>
+<span class="lineno"> 2412 </span><span class="spaces">  </span><span class="istickedoff">do (bfIndex, lval) &lt;- resolveSetupValueBitfieldLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> spec sval fieldName</span>
+<span class="lineno"> 2413 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
+<span class="lineno"> 2414 </span><span class="spaces">     </span><span class="istickedoff">val &lt;- liftIO $ Crucible.unpackMemValue <span class="nottickedoff">sym</span> Crucible.PtrRepr lval</span>
+<span class="lineno"> 2415 </span><span class="spaces">     </span><span class="istickedoff">pure (bfIndex, val)</span></span>
+<span class="lineno"> 2416 </span>
+<span class="lineno"> 2417 </span>enableSMTArrayMemoryModel :: W4.ConfigOption W4.BaseBoolType
+<span class="lineno"> 2418 </span><span class="decl"><span class="istickedoff">enableSMTArrayMemoryModel = (W4.configOption W4.knownRepr &quot;smt-array-memory-model&quot;)</span></span>
 
 </pre>
 </body>

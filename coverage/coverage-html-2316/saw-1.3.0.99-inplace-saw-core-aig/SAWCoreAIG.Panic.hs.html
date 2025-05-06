@@ -19,23 +19,24 @@ span.spaces    { background: white }
 <pre>
 <span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
 <span class="lineno">    2 </span>{- |
-<span class="lineno">    3 </span>Module      : SAWScript.Panic
-<span class="lineno">    4 </span>License     : BSD3
-<span class="lineno">    5 </span>Maintainer  : huffman
-<span class="lineno">    6 </span>Stability   : provisional
-<span class="lineno">    7 </span>-}
-<span class="lineno">    8 </span>
-<span class="lineno">    9 </span>module SAWScript.Panic (panic) where
+<span class="lineno">    3 </span>Module      : SAWCoreAIG.Panic
+<span class="lineno">    4 </span>Copyright   : Galois, Inc. 2025
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : experimental
+<span class="lineno">    8 </span>Portability : non-portable (language extensions)
+<span class="lineno">    9 </span>-}
 <span class="lineno">   10 </span>
-<span class="lineno">   11 </span>import Data.Text (Text)
+<span class="lineno">   11 </span>-- Panic hooks. See SAWSupport.PanicSupport for discussion.
 <span class="lineno">   12 </span>
-<span class="lineno">   13 </span>import SAWSupport.PanicSupport
+<span class="lineno">   13 </span>module SAWCoreAIG.Panic (panic) where
 <span class="lineno">   14 </span>
-<span class="lineno">   15 </span>-- | Raise a fatal error. See commentary in PanicSupport.
-<span class="lineno">   16 </span>--   Arguments are &quot;location&quot; (one string) and &quot;description&quot; (multiple
-<span class="lineno">   17 </span>--   strings).
-<span class="lineno">   18 </span>panic :: HasCallStack =&gt; Text -&gt; [Text] -&gt; a
-<span class="lineno">   19 </span><span class="decl"><span class="nottickedoff">panic loc descs = doPanic &quot;saw-script&quot; loc descs</span></span>
+<span class="lineno">   15 </span>import Data.Text (Text)
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>import SAWSupport.PanicSupport
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>panic :: HasCallStack =&gt; Text -&gt; [Text] -&gt; a
+<span class="lineno">   20 </span><span class="decl"><span class="nottickedoff">panic loc msgs = doPanic &quot;saw-core-aig&quot; loc msgs</span></span>
 
 </pre>
 </body>
