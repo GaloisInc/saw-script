@@ -8,7 +8,7 @@ failures:
 [Crux]   test/symb_eval/comp/alias_array_bad2.rs:45:5: 45:17: error: in alias_array_bad2/<DISAMB>::use_f[0]
 [Crux]   references AllocIndex 0 and AllocIndex 1 must not overlap
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/alias_array_bad2.rs:47:5: 47:38: error: in alias_array_bad2/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:44:9: 44:79 !test/symb_eval/comp/alias_array_bad2.rs:47:5: 47:38: error: in alias_array_bad2/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_array_bad2.rs:47:5:
 [Crux]   	b[0].get() < 10
 
