@@ -1,5 +1,8 @@
 # Structure of SAWScript
 
+SAWScript is a typed functional language with support for sequencing of
+imperative commands.
+
 A SAWScript program consists, at the top level, of a sequence of
 commands to be executed in order. Each command is terminated with a
 semicolon. For example, the `print` command displays a textual
