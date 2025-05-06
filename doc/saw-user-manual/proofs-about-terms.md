@@ -24,6 +24,12 @@ to `True` and prints out that value, returning nothing.
 - `prove_core : ProofScript () -> String -> TopLevel Theorem`
 proves and returns a `Theorem` from a string in SAWCore syntax.
 
+<!--
+   XXX this xref is used under the name Using Solvers and should
+   get itself attached to such a section when this section gets
+   updated.
+-->
+(using-solvers)=
 ## Automated Tactics
 
 The simplest proof scripts just specify the automated prover to use.
