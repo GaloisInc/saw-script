@@ -5,7 +5,7 @@ failures:
 
 ---- spec_immut_cell/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/spec_immut_cell.rs:68:5: 68:35: error: in spec_immut_cell/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:44:9: 44:79 !test/symb_eval/comp/spec_immut_cell.rs:68:5: 68:35: error: in spec_immut_cell/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/spec_immut_cell.rs:68:5:
 [Crux]   	d.get() < 10
 

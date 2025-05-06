@@ -222,7 +222,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
                     "impossible: alloc mentioned in csPointsTo is absent from csAllocs?"
             forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
                 iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-                ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
+                ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
                 matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
@@ -328,7 +328,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
 
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
+            ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym
             rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
             writeMirRefSim (ptr ^. mpType) ref' rv
 

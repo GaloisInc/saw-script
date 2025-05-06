@@ -266,8 +266,7 @@ mir_find_adt :: Mir.RustModule -> String -> [Mir.Ty] -> TopLevel Mir.Adt
 mir_find_adt rm origName substs = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-      crateDisambigs = cs ^. Mir.crateHashesMap
-  origDid <- findDefId crateDisambigs (Text.pack origName)
+  origDid <- findDefId cs (Text.pack origName)
   findAdt col origDid (Mir.Substs substs)
 
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
@@ -1372,8 +1371,7 @@ findFn :: Mir.RustModule -> String -> TopLevel Mir.Fn
 findFn rm nm = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-      crateDisambigs = cs ^. Mir.crateHashesMap
-  did <- findDefId crateDisambigs (Text.pack nm)
+  did <- findDefId cs (Text.pack nm)
   case Map.lookup did (col ^. Mir.functions) of
       Just x -> return x
       Nothing -> fail $ "Couldn't find MIR function named: " ++ nm

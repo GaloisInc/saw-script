@@ -5,7 +5,7 @@ failures:
 
 ---- alias_array_ok/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/alias_array_ok.rs:48:5: 48:38: error: in alias_array_ok/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:44:9: 44:79 !test/symb_eval/comp/alias_array_ok.rs:48:5: 48:38: error: in alias_array_ok/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_array_ok.rs:48:5:
 [Crux]   	b[0].get() < 10
 

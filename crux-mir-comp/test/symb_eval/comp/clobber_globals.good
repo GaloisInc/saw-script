@@ -5,13 +5,13 @@ failures:
 
 ---- clobber_globals/<DISAMB>::f_test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/clobber_globals.rs:15:5: 16:71: error: in clobber_globals/<DISAMB>::f_test[0]
+[Crux]   ./libs/crucible/lib.rs:44:9: 44:79 !test/symb_eval/comp/clobber_globals.rs:15:5: 16:71: error: in clobber_globals/<DISAMB>::f_test[0]
 [Crux]   MIR assertion at test/symb_eval/comp/clobber_globals.rs:15:5:
 [Crux]   	expected failure; ATOMIC was clobbered by clobber_globals()
 
 ---- clobber_globals/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/clobber_globals.rs:37:5: 38:62: error: in clobber_globals/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:44:9: 44:79 !test/symb_eval/comp/clobber_globals.rs:37:5: 38:62: error: in clobber_globals/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/clobber_globals.rs:37:5:
 [Crux]   	expected failure; ATOMIC was clobbered by f's spec
 
