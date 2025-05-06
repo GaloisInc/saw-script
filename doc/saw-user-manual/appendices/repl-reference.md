@@ -77,7 +77,7 @@ SAW also uses several environment variables for configuration:
 
 `SAW_JDK_JAR`
 : Specify the path of the `.jar` file containing the core Java
-  libraries. Note that that is not necessary if the `--java-bin-dirs` option
+  libraries. This is not necessary if the `--java-bin-dirs` option
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
