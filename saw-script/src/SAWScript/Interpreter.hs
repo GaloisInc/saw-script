@@ -942,12 +942,12 @@ readSchema fakeFileName str =
   let croak what msg =
         error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
       tokens =
-        let (tokens', optmsg) = lexSAW fakeFileName str in
         -- XXX clean this up when we clean out the message printing infrastructure
-        case optmsg of
-            Just (Error, _pos, msg) -> croak "Lexer" $ Text.unpack msg
-            Just (_, _pos, _msg) -> tokens'  -- ignore warnings for now
-            Nothing -> tokens'
+        case lexSAW fakeFileName str of
+          Left (_, _, msg) -> croak "Lexer" $ Text.unpack msg
+          Right (tokens', Nothing) -> tokens'
+          Right (_      , Just (Error, _pos, msg)) -> croak "Lexer" $ Text.unpack msg
+          Right (tokens', Just (_, _pos, _msg)) -> tokens'
   in
   case parseSchema tokens of
     Left err -> croak "Parse" $ show err
