@@ -1,5 +1,4 @@
-{-# LANGUAGE Trustworthy #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE Safe #-}
 -- |
 -- Module      : SAWSupport.PanicSupport
 -- License     : BSD3
@@ -108,9 +107,12 @@
 -- re-export HasCallStack for use by the per-library modules
 module SAWSupport.PanicSupport (Panic.HasCallStack, doPanic) where
 
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Panic as Panic
+
+import qualified SAWVersion.GitRev as GitRev
 
 -- | Hook for the panic library's use. The upstream library uses types
 --   as hooks to attach the panic metadata. We use a simpler scheme
@@ -138,4 +140,11 @@ instance Panic.PanicComponent SAWPanic where
   panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
 
   {-# Noinline panicComponentRevision #-}
-  panicComponentRevision = $Panic.useGitRevision
+  panicComponentRevision _ =
+    if GitRev.foundGit then
+        let hash = fromMaybe "(unknown revision)" GitRev.hash 
+            branch = fromMaybe "(unknown branch)" GitRev.branch
+        in
+        (hash, branch)
+    else
+        ("(VCS-less build)", "(VCS-less build)")
