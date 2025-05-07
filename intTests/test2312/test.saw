@@ -1,0 +1,4 @@
+prove_core z3 "EqTrue (equalNat (head 2 Nat (gen 3 Nat (\\(n : Nat) -> n))) 0)";
+prove_core z3 "EqTrue (vecEq 2 Nat equalNat (tail 2 Nat (gen 3 Nat (\\(n : Nat) -> n))) (gen 2 Nat (\\(n : Nat) -> Succ n)))";
+prove_core z3 "EqTrue (boolEq (head 2 Bool (bvNat 3 6)) True)";
+prove_core z3 "EqTrue (vecEq 2 Bool boolEq (tail 2 Bool (bvNat 3 6)) (bvNat 2 2))";

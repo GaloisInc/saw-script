@@ -41,17 +41,6 @@ data CellTerm = CellTerm
 cellTermNat :: forall m. MonadIO m => SC.SharedContext -> CellTerm -> m SC.Term
 cellTermNat sc (CellTerm { cellTermTerm = t, cellTermWidth = w }) = liftIO $ SC.scBvToNat sc w t
 
--- | Reverse the bits in the given bitvector.
--- Note that Yosys arithmetic cells treat bitvectors as "little-bit-endian", i.e. the 0-index bit is
--- least significant. SAWCore has the opposite convention, so it's important to reverse bitvectors
--- before and after each arithmetic operation in order to match Yosys' semantics.
-flipEndianness :: forall m. MonadIO m => SC.SharedContext -> CellTerm -> m CellTerm
-flipEndianness sc (CellTerm { cellTermTerm = t, cellTermWidth = w, cellTermSigned = s}) = do
-  wt <- liftIO $ SC.scNat sc w
-  bool <- liftIO $ SC.scBoolType sc
-  res <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [wt, bool, t]
-  pure $ CellTerm res w s
-
 -- | Apply the appropriate (possibly signed) extension or truncation to make the given bitvector
 -- match the given width.
 extTrunc :: forall m. MonadIO m => SC.SharedContext -> Natural -> CellTerm -> m CellTerm
@@ -170,35 +159,35 @@ primCellToMap sc c args = case c ^. cellType of
   CellTypeReduceBool -> bvReduce False =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
   CellTypeShl -> do
-    ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
-    nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
+    ta <- fmap cellTermTerm $ input "A"
+    nb <- cellTermNat sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
-    output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
+    output (CellTerm res (connWidthNat "A") (connSigned "A"))
   CellTypeShr -> do
-    ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
-    nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
+    ta <- fmap cellTermTerm $ input "A"
+    nb <- cellTermNat sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShr sc w ta nb
-    output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
+    output (CellTerm res (connWidthNat "A") (connSigned "A"))
   CellTypeSshl -> do
-    ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
-    nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
+    ta <- fmap cellTermTerm $ input "A"
+    nb <- cellTermNat sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
-    output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
+    output (CellTerm res (connWidthNat "A") (connSigned "A"))
   CellTypeSshr -> do
-    ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
-    nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
+    ta <- fmap cellTermTerm $ input "A"
+    nb <- cellTermNat sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvSShr sc w ta nb
-    output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
+    output (CellTerm res (connWidthNat "A") (connSigned "A"))
   -- "$shift" -> _
   CellTypeShiftx -> do
     let w = max (connWidthNat "A") (connWidthNat "B")
     wt <- liftIO $ SC.scNat sc w
-    CellTerm ta _ _ <- extTrunc sc w =<< flipEndianness sc =<< input "A"
-    CellTerm tb _ _ <- extTrunc sc w =<< flipEndianness sc =<< input "B"
+    CellTerm ta _ _ <- extTrunc sc w =<< input "A"
+    CellTerm tb _ _ <- extTrunc sc w =<< input "B"
     zero <- liftIO $ SC.scBvConst sc w 0
     tbn <- liftIO $ SC.scBvToNat sc w tb
     tbneg <- liftIO $ SC.scBvNeg sc wt tb
@@ -210,7 +199,7 @@ primCellToMap sc c args = case c ^. cellType of
     res <- if connSigned "B"
       then liftIO $ SC.scIte sc ty cond tcase ecase
       else pure tcase
-    output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
+    output (CellTerm res (connWidthNat "A") (connSigned "A"))
   CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc
   CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc
   CellTypeGt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc
@@ -286,7 +275,7 @@ primCellToMap sc c args = case c ^. cellType of
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
   CellTypeBmux -> do
     ia <- input "A"
-    is <- flipEndianness sc =<< input "S"
+    is <- input "S"
     let swidth = cellTermWidth is
     let ywidth = connWidthNat "Y"
     -- Split input A into chunks
@@ -335,8 +324,7 @@ primCellToMap sc c args = case c ^. cellType of
     output :: CellTerm -> m (Maybe (Map Text SC.Term))
     output (CellTerm ct cw _) = do
       let res = CellTerm ct cw (connSigned "Y")
-      eres <- extTrunc sc (connWidthNat "Y") =<< flipEndianness sc res
-      CellTerm t _ _ <- flipEndianness sc eres
+      CellTerm t _ _ <- extTrunc sc (connWidthNat "Y") res
       pure . Just $ Map.fromList
         [ ("Y", t)
         ]
@@ -352,22 +340,22 @@ primCellToMap sc c args = case c ^. cellType of
     -- convert input to big endian
     bvUnaryOp :: (CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvUnaryOp f = do
-      t <- flipEndianness sc =<< input "A"
+      t <- input "A"
       res <- f t
-      output =<< flipEndianness sc res
-    -- convert inputs to big endian and extend inputs to output width
+      output res
+    -- extend inputs to output width
     bvBinaryOp :: (CellTerm -> CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvBinaryOp f = do
       let w = connWidthNat "Y"
-      ta <- extTrunc sc w =<< flipEndianness sc =<< input "A"
-      tb <- extTrunc sc w =<< flipEndianness sc =<< input "B"
+      ta <- extTrunc sc w =<< input "A"
+      tb <- extTrunc sc w =<< input "B"
       res <- f ta tb
-      output =<< flipEndianness sc res
-    -- convert inputs to big endian and extend inputs to max input width, output is a single bit
+      output res
+    -- extend inputs to max input width, output is a single bit
     bvBinaryCmp :: (CellTerm -> CellTerm -> m SC.Term) -> m (Maybe (Map Text SC.Term))
     bvBinaryCmp f = do
-      ta <- flipEndianness sc =<< input "A"
-      tb <- flipEndianness sc =<< input "B"
+      ta <- input "A"
+      tb <- input "B"
       res <- uncurry f =<< extMax sc ta tb
       outputBit res
     bvReduce :: Bool -> SC.Term -> m (Maybe (Map Text SC.Term))

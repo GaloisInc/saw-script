@@ -348,6 +348,8 @@ constMap bp = Map.fromList
   -- Vectors
   , ("Prelude.Vec", vecTypeOp)
   , ("Prelude.gen", genOp)
+  , ("Prelude.head", headOp bp)
+  , ("Prelude.tail", tailOp bp)
   , ("Prelude.atWithDefault", atWithDefaultOp bp)
   , ("Prelude.upd", updOp bp)
   , ("Prelude.take", takeOp bp)
@@ -790,6 +792,29 @@ genOp =
        else
          liftM VVector $ V.generateM (fromIntegral n) g
 
+-- head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
+headOp :: VMonad l => BasePrims l -> Prim l
+headOp bp =
+  constFun $
+  constFun $
+  strictFun $ \x ->
+  Prim $
+    case x of
+      VVector xv -> force (V.head xv)
+      VWord xw -> VBool <$> bpBvAt bp xw 0
+      _ -> panic "headOp" ["expected vector"]
+
+-- tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
+tailOp :: VMonad l => BasePrims l -> Prim l
+tailOp bp =
+  constFun $
+  constFun $
+  strictFun $ \x ->
+  Prim $
+    case x of
+      VVector xv -> pure (VVector (V.tail xv))
+      VWord vw -> VWord <$> bpBvSlice bp 1 (bpBvSize bp vw - 1) vw
+      _ -> panic "tailOp" ["expected vector"]
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l

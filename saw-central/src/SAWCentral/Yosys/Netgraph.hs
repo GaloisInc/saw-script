@@ -141,7 +141,8 @@ lookupPatternTerm sc loc pat ts =
         case Map.lookup [b] ts of
           Just t -> pure t
           Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
-      vecBits <- liftIO $ SC.scVector sc onety bits
+      -- Yosys lists bits in little-endian order, while scVector expects big-endian, so reverse
+      vecBits <- liftIO $ SC.scVector sc onety (reverse bits)
       liftIO $ SC.scJoin sc many one boolty vecBits
 
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
