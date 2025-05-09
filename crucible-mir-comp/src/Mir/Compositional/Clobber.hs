@@ -39,11 +39,11 @@ import Mir.Compositional.Convert
 -- Helper functions for generating clobbering PointsTos
 
 -- | Replace each primitive value within `rv` with a fresh symbolic variable.
-clobberSymbolic :: forall sym p t st fs tp rtp args ret.
+clobberSymbolic :: forall sym p t st fs tp0 rtp args ret.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-clobberSymbolic sym loc nameStr shp rv = go shp rv
+    sym -> ProgramLoc -> String -> TypeShape tp0 -> RegValue sym tp0 ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp0)
+clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
@@ -85,11 +85,11 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
 -- inside an `UnsafeCell<T>` wrapper can still be modified even with only
 -- immutable (`&`) access.  So this function modifies only the portions of `rv`
 -- that lie within an `UnsafeCell` and leaves the rest unchanged.
-clobberImmutSymbolic :: forall sym p t st fs tp rtp args ret.
+clobberImmutSymbolic :: forall sym p t st fs tp0 rtp args ret.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
+    sym -> ProgramLoc -> String -> TypeShape tp0 -> RegValue sym tp0 ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp0)
+clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
@@ -135,12 +135,12 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
         rv'' <- go shp rv'
         return $ RV $ W4.justPartExpr sym rv''
 
--- | Construct a fresh symbolic `RegValue` of type `tp`.
-freshSymbolic :: forall sym p t st fs tp rtp args ret.
+-- | Construct a fresh symbolic `RegValue` of type `tp0`.
+freshSymbolic :: forall sym p t st fs tp0 rtp args ret.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym -> ProgramLoc -> String -> TypeShape tp ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-freshSymbolic sym loc nameStr shp = go shp
+    sym -> ProgramLoc -> String -> TypeShape tp0 ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp0)
+freshSymbolic sym loc nameStr shp0 = go shp0
   where
     go :: forall tp. TypeShape tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)

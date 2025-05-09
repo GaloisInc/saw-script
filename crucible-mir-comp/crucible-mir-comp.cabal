@@ -51,4 +51,4 @@ library
                    Mir.Compositional.Convert
                    Mir.Compositional.Override
 
-  ghc-options: -Wall -Wno-name-shadowing
+  ghc-options: -Wall

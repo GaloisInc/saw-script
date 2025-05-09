@@ -227,9 +227,9 @@ builderNew cs defId =
 -- As a side effect, this clobbers any mutable memory reachable through the
 -- argument.  For example, if `argRef` points to an `&mut i32`, the `i32` will
 -- be overwritten with a fresh symbolic variable.
-addArg :: forall sym p t st fs rtp args ret tp.
+addArg :: forall sym p t st fs rtp args ret tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    TypeRepr tp -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
+    TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb =
   ovrWithBackend $ \bak ->
@@ -241,10 +241,10 @@ addArg tpr argRef msb =
     let ty = case msb ^? msbSpec . MS.csArgs . ix idx of
             Just x -> x
             Nothing -> error $ "arg index out of range: " ++ show idx
-    let shp = tyToShapeEq col ty tpr
+    let shp0 = tyToShapeEq col ty tpr
 
-    rv <- lift $ readMirRefSim tpr argRef
-    sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
+    rv0 <- lift $ readMirRefSim tpr argRef
+    sv0 <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp0 rv0
 
     void $ forNewRefs Pre $ \fr -> do
         let allocSpec = fr ^. frAllocSpec
@@ -272,7 +272,7 @@ addArg tpr argRef msb =
         msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
         msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs' :)
 
-    msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
+    msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv0)
   where
     col = msb ^. msbCollection
     sc = msb ^. msbSharedContext
@@ -281,9 +281,9 @@ addArg tpr argRef msb =
 
 -- | Set the MethodSpec's return value.  The value to use is obtained by
 -- dereferencing `argRef`.
-setReturn :: forall sym t st fs p rtp args ret tp.
+setReturn :: forall sym t st fs p rtp args ret tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    TypeRepr tp -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
+    TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 setReturn tpr argRef msb =
   ovrWithBackend $ \bak ->
@@ -292,10 +292,10 @@ setReturn tpr argRef msb =
     let ty = case msb ^. msbSpec . MS.csRet of
             Just x -> x
             Nothing -> M.TyTuple []
-    let shp = tyToShapeEq col ty tpr
+    let shp0 = tyToShapeEq col ty tpr
 
-    rv <- lift $ readMirRefSim tpr argRef
-    sv <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
+    rv0 <- lift $ readMirRefSim tpr argRef
+    sv0 <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp0 rv0
 
     void $ forNewRefs Post $ \fr -> do
         let allocSpec = fr ^. frAllocSpec
@@ -311,7 +311,7 @@ setReturn tpr argRef msb =
 
         msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
 
-    msbSpec . MS.csRetValue .= Just sv
+    msbSpec . MS.csRetValue .= Just sv0
   where
     col = msb ^. msbCollection
     sc = msb ^. msbSharedContext
@@ -339,15 +339,15 @@ gatherAssumes msb =
     optAssumes' <- liftIO $ relevantPreds sym vars $
         map (\a -> (assumptionPred a, show $ ppAssumption PP.viaShow a)) $ flatAssumes
     let assumes' = case optAssumes' of
-            Left (pred, msg, Some v) ->
-                error $ "assumption `" ++ show pred ++ "` (" ++ show msg ++
+            Left (pred_, msg, Some v) ->
+                error $ "assumption `" ++ show pred_ ++ "` (" ++ show msg ++
                     ") references variable " ++ show v ++ " (" ++ show (W4.bvarName v) ++ " at " ++
                     show (W4.bvarLoc v) ++ "), which does not appear in the function args"
             Right x -> map fst x
 
     let loc = msb ^. msbSpec . MS.csLoc
-    assumeConds <- liftIO $ forM assumes' $ \pred -> do
-        tt <- eval pred >>= SAW.mkTypedTerm sc
+    assumeConds <- liftIO $ forM assumes' $ \pred_ -> do
+        tt <- eval pred_ >>= SAW.mkTypedTerm sc
         let md = MS.ConditionMetadata
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
@@ -355,7 +355,7 @@ gatherAssumes msb =
                  , MS.conditionContext = ""
                  }
         return $ MS.SetupCond_Pred md tt
-    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred) | pred <- assumes']
+    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred_) | pred_ <- assumes']
 
     return $ msb
         & msbSpec . MS.csPreState . MS.csConditions %~ (++ assumeConds)
@@ -386,12 +386,12 @@ gatherAsserts msb =
     optAsserts' <- liftIO $ relevantPreds sym vars $
         map (\a -> (a ^. W4.labeledPred, a ^. W4.labeledPredMsg)) asserts
     let asserts' = case optAsserts' of
-            Left (pred, msg, Some v) ->
-                error $ "assertion `" ++ show pred ++ "` (" ++ show msg ++
+            Left (pred_, msg, Some v) ->
+                error $ "assertion `" ++ show pred_ ++ "` (" ++ show msg ++
                     ") references variable " ++ show v ++ " (" ++ show (W4.bvarName v) ++ " at " ++
                     show (W4.bvarLoc v) ++ "), which does not appear in the function args"
             Right x -> map fst x
-    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred) | pred <- asserts']
+    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred_) | pred_ <- asserts']
     let postVars' = Set.union (msb ^. msbPost . seVars) newVars
     let postOnlyVars = postVars' `Set.difference` (msb ^. msbPre . seVars)
 
@@ -406,8 +406,8 @@ gatherAsserts msb =
         return (varEc, exprTerm)
 
     let loc = msb ^. msbSpec . MS.csLoc
-    assertConds <- liftIO $ forM asserts'' $ \pred -> do
-        tt <- eval pred >>= SAW.mkTypedTerm sc
+    assertConds <- liftIO $ forM asserts'' $ \pred_ -> do
+        tt <- eval pred_ >>= SAW.mkTypedTerm sc
         let md = MS.ConditionMetadata
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
@@ -437,11 +437,11 @@ gatherAsserts msb =
         IO ([W4.Expr t BaseBoolType], [Pair (W4.ExprBoundVar t) (W4.Expr t)])
     gatherSubsts _lhsOk _rhsOk accPreds accSubsts [] =
         return (reverse accPreds, reverse accSubsts)
-    gatherSubsts lhsOk rhsOk accPreds accSubsts (pred : preds)
-      | Just (Pair var expr) <- asVarEqExpr pred = do
+    gatherSubsts lhsOk rhsOk accPreds accSubsts (pred_ : preds)
+      | Just (Pair var expr) <- asVarEqExpr pred_ = do
         rhsSeenRef <- newIORef Set.empty
         cache <- W4.newIdxCache
-        visitExprVars cache expr $ \var -> modifyIORef rhsSeenRef $ Set.insert (Some var)
+        visitExprVars cache expr $ \var' -> modifyIORef rhsSeenRef $ Set.insert (Some var')
         rhsSeen <- readIORef rhsSeenRef
         let lhsOk' = Set.delete (Some var) lhsOk
         let rhsOk' = Set.delete (Some var) rhsOk
@@ -453,16 +453,16 @@ gatherAsserts msb =
         if rhsSeen `Set.isSubsetOf` rhsOk' then
             gatherSubsts lhsOk' rhsOk' accPreds (Pair var expr : accSubsts) preds
           else
-            gatherSubsts lhsOk rhsOk (pred : accPreds) accSubsts preds
+            gatherSubsts lhsOk rhsOk (pred_ : accPreds) accSubsts preds
       | otherwise =
-        gatherSubsts lhsOk rhsOk (pred : accPreds) accSubsts preds
+        gatherSubsts lhsOk rhsOk (pred_ : accPreds) accSubsts preds
       where
-        asVarEqExpr pred
-          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred
+        asVarEqExpr pred'
+          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred'
           , W4.BoundVarExpr v <- x
           , Set.member (Some v) lhsOk
           = Just (Pair v y)
-          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred
+          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred'
           , W4.BoundVarExpr v <- y
           , Set.member (Some v) lhsOk
           = Just (Pair v x)
@@ -496,12 +496,12 @@ relevantPreds :: forall sym t st fs a.
     IO (Either (W4.Pred sym, a, Some (W4.ExprBoundVar t)) [(W4.Pred sym, a)])
 relevantPreds _sym vars preds = runExceptT $ filterM check preds
   where
-    check (pred, info) = do
+    check (pred_, info) = do
         sawRel <- lift $ newIORef False
         sawIrrel <- lift $ newIORef Nothing
 
         cache <- W4.newIdxCache
-        lift $ visitExprVars cache pred $ \v ->
+        lift $ visitExprVars cache pred_ $ \v ->
             if Set.member (Some v) vars then
                 writeIORef sawRel True
             else
@@ -510,7 +510,7 @@ relevantPreds _sym vars preds = runExceptT $ filterM check preds
         sawIrrel' <- lift $ readIORef sawIrrel
 
         case (sawRel', sawIrrel') of
-            (True, Just badVar) -> throwError (pred, info, badVar)
+            (True, Just badVar) -> throwError (pred_, info, badVar)
             (True, Nothing) -> return True
             (False, _) -> return False
 
@@ -578,7 +578,7 @@ buildSubstMap ::
     SAW.SharedContext ->
     [(SAW.ExtCns SAW.Term, SAW.Term)] ->
     IO (Map SAW.VarIndex SAW.Term)
-buildSubstMap sc substs = go Map.empty substs
+buildSubstMap sc substs0 = go Map.empty substs0
   where
     go sm [] = return sm
     go sm ((ec, term) : substs) = do
@@ -631,8 +631,8 @@ substMethodSpec sc sm ms = do
         MS.SetupSlice slice -> MS.SetupSlice <$> goSetupSlice slice
         MS.SetupEnum enum_ -> MS.SetupEnum <$> goSetupEnum enum_
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
-        MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
-        MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
+        MS.SetupElem b sv' idx -> MS.SetupElem b <$> goSetupValue sv' <*> pure idx
+        MS.SetupField b sv' name -> MS.SetupField b <$> goSetupValue sv' <*> pure name
         MS.SetupCast v _ -> case v of {}
         MS.SetupUnion v _ _ -> case v of {}
         MS.SetupGlobal _ _ -> return sv
@@ -676,13 +676,13 @@ substMethodSpec sc sm ms = do
 -- RegValue will be converted into fresh variables in the MethodSpec (in either
 -- the pre or post state, depending on the pre/post flag `p`), and any
 -- MirReferences will be converted into MethodSpec allocations/pointers.
-regToSetup :: forall sym bak t st fs tp p rtp args ret.
+regToSetup :: forall sym bak t st fs tp0 p rtp args ret.
     (IsSymBackend sym bak, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     bak -> PrePost ->
     (forall tp'. BaseTypeRepr tp' -> W4.Expr t tp' -> IO SAW.TypedTerm) ->
-    TypeShape tp -> RegValue sym tp ->
+    TypeShape tp0 -> RegValue sym tp0 ->
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-regToSetup bak p eval shp rv = go shp rv
+regToSetup bak pp eval shp0 rv0 = go shp0 rv0
   where
     sym = backendGetSym bak
 
@@ -693,7 +693,7 @@ regToSetup bak p eval shp rv = go shp rv
         -- Record all vars used in `expr`
         cache <- use msbVisitCache
         visitExprVars cache expr $ \var -> do
-            msbPrePost p . seVars %= Set.insert (Some var)
+            msbPrePost pp . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
     go (TupleShape _ _ flds) rvs = MS.SetupTuple () <$> goFields flds rvs
     go (ArrayShape _ elemTy shp) vec = do
@@ -744,9 +744,9 @@ regToSetup bak p eval shp rv = go shp rv
         let mutbl = case refTy of
                 M.TyRef _ M.Immut -> M.Immut
                 _ -> M.Mut
-        alloc <- refToAlloc bak p mutbl ty' tpr startRef len
-        let offsetSv idx sv = if idx == 0 then sv else MS.SetupElem () sv idx
-        return $ offsetSv idx $ MS.SetupVar alloc
+        alloc <- refToAlloc bak pp mutbl ty' tpr startRef len
+        let offsetSv sv = if idx == 0 then sv else MS.SetupElem () sv idx
+        return $ offsetSv $ MS.SetupVar alloc
     go (SliceShape _ ty mutbl tpr) (Empty :> RV refRV :> RV lenRV) = do
         let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
         refSV <- go refShp refRV
@@ -757,9 +757,9 @@ regToSetup bak p eval shp rv = go shp rv
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
 
-    goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
+    goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]
-    goFields flds rvs = loop flds rvs []
+    goFields flds0 rvs0 = loop flds0 rvs0 []
       where
         loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
             [MS.SetupValue MIR] ->
@@ -777,7 +777,7 @@ refToAlloc :: forall sym bak t st fs tp p rtp args ret.
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex
 refToAlloc bak p mutbl ty tpr ref len = do
     refs <- use $ msbPrePost p . seRefs
-    mAlloc <- liftIO $ lookupAlloc ref (toList refs)
+    mAlloc <- liftIO $ lookupAlloc (toList refs)
     case mAlloc of
         Nothing -> do
             alloc <- use msbNextAlloc
@@ -803,18 +803,17 @@ refToAlloc bak p mutbl ty tpr ref len = do
     -- error, since it means some allocations might be aliased under some
     -- assignments to the symbolic variables but not under others.
     lookupAlloc ::
-        MirReferenceMux sym ->
         [Some (FoundRef sym)] ->
         IO (Maybe MS.AllocIndex)
-    lookupAlloc _ref [] = return Nothing
-    lookupAlloc ref (Some fr : frs) = case testEquality tpr (fr ^. frType) of
+    lookupAlloc [] = return Nothing
+    lookupAlloc (Some fr : frs) = case testEquality tpr (fr ^. frType) of
         Just Refl -> do
             eq <- mirRef_eqIO bak ref (fr ^. frRef)
             case W4.asConstantPred eq of
                 Just True -> return $ Just $ fr ^. frAlloc
-                Just False -> lookupAlloc ref frs
+                Just False -> lookupAlloc frs
                 Nothing -> error $ "refToAlloc: ref aliasing depends on symbolic values"
-        Nothing -> lookupAlloc ref frs
+        Nothing -> lookupAlloc frs
 
 -- | Run `f` on any newly-added refs/allocations in the MethodSpecBuilder.  If
 -- `f` adds more refs, then repeat until there are no more new refs remaining.
