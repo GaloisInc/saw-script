@@ -10,7 +10,7 @@ module SAWScript.AutoMatch.Declaration
   ) where
 
 import Data.Text (Text, unpack)
-import Data.List
+import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Arrow ( (&&&) )

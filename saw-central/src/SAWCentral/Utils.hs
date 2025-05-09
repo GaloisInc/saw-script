@@ -25,7 +25,7 @@ import Control.DeepSeq(rnf, NFData(..))
 import Data.Char(isSpace)
 import Data.Data
 import Data.Function (on)
-import Data.List
+import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map

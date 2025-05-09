@@ -29,7 +29,7 @@
 module Heapster.Implication where
 
 import Data.Maybe
-import Data.List
+import Data.List (delete, elemIndex, find, findIndex)
 import Data.Functor.Compose
 import Data.Reflection
 import qualified Data.BitVector.Sized as BV

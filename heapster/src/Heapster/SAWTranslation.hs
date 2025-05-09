@@ -35,7 +35,7 @@ import Prelude hiding (pi)
 
 import Data.Maybe
 import Numeric.Natural
-import Data.List hiding (inits)
+import Data.List (delete, find, intersperse)
 import Data.Text (pack)
 import GHC.TypeLits (KnownNat, natVal)
 import Data.BitVector.Sized (BV)

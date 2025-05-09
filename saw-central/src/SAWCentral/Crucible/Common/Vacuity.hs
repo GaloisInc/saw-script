@@ -13,7 +13,7 @@ import           Control.Lens
 import           Control.Monad (forM_)
 import           Control.Monad.Extra (findM, whenM)
 import           Data.Function
-import           Data.List
+import           Data.List (sortBy, subsequences)
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified Lang.Crucible.Backend as Crucible

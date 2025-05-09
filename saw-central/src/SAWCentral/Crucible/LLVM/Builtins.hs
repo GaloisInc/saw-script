@@ -105,7 +105,7 @@ import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, fold)
 import           Data.Functor (void)
 import           Data.IORef
-import           Data.List
+import           Data.List (find, nub, partition)
 import           Data.List.Extra (nubOrd)
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe

@@ -22,7 +22,6 @@ import SAWCentral.Utils
 import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
-import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word8)

@@ -61,7 +61,7 @@ module SAWScript.HeapsterBuiltins
 
 import Data.Maybe
 import Data.String
-import Data.List
+import Data.List (find, intercalate, intersperse, isInfixOf, stripPrefix)
 import qualified Data.List.Extra as List
 import Data.IORef
 import Data.Functor.Product

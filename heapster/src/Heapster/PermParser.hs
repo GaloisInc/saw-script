@@ -17,7 +17,7 @@ module Heapster.PermParser (
   parseRustTypeString,
   ) where
 
-import Data.List
+import Data.List (find, replicate)
 import GHC.TypeLits
 import qualified Control.Monad.Fail as Fail
 import Data.Binding.Hobbits

@@ -71,7 +71,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.ByteString as BS
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
-import           Data.List
+import           Data.List (partition, tails)
 import qualified Data.List.NonEmpty as NE
 import           Data.IORef (IORef, modifyIORef)
 import           Data.Map (Map)
