@@ -64,10 +64,13 @@ moduleNetgraph m =
       , b <- concat (Map.elems (cellOutputConnections c)) ]
 
     cellDeps :: Cell [Bitrep] -> [Text]
-    cellDeps c =
-      Set.toAscList $ Set.fromList $
-      Maybe.mapMaybe (flip Map.lookup sources) $
-      concat $ Map.elems $ cellInputConnections c
+    cellDeps c
+      | c ^. cellType == CellTypeDff = []
+      | c ^. cellType == CellTypeFf = []
+      | otherwise =
+        Set.toAscList $ Set.fromList $
+        Maybe.mapMaybe (flip Map.lookup sources) $
+        concat $ Map.elems $ cellInputConnections c
 
     nodes :: [(Cell [Bitrep], Text, [Text])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
