@@ -44,12 +44,12 @@ import SAWCentral.Yosys.Netgraph
 
 -- | Find all of the flip-flop cells in a network graph.
 findDffs ::
-  Netgraph Bitrep ->
+  Netgraph ->
   Map Text (Cell [Bitrep])
 findDffs ng =
   Map.fromList
   . filter (\(_, c) -> c ^. cellType `elem` [CellTypeDff, CellTypeFf])
-  . fmap (\v -> let ((nm, n), _, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
+  . fmap (\v -> let (n, nm, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
   . Graph.vertices
   $ ng ^. netgraphGraph
 

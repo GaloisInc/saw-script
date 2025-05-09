@@ -19,15 +19,15 @@ module SAWCentral.Yosys.Netgraph where
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens (at, (^.))
+import Control.Lens ((^.))
 import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
 import qualified Data.Maybe as Maybe
-import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
@@ -43,74 +43,39 @@ import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Cell
 
-cellToEdges :: (Ord b, Eq b) => Cell [b] -> [(b, [b])]
-cellToEdges c = (, inputBits) <$> outputBits
-  where
-    inputBits = List.nub . mconcat . Map.elems $ cellInputConnections c
-    outputBits = List.nub . mconcat . Map.elems $ cellOutputConnections c
-
 --------------------------------------------------------------------------------
 -- ** Building a network graph from a Yosys module
 
-data Netgraph b = Netgraph
+data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> ((Text, Cell [b]), b, [b])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], Text, [Text])
   -- , _netgraphVertexFromKey :: Bitrep -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
-moduleNetgraph :: Module -> Netgraph Bitrep
+moduleNetgraph :: Module -> Netgraph
 moduleNetgraph m =
   let
-    bitsFromInputPorts :: [Bitrep]
-    bitsFromInputPorts = (<> [BitrepZero, BitrepOne])
-      . List.nub
-      . mconcat
-      . Maybe.mapMaybe
-      ( \(_, p) ->
-          case p ^. portDirection of
-            DirectionInput -> Just $ p ^. portBits
-            DirectionInout -> Just $ p ^. portBits
-            _ -> Nothing
-      )
-      . Map.assocs
-      $ m ^. modulePorts --
-    cellToNodes :: (Text, Cell [Bitrep]) -> [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]
-    cellToNodes (nm, c)
-      | c ^. cellType == CellTypeDff = ((nm, c), , []) <$> outputBits
-      | c ^. cellType == CellTypeFf = ((nm, c), , []) <$> outputBits
-      | otherwise = ((nm, c), , inputBits) <$> outputBits
-      where
-        inputBits :: [Bitrep]
-        inputBits =
-          filter (not . flip elem bitsFromInputPorts)
-          . List.nub
-          . mconcat
-          . Maybe.mapMaybe
-          ( \(p, bits) ->
-              case c ^. cellPortDirections . at p of
-                Just DirectionInput -> Just bits
-                Just DirectionInout -> Just bits
-                _ -> Nothing
-          )
-          . Map.assocs
-          $ c ^. cellConnections
-        outputBits :: [Bitrep]
-        outputBits = List.nub
-          . mconcat
-          . Maybe.mapMaybe
-          ( \(p, bits) ->
-              case c ^. cellPortDirections . at p of
-                Just DirectionOutput -> Just bits
-                Just DirectionInout -> Just bits
-                _ -> Nothing
-          )
-          . Map.assocs
-          $ c ^. cellConnections
-    nodes = concatMap cellToNodes . Map.assocs $ m ^. moduleCells
-    (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey)
-      = Graph.graphFromEdges nodes
-  in Netgraph{..}
+    sources :: Map Bitrep Text
+    sources =
+      Map.fromList $
+      [ (b, cname)
+      | (cname, c) <- Map.assocs (m ^. moduleCells)
+      , b <- concat (Map.elems (cellOutputConnections c)) ]
+
+    cellDeps :: Cell [Bitrep] -> [Text]
+    cellDeps c =
+      Set.toAscList $ Set.fromList $
+      Maybe.mapMaybe (flip Map.lookup sources) $
+      concat $ Map.elems $ cellInputConnections c
+
+    nodes :: [(Cell [Bitrep], Text, [Text])]
+    nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
+
+    (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey) =
+      Graph.graphFromEdges nodes
+  in
+    Netgraph{..}
 
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
@@ -148,12 +113,12 @@ lookupPatternTerm sc loc pat ts =
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
 -- generated from the rest of the netgraph.
 netgraphToTerms ::
-  (MonadIO m, Ord b, Show b) =>
+  (MonadIO m) =>
   SC.SharedContext ->
   Map Text ConvertedModule ->
-  Netgraph b ->
-  Map [b] SC.Term ->
-  m (Map [b] SC.Term)
+  Netgraph ->
+  Map [Bitrep] SC.Term ->
+  m (Map [Bitrep] SC.Term)
 netgraphToTerms sc env ng inputs
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = do
@@ -162,7 +127,7 @@ netgraphToTerms sc env ng inputs
       let sorted = reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
-            let ((cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+            let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
