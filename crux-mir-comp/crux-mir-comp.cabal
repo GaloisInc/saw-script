@@ -50,7 +50,7 @@ library
                    Mir.Cryptol
   other-modules:   Mir.Compositional.DefId
 
-  ghc-options: -Wall -Wno-name-shadowing
+  ghc-options: -Wall
 
 
 executable crux-mir-comp
