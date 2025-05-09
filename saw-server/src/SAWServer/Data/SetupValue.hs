@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-orphans #-}   -- for FromJSON CrucibleSetupVal
 module SAWServer.Data.SetupValue (CrucibleSetupVal) where
 
 import Control.Applicative

@@ -863,7 +863,6 @@ library saw-server
 
   ghc-options:
     -Wall
-    -Wno-orphans
     -Werror=missing-fields
     -Werror=incomplete-patterns
     -Werror=missing-methods
@@ -953,7 +952,6 @@ executable saw-remote-api
     -O2
     -threaded
     -Wall
-    -Wno-orphans
     -Werror=missing-fields
     -Werror=incomplete-patterns
     -Werror=missing-methods
