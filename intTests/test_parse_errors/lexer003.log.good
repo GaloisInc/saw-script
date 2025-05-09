@@ -1,5 +1,5 @@
  Loading file "lexer003.saw"
  Stack trace:
-lexer003.saw:3:9-3:11: Unclosed cryptol block
+lexer003.saw:3:9-3:11: Unclosed Cryptol block
 
 FAILED
