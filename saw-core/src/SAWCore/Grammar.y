@@ -88,96 +88,86 @@ import SAWCore.Lexer
 
 %%
 
-Module :: { Module }
-Module : 'module' ModuleName 'where' list(Import) list(SAWDecl) { Module $2 $4 $5 }
+Module :: { Module } :
+  'module' ModuleName 'where' list(Import) list(SAWDecl) { Module $2 $4 $5 }
 
-ModuleName :: { PosPair ModuleName }
-ModuleName : sepBy (Ident, '.') { mkPosModuleName $1 }
+ModuleName :: { PosPair ModuleName } :
+  sepBy (Ident, '.') { mkPosModuleName $1 }
 
-Import :: { Import }
-Import : 'import' ModuleName opt(ModuleImports) ';'
-          { Import $2 $3 }
+Import :: { Import } :
+  'import' ModuleName opt(ModuleImports) ';'  { Import $2 $3 }
 
-SAWDecl :: { Decl }
-SAWDecl : 'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}'
-             { DataDecl $2 $3 $5 $8 }
-        | 'primitive' Ident ':' LTerm ';'
-             { TypeDecl PrimQualifier $2 $4 }
-        | 'axiom' Ident ':' LTerm ';'
-             { TypeDecl AxiomQualifier $2 $4 }
-        | Ident ':' LTerm opt(DefBody) ';' { maybe (TypeDecl NoQualifier $1 $3)
-                                                   (TypedDef $1 [] $3) $4 }
-        | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
-        | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';' { TypedDef $1 ($2 ++ $3) $5 $7 }
-        | 'injectCode' string string ';'
-	     { InjectCodeDecl (Text.pack (tokString (val $2))) (Text.pack (tokString (val $3))) }
+SAWDecl :: { Decl } :
+    'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $3 $5 $8 }
+  | 'primitive' Ident ':' LTerm ';'  { TypeDecl PrimQualifier $2 $4 }
+  | 'axiom' Ident ':' LTerm ';'      { TypeDecl AxiomQualifier $2 $4 }
+  | Ident ':' LTerm opt(DefBody) ';' { maybe (TypeDecl NoQualifier $1 $3) (TypedDef $1 [] $3) $4 }
+  | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
+  | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';' { TypedDef $1 ($2 ++ $3) $5 $7 }
+  | 'injectCode' string string ';' { InjectCodeDecl (Text.pack (tokString (val $2))) (Text.pack (tokString (val $3))) }
 
-DefBody :: { UTerm }
-DefBody : '=' LTerm { $2 }
+DefBody :: { UTerm } :
+  '=' LTerm { $2 }
 
-ModuleImports :: { ImportConstraint }
-ModuleImports : 'hiding' ImportNames { HidingImports $2 }
-              | ImportNames { SpecificImports $1 }
+ModuleImports :: { ImportConstraint } :
+    'hiding' ImportNames { HidingImports $2 }
+  | ImportNames { SpecificImports $1 }
 
-ImportNames :: { [String] }
-ImportNames : '(' sepBy(ImportName, ',') ')' { $2 }
+ImportNames :: { [String] } :
+  '(' sepBy(ImportName, ',') ')' { $2 }
 
-ImportName :: { String }
-ImportName : ident { tokIdent $ val $1 }
+ImportName :: { String } :
+  ident { tokIdent $ val $1 }
 
-TermVar :: { UTermVar }
-TermVar
-  : Ident { TermVar $1 }
+TermVar :: { UTermVar } :
+    Ident { TermVar $1 }
   | '_' { UnusedVar (pos $1) }
 
 -- A context of variables which may or may not be typed
-DefVarCtx :: { [(UTermVar, Maybe UTerm)] }
-DefVarCtx : list(DefVarCtxItem) { concat $1 }
+DefVarCtx :: { [(UTermVar, Maybe UTerm)] } :
+  list(DefVarCtxItem) { concat $1 }
 
-DefVarCtxItem :: { [(UTermVar, Maybe UTerm)] }
-DefVarCtxItem : TermVar { [($1, Nothing)] }
-              | '(' list(TermVar) ':'  LTerm ')'
-                { map (\var -> (var, Just $4)) $2 }
+DefVarCtxItem :: { [(UTermVar, Maybe UTerm)] } :
+    TermVar { [($1, Nothing)] }
+  | '(' list(TermVar) ':'  LTerm ')' { map (\var -> (var, Just $4)) $2 }
 
 -- A context of variables, all of which must be typed; i.e., a list syntactic
 -- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
-VarCtx :: { [(UTermVar, UTerm)] }
-VarCtx : list(VarCtxItem) { concat $1 }
+VarCtx :: { [(UTermVar, UTerm)] } :
+  list(VarCtxItem) { concat $1 }
 
-VarCtxItem :: { [(UTermVar, UTerm)] }
-VarCtxItem : '(' list(TermVar) ':' LTerm ')' { map (\var -> (var,$4)) $2 }
+VarCtxItem :: { [(UTermVar, UTerm)] } :
+  '(' list(TermVar) ':' LTerm ')' { map (\var -> (var,$4)) $2 }
 
 -- Constructor declaration of the form "c (x1 x2 :: tp1) ... (z1 :: tpn) :: tp"
-CtorDecl :: { CtorDecl }
-CtorDecl : Ident VarCtx ':' LTerm ';' { Ctor $1 $2 $4 }
+CtorDecl :: { CtorDecl } :
+  Ident VarCtx ':' LTerm ';' { Ctor $1 $2 $4 }
 
-Term :: { UTerm }
-Term : LTerm { $1 }
-     | LTerm ':' LTerm { TypeConstraint $1 (pos $2) $3 }
+Term :: { UTerm } :
+    LTerm { $1 }
+  | LTerm ':' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no type ascriptions
-LTerm :: { UTerm }
-LTerm : ProdTerm                         { $1 }
-      | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
-      | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
+LTerm :: { UTerm } :
+    ProdTerm                         { $1 }
+  | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
+  | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
 
-PiArg :: { [(UTermVar, UTerm)] }
-PiArg : ProdTerm { mkPiArg $1 }
+PiArg :: { [(UTermVar, UTerm)] } :
+  ProdTerm { mkPiArg $1 }
 
 -- Term formed from infix product type operator (right-associative)
-ProdTerm :: { UTerm }
-ProdTerm
-  : AppTerm                        { $1 }
+ProdTerm :: { UTerm } :
+    AppTerm                        { $1 }
   | AppTerm '*' ProdTerm           { PairType (pos $1) $1 $3 }
 
 -- Term formed from applications of atomic expressions
-AppTerm :: { UTerm }
-AppTerm : AtomTerm                 { $1 }
-        | AppTerm AtomTerm         { App $1 $2 }
+AppTerm :: { UTerm } :
+    AtomTerm                 { $1 }
+  | AppTerm AtomTerm         { App $1 $2 }
 
-AtomTerm :: { UTerm }
-AtomTerm
-  : nat                          { NatLit (pos $1) (tokNat (val $1)) }
+AtomTerm :: { UTerm } :
+    nat                          { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                        { BVLit (pos $1) (tokBits (val $1)) }
   | string                       { StringLit (pos $1) (Text.pack (tokString (val $1))) }
   | Ident                        { Name $1 }
@@ -194,60 +184,61 @@ AtomTerm
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
   | AtomTerm '.' '(' nat ')'           {% mkTupleProj $1 (tokNat (val $4)) }
 
-Ident :: { PosPair Text }
-Ident : ident { fmap (Text.pack . tokIdent) $1 }
+Ident :: { PosPair Text } :
+  ident { fmap (Text.pack . tokIdent) $1 }
 
-IdentRec :: { PosPair Text }
-IdentRec : identrec { fmap (Text.pack . tokRecursor) $1 }
+IdentRec :: { PosPair Text } :
+  identrec { fmap (Text.pack . tokRecursor) $1 }
 
-Sort :: { PosPair SortFlags }
-Sort : 'sort'   { fmap (const $ SortFlags False False) $1 }
-     | 'isort'  { fmap (const $ SortFlags True  False) $1 }
-     | 'qsort'  { fmap (const $ SortFlags False True ) $1 }
-     | 'qisort' { fmap (const $ SortFlags True  True ) $1 }
+Sort :: { PosPair SortFlags } :
+    'sort'   { fmap (const $ SortFlags False False) $1 }
+  | 'isort'  { fmap (const $ SortFlags True  False) $1 }
+  | 'qsort'  { fmap (const $ SortFlags False True ) $1 }
+  | 'qisort' { fmap (const $ SortFlags True  True ) $1 }
 
-FieldValue :: { (PosPair FieldName, UTerm) }
-FieldValue : Ident '=' Term { ($1, $3) }
+FieldValue :: { (PosPair FieldName, UTerm) } :
+  Ident '=' Term { ($1, $3) }
 
-FieldType :: { (PosPair FieldName, UTerm) }
-FieldType : Ident ':' LTerm { ($1, $3) }
+FieldType :: { (PosPair FieldName, UTerm) } :
+  Ident ':' LTerm { ($1, $3) }
 
-opt(q) :: { Maybe q }
-  : { Nothing }
+opt(q) :: { Maybe q } :
+    {- empty -} { Nothing }
   | q { Just $1 }
 
 -- Two elements p and r separated by q and terminated by s
-sepPair(p,q,r,s) :: { (p,r) }
-  : p q r s { ($1,$3) }
+sepPair(p,q,r,s) :: { (p,r) } :
+  p q r s { ($1,$3) }
 
 -- A possibly-empty list of p's separated by q.
-sepBy(p,q) :: { [p] }
-  : {- empty -} { [] }
+sepBy(p,q) :: { [p] } :
+    {- empty -} { [] }
   | sepBy1(p,q) { $1 }
 
 -- A possibly-empty list of p's separated by q.
-sepBy1(p,q) :: { [p] }
-  : rsepBy1(p,q) { reverse $1 }
+sepBy1(p,q) :: { [p] } :
+  rsepBy1(p,q) { reverse $1 }
 
-rsepBy1(p,q) :: { [p] }
-  : p { [$1] }
+rsepBy1(p,q) :: { [p] } :
+    p { [$1] }
   | rsepBy1(p,q) q p { $3 : $1 }
 
 -- A list of 0 or more p's, terminated by q's
-list(p) :: { [p] }
-  : {- empty -} { [] }
+list(p) :: { [p] } :
+    {- empty -} { [] }
   | rlist1(p) { reverse $1 }
 
 -- A list of 0 or more p's, terminated by q's
-list1(p) :: { [p] }
-  : rlist1(p) { reverse $1 }
+list1(p) :: { [p] } :
+  rlist1(p) { reverse $1 }
 
 -- A reversed list of at least 1 p's
-rlist1(p) :: { [p] }
-  : p           { [$1]    }
+rlist1(p) :: { [p] } :
+    p           { [$1]    }
   | rlist1(p) p { $2 : $1 }
 
 {
+
 data ParseError
   = UnexpectedLex Text
   | UnexpectedToken Token
