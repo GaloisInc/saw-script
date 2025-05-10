@@ -1,0 +1,7 @@
+ Loading file "coreparser001.saw"
+ Stack trace:
+"load_sawcore_from_file" (coreparser001.saw:2:1-2:23)
+Module parsing failed:
+PosPair {_pos = Pos {posBase = ".", posPath = "coreparser001.sawcore", posLine = 2, posCol = 7}, val = UnexpectedToken (TKey "where")}
+
+FAILED

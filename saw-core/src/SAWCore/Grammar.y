@@ -1,5 +1,6 @@
 {
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-tabs #-}
 
@@ -33,6 +34,7 @@ import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
 
+import SAWCore.Panic
 import SAWCore.UntypedAST
 import SAWCore.Module (DefQualifier(..))
 import SAWCore.Lexer
@@ -92,7 +94,7 @@ Module :: { Module } :
   'module' ModuleName 'where' list(Import) list(SAWDecl)        { Module $2 $4 $5 }
 
 ModuleName :: { PosPair ModuleName } :
-  sepBy (Ident, '.')                                            { mkPosModuleName $1 }
+  sepBy1 (Ident, '.')                                           { mkPosModuleName $1 }
 
 Import :: { Import } :
   'import' ModuleName opt(ModuleImports) ';'                    { Import $2 $3 }
@@ -338,8 +340,10 @@ parseTupleSelector t i =
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
+--
+-- The empty list case is impossible according to the grammar.
 mkPosModuleName :: [PosPair Text] -> PosPair ModuleName
-mkPosModuleName [] = error "internal: Unexpected empty module name"
+mkPosModuleName [] = panic "mkPosModuleName" ["Empty module name"]
 mkPosModuleName l = PosPair p (mkModuleName nms)
   where nms = fmap val l
         p = pos (last l)
