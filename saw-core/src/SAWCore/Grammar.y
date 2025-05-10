@@ -93,15 +93,19 @@ import SAWCore.Lexer
 
 %%
 
+-- whole module
 Module :: { Module } :
   'module' ModuleName 'where' list(Import) list(SAWDecl)        { Module $2 $4 $5 }
 
+-- possibly-qualified module name
 ModuleName :: { PosPair ModuleName } :
   sepBy1 (Ident, '.')                                           { mkPosModuleName $1 }
 
+-- import directive
 Import :: { Import } :
   'import' ModuleName opt(ModuleImports) ';'                    { Import $2 $3 }
 
+-- top-level declaration
 SAWDecl :: { Decl } :
     'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $3 $5 $8 }
   | 'primitive' Ident ':' LTerm ';'                             { mkPrimitive $2 $4 }
@@ -112,33 +116,47 @@ SAWDecl :: { Decl } :
   | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';'             { TypedDef $1 ($2 ++ $3) $5 $7 }
   | 'injectCode' string string ';'                              { mkInject $2 $3 }
 
+-- symbol import list in an import directive
 ModuleImports :: { ImportConstraint } :
     'hiding' ImportNames                        { HidingImports $2 }
   | ImportNames                                 { SpecificImports $1 }
 
+-- list of imported symbols
 ImportNames :: { [String] } :
   '(' sepBy(ImportName, ',') ')'                { $2 }
 
+-- single imported symbol
 ImportName :: { String } :
   ident                                         { tokIdent $ val $1 }
 
+-- A single parameter
 TermVar :: { UTermVar } :
     Ident                                       { TermVar $1 }
   | '_'                                         { UnusedVar (pos $1) }
 
--- A context of variables which may or may not be typed
+-- A context of variables (parameter list) which may or may not be typed
+--
+-- XXX: this is unused. Is it intended that declarations can only have
+-- either all typed or all untyped parameters, or was it a hack to avoid
+-- some grammar problem that's probably fixable?
 DefVarCtx :: { [(UTermVar, Maybe UTerm)] } :
   list(DefVarCtxItem)                           { concat $1 }
 
+-- Single entry in a parameter list: either a single variable or
+-- possibly several sharing a type. XXX: is it intended that the list
+-- can be empty?
 DefVarCtxItem :: { [(UTermVar, Maybe UTerm)] } :
     TermVar                                     { [($1, Nothing)] }
   | '(' list(TermVar) ':' LTerm ')'             { map (\var -> (var, Just $4)) $2 }
 
--- A context of variables, all of which must be typed; i.e., a list syntactic
--- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
+-- A context of variables (parameter list), all of which must be
+-- typed; i.e., a list of syntactic elements of the form
+--    (x y z :: tp) (x2 y3 :: tp2) ...
 VarCtx :: { [(UTermVar, UTerm)] } :
   list(VarCtxItem)                              { concat $1 }
 
+-- A single entry in a parameter list: several variables that share a type.
+-- XXX: is it intended that the list can be empty?
 VarCtxItem :: { [(UTermVar, UTerm)] } :
   '(' list(TermVar) ':' LTerm ')'               { map (\var -> (var, $4)) $2 }
 
@@ -146,6 +164,7 @@ VarCtxItem :: { [(UTermVar, UTerm)] } :
 CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
+-- Full term (possibly including a type annotation)
 Term :: { UTerm } :
     LTerm                                       { $1 }
   | LTerm ':' LTerm                             { TypeConstraint $1 (pos $2) $3 }
@@ -166,6 +185,7 @@ AppTerm :: { UTerm } :
     AtomTerm                                    { $1 }
   | AppTerm AtomTerm                            { App $1 $2 }
 
+-- Atomic (base) term
 AtomTerm :: { UTerm } :
     nat                                         { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
@@ -184,24 +204,34 @@ AtomTerm :: { UTerm } :
   | '#' '{' sepBy(FieldType, ',') '}'           { RecordType  (pos $1) $3 }
   | AtomTerm '.' '(' nat ')'                    {% mkTupleProj $1 (tokNat (val $4)) }
 
+-- Identifier (wrapper to extract the text)
 Ident :: { PosPair Text } :
   ident                                         { fmap (Text.pack . tokIdent) $1 }
 
+-- Recursor identifier (wrapper to extract the text)
 IdentRec :: { PosPair Text } :
   identrec                                      { fmap (Text.pack . tokRecursor) $1 }
 
+-- Sort keywords
 Sort :: { PosPair SortFlags } :
     'sort'                                      { fmap (const $ SortFlags False False) $1 }
   | 'isort'                                     { fmap (const $ SortFlags True  False) $1 }
   | 'qsort'                                     { fmap (const $ SortFlags False True ) $1 }
   | 'qisort'                                    { fmap (const $ SortFlags True  True ) $1 }
 
+-- Value for a record field
 FieldValue :: { (PosPair FieldName, UTerm) } :
   Ident '=' Term                                { ($1, $3) }
 
+-- Type for a record field
 FieldType :: { (PosPair FieldName, UTerm) } :
   Ident ':' LTerm                               { ($1, $3) }
 
+
+------------------------------------------------------------
+-- Utility productions
+
+-- optional
 opt(q) :: { Maybe q } :
     {- empty -}                                 { Nothing }
   | q                                           { Just $1 }
@@ -215,24 +245,25 @@ sepBy(p, q) :: { [p] } :
     {- empty -}                                 { [] }
   | sepBy1(p, q)                                { $1 }
 
--- A possibly-empty list of p's separated by q.
+-- A non-empty list of p's separated by q.
 sepBy1(p, q) :: { [p] } :
   rsepBy1(p, q)                                 { reverse $1 }
 
+-- A non-empty list of p's separated by q, constructed in reverse order.
 rsepBy1(p, q) :: { [p] } :
     p                                           { [$1] }
   | rsepBy1(p, q) q p                           { $3 : $1 }
 
--- A list of 0 or more p's, terminated by q's
+-- A list of 0 or more p's.
 list(p) :: { [p] } :
     {- empty -}                                 { [] }
   | rlist1(p)                                   { reverse $1 }
 
--- A list of 0 or more p's, terminated by q's
+-- A list of 1 or more p's.
 list1(p) :: { [p] } :
   rlist1(p)                                     { reverse $1 }
 
--- A reversed list of at least 1 p's
+-- A list of 1 or more p's, constructed in reverse order.
 rlist1(p) :: { [p] } :
     p                                           { [$1] }
   | rlist1(p) p                                 { $2 : $1 }
