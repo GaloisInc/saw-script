@@ -20,26 +20,20 @@ Portability : non-portable (language extensions)
 module SAWCore.Term.Pretty
   ( SawDoc
   , renderSawDoc
-  , SawStyle(..)
   , PPOpts(..)
   , MemoStyle(..)
   , defaultPPOpts
-  , depthPPOpts
   , ppNat
   , ppTerm
   , ppTermInCtx
   , showTerm
   , scPrettyTerm
   , scPrettyTermInCtx
-  , ppTermDepth
   , ppTermWithNames
   , showTermWithNames
   , PPModule(..), PPDecl(..)
   , ppPPModule
   , scTermCount
-  , scTermCountAux
-  , scTermCountMany
-  , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
   , ppTermContainerWithNames
@@ -656,13 +650,6 @@ type OccurrenceMap = IntMap (Term, Int)
 scTermCount :: Bool -> Term -> OccurrenceMap
 scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
 
--- | Returns map that associates each term index appearing in the list of terms to the
--- number of occurrences in the shared term. Subterms that are on the left-hand
--- side of an application are excluded. (FIXME: why?) The boolean flag indicates
--- whether to descend under lambdas and other binders.
-scTermCountMany :: Bool -> [Term] -> OccurrenceMap
-scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts)  IntMap.empty
-
 scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
 scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
@@ -794,8 +781,11 @@ ppTerm :: PPOpts -> Term -> SawDoc
 ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
-ppTermDepth :: Int -> Term -> SawDoc
-ppTermDepth depth = ppTerm (depthPPOpts depth)
+--
+-- Not used, but I'm not ready to rip this functionality out just yet.
+-- FUTURE: figure out if we really want it or not
+_ppTermDepth :: Int -> Term -> SawDoc
+_ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context
