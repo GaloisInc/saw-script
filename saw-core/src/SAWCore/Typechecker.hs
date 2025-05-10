@@ -47,7 +47,7 @@ import SAWCore.Module
 import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (SawDoc)
+import SAWCore.Term.Pretty (SawDoc, showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.SCTypeCheck

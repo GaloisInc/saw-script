@@ -122,6 +122,7 @@ import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.OpenTerm
+import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTermInCtx)
 
 import CryptolSAWCore.Panic
 import CryptolSAWCore.TypedTerm

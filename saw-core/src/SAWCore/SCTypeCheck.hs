@@ -69,6 +69,7 @@ import SAWCore.SharedTerm
 import SAWCore.TypedAST
 import SAWCore.Module
 import SAWCore.Position
+import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTermInCtx)
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term

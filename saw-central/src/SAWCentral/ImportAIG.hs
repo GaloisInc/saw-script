@@ -35,6 +35,7 @@ import qualified Data.AIG as AIG
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm hiding (scNot, scAnd, scOr)
+import SAWCore.Term.Pretty (defaultPPOpts, ppTerm)
 import SAWCentral.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)

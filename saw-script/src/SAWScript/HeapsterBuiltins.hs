@@ -93,6 +93,7 @@ import SAWCore.Recognizer
 import SAWCore.OpenTerm
 import SAWCore.Typechecker
 import SAWCore.SCTypeCheck
+import qualified SAWCore.Term.Pretty as Pretty (defaultPPOpts, scPrettyTerm, scPrettyTermInCtx)
 import qualified SAWCore.UntypedAST as Un
 import qualified SAWCore.Grammar as Un
 
@@ -119,7 +120,6 @@ import SAWCentral.Builtins
 import SAWCentral.Crucible.LLVM.Builtins
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 
-import qualified SAWCore.Term.Pretty as Pretty
 import Heapster.CruUtil
 import Heapster.HintExtract
 import Heapster.Permissions
@@ -149,7 +149,7 @@ debugPrettyTermWithPrefix henv req_dlevel prefix trm =
   do dlevel <- liftIO $ readIORef $ heapsterEnvDebugLevel henv
      pp_opts <- getTopLevelPPOpts
      debugTrace req_dlevel dlevel (prefix ++
-                                   scPrettyTerm pp_opts trm) (return ())
+                                   Pretty.scPrettyTerm pp_opts trm) (return ())
 
 -- | Check that a type equals the type described by a type description in a ctx
 checkTypeAgreesWithDesc :: SharedContext -> PermEnv -> String -> Ident ->
@@ -164,9 +164,9 @@ checkTypeAgreesWithDesc sc env nm tp_ident ctx d_ident =
           fail ("Type description for " ++ nm ++
                 " does not match user-supplied type\n" ++
                 "Type for description:\n" ++
-                scPrettyTermInCtx Pretty.defaultPPOpts [] d_tp_norm ++ "\n" ++
+                Pretty.scPrettyTermInCtx Pretty.defaultPPOpts [] d_tp_norm ++ "\n" ++
                 "User-supplied type:\n" ++
-                scPrettyTermInCtx Pretty.defaultPPOpts [] tp_norm)
+                Pretty.scPrettyTermInCtx Pretty.defaultPPOpts [] tp_norm)
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
@@ -1205,7 +1205,7 @@ heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
 heapster_print_fun_trans _bic _opts henv fn_name =
   do pp_opts <- getTopLevelPPOpts
      fun_term <- heapsterFunTrans henv fn_name
-     liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
+     liftIO $ putStrLn $ Pretty.scPrettyTerm pp_opts fun_term
 
 -- | Export all definitions in the SAW core module associated with a Heapster
 -- environment to a Coq file with the given name

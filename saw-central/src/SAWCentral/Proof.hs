@@ -160,7 +160,7 @@ import SAWCore.TypedAST
 import CryptolSAWCore.TypedTerm
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty
-  (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)
+  (PPOpts, defaultPPOpts, SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames, showTerm, scPrettyTerm)
 import qualified SAWCore.SCTypeCheck as TC
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)

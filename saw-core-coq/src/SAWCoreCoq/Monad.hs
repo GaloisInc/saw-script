@@ -28,7 +28,7 @@ import Prelude hiding (fail)
 
 import SAWCore.SharedTerm
 -- import SAWCore.Term.CtxTerm
---import SAWCore.Term.Pretty
+import SAWCore.Term.Pretty (showTerm)
 -- import qualified SAWCore.UntypedAST as Un
 
 data TranslationError a

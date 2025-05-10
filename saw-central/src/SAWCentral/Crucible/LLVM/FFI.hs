@@ -76,6 +76,7 @@ import           SAWCore.OpenTerm
 import           SAWCore.Prelude
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm as Term
+import           SAWCore.Term.Pretty (showTerm)
 import           CryptolSAWCore.TypedTerm
 
 -- | Commonly used things that need to be passed around.

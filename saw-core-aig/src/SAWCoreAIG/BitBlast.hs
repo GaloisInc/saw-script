@@ -45,6 +45,7 @@ import SAWCore.TypedAST
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
+import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTerm)
 
 import SAWCoreAIG.Panic
 

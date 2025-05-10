@@ -94,8 +94,7 @@ import CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import SAWCore.SharedTerm hiding (PPOpts(..), defaultPPOpts,
-                                       ppTerm, scPrettyTerm)
+import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
 import CryptolSAWCore.TypedTerm
 import SAWCore.Term.Functor (ModuleName)

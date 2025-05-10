@@ -49,14 +49,6 @@ module SAWCore.SharedTerm
   , scFindBestName
   , scShowTerm
   , DuplicateNameException(..)
-    -- * Re-exported pretty-printing functions
-  , PPOpts(..)
-  , defaultPPOpts
-  , ppTerm
-  , ppTermDepth
-  , showTerm
-  , scPrettyTerm
-  , scPrettyTermInCtx
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext

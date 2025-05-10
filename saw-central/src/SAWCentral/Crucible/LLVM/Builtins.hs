@@ -183,6 +183,7 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.SharedTerm
 import SAWCore.TypedAST
 import SAWCore.Recognizer
+import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
 

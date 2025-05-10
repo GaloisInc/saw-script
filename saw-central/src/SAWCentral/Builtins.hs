@@ -80,7 +80,7 @@ import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (MemoStyle(..))
+import SAWCore.Term.Pretty (MemoStyle(..), PPOpts(..), defaultPPOpts, ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCore.Simulator.Concrete as Concrete
