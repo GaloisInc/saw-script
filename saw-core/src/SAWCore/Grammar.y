@@ -87,8 +87,8 @@ import SAWCore.Lexer
   nat           { PosPair _ (TNat _) }
   bvlit         { PosPair _ (TBitvector _) }
   '_'           { PosPair _ (TIdent "_") }
-  ident         { PosPair _ (TIdent _) }
-  identrec      { PosPair _ (TRecursor _) }
+  rawident      { PosPair _ (TIdent _) }
+  rawidentrec   { PosPair _ (TRecursor _) }
   string        { PosPair _ (TString _) }
 
 %%
@@ -127,7 +127,7 @@ ImportNames :: { [String] } :
 
 -- single imported symbol
 ImportName :: { String } :
-  ident                                         { tokIdent $ val $1 }
+  rawident                                      { tokIdent $ val $1 }
 
 -- A single parameter
 TermVar :: { UTermVar } :
@@ -206,11 +206,11 @@ AtomTerm :: { UTerm } :
 
 -- Identifier (wrapper to extract the text)
 Ident :: { PosPair Text } :
-  ident                                         { fmap (Text.pack . tokIdent) $1 }
+  rawident                                      { fmap (Text.pack . tokIdent) $1 }
 
 -- Recursor identifier (wrapper to extract the text)
 IdentRec :: { PosPair Text } :
-  identrec                                      { fmap (Text.pack . tokRecursor) $1 }
+  rawidentrec                                   { fmap (Text.pack . tokRecursor) $1 }
 
 -- Sort keywords
 Sort :: { PosPair SortFlags } :
