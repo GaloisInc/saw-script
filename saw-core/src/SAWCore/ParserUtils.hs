@@ -137,7 +137,7 @@ declareTermApplyFun nm n tf =
 --
 -- The number of 'Term's to take as arguments is given by the arity of @tp@,
 -- i.e., the number of nested pi-abstractions it contains at top level.
-declareTypedNameFun :: Q Exp -> ModuleName -> Text -> Bool -> Un.Term ->
+declareTypedNameFun :: Q Exp -> ModuleName -> Text -> Bool -> Un.UTerm ->
                        DecWriter ()
 declareTypedNameFun sc_fun mnm nm apply_p tp =
   let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ Text.unpack nm in
@@ -152,7 +152,7 @@ declareTypedNameFun sc_fun mnm nm apply_p tp =
 --
 -- for declared name (primitive, axiom, or definition) @d@ with type @tp@ in
 -- module @MMM@
-declareDefFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
+declareDefFun :: ModuleName -> Text -> Un.UTerm -> DecWriter ()
 declareDefFun mnm d tp =
   declareTypedNameFun [| scGlobalApply |] mnm d True tp
 
@@ -161,7 +161,7 @@ declareDefFun mnm d tp =
 -- > scMMM_d :: SharedContext -> Term -> ... -> Term -> IO Term
 --
 -- for datatype @d@ with parameters @p_ctx@ and type @tp@ in module @MMM@
-declareDataTypeFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
+declareDataTypeFun :: ModuleName -> Text -> Un.UTerm -> DecWriter ()
 declareDataTypeFun mnm d tp =
   declareTypedNameFun [| scDataTypeApp |] mnm d False tp
 
@@ -170,7 +170,7 @@ declareDataTypeFun mnm d tp =
 -- > scApplyMMM_c :: SharedContext -> Term -> ... -> Term -> IO Term
 --
 -- for constructor @c@ with type (including parameters) @tp@ in module @MMM@
-declareCtorFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
+declareCtorFun :: ModuleName -> Text -> Un.UTerm -> DecWriter ()
 declareCtorFun mnm c tp =
   declareTypedNameFun [| scCtorApp |] mnm c True tp
 

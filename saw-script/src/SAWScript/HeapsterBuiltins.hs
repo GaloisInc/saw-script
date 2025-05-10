@@ -273,6 +273,8 @@ heapster_default_env = emptyPermEnv
 
 -- | Based on the function of the same name in SAWCore.ParserUtils.
 -- Unlike that function, this calls 'fail' instead of 'error'.
+--
+-- XXX: we only need one; unify these once the error handling gets fixed.
 readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
 readModuleFromFile path = do
   base <- liftIO getCurrentDirectory
@@ -283,7 +285,11 @@ readModuleFromFile path = do
 
 -- | Parse the second given string as a term, the first given string being
 -- used as the path for error reporting
-parseTermFromString :: String -> String -> TopLevel Un.Term
+--
+-- XXX: this should be moved to saw-core once we have unified error
+-- handling that'll allow it to not need to explicitly live in
+-- TopLevel.
+parseTermFromString :: String -> String -> TopLevel Un.UTerm
 parseTermFromString nm term_string = do
   let base = ""
       path = "<" ++ nm ++ ">"

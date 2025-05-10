@@ -57,7 +57,7 @@ import Debug.Trace
 
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
-inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.Term ->
+inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
                      IO (Either SawDoc Term)
 inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 
@@ -65,7 +65,7 @@ inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 -- typing context
 inferCompleteTermCtx ::
   SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
-  Un.Term -> IO (Either SawDoc Term)
+  Un.UTerm -> IO (Either SawDoc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
@@ -122,7 +122,7 @@ inferResolveNameApp n args =
          throwTCError $ UnboundName n
 
 -- | Match an untyped term as a name applied to 0 or more arguments
-matchAppliedName :: Un.Term -> Maybe (Text, [Un.Term])
+matchAppliedName :: Un.UTerm -> Maybe (Text, [Un.UTerm])
 matchAppliedName (Un.Name (PosPair _ n)) = Just (n, [])
 matchAppliedName (Un.App f arg) =
   do (n, args) <- matchAppliedName f
@@ -130,7 +130,7 @@ matchAppliedName (Un.App f arg) =
 matchAppliedName _ = Nothing
 
 -- | Match an untyped term as a recursor applied to 0 or more arguments
-matchAppliedRecursor :: Un.Term -> Maybe (Maybe ModuleName, Text, [Un.Term])
+matchAppliedRecursor :: Un.UTerm -> Maybe (Maybe ModuleName, Text, [Un.UTerm])
 matchAppliedRecursor (Un.Recursor mnm (PosPair _ n)) = Just (mnm, n, [])
 matchAppliedRecursor (Un.App f arg) =
   do (mnm, n, args) <- matchAppliedRecursor f
@@ -148,7 +148,7 @@ typeInferDebug _ = return ()
 
 -- The type inference engine for untyped terms, which mostly just dispatches to
 -- the type inference engine for (FTermF TypedTerm) defined in SCTypeCheck.hs
-instance TypeInfer Un.Term where
+instance TypeInfer Un.UTerm where
   typeInfer t = typedVal <$> typeInferComplete t
 
   typeInferComplete t =
@@ -159,7 +159,7 @@ instance TypeInfer Un.Term where
        return res
 
 -- | Main workhorse function for type inference on untyped terms
-typeInferCompleteTerm :: Un.Term -> TCM TypedTerm
+typeInferCompleteTerm :: Un.UTerm -> TCM TypedTerm
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
@@ -294,7 +294,7 @@ typeInferCompleteTerm (Un.BadTerm _) =
   internalError "Type inference encountered a BadTerm"
 
 
-instance TypeInferCtx Un.TermVar Un.Term where
+instance TypeInferCtx Un.UTermVar Un.UTerm where
   typeInferCompleteCtx =
     typeInferCompleteCtx . map (\(x,tp) -> (Un.termVarLocalName x, tp))
 
