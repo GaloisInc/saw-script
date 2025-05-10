@@ -41,6 +41,9 @@ import SAWCore.Lexer
 
 }
 
+-- edit width for this file is 100:
+----------------------------------------------------------------------------------------------------
+
 %name parseSAW2 Module
 %name parseSAWTerm2 Term
 
@@ -101,15 +104,13 @@ Import :: { Import } :
 
 SAWDecl :: { Decl } :
     'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $3 $5 $8 }
-  | 'primitive' Ident ':' LTerm ';'                             { TypeDecl PrimQualifier $2 $4 }
-  | 'axiom' Ident ':' LTerm ';'                                 { TypeDecl AxiomQualifier $2 $4 }
-  | Ident ':' LTerm opt(DefBody) ';'                            { maybe (TypeDecl NoQualifier $1 $3) (TypedDef $1 [] $3) $4 }
+  | 'primitive' Ident ':' LTerm ';'                             { mkPrimitive $2 $4 }
+  | 'axiom' Ident ':' LTerm ';'                                 { mkAxiom $2 $4 }
+  | Ident ':' LTerm ';'                                         { mkNoQual $1 $3 }
+  | Ident ':' LTerm '=' LTerm ';'                               { TypedDef $1 [] $3 $5 }
   | Ident list(TermVar) '=' LTerm ';'                           { TermDef $1 $2 $4 }
   | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';'             { TypedDef $1 ($2 ++ $3) $5 $7 }
-  | 'injectCode' string string ';'                              { InjectCodeDecl (Text.pack (tokString (val $2))) (Text.pack (tokString (val $3))) }
-
-DefBody :: { UTerm } :
-  '=' LTerm                                                     { $2 }
+  | 'injectCode' string string ';'                              { mkInject $2 $3 }
 
 ModuleImports :: { ImportConstraint } :
     'hiding' ImportNames                        { HidingImports $2 }
@@ -152,11 +153,8 @@ Term :: { UTerm } :
 -- Term with uses of pi and lambda, but no type ascriptions
 LTerm :: { UTerm } :
     ProdTerm                                    { $1 }
-  | PiArg '->' LTerm                            { Pi (pos $2) $1 $3 }
+  | ProdTerm '->' LTerm                         { Pi (pos $2) (mkPiArg $1) $3 }
   | '\\' VarCtx '->' LTerm                      { Lambda (pos $1) $2 $4 }
-
-PiArg :: { [(UTermVar, UTerm)] } :
-  ProdTerm                                      { mkPiArg $1 }
 
 -- Term formed from infix product type operator (right-associative)
 ProdTerm :: { UTerm } :
@@ -171,11 +169,11 @@ AppTerm :: { UTerm } :
 AtomTerm :: { UTerm } :
     nat                                         { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
-  | string                                      { StringLit (pos $1) (Text.pack (tokString (val $1))) }                
+  | string                                      { mkString $1 }
   | Ident                                       { Name $1 }
   | IdentRec                                    { Recursor Nothing $1 }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
-  | Sort nat                                    { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
+  | Sort nat                                   { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
   | AtomTerm '.' IdentRec                       {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat                            {% parseTupleSelector $1 (fmap tokNat $3) }
@@ -347,4 +345,22 @@ mkPosModuleName [] = panic "mkPosModuleName" ["Empty module name"]
 mkPosModuleName l = PosPair p (mkModuleName nms)
   where nms = fmap val l
         p = pos (last l)
+
+mkPrimitive :: PosPair Text -> UTerm -> Decl
+mkPrimitive x ty = TypeDecl PrimQualifier x ty
+
+mkAxiom :: PosPair Text -> UTerm -> Decl
+mkAxiom x ty = TypeDecl AxiomQualifier x ty
+
+mkNoQual :: PosPair Text -> UTerm -> Decl
+mkNoQual x ty = TypeDecl NoQualifier x ty
+
+mkInject :: PosPair Token -> PosPair Token -> Decl
+mkInject a b =
+  let fixup t = Text.pack (tokString (val t)) in
+  InjectCodeDecl (fixup a) (fixup b)
+
+mkString :: PosPair Token -> UTerm
+mkString t = StringLit (pos t) (Text.pack (tokString (val t)))
+
 }
