@@ -309,15 +309,16 @@ span.spaces    { background: white }
 <span class="lineno">  290 </span>deriveTermsByIndices :: (MonadIO m, Ord b) =&gt; SC.SharedContext -&gt; [b] -&gt; SC.Term -&gt; m (Map [b] SC.Term)
 <span class="lineno">  291 </span><span class="decl"><span class="istickedoff">deriveTermsByIndices sc rep t = do</span>
 <span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">boolty &lt;- liftIO $ SC.scBoolType sc</span>
-<span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">telems &lt;- forM [0..length rep - 1] $ \index -&gt; do</span>
-<span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff">tlen &lt;- liftIO . SC.scNat sc . fromIntegral $ length rep</span>
-<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">idx &lt;- liftIO . SC.scNat sc $ fromIntegral index</span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">bit &lt;- liftIO $ SC.scAt sc tlen boolty t idx</span>
-<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ SC.scSingle sc boolty bit</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">pure . Map.fromList $ mconcat</span>
-<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">[ [(rep, t)]</span>
-<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">, zip ((:[]) &lt;$&gt; rep) telems</span>
-<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">-- Yosys uses little-endian order while saw uses big-endian (msb at index 0), so reverse indices</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">telems &lt;- forM (reverse [0..length rep - 1]) $ \index -&gt; do</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">tlen &lt;- liftIO . SC.scNat sc . fromIntegral $ length rep</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">idx &lt;- liftIO . SC.scNat sc $ fromIntegral index</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">bit &lt;- liftIO $ SC.scAt sc tlen boolty t idx</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ SC.scSingle sc boolty bit</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">pure . Map.fromList $ mconcat</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">[ [(rep, t)]</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">, zip ((:[]) &lt;$&gt; rep) telems</span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
 
 </pre>
 </body>
