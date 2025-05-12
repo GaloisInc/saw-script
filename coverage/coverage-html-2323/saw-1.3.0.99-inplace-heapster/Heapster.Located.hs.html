@@ -1,0 +1,63 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# Language DeriveTraversable #-}
+<span class="lineno">    2 </span>{-# Language TemplateHaskell #-}
+<span class="lineno">    3 </span>{-# Options_GHC -Wno-unused-foralls #-}
+<span class="lineno">    4 </span>module Heapster.Located
+<span class="lineno">    5 </span>  ( Located(..),
+<span class="lineno">    6 </span>    Pos(..),
+<span class="lineno">    7 </span>    HasPos(..),
+<span class="lineno">    8 </span>  )where
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>import Data.Binding.Hobbits
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>-- | A thing paired with its location
+<span class="lineno">   13 </span>data Located a = Located
+<span class="lineno">   14 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">locPos</span></span></span> :: !Pos      -- ^ location
+<span class="lineno">   15 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">locThing</span></span></span> :: a       -- ^ thing
+<span class="lineno">   16 </span>  }
+<span class="lineno">   17 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>-- | A position in a text-file
+<span class="lineno">   20 </span>data Pos = Pos
+<span class="lineno">   21 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">posChar</span></span></span> :: !Int     -- ^ 0-based absolute index
+<span class="lineno">   22 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">posLine</span></span></span> :: !Int     -- ^ 1-based line number
+<span class="lineno">   23 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">posCol</span></span></span>  :: !Int     -- ^ 1-based column number
+<span class="lineno">   24 </span>  }
+<span class="lineno">   25 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>-- | Convenience class for types of things with a known location
+<span class="lineno">   28 </span>class HasPos a where
+<span class="lineno">   29 </span>  -- | Get contained position
+<span class="lineno">   30 </span>  pos :: a -&gt; Pos
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>-- | Returns 'locPos'
+<span class="lineno">   33 </span>instance HasPos (Located a) where
+<span class="lineno">   34 </span>  <span class="decl"><span class="nottickedoff">pos = locPos</span></span>
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>-- | Returns itself
+<span class="lineno">   37 </span>instance HasPos Pos where
+<span class="lineno">   38 </span>  <span class="decl"><span class="nottickedoff">pos = id</span></span>
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">mkNuMatching [t| Pos |]</span></span></span>
+
+</pre>
+</body>
+</html>
