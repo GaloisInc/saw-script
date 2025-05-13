@@ -57,7 +57,7 @@ import System.Process (readProcess)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
-import SAWCentral.AST (Located(..),Import(..))
+import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..))
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)

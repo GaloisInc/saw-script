@@ -485,15 +485,6 @@ forValue (x : xs) f =
 
 -- TopLevel Monad --------------------------------------------------------------
 
--- | Position in the life cycle of a primitive.
-data PrimitiveLifecycle
-  = Current         {- ^ Currently available in all modes. -}
-  | Deprecated      {- ^ Will be removed soon, and available only when
-                         requested. -}
-  | Experimental    {- ^ Will be made @Current@ soon, but available only by
-                         request at the moment. -}
-  deriving (Eq, Ord, Show)
-
 data LocalBinding
   = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
   | LocalTypedef SS.Name SS.Type
@@ -571,7 +562,7 @@ data TopLevelRW =
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
-  , rwPrimsAvail :: Set PrimitiveLifecycle
+  , rwPrimsAvail :: Set SS.PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath

@@ -15,7 +15,8 @@ Stability   : provisional
 {-# LANGUAGE NamedFieldPuns #-}
 
 module SAWCentral.AST
-       ( Name
+       ( PrimitiveLifecycle(..)
+       , Name
        , LName
        , Located(..)
        , Import(..)
@@ -56,6 +57,19 @@ import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
+
+-- Lifecycle / Deprecation {{{
+
+-- | Position in the life cycle of a primitive.
+data PrimitiveLifecycle
+  = Current         {- ^ Currently available in all modes. -}
+  | Deprecated      {- ^ Will be removed soon, and available only when
+                         requested. -}
+  | Experimental    {- ^ Will be made @Current@ soon, but available only by
+                         request at the moment. -}
+  deriving (Eq, Ord, Show)
+
+-- }}}
 
 -- Names {{{
 
