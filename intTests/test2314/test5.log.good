@@ -1,0 +1,5 @@
+ Loading file "test5.saw"
+ Stack trace:
+test5.saw:2:1-2:2: Unterminated string
+
+FAILED
