@@ -192,7 +192,7 @@ import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 -- saw-script
-import SAWCentral.AST (Located(..))
+import SAWCentral.AST (Located(..), tMono, tTerm)
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
@@ -490,15 +490,17 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 MS.csRetValue .~ extracted_ret_value &
                 MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
+          -- XXX could have a real position...
+          let pos = PosInternal "llvm_compositional_extract"
           let func_name' = Text.pack func_name
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
           rw <- getTopLevelRW
           rw' <-
             liftIO $
             extendEnv shared_context
-              (Located func_name' func_name' $ PosInternal "llvm_compositional_extract")
-              Nothing
-              Nothing
+              (Located func_name' func_name' pos)
+              (tMono $ tTerm pos)
+              Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)
               rw
           putTopLevelRW rw'

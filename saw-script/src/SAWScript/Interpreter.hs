@@ -38,11 +38,11 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
-import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.Maybe (fromMaybe)
 import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -159,37 +159,87 @@ isPolymorphic ty0 = case ty0 of
 
 -- Environment -----------------------------------------------------------------
 
+-- The second argument (the schema, aka type) is Nothing in most
+-- cases, but for Decls is taken from the Decl. This will always be
+-- Just s for Decls that have been typechecked, which are the only
+-- ones we should be handling here.
+--
+-- Meanwhile the Maybe Type field of PVar is also always Just ty for
+-- patterns that have been typechecked, and the typechecker will have
+-- established that the type of the pattern matches the type of the
+-- Decl if there is one.
+--
+-- So we should be able to remove the schema argument (and with it the
+-- mess for dividing up a passed-in tuple), but for the moment I'm
+-- unwilling to in case there's something weird going on somewhere.
+-- For the time being we'll just panic if the pattern type is missing
+-- and use it to fill in the schema if there isn't a schema passed
+-- down. We could also assert that the schema type and the pattern
+-- type actually match, but it's intentionally difficult to do that
+-- outside the typechecker and not really worthwhile.
+--
+-- XXX: at some point clean this up further.
+--
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal pat ms v env =
   case pat of
-    SS.PWild _pos _   -> env
-    SS.PVar _pos x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PWild _pos _ ->
+      env
+    SS.PVar _pos _x Nothing ->
+      panic "bindPatternLocal" [
+          "Found pattern with no type in it",
+          "Pattern: " <> Text.pack (show pat)
+      ]
+    SS.PVar _pos x (Just ty) ->
+      let s = fromMaybe (SS.tMono ty) ms in
+      extendLocal x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
-                  Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
-                    -> [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
-        _ -> error "bindPatternLocal: expected tuple value"
+                  Nothing ->
+                      repeat Nothing
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                      [ Just (SS.Forall ks t) | t <- ts ]
+                  Just t ->
+                      panic "bindPatternLocal" [
+                          "Expected tuple type, got " <> Text.pack (show t)
+                      ]
+        _ ->
+            panic "bindPatternLocal" [
+                "Expected tuple value; got " <> Text.pack (show v)
+            ]
 
+-- See notes in bindPatternLocal above regading the schema argument.
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
-    SS.PWild _pos _   -> pure env
-    SS.PVar _pos x mt ->
-      do sc <- getSharedContext
-         liftIO $ extendEnv sc x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PWild _pos _   ->
+        pure env
+    SS.PVar _pos _x Nothing ->
+        panic "bindPatternEnv" [
+            "Found pattern with no type in it",
+            "Pattern: " <> Text.pack (show pat)
+        ]
+    SS.PVar _pos x (Just ty) -> do
+        sc <- getSharedContext
+        let s = fromMaybe (SS.tMono ty) ms
+        liftIO $ extendEnv sc x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
-                    -> [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
-        _ -> error "bindPatternEnv: expected tuple value"
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                      [ Just (SS.Forall ks t) | t <- ts ]
+                  Just t ->
+                      panic "bindPatternEnv" [
+                          "Expected tuple type, got " <> Text.pack (show t)
+                      ]
+        _ ->
+            panic "bindPatternEnv" [
+                "Expected tuple value; got " <> Text.pack (show v)
+            ]
 
 -- Typechecker ----------------------------------------------------------------
 

@@ -486,7 +486,7 @@ forValue (x : xs) f =
 -- TopLevel Monad --------------------------------------------------------------
 
 data LocalBinding
-  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
+  = LocalLet SS.LName SS.Schema (Maybe String) Value
   | LocalTypedef SS.Name SS.Type
  deriving (Show)
 
@@ -495,8 +495,8 @@ type LocalEnv = [LocalBinding]
 emptyLocal :: LocalEnv
 emptyLocal = []
 
-extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
-extendLocal x mt md v env = LocalLet x mt md v : env
+extendLocal :: SS.LName -> SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
+extendLocal x ty md v env = LocalLet x ty md v : env
 
 -- Note that the expansion type should have already been through the
 -- typechecker, so it's ok to panic if it turns out to be broken.
@@ -511,7 +511,7 @@ addTypedef name ty rw =
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+  where addBinding (LocalLet x ty md v) = extendEnv sc x ty md v
         addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 getMergedEnv :: TopLevel TopLevelRW
@@ -820,12 +820,10 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
--- XXX: under what circumstances can this be passed a value without
--- a type, and why would we want to allow that?
 extendEnv ::
   SharedContext ->
-  SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
-extendEnv sc x mt md v rw =
+  SS.LName -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
+extendEnv sc x ty md v rw =
   do ce' <-
        case v of
          VTerm t ->
@@ -844,12 +842,6 @@ extendEnv sc x mt md v rw =
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
-     let ty = case mt of
-           Just ty' -> ty'
-           Nothing ->
-             -- XXX for the time being use bottom, which is not a good
-             -- type for this but it's readily written down.
-             SS.Forall [(SS.getPos x, "aaa")] (SS.TyVar (SS.getPos x) "aaa")
      pure $
       rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)
          , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
