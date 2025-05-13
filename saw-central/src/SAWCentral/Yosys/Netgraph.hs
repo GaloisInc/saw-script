@@ -95,23 +95,19 @@ lookupPatternTerm ::
   SC.SharedContext ->
   YosysBitvecConsumer ->
   [b] ->
-  Map [b] SC.Term ->
+  Map [b] Preterm ->
   m SC.Term
 lookupPatternTerm sc loc pat ts =
   case Map.lookup pat ts of
-    Just t -> pure t
+    Just t -> liftIO $ scPreterm sc t
     Nothing -> do
-      one <- liftIO $ SC.scNat sc 1
-      boolty <- liftIO $ SC.scBoolType sc
-      many <- liftIO . SC.scNat sc . fromIntegral $ length pat
-      onety <- liftIO $ SC.scBitvector sc 1
       bits <- forM pat $ \b -> do
         case Map.lookup [b] ts of
           Just t -> pure t
           Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
       -- Yosys lists bits in little-endian order, while scVector expects big-endian, so reverse
-      vecBits <- liftIO $ SC.scVector sc onety (reverse bits)
-      liftIO $ SC.scJoin sc many one boolty vecBits
+      let ps = fusePreterms (reverse bits)
+      liftIO $ scPreterms sc ps
 
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
 -- generated from the rest of the netgraph.
@@ -120,8 +116,8 @@ netgraphToTerms ::
   SC.SharedContext ->
   Map Text ConvertedModule ->
   Netgraph ->
-  Map [Bitrep] SC.Term ->
-  m (Map [Bitrep] SC.Term)
+  Map [Bitrep] Preterm ->
+  m (Map [Bitrep] Preterm)
 netgraphToTerms sc env ng inputs
   | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = do
@@ -199,8 +195,6 @@ convertModule sc env m = do
     t <- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm
     deriveTermsByIndices sc inp t
 
-  zeroTerm <- liftIO $ SC.scBvConst sc 1 0
-  oneTerm <- liftIO $ SC.scBvConst sc 1 1
   oneBitType <- liftIO $ SC.scBitvector sc 1
   xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
   xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
@@ -208,10 +202,10 @@ convertModule sc env m = do
   zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
-            [ ( [BitrepZero], zeroTerm)
-            , ( [BitrepOne], oneTerm )
-            , ( [BitrepX], xTerm )
-            , ( [BitrepZ], zTerm )
+            [ ( [BitrepZero], PretermBvNat 1 0 )
+            , ( [BitrepOne], PretermBvNat 1 1 )
+            , ( [BitrepX], PretermSlice 0 1 0 xTerm )
+            , ( [BitrepZ], PretermSlice 0 1 0 zTerm )
             ]
           ]
         , derivedInputs

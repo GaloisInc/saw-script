@@ -134,8 +134,6 @@ convertModuleInline sc m = do
         t <- liftIO $ cryptolRecordSelect sc stateFields preStateRecord cnm
         deriveTermsByIndices sc b t
 
-  zeroTerm <- liftIO $ SC.scBvConst sc 1 0
-  oneTerm <- liftIO $ SC.scBvConst sc 1 1
   oneBitType <- liftIO $ SC.scBitvector sc 1
   xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
   xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
@@ -143,10 +141,10 @@ convertModuleInline sc m = do
   zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
-            [ ( [BitrepZero], zeroTerm)
-            , ( [BitrepOne], oneTerm )
-            , ( [BitrepX], xTerm )
-            , ( [BitrepZ], zTerm )
+            [ ( [BitrepZero], PretermBvNat 1 0 )
+            , ( [BitrepOne], PretermBvNat 1 1 )
+            , ( [BitrepX], PretermSlice 0 1 0 xTerm )
+            , ( [BitrepZ], PretermSlice 0 1 0 zTerm )
             ]
           ]
         , derivedInputs

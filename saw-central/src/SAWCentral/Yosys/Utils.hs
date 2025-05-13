@@ -28,6 +28,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Graph as Graph
 
+import Numeric.Natural (Natural)
+
 import Text.Encoding.Z (zEncodeString)
 
 import qualified SAWCore.SharedTerm as SC
@@ -287,16 +289,124 @@ fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIden
 
 -- | Given a bit pattern ([b]) and a term, construct a map associating that output pattern with
 -- the term, and each bit of that pattern with the corresponding bit of the term.
-deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
-deriveTermsByIndices sc rep t = do
-  boolty <- liftIO $ SC.scBoolType sc
-  -- Yosys uses little-endian order while saw uses big-endian (msb at index 0), so reverse indices
-  telems <- forM (reverse [0..length rep - 1]) $ \index -> do
-    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
-    idx <- liftIO . SC.scNat sc $ fromIntegral index
-    bit <- liftIO $ SC.scAt sc tlen boolty t idx
-    liftIO $ SC.scSingle sc boolty bit
+deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] Preterm)
+deriveTermsByIndices _sc rep t = do
+  let len = length rep
+  let bit i = PretermSlice (fromIntegral (len - 1 - i)) 1 (fromIntegral i) t
+  let telems = map bit [0..len-1]
   pure . Map.fromList $ mconcat
-    [ [(rep, t)]
+    [ [(rep, PretermSlice 0 (fromIntegral len) 0 t)]
     , zip ((:[]) <$> rep) telems
     ]
+
+--------------------------------------------------------------------------------
+-- ** Pre-terms
+
+data Preterm
+  = PretermSlice Natural Natural Natural SC.Term
+    -- ^ @PretermSlice i j k t@ selects bits @k..k+j-1@ from @t@.
+  | PretermBvNat Natural Natural
+    -- ^ @PretermBvNat n x@ is @x@ as an @n@-bit binary number.
+
+widthPreterm :: Preterm -> Natural
+widthPreterm p =
+  case p of
+    PretermSlice _ j _ _ -> j
+    PretermBvNat n _ -> n
+
+-- | Rewrite the concatenation of two @Preterm@ expressions into a
+-- single @Preterm@, if possible.
+fusePreterm :: Preterm -> Preterm -> Maybe Preterm
+fusePreterm (PretermSlice a b c t) (PretermSlice i j k t')
+  | t == t' && a + b == i && c == j + k =
+    Just (PretermSlice a (b + j) k t)
+fusePreterm (PretermBvNat m x) (PretermBvNat n y) =
+  Just (PretermBvNat (m + n) (x * 2^n + y))
+fusePreterm _ _ = Nothing
+
+-- | Concatenate a @Preterm@ expression onto a list of @Preterm@s,
+-- fusing expressions if possible.
+consPreterm :: Preterm -> [Preterm] -> [Preterm]
+consPreterm x [] = [x]
+consPreterm x (y : ys) =
+  case fusePreterm x y of
+    Nothing -> x : y : ys
+    Just xy -> xy : ys
+
+-- | Rewrite a sequence of @Preterm@ expressions, combining adjacent
+-- expressions wherever possible.
+fusePreterms :: [Preterm] -> [Preterm]
+fusePreterms = foldr consPreterm []
+
+-- | Build a @SC.Term@ from a @Preterm@.
+scPreterm :: SC.SharedContext -> Preterm -> IO SC.Term
+scPreterm sc p =
+  case p of
+    PretermSlice 0 _ 0 t ->
+      pure t
+    PretermSlice 0 j k t ->
+      do boolty <- SC.scBoolType sc
+         j' <- SC.scNat sc j
+         k' <- SC.scNat sc k
+         SC.scGlobalApply sc "Prelude.take" [boolty, j', k', t]
+    PretermSlice i j 0 t ->
+      do boolty <- SC.scBoolType sc
+         i' <- SC.scNat sc i
+         j' <- SC.scNat sc j
+         SC.scGlobalApply sc "Prelude.drop" [boolty, i', j', t]
+    PretermSlice i 1 k t ->
+      do boolty <- SC.scBoolType sc
+         n' <- SC.scNat sc (i + 1 + k)
+         i' <- SC.scNat sc i
+         SC.scSingle sc boolty =<< SC.scAt sc n' boolty t i'
+    PretermSlice i j k t ->
+      do boolty <- liftIO $ SC.scBoolType sc
+         i' <- SC.scNat sc i
+         j' <- SC.scNat sc j
+         k' <- SC.scNat sc k
+         SC.scSlice sc boolty i' j' k' t
+    PretermBvNat i x ->
+      do i' <- SC.scNat sc i
+         x' <- SC.scNat sc x
+         SC.scBvNat sc i' x'
+
+-- | Build a @SC.Term@ from a concatenated sequence of @Preterm@s.
+scPreterms :: SC.SharedContext -> [Preterm] -> IO SC.Term
+scPreterms sc preterms = snd <$> go preterms
+  where
+    append :: (Natural, SC.Term) -> (Natural, SC.Term) -> IO (Natural, SC.Term)
+    append (i, x) (j, y)
+      | i == 0 = pure (j, y)
+      | j == 0 = pure (i, x)
+      | otherwise =
+        do i' <- SC.scNat sc i
+           j' <- SC.scNat sc j
+           boolty <- SC.scBoolType sc
+           t <- SC.scAppend sc i' j' boolty x y
+           pure (i + j, t)
+
+    go :: [Preterm] -> IO (Natural, SC.Term)
+    go [] =
+      do z <- SC.scNat sc 0
+         t <- SC.scBvNat sc z z
+         pure (0, t)
+    go (p : ps) =
+      do let i = widthPreterm p
+         p' <- scPreterm sc p
+         let (ps1, ps2) = span ((==i) . widthPreterm) ps
+         if length ps1 > 1 then
+           -- Use `join` to concatenate same-length preterms
+           do i' <- SC.scNat sc i
+              boolty <- SC.scBoolType sc
+              ety <- SC.scVecType sc i' boolty
+              ps1' <- traverse (scPreterm sc) ps1
+              v <- SC.scVector sc ety (p' : ps1')
+              let len = List.genericLength ps1 + 1 :: Natural
+              len' <- SC.scNat sc len
+              x <- SC.scJoin sc len' i' boolty v
+              (j, y) <- go ps2
+              append (len * i, x) (j, y)
+           else
+           do x <- scPreterm sc p
+              (j, y) <- go ps
+              append (i, x) (j, y)
