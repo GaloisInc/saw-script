@@ -9,7 +9,7 @@ import qualified Data.Text as Text
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
-import qualified Data.Map as M
+import qualified Data.Map as Map
 
 import SAWCentral.Panic
 import SAWCentral.Position
@@ -29,20 +29,20 @@ class NamedTyVars t where
   namedTyVars :: t -> Map Name Pos
 
 instance (Ord k, NamedTyVars a) => NamedTyVars (Map k a) where
-  namedTyVars = namedTyVars . M.elems
+  namedTyVars = namedTyVars . Map.elems
 
 instance (NamedTyVars a) => NamedTyVars [a] where
-  namedTyVars = M.unionsWith choosePos . map namedTyVars
+  namedTyVars = Map.unionsWith choosePos . map namedTyVars
 
 instance NamedTyVars Type where
   namedTyVars t = case t of
     TyCon _ _ ts      -> namedTyVars ts
     TyRecord _ tm     -> namedTyVars tm
-    TyVar pos n       -> M.singleton n pos
-    TyUnifyVar _ _    -> M.empty
+    TyVar pos n       -> Map.singleton n pos
+    TyUnifyVar _ _    -> Map.empty
 
 instance NamedTyVars Schema where
-  namedTyVars (Forall ns t) = namedTyVars t M.\\ M.fromList ns'
+  namedTyVars (Forall ns t) = namedTyVars t Map.\\ Map.fromList ns'
     where ns' = map (\(pos, n) -> (n, pos)) ns
 
 
@@ -83,7 +83,7 @@ instance SubstituteTyVars Type where
     TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->
-        case M.lookup n tyenv of
+        case Map.lookup n tyenv of
             Nothing -> ty
             Just (lc, expansion) ->
                 if not (Set.member lc avail) then
