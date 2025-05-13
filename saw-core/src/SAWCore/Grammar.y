@@ -112,7 +112,7 @@ SAWDecl : 'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}'
         | 'injectCode' string string ';'
 	     { InjectCodeDecl (Text.pack (tokString (val $2))) (Text.pack (tokString (val $3))) }
 
-DefBody :: { Term }
+DefBody :: { UTerm }
 DefBody : '=' LTerm { $2 }
 
 ModuleImports :: { ImportConstraint }
@@ -125,57 +125,57 @@ ImportNames : '(' sepBy(ImportName, ',') ')' { $2 }
 ImportName :: { String }
 ImportName : ident { tokIdent $ val $1 }
 
-TermVar :: { TermVar }
+TermVar :: { UTermVar }
 TermVar
   : Ident { TermVar $1 }
   | '_' { UnusedVar (pos $1) }
 
 -- A context of variables which may or may not be typed
-DefVarCtx :: { [(TermVar, Maybe Term)] }
+DefVarCtx :: { [(UTermVar, Maybe UTerm)] }
 DefVarCtx : list(DefVarCtxItem) { concat $1 }
 
-DefVarCtxItem :: { [(TermVar, Maybe Term)] }
+DefVarCtxItem :: { [(UTermVar, Maybe UTerm)] }
 DefVarCtxItem : TermVar { [($1, Nothing)] }
               | '(' list(TermVar) ':'  LTerm ')'
                 { map (\var -> (var, Just $4)) $2 }
 
 -- A context of variables, all of which must be typed; i.e., a list syntactic
 -- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
-VarCtx :: { [(TermVar, Term)] }
+VarCtx :: { [(UTermVar, UTerm)] }
 VarCtx : list(VarCtxItem) { concat $1 }
 
-VarCtxItem :: { [(TermVar, Term)] }
+VarCtxItem :: { [(UTermVar, UTerm)] }
 VarCtxItem : '(' list(TermVar) ':' LTerm ')' { map (\var -> (var,$4)) $2 }
 
 -- Constructor declaration of the form "c (x1 x2 :: tp1) ... (z1 :: tpn) :: tp"
 CtorDecl :: { CtorDecl }
 CtorDecl : Ident VarCtx ':' LTerm ';' { Ctor $1 $2 $4 }
 
-Term :: { Term }
+Term :: { UTerm }
 Term : LTerm { $1 }
      | LTerm ':' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no type ascriptions
-LTerm :: { Term }
+LTerm :: { UTerm }
 LTerm : ProdTerm                         { $1 }
       | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
       | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
 
-PiArg :: { [(TermVar, Term)] }
+PiArg :: { [(UTermVar, UTerm)] }
 PiArg : ProdTerm { mkPiArg $1 }
 
 -- Term formed from infix product type operator (right-associative)
-ProdTerm :: { Term }
+ProdTerm :: { UTerm }
 ProdTerm
   : AppTerm                        { $1 }
   | AppTerm '*' ProdTerm           { PairType (pos $1) $1 $3 }
 
 -- Term formed from applications of atomic expressions
-AppTerm :: { Term }
+AppTerm :: { UTerm }
 AppTerm : AtomTerm                 { $1 }
         | AppTerm AtomTerm         { App $1 $2 }
 
-AtomTerm :: { Term }
+AtomTerm :: { UTerm }
 AtomTerm
   : nat                          { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                        { BVLit (pos $1) (tokBits (val $1)) }
@@ -206,10 +206,10 @@ Sort : 'sort'   { fmap (const $ SortFlags False False) $1 }
      | 'qsort'  { fmap (const $ SortFlags False True ) $1 }
      | 'qisort' { fmap (const $ SortFlags True  True ) $1 }
 
-FieldValue :: { (PosPair FieldName, Term) }
+FieldValue :: { (PosPair FieldName, UTerm) }
 FieldValue : Ident '=' Term { ($1, $3) }
 
-FieldType :: { (PosPair FieldName, Term) }
+FieldType :: { (PosPair FieldName, UTerm) }
 FieldType : Ident ':' LTerm { ($1, $3) }
 
 opt(q) :: { Maybe q }
@@ -289,7 +289,7 @@ runParser (Parser m) base path txt = evalState (runExceptT m) initState
 parseSAW :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Module
 parseSAW = runParser parseSAW2
 
-parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Term
+parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) UTerm
 parseSAWTerm = runParser parseSAWTerm2
 
 parseError :: PosPair Token -> Parser a
@@ -299,7 +299,7 @@ addParseError :: Pos -> String -> Parser ()
 addParseError p s = addError p (ParseError s)
 
 -- Try to parse an expression as a list of identifiers
-exprAsIdentList :: Term -> Maybe [TermVar]
+exprAsIdentList :: UTerm -> Maybe [UTermVar]
 exprAsIdentList (Name x) = return [TermVar x]
 exprAsIdentList (App expr (Name x)) =
   (++ [TermVar x]) <$> exprAsIdentList expr
@@ -313,13 +313,13 @@ exprAsIdentList _ = Nothing
 -- This function takes in a term for the LHS and tests if it is of the first
 -- form, or, if not, converts the second form into the first by making a single
 -- "unused" variable with the name "_"
-mkPiArg :: Term -> [(TermVar, Term)]
+mkPiArg :: UTerm -> [(UTermVar, UTerm)]
 mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
   map (\x -> (x, t)) xs
 mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
 
 -- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
-mkTupleProj :: Term -> Natural -> Parser Term
+mkTupleProj :: UTerm -> Natural -> Parser UTerm
 mkTupleProj t 1 = return $ PairLeft t
 mkTupleProj t 2 = return $ PairRight t
 mkTupleProj t _ =
@@ -327,19 +327,19 @@ mkTupleProj t _ =
      return (badTerm (pos t))
 
 -- | Parse a term as a dotted list of strings
-parseModuleName :: Term -> Maybe [Text]
+parseModuleName :: UTerm -> Maybe [Text]
 parseModuleName (RecordProj t fname) = (++ [fname]) <$> parseModuleName t
 parseModuleName _ = Nothing
 
 -- | Parse a qualified recursor @M1.M2...Mn.d#rec@
-parseRecursorProj :: Term -> PosPair Text -> Parser Term
+parseRecursorProj :: UTerm -> PosPair Text -> Parser UTerm
 parseRecursorProj (parseModuleName -> Just mnm) i =
   return $ Recursor (Just $ mkModuleName mnm) i
 parseRecursorProj t _ =
   do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
 
-parseTupleSelector :: Term -> PosPair Natural -> Parser Term
+parseTupleSelector :: UTerm -> PosPair Natural -> Parser UTerm
 parseTupleSelector t i =
   if val i >= 1 then return (mkTupleSelector t (val i)) else
     do addParseError (pos t) "non-positive tuple projection index"

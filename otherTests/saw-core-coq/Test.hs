@@ -78,19 +78,19 @@ translate term ty = do
 preludeName :: Un.ModuleName
 preludeName = Un.moduleName preludeModule
 
-checkTermVar :: Un.TermVar -> Ident
+checkTermVar :: Un.UTermVar -> Ident
 checkTermVar tv = mkIdent preludeName (Text.pack $ Un.termVarString tv) -- FIXME
 
-checkTermCtx :: SCIOMonad m => Un.TermCtx -> m [(Ident, Term)]
+checkTermCtx :: SCIOMonad m => Un.UTermCtx -> m [(Ident, Term)]
 checkTermCtx ctx = mapM checkUntypedBinder ctx
 
-checkUntypedBinder :: SCIOMonad m => (Un.TermVar, Un.Term) -> m (Ident, Term)
+checkUntypedBinder :: SCIOMonad m => (Un.UTermVar, Un.UTerm) -> m (Ident, Term)
 checkUntypedBinder (ident, term) =
   (,) <$> pure (checkTermVar ident) <*> checkUntypedTerm term
 
 type SCIOMonad m = ( MonadIO m, MonadReader SharedContext m )
 
-checkUntypedTerm :: SCIOMonad m => Un.Term -> m Term
+checkUntypedTerm :: SCIOMonad m => Un.UTerm -> m Term
 checkUntypedTerm term = do
   sc <- ask
   et <- liftIO $ do
