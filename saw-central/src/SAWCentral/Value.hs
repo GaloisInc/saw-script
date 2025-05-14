@@ -104,7 +104,6 @@ import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete as C
 import CryptolSAWCore.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified Cryptol.Utils.Logger as C (quietLogger)
 import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
@@ -250,13 +249,6 @@ data PPOpts = PPOpts
 defaultPPOpts :: PPOpts
 defaultPPOpts = PPOpts False 10 False 2 SAWCorePP.Incremental
 
-cryptolPPOpts :: PPOpts -> C.PPOpts
-cryptolPPOpts opts =
-  C.defaultPPOpts
-    { C.useAscii = ppOptsAscii opts
-    , C.useBase = ppOptsBase opts
-    }
-
 sawPPOpts :: PPOpts -> SAWCorePP.PPOpts
 sawPPOpts opts =
   SAWCorePP.defaultPPOpts
@@ -265,9 +257,6 @@ sawPPOpts opts =
     , SAWCorePP.ppMinSharing = ppOptsMinSharing opts
     , SAWCorePP.ppMemoStyle = ppOptsMemoStyle opts
     }
-
-quietEvalOpts :: C.EvalOpts
-quietEvalOpts = C.EvalOpts C.quietLogger C.defaultPPOpts
 
 commaSep :: [ShowS] -> ShowS
 commaSep ss = foldr (.) id (intersperse (showString ",") ss)
