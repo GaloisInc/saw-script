@@ -1,6 +1,6 @@
- Loading file "err52.saw"
+ Loading file "err052.saw"
  Type errors:
-  err52.saw:8:13-8:25: Inaccessible type: "BisimTheorem"
-  err52.saw:8:13-8:25: This type is available only after running `enable_experimental`.
+  err052.saw:8:13-8:25: Inaccessible type: "BisimTheorem"
+  err052.saw:8:13-8:25: This type is available only after running `enable_experimental`.
 
 FAILED
