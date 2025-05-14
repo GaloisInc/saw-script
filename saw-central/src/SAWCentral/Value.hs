@@ -485,17 +485,8 @@ forValue (x : xs) f =
 
 -- TopLevel Monad --------------------------------------------------------------
 
--- | Position in the life cycle of a primitive.
-data PrimitiveLifecycle
-  = Current         {- ^ Currently available in all modes. -}
-  | Deprecated      {- ^ Will be removed soon, and available only when
-                         requested. -}
-  | Experimental    {- ^ Will be made @Current@ soon, but available only by
-                         request at the moment. -}
-  deriving (Eq, Ord, Show)
-
 data LocalBinding
-  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
+  = LocalLet SS.LName SS.Schema (Maybe String) Value
   | LocalTypedef SS.Name SS.Type
  deriving (Show)
 
@@ -504,17 +495,23 @@ type LocalEnv = [LocalBinding]
 emptyLocal :: LocalEnv
 emptyLocal = []
 
-extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
-extendLocal x mt md v env = LocalLet x mt md v : env
+extendLocal :: SS.LName -> SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
+extendLocal x ty md v env = LocalLet x ty md v : env
 
+-- Note that the expansion type should have already been through the
+-- typechecker, so it's ok to panic if it turns out to be broken.
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw =
-  rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
-  where ty' = SS.substituteTyVars (rwNamedTypes rw) ty
+  let primsAvail = rwPrimsAvail rw
+      typeInfo = rwTypeInfo rw
+      ty' = SS.substituteTyVars primsAvail typeInfo ty
+      typeInfo' = M.insert name (SS.Current, SS.ConcreteType ty') typeInfo
+  in
+  rw { rwTypeInfo = typeInfo' }
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+  where addBinding (LocalLet x ty md v) = extendEnv sc x ty md v
         addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 getMergedEnv :: TopLevel TopLevelRW
@@ -555,9 +552,8 @@ data TopLevelRO =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValues     :: Map SS.LName Value
-  , rwValueTypes :: Map SS.LName SS.Schema
-  , rwNamedTypes :: Map SS.Name SS.NamedType
+  { rwValueInfo  :: Map SS.LName (SS.PrimitiveLifecycle, SS.Schema, Value)
+  , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
   , rwMonadify   :: Monadify.MonadifyEnv
@@ -571,7 +567,7 @@ data TopLevelRW =
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
-  , rwPrimsAvail :: Set PrimitiveLifecycle
+  , rwPrimsAvail :: Set SS.PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
@@ -824,12 +820,10 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
--- XXX: under what circumstances can this be passed a value without
--- a type, and why would we want to allow that?
 extendEnv ::
   SharedContext ->
-  SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
-extendEnv sc x mt md v rw =
+  SS.LName -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
+extendEnv sc x ty md v rw =
   do ce' <-
        case v of
          VTerm t ->
@@ -849,8 +843,7 @@ extendEnv sc x mt md v rw =
          _ ->
            pure ce
      pure $
-      rw { rwValues  = M.insert name v (rwValues rw)
-         , rwValueTypes = maybeInsert name mt (rwValueTypes rw)
+      rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)
          , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
          , rwCryptol = ce'
          }

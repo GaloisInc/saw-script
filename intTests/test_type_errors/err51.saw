@@ -1,0 +1,9 @@
+// Make sure deprecated primitives are hidden by default, and test
+// the associated message.
+//
+// This can be anything deprecated; if you need to change it because
+// the thing I picked finally gets removed, just update the reference
+// file accordingly.
+
+let _ = addsimp';
+

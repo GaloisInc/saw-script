@@ -38,16 +38,15 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
-import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.Maybe (fromMaybe)
 import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
-import Data.Set ( Set )
 import qualified Data.Text as Text
 import Data.Text (Text)
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
@@ -57,7 +56,7 @@ import System.Process (readProcess)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
-import SAWCentral.AST (Located(..),Import(..))
+import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
@@ -160,37 +159,87 @@ isPolymorphic ty0 = case ty0 of
 
 -- Environment -----------------------------------------------------------------
 
+-- The second argument (the schema, aka type) is Nothing in most
+-- cases, but for Decls is taken from the Decl. This will always be
+-- Just s for Decls that have been typechecked, which are the only
+-- ones we should be handling here.
+--
+-- Meanwhile the Maybe Type field of PVar is also always Just ty for
+-- patterns that have been typechecked, and the typechecker will have
+-- established that the type of the pattern matches the type of the
+-- Decl if there is one.
+--
+-- So we should be able to remove the schema argument (and with it the
+-- mess for dividing up a passed-in tuple), but for the moment I'm
+-- unwilling to in case there's something weird going on somewhere.
+-- For the time being we'll just panic if the pattern type is missing
+-- and use it to fill in the schema if there isn't a schema passed
+-- down. We could also assert that the schema type and the pattern
+-- type actually match, but it's intentionally difficult to do that
+-- outside the typechecker and not really worthwhile.
+--
+-- XXX: at some point clean this up further.
+--
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal pat ms v env =
   case pat of
-    SS.PWild _pos _   -> env
-    SS.PVar _pos x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PWild _pos _ ->
+      env
+    SS.PVar _pos _x Nothing ->
+      panic "bindPatternLocal" [
+          "Found pattern with no type in it",
+          "Pattern: " <> Text.pack (show pat)
+      ]
+    SS.PVar _pos x (Just ty) ->
+      let s = fromMaybe (SS.tMono ty) ms in
+      extendLocal x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
-                  Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
-                    -> [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
-        _ -> error "bindPatternLocal: expected tuple value"
+                  Nothing ->
+                      repeat Nothing
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                      [ Just (SS.Forall ks t) | t <- ts ]
+                  Just t ->
+                      panic "bindPatternLocal" [
+                          "Expected tuple type, got " <> Text.pack (show t)
+                      ]
+        _ ->
+            panic "bindPatternLocal" [
+                "Expected tuple value; got " <> Text.pack (show v)
+            ]
 
+-- See notes in bindPatternLocal above regading the schema argument.
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
-    SS.PWild _pos _   -> pure env
-    SS.PVar _pos x mt ->
-      do sc <- getSharedContext
-         liftIO $ extendEnv sc x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PWild _pos _   ->
+        pure env
+    SS.PVar _pos _x Nothing ->
+        panic "bindPatternEnv" [
+            "Found pattern with no type in it",
+            "Pattern: " <> Text.pack (show pat)
+        ]
+    SS.PVar _pos x (Just ty) -> do
+        sc <- getSharedContext
+        let s = fromMaybe (SS.tMono ty) ms
+        liftIO $ extendEnv sc x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
-                    -> [ Just (SS.Forall ks t) | t <- ts ]
-                  Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
-        _ -> error "bindPatternEnv: expected tuple value"
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                      [ Just (SS.Forall ks t) | t <- ts ]
+                  Just t ->
+                      panic "bindPatternEnv" [
+                          "Expected tuple type, got " <> Text.pack (show t)
+                      ]
+        _ ->
+            panic "bindPatternEnv" [
+                "Expected tuple value; got " <> Text.pack (show v)
+            ]
 
 -- Typechecker ----------------------------------------------------------------
 
@@ -242,9 +291,13 @@ interpret expr =
       SS.TLookup _ e i         -> do a <- interpret e
                                      return (tupleLookupValue a i)
       SS.Var x                 -> do rw <- getMergedEnv
-                                     case Map.lookup x (rwValues rw) of
+                                     case Map.lookup x (rwValueInfo rw) of
                                        Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
-                                       Just v -> return (addTrace (show x) v)
+                                       Just (lc, _ty, v)
+                                         | Set.member lc (rwPrimsAvail rw) ->
+                                              return (addTrace (show x) v)
+                                         | otherwise ->
+                                              fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
       SS.Function _ pat e      -> do env <- getLocalEnv
                                      let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
                                      return $ VLambda f
@@ -443,7 +496,9 @@ interpretStmt printBinds stmt = do
 
   ctx <- getMonadContext
   rw <- liftTopLevel getMergedEnv
-  stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
+  let valueInfo = rwValueInfo rw
+      valueInfo' = Map.map (\(lc, ty, _v) -> (lc, ty)) valueInfo
+  stmt' <- processTypeCheck $ checkStmt (rwPrimsAvail rw) valueInfo' (rwTypeInfo rw) ctx stmt
 
   case stmt' of
 
@@ -506,9 +561,15 @@ interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
   let mainName = Located "main" "main" (SS.PosInternal "entry")
-  case Map.lookup mainName (rwValues rw) of
+  case Map.lookup mainName (rwValueInfo rw) of
     Nothing -> return () -- fail "No 'main' defined"
-    Just v -> fromValue v
+    Just (Current, _ty, v) -> fromValue v
+    Just (lc, _ty, _v) ->
+      -- There is no way for things other than primitives to get marked
+      -- experimental or deprecated, so this isn't possible. If we allow
+      -- users to deprecate their own functions in the future, change
+      -- this message to an actual error that says something snarky :-)
+      panic "Interpreter" ["Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"]
 
 buildTopLevelEnv :: AIGProxy
                  -> Options
@@ -561,16 +622,14 @@ buildTopLevelEnv proxy opts =
                    biSharedContext = sc
                  , biBasicSS = ss
                  }
-           primsAvail = Set.fromList [Current]
        ce0 <- CEnv.initCryptolEnv sc
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwValues     = valueEnv primsAvail opts bic
-                   , rwValueTypes = primValueTypeEnv primsAvail
-                   , rwNamedTypes = primNamedTypeEnv primsAvail
-                   , rwDocs       = primDocEnv primsAvail
+                   { rwValueInfo  = primValueEnv opts bic
+                   , rwTypeInfo   = primNamedTypeEnv
+                   , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
@@ -580,7 +639,7 @@ buildTopLevelEnv proxy opts =
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
-                   , rwPrimsAvail = primsAvail
+                   , rwPrimsAvail = defaultAvailable
                    , rwSMTArrayMemoryModel = False
                    , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
@@ -626,15 +685,10 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 -- Primitives ------------------------------------------------------------------
 
 add_primitives :: PrimitiveLifecycle -> BuiltinContext -> Options -> TopLevel ()
-add_primitives lc bic opts = do
+add_primitives lc _bic _opts = do
   rw <- getTopLevelRW
-  let lcs = Set.singleton lc
   putTopLevelRW rw {
-    rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
-  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
-  , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
-  , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
+    rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
 enable_safety_proofs :: TopLevel ()
@@ -955,16 +1009,14 @@ readSchema fakeFileName str =
 
 data PrimType
   = PrimType
-    { primTypeName :: SS.Name
-    , primTypeType :: SS.NamedType
+    { primTypeType :: SS.NamedType
     , primTypeLife :: PrimitiveLifecycle
     -- FUTURE: add doc strings for these?
     }
 
 data Primitive
   = Primitive
-    { primitiveName :: SS.LName
-    , primitiveType :: SS.Schema
+    { primitiveType :: SS.Schema
     , primitiveLife :: PrimitiveLifecycle
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
@@ -1004,7 +1056,7 @@ primTypes = Map.fromList
   , abstype "Simpset" Current
   , abstype "SkeletonState" Experimental
   , abstype "Theorem" Current
-  , abstype "Uninterp" Deprecated
+  , abstype "Uninterp" HideDeprecated
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
   ]
@@ -1014,8 +1066,7 @@ primTypes = Map.fromList
     abstype name lc = (name, info)
       where
         info = PrimType
-          { primTypeName = name
-          , primTypeType = SS.AbstractType
+          { primTypeType = SS.AbstractType
           , primTypeLife = lc
           }
 
@@ -1024,8 +1075,7 @@ primTypes = Map.fromList
     _conctype name tystr lc = (name, info)
       where
         info = PrimType
-          { primTypeName = name
-          , primTypeType = SS.ConcreteType ty
+          { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
@@ -1199,9 +1249,14 @@ primitives = Map.fromList
     [ "Execute the given SAWScript file." ]
 
   , prim "enable_deprecated"   "TopLevel ()"
-    (bicVal (add_primitives Deprecated))
+    (bicVal (add_primitives HideDeprecated))
     Current
-    [ "Enable the use of deprecated commands." ]
+    [ "Enable the use of deprecated commands. When commands are first deprecated they"
+    , "generate warnings. At a later stage they become invisible unless explicitly"
+    , "enabled with this command. The next stage is to remove them entirely. Therefore,"
+    , "the use of this command should always be considered a temporary stopgap until"
+    , "your scripts can be updated."
+    ]
 
   , prim "enable_experimental" "TopLevel ()"
     (bicVal (add_primitives Experimental))
@@ -1637,7 +1692,7 @@ primitives = Map.fromList
 
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
-    Deprecated
+    HideDeprecated
     [ "Indicate that the given term should be used as the definition of the"
     , "named function when loading an SBV file. This command returns an"
     , "object that can be passed to 'read_sbv'."
@@ -1672,7 +1727,7 @@ primitives = Map.fromList
 
   , prim "read_sbv"            "String -> [Uninterp] -> TopLevel Term"
     (pureVal readSBV)
-    Deprecated
+    HideDeprecated
     [ "Read an SBV file produced by Cryptol 1, using the given set of"
     , "overrides for any uninterpreted functions that appear in the file."
     ]
@@ -2716,14 +2771,14 @@ primitives = Map.fromList
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
     (funVal2 addsimp')
-    Deprecated
+    HideDeprecated
     [ "Add an arbitrary equality term to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimp` instead."
     ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Deprecated
+    HideDeprecated
     [ "Add arbitrary equality terms to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimps` instead."
     ]
@@ -3962,7 +4017,7 @@ primitives = Map.fromList
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
-    Deprecated
+    HideDeprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
@@ -5187,8 +5242,7 @@ primitives = Map.fromList
     prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
-                                     { primitiveName = qname
-                                     , primitiveType = readSchema fakeFileName ty
+                                     { primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn
                                      , primitiveLife = lc
@@ -5222,40 +5276,28 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvailTypes ::
-  Set PrimitiveLifecycle ->
-  Map SS.Name PrimType ->
-  Map SS.Name PrimType
-filterAvailTypes primsAvail =
-  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
+-- FUTURE: extract here is now functionally a nop, so if things don't
+-- change going forward we should consider simplifying so primTypes
+-- uses the same type as the interprer environment this function
+-- seeds, instead of its own.
+primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
+primNamedTypeEnv = fmap extract primTypes
+   where extract pt = (primTypeLife pt, primTypeType pt)
 
-filterAvailPrims ::
-  Set PrimitiveLifecycle ->
-  Map SS.LName Primitive ->
-  Map SS.LName Primitive
-filterAvailPrims primsAvail =
-  Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
-
-primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
-
-primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
-primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
-
-valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
-  where f p = (primitiveFn p) opts bic
+primValueEnv :: Options -> BuiltinContext -> Map SS.LName (PrimitiveLifecycle, SS.Schema, Value)
+primValueEnv opts bic = fmap extract primitives
+  where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) opts bic)
 
 -- | Map containing the formatted documentation string for each
 -- saw-script primitive.
-primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
-primDocEnv primsAvail =
-  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
+primDocEnv :: Map SS.Name String
+primDocEnv =
+  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
     where
-      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
-                Deprecated -> ["DEPRECATED", ""]
+                WarnDeprecated -> ["DEPRECATED AND WILL WARN", ""]
+                HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
                 Experimental -> ["EXPERIMENTAL", ""]
       doc n p = unlines $
                 [ "Description"

@@ -1817,10 +1817,15 @@ caseSatResultPrim sr vUnsat vSat = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwValueTypes <$> SV.getMergedEnv
+  rw <- SV.getMergedEnv
+  let avail = rwPrimsAvail rw
+      vals = rwValueInfo rw
+      keep (_x, (lc, _ty, _v)) = Set.member lc avail
+      vals' = filter keep $ Map.assocs vals
+      showLName = Text.unpack . getVal
+      printit (x, (_lc, ty, _v)) = showLName x ++ " : " ++ pShow ty
   opts <- getOptions
-  let showLName = Text.unpack . getVal
-  io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
+  io $ sequence_ [ printOutLn opts Info (printit item) | item <- vals' ]
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode

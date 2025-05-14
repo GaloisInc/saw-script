@@ -11,8 +11,5 @@
     within "x" (unify002.saw:7:5-7:6)
 
   unify002.saw:7:23-7:27: Unbound variable: "True" (unify002.saw:7:23-7:27)
-Note that some built-in commands are available only after running
-either `enable_deprecated` or `enable_experimental`.
-
 
 FAILED

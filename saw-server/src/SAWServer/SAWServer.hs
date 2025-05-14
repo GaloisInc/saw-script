@@ -244,9 +244,8 @@ initialState readFileFn =
                 , roLocalEnv = []
                 }
          rw = TopLevelRW
-                { rwValues = mempty
-                , rwValueTypes = mempty
-                , rwNamedTypes = mempty
+                { rwValueInfo = mempty
+                , rwTypeInfo = mempty
                 , rwDocs = mempty
                 , rwCryptol = cenv
                 , rwMonadify = defaultMonEnv

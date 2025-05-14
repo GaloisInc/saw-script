@@ -15,7 +15,10 @@ Stability   : provisional
 {-# LANGUAGE NamedFieldPuns #-}
 
 module SAWCentral.AST
-       ( Name
+       ( PrimitiveLifecycle(..)
+       , everythingAvailable
+       , defaultAvailable
+       , Name
        , LName
        , Located(..)
        , Import(..)
@@ -42,6 +45,8 @@ module SAWCentral.AST
 import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Text (Text)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -56,6 +61,29 @@ import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
+
+-- Lifecycle / Deprecation {{{
+
+-- | Position in the life cycle of a primitive.
+data PrimitiveLifecycle
+  = Current         {- ^ Currently available in all modes. -}
+  | WarnDeprecated  {- ^ Removal planned, available but causes a warning -}
+  | HideDeprecated  {- ^ Will be removed soon, and available only when
+                         requested. -}
+  | Experimental    {- ^ Will be made @Current@ soon, but available only by
+                         request at the moment. -}
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- | Set of all lifecycle values.
+everythingAvailable :: Set PrimitiveLifecycle
+everythingAvailable = Set.fromList [minBound .. maxBound]
+
+-- | Default set of lifecycle values.
+--   Keep this with its type to make sure it stays current.
+defaultAvailable :: Set PrimitiveLifecycle
+defaultAvailable = Set.fromList [Current, WarnDeprecated]
+
+-- }}}
 
 -- Names {{{
 

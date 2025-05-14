@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -26,7 +27,7 @@ module SAWScript.Typechecker
 import Control.Applicative
 #endif
 
-import Control.Monad (zipWithM, zipWithM_)
+import Control.Monad (when, zipWithM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
@@ -35,12 +36,13 @@ import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
+import Data.Set (Set)
 import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
 import SAWCentral.AST
-import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..))
+import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -50,8 +52,8 @@ tUnit pos = tTuple pos []
 
 
 -- short names for the environment types we use
-type VarEnv = Map LName Schema
-type TyEnv = Map Name NamedType 
+type VarEnv = Map LName (PrimitiveLifecycle, Schema)
+type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
 
 
 ------------------------------------------------------------
@@ -72,6 +74,9 @@ instance (Ord k, UnifyVars a) => UnifyVars (M.Map k a) where
 
 instance (UnifyVars a) => UnifyVars [a] where
   unifyVars = M.unionsWith choosePos . map unifyVars
+
+instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
+  unifyVars (_lc, t) = unifyVars t
 
 instance UnifyVars Type where
   unifyVars t = case t of
@@ -182,6 +187,9 @@ instance (AppSubst t) => AppSubst (Maybe t) where
 
 instance (AppSubst t) => AppSubst [t] where
   appSubst s = map $ appSubst s
+
+instance (AppSubst t) => AppSubst (PrimitiveLifecycle, t) where
+  appSubst s (lc, x) = (lc, appSubst s x)
 
 instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
   appSubst s = fmap (appSubst s)
@@ -310,6 +318,9 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
 -- | The "readonly" portion
 data RO = RO
   {
+    -- | The variable availability (lifecycle set)
+    primsAvail :: Set PrimitiveLifecycle,
+
     -- | The variable typing environment (variable name to type scheme)
     varEnv :: VarEnv,
 
@@ -383,10 +394,14 @@ applyCurrentSubst t = do
   return $ appSubst s t
 
 -- Apply the current typedef collection with substituteTyVars.
+--
+-- The type t has already been checked, so it's ok to panic if it refers
+-- to something in the typedef collection that's not visible.
 resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
+  avail <- TI $ asks primsAvail
   s <- TI $ asks tyEnv
-  return $ substituteTyVars s t
+  return $ substituteTyVars avail s t
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -875,7 +890,7 @@ inferField m (n,e) = do
 -- wrap the action m with a type for x
 withVar :: Located Name -> Schema -> TI a -> TI a
 withVar x s m =
-  TI $ local (\ro -> ro { varEnv = M.insert x s $ varEnv ro }) $ unTI m
+  TI $ local (\ro -> ro { varEnv = M.insert x (Current, s) $ varEnv ro }) $ unTI m
 
 -- wrap the action m with types for a list of vars
 withVars :: [(Located Name, Schema)] -> TI a -> TI a
@@ -927,7 +942,7 @@ withDeclGroup (Recursive ds) m = foldr withDecl m ds
 -- wrap the action m with some abstract type variables.
 withAbstractTyVars :: Map Name Pos -> TI a -> TI a
 withAbstractTyVars vars m = do
-    let insertOne x _pos tyenv = M.insert x AbstractType tyenv
+    let insertOne x _pos tyenv = M.insert x (Current, AbstractType) tyenv
         insertAll tyenv = M.foldrWithKey insertOne tyenv vars
     TI $ local (\ro -> ro { tyEnv = insertAll $ tyEnv ro }) $ unTI m
 
@@ -1023,24 +1038,36 @@ inferExpr (ln, expr) = case expr of
        return (TLookup pos e1 i, elTy)
 
   Var x ->
-    do env <- TI $ asks varEnv
+    do avail <- TI $ asks primsAvail
+       env <- TI $ asks varEnv
        case M.lookup x env of
          Nothing -> do
-           recordError (getPos x) $ unlines
-             [ "Unbound variable: " ++ show x
-             , "Note that some built-in commands are available only after running"
-             , "either `enable_deprecated` or `enable_experimental`."
-             ]
+           recordError (getPos x) $ "Unbound variable: " ++ show x
            t <- getFreshTyVar (getPos x)
            return (Var x, t)
-         Just (Forall as t) -> do
+         Just (lc, Forall as t)
+          | S.member lc avail -> do
+           when (isDeprecated lc) $
+               case t of
+                   TyCon _typos FunCon _args ->
+                       recordWarning (getPos x) $ "Function is deprecated: " <> show x
+                   _ ->
+                       recordWarning (getPos x) $ "Value is deprecated: " <> show x
+
            -- get a fresh tyvar for each quantifier binding, convert
            -- to a name -> ty map, and substitute the fresh tyvars
            let once (apos, a) = do
                  at <- getFreshTyVar apos
-                 return (a, ConcreteType at)
+                 return (a, (Current, ConcreteType at))
            substs <- mapM once as
-           let t' = substituteTyVars (M.fromList substs) t
+           let t' = substituteTyVars avail (M.fromList substs) t
+           return (Var x, t')
+          | otherwise -> do
+           recordError (getPos x) $ "Inaccessible variable: " ++ show x
+           let how = if lc == HideDeprecated then "deprecated" else "experimental"
+           recordError (getPos x) $ "This command is available only after running " ++
+                                    "`enable_" ++ how ++ "`."
+           t' <- getFreshTyVar (getPos x)
            return (Var x, t')
 
   Function pos pat body ->
@@ -1123,14 +1150,17 @@ checkPattern ln t pat =
 -- statements
 --
 
--- wrap m with a typedef binding
+-- Wrap m with a typedef binding.
+--
+-- The expansion (t) has been checked, so it's ok to panic if it
+-- refers to something not visible in the environment.
 withTypedef :: LName -> Type -> TI a -> TI a
 withTypedef n t m =
   TI $
   local
     (\ro ->
-      let t' = substituteTyVars (tyEnv ro) t
-      in  ro { tyEnv = M.insert (getVal n) (ConcreteType t') $ tyEnv ro })
+      let t' = substituteTyVars (primsAvail ro) (tyEnv ro) t
+      in  ro { tyEnv = M.insert (getVal n) (Current, ConcreteType t') $ tyEnv ro })
     $ unTI m
 
 -- Check if a statement is an allowable one for the end of a do-block.
@@ -1642,12 +1672,16 @@ checkType kind ty = case ty of
           return $ TyRecord pos fields'
 
   TyVar pos x -> do
+      avail <- TI $ asks primsAvail
       tyenv <- TI $ asks tyEnv
       case M.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
-          Just _ty' ->
+          Just (lc, _ty')
+           | S.member lc avail -> do
+              when (isDeprecated lc) $
+                  recordWarning pos $ "Type is deprecated: " <> Text.unpack x
               -- Assume ty' was checked when it was entered.
               -- (If we entered it that's true, if it was in the
               -- initial environment we were given that depends on the
@@ -1669,6 +1703,13 @@ checkType kind ty = case ty of
                   -- We do _not_ want to expand typedefs when checking,
                   -- so return the original TyVar.
                   return ty
+           | otherwise -> do
+                  recordError pos $ "Inaccessible type: " ++ show x
+                  let how = if lc == HideDeprecated then "deprecated" else "experimental"
+                  recordError pos $ "This type is available only after running " ++
+                                    "`enable_" ++ how ++ "`."
+                  t' <- getFreshTyVar pos
+                  return t'
 
   TyUnifyVar _pos _ix ->
       -- for now at least we don't track the kinds of unification vars
@@ -1693,17 +1734,17 @@ type Result a = (Either MsgList a, MsgList)
 -- Note that the error and warning lists accumulate in reverse order
 -- (later messages are consed onto the head of the list) so we
 -- reverse on the way out.
-runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
+runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
+runTIWithEnv avail env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
   where
-  m' = runReaderT (unTI m) (RO env tenv)
+  m' = runReaderT (unTI m) (RO avail env tenv)
   (a,rw) = runState m' emptyRW
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
-evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Result a
-evalTIWithEnv env tenv m =
-  case runTIWithEnv env tenv m of
+evalTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
+evalTIWithEnv avail env tenv m =
+  case runTIWithEnv avail env tenv m of
     (res, _, [], warns) -> (Right res, warns)
     (_, _, errs, warns) -> (Left errs, warns)
 
@@ -1714,8 +1755,8 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
-checkStmt :: VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
-checkStmt env tenv ctx stmt =
+checkStmt :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
+checkStmt avail env tenv ctx stmt =
   -- XXX: we shouldn't need this position here.
   -- The position is used for the following things:
   --
@@ -1754,15 +1795,15 @@ checkStmt env tenv ctx stmt =
           _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
       ctxtype = TyCon pos (ContextCon ctx) []
   in
-  evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)
+  evalTIWithEnv avail env tenv (inferSingleStmt ln pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
-checkDecl env tenv decl =
-  evalTIWithEnv env tenv (inferDecl decl)
+checkDecl :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
+checkDecl avail env tenv decl =
+  evalTIWithEnv avail env tenv (inferDecl decl)
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)
@@ -1772,8 +1813,8 @@ checkDecl env tenv decl =
 --
 -- Returns a possibly updated pattern.
 --
-checkSchemaPattern :: VarEnv -> TyEnv -> SchemaPattern -> Result SchemaPattern
-checkSchemaPattern _env _tenv pat =
+checkSchemaPattern :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> SchemaPattern -> Result SchemaPattern
+checkSchemaPattern _avail _env _tenv pat =
     -- For the time being, do nothing -- we specifically don't want it
     -- to reject unbound/free type variables (see Search.hs for a
     -- discussion of why) or underapplied type constructors, so the

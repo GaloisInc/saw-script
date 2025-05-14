@@ -498,7 +498,7 @@ modifyEnvironment = modifyRef environment
 getSAWScriptNames :: REPL [String]
 getSAWScriptNames = do
   env <- getEnvironment
-  let rnames = Map.keys (rwValues env)
+  let rnames = Map.keys (rwValueInfo env)
   return (map (Text.unpack . getVal) rnames)
 
 -- User Environment Interaction ------------------------------------------------
