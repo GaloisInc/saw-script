@@ -47,49 +47,54 @@ span.spaces    { background: white }
 <span class="lineno">   28 </span><span class="decl"><span class="istickedoff">loadFile opts fname = do</span>
 <span class="lineno">   29 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $ &quot;Loading file &quot; ++ show fname</span>
 <span class="lineno">   30 </span><span class="spaces">  </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname</span>
-<span class="lineno">   31 </span><span class="spaces">  </span><span class="istickedoff">let (tokens, optmsg) = lexSAW fname ftext</span>
-<span class="lineno">   32 </span><span class="spaces">  </span><span class="istickedoff">case optmsg of</span>
-<span class="lineno">   33 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno">   34 </span><span class="spaces">      </span><span class="istickedoff">Just (vrb, pos, txt) -&gt; do</span>
-<span class="lineno">   35 </span><span class="spaces">          </span><span class="istickedoff">-- XXX: the print functions should take care of printing the position</span>
-<span class="lineno">   36 </span><span class="spaces">          </span><span class="istickedoff">-- (clean this up when we clean out the printing infrastructure)</span>
-<span class="lineno">   37 </span><span class="spaces">          </span><span class="istickedoff">let txt' = show pos ++ &quot;: &quot; ++ Text.unpack txt</span>
-<span class="lineno">   38 </span><span class="spaces">          </span><span class="istickedoff">-- XXX: the print functions should also take care of exiting on an error</span>
-<span class="lineno">   39 </span><span class="spaces">          </span><span class="istickedoff">-- (immediately or later). For now, throw errors and print anything else.</span>
-<span class="lineno">   40 </span><span class="spaces">          </span><span class="istickedoff">case vrb of</span>
-<span class="lineno">   41 </span><span class="spaces">              </span><span class="istickedoff">Error -&gt; throwIO $ userError txt'</span>
-<span class="lineno">   42 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; printOutLn opts vrb txt'</span>
-<span class="lineno">   43 </span><span class="spaces">  </span><span class="istickedoff">either throwIO return (parseFile tokens)</span></span>
-<span class="lineno">   44 </span>
-<span class="lineno">   45 </span>parseFile :: [Token Pos] -&gt; Either ParseError [Stmt]
-<span class="lineno">   46 </span><span class="decl"><span class="istickedoff">parseFile tokens = do</span>
-<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">case parseModule tokens of</span>
-<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; Left err</span>
-<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">Right stmts -&gt; Right stmts</span></span>
-<span class="lineno">   50 </span>
-<span class="lineno">   51 </span>findAndLoadFile :: Options -&gt; FilePath -&gt; IO [Stmt]
-<span class="lineno">   52 </span><span class="decl"><span class="nottickedoff">findAndLoadFile opts fp = do</span>
-<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">let paths = importPath opts</span>
-<span class="lineno">   54 </span><span class="spaces">  </span><span class="nottickedoff">mfname &lt;- findFile paths fp</span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">case mfname of</span>
-<span class="lineno">   56 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ unlines $</span>
-<span class="lineno">   57 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Couldn't find file: &quot; ++ show fp</span>
-<span class="lineno">   58 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;  Searched in directories:&quot;</span>
-<span class="lineno">   59 </span><span class="spaces">        </span><span class="nottickedoff">] ++ map (&quot;    &quot; ++) paths</span>
-<span class="lineno">   60 </span><span class="spaces">    </span><span class="nottickedoff">Just fname -&gt; loadFile opts fname</span></span>
-<span class="lineno">   61 </span>
-<span class="lineno">   62 </span>#if __GLASGOW_HASKELL__ &lt; 706
-<span class="lineno">   63 </span>findFile :: [FilePath] -&gt; String -&gt; IO (Maybe FilePath)
-<span class="lineno">   64 </span>findFile paths fileName = search paths
-<span class="lineno">   65 </span>  where
-<span class="lineno">   66 </span>    search :: [FilePath] -&gt; IO (Maybe FilePath)
-<span class="lineno">   67 </span>    search [] = return Nothing
-<span class="lineno">   68 </span>    search (d:ds) = do
-<span class="lineno">   69 </span>        let path = d &lt;/&gt; fileName
-<span class="lineno">   70 </span>        b &lt;- doesFileExist path
-<span class="lineno">   71 </span>        if b then return (Just path)
-<span class="lineno">   72 </span>             else search ds
-<span class="lineno">   73 </span>#endif
+<span class="lineno">   31 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: the print functions should take care of printing the position</span>
+<span class="lineno">   32 </span><span class="spaces">  </span><span class="istickedoff">-- (clean this up when we clean out the printing infrastructure)</span>
+<span class="lineno">   33 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: the print functions should also take care of exiting on an error</span>
+<span class="lineno">   34 </span><span class="spaces">  </span><span class="istickedoff">-- (immediately or later). For now, throw errors and print anything else.</span>
+<span class="lineno">   35 </span><span class="spaces">  </span><span class="istickedoff">case lexSAW fname ftext of</span>
+<span class="lineno">   36 </span><span class="spaces">    </span><span class="istickedoff">Left (_, pos, txt) -&gt; do</span>
+<span class="lineno">   37 </span><span class="spaces">      </span><span class="istickedoff">let txt' = show pos ++ &quot;: &quot; ++ Text.unpack txt</span>
+<span class="lineno">   38 </span><span class="spaces">      </span><span class="istickedoff">throwIO $ userError txt'</span>
+<span class="lineno">   39 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   40 </span><span class="spaces">    </span><span class="istickedoff">Right (tokens, optmsg) -&gt; do</span>
+<span class="lineno">   41 </span><span class="spaces">      </span><span class="istickedoff">case optmsg of</span>
+<span class="lineno">   42 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno">   43 </span><span class="spaces">        </span><span class="istickedoff">Just (vrb, pos, txt) -&gt; do</span>
+<span class="lineno">   44 </span><span class="spaces">          </span><span class="istickedoff">let txt' = show pos ++ &quot;: &quot; ++ Text.unpack txt</span>
+<span class="lineno">   45 </span><span class="spaces">          </span><span class="istickedoff">case vrb of</span>
+<span class="lineno">   46 </span><span class="spaces">            </span><span class="istickedoff">Error -&gt; <span class="nottickedoff">throwIO $ userError txt'</span></span>
+<span class="lineno">   47 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; printOutLn opts vrb txt'</span>
+<span class="lineno">   48 </span><span class="spaces">      </span><span class="istickedoff">either throwIO return (parseFile tokens)</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>parseFile :: [Token Pos] -&gt; Either ParseError [Stmt]
+<span class="lineno">   51 </span><span class="decl"><span class="istickedoff">parseFile tokens = do</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff">case parseModule tokens of</span>
+<span class="lineno">   53 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; Left err</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">Right stmts -&gt; Right stmts</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>findAndLoadFile :: Options -&gt; FilePath -&gt; IO [Stmt]
+<span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">findAndLoadFile opts fp = do</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">let paths = importPath opts</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">mfname &lt;- findFile paths fp</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">case mfname of</span>
+<span class="lineno">   61 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ unlines $</span>
+<span class="lineno">   62 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Couldn't find file: &quot; ++ show fp</span>
+<span class="lineno">   63 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;  Searched in directories:&quot;</span>
+<span class="lineno">   64 </span><span class="spaces">        </span><span class="nottickedoff">] ++ map (&quot;    &quot; ++) paths</span>
+<span class="lineno">   65 </span><span class="spaces">    </span><span class="nottickedoff">Just fname -&gt; loadFile opts fname</span></span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>#if __GLASGOW_HASKELL__ &lt; 706
+<span class="lineno">   68 </span>findFile :: [FilePath] -&gt; String -&gt; IO (Maybe FilePath)
+<span class="lineno">   69 </span>findFile paths fileName = search paths
+<span class="lineno">   70 </span>  where
+<span class="lineno">   71 </span>    search :: [FilePath] -&gt; IO (Maybe FilePath)
+<span class="lineno">   72 </span>    search [] = return Nothing
+<span class="lineno">   73 </span>    search (d:ds) = do
+<span class="lineno">   74 </span>        let path = d &lt;/&gt; fileName
+<span class="lineno">   75 </span>        b &lt;- doesFileExist path
+<span class="lineno">   76 </span>        if b then return (Just path)
+<span class="lineno">   77 </span>             else search ds
+<span class="lineno">   78 </span>#endif
 
 </pre>
 </body>
