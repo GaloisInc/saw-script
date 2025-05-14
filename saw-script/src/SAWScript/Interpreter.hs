@@ -1009,16 +1009,14 @@ readSchema fakeFileName str =
 
 data PrimType
   = PrimType
-    { primTypeName :: SS.Name
-    , primTypeType :: SS.NamedType
+    { primTypeType :: SS.NamedType
     , primTypeLife :: PrimitiveLifecycle
     -- FUTURE: add doc strings for these?
     }
 
 data Primitive
   = Primitive
-    { primitiveName :: SS.LName
-    , primitiveType :: SS.Schema
+    { primitiveType :: SS.Schema
     , primitiveLife :: PrimitiveLifecycle
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
@@ -1068,8 +1066,7 @@ primTypes = Map.fromList
     abstype name lc = (name, info)
       where
         info = PrimType
-          { primTypeName = name
-          , primTypeType = SS.AbstractType
+          { primTypeType = SS.AbstractType
           , primTypeLife = lc
           }
 
@@ -1078,8 +1075,7 @@ primTypes = Map.fromList
     _conctype name tystr lc = (name, info)
       where
         info = PrimType
-          { primTypeName = name
-          , primTypeType = SS.ConcreteType ty
+          { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
         fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
@@ -5246,8 +5242,7 @@ primitives = Map.fromList
     prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
-                                     { primitiveName = qname
-                                     , primitiveType = readSchema fakeFileName ty
+                                     { primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn
                                      , primitiveLife = lc
