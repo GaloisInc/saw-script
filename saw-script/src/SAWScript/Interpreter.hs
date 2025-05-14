@@ -1255,7 +1255,12 @@ primitives = Map.fromList
   , prim "enable_deprecated"   "TopLevel ()"
     (bicVal (add_primitives HideDeprecated))
     Current
-    [ "Enable the use of deprecated commands." ]
+    [ "Enable the use of deprecated commands. When commands are first deprecated they"
+    , "generate warnings. At a later stage they become invisible unless explicitly"
+    , "enabled with this command. The next stage is to remove them entirely. Therefore,"
+    , "the use of this command should always be considered a temporary stopgap until"
+    , "your scripts can be updated."
+    ]
 
   , prim "enable_experimental" "TopLevel ()"
     (bicVal (add_primitives Experimental))
