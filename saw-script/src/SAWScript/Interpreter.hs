@@ -2967,8 +2967,9 @@ primitives = Map.fromList
     ]
   , prim "llvm_struct"         "String -> LLVMType"
     (pureVal llvm_alias)
-    Current
+    WarnDeprecated
     [ "Legacy alternative name for `llvm_alias`."
+    , "If you are trying to create a struct type from its contents, you want llvm_struct_type."
     ]
 
   , prim "llvm_pointer"        "LLVMType -> LLVMType"

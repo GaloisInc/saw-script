@@ -50,6 +50,13 @@ Note that build.sh is in any case the recommended way to build.
 * Invoking the Cryptol `error` function in SAW now preserves the error message
   instead of throwing it away.
 
+## Deprecations
+
+* `llvm_struct` has been marked deprecated.
+It is the same as `llvm_alias` and you should use this instead.
+(If you were looking for a function to create a struct type from its
+contents, that's `llvm_struct_type`.)
+
 # Version 1.3 -- 2025-03-21
 
 This release supports [version
