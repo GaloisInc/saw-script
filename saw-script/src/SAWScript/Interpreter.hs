@@ -5276,6 +5276,10 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
+-- FUTURE: extract here is now functionally a nop, so if things don't
+-- change going forward we should consider simplifying so primTypes
+-- uses the same type as the interprer environment this function
+-- seeds, instead of its own.
 primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
 primNamedTypeEnv = fmap extract primTypes
    where extract pt = (primTypeLife pt, primTypeType pt)

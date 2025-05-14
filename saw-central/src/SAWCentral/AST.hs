@@ -72,12 +72,11 @@ data PrimitiveLifecycle
                          requested. -}
   | Experimental    {- ^ Will be made @Current@ soon, but available only by
                          request at the moment. -}
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 -- | Set of all lifecycle values.
---   Keep this with its type to make sure it stays current.
 everythingAvailable :: Set PrimitiveLifecycle
-everythingAvailable = Set.fromList [Current, WarnDeprecated, HideDeprecated, Experimental]
+everythingAvailable = Set.fromList [minBound .. maxBound]
 
 -- | Default set of lifecycle values.
 --   Keep this with its type to make sure it stays current.

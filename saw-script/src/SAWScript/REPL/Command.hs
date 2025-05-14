@@ -54,11 +54,14 @@ import qualified Data.Set as Set
 
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
-import qualified SAWCentral.AST as SS
-    (pShow,
+import qualified SAWCentral.AST as SS (
+     pShow,
      Located(..),
+     LName,
      Decl(..),
-     Pattern(..))
+     Pattern(..),
+     Schema
+ )
 import SAWCentral.Exceptions
 
 import SAWScript.Panic
@@ -250,6 +253,15 @@ searchCmd str
 
          -- Divide the results into visible, experimental-not-visible,
          -- and deprecated-not-visible.
+         inspect ::
+             SS.LName ->
+             (PrimitiveLifecycle, SS.Schema) ->
+             (Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema)) ->
+             (Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema))
          inspect name (lc, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)
