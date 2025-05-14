@@ -304,7 +304,7 @@ span.spaces    { background: white }
 <span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAnd&quot; , wordBinOp (bpPack bp) (bpBvAnd bp))</span>
 <span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvOr&quot;  , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvOr  bp))</span>
 <span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp (bpPack bp) (bpBvXor bp))</span>
-<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  (bpPack bp) (bpBvNot bp))</span>
+<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNot bp))</span>
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">-- Arithmetic</span>
 <span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNeg&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNeg bp))</span>
 <span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAdd&quot; , wordBinOp (bpPack bp) (bpBvAdd bp))</span>
@@ -478,7 +478,7 @@ span.spaces    { background: white }
 <span class="lineno">  459 </span>  Pack l -&gt; (VWord l -&gt; MWord l) -&gt; Prim l
 <span class="lineno">  460 </span><span class="decl"><span class="istickedoff">wordUnOp pack op =</span>
 <span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
-<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">wordFun pack $ \x -&gt;</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">wordFun <span class="nottickedoff">pack</span> $ \x -&gt;</span>
 <span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">Prim (VWord &lt;$&gt; op x)</span></span>
 <span class="lineno">  464 </span>
 <span class="lineno">  465 </span>-- op : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Vec n Bool;
@@ -706,7 +706,7 @@ span.spaces    { background: white }
 <span class="lineno">  687 </span>divModNatOp :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno">  688 </span><span class="decl"><span class="istickedoff">divModNatOp bp = binNatOp <span class="nottickedoff">bp</span> <span class="nottickedoff">max</span></span>
 <span class="lineno">  689 </span><span class="spaces">                 </span><span class="istickedoff">(\m n -&gt; let (q,r) = divMod m n in</span>
-<span class="lineno">  690 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, ready $ vNat r])</span>
+<span class="lineno">  690 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, <span class="nottickedoff">ready $ vNat r</span>])</span>
 <span class="lineno">  691 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">(\w x1 x2 -&gt; do q &lt;- VBVToNat w . VWord &lt;$&gt; bpBvUDiv bp x1 x2</span></span>
 <span class="lineno">  692 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">r &lt;- VBVToNat w . VWord &lt;$&gt; bpBvURem bp x1 x2</span></span>
 <span class="lineno">  693 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">pure $ vTuple [ready q, ready r])</span></span></span>
@@ -1359,7 +1359,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1340 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1341 </span><span class="spaces">    </span><span class="istickedoff">value VUnitType VUnit VUnit = <span class="nottickedoff">return VUnit</span></span>
 <span class="lineno"> 1342 </span><span class="spaces">    </span><span class="istickedoff">value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =</span>
-<span class="lineno"> 1343 </span><span class="spaces">      </span><span class="istickedoff">VPair &lt;$&gt; thunk t1 x1 y1 &lt;*&gt; thunk t2 x2 y2</span>
+<span class="lineno"> 1343 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">VPair &lt;$&gt; thunk t1 x1 y1 &lt;*&gt; thunk t2 x2 y2</span></span>
 <span class="lineno"> 1344 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1345 </span><span class="spaces">    </span><span class="istickedoff">value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =</span>
 <span class="lineno"> 1346 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let em1 = Map.fromList elems1</span></span>

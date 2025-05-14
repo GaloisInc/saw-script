@@ -189,7 +189,7 @@ span.spaces    { background: white }
 <span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvectors</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = SW.bvUnpackBE sym</span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = SW.bvPackBE sym</span>
-<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = \w i -&gt; SW.bvAtBE sym w (toInteger i)</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">\w i -&gt; SW.bvAtBE sym w (toInteger i)</span></span>
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = \l x -&gt; SW.bvLit sym (toInteger l) x</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = swBvWidth</span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = SW.bvJoin   sym</span>
@@ -205,7 +205,7 @@ span.spaces    { background: white }
 <span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = W.falsePred sym</span>
 <span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = W.notPred   sym</span>
 <span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = W.andPred   sym</span>
-<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = W.orPred    sym</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = W.orPred    <span class="nottickedoff">sym</span></span>
 <span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">W.xorPred   sym</span></span>
 <span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">W.isEq      sym</span></span>
 <span class="lineno">  192 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
@@ -330,7 +330,7 @@ span.spaces    { background: white }
 <span class="lineno">  311 </span>
 <span class="lineno">  312 </span>wordFun ::
 <span class="lineno">  313 </span> Sym sym =&gt; sym -&gt; (SWord sym -&gt; SPrim sym) -&gt; SPrim sym
-<span class="lineno">  314 </span><span class="decl"><span class="istickedoff">wordFun sym = Prims.wordFun (SW.bvPackBE sym)</span></span>
+<span class="lineno">  314 </span><span class="decl"><span class="istickedoff">wordFun sym = Prims.wordFun <span class="nottickedoff">(SW.bvPackBE sym)</span></span></span>
 <span class="lineno">  315 </span>
 <span class="lineno">  316 </span>valueToSymExpr :: SValue sym -&gt; Maybe (Some (W.SymExpr sym))
 <span class="lineno">  317 </span><span class="decl"><span class="istickedoff">valueToSymExpr = \case</span>
@@ -346,7 +346,7 @@ span.spaces    { background: white }
 <span class="lineno">  327 </span>  W.SymExpr sym tp -&gt;
 <span class="lineno">  328 </span>  Maybe (SValue sym)
 <span class="lineno">  329 </span><span class="decl"><span class="istickedoff">symExprToValue tp expr = case tp of</span>
-<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">BaseBoolRepr -&gt; Just $ VBool expr</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">BaseBoolRepr -&gt; <span class="nottickedoff">Just $ VBool expr</span></span>
 <span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">Just $ VInt expr</span></span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">(BaseBVRepr w) -&gt; Just $ withKnownNat <span class="nottickedoff">w</span> $ VWord $ DBV expr</span>
 <span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">(BaseArrayRepr (Ctx.Empty Ctx.:&gt; _) _) -&gt; <span class="nottickedoff">Just $ VArray $ SArray expr</span></span>
@@ -443,7 +443,7 @@ span.spaces    { background: white }
 <span class="lineno">  424 </span>             (SWord sym -&gt; Integer   -&gt; IO (SWord sym)) -&gt; SPrim sym
 <span class="lineno">  425 </span><span class="decl"><span class="istickedoff">bvShiftOp sym bvOp natOp =</span>
 <span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">Prims.constFun  $                  -- additional argument? the size?</span>
-<span class="lineno">  427 </span><span class="spaces">  </span><span class="istickedoff">wordFun sym $ \x -&gt;                -- word to shift</span>
+<span class="lineno">  427 </span><span class="spaces">  </span><span class="istickedoff">wordFun <span class="nottickedoff">sym</span> $ \x -&gt;                -- word to shift</span>
 <span class="lineno">  428 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \y -&gt;            -- amount to shift as a nat</span>
 <span class="lineno">  429 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $</span>
 <span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
@@ -454,12 +454,12 @@ span.spaces    { background: white }
 <span class="lineno">  435 </span>
 <span class="lineno">  436 </span>-- bvShl : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  437 </span>bvShLOp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  438 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp sym <span class="nottickedoff">(SW.bvShl sym)</span></span>
+<span class="lineno">  438 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp <span class="nottickedoff">sym</span> <span class="nottickedoff">(SW.bvShl sym)</span></span>
 <span class="lineno">  439 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvShl sym))</span></span>
 <span class="lineno">  440 </span>
 <span class="lineno">  441 </span>-- bvShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  442 </span>bvShROp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  443 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp sym <span class="nottickedoff">(SW.bvLshr sym)</span></span>
+<span class="lineno">  443 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp <span class="nottickedoff">sym</span> <span class="nottickedoff">(SW.bvLshr sym)</span></span>
 <span class="lineno">  444 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvLshr sym))</span></span>
 <span class="lineno">  445 </span>
 <span class="lineno">  446 </span>-- bvSShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
@@ -1282,10 +1282,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1263 </span>newVarFOT :: forall sym. IsSymExprBuilder sym =&gt;
 <span class="lineno"> 1264 </span>   sym -&gt; FirstOrderType -&gt; StateT Int IO (Labeler sym, SValue sym)
 <span class="lineno"> 1265 </span>
-<span class="lineno"> 1266 </span><span class="decl"><span class="istickedoff">newVarFOT sym (FOTTuple ts) = do</span>
-<span class="lineno"> 1267 </span><span class="spaces">  </span><span class="istickedoff">(labels,vals) &lt;- V.unzip &lt;$&gt; traverse (newVarFOT sym) (V.fromList ts)</span>
-<span class="lineno"> 1268 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- traverse (return . ready) (V.toList vals)</span>
-<span class="lineno"> 1269 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">TupleLabel labels</span>, vTuple args)</span>
+<span class="lineno"> 1266 </span><span class="decl"><span class="istickedoff">newVarFOT sym (FOTTuple ts) = <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1267 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">(labels,vals) &lt;- V.unzip &lt;$&gt; traverse (newVarFOT sym) (V.fromList ts)</span></span>
+<span class="lineno"> 1268 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">args &lt;- traverse (return . ready) (V.toList vals)</span></span>
+<span class="lineno"> 1269 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return (TupleLabel labels, vTuple args)</span></span>
 <span class="lineno"> 1270 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1271 </span><span class="spaces"></span><span class="istickedoff">newVarFOT _sym (FOTVec 0 FOTBit)</span>
 <span class="lineno"> 1272 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">return (ZeroWidthBVLabel, VWord ZBV)</span></span>
