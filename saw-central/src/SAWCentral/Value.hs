@@ -240,8 +240,7 @@ isVUnit (VTuple []) = True
 isVUnit _ = False
 
 data PPOpts = PPOpts
-  { ppOptsAnnotate :: Bool
-  , ppOptsAscii :: Bool
+  { ppOptsAscii :: Bool
   , ppOptsBase :: Int
   , ppOptsColor :: Bool
   , ppOptsMinSharing :: Int
@@ -249,7 +248,7 @@ data PPOpts = PPOpts
   }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10 False 2 SAWCorePP.Incremental
+defaultPPOpts = PPOpts False 10 False 2 SAWCorePP.Incremental
 
 cryptolPPOpts :: PPOpts -> C.PPOpts
 cryptolPPOpts opts =
