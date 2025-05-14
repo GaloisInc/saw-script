@@ -493,55 +493,59 @@ span.spaces    { background: white }
 <span class="lineno">  474 </span>
 <span class="lineno">  475 </span>-- short name for the environment type we use
 <span class="lineno">  476 </span>--
-<span class="lineno">  477 </span>-- (XXX: this is pasted from the typechecker, and should probably be
-<span class="lineno">  478 </span>-- either in its public interface or shared from somewhere else, but
-<span class="lineno">  479 </span>-- sorting it out requires still-pending interpreter cleanup)
-<span class="lineno">  480 </span>type TyEnv = Map Name NamedType
-<span class="lineno">  481 </span>
-<span class="lineno">  482 </span>-- | Check and compile a type schema pattern.
-<span class="lineno">  483 </span>--
-<span class="lineno">  484 </span>-- We get passed a list of forall bindings (will often be empty)
-<span class="lineno">  485 </span>-- and one or more types. Convert this into our internal representation.
-<span class="lineno">  486 </span>--
-<span class="lineno">  487 </span>-- Type variables that are not explicitly forall-bound and not listed
-<span class="lineno">  488 </span>-- in the environment are handled as free type variables, which have
-<span class="lineno">  489 </span>-- different match semantics from forall-bound type variables. See
-<span class="lineno">  490 </span>-- notes at the top of the file.
-<span class="lineno">  491 </span>--
-<span class="lineno">  492 </span>compileSearchPattern :: TyEnv -&gt; SchemaPattern -&gt; SearchPattern
-<span class="lineno">  493 </span><span class="decl"><span class="istickedoff">compileSearchPattern tyEnv (SchemaPattern forallList tys) =</span>
-<span class="lineno">  494 </span><span class="spaces">  </span><span class="istickedoff">let foralls = Set.fromList $ map (\(_pos, name) -&gt; name) forallList</span>
-<span class="lineno">  495 </span><span class="spaces">      </span><span class="istickedoff">boundVars = Map.keysSet tyEnv</span>
-<span class="lineno">  496 </span><span class="spaces">      </span><span class="istickedoff">-- treat '_' as a bound var to avoid assorted confusion</span>
-<span class="lineno">  497 </span><span class="spaces">      </span><span class="istickedoff">boundVars' = Set.insert &quot;_&quot; boundVars</span>
-<span class="lineno">  498 </span><span class="spaces">      </span><span class="istickedoff">oneType ty freeVarsSoFar =</span>
-<span class="lineno">  499 </span><span class="spaces">        </span><span class="istickedoff">-- get all the type variables present and drop the ones already known</span>
-<span class="lineno">  500 </span><span class="spaces">        </span><span class="istickedoff">let vars0 = Map.keysSet $ namedTyVars ty</span>
-<span class="lineno">  501 </span><span class="spaces">            </span><span class="istickedoff">vars1 = vars0 Set.\\ foralls</span>
-<span class="lineno">  502 </span><span class="spaces">            </span><span class="istickedoff">vars2 = vars1 Set.\\ boundVars'</span>
-<span class="lineno">  503 </span><span class="spaces">            </span><span class="istickedoff">vars3 = vars2 Set.\\ freeVarsSoFar</span>
-<span class="lineno">  504 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  505 </span><span class="spaces">        </span><span class="istickedoff">-- add what's left to the collection of free type variables</span>
-<span class="lineno">  506 </span><span class="spaces">        </span><span class="istickedoff">Set.union freeVarsSoFar vars3</span>
-<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff">freeVars = foldr oneType Set.empty tys</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">SearchPattern { spForalls = foralls, spFreeVars = freeVars, spTypes = tys }</span></span>
-<span class="lineno">  510 </span>
-<span class="lineno">  511 </span>-- | Match a type pattern.
-<span class="lineno">  512 </span>--
-<span class="lineno">  513 </span>matchSearchPattern :: SearchPattern -&gt; Schema -&gt; Bool
-<span class="lineno">  514 </span><span class="decl"><span class="istickedoff">matchSearchPattern pattern (Forall tgtForallList tgtType) =</span>
-<span class="lineno">  515 </span><span class="spaces">  </span><span class="istickedoff">let tgtForalls = Set.fromList $ map (\(_pos, name) -&gt; name) tgtForallList</span>
-<span class="lineno">  516 </span><span class="spaces">      </span><span class="istickedoff">ctx = Match {</span>
-<span class="lineno">  517 </span><span class="spaces">          </span><span class="istickedoff">mPatForalls = spForalls pattern,</span>
-<span class="lineno">  518 </span><span class="spaces">          </span><span class="istickedoff">mPatFreeVars = spFreeVars pattern,</span>
-<span class="lineno">  519 </span><span class="spaces">          </span><span class="istickedoff">mTgtForalls = tgtForalls</span>
-<span class="lineno">  520 </span><span class="spaces">       </span><span class="istickedoff">}</span>
-<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">not $ Set.null cands</span></span>
-<span class="lineno">  524 </span>
-<span class="lineno">  525 </span>-- }}}
+<span class="lineno">  477 </span>-- Let this be polymorphic in the things it carries because all we
+<span class="lineno">  478 </span>-- need from it is the keys.
+<span class="lineno">  479 </span>--
+<span class="lineno">  480 </span>-- (XXX: this type really belongs to the interpreter and should really
+<span class="lineno">  481 </span>-- be in its public interface or shared from somewhere else, but that
+<span class="lineno">  482 </span>-- requires the interpreter to have an interface, which requires
+<span class="lineno">  483 </span>-- still-pending interpreter cleanup)
+<span class="lineno">  484 </span>type TyEnv a = Map Name a
+<span class="lineno">  485 </span>
+<span class="lineno">  486 </span>-- | Check and compile a type schema pattern.
+<span class="lineno">  487 </span>--
+<span class="lineno">  488 </span>-- We get passed a list of forall bindings (will often be empty)
+<span class="lineno">  489 </span>-- and one or more types. Convert this into our internal representation.
+<span class="lineno">  490 </span>--
+<span class="lineno">  491 </span>-- Type variables that are not explicitly forall-bound and not listed
+<span class="lineno">  492 </span>-- in the environment are handled as free type variables, which have
+<span class="lineno">  493 </span>-- different match semantics from forall-bound type variables. See
+<span class="lineno">  494 </span>-- notes at the top of the file.
+<span class="lineno">  495 </span>--
+<span class="lineno">  496 </span>compileSearchPattern :: TyEnv a -&gt; SchemaPattern -&gt; SearchPattern
+<span class="lineno">  497 </span><span class="decl"><span class="istickedoff">compileSearchPattern tyEnv (SchemaPattern forallList tys) =</span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">let foralls = Set.fromList $ map (\(_pos, name) -&gt; name) forallList</span>
+<span class="lineno">  499 </span><span class="spaces">      </span><span class="istickedoff">boundVars = Map.keysSet tyEnv</span>
+<span class="lineno">  500 </span><span class="spaces">      </span><span class="istickedoff">-- treat '_' as a bound var to avoid assorted confusion</span>
+<span class="lineno">  501 </span><span class="spaces">      </span><span class="istickedoff">boundVars' = Set.insert &quot;_&quot; boundVars</span>
+<span class="lineno">  502 </span><span class="spaces">      </span><span class="istickedoff">oneType ty freeVarsSoFar =</span>
+<span class="lineno">  503 </span><span class="spaces">        </span><span class="istickedoff">-- get all the type variables present and drop the ones already known</span>
+<span class="lineno">  504 </span><span class="spaces">        </span><span class="istickedoff">let vars0 = Map.keysSet $ namedTyVars ty</span>
+<span class="lineno">  505 </span><span class="spaces">            </span><span class="istickedoff">vars1 = vars0 Set.\\ foralls</span>
+<span class="lineno">  506 </span><span class="spaces">            </span><span class="istickedoff">vars2 = vars1 Set.\\ boundVars'</span>
+<span class="lineno">  507 </span><span class="spaces">            </span><span class="istickedoff">vars3 = vars2 Set.\\ freeVarsSoFar</span>
+<span class="lineno">  508 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  509 </span><span class="spaces">        </span><span class="istickedoff">-- add what's left to the collection of free type variables</span>
+<span class="lineno">  510 </span><span class="spaces">        </span><span class="istickedoff">Set.union freeVarsSoFar vars3</span>
+<span class="lineno">  511 </span><span class="spaces">      </span><span class="istickedoff">freeVars = foldr oneType Set.empty tys</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">SearchPattern { spForalls = foralls, spFreeVars = freeVars, spTypes = tys }</span></span>
+<span class="lineno">  514 </span>
+<span class="lineno">  515 </span>-- | Match a type pattern.
+<span class="lineno">  516 </span>--
+<span class="lineno">  517 </span>matchSearchPattern :: SearchPattern -&gt; Schema -&gt; Bool
+<span class="lineno">  518 </span><span class="decl"><span class="istickedoff">matchSearchPattern pattern (Forall tgtForallList tgtType) =</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">let tgtForalls = Set.fromList $ map (\(_pos, name) -&gt; name) tgtForallList</span>
+<span class="lineno">  520 </span><span class="spaces">      </span><span class="istickedoff">ctx = Match {</span>
+<span class="lineno">  521 </span><span class="spaces">          </span><span class="istickedoff">mPatForalls = spForalls pattern,</span>
+<span class="lineno">  522 </span><span class="spaces">          </span><span class="istickedoff">mPatFreeVars = spFreeVars pattern,</span>
+<span class="lineno">  523 </span><span class="spaces">          </span><span class="istickedoff">mTgtForalls = tgtForalls</span>
+<span class="lineno">  524 </span><span class="spaces">       </span><span class="istickedoff">}</span>
+<span class="lineno">  525 </span><span class="spaces">      </span><span class="istickedoff">cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="istickedoff">not $ Set.null cands</span></span>
+<span class="lineno">  528 </span>
+<span class="lineno">  529 </span>-- }}}
 
 </pre>
 </body>

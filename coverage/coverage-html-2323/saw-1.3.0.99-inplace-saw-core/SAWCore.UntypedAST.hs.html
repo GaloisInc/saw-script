@@ -40,11 +40,11 @@ span.spaces    { background: white }
 <span class="lineno">   21 </span>  , ImportConstraint(..)
 <span class="lineno">   22 </span>  , nameSatsConstraint
 <span class="lineno">   23 </span>  , CtorDecl(..)
-<span class="lineno">   24 </span>  , Term(..)
-<span class="lineno">   25 </span>  , TermVar(..)
+<span class="lineno">   24 </span>  , UTerm(..)
+<span class="lineno">   25 </span>  , UTermVar(..)
 <span class="lineno">   26 </span>  , termVarString
 <span class="lineno">   27 </span>  , termVarLocalName
-<span class="lineno">   28 </span>  , TermCtx
+<span class="lineno">   28 </span>  , UTermCtx
 <span class="lineno">   29 </span>  , asApp
 <span class="lineno">   30 </span>  , asPiList
 <span class="lineno">   31 </span>  , mkTupleValue
@@ -81,55 +81,55 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span>  , LocalName
 <span class="lineno">   63 </span>  )
 <span class="lineno">   64 </span>
-<span class="lineno">   65 </span>data Term
+<span class="lineno">   65 </span>data UTerm
 <span class="lineno">   66 </span>  = Name (PosPair Text)
 <span class="lineno">   67 </span>  | Sort Pos Sort SortFlags
-<span class="lineno">   68 </span>  | App Term Term
-<span class="lineno">   69 </span>  | Lambda Pos TermCtx Term
-<span class="lineno">   70 </span>  | Pi Pos TermCtx Term
+<span class="lineno">   68 </span>  | App UTerm UTerm
+<span class="lineno">   69 </span>  | Lambda Pos UTermCtx UTerm
+<span class="lineno">   70 </span>  | Pi Pos UTermCtx UTerm
 <span class="lineno">   71 </span>  | Recursor (Maybe ModuleName) (PosPair Text)
 <span class="lineno">   72 </span>  | UnitValue Pos
 <span class="lineno">   73 </span>  | UnitType Pos
 <span class="lineno">   74 </span>    -- | New-style records
-<span class="lineno">   75 </span>  | RecordValue Pos [(PosPair FieldName, Term)]
-<span class="lineno">   76 </span>  | RecordType Pos [(PosPair FieldName, Term)]
-<span class="lineno">   77 </span>  | RecordProj Term FieldName
+<span class="lineno">   75 </span>  | RecordValue Pos [(PosPair FieldName, UTerm)]
+<span class="lineno">   76 </span>  | RecordType Pos [(PosPair FieldName, UTerm)]
+<span class="lineno">   77 </span>  | RecordProj UTerm FieldName
 <span class="lineno">   78 </span>    -- | Simple pairs
-<span class="lineno">   79 </span>  | PairValue Pos Term Term
-<span class="lineno">   80 </span>  | PairType Pos Term Term
-<span class="lineno">   81 </span>  | PairLeft Term
-<span class="lineno">   82 </span>  | PairRight Term
+<span class="lineno">   79 </span>  | PairValue Pos UTerm UTerm
+<span class="lineno">   80 </span>  | PairType Pos UTerm UTerm
+<span class="lineno">   81 </span>  | PairLeft UTerm
+<span class="lineno">   82 </span>  | PairRight UTerm
 <span class="lineno">   83 </span>    -- | Identifies a type constraint on the term, i.e., a type ascription
-<span class="lineno">   84 </span>  | TypeConstraint Term Pos Term
+<span class="lineno">   84 </span>  | TypeConstraint UTerm Pos UTerm
 <span class="lineno">   85 </span>  | NatLit Pos Natural
 <span class="lineno">   86 </span>  | StringLit Pos Text
 <span class="lineno">   87 </span>    -- | Vector literal.
-<span class="lineno">   88 </span>  | VecLit Pos [Term]
+<span class="lineno">   88 </span>  | VecLit Pos [UTerm]
 <span class="lineno">   89 </span>    -- | Bitvector literal.
 <span class="lineno">   90 </span>  | BVLit Pos [Bool]
 <span class="lineno">   91 </span>  | BadTerm Pos
 <span class="lineno">   92 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>-- | A pattern used for matching a variable.
-<span class="lineno">   95 </span>data TermVar
+<span class="lineno">   95 </span>data UTermVar
 <span class="lineno">   96 </span>  = TermVar (PosPair LocalName)
 <span class="lineno">   97 </span>  | UnusedVar Pos
 <span class="lineno">   98 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
 <span class="lineno">   99 </span>
-<span class="lineno">  100 </span>-- | Return the 'String' name associated with a 'TermVar'
-<span class="lineno">  101 </span>termVarString :: TermVar -&gt; String
+<span class="lineno">  100 </span>-- | Return the 'String' name associated with a 'UTermVar'
+<span class="lineno">  101 </span>termVarString :: UTermVar -&gt; String
 <span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">termVarString (TermVar (PosPair _ str)) = Text.unpack str</span>
 <span class="lineno">  103 </span><span class="spaces"></span><span class="nottickedoff">termVarString (UnusedVar _) = &quot;_&quot;</span></span>
 <span class="lineno">  104 </span>
-<span class="lineno">  105 </span>-- | Return the 'LocalName' associated with a 'TermVar'
-<span class="lineno">  106 </span>termVarLocalName :: TermVar -&gt; LocalName
+<span class="lineno">  105 </span>-- | Return the 'LocalName' associated with a 'UTermVar'
+<span class="lineno">  106 </span>termVarLocalName :: UTermVar -&gt; LocalName
 <span class="lineno">  107 </span><span class="decl"><span class="istickedoff">termVarLocalName (TermVar (PosPair _ str)) = str</span>
 <span class="lineno">  108 </span><span class="spaces"></span><span class="istickedoff">termVarLocalName (UnusedVar _) = &quot;_&quot;</span></span>
 <span class="lineno">  109 </span>
 <span class="lineno">  110 </span>-- | A context of 0 or more variable bindings, with types
-<span class="lineno">  111 </span>type TermCtx = [(TermVar,Term)]
+<span class="lineno">  111 </span>type UTermCtx = [(UTermVar, UTerm)]
 <span class="lineno">  112 </span>
-<span class="lineno">  113 </span>instance Positioned Term where
+<span class="lineno">  113 </span>instance Positioned UTerm where
 <span class="lineno">  114 </span>  <span class="decl"><span class="nottickedoff">pos t =</span>
 <span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">case t of</span>
 <span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">Name i               -&gt; pos i</span>
@@ -154,28 +154,28 @@ span.spaces    { background: white }
 <span class="lineno">  135 </span><span class="spaces">      </span><span class="nottickedoff">BVLit p _            -&gt; p</span>
 <span class="lineno">  136 </span><span class="spaces">      </span><span class="nottickedoff">BadTerm p            -&gt; p</span></span>
 <span class="lineno">  137 </span>
-<span class="lineno">  138 </span>instance Positioned TermVar where
+<span class="lineno">  138 </span>instance Positioned UTermVar where
 <span class="lineno">  139 </span>  <span class="decl"><span class="nottickedoff">pos (TermVar i) = pos i</span>
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">pos (UnusedVar p) = p</span></span>
 <span class="lineno">  141 </span>
-<span class="lineno">  142 </span>badTerm :: Pos -&gt; Term
+<span class="lineno">  142 </span>badTerm :: Pos -&gt; UTerm
 <span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">badTerm = BadTerm</span></span>
 <span class="lineno">  144 </span>
 <span class="lineno">  145 </span>-- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
-<span class="lineno">  146 </span>data CtorDecl = Ctor (PosPair Text) TermCtx Term
+<span class="lineno">  146 </span>data CtorDecl = Ctor (PosPair Text) UTermCtx UTerm
 <span class="lineno">  147 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
 <span class="lineno">  148 </span>
 <span class="lineno">  149 </span>-- | A top-level declaration in a saw-core file
 <span class="lineno">  150 </span>data Decl
-<span class="lineno">  151 </span>   = TypeDecl DefQualifier (PosPair Text) Term
+<span class="lineno">  151 </span>   = TypeDecl DefQualifier (PosPair Text) UTerm
 <span class="lineno">  152 </span>     -- ^ A declaration of something having a type, where the declaration
 <span class="lineno">  153 </span>     -- qualifier states what flavor of thing it is
-<span class="lineno">  154 </span>   | DataDecl (PosPair Text) TermCtx Term [CtorDecl]
+<span class="lineno">  154 </span>   | DataDecl (PosPair Text) UTermCtx UTerm [CtorDecl]
 <span class="lineno">  155 </span>     -- ^ A declaration of an inductive data types, with a name, a parameter
 <span class="lineno">  156 </span>     -- context, a return type, and a list of constructor declarations
-<span class="lineno">  157 </span>   | TermDef (PosPair Text) [TermVar] Term
+<span class="lineno">  157 </span>   | TermDef (PosPair Text) [UTermVar] UTerm
 <span class="lineno">  158 </span>     -- ^ A declaration of a term having a definition, with variables
-<span class="lineno">  159 </span>   | TypedDef (PosPair Text) [(TermVar, Term)] Term Term
+<span class="lineno">  159 </span>   | TypedDef (PosPair Text) [(UTermVar, UTerm)] UTerm UTerm
 <span class="lineno">  160 </span>     -- ^ A definition of something with a specific type, with parameters
 <span class="lineno">  161 </span>   | InjectCodeDecl Text Text
 <span class="lineno">  162 </span>     -- ^ Some raw text to inject into a translation
@@ -216,57 +216,57 @@ span.spaces    { background: white }
 <span class="lineno">  197 </span>
 <span class="lineno">  198 </span>-- | Get a list of all names (i.e., definitions, axioms, or primitives) declared
 <span class="lineno">  199 </span>-- in a module, along with their types and qualifiers
-<span class="lineno">  200 </span>moduleTypedDecls :: Module -&gt; [(Text, Term)]
+<span class="lineno">  200 </span>moduleTypedDecls :: Module -&gt; [(Text, UTerm)]
 <span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">moduleTypedDecls (Module _ _ decls) = concatMap helper decls where</span>
-<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">helper :: Decl -&gt; [(Text, Term)]</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">helper :: Decl -&gt; [(Text, UTerm)]</span>
 <span class="lineno">  203 </span><span class="spaces">  </span><span class="nottickedoff">helper (TypeDecl _ (PosPair _ nm) tm) = [(nm,tm)]</span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">helper _ = []</span></span>
 <span class="lineno">  205 </span>
 <span class="lineno">  206 </span>-- | Get a list of all datatypes declared in a module
-<span class="lineno">  207 </span>moduleDataDecls :: Module -&gt; [(Text, TermCtx, Term, [CtorDecl])]
+<span class="lineno">  207 </span>moduleDataDecls :: Module -&gt; [(Text, UTermCtx, UTerm, [CtorDecl])]
 <span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">moduleDataDecls (Module _ _ decls) = concatMap helper decls where</span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">helper :: Decl -&gt; [(Text, TermCtx, Term, [CtorDecl])]</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">helper :: Decl -&gt; [(Text, UTermCtx, UTerm, [CtorDecl])]</span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">helper (DataDecl (PosPair _ nm) params tp ctors) = [(nm, params, tp, ctors)]</span>
 <span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">helper _ = []</span></span>
 <span class="lineno">  212 </span>
-<span class="lineno">  213 </span>moduleTypedDataDecls :: Module -&gt; [(Text, Term)]
+<span class="lineno">  213 </span>moduleTypedDataDecls :: Module -&gt; [(Text, UTerm)]
 <span class="lineno">  214 </span><span class="decl"><span class="nottickedoff">moduleTypedDataDecls =</span>
 <span class="lineno">  215 </span><span class="spaces">  </span><span class="nottickedoff">map (\(nm,p_ctx,tp,_) -&gt;</span>
 <span class="lineno">  216 </span><span class="spaces">        </span><span class="nottickedoff">(nm, Pi (pos tp) p_ctx tp)) . moduleDataDecls</span></span>
 <span class="lineno">  217 </span>
 <span class="lineno">  218 </span>-- | Get a list of all constructors declared in a module, along with the context
 <span class="lineno">  219 </span>-- of parameters for each one
-<span class="lineno">  220 </span>moduleCtorDecls :: Module -&gt; [(TermCtx,CtorDecl)]
+<span class="lineno">  220 </span>moduleCtorDecls :: Module -&gt; [(UTermCtx, CtorDecl)]
 <span class="lineno">  221 </span><span class="decl"><span class="nottickedoff">moduleCtorDecls =</span>
 <span class="lineno">  222 </span><span class="spaces">  </span><span class="nottickedoff">concatMap (\(_,p_ctx,_,ctors) -&gt; map (p_ctx,) ctors) . moduleDataDecls</span></span>
 <span class="lineno">  223 </span>
 <span class="lineno">  224 </span>-- | Get a list of the names and types of all the constructors in a module
-<span class="lineno">  225 </span>moduleTypedCtorDecls :: Module -&gt; [(Text, Term)]
+<span class="lineno">  225 </span>moduleTypedCtorDecls :: Module -&gt; [(Text, UTerm)]
 <span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">moduleTypedCtorDecls =</span>
 <span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">concatMap (\(_,p_ctx,_,ctors) -&gt;</span>
 <span class="lineno">  228 </span><span class="spaces">              </span><span class="nottickedoff">map (\(Ctor (PosPair _ nm) ctx tp) -&gt;</span>
 <span class="lineno">  229 </span><span class="spaces">                    </span><span class="nottickedoff">(nm, Pi (pos tp) (p_ctx ++ ctx) tp)) ctors)</span>
 <span class="lineno">  230 </span><span class="spaces">  </span><span class="nottickedoff">. moduleDataDecls</span></span>
 <span class="lineno">  231 </span>
-<span class="lineno">  232 </span>asPiList :: Term -&gt; (TermCtx,Term)
+<span class="lineno">  232 </span>asPiList :: UTerm -&gt; (UTermCtx, UTerm)
 <span class="lineno">  233 </span><span class="decl"><span class="istickedoff">asPiList (Pi _ ctx1 body1) =</span>
 <span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">let (ctx2,body2) = asPiList body1 in</span>
 <span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">(ctx1 ++ ctx2, body2)</span>
 <span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff">asPiList t = ([], t)</span></span>
 <span class="lineno">  237 </span>
-<span class="lineno">  238 </span>asApp :: Term -&gt; (Term,[Term])
+<span class="lineno">  238 </span>asApp :: UTerm -&gt; (UTerm, [UTerm])
 <span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">asApp = go []</span>
 <span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">where go l (App t u)   = go (u:l) t</span>
 <span class="lineno">  241 </span><span class="spaces">        </span><span class="nottickedoff">go l t = (t,l)</span></span>
 <span class="lineno">  242 </span>
 <span class="lineno">  243 </span>-- | Build a tuple value @(x1, .., xn)@.
-<span class="lineno">  244 </span>mkTupleValue :: Pos -&gt; [Term] -&gt; Term
+<span class="lineno">  244 </span>mkTupleValue :: Pos -&gt; [UTerm] -&gt; UTerm
 <span class="lineno">  245 </span><span class="decl"><span class="istickedoff">mkTupleValue p [] = <span class="nottickedoff">UnitValue p</span></span>
 <span class="lineno">  246 </span><span class="spaces"></span><span class="istickedoff">mkTupleValue _ [x] = x</span>
 <span class="lineno">  247 </span><span class="spaces"></span><span class="istickedoff">mkTupleValue p (x:xs) = <span class="nottickedoff">PairValue (pos x) x (mkTupleValue p xs)</span></span></span>
 <span class="lineno">  248 </span>
 <span class="lineno">  249 </span>-- | Build a tuple type @#(x1, .., xn)@.
-<span class="lineno">  250 </span>mkTupleType :: Pos -&gt; [Term] -&gt; Term
+<span class="lineno">  250 </span>mkTupleType :: Pos -&gt; [UTerm] -&gt; UTerm
 <span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">mkTupleType p [] = UnitType p</span>
 <span class="lineno">  252 </span><span class="spaces"></span><span class="nottickedoff">mkTupleType _ [x] = x</span>
 <span class="lineno">  253 </span><span class="spaces"></span><span class="nottickedoff">mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)</span></span>
@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span>-- | Build a projection @t.i@ of a tuple. NOTE: This function does not
 <span class="lineno">  256 </span>-- work to access the last component in a tuple, since it always
 <span class="lineno">  257 </span>-- generates a @PairLeft@.
-<span class="lineno">  258 </span>mkTupleSelector :: Term -&gt; Natural -&gt; Term
+<span class="lineno">  258 </span>mkTupleSelector :: UTerm -&gt; Natural -&gt; UTerm
 <span class="lineno">  259 </span><span class="decl"><span class="nottickedoff">mkTupleSelector t i</span>
 <span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">| i == 1    = PairLeft t</span>
 <span class="lineno">  261 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt; 1     = mkTupleSelector (PairRight t) (i - 1)</span>

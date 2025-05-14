@@ -450,7 +450,7 @@ span.spaces    { background: white }
 <span class="lineno">  431 </span><span class="decl"><span class="istickedoff">mkBvNat n x = do</span>
 <span class="lineno">  432 </span><span class="spaces">  </span><span class="istickedoff">mkGlobalDef &quot;Prelude.bvNat&quot;</span>
 <span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">`mkApp` (mkNatLit n)</span>
-<span class="lineno">  434 </span><span class="spaces">    </span><span class="istickedoff">`mkApp` (mkNatLit $ fromInteger $ x .&amp;. <span class="nottickedoff">bitMask (fromIntegral n)</span>)</span></span>
+<span class="lineno">  434 </span><span class="spaces">    </span><span class="istickedoff">`mkApp` (mkNatLit $ fromInteger $ x .&amp;. bitMask (fromIntegral n))</span></span>
 <span class="lineno">  435 </span>
 <span class="lineno">  436 </span>class Buildable a where
 <span class="lineno">  437 </span>  defaultBuilder :: a -&gt; TermBuilder Term
@@ -691,7 +691,7 @@ span.spaces    { background: white }
 <span class="lineno">  672 </span><span class="decl"><span class="istickedoff">bvAdd_bvNat = globalConv &quot;Prelude.bvAdd&quot; <span class="nottickedoff">Prim.bvAdd</span></span></span>
 <span class="lineno">  673 </span>
 <span class="lineno">  674 </span>bvSub_bvNat :: Conversion
-<span class="lineno">  675 </span><span class="decl"><span class="istickedoff">bvSub_bvNat = globalConv &quot;Prelude.bvSub&quot; <span class="nottickedoff">Prim.bvSub</span></span></span>
+<span class="lineno">  675 </span><span class="decl"><span class="istickedoff">bvSub_bvNat = globalConv &quot;Prelude.bvSub&quot; Prim.bvSub</span></span>
 <span class="lineno">  676 </span>
 <span class="lineno">  677 </span>bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Conversion
 <span class="lineno">  678 </span><span class="decl"><span class="istickedoff">bvugt_bvNat = globalConv &quot;Prelude.bvugt&quot; <span class="nottickedoff">Prim.bvugt</span></span></span>

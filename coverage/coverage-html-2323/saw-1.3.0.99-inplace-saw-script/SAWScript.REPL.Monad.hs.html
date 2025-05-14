@@ -517,7 +517,7 @@ span.spaces    { background: white }
 <span class="lineno">  498 </span>getSAWScriptNames :: REPL [String]
 <span class="lineno">  499 </span><span class="decl"><span class="nottickedoff">getSAWScriptNames = do</span>
 <span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- getEnvironment</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys (rwValues env)</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys (rwValueInfo env)</span>
 <span class="lineno">  502 </span><span class="spaces">  </span><span class="nottickedoff">return (map (Text.unpack . getVal) rnames)</span></span>
 <span class="lineno">  503 </span>
 <span class="lineno">  504 </span>-- User Environment Interaction ------------------------------------------------

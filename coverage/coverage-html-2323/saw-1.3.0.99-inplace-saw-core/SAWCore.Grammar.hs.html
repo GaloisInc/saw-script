@@ -101,8 +101,8 @@ span.spaces    { background: white }
 <span class="lineno">   82 </span>happyOut8 :: (HappyAbsSyn ) -&gt; HappyWrap8
 <span class="lineno">   83 </span><span class="decl"><span class="istickedoff">happyOut8 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">   84 </span>{-# INLINE happyOut8 #-}
-<span class="lineno">   85 </span>newtype HappyWrap9 = HappyWrap9 (Term)
-<span class="lineno">   86 </span>happyIn9 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">   85 </span>newtype HappyWrap9 = HappyWrap9 (UTerm)
+<span class="lineno">   86 </span>happyIn9 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">   87 </span><span class="decl"><span class="istickedoff">happyIn9 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap9 x)</span></span>
 <span class="lineno">   88 </span>{-# INLINE happyIn9 #-}
 <span class="lineno">   89 </span>happyOut9 :: (HappyAbsSyn ) -&gt; HappyWrap9
@@ -129,36 +129,36 @@ span.spaces    { background: white }
 <span class="lineno">  110 </span>happyOut12 :: (HappyAbsSyn ) -&gt; HappyWrap12
 <span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">happyOut12 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  112 </span>{-# INLINE happyOut12 #-}
-<span class="lineno">  113 </span>newtype HappyWrap13 = HappyWrap13 (TermVar)
-<span class="lineno">  114 </span>happyIn13 :: (TermVar) -&gt; (HappyAbsSyn )
+<span class="lineno">  113 </span>newtype HappyWrap13 = HappyWrap13 (UTermVar)
+<span class="lineno">  114 </span>happyIn13 :: (UTermVar) -&gt; (HappyAbsSyn )
 <span class="lineno">  115 </span><span class="decl"><span class="istickedoff">happyIn13 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap13 x)</span></span>
 <span class="lineno">  116 </span>{-# INLINE happyIn13 #-}
 <span class="lineno">  117 </span>happyOut13 :: (HappyAbsSyn ) -&gt; HappyWrap13
 <span class="lineno">  118 </span><span class="decl"><span class="istickedoff">happyOut13 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  119 </span>{-# INLINE happyOut13 #-}
-<span class="lineno">  120 </span>newtype HappyWrap14 = HappyWrap14 ([(TermVar, Maybe Term)])
-<span class="lineno">  121 </span>happyIn14 :: ([(TermVar, Maybe Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  120 </span>newtype HappyWrap14 = HappyWrap14 ([(UTermVar, Maybe UTerm)])
+<span class="lineno">  121 </span>happyIn14 :: ([(UTermVar, Maybe UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  122 </span><span class="decl"><span class="nottickedoff">happyIn14 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap14 x)</span></span>
 <span class="lineno">  123 </span>{-# INLINE happyIn14 #-}
 <span class="lineno">  124 </span>happyOut14 :: (HappyAbsSyn ) -&gt; HappyWrap14
 <span class="lineno">  125 </span><span class="decl"><span class="nottickedoff">happyOut14 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  126 </span>{-# INLINE happyOut14 #-}
-<span class="lineno">  127 </span>newtype HappyWrap15 = HappyWrap15 ([(TermVar, Maybe Term)])
-<span class="lineno">  128 </span>happyIn15 :: ([(TermVar, Maybe Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  127 </span>newtype HappyWrap15 = HappyWrap15 ([(UTermVar, Maybe UTerm)])
+<span class="lineno">  128 </span>happyIn15 :: ([(UTermVar, Maybe UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">happyIn15 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap15 x)</span></span>
 <span class="lineno">  130 </span>{-# INLINE happyIn15 #-}
 <span class="lineno">  131 </span>happyOut15 :: (HappyAbsSyn ) -&gt; HappyWrap15
 <span class="lineno">  132 </span><span class="decl"><span class="nottickedoff">happyOut15 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  133 </span>{-# INLINE happyOut15 #-}
-<span class="lineno">  134 </span>newtype HappyWrap16 = HappyWrap16 ([(TermVar, Term)])
-<span class="lineno">  135 </span>happyIn16 :: ([(TermVar, Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  134 </span>newtype HappyWrap16 = HappyWrap16 ([(UTermVar, UTerm)])
+<span class="lineno">  135 </span>happyIn16 :: ([(UTermVar, UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  136 </span><span class="decl"><span class="istickedoff">happyIn16 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap16 x)</span></span>
 <span class="lineno">  137 </span>{-# INLINE happyIn16 #-}
 <span class="lineno">  138 </span>happyOut16 :: (HappyAbsSyn ) -&gt; HappyWrap16
 <span class="lineno">  139 </span><span class="decl"><span class="istickedoff">happyOut16 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  140 </span>{-# INLINE happyOut16 #-}
-<span class="lineno">  141 </span>newtype HappyWrap17 = HappyWrap17 ([(TermVar, Term)])
-<span class="lineno">  142 </span>happyIn17 :: ([(TermVar, Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  141 </span>newtype HappyWrap17 = HappyWrap17 ([(UTermVar, UTerm)])
+<span class="lineno">  142 </span>happyIn17 :: ([(UTermVar, UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  143 </span><span class="decl"><span class="istickedoff">happyIn17 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap17 x)</span></span>
 <span class="lineno">  144 </span>{-# INLINE happyIn17 #-}
 <span class="lineno">  145 </span>happyOut17 :: (HappyAbsSyn ) -&gt; HappyWrap17
@@ -171,43 +171,43 @@ span.spaces    { background: white }
 <span class="lineno">  152 </span>happyOut18 :: (HappyAbsSyn ) -&gt; HappyWrap18
 <span class="lineno">  153 </span><span class="decl"><span class="nottickedoff">happyOut18 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  154 </span>{-# INLINE happyOut18 #-}
-<span class="lineno">  155 </span>newtype HappyWrap19 = HappyWrap19 (Term)
-<span class="lineno">  156 </span>happyIn19 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">  155 </span>newtype HappyWrap19 = HappyWrap19 (UTerm)
+<span class="lineno">  156 </span>happyIn19 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">  157 </span><span class="decl"><span class="istickedoff">happyIn19 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap19 x)</span></span>
 <span class="lineno">  158 </span>{-# INLINE happyIn19 #-}
 <span class="lineno">  159 </span>happyOut19 :: (HappyAbsSyn ) -&gt; HappyWrap19
 <span class="lineno">  160 </span><span class="decl"><span class="istickedoff">happyOut19 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  161 </span>{-# INLINE happyOut19 #-}
-<span class="lineno">  162 </span>newtype HappyWrap20 = HappyWrap20 (Term)
-<span class="lineno">  163 </span>happyIn20 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">  162 </span>newtype HappyWrap20 = HappyWrap20 (UTerm)
+<span class="lineno">  163 </span>happyIn20 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">  164 </span><span class="decl"><span class="istickedoff">happyIn20 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap20 x)</span></span>
 <span class="lineno">  165 </span>{-# INLINE happyIn20 #-}
 <span class="lineno">  166 </span>happyOut20 :: (HappyAbsSyn ) -&gt; HappyWrap20
 <span class="lineno">  167 </span><span class="decl"><span class="istickedoff">happyOut20 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  168 </span>{-# INLINE happyOut20 #-}
-<span class="lineno">  169 </span>newtype HappyWrap21 = HappyWrap21 ([(TermVar, Term)])
-<span class="lineno">  170 </span>happyIn21 :: ([(TermVar, Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  169 </span>newtype HappyWrap21 = HappyWrap21 ([(UTermVar, UTerm)])
+<span class="lineno">  170 </span>happyIn21 :: ([(UTermVar, UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  171 </span><span class="decl"><span class="istickedoff">happyIn21 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap21 x)</span></span>
 <span class="lineno">  172 </span>{-# INLINE happyIn21 #-}
 <span class="lineno">  173 </span>happyOut21 :: (HappyAbsSyn ) -&gt; HappyWrap21
 <span class="lineno">  174 </span><span class="decl"><span class="istickedoff">happyOut21 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  175 </span>{-# INLINE happyOut21 #-}
-<span class="lineno">  176 </span>newtype HappyWrap22 = HappyWrap22 (Term)
-<span class="lineno">  177 </span>happyIn22 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">  176 </span>newtype HappyWrap22 = HappyWrap22 (UTerm)
+<span class="lineno">  177 </span>happyIn22 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">  178 </span><span class="decl"><span class="istickedoff">happyIn22 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap22 x)</span></span>
 <span class="lineno">  179 </span>{-# INLINE happyIn22 #-}
 <span class="lineno">  180 </span>happyOut22 :: (HappyAbsSyn ) -&gt; HappyWrap22
 <span class="lineno">  181 </span><span class="decl"><span class="istickedoff">happyOut22 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  182 </span>{-# INLINE happyOut22 #-}
-<span class="lineno">  183 </span>newtype HappyWrap23 = HappyWrap23 (Term)
-<span class="lineno">  184 </span>happyIn23 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">  183 </span>newtype HappyWrap23 = HappyWrap23 (UTerm)
+<span class="lineno">  184 </span>happyIn23 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">  185 </span><span class="decl"><span class="istickedoff">happyIn23 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap23 x)</span></span>
 <span class="lineno">  186 </span>{-# INLINE happyIn23 #-}
 <span class="lineno">  187 </span>happyOut23 :: (HappyAbsSyn ) -&gt; HappyWrap23
 <span class="lineno">  188 </span><span class="decl"><span class="istickedoff">happyOut23 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  189 </span>{-# INLINE happyOut23 #-}
-<span class="lineno">  190 </span>newtype HappyWrap24 = HappyWrap24 (Term)
-<span class="lineno">  191 </span>happyIn24 :: (Term) -&gt; (HappyAbsSyn )
+<span class="lineno">  190 </span>newtype HappyWrap24 = HappyWrap24 (UTerm)
+<span class="lineno">  191 </span>happyIn24 :: (UTerm) -&gt; (HappyAbsSyn )
 <span class="lineno">  192 </span><span class="decl"><span class="istickedoff">happyIn24 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap24 x)</span></span>
 <span class="lineno">  193 </span>{-# INLINE happyIn24 #-}
 <span class="lineno">  194 </span>happyOut24 :: (HappyAbsSyn ) -&gt; HappyWrap24
@@ -234,15 +234,15 @@ span.spaces    { background: white }
 <span class="lineno">  215 </span>happyOut27 :: (HappyAbsSyn ) -&gt; HappyWrap27
 <span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">happyOut27 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  217 </span>{-# INLINE happyOut27 #-}
-<span class="lineno">  218 </span>newtype HappyWrap28 = HappyWrap28 ((PosPair FieldName, Term))
-<span class="lineno">  219 </span>happyIn28 :: ((PosPair FieldName, Term)) -&gt; (HappyAbsSyn )
+<span class="lineno">  218 </span>newtype HappyWrap28 = HappyWrap28 ((PosPair FieldName, UTerm))
+<span class="lineno">  219 </span>happyIn28 :: ((PosPair FieldName, UTerm)) -&gt; (HappyAbsSyn )
 <span class="lineno">  220 </span><span class="decl"><span class="nottickedoff">happyIn28 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap28 x)</span></span>
 <span class="lineno">  221 </span>{-# INLINE happyIn28 #-}
 <span class="lineno">  222 </span>happyOut28 :: (HappyAbsSyn ) -&gt; HappyWrap28
 <span class="lineno">  223 </span><span class="decl"><span class="nottickedoff">happyOut28 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  224 </span>{-# INLINE happyOut28 #-}
-<span class="lineno">  225 </span>newtype HappyWrap29 = HappyWrap29 ((PosPair FieldName, Term))
-<span class="lineno">  226 </span>happyIn29 :: ((PosPair FieldName, Term)) -&gt; (HappyAbsSyn )
+<span class="lineno">  225 </span>newtype HappyWrap29 = HappyWrap29 ((PosPair FieldName, UTerm))
+<span class="lineno">  226 </span>happyIn29 :: ((PosPair FieldName, UTerm)) -&gt; (HappyAbsSyn )
 <span class="lineno">  227 </span><span class="decl"><span class="nottickedoff">happyIn29 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap29 x)</span></span>
 <span class="lineno">  228 </span>{-# INLINE happyIn29 #-}
 <span class="lineno">  229 </span>happyOut29 :: (HappyAbsSyn ) -&gt; HappyWrap29
@@ -255,8 +255,8 @@ span.spaces    { background: white }
 <span class="lineno">  236 </span>happyOut30 :: (HappyAbsSyn ) -&gt; HappyWrap30
 <span class="lineno">  237 </span><span class="decl"><span class="nottickedoff">happyOut30 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  238 </span>{-# INLINE happyOut30 #-}
-<span class="lineno">  239 </span>newtype HappyWrap31 = HappyWrap31 ([([(TermVar, Maybe Term)])])
-<span class="lineno">  240 </span>happyIn31 :: ([([(TermVar, Maybe Term)])]) -&gt; (HappyAbsSyn )
+<span class="lineno">  239 </span>newtype HappyWrap31 = HappyWrap31 ([([(UTermVar, Maybe UTerm)])])
+<span class="lineno">  240 </span>happyIn31 :: ([([(UTermVar, Maybe UTerm)])]) -&gt; (HappyAbsSyn )
 <span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">happyIn31 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap31 x)</span></span>
 <span class="lineno">  242 </span>{-# INLINE happyIn31 #-}
 <span class="lineno">  243 </span>happyOut31 :: (HappyAbsSyn ) -&gt; HappyWrap31
@@ -276,22 +276,22 @@ span.spaces    { background: white }
 <span class="lineno">  257 </span>happyOut33 :: (HappyAbsSyn ) -&gt; HappyWrap33
 <span class="lineno">  258 </span><span class="decl"><span class="istickedoff">happyOut33 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  259 </span>{-# INLINE happyOut33 #-}
-<span class="lineno">  260 </span>newtype HappyWrap34 = HappyWrap34 ([(TermVar)])
-<span class="lineno">  261 </span>happyIn34 :: ([(TermVar)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  260 </span>newtype HappyWrap34 = HappyWrap34 ([(UTermVar)])
+<span class="lineno">  261 </span>happyIn34 :: ([(UTermVar)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  262 </span><span class="decl"><span class="istickedoff">happyIn34 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap34 x)</span></span>
 <span class="lineno">  263 </span>{-# INLINE happyIn34 #-}
 <span class="lineno">  264 </span>happyOut34 :: (HappyAbsSyn ) -&gt; HappyWrap34
 <span class="lineno">  265 </span><span class="decl"><span class="istickedoff">happyOut34 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  266 </span>{-# INLINE happyOut34 #-}
-<span class="lineno">  267 </span>newtype HappyWrap35 = HappyWrap35 ([([(TermVar, Term)])])
-<span class="lineno">  268 </span>happyIn35 :: ([([(TermVar, Term)])]) -&gt; (HappyAbsSyn )
+<span class="lineno">  267 </span>newtype HappyWrap35 = HappyWrap35 ([([(UTermVar, UTerm)])])
+<span class="lineno">  268 </span>happyIn35 :: ([([(UTermVar, UTerm)])]) -&gt; (HappyAbsSyn )
 <span class="lineno">  269 </span><span class="decl"><span class="istickedoff">happyIn35 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap35 x)</span></span>
 <span class="lineno">  270 </span>{-# INLINE happyIn35 #-}
 <span class="lineno">  271 </span>happyOut35 :: (HappyAbsSyn ) -&gt; HappyWrap35
 <span class="lineno">  272 </span><span class="decl"><span class="istickedoff">happyOut35 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  273 </span>{-# INLINE happyOut35 #-}
-<span class="lineno">  274 </span>newtype HappyWrap36 = HappyWrap36 (Maybe (Term))
-<span class="lineno">  275 </span>happyIn36 :: (Maybe (Term)) -&gt; (HappyAbsSyn )
+<span class="lineno">  274 </span>newtype HappyWrap36 = HappyWrap36 (Maybe (UTerm))
+<span class="lineno">  275 </span>happyIn36 :: (Maybe (UTerm)) -&gt; (HappyAbsSyn )
 <span class="lineno">  276 </span><span class="decl"><span class="istickedoff">happyIn36 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap36 x)</span></span>
 <span class="lineno">  277 </span>{-# INLINE happyIn36 #-}
 <span class="lineno">  278 </span>happyOut36 :: (HappyAbsSyn ) -&gt; HappyWrap36
@@ -304,15 +304,15 @@ span.spaces    { background: white }
 <span class="lineno">  285 </span>happyOut37 :: (HappyAbsSyn ) -&gt; HappyWrap37
 <span class="lineno">  286 </span><span class="decl"><span class="istickedoff">happyOut37 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  287 </span>{-# INLINE happyOut37 #-}
-<span class="lineno">  288 </span>newtype HappyWrap38 = HappyWrap38 ([((PosPair FieldName, Term))])
-<span class="lineno">  289 </span>happyIn38 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  288 </span>newtype HappyWrap38 = HappyWrap38 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  289 </span>happyIn38 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  290 </span><span class="decl"><span class="nottickedoff">happyIn38 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap38 x)</span></span>
 <span class="lineno">  291 </span>{-# INLINE happyIn38 #-}
 <span class="lineno">  292 </span>happyOut38 :: (HappyAbsSyn ) -&gt; HappyWrap38
 <span class="lineno">  293 </span><span class="decl"><span class="nottickedoff">happyOut38 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  294 </span>{-# INLINE happyOut38 #-}
-<span class="lineno">  295 </span>newtype HappyWrap39 = HappyWrap39 ([((PosPair FieldName, Term))])
-<span class="lineno">  296 </span>happyIn39 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  295 </span>newtype HappyWrap39 = HappyWrap39 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  296 </span>happyIn39 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">happyIn39 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap39 x)</span></span>
 <span class="lineno">  298 </span>{-# INLINE happyIn39 #-}
 <span class="lineno">  299 </span>happyOut39 :: (HappyAbsSyn ) -&gt; HappyWrap39
@@ -332,8 +332,8 @@ span.spaces    { background: white }
 <span class="lineno">  313 </span>happyOut41 :: (HappyAbsSyn ) -&gt; HappyWrap41
 <span class="lineno">  314 </span><span class="decl"><span class="nottickedoff">happyOut41 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  315 </span>{-# INLINE happyOut41 #-}
-<span class="lineno">  316 </span>newtype HappyWrap42 = HappyWrap42 ([(Term)])
-<span class="lineno">  317 </span>happyIn42 :: ([(Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  316 </span>newtype HappyWrap42 = HappyWrap42 ([(UTerm)])
+<span class="lineno">  317 </span>happyIn42 :: ([(UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  318 </span><span class="decl"><span class="istickedoff">happyIn42 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap42 x)</span></span>
 <span class="lineno">  319 </span>{-# INLINE happyIn42 #-}
 <span class="lineno">  320 </span>happyOut42 :: (HappyAbsSyn ) -&gt; HappyWrap42
@@ -346,8 +346,8 @@ span.spaces    { background: white }
 <span class="lineno">  327 </span>happyOut43 :: (HappyAbsSyn ) -&gt; HappyWrap43
 <span class="lineno">  328 </span><span class="decl"><span class="nottickedoff">happyOut43 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  329 </span>{-# INLINE happyOut43 #-}
-<span class="lineno">  330 </span>newtype HappyWrap44 = HappyWrap44 ([([(TermVar, Maybe Term)])])
-<span class="lineno">  331 </span>happyIn44 :: ([([(TermVar, Maybe Term)])]) -&gt; (HappyAbsSyn )
+<span class="lineno">  330 </span>newtype HappyWrap44 = HappyWrap44 ([([(UTermVar, Maybe UTerm)])])
+<span class="lineno">  331 </span>happyIn44 :: ([([(UTermVar, Maybe UTerm)])]) -&gt; (HappyAbsSyn )
 <span class="lineno">  332 </span><span class="decl"><span class="nottickedoff">happyIn44 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap44 x)</span></span>
 <span class="lineno">  333 </span>{-# INLINE happyIn44 #-}
 <span class="lineno">  334 </span>happyOut44 :: (HappyAbsSyn ) -&gt; HappyWrap44
@@ -367,29 +367,29 @@ span.spaces    { background: white }
 <span class="lineno">  348 </span>happyOut46 :: (HappyAbsSyn ) -&gt; HappyWrap46
 <span class="lineno">  349 </span><span class="decl"><span class="istickedoff">happyOut46 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  350 </span>{-# INLINE happyOut46 #-}
-<span class="lineno">  351 </span>newtype HappyWrap47 = HappyWrap47 ([(TermVar)])
-<span class="lineno">  352 </span>happyIn47 :: ([(TermVar)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  351 </span>newtype HappyWrap47 = HappyWrap47 ([(UTermVar)])
+<span class="lineno">  352 </span>happyIn47 :: ([(UTermVar)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  353 </span><span class="decl"><span class="istickedoff">happyIn47 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap47 x)</span></span>
 <span class="lineno">  354 </span>{-# INLINE happyIn47 #-}
 <span class="lineno">  355 </span>happyOut47 :: (HappyAbsSyn ) -&gt; HappyWrap47
 <span class="lineno">  356 </span><span class="decl"><span class="istickedoff">happyOut47 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  357 </span>{-# INLINE happyOut47 #-}
-<span class="lineno">  358 </span>newtype HappyWrap48 = HappyWrap48 ([([(TermVar, Term)])])
-<span class="lineno">  359 </span>happyIn48 :: ([([(TermVar, Term)])]) -&gt; (HappyAbsSyn )
+<span class="lineno">  358 </span>newtype HappyWrap48 = HappyWrap48 ([([(UTermVar, UTerm)])])
+<span class="lineno">  359 </span>happyIn48 :: ([([(UTermVar, UTerm)])]) -&gt; (HappyAbsSyn )
 <span class="lineno">  360 </span><span class="decl"><span class="istickedoff">happyIn48 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap48 x)</span></span>
 <span class="lineno">  361 </span>{-# INLINE happyIn48 #-}
 <span class="lineno">  362 </span>happyOut48 :: (HappyAbsSyn ) -&gt; HappyWrap48
 <span class="lineno">  363 </span><span class="decl"><span class="istickedoff">happyOut48 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  364 </span>{-# INLINE happyOut48 #-}
-<span class="lineno">  365 </span>newtype HappyWrap49 = HappyWrap49 ([((PosPair FieldName, Term))])
-<span class="lineno">  366 </span>happyIn49 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  365 </span>newtype HappyWrap49 = HappyWrap49 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  366 </span>happyIn49 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">happyIn49 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap49 x)</span></span>
 <span class="lineno">  368 </span>{-# INLINE happyIn49 #-}
 <span class="lineno">  369 </span>happyOut49 :: (HappyAbsSyn ) -&gt; HappyWrap49
 <span class="lineno">  370 </span><span class="decl"><span class="nottickedoff">happyOut49 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  371 </span>{-# INLINE happyOut49 #-}
-<span class="lineno">  372 </span>newtype HappyWrap50 = HappyWrap50 ([((PosPair FieldName, Term))])
-<span class="lineno">  373 </span>happyIn50 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  372 </span>newtype HappyWrap50 = HappyWrap50 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  373 </span>happyIn50 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  374 </span><span class="decl"><span class="nottickedoff">happyIn50 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap50 x)</span></span>
 <span class="lineno">  375 </span>{-# INLINE happyIn50 #-}
 <span class="lineno">  376 </span>happyOut50 :: (HappyAbsSyn ) -&gt; HappyWrap50
@@ -409,22 +409,22 @@ span.spaces    { background: white }
 <span class="lineno">  390 </span>happyOut52 :: (HappyAbsSyn ) -&gt; HappyWrap52
 <span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">happyOut52 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  392 </span>{-# INLINE happyOut52 #-}
-<span class="lineno">  393 </span>newtype HappyWrap53 = HappyWrap53 ([(Term)])
-<span class="lineno">  394 </span>happyIn53 :: ([(Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  393 </span>newtype HappyWrap53 = HappyWrap53 ([(UTerm)])
+<span class="lineno">  394 </span>happyIn53 :: ([(UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  395 </span><span class="decl"><span class="istickedoff">happyIn53 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap53 x)</span></span>
 <span class="lineno">  396 </span>{-# INLINE happyIn53 #-}
 <span class="lineno">  397 </span>happyOut53 :: (HappyAbsSyn ) -&gt; HappyWrap53
 <span class="lineno">  398 </span><span class="decl"><span class="istickedoff">happyOut53 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  399 </span>{-# INLINE happyOut53 #-}
-<span class="lineno">  400 </span>newtype HappyWrap54 = HappyWrap54 ([((PosPair FieldName, Term))])
-<span class="lineno">  401 </span>happyIn54 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  400 </span>newtype HappyWrap54 = HappyWrap54 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  401 </span>happyIn54 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">happyIn54 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap54 x)</span></span>
 <span class="lineno">  403 </span>{-# INLINE happyIn54 #-}
 <span class="lineno">  404 </span>happyOut54 :: (HappyAbsSyn ) -&gt; HappyWrap54
 <span class="lineno">  405 </span><span class="decl"><span class="nottickedoff">happyOut54 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  406 </span>{-# INLINE happyOut54 #-}
-<span class="lineno">  407 </span>newtype HappyWrap55 = HappyWrap55 ([((PosPair FieldName, Term))])
-<span class="lineno">  408 </span>happyIn55 :: ([((PosPair FieldName, Term))]) -&gt; (HappyAbsSyn )
+<span class="lineno">  407 </span>newtype HappyWrap55 = HappyWrap55 ([((PosPair FieldName, UTerm))])
+<span class="lineno">  408 </span>happyIn55 :: ([((PosPair FieldName, UTerm))]) -&gt; (HappyAbsSyn )
 <span class="lineno">  409 </span><span class="decl"><span class="nottickedoff">happyIn55 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap55 x)</span></span>
 <span class="lineno">  410 </span>{-# INLINE happyIn55 #-}
 <span class="lineno">  411 </span>happyOut55 :: (HappyAbsSyn ) -&gt; HappyWrap55
@@ -444,8 +444,8 @@ span.spaces    { background: white }
 <span class="lineno">  425 </span>happyOut57 :: (HappyAbsSyn ) -&gt; HappyWrap57
 <span class="lineno">  426 </span><span class="decl"><span class="nottickedoff">happyOut57 x = Happy_GHC_Exts.unsafeCoerce# x</span></span>
 <span class="lineno">  427 </span>{-# INLINE happyOut57 #-}
-<span class="lineno">  428 </span>newtype HappyWrap58 = HappyWrap58 ([(Term)])
-<span class="lineno">  429 </span>happyIn58 :: ([(Term)]) -&gt; (HappyAbsSyn )
+<span class="lineno">  428 </span>newtype HappyWrap58 = HappyWrap58 ([(UTerm)])
+<span class="lineno">  429 </span>happyIn58 :: ([(UTerm)]) -&gt; (HappyAbsSyn )
 <span class="lineno">  430 </span><span class="decl"><span class="istickedoff">happyIn58 x = Happy_GHC_Exts.unsafeCoerce# (HappyWrap58 x)</span></span>
 <span class="lineno">  431 </span>{-# INLINE happyIn58 #-}
 <span class="lineno">  432 </span>happyOut58 :: (HappyAbsSyn ) -&gt; HappyWrap58
@@ -1755,7 +1755,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1736 </span>parseSAW :: FilePath -&gt; FilePath -&gt; LText.Text -&gt; Either (PosPair ParseError) Module
 <span class="lineno"> 1737 </span><span class="decl"><span class="istickedoff">parseSAW = runParser parseSAW2</span></span>
 <span class="lineno"> 1738 </span>
-<span class="lineno"> 1739 </span>parseSAWTerm :: FilePath -&gt; FilePath -&gt; LText.Text -&gt; Either (PosPair ParseError) Term
+<span class="lineno"> 1739 </span>parseSAWTerm :: FilePath -&gt; FilePath -&gt; LText.Text -&gt; Either (PosPair ParseError) UTerm
 <span class="lineno"> 1740 </span><span class="decl"><span class="istickedoff">parseSAWTerm = runParser parseSAWTerm2</span></span>
 <span class="lineno"> 1741 </span>
 <span class="lineno"> 1742 </span>parseError :: PosPair Token -&gt; Parser a
@@ -1765,7 +1765,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1746 </span><span class="decl"><span class="nottickedoff">addParseError p s = addError p (ParseError s)</span></span>
 <span class="lineno"> 1747 </span>
 <span class="lineno"> 1748 </span>-- Try to parse an expression as a list of identifiers
-<span class="lineno"> 1749 </span>exprAsIdentList :: Term -&gt; Maybe [TermVar]
+<span class="lineno"> 1749 </span>exprAsIdentList :: UTerm -&gt; Maybe [UTermVar]
 <span class="lineno"> 1750 </span><span class="decl"><span class="istickedoff">exprAsIdentList (Name x) = return [TermVar x]</span>
 <span class="lineno"> 1751 </span><span class="spaces"></span><span class="istickedoff">exprAsIdentList (App expr (Name x)) =</span>
 <span class="lineno"> 1752 </span><span class="spaces">  </span><span class="istickedoff">(++ [TermVar x]) &lt;$&gt; exprAsIdentList expr</span>
@@ -1779,13 +1779,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1760 </span>-- This function takes in a term for the LHS and tests if it is of the first
 <span class="lineno"> 1761 </span>-- form, or, if not, converts the second form into the first by making a single
 <span class="lineno"> 1762 </span>-- &quot;unused&quot; variable with the name &quot;_&quot;
-<span class="lineno"> 1763 </span>mkPiArg :: Term -&gt; [(TermVar, Term)]
+<span class="lineno"> 1763 </span>mkPiArg :: UTerm -&gt; [(UTermVar, UTerm)]
 <span class="lineno"> 1764 </span><span class="decl"><span class="istickedoff">mkPiArg (TypeConstraint (exprAsIdentList -&gt; Just xs) _ t) =</span>
 <span class="lineno"> 1765 </span><span class="spaces">  </span><span class="istickedoff">map (\x -&gt; (x, t)) xs</span>
 <span class="lineno"> 1766 </span><span class="spaces"></span><span class="istickedoff">mkPiArg lhs = [(UnusedVar <span class="nottickedoff">(pos lhs)</span>, lhs)]</span></span>
 <span class="lineno"> 1767 </span>
 <span class="lineno"> 1768 </span>-- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
-<span class="lineno"> 1769 </span>mkTupleProj :: Term -&gt; Natural -&gt; Parser Term
+<span class="lineno"> 1769 </span>mkTupleProj :: UTerm -&gt; Natural -&gt; Parser UTerm
 <span class="lineno"> 1770 </span><span class="decl"><span class="nottickedoff">mkTupleProj t 1 = return $ PairLeft t</span>
 <span class="lineno"> 1771 </span><span class="spaces"></span><span class="nottickedoff">mkTupleProj t 2 = return $ PairRight t</span>
 <span class="lineno"> 1772 </span><span class="spaces"></span><span class="nottickedoff">mkTupleProj t _ =</span>
@@ -1793,19 +1793,19 @@ span.spaces    { background: white }
 <span class="lineno"> 1774 </span><span class="spaces">     </span><span class="nottickedoff">return (badTerm (pos t))</span></span>
 <span class="lineno"> 1775 </span>
 <span class="lineno"> 1776 </span>-- | Parse a term as a dotted list of strings
-<span class="lineno"> 1777 </span>parseModuleName :: Term -&gt; Maybe [Text]
+<span class="lineno"> 1777 </span>parseModuleName :: UTerm -&gt; Maybe [Text]
 <span class="lineno"> 1778 </span><span class="decl"><span class="nottickedoff">parseModuleName (RecordProj t fname) = (++ [fname]) &lt;$&gt; parseModuleName t</span>
 <span class="lineno"> 1779 </span><span class="spaces"></span><span class="nottickedoff">parseModuleName _ = Nothing</span></span>
 <span class="lineno"> 1780 </span>
 <span class="lineno"> 1781 </span>-- | Parse a qualified recursor @M1.M2...Mn.d#rec@
-<span class="lineno"> 1782 </span>parseRecursorProj :: Term -&gt; PosPair Text -&gt; Parser Term
+<span class="lineno"> 1782 </span>parseRecursorProj :: UTerm -&gt; PosPair Text -&gt; Parser UTerm
 <span class="lineno"> 1783 </span><span class="decl"><span class="nottickedoff">parseRecursorProj (parseModuleName -&gt; Just mnm) i =</span>
 <span class="lineno"> 1784 </span><span class="spaces">  </span><span class="nottickedoff">return $ Recursor (Just $ mkModuleName mnm) i</span>
 <span class="lineno"> 1785 </span><span class="spaces"></span><span class="nottickedoff">parseRecursorProj t _ =</span>
 <span class="lineno"> 1786 </span><span class="spaces">  </span><span class="nottickedoff">do addParseError (pos t) &quot;Malformed recursor projection&quot;</span>
 <span class="lineno"> 1787 </span><span class="spaces">     </span><span class="nottickedoff">return (badTerm (pos t))</span></span>
 <span class="lineno"> 1788 </span>
-<span class="lineno"> 1789 </span>parseTupleSelector :: Term -&gt; PosPair Natural -&gt; Parser Term
+<span class="lineno"> 1789 </span>parseTupleSelector :: UTerm -&gt; PosPair Natural -&gt; Parser UTerm
 <span class="lineno"> 1790 </span><span class="decl"><span class="nottickedoff">parseTupleSelector t i =</span>
 <span class="lineno"> 1791 </span><span class="spaces">  </span><span class="nottickedoff">if val i &gt;= 1 then return (mkTupleSelector t (val i)) else</span>
 <span class="lineno"> 1792 </span><span class="spaces">    </span><span class="nottickedoff">do addParseError (pos t) &quot;non-positive tuple projection index&quot;</span>

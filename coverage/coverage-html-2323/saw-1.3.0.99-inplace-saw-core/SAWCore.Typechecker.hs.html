@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>-- | Infer the type of an untyped term and complete it to a 'Term', all in the
 <span class="lineno">   59 </span>-- empty typing context
-<span class="lineno">   60 </span>inferCompleteTerm :: SharedContext -&gt; Maybe ModuleName -&gt; Un.Term -&gt;
+<span class="lineno">   60 </span>inferCompleteTerm :: SharedContext -&gt; Maybe ModuleName -&gt; Un.UTerm -&gt;
 <span class="lineno">   61 </span>                     IO (Either SawDoc Term)
 <span class="lineno">   62 </span><span class="decl"><span class="nottickedoff">inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t</span></span>
 <span class="lineno">   63 </span>
@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>-- typing context
 <span class="lineno">   66 </span>inferCompleteTermCtx ::
 <span class="lineno">   67 </span>  SharedContext -&gt; Maybe ModuleName -&gt; [(LocalName, Term)] -&gt;
-<span class="lineno">   68 </span>  Un.Term -&gt; IO (Either SawDoc Term)
+<span class="lineno">   68 </span>  Un.UTerm -&gt; IO (Either SawDoc Term)
 <span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">inferCompleteTermCtx sc mnm ctx t =</span>
 <span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">do res &lt;- runTCM (typeInferComplete t) sc mnm ctx</span>
 <span class="lineno">   71 </span><span class="spaces">     </span><span class="nottickedoff">case res of</span>
@@ -141,7 +141,7 @@ span.spaces    { background: white }
 <span class="lineno">  122 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ UnboundName n</span></span></span>
 <span class="lineno">  123 </span>
 <span class="lineno">  124 </span>-- | Match an untyped term as a name applied to 0 or more arguments
-<span class="lineno">  125 </span>matchAppliedName :: Un.Term -&gt; Maybe (Text, [Un.Term])
+<span class="lineno">  125 </span>matchAppliedName :: Un.UTerm -&gt; Maybe (Text, [Un.UTerm])
 <span class="lineno">  126 </span><span class="decl"><span class="istickedoff">matchAppliedName (Un.Name (PosPair _ n)) = Just (n, [])</span>
 <span class="lineno">  127 </span><span class="spaces"></span><span class="istickedoff">matchAppliedName (Un.App f arg) =</span>
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">do (n, args) &lt;- matchAppliedName f</span>
@@ -149,7 +149,7 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff">matchAppliedName _ = Nothing</span></span>
 <span class="lineno">  131 </span>
 <span class="lineno">  132 </span>-- | Match an untyped term as a recursor applied to 0 or more arguments
-<span class="lineno">  133 </span>matchAppliedRecursor :: Un.Term -&gt; Maybe (Maybe ModuleName, Text, [Un.Term])
+<span class="lineno">  133 </span>matchAppliedRecursor :: Un.UTerm -&gt; Maybe (Maybe ModuleName, Text, [Un.UTerm])
 <span class="lineno">  134 </span><span class="decl"><span class="istickedoff">matchAppliedRecursor (Un.Recursor mnm (PosPair _ n)) = Just (mnm, n, [])</span>
 <span class="lineno">  135 </span><span class="spaces"></span><span class="istickedoff">matchAppliedRecursor (Un.App f arg) =</span>
 <span class="lineno">  136 </span><span class="spaces">  </span><span class="istickedoff">do (mnm, n, args) &lt;- matchAppliedRecursor f</span>
@@ -167,7 +167,7 @@ span.spaces    { background: white }
 <span class="lineno">  148 </span>
 <span class="lineno">  149 </span>-- The type inference engine for untyped terms, which mostly just dispatches to
 <span class="lineno">  150 </span>-- the type inference engine for (FTermF TypedTerm) defined in SCTypeCheck.hs
-<span class="lineno">  151 </span>instance TypeInfer Un.Term where
+<span class="lineno">  151 </span>instance TypeInfer Un.UTerm where
 <span class="lineno">  152 </span>  <span class="decl"><span class="nottickedoff">typeInfer t = typedVal &lt;$&gt; typeInferComplete t</span></span>
 <span class="lineno">  153 </span>
 <span class="lineno">  154 </span>  <span class="decl"><span class="istickedoff">typeInferComplete t =</span>
@@ -178,7 +178,7 @@ span.spaces    { background: white }
 <span class="lineno">  159 </span><span class="spaces">       </span><span class="istickedoff">return res</span></span>
 <span class="lineno">  160 </span>
 <span class="lineno">  161 </span>-- | Main workhorse function for type inference on untyped terms
-<span class="lineno">  162 </span>typeInferCompleteTerm :: Un.Term -&gt; TCM TypedTerm
+<span class="lineno">  162 </span>typeInferCompleteTerm :: Un.UTerm -&gt; TCM TypedTerm
 <span class="lineno">  163 </span>
 <span class="lineno">  164 </span>-- Names
 <span class="lineno">  165 </span><span class="decl"><span class="istickedoff">typeInferCompleteTerm (matchAppliedName -&gt; Just (n, args)) =</span>
@@ -313,7 +313,7 @@ span.spaces    { background: white }
 <span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">internalError &quot;Type inference encountered a BadTerm&quot;</span></span></span>
 <span class="lineno">  295 </span>
 <span class="lineno">  296 </span>
-<span class="lineno">  297 </span>instance TypeInferCtx Un.TermVar Un.Term where
+<span class="lineno">  297 </span>instance TypeInferCtx Un.UTermVar Un.UTerm where
 <span class="lineno">  298 </span>  <span class="decl"><span class="istickedoff">typeInferCompleteCtx =</span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">typeInferCompleteCtx . map (\(x,tp) -&gt; (Un.termVarLocalName x, tp))</span></span>
 <span class="lineno">  300 </span>
