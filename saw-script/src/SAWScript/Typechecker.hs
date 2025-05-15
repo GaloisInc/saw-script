@@ -283,8 +283,8 @@ kindStar = Kind 0
 --kindStarToStarToStar :: Kind
 --kindStarToStarToStar = Kind 2
 
-instance PrettyPrint Kind where
-  pretty _ (Kind n) =
+instance PrettyPrintPrec Kind where
+  prettyPrec _ (Kind n) =
      PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
 
 
