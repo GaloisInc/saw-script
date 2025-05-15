@@ -1,0 +1,2 @@
+enable_experimental;
+load_sawcore_from_file "coreparser001.sawcore";

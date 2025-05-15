@@ -1,0 +1,3 @@
+-- Missing module name in file header
+module where
+import Prelude;
