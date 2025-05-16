@@ -1,5 +1,9 @@
 # next -- TBA
 
+This release supports [version
+2](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#2) of
+`mir-json`'s schema.
+
 The way git information gets compiled in (so it can be reported with
 e.g. saw --version) has been changed.
 You must build with build.sh after git changes for those changes to
@@ -35,6 +39,8 @@ Note that build.sh is in any case the recommended way to build.
   but work on arbitrary terms rather than proof goals.
 
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
+
+* Support verifying Rust code up to version 1.86.
 
 ## Bug fixes
 

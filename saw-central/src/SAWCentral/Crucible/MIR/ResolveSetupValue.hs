@@ -1543,57 +1543,69 @@ mirAdtToTy adt =
   Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)
 
 -- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
-findDefId :: MonadFail m => Map Text (NonEmpty Text) -> Text -> m Mir.DefId
-findDefId crateDisambigs fnName =
-  either fail pure $ findDefIdEither crateDisambigs fnName
+findDefId :: MonadFail m => Mir.CollectionState -> Text -> m Mir.DefId
+findDefId cs defName =
+  either fail pure $ findDefIdEither cs defName
 
--- | Given a function name @fnName@, attempt to look up its corresponding
+-- | Given a definition name @defName@, attempt to look up its corresponding
 -- 'Mir.DefId'. If successful, return it with 'Right'. Currently, the following
--- types of function names are permittd:
+-- types of definition names are permitted:
 --
--- * @<crate_name>/<disambiguator>::<function_name>: A fully disambiguated name.
+-- * @<crate_name>/<disambiguator>::<def_name>: A fully disambiguated name.
 --
--- * @<crate_name>::<function_name>: A name without a disambiguator. In this
---   case, SAW will attempt to look up a disambiguator from the @crateDisambigs@
---   map. If none can be found, or if there are multiple disambiguators for the
---   given @<crate_name>@, then this will return an error message with 'Left'.
-findDefIdEither :: Map Text (NonEmpty Text) -> Text -> Either String Mir.DefId
-findDefIdEither crateDisambigs fnName = do
+-- * @<crate_name>::<def_name>: A name without a disambiguator. In this
+--   case, SAW will attempt to look up a disambiguator from the
+--   'Mir.crateHashesMap'. If none can be found, or if there are multiple
+--   disambiguators for the given @<crate_name>@, then this will return an error
+--   message with 'Left'.
+--
+-- This also consults the 'Mir.langItems' so that if a user looks up the
+-- original 'DefId' for a lang item (e.g., @core::option::Option@), then this
+-- function will return the @$lang@-based 'DefId' instead (e.g.,
+-- @$lang::Option@), as the latter 'DefId' is what will be used throughout the
+-- rest of the MIR code.
+findDefIdEither :: Mir.CollectionState -> Text -> Either String Mir.DefId
+findDefIdEither cs defName = do
     (crate, path) <-
       case edid of
         crate:path -> pure (crate, path)
         [] -> Left $ unlines
-                [ "The function `" ++ fnNameStr ++ "` lacks a crate."
-                , "Consider providing one, e.g., `<crate_name>::" ++ fnNameStr ++ "`."
+                [ "The definition `" ++ defNameStr ++ "` lacks a crate."
+                , "Consider providing one, e.g., `<crate_name>::" ++ defNameStr ++ "`."
                 ]
     let crateStr = Text.unpack crate
-    case Text.splitOn "/" crate of
-      [crateNoDisambig, disambig] ->
-        Right $ Mir.textId $ Text.intercalate "::"
-              $ (crateNoDisambig <> "/" <> disambig) : path
-      [_] ->
-        case Map.lookup crate crateDisambigs of
-            Just allDisambigs@(disambig :| otherDisambigs)
-              |  F.null otherDisambigs
-              -> Right $ Mir.textId $ Text.intercalate "::"
-                       $ (crate <> "/" <> disambig) : path
-              |  otherwise
-              -> Left $ unlines $
-                   [ "ambiguous crate " ++ crateStr
-                   , "crate disambiguators:"
-                   ] ++ F.toList (Text.unpack <$> allDisambigs)
-            Nothing -> Left $ "unknown crate " ++ crateStr
-      _ -> Left $ "Malformed crate name: " ++ show crateStr
+    origDefId <-
+      case Text.splitOn "/" crate of
+        [crateNoDisambig, disambig] ->
+          Right $ Mir.textId $ Text.intercalate "::"
+                $ (crateNoDisambig <> "/" <> disambig) : path
+        [_] ->
+          case Map.lookup crate crateDisambigs of
+              Just allDisambigs@(disambig :| otherDisambigs)
+                |  F.null otherDisambigs
+                -> Right $ Mir.textId $ Text.intercalate "::"
+                         $ (crate <> "/" <> disambig) : path
+                |  otherwise
+                -> Left $ unlines $
+                     [ "ambiguous crate " ++ crateStr
+                     , "crate disambiguators:"
+                     ] ++ F.toList (Text.unpack <$> allDisambigs)
+              Nothing -> Left $ "unknown crate " ++ crateStr
+        _ -> Left $ "Malformed crate name: " ++ show crateStr
+    Right $ Map.findWithDefault origDefId origDefId langItemDefIds
   where
-    fnNameStr = Text.unpack fnName
-    edid = Text.splitOn "::" fnName
+    crateDisambigs = cs ^. Mir.crateHashesMap
+    langItemDefIds = cs ^. Mir.collection . Mir.langItems
+
+    defNameStr = Text.unpack defName
+    edid = Text.splitOn "::" defName
 
 -- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
 -- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
 -- will raise an error.
 findStatic :: X.MonadThrow m => Mir.CollectionState -> String -> m Mir.Static
 findStatic cs name = do
-  did <- case findDefIdEither (cs ^. Mir.crateHashesMap) (Text.pack name) of
+  did <- case findDefIdEither cs (Text.pack name) of
     Left err -> X.throwM $ MIRInvalidIdentifier err
     Right did -> pure did
   case Map.lookup did (cs ^. Mir.collection . Mir.statics) of

@@ -253,7 +253,7 @@ addArg tpr argRef msb =
         svPairs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- lift $ mirRef_offsetSim (fr ^. frType) (fr ^. frRef) iSym
+            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym
             rv <- lift $ readMirRefSim (fr ^. frType) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
@@ -304,7 +304,7 @@ setReturn tpr argRef msb =
         svs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- lift $ mirRef_offsetSim (fr ^. frType) (fr ^. frRef) iSym
+            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym
             rv <- lift $ readMirRefSim (fr ^. frType) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
