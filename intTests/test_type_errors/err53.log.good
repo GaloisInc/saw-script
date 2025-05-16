@@ -1,6 +1,0 @@
- Loading file "err53.saw"
- Type errors:
-  err53.saw:8:13-8:21: Inaccessible type: "Uninterp"
-  err53.saw:8:13-8:21: This type is available only after running `enable_deprecated`.
-
-FAILED

@@ -1,6 +1,0 @@
- Loading file "err51.saw"
- Type errors:
-  err51.saw:8:9-8:17: Inaccessible variable: "addsimp'" (err51.saw:8:9-8:17)
-  err51.saw:8:9-8:17: This command is available only after running `enable_deprecated`.
-
-FAILED
