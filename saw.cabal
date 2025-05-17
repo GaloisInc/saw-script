@@ -641,6 +641,7 @@ library saw-central
     SAWCentral.Crucible.Common.Setup.Builtins
     SAWCentral.Crucible.Common.Setup.Type
     SAWCentral.Crucible.Common.Setup.Value
+    SAWCentral.Crucible.Common.Vacuity
 
     SAWCentral.Crucible.LLVM.Builtins
     SAWCentral.Crucible.LLVM.Boilerplate
