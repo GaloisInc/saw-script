@@ -133,6 +133,7 @@ import qualified SAWCentral.Crucible.Common as Common
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.Override (MetadataMap)
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
+import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
@@ -246,6 +247,14 @@ jvm_verify cls nm lemmas checkSat setup tactic =
 
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+
+     -- check for contradictory preconditions
+     when (detectVacuity opts) $
+       Vacuity.checkAssumptionsForContradictions
+         (Vacuity.GenericCrucibleContext sym)
+         methodSpec
+         tactic
+         assumes
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
