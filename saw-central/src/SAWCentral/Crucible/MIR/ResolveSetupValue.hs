@@ -104,7 +104,9 @@ import CryptolSAWCore.TypedTerm
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common.Pred (checkBooleanType)
 import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
+
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Panic
@@ -859,6 +861,8 @@ resolveSAWPred ::
 resolveSAWPred cc tm =
   do let sym = cc^.mccSym
      st <- sawCoreState sym
+     let sc = saw_ctx st
+     checkBooleanType sc tm
      bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::

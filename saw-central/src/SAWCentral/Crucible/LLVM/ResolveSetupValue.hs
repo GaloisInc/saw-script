@@ -83,6 +83,7 @@ import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
+import           SAWCentral.Crucible.Common.Pred (checkBooleanType)
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
@@ -751,6 +752,9 @@ resolveSAWPred cc tm = do
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
      (_,tm') <- rewriteSharedTerm sc ss tm
+
+     checkBooleanType sc tm'
+     
      mx <- case getAllExts tm' of
              -- concretely evaluate if it is a closed term
              [] -> do modmap <- scGetModuleMap sc

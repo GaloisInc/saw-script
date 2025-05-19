@@ -1,0 +1,17 @@
+enable_experimental;
+
+let {{
+foo : () -> Bit
+foo _ = True
+}};
+
+let f_jvm_spec = do {
+  x <- jvm_fresh_var "x" java_int;
+  jvm_assert {{ foo }};
+  jvm_execute_func [jvm_term x];
+  jvm_return (jvm_term x);
+};
+
+cls <- java_load_class "Test";
+jvm_verify cls "f" [] false f_jvm_spec z3;
+

@@ -67,6 +67,7 @@ import qualified Language.JVM.Parser as J
 
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common.Pred (checkBooleanType)
 
 import SAWCentral.Panic
 import SAWCentral.Crucible.JVM.MethodSpecIR
@@ -217,6 +218,8 @@ resolveSAWPred ::
 resolveSAWPred cc tm =
   do let sym = cc^.jccSym
      st <- sawCoreState sym
+     let sc = saw_ctx st
+     checkBooleanType sc tm
      bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::

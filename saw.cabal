@@ -637,6 +637,7 @@ library saw-central
     SAWCentral.Crucible.Common
     SAWCentral.Crucible.Common.MethodSpec
     SAWCentral.Crucible.Common.Override
+    SAWCentral.Crucible.Common.Pred
     SAWCentral.Crucible.Common.ResolveSetupValue
     SAWCentral.Crucible.Common.Setup.Builtins
     SAWCentral.Crucible.Common.Setup.Type
