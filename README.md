@@ -117,7 +117,7 @@ compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
 tool which compiles Rust code to a machine-readable, JSON-based format.
 
 Currently, SAW supports [version
-1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+2](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#2) of
 `mir-json`'s schema. Note that the schema versions produced by `mir-json` can
 change over time as dictated by internal requirements and upstream changes. To
 help smooth this over:
