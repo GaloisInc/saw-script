@@ -64,6 +64,9 @@ import CryptolSAWCore.Panic
 import SAWCore.Name (ecName)
 import SAWCore.Recognizer (asConstant)
 import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars, showTerm)
+  -- FIXME: `incVars` leaks the De Bruijn representation of Term's!
+  --   - Think this is the only function that does. (?)
+  --   - It would be desirable to not expose this representation.
 
 import qualified CryptolSAWCore.Cryptol as C
 
@@ -106,6 +109,8 @@ import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 
+-- pkg: pretty-show
+import Text.Show.Pretty -- FIXME: debugging
 
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
@@ -126,6 +131,7 @@ data InputText = InputText
 data ImportVisibility
   = OnlyPublic
   | PublicAndPrivate
+  deriving (Eq, Show)
 
 -- | The environment for capturing the Cryptol interpreter state as well as the
 --   SAWCore translations and associated state.
@@ -137,7 +143,9 @@ data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, P.Import)]
                                         -- ^ Declarations of imported Cryptol modules
   , eModuleEnv  :: ME.ModuleEnv         -- ^ Imported modules, and state for the ModuleM monad
+      -- FIXME:doc: do the above two have a 1-1 association of modules?
   , eExtraNames :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
+      -- FIXME:doc: this a "computed field" (a function of other fields)?
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
@@ -184,12 +192,6 @@ nameMatcher xs =
                        init cs == C.modNameChunksText top ++ map identText ns
 
 -- Initialize ------------------------------------------------------------------
-
--- FIXME: Code duplication, these three functions are relatively similar (and last 2 are 85% similar):
---  - initCryptolEnv
---  - loadCryptolModule
---  - importModule
---- TODO: common up the common code.
 
 initCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -280,17 +282,39 @@ ioParseResult res = case res of
   Right a -> return a
   Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e) -- X.throwIO (ParseError e)
 
+
 -- Rename ----------------------------------------------------------------------
+--  FIXME: why "Rename"?  I see we pass the result of this to 'MB.rename'
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
   where
     nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
+      {-
+      eImports : TODO!
+      but note: type T.Import = T.ImportG C.ModName
+      -}
+
+    -- FIXME:MT: this feels suspicious
+    --   1. outside of the case on `vis`, it's all among Cryptol.ModuleSystem.**
+    --      functions:
+    --        - which is, wow, very complex.
+    --        - and is there code there that does this?
+
+    --   2. Why Maybe?  return Nothing if the module dosen't exist??!!
+    -- First conjecture:
+    --   - this `case vis` is being called way too prematurely?
+
+    loadImport :: (ImportVisibility, T.ImportG C.ModName) -> Maybe MR.NamingEnv
     loadImport (vis, i) = do
+      -- get the LoadedModule:
       lm <- ME.lookupModule (T.iModule i) (eModuleEnv env)
+            -- TODO: understand:
+            --  - when this is Nothing, why just ignored?
       let ifc = MI.ifNames (ME.lmInterface lm)
+                --
           syms = MN.namingEnvFromNames $
-                 case vis of
+                 case {- vis -} PublicAndPrivate of  -- FIXME[MT]: temporary
                    OnlyPublic       -> MI.ifsPublic ifc
                    PublicAndPrivate -> MI.ifsDefines ifc
       return $ MN.interpImportEnv i syms
@@ -398,6 +422,18 @@ checkNotParameterized m =
                    , "Either use a ` import, or make a module instantiation."
                    ]
 
+-- FIXME: Code duplication, these two functions are highly similar
+--  - loadCryptolModule
+--  - importModule
+-- TODO:
+--   - determine if these are correctly (vs. accidentally) dissimilar
+--      - handling prims differently
+--      - returned CryptolEnv's are subtly different for the two.
+--      - import _ as X
+--   - obvious differences
+--      - return of CryptolModule
+--   - common up the common code
+
 
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -415,11 +451,24 @@ loadCryptolModule sc primOpts env path = do
          T.TCTopSignature {} ->
             fail $ "Expected a module, but " ++ show path ++ " is an interface."
   checkNotParameterized m
-
+  -- FIXME: doc: what's happening here?
+  --   - `m` not used (directly) but translating the modEnv'
+  --   - this behavior is not in `importModule`
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
+
+  -- FIXME[MT]:debugging:
+  let debug = True
+  when debug $ do
+    putStrLn $ unwords [ "loadCryptolModule ("
+                       , show path
+                       , ")"
+                       ]
+    writeFile (path ++ ".ast-ld1") (ppShow m)
+    writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
+    writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
@@ -451,7 +500,8 @@ loadCryptolModule sc primOpts env path = do
                 newTermEnv
 
   let env' = updateFFITypes m
-               env { eModuleEnv = modEnv''
+               env { eModuleEnv = modEnv''  -- MT:DIFF
+                     -- MT: DIFF: no eImports
                    , eTermEnv = newTermEnv
                    }
 
@@ -531,6 +581,18 @@ importModule sc env src as vis imps = do
             fail "Expected a module but found an interface."
   checkNotParameterized m
 
+  -- FIXME[MT]:debugging:
+  let debug = True
+  when debug $ do
+    putStrLn $ unwords [ "importModule ("
+                       , show src
+                       , ",", show vis
+                       , ")"
+                       ]
+    case src of
+      Left fp -> writeFile (fp ++ ".ast-im") (ppShow m)
+      Right _ -> return ()
+
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
   let oldModNames   = map ME.lmName
@@ -553,7 +615,13 @@ importModule sc env src as vis imps = do
 
   return $
     updateFFITypes m
-      env { eImports   = (vis, P.Import (T.mName m) as imps Nothing Nothing)
+      env { eImports   = (vis, P.Import { T.iModule= T.mName m
+                                        , T.iAs    = as
+                                        , T.iSpec  = imps
+                                        , T.iInst  = Nothing
+                                        , T.iDoc   = Nothing
+                                        }
+                         )
                        : eImports env
           , eModuleEnv = modEnv'
           , eTermEnv   = newTermEnv
@@ -615,9 +683,12 @@ resolveIdentifier ::
 resolveIdentifier env nm =
   case splitOn (pack "::") nm of
     []  -> pure Nothing
+           -- FIXME: shouldn't this be error?
     [i] -> doResolve (P.UnQual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
             in doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
+    -- FIXME: Is there no function that parses Text into PName?
+
   where
   modEnv = eModuleEnv env
   nameEnv = getNamingEnv env

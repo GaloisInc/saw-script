@@ -220,6 +220,7 @@ library cryptol-saw-core
     integer-gmp,
     modern-uri,
     mtl,
+    pretty-show,
     sbv,
     template-haskell,
     text,
