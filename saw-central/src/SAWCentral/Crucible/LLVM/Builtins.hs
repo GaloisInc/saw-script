@@ -175,8 +175,6 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
-import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
-
 -- parameterized-utils
 import qualified Data.Parameterized.TraversableFC as Ctx
 
@@ -212,6 +210,7 @@ import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..))
 import           SAWCentral.Crucible.Common.Override
 import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import SAWCentral.Crucible.LLVM.Override
 import SAWCentral.Crucible.LLVM.ResolveSetupValue

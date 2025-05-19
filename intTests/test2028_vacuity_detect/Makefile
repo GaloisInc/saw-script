@@ -1,7 +1,4 @@
-all: test.bc test.linked-mir.json Test.class
-
-test.bc: test.c
-	clang -emit-llvm -c -o $@ $<
+all: test.linked-mir.json Test.class
 
 test.linked-mir.json: test.rs
 	saw-rustc $<

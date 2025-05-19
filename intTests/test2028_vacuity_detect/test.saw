@@ -1,14 +1,6 @@
 // test.saw
 enable_experimental;
 
-let fun_c_spec = do {
-  x <- llvm_fresh_var "x" (llvm_int 32);
-  llvm_precond {{ x != x }};
-  llvm_execute_func [];
-};
-llvm_mod <- llvm_load_module "test.bc";
-llvm_verify llvm_mod "fun_c" [] false fun_c_spec z3;
-
 let fun_rs_spec = do {
   x <- mir_fresh_var "x" mir_u32;
   mir_precond {{ x != x }};

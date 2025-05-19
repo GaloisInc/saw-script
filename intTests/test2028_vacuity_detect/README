@@ -1,6 +1,8 @@
-This test checks for vacuous proofs across LLVM, MIR, and JVM backends.
+This test checks for vacuous proofs in the MIR, and JVM backends. It skips
+LLVM as that is already tested in test0064.
 
 It corresponds to issue https://github.com/GaloisInc/saw-script/issues/2028
 
-Each function includes a contradictory precondition (e.g., x != x), and SAW should detect this
-and emit a vacuity warning before successfully proving the function.
+Each function includes a contradictory precondition (e.g., x != x), and SAW
+should detect this and emit a vacuity warning before successfully proving the
+function.
