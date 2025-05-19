@@ -1987,7 +1987,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1968 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars (e:es) =</span>
 <span class="lineno"> 1969 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT <span class="nottickedoff">mmap</span> (ecType e) of</span>
 <span class="lineno"> 1970 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es</span></span>
-<span class="lineno"> 1971 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars <span class="nottickedoff">mmap</span> (Map.insert e <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 1971 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars <span class="nottickedoff">mmap</span> (Map.insert e fot fovars) absvars es</span>
 <span class="lineno"> 1972 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1973 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1974 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
