@@ -154,10 +154,10 @@ following steps:
    instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
    in order to install `mir-json`.
 
-4. Run the `translate_libs.sh` script in the `mir-json` submodule:
+4. Run the `mir-json-translate-libs` script in the `mir-json` submodule:
 
    :::{code-block} console
-   $ ./translate_libs.sh
+   $ mir-json-translate-libs
    :::
 
    This will compile the custom versions of the Rust standard libraries using
