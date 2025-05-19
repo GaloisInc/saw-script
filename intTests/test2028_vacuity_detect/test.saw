@@ -1,0 +1,19 @@
+// test.saw
+enable_experimental;
+
+let fun_rs_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x != x }};
+  mir_execute_func [];
+};
+mir_mod <- mir_load_module "test.linked-mir.json";
+mir_verify mir_mod "test::fun_rs" [] false fun_rs_spec z3;
+
+let fun_jvm_spec = do {
+  x <- jvm_fresh_var "x" java_int;
+  jvm_precond {{ x != x }};  // Always false
+  jvm_execute_func [];
+};
+
+cls <- java_load_class "Test";
+jvm_verify cls "fun_jvm" [] false fun_jvm_spec z3;

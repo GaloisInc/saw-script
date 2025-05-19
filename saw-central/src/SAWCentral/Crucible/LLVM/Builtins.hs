@@ -94,8 +94,7 @@ import Prelude hiding (fail)
 import qualified Control.Exception as X
 import           Control.Lens
 
-import           Control.Monad (foldM, forM, forM_, replicateM, unless, when)
-import           Control.Monad.Extra (findM, whenM)
+import           Control.Monad (foldM, forM, replicateM, unless, when)
 import           Control.Monad.Fail (MonadFail(..))
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Reader (runReaderT)
@@ -104,7 +103,6 @@ import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, fold)
-import           Data.Function
 import           Data.Functor (void)
 import           Data.IORef
 import           Data.List
@@ -212,6 +210,7 @@ import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..))
 import           SAWCentral.Crucible.Common.Override
 import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import SAWCentral.Crucible.LLVM.Override
 import SAWCentral.Crucible.LLVM.ResolveSetupValue
@@ -654,7 +653,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        io $ verifyPrestate opts cc methodSpec globals1
 
      when (detectVacuity opts)
-       $ checkAssumptionsForContradictions cc methodSpec tactic assumes
+       $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -755,7 +754,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
        io $ verifyPrestate opts cc methodSpec globals1
 
      when (detectVacuity opts)
-       $ checkAssumptionsForContradictions cc methodSpec tactic assumes
+       $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -980,86 +979,6 @@ verifyPrestate opts cc mspec globals =
      args <- resolveArguments cc mem''' mspec env
 
      return (args, cs, env, globals2)
-
--- | Checks for contradictions within the given list of assumptions, by asking
--- the solver about whether their conjunction entails falsehood.
-assumptionsContainContradiction ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
-  LLVMCrucibleContext arch ->
-  MS.CrucibleMethodSpecIR (LLVM arch) ->
-  ProofScript () ->
-  [Crucible.LabeledPred Term AssumptionReason] ->
-  TopLevel Bool
-assumptionsContainContradiction cc methodSpec tactic assumptions =
-  do
-     let sym = cc^.ccSym
-     st <- io $ Common.sawCoreState sym
-     let sc  = saw_ctx st
-     let ploc = methodSpec^.MS.csLoc
-     (goal',pgl) <- io $
-      do
-         -- conjunction of all assumptions
-         assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
-         -- implies falsehood
-         goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
-         goal' <- boolToProp sc [] goal
-         return $ (goal',
-                  ProofGoal
-                  { goalNum  = 0
-                  , goalType = "vacuousness check"
-                  , goalName = show (methodSpec^.MS.csMethod)
-                  , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
-                  , goalDesc = "vacuousness check"
-                  , goalSequent = propToSequent goal'
-                  , goalTags = mempty
-                  })
-     res <- runProofScript tactic goal' pgl Nothing
-              "vacuousness check" False False
-     case res of
-       ValidProof _ _     -> return True
-       InvalidProof _ _ _ -> return False
-       UnfinishedProof _  ->
-         -- TODO? is this the right behavior?
-         do printOutLnTop Warn "Could not determine if preconditions are vacuous"
-            return True
-
--- | Given a list of assumptions, computes and displays a smallest subset of
--- them that are contradictory among each themselves.  This is **not**
--- implemented efficiently.
-computeMinimalContradictingCore ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
-  LLVMCrucibleContext arch ->
-  MS.CrucibleMethodSpecIR (LLVM arch) ->
-  ProofScript () ->
-  [Crucible.LabeledPred Term AssumptionReason] ->
-  TopLevel ()
-computeMinimalContradictingCore cc methodSpec tactic assumes =
-  do
-     printOutLnTop Warn "Contradiction detected! Computing minimal core of contradictory assumptions:"
-     -- test subsets of assumptions of increasing sizes until we find a
-     -- contradictory one
-     let cores = sortBy (compare `on` length) (subsequences assumes)
-     findM (assumptionsContainContradiction cc methodSpec tactic) cores >>= \case
-      Nothing -> printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
-      Just core ->
-        forM_ core $ \assume ->
-          case assume^.Crucible.labeledPredMsg of
-            (loc, reason) -> printOutLnTop Warn (show loc ++ ": " ++ reason)
-     printOutLnTop Warn "Because of the contradiction, the following proofs may be vacuous."
-
--- | Checks whether the given list of assumptions contains a contradiction, and
--- if so, computes and displays a minimal set of contradictory assumptions.
-checkAssumptionsForContradictions ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
-  LLVMCrucibleContext arch ->
-  MS.CrucibleMethodSpecIR (LLVM arch) ->
-  ProofScript () ->
-  [Crucible.LabeledPred Term AssumptionReason] ->
-  TopLevel ()
-checkAssumptionsForContradictions cc methodSpec tactic assumes =
-  whenM
-    (assumptionsContainContradiction cc methodSpec tactic assumes)
-    (computeMinimalContradictingCore cc methodSpec tactic assumes)
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to

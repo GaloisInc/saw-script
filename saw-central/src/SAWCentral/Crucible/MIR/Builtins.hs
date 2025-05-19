@@ -132,6 +132,7 @@ import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Override
 import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.Override
 import SAWCentral.Crucible.MIR.ResolveSetupValue
@@ -709,6 +710,14 @@ mir_verify rm nm lemmas checkSat setup tactic =
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
+
+     -- check for contradictory preconditions
+     when (detectVacuity opts) $
+       Vacuity.checkAssumptionsForContradictions
+         sym
+         methodSpec
+         tactic
+         assumes
 
      -- run the symbolic execution
      printOutLnTop Info $

@@ -36,6 +36,11 @@ Note that build.sh is in any case the recommended way to build.
 
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 
+* Vacuity checking (`--detect-vacuity`) now correctly reports contradictions in specifications
+  for all Crucible backends: LLVM, MIR, and JVM. Previously, vacuous proofs in MIR and JVM
+  code could go undetected.
+
+
 ## Bug fixes
 
 * The `head` and `tail` primitives are now implemented in the SAW-Core
