@@ -1,0 +1,16 @@
+ Loading file "err055.saw"
+registering standard overrides
+registering user-provided overrides
+registering assumptions
+ Stack trace:
+"jvm_verify" (err055.saw:16:1-16:11)
+Symbolic execution failed.
+Abort due to assertion failure:
+  internal: error: in _SAW_JVM_verifyPrestate
+  Expected type: Bit
+  Actual type:   () -> Bit
+
+
+
+
+FAILED

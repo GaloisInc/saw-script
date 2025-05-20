@@ -1,0 +1,16 @@
+enable_experimental;
+
+let {{
+foo : () -> Bit
+foo _ = True
+}};
+
+let f_llvm_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_assert {{ foo }};
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term x);
+};
+
+mir <- llvm_load_module "err054.bc";
+llvm_verify mir "f" [] false f_llvm_spec z3;

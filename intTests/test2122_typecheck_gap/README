@@ -1,0 +1,16 @@
+These tests check for consistent type checking of predicate terms across the
+LLVM, MIR, and JVM backends. They corresponds to issue:
+
+https://github.com/GaloisInc/saw-script/issues/2122.
+
+Each test function includes an assertion over a term that is not of Cryptol type `Bit`.
+SAW should reject the spec during verification with an error message containing:
+
+  Expected type: Bit
+  Actual type:   () -> Bit
+
+This is tested using the standard type error harness in `test_type_errors/`.
+Specifically:
+  - `err054.saw` tests the LLVM backend
+  - `err055.saw` tests the JVM backend
+  - `err056.saw` tests the MIR backend

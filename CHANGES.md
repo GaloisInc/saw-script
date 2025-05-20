@@ -60,6 +60,11 @@ Note that build.sh is in any case the recommended way to build.
 * Invoking the Cryptol `error` function in SAW now preserves the error message
   instead of throwing it away.
 
+* Fixed inconsistent type checking of `llvm_assert`, `mir_assert`, and
+￼ `jvm_assert` statements. Previously, the LLVM backend implicitly rejected
+￼ predicates of non-Bit type due to evaluation failures, while MIR and JVM
+￼ backends accepted them, leading to backend-specific errors.
+
 ## Deprecations
 
 * `llvm_struct` has been marked deprecated.

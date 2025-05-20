@@ -72,7 +72,7 @@ import SAWCentral.Panic
 import SAWCentral.Crucible.JVM.MethodSpecIR
 import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
+import SAWCentral.Crucible.Common.ResolveSetupValue ( resolveBoolTerm, checkBooleanType )
 
 
 data JVMVal
@@ -217,6 +217,8 @@ resolveSAWPred ::
 resolveSAWPred cc tm =
   do let sym = cc^.jccSym
      st <- sawCoreState sym
+     let sc = saw_ctx st
+     checkBooleanType sc tm
      bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::
