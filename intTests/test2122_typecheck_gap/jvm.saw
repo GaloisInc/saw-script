@@ -12,6 +12,6 @@ let f_jvm_spec = do {
   jvm_return (jvm_term x);
 };
 
-cls <- java_load_class "err055";
+cls <- java_load_class "Test";
 jvm_verify cls "f" [] false f_jvm_spec z3;
 

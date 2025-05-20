@@ -12,5 +12,5 @@ let f_mir_spec = do {
   mir_return (mir_term x);
 };
 
-llvm <- mir_load_module "err056.json";
-mir_verify llvm "err056::f" [] false f_mir_spec z3;
+llvm <- mir_load_module "test.linked-mir.json";
+mir_verify llvm "test::f" [] false f_mir_spec z3;

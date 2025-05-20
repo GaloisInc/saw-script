@@ -1,13 +1,13 @@
-all: err054.bc err055.class err056.json
+all: test.bc test.linked-mir.json Test.class
 
-err054.bc: err054.c
+test.bc: test.c
 	clang -emit-llvm -c -o $@ $<
 
-err055.class: err055.java
+test.linked-mir.json: test.rs
+	saw-rustc $<
+
+Test.class: Test.java
 	javac -g $<
 
-err056.json: err056.rs
-	saw-rustc $< && mv err056.linked-mir.json $@
-
 clean:
-	rm -f *.class *.bc *.json *.rlib *.mir err056
+	rm -f *.class *.bc *.json *.rlib *.mir test

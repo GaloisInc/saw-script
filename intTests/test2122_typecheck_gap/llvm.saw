@@ -12,5 +12,5 @@ let f_llvm_spec = do {
   llvm_return (llvm_term x);
 };
 
-mir <- llvm_load_module "err054.bc";
+mir <- llvm_load_module "test.bc";
 llvm_verify mir "f" [] false f_llvm_spec z3;
