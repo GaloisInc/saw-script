@@ -309,7 +309,7 @@ processDecls [] = return ()
 
 processDecls (Un.InjectCodeDecl ns txt : rest) =
   do mnm <- getModuleName
-     liftTCM scModifyModule mnm $ \m -> insInjectCode m ns txt
+     liftTCM scInjectCode mnm ns txt
      processDecls rest
 
 processDecls (Un.TypedDef nm params rty body : rest) =
