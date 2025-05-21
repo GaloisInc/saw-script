@@ -1,39 +1,39 @@
-Cabal-version: 3.0
-Name:          saw
-Version:       1.3.0.99
-Author:        Galois, Inc.
-Maintainer:    saw@galois.com
-Build-type:    Simple
-License:       BSD-3-Clause
-License-file:  LICENSE
-Copyright:     Copyright 2012-2025 Galois, Inc.
-Category:      Formal Methods
-Synopsis:      The Software Analysis Workbench
+Cabal-version:      3.0
+Name:               saw
+Version:            1.3.0.99
+Author:             Galois, Inc.
+Maintainer:         saw@galois.com
+Build-type:         Simple
+License:            BSD-3-Clause
+License-file:       LICENSE
+Copyright:          Copyright 2012-2025 Galois, Inc.
+Category:           Formal Methods
+Synopsis:           The Software Analysis Workbench
 Description:
   SAW is a tool supporting a broad range of formal verification
   scenarios.
 
 -- extra files for saw-core
 extra-source-files:
-    saw-core/prelude/Prelude.sawcore
-    saw-core/src/SAWCore/Grammar.y
-    saw-core/src/SAWCore/Lexer.x
+  saw-core/prelude/Prelude.sawcore
+  saw-core/src/SAWCore/Grammar.y
+  saw-core/src/SAWCore/Lexer.x
 
 -- extra files for cryptol-saw-core
 extra-source-files:
-    cryptol-saw-core/saw/Cryptol.sawcore
-    cryptol-saw-core/saw/SpecM.sawcore
-    cryptol-saw-core/saw/CryptolM.sawcore
+  cryptol-saw-core/saw/Cryptol.sawcore
+  cryptol-saw-core/saw/SpecM.sawcore
+  cryptol-saw-core/saw/CryptolM.sawcore
 
 -- extra files for heapster
 extra-source-files:
-    heapster/src/Heapster/Lexer.x
-    heapster/src/Heapster/Parser.y
+  heapster/src/Heapster/Lexer.x
+  heapster/src/Heapster/Parser.y
 
 -- extra files for saw-script
 extra-source-files:
-    saw-script/src/SAWScript/Parser.y
-    saw-script/src/SAWScript/Lexer.x
+  saw-script/src/SAWScript/Parser.y
+  saw-script/src/SAWScript/Lexer.x
 
 
 ------------------------------------------------------------
@@ -47,12 +47,12 @@ library saw-version
   visibility: public
 
   build-depends:
-      base >= 4.9
+    base >= 4.9
 
   hs-source-dirs: saw-version/src
   exposed-modules:
-      SAWVersion.GitRev
-      SAWVersion.Version
+    SAWVersion.GitRev
+    SAWVersion.Version
   other-modules:
     Paths_saw
   autogen-modules:
@@ -83,7 +83,7 @@ library saw-support
 
   hs-source-dirs: saw-support/src
   exposed-modules:
-     SAWSupport.PanicSupport
+    SAWSupport.PanicSupport
 
   GHC-options: -Wall -Werror -Wcompat
 
@@ -140,48 +140,48 @@ library saw-core
 
   hs-source-dirs: saw-core/src
   exposed-modules:
-     SAWCore.SAWCore
-     SAWCore.Constant
-     SAWCore.ExternalFormat
-     SAWCore.Conversion
-     SAWCore.Cache
-     SAWCore.FiniteValue
-     SAWCore.Grammar
-     SAWCore.Lexer
-     SAWCore.Module
-     SAWCore.Name
-     SAWCore.ParserUtils
-     SAWCore.Position
-     SAWCore.Prelude
-     SAWCore.Prelude.Constants
-     SAWCore.Prim
-     SAWCore.Recognizer
-     SAWCore.Rewriter
-     SAWCore.SATQuery
-     SAWCore.SCTypeCheck
-     SAWCore.Simulator
-     SAWCore.Simulator.Concrete
-     SAWCore.Simulator.TermModel
-     SAWCore.Simulator.MonadLazy
-     SAWCore.Simulator.Prims
-     SAWCore.Simulator.RME
-     SAWCore.Simulator.Value
-     SAWCore.SharedTerm
-     SAWCore.Term.Functor
-     SAWCore.Term.CtxTerm
-     SAWCore.OpenTerm
-     SAWCore.Term.Pretty
-     SAWCore.TermNet
-     SAWCore.Testing.Random
-     SAWCore.Typechecker
-     SAWCore.TypedAST
-     SAWCore.Unique
-     SAWCore.UntypedAST
-     SAWCore.Change
-     SAWCore.Utils
+    SAWCore.SAWCore
+    SAWCore.Constant
+    SAWCore.ExternalFormat
+    SAWCore.Conversion
+    SAWCore.Cache
+    SAWCore.FiniteValue
+    SAWCore.Grammar
+    SAWCore.Lexer
+    SAWCore.Module
+    SAWCore.Name
+    SAWCore.ParserUtils
+    SAWCore.Position
+    SAWCore.Prelude
+    SAWCore.Prelude.Constants
+    SAWCore.Prim
+    SAWCore.Recognizer
+    SAWCore.Rewriter
+    SAWCore.SATQuery
+    SAWCore.SCTypeCheck
+    SAWCore.Simulator
+    SAWCore.Simulator.Concrete
+    SAWCore.Simulator.TermModel
+    SAWCore.Simulator.MonadLazy
+    SAWCore.Simulator.Prims
+    SAWCore.Simulator.RME
+    SAWCore.Simulator.Value
+    SAWCore.SharedTerm
+    SAWCore.Term.Functor
+    SAWCore.Term.CtxTerm
+    SAWCore.OpenTerm
+    SAWCore.Term.Pretty
+    SAWCore.TermNet
+    SAWCore.Testing.Random
+    SAWCore.Typechecker
+    SAWCore.TypedAST
+    SAWCore.Unique
+    SAWCore.UntypedAST
+    SAWCore.Change
+    SAWCore.Utils
   other-modules:
-     SAWCore.Panic
-     SAWCore.UnionFind
+    SAWCore.Panic
+    SAWCore.UnionFind
 
   GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)
@@ -236,15 +236,15 @@ library cryptol-saw-core
 
   hs-source-dirs: cryptol-saw-core/src
   exposed-modules:
-     CryptolSAWCore.Cryptol
-     CryptolSAWCore.CryptolEnv
-     CryptolSAWCore.Monadify
-     CryptolSAWCore.Prelude
-     CryptolSAWCore.PreludeM
-     CryptolSAWCore.Simpset
-     CryptolSAWCore.TypedTerm
+    CryptolSAWCore.Cryptol
+    CryptolSAWCore.CryptolEnv
+    CryptolSAWCore.Monadify
+    CryptolSAWCore.Prelude
+    CryptolSAWCore.PreludeM
+    CryptolSAWCore.Simpset
+    CryptolSAWCore.TypedTerm
   other-modules:
-     CryptolSAWCore.Panic
+    CryptolSAWCore.Panic
 
   -- GHC-options: -Wall -Werror
   GHC-options: -Wall
@@ -284,14 +284,14 @@ library saw-core-coq
 
   hs-source-dirs: saw-core-coq/src
   exposed-modules:
-     Language.Coq.AST
-     Language.Coq.Pretty
-     SAWCoreCoq.Coq
-     SAWCoreCoq.CryptolModule
-     SAWCoreCoq.SAWModule
-     SAWCoreCoq.Monad
-     SAWCoreCoq.Term
-     SAWCoreCoq.SpecialTreatment
+    Language.Coq.AST
+    Language.Coq.Pretty
+    SAWCoreCoq.Coq
+    SAWCoreCoq.CryptolModule
+    SAWCoreCoq.SAWModule
+    SAWCoreCoq.Monad
+    SAWCoreCoq.Term
+    SAWCoreCoq.SpecialTreatment
 
   ghc-options: -Wall -Werror
 
@@ -325,9 +325,9 @@ library saw-core-aig
 
   hs-source-dirs: saw-core-aig/src
   exposed-modules:
-     SAWCoreAIG.BitBlast
+    SAWCoreAIG.BitBlast
   other-modules:
-     SAWCoreAIG.Panic
+    SAWCoreAIG.Panic
 
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
@@ -362,10 +362,10 @@ library saw-core-sbv
 
   hs-source-dirs: saw-core-sbv/src
   exposed-modules:
-     SAWCoreSBV.SBV
-     SAWCoreSBV.SWord
+    SAWCoreSBV.SBV
+    SAWCoreSBV.SWord
   other-modules:
-     SAWCoreSBV.Panic
+    SAWCoreSBV.Panic
 
   GHC-options: -Wall -Werror -Wcompat
 
@@ -404,12 +404,12 @@ library saw-core-what4
 
   hs-source-dirs: saw-core-what4/src
   exposed-modules:
-     SAWCoreWhat4.What4
-     SAWCoreWhat4.FirstOrder
-     SAWCoreWhat4.PosNat
-     SAWCoreWhat4.ReturnTrip
+    SAWCoreWhat4.What4
+    SAWCoreWhat4.FirstOrder
+    SAWCoreWhat4.PosNat
+    SAWCoreWhat4.ReturnTrip
   other-modules:
-     SAWCoreWhat4.Panic
+    SAWCoreWhat4.Panic
 
   GHC-options: -Wall -Werror
 
@@ -544,14 +544,14 @@ library saw-central
     utf8-string,
     vector,
     zenc,
-       -- apparently no longer used:
-       --   either
-       --   executable-path
-       --   fgl
-       --   parsec
-       --   QuickCheck
-       --   template-haskell
-       --   transformers-compat
+    -- apparently no longer used:
+    --   either
+    --   executable-path
+    --   fgl
+    --   parsec
+    --   QuickCheck
+    --   template-haskell
+    --   transformers-compat
 
     -- galois packages from hackage
     bv-sized >= 1.0 && < 1.1,
@@ -579,10 +579,10 @@ library saw-central
     parameterized-utils,
     what4 >= 0.4,
     what4-transition-system,
-       -- apparently no longer used:
-       --   flexdis86
+    -- apparently no longer used:
+    --   flexdis86
 
-      -- internal subpackages/sublibraries in the saw tree
+    -- internal subpackages/sublibraries in the saw tree
     rme,
     saw:saw-support,
     saw:saw-core,
@@ -798,70 +798,70 @@ library saw-server
   visibility: public
 
   build-depends:
-                 -- upstream packages from hackage
-                 base >=4.11.1.0 && <4.20,
-                 aeson >= 1.4.2 && < 2.3,
-                 base64-bytestring,
-                 bytestring,
-                 containers >= 0.6 && < 0.7,
-                 cryptonite,
-                 cryptonite-conduit,
-                 directory,
-                 lens,
-                 mtl,
-                 silently,
-                 text,
-                 unordered-containers,
-                 vector >= 0.12 && < 0.14,
+    -- upstream packages from hackage
+    base >=4.11.1.0 && <4.20,
+    aeson >= 1.4.2 && < 2.3,
+    base64-bytestring,
+    bytestring,
+    containers >= 0.6 && < 0.7,
+    cryptonite,
+    cryptonite-conduit,
+    directory,
+    lens,
+    mtl,
+    silently,
+    text,
+    unordered-containers,
+    vector >= 0.12 && < 0.14,
 
-                 -- packages in git submodules
-                 aig,
-                 argo,
-                 cryptol >= 2.8.1,
-                 cryptol-remote-api,
-                 crucible,
-                 crucible-jvm,
-                 crucible-mir,
-                 jvm-parser,
-                 llvm-pretty,
-                 llvm-pretty-bc-parser,
-                 parameterized-utils,
+    -- packages in git submodules
+    aig,
+    argo,
+    cryptol >= 2.8.1,
+    cryptol-remote-api,
+    crucible,
+    crucible-jvm,
+    crucible-mir,
+    jvm-parser,
+    llvm-pretty,
+    llvm-pretty-bc-parser,
+    parameterized-utils,
 
-                 -- internal subpackages in the saw tree
-                 saw:saw-core,
-                 saw:cryptol-saw-core,
-                 saw:saw-central
+    -- internal subpackages in the saw tree
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-central
 
   hs-source-dirs: saw-server/src
   exposed-modules:
-                   SAWServer.SAWServer,
-                   SAWServer.ClearState,
-                   SAWServer.CryptolExpression,
-                   SAWServer.CryptolSetup,
-                   SAWServer.Data.Contract,
-                   SAWServer.Data.JVMType,
-                   SAWServer.Data.LLVMType,
-                   SAWServer.Data.MIRType,
-                   SAWServer.Data.SetupValue,
-                   SAWServer.Eval,
-                   SAWServer.Exceptions,
-                   SAWServer.Ghost,
-                   SAWServer.JVMCrucibleSetup,
-                   SAWServer.JVMVerify,
-                   SAWServer.LLVMCrucibleSetup,
-                   SAWServer.LLVMVerify,
-                   SAWServer.MIRCrucibleSetup,
-                   SAWServer.MIRFindADT,
-                   SAWServer.MIRVerify,
-                   SAWServer.NoParams,
-                   SAWServer.OK,
-                   SAWServer.ProofScript,
-                   SAWServer.SaveTerm,
-                   SAWServer.SetOption,
-                   SAWServer.TopLevel,
-                   SAWServer.TrackFile,
-                   SAWServer.VerifyCommon,
-                   SAWServer.Yosys
+    SAWServer.SAWServer,
+    SAWServer.ClearState,
+    SAWServer.CryptolExpression,
+    SAWServer.CryptolSetup,
+    SAWServer.Data.Contract,
+    SAWServer.Data.JVMType,
+    SAWServer.Data.LLVMType,
+    SAWServer.Data.MIRType,
+    SAWServer.Data.SetupValue,
+    SAWServer.Eval,
+    SAWServer.Exceptions,
+    SAWServer.Ghost,
+    SAWServer.JVMCrucibleSetup,
+    SAWServer.JVMVerify,
+    SAWServer.LLVMCrucibleSetup,
+    SAWServer.LLVMVerify,
+    SAWServer.MIRCrucibleSetup,
+    SAWServer.MIRFindADT,
+    SAWServer.MIRVerify,
+    SAWServer.NoParams,
+    SAWServer.OK,
+    SAWServer.ProofScript,
+    SAWServer.SaveTerm,
+    SAWServer.SetOption,
+    SAWServer.TopLevel,
+    SAWServer.TrackFile,
+    SAWServer.VerifyCommon,
+    SAWServer.Yosys
 
   ghc-options:
     -Wall
@@ -911,43 +911,43 @@ executable saw-remote-api
   default-language: Haskell2010
 
   build-depends:
-                 -- upstream packages from hackage
-                 base >=4.11.1.0 && <4.20,
-                 aeson >= 1.4.2 && < 2.3,
-                 base64-bytestring,
-                 bytestring,
-                 containers >= 0.6 && < 0.7,
-                 cryptonite,
-                 cryptonite-conduit,
-                 directory,
-                 lens,
-                 mtl,
-                 silently,
-                 text,
-                 unordered-containers,
-                 vector >= 0.12 && < 0.14,
+    -- upstream packages from hackage
+    base >=4.11.1.0 && <4.20,
+    aeson >= 1.4.2 && < 2.3,
+    base64-bytestring,
+    bytestring,
+    containers >= 0.6 && < 0.7,
+    cryptonite,
+    cryptonite-conduit,
+    directory,
+    lens,
+    mtl,
+    silently,
+    text,
+    unordered-containers,
+    vector >= 0.12 && < 0.14,
 
-                 -- packages in git submodules
-                 aig,
-                 argo,
-                 cryptol >= 2.8.1,
-                 cryptol-remote-api,
-                 crucible,
-                 crucible-jvm,
-                 crucible-mir,
-                 jvm-parser,
-                 llvm-pretty,
-                 llvm-pretty-bc-parser,
-                 parameterized-utils,
+    -- packages in git submodules
+    aig,
+    argo,
+    cryptol >= 2.8.1,
+    cryptol-remote-api,
+    crucible,
+    crucible-jvm,
+    crucible-mir,
+    jvm-parser,
+    llvm-pretty,
+    llvm-pretty-bc-parser,
+    parameterized-utils,
 
-                 -- internal subpackages in the saw tree
-                 saw:saw-core,
-                 saw:cryptol-saw-core,
-                 saw:saw-central,
-                 saw:saw-server
+    -- internal subpackages in the saw tree
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-central,
+    saw:saw-server
 
   hs-source-dirs: saw-remote-api
-  main-is:             Main.hs
+  main-is: Main.hs
 
   ghc-options:
     -O2
@@ -985,8 +985,8 @@ executable css
     saw:saw-core-aig,
     saw:cryptol-saw-core
 
-  hs-source-dirs : saw-tools/css
-  main-is : Main.hs
+  hs-source-dirs: saw-tools/css
+  main-is: Main.hs
 
   GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
   extra-libraries:      stdc++
@@ -1045,15 +1045,15 @@ test-suite integration_tests
 
   build-tool-depends: saw:saw
   build-depends:
-               -- upstream packages from hackage
-               base,
-               directory,
-               filemanip,
-               filepath,
-               process,
-               tasty,
-               tasty-hunit,
-               tasty-expected-failure,
+    -- upstream packages from hackage
+    base,
+    directory,
+    filemanip,
+    filepath,
+    process,
+    tasty,
+    tasty-hunit,
+    tasty-expected-failure,
 
   type: exitcode-stdio-1.0
   hs-source-dirs: intTests
@@ -1152,24 +1152,24 @@ test-suite prover_tests
   default-language: Haskell2010
 
   build-depends:
-               -- upstream packages from hackage
-               base,
-               directory,
-               filemanip,
-               filepath,
-               process,
-               tasty,
-               tasty-hunit,
-               tasty-expected-failure,
+    -- upstream packages from hackage
+    base,
+    directory,
+    filemanip,
+    filepath,
+    process,
+    tasty,
+    tasty-hunit,
+    tasty-expected-failure,
 
-               -- packages in git submodules
-               -- (hobbits is for now actually a source-repository-package)
-               crucible,
-               crucible-llvm,
-               hobbits ^>= 1.4,
+    -- packages in git submodules
+    -- (hobbits is for now actually a source-repository-package)
+    crucible,
+    crucible-llvm,
+    hobbits ^>= 1.4,
 
-               -- the heapster library in the saw tree
-               saw:heapster
+    -- the heapster library in the saw tree
+    saw:heapster
 
   type: exitcode-stdio-1.0
   hs-source-dirs: heapster/proverTests

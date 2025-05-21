@@ -1,18 +1,18 @@
-cabal-version:       3.0
-name:                crucible-mir-comp
-version:             0.1
-author:              Joshua Gancher,
-                     Rob Dockins,
-                     Andrey Chudnov,
-                     Stephanie Weirich,
-                     Stuart Pernsteiner
-maintainer:          spernsteiner@galois.com
-build-type:          Simple
-license:             BSD-3-Clause
-license-file:        LICENSE
-copyright:           2017-2023 Galois, Inc.
-homepage:            https://github.com/GaloisInc/saw-script/blob/master/crucible-mir-comp/README.md
-category:            Formal Methods
+cabal-version:      3.0
+name:               crucible-mir-comp
+version:            0.1
+author:             Joshua Gancher,
+                    Rob Dockins,
+                    Andrey Chudnov,
+                    Stephanie Weirich,
+                    Stuart Pernsteiner
+maintainer:         spernsteiner@galois.com
+build-type:         Simple
+license:            BSD-3-Clause
+license-file:       LICENSE
+copyright:          2017-2023 Galois, Inc.
+homepage:           https://github.com/GaloisInc/saw-script/blob/master/crucible-mir-comp/README.md
+category:           Formal Methods
 -- synopsis:
 -- description:
 
@@ -22,36 +22,36 @@ library
   default-language: Haskell2010
 
   build-depends:
-                 -- upstream packages from hackage
-                 base >= 4.9 && < 5,
-                 bytestring,
-                 containers,
-                 lens,
-                 mtl,
-                 prettyprinter >= 1.7.0,
-                 text,
-                 vector,
+    -- upstream packages from hackage
+    base >= 4.9 && < 5,
+    bytestring,
+    containers,
+    lens,
+    mtl,
+    prettyprinter >= 1.7.0,
+    text,
+    vector,
 
-                 -- galois packages from hackage
-                 bv-sized,
+    -- galois packages from hackage
+    bv-sized,
 
-                 -- packages in git submodules
-                 crucible,
-                 crucible-mir,
-                 parameterized-utils >= 1.0.8,
-                 what4,
+    -- packages in git submodules
+    crucible,
+    crucible-mir,
+    parameterized-utils >= 1.0.8,
+    what4,
 
-                 -- internal subpackages in the saw tree
-                 saw:saw-core,
-                 saw:cryptol-saw-core,
-                 saw:saw-core-what4,
-                 saw:saw-central
+    -- internal subpackages in the saw tree
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-core-what4,
+    saw:saw-central
 
   hs-source-dirs: src
   exposed-modules:
-                   Mir.Compositional.Builder
-                   Mir.Compositional.Clobber
-                   Mir.Compositional.Convert
-                   Mir.Compositional.Override
+    Mir.Compositional.Builder
+    Mir.Compositional.Clobber
+    Mir.Compositional.Convert
+    Mir.Compositional.Override
 
   ghc-options: -Wall
