@@ -45,6 +45,7 @@ extra-source-files:
 library saw-version
   default-language: Haskell2010
   visibility: public
+
   build-depends:
       base >= 4.9
 
@@ -52,7 +53,6 @@ library saw-version
   exposed-modules:
       SAWVersion.GitRev
       SAWVersion.Version
-
   other-modules:
     Paths_saw
   autogen-modules:
@@ -96,6 +96,9 @@ library saw-core
   default-language: Haskell2010
   visibility: public
 
+  build-tool-depends:
+    alex:alex >= 3.1.3,
+    happy:happy >= 1.9.6
   build-depends:
     -- upstream packages from hackage
     base >= 4.8,
@@ -190,10 +193,6 @@ library saw-core
     ImplicitParams
     ViewPatterns
 
-  build-tool-depends:
-    alex:alex >= 3.1.3,
-    happy:happy >= 1.9.6
-
 
 ------------------------------------------------------------
 -- cryptol-saw-core
@@ -246,6 +245,7 @@ library cryptol-saw-core
      CryptolSAWCore.TypedTerm
   other-modules:
      CryptolSAWCore.Panic
+
   -- GHC-options: -Wall -Werror
   GHC-options: -Wall
 
@@ -258,8 +258,8 @@ library cryptol-saw-core
 library saw-core-coq
   default-language: Haskell2010
   visibility: private
-  build-depends:
 
+  build-depends:
     -- upstream packages from hackage
     base == 4.*,
     containers,
@@ -292,6 +292,7 @@ library saw-core-coq
      SAWCoreCoq.Monad
      SAWCoreCoq.Term
      SAWCoreCoq.SpecialTreatment
+
   ghc-options: -Wall -Werror
 
 
@@ -306,8 +307,9 @@ library saw-core-coq
 
 library saw-core-aig
   default-language: Haskell2010
-  build-depends:
+  visibility: public
 
+  build-depends:
     -- upstream packages from hackage
     base == 4.*,
     containers,
@@ -322,7 +324,6 @@ library saw-core-aig
     saw:saw-core
 
   hs-source-dirs: saw-core-aig/src
-
   exposed-modules:
      SAWCoreAIG.BitBlast
   other-modules:
@@ -342,8 +343,9 @@ library saw-core-aig
 -- intermediate language using the SBV library to generate SMT-Lib.
 library saw-core-sbv
   default-language: Haskell2010
-  build-depends:
+  visibility: public
 
+  build-depends:
     -- upstream packages from hackage
     base == 4.*,
     containers,
@@ -359,7 +361,6 @@ library saw-core-sbv
     saw:saw-core
 
   hs-source-dirs: saw-core-sbv/src
-
   exposed-modules:
      SAWCoreSBV.SBV
      SAWCoreSBV.SWord
@@ -379,8 +380,8 @@ library saw-core-sbv
 library saw-core-what4
   default-language: Haskell2010
   visibility: public
-  build-depends:
 
+  build-depends:
     -- upstream packages from hackage
     base >= 4.9,
     bv-sized >= 1.0.0,
@@ -424,8 +425,11 @@ library saw-core-what4
 library heapster
   default-language: Haskell2010
   visibility: private
-  build-depends:
 
+  build-tool-depends:
+    alex:alex,
+    happy:happy
+  build-depends:
     -- upstream packages from hackage
     base == 4.*,
     aeson >= 1.5 && < 2.3,
@@ -489,10 +493,8 @@ library heapster
   other-modules:
     Heapster.Panic
     Heapster.PatternMatchUtil
+
   GHC-options: -Wall
-  build-tool-depends:
-    alex:alex,
-    happy:happy,
 
 
 ------------------------------------------------------------
@@ -504,8 +506,8 @@ library heapster
 library saw-central
   default-language: Haskell2010
   visibility: public
-  build-depends:
 
+  build-depends:
       -- upstream packages from hackage
       base >= 4.9
     , aeson >= 2.0 && < 2.3
@@ -593,7 +595,6 @@ library saw-central
     , saw:saw-version
 
   hs-source-dirs: saw-central/src
-
   exposed-modules:
     SAWCentral.Options
     SAWCentral.Position
@@ -684,7 +685,6 @@ library saw-central
     SAWCentral.VerificationSummary
 
     SAWCentral.Value
-
   other-modules:
     SAWCentral.Panic
 
@@ -702,8 +702,14 @@ library saw-central
 -- language.
 library saw-script
   default-language: Haskell2010
-  build-depends:
+  visibility: private
 
+  build-tool-depends:
+    -- note: as of 20250521 alex < 3.2.6 fails dependency resolution,
+    -- but 3.2.6 works, and so does the current latest (3.5.3)
+    alex:alex >= 3.1.3,
+    happy:happy >= 1.9.4
+  build-depends:
       -- upstream packages from hackage
       base >= 4.9
     , ansi-terminal
@@ -750,7 +756,6 @@ library saw-script
     , saw:saw-central
 
   hs-source-dirs: saw-script/src
-
   exposed-modules:
     SAWScript.AutoMatch
     SAWScript.AutoMatch.Interaction
@@ -776,19 +781,12 @@ library saw-script
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.REPL.Trie
-
   other-modules:
     SAWScript.Panic
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
-
-  build-tool-depends:
-    -- note: as of 20250521 alex < 3.2.6 fails dependency resolution,
-    -- but 3.2.6 works, and so does the current latest (3.5.3)
-    alex:alex >= 3.1.3,
-    happy:happy >= 1.9.4
 
 
 ------------------------------------------------------------
@@ -798,6 +796,7 @@ library saw-script
 library saw-server
   default-language: Haskell2010
   visibility: public
+
   build-depends:
                  -- upstream packages from hackage
                  base >=4.11.1.0 && <4.20,
@@ -834,7 +833,8 @@ library saw-server
                  saw:saw-central
 
   hs-source-dirs: saw-server/src
-  exposed-modules: SAWServer.SAWServer,
+  exposed-modules:
+                   SAWServer.SAWServer,
                    SAWServer.ClearState,
                    SAWServer.CryptolExpression,
                    SAWServer.CryptolSetup,
@@ -877,18 +877,8 @@ library saw-server
 -- The saw executable is where you run the saw-script interpreter.
 executable saw
   default-language: Haskell2010
-  hs-source-dirs: saw
-
-  main-is: Main.hs
-
-  other-modules:
-    Paths_saw
-
-  autogen-modules:
-    Paths_saw
 
   build-depends:
-
       -- upstream packages from hackage
       base >= 4.5
     , directory
@@ -902,6 +892,13 @@ executable saw
     , saw:saw-central
     , saw:saw-script
 
+  hs-source-dirs: saw
+  main-is: Main.hs
+  other-modules:
+    Paths_saw
+  autogen-modules:
+    Paths_saw
+
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
 
@@ -912,6 +909,7 @@ executable saw
 -- API interface.
 executable saw-remote-api
   default-language: Haskell2010
+
   build-depends:
                  -- upstream packages from hackage
                  base >=4.11.1.0 && <4.20,
@@ -948,8 +946,9 @@ executable saw-remote-api
                  saw:saw-central,
                  saw:saw-server
 
-  main-is:             Main.hs
   hs-source-dirs: saw-remote-api
+  main-is:             Main.hs
+
   ghc-options:
     -O2
     -threaded
@@ -969,7 +968,6 @@ executable css
   default-language: Haskell2010
 
   build-depends:
-
     -- upstream packages from hackage
     base >= 4.5,
     array,
@@ -989,6 +987,7 @@ executable css
 
   hs-source-dirs : saw-tools/css
   main-is : Main.hs
+
   GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
   extra-libraries:      stdc++
 
@@ -1042,14 +1041,9 @@ executable extcore-info
 -- The integration_tests/intTests test suite is the main SAW test
 -- suite.
 test-suite integration_tests
-  type: exitcode-stdio-1.0
-  hs-source-dirs: intTests
-
-  ghc-options: -Wall -threaded
   default-language: Haskell2010
 
-  main-is: IntegrationTest.hs
-
+  build-tool-depends: saw:saw
   build-depends:
                  -- upstream packages from hackage
                  base
@@ -1061,11 +1055,15 @@ test-suite integration_tests
                , tasty-hunit
                , tasty-expected-failure
 
-  build-tool-depends: saw:saw
+  type: exitcode-stdio-1.0
+  hs-source-dirs: intTests
+  main-is: IntegrationTest.hs
+
+  ghc-options: -Wall -threaded
+
 
 -- There's a saw-core test suite.
 test-suite test-sawcore
-  type: exitcode-stdio-1.0
   default-language: Haskell2010
 
   build-depends:
@@ -1089,8 +1087,9 @@ test-suite test-sawcore
       -- the saw-core library in the saw tree
     , saw:saw-core
 
-  main-is: Tests.hs
+  type: exitcode-stdio-1.0
   hs-source-dirs: otherTests/saw-core
+  main-is: Tests.hs
   other-modules:
     Tests.CacheTests
     Tests.Functor
@@ -1103,11 +1102,7 @@ test-suite test-sawcore
 
 -- The cryptol-saw-core library has its own small test suite.
 test-suite cryptol-saw-core-tc-test
-  type: exitcode-stdio-1.0
   default-language: Haskell2010
-
-  hs-source-dirs: otherTests/cryptol-saw-core
-  main-is: CryptolVerifierTC.hs
 
   build-depends:
     -- upstream packages from hackage
@@ -1124,15 +1119,15 @@ test-suite cryptol-saw-core-tc-test
     saw:saw-core,
     saw:cryptol-saw-core
 
+  type: exitcode-stdio-1.0
+  hs-source-dirs: otherTests/cryptol-saw-core
+  main-is: CryptolVerifierTC.hs
+
   GHC-options: -threaded
 
 -- saw-core-coq has its own small test suite.
 test-suite saw-core-coq-tests
-  type: exitcode-stdio-1.0
   default-language: Haskell2010
-
-  hs-source-dirs: otherTests/saw-core-coq
-  main-is: Test.hs
 
   build-depends:
     -- upstream packages from hackage
@@ -1146,15 +1141,15 @@ test-suite saw-core-coq-tests
     saw:saw-core,
     saw:saw-core-coq,
 
+  type: exitcode-stdio-1.0
+  hs-source-dirs: otherTests/saw-core-coq
+  main-is: Test.hs
+
   ghc-options: -Wall -threaded
 
 -- heapster has a test suite.
 test-suite prover_tests
-  type: exitcode-stdio-1.0
   default-language: Haskell2010
-
-  hs-source-dirs: heapster/proverTests
-  main-is: Main.hs
 
   build-depends:
                  -- upstream packages from hackage
@@ -1175,5 +1170,9 @@ test-suite prover_tests
 
                  -- the heapster library in the saw tree
                , saw:heapster
+
+  type: exitcode-stdio-1.0
+  hs-source-dirs: heapster/proverTests
+  main-is: Main.hs
 
   ghc-options: -Wall -threaded

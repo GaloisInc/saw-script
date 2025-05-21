@@ -1,24 +1,26 @@
 cabal-version:       3.0
 name:                crucible-mir-comp
 version:             0.1
--- synopsis:
--- description:
-homepage:            https://github.com/GaloisInc/saw-script/blob/master/crucible-mir-comp/README.md
-license:             BSD-3-Clause
-license-file:        LICENSE
 author:              Joshua Gancher,
                      Rob Dockins,
                      Andrey Chudnov,
                      Stephanie Weirich,
                      Stuart Pernsteiner
 maintainer:          spernsteiner@galois.com
-copyright:           2017-2023 Galois, Inc.
-category:            Web
 build-type:          Simple
+license:             BSD-3-Clause
+license-file:        LICENSE
+copyright:           2017-2023 Galois, Inc.
+homepage:            https://github.com/GaloisInc/saw-script/blob/master/crucible-mir-comp/README.md
+category:            Formal Methods
+-- synopsis:
+-- description:
+
 extra-source-files:  README.md
 
 library
   default-language: Haskell2010
+
   build-depends:
                  -- upstream packages from hackage
                  base >= 4.9 && < 5,
@@ -46,7 +48,8 @@ library
                  saw:saw-central
 
   hs-source-dirs: src
-  exposed-modules: Mir.Compositional.Builder
+  exposed-modules:
+                   Mir.Compositional.Builder
                    Mir.Compositional.Clobber
                    Mir.Compositional.Convert
                    Mir.Compositional.Override
