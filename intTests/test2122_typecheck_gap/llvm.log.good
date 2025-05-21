@@ -1,0 +1,17 @@
+ Loading file "llvm.saw"
+ Verifying f ...
+ Simulating f ...
+ Stack trace:
+"llvm_verify" (llvm.saw:16:1-16:12)
+Symbolic execution failed.
+Abort due to assertion failure:
+  internal: error: in _SAW_LLVM_verifyPrestate
+  Expected type: Bit
+  Actual type:   () -> Bit
+
+Base memory
+  Allocations:
+    GlobalAlloc 1 0x0:[64] Immutable 1-byte-aligned [defined function ] f
+
+
+FAILED

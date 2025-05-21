@@ -1,0 +1,16 @@
+enable_experimental;
+
+let {{
+foo : () -> Bit
+foo _ = True
+}};
+
+let f_mir_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_assert {{ foo }};
+  mir_execute_func [mir_term x];
+  mir_return (mir_term x);
+};
+
+llvm <- mir_load_module "test.linked-mir.json";
+mir_verify llvm "test::f" [] false f_mir_spec z3;
