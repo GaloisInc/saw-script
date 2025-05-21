@@ -35,6 +35,12 @@ extra-source-files:
   saw-script/src/SAWScript/Parser.y
   saw-script/src/SAWScript/Lexer.x
 
+-- declare GHC options once
+common ghc-options
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+common ghc-options-executable
+  ghc-options: -threaded -rtsopts
+
 
 ------------------------------------------------------------
 -- saw-version
@@ -43,6 +49,7 @@ extra-source-files:
 -- information. It's a separate library in the hopes of reducing the
 -- rebuild impact when the git revision changes.
 library saw-version
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -58,14 +65,13 @@ library saw-version
   autogen-modules:
     Paths_saw
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-support
 
 -- Support material shared by the rest of SAW.
 library saw-support
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -85,14 +91,13 @@ library saw-support
   exposed-modules:
     SAWSupport.PanicSupport
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-core
 
 -- The SAWCore intermediate language
 library saw-core
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -183,7 +188,6 @@ library saw-core
     SAWCore.Panic
     SAWCore.UnionFind
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
   ghc-prof-options: -fprof-auto -fprof-cafs
@@ -203,6 +207,7 @@ library saw-core
 -- analysed by various backend proof systems.
 
 library cryptol-saw-core
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -246,8 +251,6 @@ library cryptol-saw-core
   other-modules:
     CryptolSAWCore.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-core-coq
@@ -255,6 +258,7 @@ library cryptol-saw-core
 -- The saw-core-coq library implements a backend for translating terms
 -- in the SAWCore intermediate language into the syntax of Coq/Rocq.
 library saw-core-coq
+  import: ghc-options
   default-language: Haskell2010
   visibility: private
 
@@ -292,8 +296,6 @@ library saw-core-coq
     SAWCoreCoq.Term
     SAWCoreCoq.SpecialTreatment
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-core-aig
@@ -305,6 +307,7 @@ library saw-core-coq
 -- And-Inverter Graphs (AIGs).
 
 library saw-core-aig
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -328,7 +331,6 @@ library saw-core-aig
   other-modules:
     SAWCoreAIG.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
@@ -341,6 +343,7 @@ library saw-core-aig
 -- A backend for symbolically evaluating terms in the SAWCore
 -- intermediate language using the SBV library to generate SMT-Lib.
 library saw-core-sbv
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -366,8 +369,6 @@ library saw-core-sbv
   other-modules:
     SAWCoreSBV.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-core-what4
@@ -377,6 +378,7 @@ library saw-core-sbv
 -- A backend for symbolically evaluating terms in the SAWCore
 -- intermediate language using the What4 library to generate SMT-Lib.
 library saw-core-what4
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -410,8 +412,6 @@ library saw-core-what4
   other-modules:
     SAWCoreWhat4.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- heapster
@@ -422,6 +422,7 @@ library saw-core-what4
 -- translation from well-typed programs into pure monadic SAW core
 -- programs
 library heapster
+  import: ghc-options
   default-language: Haskell2010
   visibility: private
 
@@ -493,8 +494,6 @@ library heapster
     Heapster.Panic
     Heapster.PatternMatchUtil
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw-central
@@ -503,6 +502,7 @@ library heapster
 -- meaning the verification primitives and logic shared between
 -- the saw-script interpreter and the remote API interface.
 library saw-central
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -687,7 +687,6 @@ library saw-central
   other-modules:
     SAWCentral.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
@@ -700,6 +699,7 @@ library saw-central
 -- The saw-script library contains the interpreter for the SAWScript
 -- language.
 library saw-script
+  import: ghc-options
   default-language: Haskell2010
   visibility: private
 
@@ -783,7 +783,6 @@ library saw-script
   other-modules:
     SAWScript.Panic
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
@@ -793,6 +792,7 @@ library saw-script
 
 -- The remote API RPC server.
 library saw-server
+  import: ghc-options
   default-language: Haskell2010
   visibility: public
 
@@ -862,14 +862,14 @@ library saw-server
     SAWServer.VerifyCommon,
     SAWServer.Yosys
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- saw
 
 -- The saw executable is where you run the saw-script interpreter.
 executable saw
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -893,9 +893,6 @@ executable saw
   autogen-modules:
     Paths_saw
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
-
 
 ------------------------------------------------------------
 -- saw-tools
@@ -903,6 +900,8 @@ executable saw
 -- The saw-remote-api executable is the server program for the remote
 -- API interface.
 executable saw-remote-api
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -944,9 +943,6 @@ executable saw-remote-api
   hs-source-dirs: saw-remote-api
   main-is: Main.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
-
 
 ------------------------------------------------------------
 -- saw-tools
@@ -954,6 +950,8 @@ executable saw-remote-api
 -- The Cryptol Symbolic Simulator (css) is a standalone program that
 -- translates a single Cryptol function to an AIG.
 executable css
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -977,8 +975,7 @@ executable css
   hs-source-dirs: saw-tools/css
   main-is: Main.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts -pgmlc++
+  ghc-options: -pgmlc++
   extra-libraries:      stdc++
 
 -- Verification Summary Viewer
@@ -986,6 +983,8 @@ executable css
 -- Translate JSON verification summaries into GraphViz format to
 -- produce a graph-based view of a verification effort.
 executable verif-viewer
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1003,13 +1002,14 @@ executable verif-viewer
   hs-source-dirs: saw-tools/verif-viewer
   main-is: Main.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
   ghc-prof-options: -fprof-auto -fprof-cafs
 
 -- extcore-info is a tool for examining the saw-core external dump format.
 executable extcore-info
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1022,8 +1022,6 @@ executable extcore-info
   hs-source-dirs: saw-tools/extcore-info
   main-is: Main.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-
 
 ------------------------------------------------------------
 -- test suites
@@ -1031,6 +1029,8 @@ executable extcore-info
 -- The integration_tests/intTests test suite is the main SAW test
 -- suite.
 test-suite integration_tests
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-tool-depends: saw:saw
@@ -1049,12 +1049,11 @@ test-suite integration_tests
   hs-source-dirs: intTests
   main-is: IntegrationTest.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
-
 
 -- There's a saw-core test suite.
 test-suite test-sawcore
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1089,10 +1088,11 @@ test-suite test-sawcore
     Tests.SharedTerm
     Tests.Simulator
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
 
 -- The cryptol-saw-core library has its own small test suite.
 test-suite cryptol-saw-core-tc-test
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1114,11 +1114,11 @@ test-suite cryptol-saw-core-tc-test
   hs-source-dirs: otherTests/cryptol-saw-core
   main-is: CryptolVerifierTC.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
 
 -- saw-core-coq has its own small test suite.
 test-suite saw-core-coq-tests
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1137,11 +1137,11 @@ test-suite saw-core-coq-tests
   hs-source-dirs: otherTests/saw-core-coq
   main-is: Test.hs
 
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
 
 -- heapster has a test suite.
 test-suite prover_tests
+  import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   build-depends:
@@ -1167,6 +1167,3 @@ test-suite prover_tests
   type: exitcode-stdio-1.0
   hs-source-dirs: heapster/proverTests
   main-is: Main.hs
-
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
-  ghc-options: -threaded -rtsopts
