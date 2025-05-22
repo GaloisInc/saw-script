@@ -840,7 +840,7 @@ verifyObligations cc mspec tactic assumes asserts =
               do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
                  printOutLnTop Info (show stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-                 opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
+                 opts <- rwPPOpts <$> getTopLevelRW
                  if null vals then
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else

@@ -424,9 +424,8 @@ split_goal =
      execTactic (tacticSplit sc)
 
 getTopLevelPPOpts :: TopLevel PPOpts
-getTopLevelPPOpts = do
-  opts <- fmap rwPPOpts getTopLevelRW
-  return (SV.sawPPOpts opts)
+getTopLevelPPOpts =
+  rwPPOpts <$> getTopLevelRW
 
 show_term :: Term -> TopLevel String
 show_term t =
@@ -1300,7 +1299,7 @@ proveHelper nm script t f = do
                           ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -1502,7 +1501,7 @@ proveByBVInduction script t =
   badTy opts ty =
     fail $ unlines [ "Incorrect type for proof by induction!"
                    , "Run `:help prove_by_bv_induction` to see a description of what is expected."
-                   , show (ppTerm (SV.sawPPOpts opts) ty)
+                   , show (ppTerm opts ty)
                    ]
 
 provePrintPrim ::
@@ -2494,7 +2493,7 @@ summarize_verification =
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
      let summary = computeVerificationSummary db jspecs lspecs thms
-     opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+     opts <- rwPPOpts <$> getTopLevelRW
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
@@ -2520,7 +2519,7 @@ writeVerificationSummary = do
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     nenv <- io . scGetNamingEnv =<< getSharedContext
-    ppOpts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+    ppOpts <- rwPPOpts <$> getTopLevelRW
 
     case summaryFile opts of
       Nothing -> return ()

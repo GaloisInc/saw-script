@@ -84,7 +84,7 @@ import SAWCore.Conversion
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (MemoStyle(..))
+import SAWCore.Term.Pretty (MemoStyle(..), PPOpts(..), defaultPPOpts)
 import SAWCore.TypedAST hiding (FlatTermF(..))
 import CryptolSAWCore.TypedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -634,7 +634,7 @@ buildTopLevelEnv proxy opts =
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
-                   , rwPPOpts     = SAWCentral.Value.defaultPPOpts
+                   , rwPPOpts     = defaultPPOpts
                    , rwSharedContext = sc
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB
@@ -904,12 +904,12 @@ include_value file = do
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsAscii = b } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppUseAscii = b } }
 
 set_base :: Int -> TopLevel ()
 set_base b = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsBase = b } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppBase = b } }
 
 set_color :: Bool -> TopLevel ()
 set_color b = do
@@ -917,12 +917,12 @@ set_color b = do
   opts <- getOptions
   -- Keep color disabled if `--no-color` command-line option is present
   let b' = b && useColor opts
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppColor = b' } }
 
 set_min_sharing :: Int -> TopLevel ()
 set_min_sharing b = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppMinSharing = b } }
 
 -- | 'set_memoization_hash i' changes the memoization strategy for terms:
 -- memoization identifiers will include the first 'i' digits of the hash of the
@@ -932,7 +932,7 @@ set_min_sharing b = do
 set_memoization_hash :: Int -> TopLevel ()
 set_memoization_hash i = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Hash i } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppMemoStyle = Hash i } }
 
 -- | 'set_memoization_hash_incremental i' changes the memoization strategy for
 -- terms: memoization identifiers will include the first 'i' digits of the hash
@@ -945,7 +945,7 @@ set_memoization_hash i = do
 set_memoization_hash_incremental :: Int -> TopLevel ()
 set_memoization_hash_incremental i = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = HashIncremental i } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppMemoStyle = HashIncremental i } }
 
 -- | `set_memoization_incremental` changes the memoization strategy for terms:
 -- memoization identifiers will only include the value of a global counter that
@@ -953,7 +953,7 @@ set_memoization_hash_incremental i = do
 set_memoization_incremental :: TopLevel ()
 set_memoization_incremental = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Incremental } }
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppMemoStyle = Incremental } }
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
@@ -966,8 +966,8 @@ print_value (VTerm t) = do
   sawopts <- getOptions
   t' <- io $ defaultTypedTerm sawopts sc cfg t
   opts <- fmap rwPPOpts getTopLevelRW
-  let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
-                              , V.useBase = ppOptsBase opts
+  let opts' = V.defaultPPOpts { V.useAscii = ppUseAscii opts
+                              , V.useBase = ppBase opts
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
   doc <- io $ V.runEval mempty (V.ppValue V.Concrete opts' evaled_t)

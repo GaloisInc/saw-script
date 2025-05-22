@@ -101,16 +101,36 @@ type SawDoc = Doc SawStyle
 --------------------------------------------------------------------------------
 
 -- | Global options for pretty-printing
-data PPOpts = PPOpts { ppBase :: Int
-                     , ppColor :: Bool
-                     , ppShowLocalNames :: Bool
-                     , ppMaxDepth :: Maybe Int
-                     , ppNoInlineMemoFresh :: [Int]
-                        -- ^ The numeric identifiers, as seen in the 'memoFresh'
-                        -- field of 'MemoVar', of variables that shouldn't be
-                        -- inlined
-                     , ppMemoStyle :: MemoStyle
-                     , ppMinSharing :: Int }
+data PPOpts = PPOpts {
+    -- | Passed to the "useAscii" setting of Cryptol's prettyprinter.
+    --   Default is false.
+    ppUseAscii :: Bool,
+
+    -- | The base to print integers in; default is 10.
+    ppBase :: Int,
+    -- | Whether to print in color; default is false.
+    ppColor :: Bool,
+
+    -- | Whether to show the names of local variables. Default is
+    --   true. If set to false, prints the deBruijn indexes instead.
+    ppShowLocalNames :: Bool,
+
+    -- | Maximum depth to recurse into terms. If not set, no limit.
+    --   Default is unset.
+    ppMaxDepth :: Maybe Int,
+
+    -- | The numeric identifiers, as seen in the 'memoFresh' field of
+    --   'MemoVar', of SAWCore variables that shouldn't be inlined.
+    ppNoInlineMemoFresh :: [Int],
+
+    -- | The way to display SAWCore memoization variables.
+    --   Default is Incremental.
+    ppMemoStyle :: MemoStyle,
+
+    -- | Minimum sharing level required to memoize SAWCore subterms.
+    --   Default is 2 (i.e., any sharing).
+    ppMinSharing :: Int
+ }
 
 -- | How should memoization variables be displayed?
 --
@@ -129,20 +149,22 @@ data MemoStyle
   -- _both_ the first 'i' digits of the term's hash _and_ the value of the
   -- counter described in 'Incremental'.
 
--- | Default options for pretty-printing
+-- | Default options for pretty-printing.
+--
+-- If the default 'ppMemoStyle' changes, be sure to update the help
+-- text in the interpreter functions that control the memoization
+-- style to reflect this change to users.
 defaultPPOpts :: PPOpts
-defaultPPOpts =
-  PPOpts
-    { ppBase = 10
-    , ppColor = False
-    , ppNoInlineMemoFresh = mempty
-    , ppShowLocalNames = True
-    , ppMaxDepth = Nothing
-    , ppMinSharing = 2
-    , ppMemoStyle = Incremental }
-    -- If 'ppMemoStyle' changes its default, be sure to update the help text in
-    -- the interpreter functions that control the memoization style to reflect
-    -- this change to users.
+defaultPPOpts = PPOpts {
+    ppUseAscii = False,
+    ppBase = 10,
+    ppColor = False,
+    ppNoInlineMemoFresh = mempty,
+    ppShowLocalNames = True,
+    ppMaxDepth = Nothing,
+    ppMinSharing = 2,
+    ppMemoStyle = Incremental
+ }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts

@@ -1614,7 +1614,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-        ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
+        ppOpts <- rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
           _ -> let showEC ec = Text.unpack (toShortName (ecName ec)) in
