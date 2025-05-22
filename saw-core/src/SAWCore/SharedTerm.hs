@@ -641,13 +641,14 @@ scBeginDataType ::
   [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
   [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
-  IO ()
+  IO (PrimName Term)
 scBeginDataType sc dtName dtParams dtIndices dtSort =
   do dtVarIndex <- scFreshGlobalVar sc
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
      let mnm = identModule dtName
      scModifyModule sc mnm (\m -> beginDataType m dt)
+     pure $ PrimName dtVarIndex dtName dtType
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
