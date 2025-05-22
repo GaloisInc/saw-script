@@ -109,7 +109,6 @@ data PPOpts = PPOpts { ppBase :: Int
                         -- ^ The numeric identifiers, as seen in the 'memoFresh'
                         -- field of 'MemoVar', of variables that shouldn't be
                         -- inlined
-                     , ppNoInlineIdx :: Set TermIndex -- move to PPState?
                      , ppMemoStyle :: MemoStyle
                      , ppMinSharing :: Int }
 
@@ -137,7 +136,6 @@ defaultPPOpts =
     { ppBase = 10
     , ppColor = False
     , ppNoInlineMemoFresh = mempty
-    , ppNoInlineIdx = mempty
     , ppShowLocalNames = True
     , ppMaxDepth = Nothing
     , ppMinSharing = 2
@@ -270,7 +268,10 @@ data PPState =
     ppGlobalMemoTable :: IntMap MemoVar,
     -- | Memoization table for terms at the current binding level, mapping term
     -- indices to "memoization variables" that are in scope
-    ppLocalMemoTable :: IntMap MemoVar
+    ppLocalMemoTable :: IntMap MemoVar,
+
+    -- | Terms to not inline (apparently)
+    ppNoInlineIdx :: Set TermIndex
   }
 
 emptyPPState :: PPOpts -> SAWNamingEnv -> PPState
@@ -281,7 +282,9 @@ emptyPPState opts ne =
             ppNamingEnv = ne,
             ppMemoFresh = 1,
             ppGlobalMemoTable = IntMap.empty,
-            ppLocalMemoTable = IntMap.empty }
+            ppLocalMemoTable = IntMap.empty,
+            ppNoInlineIdx = mempty
+   }
 
 -- | The pretty-printing monad
 newtype PPM a = PPM (Reader PPState a)
@@ -346,7 +349,7 @@ withMemoVar global_p termIdx termHash f =
     memoFresh <- asks ppMemoFresh
     let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
     memoFreshSkips <- asks (ppNoInlineMemoFresh . ppOpts)
-    termIdxSkips <- asks (ppNoInlineIdx . ppOpts)
+    termIdxSkips <- asks ppNoInlineIdx
     case memoFreshSkips of
       -- Even if we must skip this memoization variable, we still want to
       -- "pretend" we memoized by calling `freshen`, so that non-inlined
@@ -370,8 +373,8 @@ withMemoVar global_p termIdx termHash f =
     setMemoFreshSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
       PPState { ppOpts = PPOpts { ppNoInlineMemoFresh = memoSkips, ..}, ..}
 
-    addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
-      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }, .. }
+    addIdxSkip PPState{ .. } =
+      PPState { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }
 
     freshen PPState{ .. } =
       PPState { ppMemoFresh = ppMemoFresh + 1, .. }
