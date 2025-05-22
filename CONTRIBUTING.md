@@ -145,10 +145,10 @@ The procedure for this is:
 
 # Testing
 
-The primary test suite for SAW is called `integration_tests` and can
-be run with `cabal test integration_tests`.
+The primary test suite for SAW is called `integration-tests` and can
+be run with `cabal test integration-tests`.
 
-Ideally one runs at least `integration_tests` locally before
+Ideally one runs at least `integration-tests` locally before
 committing, but it takes long enough (this will only get worse as
 coverage improves and the test suite grows) that people will run only
 a few tests pertinent to their changes and let the CI run the rest in

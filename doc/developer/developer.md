@@ -134,19 +134,17 @@ This material is covered in
 
 There are multiple test suites in the SAW repository.
 
-The main test suite is called `integration_tests` and the contents
+The main test suite is called `integration-tests` and the contents
 can be found in the `intTests` directory.
 
 The following can be run with `cabal test`:
 
-- `integration_tests` (this is the main test suite)
-- `cryptol-saw-core-tc-tests`
+- `integration-tests` (this is the main test suite)
+- `saw-core-tests`
+- `cryptol-saw-core-tests`
 - `saw-core-coq-tests`
-- `test-sawcore`
-- `test` (this belongs to crux-mir-comp, needs to be run specifically
-  as `crux-mir-comp:test` because its name is ambiguous, and should be
-  renamed)
-- `prover_tests`
+- `prover-tests`
+- `crux-mir-comp-tests`
 
 There are three other sets of tests:
 

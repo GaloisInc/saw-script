@@ -1026,9 +1026,9 @@ executable extcore-info
 ------------------------------------------------------------
 -- test suites
 
--- The integration_tests/intTests test suite is the main SAW test
+-- The integration-tests/intTests test suite is the main SAW test
 -- suite.
-test-suite integration_tests
+test-suite integration-tests
   import: ghc-options
   import: ghc-options-executable
   default-language: Haskell2010
@@ -1051,7 +1051,7 @@ test-suite integration_tests
 
 
 -- There's a saw-core test suite.
-test-suite test-sawcore
+test-suite saw-core-tests
   import: ghc-options
   import: ghc-options-executable
   default-language: Haskell2010
@@ -1090,7 +1090,7 @@ test-suite test-sawcore
 
 
 -- The cryptol-saw-core library has its own small test suite.
-test-suite cryptol-saw-core-tc-test
+test-suite cryptol-saw-core-tests
   import: ghc-options
   import: ghc-options-executable
   default-language: Haskell2010
@@ -1139,7 +1139,7 @@ test-suite saw-core-coq-tests
 
 
 -- heapster has a test suite.
-test-suite prover_tests
+test-suite prover-tests
   import: ghc-options
   import: ghc-options-executable
   default-language: Haskell2010

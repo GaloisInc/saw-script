@@ -5,10 +5,10 @@ Running tests
 -------------
 
 The integration tests are exposed as the [cabal test suite](../saw.cabal)
-`integration_tests`. The default tests can be run with:
+`integration-tests`. The default tests can be run with:
 
 ```
-cabal test --enable-tests integration_tests
+cabal test --enable-tests integration-tests
 ```
 
 For each `test_*` directory that is not listed in the `DISABLED_TESTS`

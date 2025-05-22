@@ -13,6 +13,17 @@ info.
 course.)
 Note that build.sh is in any case the recommended way to build.
 
+The names of the various test suites used with `cabal test` have been
+normalized.
+See saw.cabal for the full list.
+The most notable changes are:
+
+  - the main test suite, which people occasionally run directly, is
+    now spelled `integration-tests` with a dash rather than
+    `integration_tests` with an underscore;
+  - the crux-mir-comp test suite is now called `crux-mir-comp-tests`
+    rather than just `test`.
+
 ## New Features
 
 * SAW now supports importing Cryptol code that uses enums.
