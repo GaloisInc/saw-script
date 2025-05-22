@@ -124,7 +124,7 @@ There are two interesting things worth calling out in this spec:
    to after calling the function. The two uses to `mir_points_to` after the
    function has been called swap the order of `a_val` and `b_val`, reflecting
    the fact that the `swap` function itself swaps the values that the references
-   point to. Sandberg
+   point to.
 
 ### Convenience: `mir_ref_of`
 
