@@ -441,7 +441,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
-  liftTCM scModifyModule mnm (\m -> completeDataType m dtName ctors)
+  liftTCM scCompleteDataType dtName ctors
 
 
 -- | Typecheck a module and, on success, insert it into the current context
