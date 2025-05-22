@@ -218,7 +218,7 @@ mir_alloc_internal mut mty =
 
 -- | Allocate a MIR reference and initialize it to point to a given SetupValue.
 -- This is a convenience function that avoids requiring the caller to manually
--- pair `mir_alloc` and `mir_points_to`.
+-- pair @mir_alloc@ and @mir_points_to@.
 mir_ref_of :: SetupValue -> MIRSetupM SetupValue
 mir_ref_of val = do
   cc  <- MIRSetupM getMIRCrucibleContext
