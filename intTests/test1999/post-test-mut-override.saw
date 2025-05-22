@@ -1,0 +1,19 @@
+enable_experimental;
+
+m <- mir_load_module "post-test-mut.linked-mir.json";
+
+let get41_override_spec = do {
+  mir_execute_func [];
+
+  ref_41 <- mir_ref_of_mut (mir_term {{ 41 : [32] }});
+  mir_return ref_41;
+};
+
+get41_ov <- mir_unsafe_assume_spec m "post_test_mut::get41" get41_override_spec;
+
+let is42_spec = do {
+  mir_execute_func [];
+  mir_return (mir_term {{ True }});
+};
+
+mir_verify m "post_test_mut::is42" [get41_ov] false is42_spec z3;

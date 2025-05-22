@@ -1,0 +1,45 @@
+# SAW Tests for `mir_ref_of` and `mir_ref_of_mut`
+
+This directory contains tests that demonstrate the use of `mir_ref_of` and
+`mir_ref_of_mut` in both preconditions and postconditions of SAW
+specifications. These are intended to verify correctness and usability compared
+to the more verbose `mir_alloc` + `mir_points_to` pattern.
+
+These tests correspond to:  
+https://github.com/GaloisInc/saw-script/issues/1999
+
+---
+
+## Tests using `mir_ref_of`
+
+- `pre-test.rs` / `pre-test.saw`  
+  SAW uses `mir_ref_of` in the precondition.
+
+- `post-test.rs` / `post-test.saw`  
+  SAW uses `mir_ref_of` in the postcondition.
+
+- `pre-test-override.saw`  
+  Uses `mir_unsafe_assume_spec` with `mir_ref_of` in the precondition as an
+  override to verify a downstream function.
+
+- `post-test-override.saw`  
+  Uses `mir_unsafe_assume_spec` with `mir_ref_of` in the postcondition as an
+  override to verify a downstream function.
+
+---
+
+## Tests using `mir_ref_of_mut`
+
+- `pre-test-mut.saw`  
+  SAW uses `mir_ref_of_mut` in the precondition.
+
+- `post-test-mut.saw`  
+  SAW uses `mir_ref_of_mut` in the postcondition to describe the result.
+
+- `pre-test-mut-override.saw`  
+  Uses `mir_unsafe_assume_spec` with `mir_ref_of_mut` in the precondition as an
+  override to verify a downstream function.
+
+- `post-test-mut-override.saw`  
+  Uses `mir_unsafe_assume_spec` with `mir_ref_of_mut` in the postcondition as
+  an override to verify a downstream function.

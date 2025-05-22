@@ -853,6 +853,13 @@ and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
 `SetupValue`).
 
+As a convenience, SAW also provides:
+
+- `mir_ref_of : SetupValue -> MIRSetup SetupValue`
+- `mir_ref_of_mut : SetupValue -> MIRSetup SetupValue`
+
+which combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to` into a single operation.
+
 ## Working with Compound Types
 
 The commands mentioned so far give us no way to specify the values of

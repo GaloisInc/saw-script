@@ -1,0 +1,13 @@
+enable_experimental;
+
+m <- mir_load_module "post-test.linked-mir.json";
+
+// Override for x using mir_ref_of in postcondition
+let x_spec = do {
+  mir_execute_func [];
+
+  ref_42 <- mir_ref_of (mir_term {{ 42 : [32] }});
+  mir_return ref_42;
+};
+
+mir_verify m "post_test::x" [] false x_spec z3;
