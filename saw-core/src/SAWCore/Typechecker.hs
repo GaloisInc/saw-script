@@ -366,17 +366,8 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
       let ident = mkIdent mnm nm
-      i <- liftTCM scFreshGlobalVar
-      liftTCM scRegisterName i (ModuleIdentifier ident)
       let def_tp = typedVal typed_tp
-      let pn = PrimName i ident def_tp
-      t <- liftTCM scFlatTermF (Primitive pn)
-      liftTCM scRegisterGlobal ident t
-      liftTCM scModifyModule mnm $ \m ->
-        insDef m $ Def { defIdent = ident,
-                         defQualifier = q,
-                         defType = typedVal typed_tp,
-                         defBody = Nothing }) >>
+      liftTCM scDeclarePrim mnm ident q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
