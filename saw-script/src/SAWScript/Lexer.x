@@ -1,11 +1,4 @@
 {
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing     #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing     #-}
-{-# OPTIONS_GHC -fno-warn-unused-binds       #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports     #-}
-{-# OPTIONS_GHC -fno-warn-unused-matches     #-}
-{-# OPTIONS_GHC -fno-warn-tabs               #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Lexer
@@ -22,7 +15,6 @@ import SAWCentral.Utils
 import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
-import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word8)
@@ -162,23 +154,23 @@ xform f tok pos txt = \s -> ([tok pos (f txt)], s)     -- ^ transform contents
 addon f tok pos txt = \s -> ([tok pos txt (f txt)], s) -- ^ also variant contents
 lexFail msg pos txt = \_ -> ([], LexFailed msg pos txt)
 
-startComment p txt s = ([], InComment p stack chunks done)
-  where (stack,chunks, done) = case s of
+startComment p txt s = ([], InComment p stack chunks done')
+  where (stack, chunks, done') = case s of
           Normal                 -> ([], [txt], Normal)
           InComment q qs cs done -> (q : qs, txt : cs, done)
           InCode q ctxt          -> ([], [txt], InCode q ctxt)
           InCType q ctxt         -> ([], [txt], InCType q ctxt)
           _                      -> panic "[Lexer] startComment" ["not in normal or cryptol block or comment"]
 
-endComment p txt s =
+endComment _p txt s =
   case s of
     InComment f [] cs done     -> ([], addWhitespace f (Text.concat (reverse cs) <> txt) done)
     InComment _ (q:qs) cs done -> ([], InComment q qs (txt : cs) done)
     _                          -> panic "[Lexer] endComment" ["outside comment"]
 
-addToComment _ txt s = ([], InComment p stack (txt : chunks) done)
+addToComment _ txt s = ([], InComment p stack (txt : chunks) done')
   where
-  (p, stack, chunks, done) =
+  (p, stack, chunks, done') =
      case s of
        InComment q qs cs done -> (q,qs,cs,done)
        _                   -> panic "[Lexer] addToComment" ["outside comment"]
@@ -187,14 +179,14 @@ startLineComment p txt s = ([], InLineComment p txt s)
 
 endLineComment p txt s =
   case s of
-    InLineComment f cs done -> ([], addWhitespace p (cs <> txt) done)
+    InLineComment _f cs done -> ([], addWhitespace p (cs <> txt) done)
     _                    -> panic "[Lexer] endLineComment" ["outside line comment"]
 
 -- Cryptol is indentation-sensitive. Just deleting the comments could produce
 -- unparsable Cryptol , so we replace the removed comments with matching
 -- whitespace
-addWhitespace p txt s@(InCode q x) = snd $ addToCode p (whiteout txt) s
-addWhitespace p txt s@(InCType q x) = snd $ addToCType p (whiteout txt) s
+addWhitespace p txt s@(InCode _q _x) = snd $ addToCode p (whiteout txt) s
+addWhitespace p txt s@(InCType _q _x) = snd $ addToCType p (whiteout txt) s
 addWhitespace _ _ s = s
 
 whiteout = Text.map (\c -> if c == '\n' then '\n' else ' ')
@@ -298,8 +290,8 @@ stateToInt (LexFailed msg pos _) = panic "stateToInt"
   ]
 
 -- initial position
-startPos :: AlexPos
-startPos = AlexPos { apLine = 1, apCol = 1 }
+initialPos :: AlexPos
+initialPos = AlexPos { apLine = 1, apCol = 1 }
 
 -- feed alex a byte describing the current char
 -- this came from Cryptol's lexer, which came from LexerUtils, which
@@ -351,8 +343,8 @@ byteForChar c
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
 alexGetByte (pos, text) = fmap doGet $ Text.uncons text
     where
-      doGet (c, text') = (byteForChar c, (move pos c, text'))
-      move pos c = case c of
+      doGet (c, text') = (byteForChar c, (move c, text'))
+      move c = case c of
           '\n' -> AlexPos { apLine = apLine pos + 1, apCol = 1 }
           _ -> pos { apCol = apCol pos + 1 }
 
@@ -362,7 +354,7 @@ alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
 -- read the text of a file, passing in the filename for use in positions
 scanTokens :: FilePath -> Text -> LexResult
-scanTokens filename str = go (startPos, str) Normal
+scanTokens filename str0 = go (initialPos, str0) Normal
   where
     fillPos pos height width =
         let startLine = apLine pos
@@ -372,41 +364,41 @@ scanTokens filename str = go (startPos, str) Normal
         in
         Range filename startLine startCol endLine endCol
 
-    go inp@(pos, str) s = case alexScan inp (stateToInt s) of
-        AlexEOF -> let pos' = fillPos pos 0 0
-                       tok = [TEOF pos' "EOF"]
+    go inp@(strPos, str) s = case alexScan inp (stateToInt s) of
+        AlexEOF -> let strPos' = fillPos strPos 0 0
+                       tok = [TEOF strPos' "EOF"]
                    in case s of
             Normal ->
                 Right (tok, Nothing)
-            InLineComment pos _ _ ->
-                Right (tok, Just (Warn, pos', "Missing newline at end of file"))
-            InComment pos _ _ _ ->
-                Left (Error, pos, "Unclosed block comment")
-            InString pos _ _ ->
-                Left (Error, pos, "Unterminated string")
-            InCode pos _ ->
-                Left (Error, pos, "Unclosed cryptol block")
-            InCType pos _ ->
-                Left (Error, pos, "Unclosed ctype block")
-            LexFailed msg pos _ -> -- should never happen, but this is its semantics anyway
-                Left (Error, pos, msg)
-        AlexError (pos, _) ->
-            let line' = Text.pack $ show $ apLine pos
-                col' = Text.pack $ show $ apCol pos
+            InLineComment _beginPos _ _ ->
+                Right (tok, Just (Warn, strPos', "Missing newline at end of file"))
+            InComment beginPos _ _ _ ->
+                Left (Error, beginPos, "Unclosed block comment")
+            InString beginPos _ _ ->
+                Left (Error, beginPos, "Unterminated string")
+            InCode beginPos _ ->
+                Left (Error, beginPos, "Unclosed Cryptol block")
+            InCType beginPos _ ->
+                Left (Error, beginPos, "Unclosed Cryptol type block")
+            LexFailed msg failPos _ -> -- should never happen, but this is its semantics anyway
+                Left (Error, failPos, msg)
+        AlexError (failPos, _) ->
+            let line' = Text.pack $ show $ apLine failPos
+                col' = Text.pack $ show $ apCol failPos
             in
             panic "Lexer" [line' <> ":" <> col' <> ": no possible token matched"]
-        AlexSkip inp' len ->
+        AlexSkip inp' _len ->
             go inp' s
         AlexToken inp' len act ->
             let text = Text.take len str
                 (height, width) = case reverse $ Text.lines text of
                     [] -> (0, 0)
                     [line] -> (0, Text.length line)
-                    last : lines -> (length lines, Text.length last)
-                pos' = fillPos pos height width
+                    last_ : rest -> (length rest, Text.length last_)
+                strPos' = fillPos strPos height width
             in
-            case act pos' text s of
-              (t, LexFailed msg pos _rest) -> Left (Error, pos, msg)
+            case act strPos' text s of
+              (_t, LexFailed msg failPos _rest) -> Left (Error, failPos, msg)
               (t, s') -> case go inp' s' of
                 Left x -> Left x
                 Right (ts, mmsg) -> Right (t ++ ts, mmsg)

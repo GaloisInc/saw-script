@@ -31,7 +31,7 @@ module Heapster.RustTypes where
 import Prelude hiding (span)
 
 import Data.Maybe
-import Data.List hiding (span)
+import Data.List (delete, find, findIndex, intersperse)
 import GHC.TypeLits
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant

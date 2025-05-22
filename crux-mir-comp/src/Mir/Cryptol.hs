@@ -241,8 +241,8 @@ loadCryptolFunc col sig modulePath name = do
         cryptolRun sc (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
 
   where
-    listToCtx :: forall k (f :: k -> Kind.Type). [Some f] -> Some (Assignment f)
-    listToCtx xs = go xs (Some Empty)
+    listToCtx :: forall k0 (f0 :: k0 -> Kind.Type). [Some f0] -> Some (Assignment f0)
+    listToCtx xs0 = go xs0 (Some Empty)
       where
         go :: forall k (f :: k -> Kind.Type). [Some f] -> Some (Assignment f) -> Some (Assignment f)
         go [] acc = acc
@@ -282,10 +282,10 @@ cryptolRun sc name argShps retShp funcTerm = do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     liftIO $ termToReg sym sc w4VarMap appTerm retShp
 
-munge :: forall sym t st fs tp.
+munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    sym -> TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
-munge sym shp rv = do
+    sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
+munge sym shp0 rv0 = do
     sc <- SAW.mkSharedContext
     SAW.scLoadPreludeModule sc
 
@@ -359,7 +359,7 @@ munge sym shp rv = do
             rv' <- readMaybeType sym "field" (shapeType shp) rv
             W4.justPartExpr sym <$> go shp rv'
 
-    go shp rv
+    go shp0 rv0
 
 
 typecheckFnSig ::
@@ -368,8 +368,8 @@ typecheckFnSig ::
     Some TypeShape ->
     SAW.TypedTermType ->
     Either String ()
-typecheckFnSig fnSig argShps retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] ty)) =
-    go 0 argShps ty
+typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] ty0)) =
+    go 0 argShps0 ty0
   where
     go :: Int -> [Some TypeShape] -> Cry.Type -> Either String ()
     go _ [] ty | Some retShp' <- retShp = goOne "return value" retShp' ty
@@ -396,15 +396,15 @@ typecheckFnSig fnSig argShps retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] t
         (TupleShape _ _ flds, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
           | Ctx.sizeInt (Ctx.size flds) == n -> do
             let flds' = toListFC Some flds
-            zipWithM_ (\(Some fld) ty -> goOneField desc fld ty) flds' tys
+            zipWithM_ (\(Some fld) ty' -> goOneField desc fld ty') flds' tys
           | otherwise -> typeErr desc shp ty $
             "tuple size " ++ show n ++ " does not match " ++ show (Ctx.sizeInt $ Ctx.size flds)
-        (ArrayShape (M.TyArray _ n) _ shp,
+        (ArrayShape (M.TyArray _ n) _ shp',
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
                 ty'])
-          | fromIntegral n == n' -> goOne desc shp ty'
-          | otherwise -> typeErr desc shp ty $
+          | fromIntegral n == n' -> goOne desc shp' ty'
+          | otherwise -> typeErr desc shp' ty $
             "array length " ++ show n' ++ " does not match " ++ show n
         _ -> typeErr desc shp ty ""
 

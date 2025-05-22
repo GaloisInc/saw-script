@@ -5,7 +5,6 @@
 module Main where
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Map as Map
 import Data.Text (Text)
 
@@ -14,7 +13,6 @@ import Text.Heredoc (there)
 import qualified Cryptol.ModuleSystem.Name as N
 import qualified Cryptol.Utils.Ident as N
 
-import qualified CryptolSAWCore.Cryptol as C
 import           SAWCore.SharedTerm
 import qualified SAWCore.SCTypeCheck as TC
 import qualified CryptolSAWCore.Prelude as C

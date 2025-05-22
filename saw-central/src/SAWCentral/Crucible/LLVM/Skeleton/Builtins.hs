@@ -30,7 +30,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
 
-import Data.List
+import Data.List (findIndex)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Parameterized.Some

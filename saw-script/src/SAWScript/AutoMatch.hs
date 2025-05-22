@@ -24,7 +24,7 @@ import qualified Control.Monad.ST as ST
 import           Control.Monad.ST (ST)
 
 import Data.Ord
-import Data.List
+import Data.List (delete, sortBy)
 import Data.Maybe
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative

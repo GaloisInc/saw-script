@@ -7,8 +7,8 @@ import           Data.Set   (Set)
 import qualified Data.Map as Map
 import           Data.Map   (Map)
 
-import Data.Maybe
-import Data.List
+import Data.Maybe (fromMaybe)
+import Data.List (intersperse)
 import Control.Monad (mfilter)
 import Control.Arrow ( (&&&) )
 

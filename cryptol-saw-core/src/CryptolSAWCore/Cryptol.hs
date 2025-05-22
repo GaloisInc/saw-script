@@ -47,7 +47,7 @@ import Control.Monad (foldM, forM, join, when, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
-import Data.List
+import Data.List (elemIndex)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie

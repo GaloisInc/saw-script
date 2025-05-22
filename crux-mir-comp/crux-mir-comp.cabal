@@ -1,131 +1,137 @@
-cabal-version:       3.0
-name:                crux-mir-comp
-version:             0.4
+cabal-version:      3.0
+name:               crux-mir-comp
+version:            0.4
+author:             Joshua Gancher,
+                    Rob Dockins,
+                    Andrey Chudnov,
+                    Stephanie Weirich,
+                    Stuart Pernsteiner
+maintainer:         spernsteiner@galois.com
+build-type:         Simple
+license:            BSD-3-Clause
+license-file:       LICENSE
+copyright:          2017-2023 Galois, Inc.
+homepage:           https://github.com/GaloisInc/saw-script/blob/master/crux-mir-comp/README.md
+category:           Formal Methods
 -- synopsis:
 -- description:
-homepage:            https://github.com/GaloisInc/crucible/blob/master/crux-mir/README.md
-license:             BSD-3-Clause
-license-file:        LICENSE
-author:              Joshua Gancher,
-                     Rob Dockins,
-                     Andrey Chudnov,
-                     Stephanie Weirich,
-                     Stuart Pernsteiner
-maintainer:          spernsteiner@galois.com
-copyright:           2017-2023 Galois, Inc.
-category:            Web
-build-type:          Simple
+
 extra-source-files:  README.md
 
 library
   default-language: Haskell2010
+
   build-depends:
-                 -- upstream packages from hackage
-                 base >= 4.9 && < 5,
-                 bytestring,
-                 containers,
-                 extra,
-                 lens,
-                 prettyprinter,
-                 text,
+    -- upstream packages from hackage
+    base >= 4.9 && < 5,
+    bytestring,
+    containers,
+    extra,
+    lens,
+    prettyprinter,
+    text,
 
-                 -- packages in git submodules
-                 crucible,
-                 crucible-mir,
-                 crux,
-                 crux-mir,
-                 cryptol,
-                 parameterized-utils >= 1.0.8,
-                 what4,
+    -- packages in git submodules
+    crucible,
+    crucible-mir,
+    crux,
+    crux-mir,
+    cryptol,
+    parameterized-utils >= 1.0.8,
+    what4,
 
-                 -- internal subpackages/sublibraries in the saw tree
-                 crucible-mir-comp,
-                 saw:saw-core,
-                 saw:cryptol-saw-core,
-                 saw:saw-core-what4,
-                 saw:saw-central
+    -- internal subpackages/sublibraries in the saw tree
+    crucible-mir-comp,
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-core-what4,
+    saw:saw-central
 
   hs-source-dirs: src
-  exposed-modules: Mir.Compositional
-                   Mir.Cryptol
-  other-modules:   Mir.Compositional.DefId
+  exposed-modules:
+    Mir.Compositional
+    Mir.Cryptol
+  other-modules:
+    Mir.Compositional.DefId
 
-  ghc-options: -Wall -Wno-name-shadowing
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
 
 
 executable crux-mir-comp
+  default-language: Haskell2010
+
+  build-depends:
+    -- upstream packages from hackage
+    base >= 4.7 && < 5,
+    containers,
+    lens,
+    mtl,
+    tasty            >= 0.10,
+    tasty-hunit      >= 0.10,
+    tasty-quickcheck >= 0.8,
+    tasty-golden     >= 2.3,
+    template-haskell,
+    text,
+    transformers,
+    vector,
+
+    -- packages in git submodules
+    crucible,
+    crux,
+    crux-mir,
+    parameterized-utils >= 1.0.8,
+    what4,
+
+    -- this package's own library
+    crux-mir-comp
+
   hs-source-dirs: exe
   main-is: Main.hs
 
-  build-depends:
-                -- upstream packages from hackage
-                base >= 4.7 && < 5,
-                containers,
-                lens,
-                mtl,
-                tasty            >= 0.10,
-                tasty-hunit      >= 0.10,
-                tasty-quickcheck >= 0.8,
-                tasty-golden     >= 2.3,
-                template-haskell,
-                text,
-                transformers,
-                vector,
-
-                -- packages in git submodules
-                crucible,
-                crux,
-                crux-mir,
-                parameterized-utils >= 1.0.8,
-                what4,
-
-                -- this package's own library
-                crux-mir-comp
-
-  ghc-options: -Wall -threaded
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  ghc-options: -threaded -rtsopts
   ghc-prof-options: -O2 -fprof-auto-top
-  default-language: Haskell2010
 
 
 test-suite crux-mir-comp-test
-  type: exitcode-stdio-1.0
-  hs-source-dirs: test
-
-  ghc-options: -Wall -threaded
-  ghc-prof-options: -fprof-auto -O2
-
-  main-is: Test.hs
+  default-language: Haskell2010
 
   build-depends:
-                -- upstream packages from hackage
-                base             >= 4.7,
-                bytestring,
-                config-schema,
-                config-value,
-                containers,
-                deepseq,
-                directory,
-                filepath,
-                parsec,
-                process,
-                QuickCheck,
-                regex-base,
-                regex-posix,
-                tasty            >= 0.10,
-                tasty-hunit      >= 0.10,
-                tasty-quickcheck >= 0.8,
-                tasty-golden     >= 2.3,
-                tasty-expected-failure >= 0.11,
-                temporary        >= 1.3,
-                utf8-string,
+    -- upstream packages from hackage
+    base             >= 4.7,
+    bytestring,
+    config-schema,
+    config-value,
+    containers,
+    deepseq,
+    directory,
+    filepath,
+    parsec,
+    process,
+    QuickCheck,
+    regex-base,
+    regex-posix,
+    tasty            >= 0.10,
+    tasty-hunit      >= 0.10,
+    tasty-quickcheck >= 0.8,
+    tasty-golden     >= 2.3,
+    tasty-expected-failure >= 0.11,
+    temporary        >= 1.3,
+    utf8-string,
 
-                -- packages in git submodules
-                aig,
-                crucible,
-                crux,
-                crux-mir,
+    -- packages in git submodules
+    aig,
+    crucible,
+    crux,
+    crux-mir,
 
-                -- this package's own library
-                crux-mir-comp
+    -- this package's own library
+    crux-mir-comp
 
-  default-language: Haskell2010
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Test.hs
+
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  ghc-options: -threaded -rtsopts
+  ghc-prof-options: -fprof-auto -O2

@@ -86,10 +86,10 @@ visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
     go MirReferenceRepr _ = return ()
     go tpr _ = error $ "visitRegValueExprs: unsupported: " ++ show tpr
 
-    forMWithRepr_ :: forall ctx m f. Monad m =>
-        CtxRepr ctx -> Assignment f ctx -> (forall tp. TypeRepr tp -> f tp -> m ()) -> m ()
-    forMWithRepr_ ctxr assn f = void $
-        Ctx.zipWithM (\x y -> f x y >> return (Const ())) ctxr assn
+forMWithRepr_ :: forall ctx m f. Monad m =>
+    CtxRepr ctx -> Assignment f ctx -> (forall tp. TypeRepr tp -> f tp -> m ()) -> m ()
+forMWithRepr_ ctxr assn f = void $
+    Ctx.zipWithM (\x y -> f x y >> return (Const ())) ctxr assn
 
 -- | Run `f` on each free symbolic variable in `e`.
 visitExprVars ::
@@ -99,7 +99,7 @@ visitExprVars ::
     W4.Expr t tp ->
     (forall tp'. W4.ExprBoundVar t tp' -> m ()) ->
     m ()
-visitExprVars cache e f = go Set.empty e
+visitExprVars cache e0 f = go Set.empty e0
   where
     go :: Set (Some (W4.ExprBoundVar t)) -> W4.Expr t tp' -> m ()
     go bound e = void $ W4.idxCacheEval cache e (go' bound e >> return (Const ()))
@@ -129,7 +129,7 @@ readMaybeType :: forall tp sym. IsSymInterface sym =>
     sym -> String -> TypeRepr tp -> RegValue sym (MaybeType tp) ->
     IO (RegValue sym tp)
 readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
-    Just x -> return x
+    Just x' -> return x'
     Nothing -> error $ "regToSetup: accessed possibly-uninitialized " ++ desc ++
         " of type " ++ show tpr
 
@@ -165,9 +165,9 @@ termToReg :: forall sym t st fs tp.
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym sc varMap term shp = do
+termToReg sym sc varMap term shp0 = do
     sv <- termToSValue sym sc varMap term
-    go shp sv
+    go shp0 sv
   where
     go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
     go shp sv = case (shp, sv) of
@@ -185,12 +185,12 @@ termToReg sym sc varMap term shp = do
         (TupleShape _ _ flds, _) -> do
             svs <- tupleToListRev (Ctx.sizeInt $ Ctx.size flds) [] sv
             goTuple flds svs
-        (ArrayShape (M.TyArray _ n) _ shp, SAW.VVector thunks) -> do
+        (ArrayShape (M.TyArray _ n) _ shp', SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= n) $ fail $
                 "termToReg: type error: expected an array of length " ++ show n ++
                     ", but simulator returned " ++ show (length svs) ++ " elements"
-            v <- V.fromList <$> mapM (go shp) svs
+            v <- V.fromList <$> mapM (go shp') svs
             return $ MirVector_Vector v
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
@@ -237,31 +237,31 @@ termToReg sym sc varMap term shp = do
     goField (OptField shp) sv = W4.justPartExpr sym <$> go shp sv
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
-    -- required to match `w`.
-    buildBitVector :: forall w. (1 <= w) =>
-        NatRepr w -> Vector (W4.Pred sym) -> IO (W4.SymExpr sym (BaseBVType w))
-    buildBitVector w v = do
+    -- required to match `tw`.
+    buildBitVector :: forall tw. (1 <= tw) =>
+        NatRepr tw -> Vector (W4.Pred sym) -> IO (W4.SymExpr sym (BaseBVType tw))
+    buildBitVector tw v = do
         bvs <- mapM (\b -> W4.bvFill sym (knownNat @1) b) $ toList v
         case bvs of
-            [] -> error $ "buildBitVector: expected " ++ show w ++ " bits, but got 0"
+            [] -> error $ "buildBitVector: expected " ++ show tw ++ " bits, but got 0"
             (bv : bvs') -> do
-                Some bv' <- go (knownNat @1) bv bvs'
-                Refl <- case testEquality (W4.exprType bv') (BaseBVRepr w) of
+                Some bv' <- goBV (knownNat @1) bv bvs'
+                Refl <- case testEquality (W4.exprType bv') (BaseBVRepr tw) of
                     Just x -> return x
-                    Nothing -> error $ "buildBitVector: expected " ++ show (BaseBVRepr w) ++
+                    Nothing -> error $ "buildBitVector: expected " ++ show (BaseBVRepr tw) ++
                         ", but got " ++ show (W4.exprType bv')
                 return bv'
       where
-        go :: forall w. (1 <= w) =>
-            NatRepr w ->
-            W4.SymExpr sym (BaseBVType w) ->
+        goBV :: forall iw. (1 <= iw) =>
+            NatRepr iw ->
+            W4.SymExpr sym (BaseBVType iw) ->
             [W4.SymExpr sym (BaseBVType 1)] ->
             IO (Some (W4.SymExpr sym))
-        go _ bv [] = return $ Some bv
-        go w bv (b : bs)
-          | LeqProof <- addPrefixIsLeq w (knownNat @1) = do
+        goBV _ bv [] = return $ Some bv
+        goBV iw bv (b : bs)
+          | LeqProof <- addPrefixIsLeq iw (knownNat @1) = do
             bv' <- W4.bvConcat sym bv b
-            go (addNat w (knownNat @1)) bv' bs
+            goBV (addNat iw (knownNat @1)) bv' bs
 
 -- | Common code for termToExpr and termToReg
 termToSValue :: forall sym t st fs.
@@ -311,11 +311,11 @@ termToType sym sc term = do
     case tv of
         SAW.VBoolType -> return $ Some BaseBoolRepr
         SAW.VVecType w SAW.VBoolType -> do
-            Some w <- return $ mkNatRepr w
-            LeqProof <- case testLeq (knownNat @1) w of
+            Some w' <- return $ mkNatRepr w
+            LeqProof <- case testLeq (knownNat @1) w' of
                 Just x -> return x
                 Nothing -> error "termToPred: zero-width bitvector"
-            return $ Some $ BaseBVRepr w
+            return $ Some $ BaseBVRepr w'
         _ -> error $ "termToType: bad SValue"
 
 
@@ -333,16 +333,16 @@ exprToTerm sym sc w4VarMapRef val = liftIO $ do
     term <- SAW.scExtCns sc ec
     return term
 
-regToTerm :: forall sym t st fs tp m.
+regToTerm :: forall sym t st fs tp0 m.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m, MonadFail m) =>
     sym ->
     SAW.SharedContext ->
     String ->
     IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
-    TypeShape tp ->
-    RegValue sym tp ->
+    TypeShape tp0 ->
+    RegValue sym tp0 ->
     m SAW.Term
-regToTerm sym sc name w4VarMapRef shp rv = go shp rv
+regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
   where
     go :: forall tp.
         TypeShape tp ->
@@ -352,11 +352,11 @@ regToTerm sym sc name w4VarMapRef shp rv = go shp rv
         (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
         (PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
         (TupleShape _ _ flds, rvs) -> do
-            terms <- Ctx.zipWithM (\fld (RV rv) -> Const <$> goField fld rv) flds rvs
+            terms <- Ctx.zipWithM (\fld (RV rvi) -> Const <$> goField fld rvi) flds rvs
             liftIO $ SAW.scTuple sc (toListFC getConst terms)
-        (ArrayShape _ _ shp, vec) -> do
-            terms <- goVector shp vec
-            tyTerm <- shapeToTerm sc shp
+        (ArrayShape _ _ shp', vec) -> do
+            terms <- goVector shp' vec
+            tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)

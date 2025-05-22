@@ -31,7 +31,7 @@ module Heapster.TypedCrucible where
 
 import Data.Maybe
 import qualified Data.Text as Text
-import Data.List hiding (sort)
+import Data.List (find, findIndex, foldl1', nub)
 import Data.Functor.Constant
 import Data.Functor.Product
 import Data.Type.Equality

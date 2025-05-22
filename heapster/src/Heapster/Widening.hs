@@ -29,7 +29,7 @@
 module Heapster.Widening where
 
 import Data.Maybe
-import Data.List
+import Data.List (findIndex)
 import Data.Functor (void)
 import Data.Functor.Constant
 import Data.Functor.Product

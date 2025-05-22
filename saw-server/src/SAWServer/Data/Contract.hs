@@ -4,6 +4,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-orphans #-}   -- for FromJSON CheckPointsToType
 module SAWServer.Data.Contract
   ( ContractMode(..)
   , Contract(..)

@@ -12,7 +12,7 @@ import SAWScript.AutoMatch.Interaction
 import Control.Monad
 import Control.Monad.Free
 import qualified Data.ByteString as BS (readFile)
-import Data.List hiding (sort)
+import Data.List (sortBy)
 import Data.Maybe
 import Data.Ord
 import Data.Text (Text)

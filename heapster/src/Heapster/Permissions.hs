@@ -33,7 +33,7 @@ import Data.Char
 import Data.Word
 import Data.Maybe
 import Data.Either
-import Data.List hiding (sort)
+import Data.List (delete, find, findIndex, foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.String

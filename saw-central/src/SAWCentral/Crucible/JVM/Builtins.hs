@@ -62,7 +62,7 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
-import           Data.List
+import           Data.List (dropWhileEnd, isPrefixOf, sortBy)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)

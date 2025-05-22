@@ -111,7 +111,7 @@ enable ::
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
-    MirHandle _name _sig mh <- case cs ^? handleMap . ix funcName of
+    MirHandle _name _sig mh <- case myCS ^? handleMap . ix funcName of
         Just x -> return x
         Nothing -> error $ "MethodSpec has bad method name " ++
             show (ms ^. msSpec . MS.csMethod) ++ "?"
@@ -119,9 +119,9 @@ enable ms = do
     -- TODO: handle multiple specs for the same function
 
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
-        runSpec cs mh (ms ^. msSpec)
+        runSpec myCS mh (ms ^. msSpec)
   where
-    cs = ms ^. msCollectionState
+    myCS = ms ^. msCollectionState
 
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
@@ -129,8 +129,8 @@ runSpec :: forall sym p t st fs args ret rtp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec cs mh ms = ovrWithBackend $ \bak ->
- do let col = cs ^. collection
+runSpec myCS mh ms = ovrWithBackend $ \bak ->
+ do let col = myCS ^. collection
     sym <- getSymInterface
     RegMap argVals <- getOverrideArgs
     let argVals' = Map.fromList $ zip [0..] $ MS.assignmentToList argVals
@@ -258,16 +258,16 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         forM_ (ms ^. MS.csPreState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred <- liftIO $ termToPred sym sc w4VarMap term
-            MS.addAssert pred md $
-                SimError loc (AssertFailureSimError (show $ W4.printSymExpr pred) "")
+            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            MS.addAssert pred_ md $
+                SimError loc (AssertFailureSimError (show $ W4.printSymExpr pred_) "")
 
         -- Convert postconditions to `osAssumes`
         forM_ (ms ^. MS.csPostState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred <- liftIO $ termToPred sym sc w4VarMap term
-            MS.addAssume pred md
+            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            MS.addAssume pred_ md
 
     ((), os) <- case result of
         Left err -> error $ show err
@@ -337,7 +337,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
     -- globals.  Since we have no idea what the subject function might do to
     -- globals during a normal call, we conservatively clobber all globals as
     -- part of the spec override.
-    clobberGlobals sym loc "run_spec_clobber_globals" cs
+    clobberGlobals sym loc "run_spec_clobber_globals" myCS
 
     return retVal
 
@@ -346,16 +346,16 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
 -- this may update `termSub` and `setupValueSub` with new bindings for the
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
-    forall sym t st fs tp.
+    forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym ->
     SAW.SharedContext ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
     MS.ConditionMetadata ->
-    TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
+    TypeShape tp0 -> RegValue sym tp0 -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
+matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -420,9 +420,9 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
         show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
 
-    goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
+    goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
         [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
-    goFields flds rvs svs = loop flds rvs (reverse svs)
+    goFields flds0 rvs0 svs0 = loop flds0 rvs0 (reverse svs0)
       where
         loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
             [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
@@ -501,27 +501,27 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
 -- namely the return value and any post-state PointsTos.
-setupToReg :: forall sym t st fs tp.
+setupToReg :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym ->
     SAW.SharedContext ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
     Map SAW.VarIndex SAW.Term ->
-    -- | `regMap`: maps `VarIndex`es in the context's namespace to the
+    -- | `myRegMap`: maps `VarIndex`es in the context's namespace to the
     -- corresponding W4 variables in the context's namespace.
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     Map MS.AllocIndex (Some (MirPointer sym)) ->
-    TypeShape tp ->
+    TypeShape tp0 ->
     MS.SetupValue MIR ->
-    IO (RegValue sym tp)
-setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
+    IO (RegValue sym tp0)
+setupToReg sym sc termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
-        Some expr <- termToExpr sym sc regMap term
+        Some expr <- termToExpr sym sc myRegMap term
         Refl <- case testEquality (W4.exprType expr) btpr of
             Just x -> return x
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
@@ -552,9 +552,9 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
         ": " ++ show (MS.ppSetupValue sv)
 
-    goFields :: forall ctx. Assignment FieldShape ctx -> [MS.SetupValue MIR] ->
-        IO (Assignment (RegValue' sym) ctx)
-    goFields shps svs = loop shps (reverse svs)
+    goFields :: forall ctx0. Assignment FieldShape ctx0 -> [MS.SetupValue MIR] ->
+        IO (Assignment (RegValue' sym) ctx0)
+    goFields shps0 svs0 = loop shps0 (reverse svs0)
       where
         loop :: forall ctx. Assignment FieldShape ctx -> [MS.SetupValue MIR] ->
             IO (Assignment (RegValue' sym) ctx)
