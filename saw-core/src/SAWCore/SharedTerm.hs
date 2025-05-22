@@ -94,6 +94,7 @@ module SAWCore.SharedTerm
   , scFindModule
   , scFindDef
   , scBeginDataType
+  , scCompleteDataType
   , scFindDataType
   , scFindCtor
   , scRequireDef
@@ -321,7 +322,7 @@ import Text.URI
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
-import SAWCore.Module (insInjectCode, beginDataType)
+import SAWCore.Module (insInjectCode, beginDataType, completeDataType)
 import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
@@ -634,7 +635,8 @@ scRequireDef sc i =
     Nothing -> fail ("Could not find definition: " ++ show i)
 
 -- | Insert an "incomplete" datatype, used as part of building up a
--- 'DataType' to typecheck its constructors.
+-- 'DataType' to typecheck its constructors. The constructors must be
+-- registered separately with @scCompleteDataType@.
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
@@ -649,6 +651,12 @@ scBeginDataType sc dtName dtParams dtIndices dtSort =
      let mnm = identModule dtName
      scModifyModule sc mnm (\m -> beginDataType m dt)
      pure $ PrimName dtVarIndex dtName dtType
+
+-- | Complete a datatype, by adding its constructors. See also @scBeginDataType@.
+scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
+scCompleteDataType sc dtName ctors =
+  do let mnm = identModule dtName
+     scModifyModule sc mnm (\m -> completeDataType m dtName ctors)
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
