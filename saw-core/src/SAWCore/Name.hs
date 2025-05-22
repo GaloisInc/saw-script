@@ -52,7 +52,6 @@ module SAWCore.Name
   ) where
 
 import           Numeric (showHex)
-import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -94,9 +93,8 @@ moduleNamePieces (ModuleName x) = Text.splitOn "." x
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
-mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (all (isCtor . Text.unpack) nms) $ ModuleName s
-  where s = Text.intercalate "." (reverse nms)
+mkModuleName [] = panic "mkModuleName" ["Empty module name"]
+mkModuleName nms = ModuleName $ Text.intercalate "." (reverse nms)
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -171,10 +169,6 @@ instance IsString Ident where
 isIdent :: String -> Bool
 isIdent (c:l) = isAlpha c && all isIdChar l
 isIdent [] = False
-
-isCtor :: String -> Bool
-isCtor (c:l) = isUpper c && all isIdChar l
-isCtor [] = False
 
 -- | Returns true if character can appear in identifier.
 isIdChar :: Char -> Bool
