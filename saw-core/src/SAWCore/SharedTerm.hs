@@ -88,6 +88,7 @@ module SAWCore.SharedTerm
   , scLoadModule
   , scUnloadModule
   , scModifyModule
+  , scDeclarePrim
   , scInsertDef
   , scModuleIsLoaded
   , scFindModule
@@ -584,6 +585,19 @@ scModifyModule sc mnm f =
   let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
   modifyIORef' (scModuleMap sc) $
   HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
+
+-- | Declare a SAW core primitive of the specified type.
+scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc mnm ident q def_tp =
+  do i <- scFreshGlobalVar sc
+     let pn = PrimName i ident def_tp
+     t <- scFlatTermF sc (Primitive pn)
+     scRegisterGlobal sc ident t
+     scModifyModule sc mnm $ \m ->
+       insDef m $ Def { defIdent = ident,
+                        defQualifier = q,
+                        defType = def_tp,
+                        defBody = Nothing }
 
 -- | Insert a definition into a SAW core module
 scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
