@@ -395,8 +395,6 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs
   let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed
       ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
-  dtType <- (liftTCM scPiList (dtParams ++ dtIndices)
-             =<< liftTCM scSort dtSort)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative
   -- (non-Prop) inductive type, which includes:
@@ -415,11 +413,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
   let dtName = mkIdent mnm nm
-  dtVarIndex <- liftTCM scFreshGlobalVar
-  liftTCM scRegisterName dtVarIndex (ModuleIdentifier dtName)
-
-  let dt = DataType { dtCtors = [], .. }
-  liftTCM scModifyModule mnm (\m -> beginDataType m dt)
+  pn <- liftTCM scBeginDataType dtName dtParams dtIndices dtSort
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
@@ -441,9 +435,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                 Nothing -> error ("Internal error: type of the type of" ++
                                   " constructor is not a sort!")) >>
             let tp = typedVal typed_tp in
-            case mkCtorArgStruct (dtPrimName dt) p_ctx ix_ctx tp of
+            case mkCtorArgStruct pn p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor (dtPrimName dt) (mkIdent mnm c) arg_struct
+                liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
