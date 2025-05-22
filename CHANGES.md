@@ -46,6 +46,10 @@ Note that build.sh is in any case the recommended way to build.
 
 * Support verifying Rust code up to version 1.86.
 
+* Added `mir_ref_of` to SAWScript's MIR support. This helper combines mir_alloc
+  and mir_points_to, simplifying the common pattern of allocating a reference
+  and immediately initializing it.
+
 ## Bug fixes
 
 * The `head` and `tail` primitives are now implemented in the SAW-Core

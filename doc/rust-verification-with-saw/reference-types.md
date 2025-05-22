@@ -124,4 +124,34 @@ There are two interesting things worth calling out in this spec:
    to after calling the function. The two uses to `mir_points_to` after the
    function has been called swap the order of `a_val` and `b_val`, reflecting
    the fact that the `swap` function itself swaps the values that the references
-   point to.
+   point to. Sandberg
+
+### Convenience: `mir_ref_of`
+
+Because this pattern of allocating a reference and initializing it with `mir_points_to`
+is so common, SAW provides a helper: `mir_ref_of`.
+
+:::{code-block} console
+sawscript> :type mir_ref_of
+MIRValue -> MIRSetup MIRValue
+:::
+
+`mir_ref_of` combines `mir_alloc` and `mir_points_to` into a single operation, returning 
+a reference to the specified value. This portion of a spec:
+
+:::{code-block} console
+s <- mir_alloc (mir_adt s_adt);
+s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
+mir_points_to s s_val;
+:::
+
+can be rewritten more concisely as:
+
+:::{code-block} console
+s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
+s <- mir_ref_of s_val;
+:::
+
+This version mirrors how one would write the function in Rust, where a `&T`
+points to an already-initialized value. Using `mir_ref_of` encourages that 
+style and avoids the risk of forgetting to initialize allocated memory.

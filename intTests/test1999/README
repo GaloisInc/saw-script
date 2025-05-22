@@ -1,0 +1,11 @@
+This test verifies that `mir_ref_of` behaves equivalently to the more verbose
+pattern using `mir_alloc` followed by `mir_points_to`. It corresponds to
+
+https://github.com/GaloisInc/saw-script/issues/1999.
+
+The Rust function under test takes an immutable reference to a struct and
+returns it.  The SAW specification uses `mir_ref_of` to allocate and initialize
+the reference in one step.
+
+This test reuses the same MIR module as test1973 and should verify
+successfully.
