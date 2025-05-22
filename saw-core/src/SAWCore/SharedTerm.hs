@@ -93,6 +93,7 @@ module SAWCore.SharedTerm
   , scModuleIsLoaded
   , scFindModule
   , scFindDef
+  , scBeginDataType
   , scFindDataType
   , scFindCtor
   , scRequireDef
@@ -320,7 +321,7 @@ import Text.URI
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
-import SAWCore.Module (insInjectCode)
+import SAWCore.Module (insInjectCode, beginDataType)
 import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
@@ -631,6 +632,22 @@ scRequireDef sc i =
   case maybe_d of
     Just d -> return d
     Nothing -> fail ("Could not find definition: " ++ show i)
+
+-- | Insert an "incomplete" datatype, used as part of building up a
+-- 'DataType' to typecheck its constructors.
+scBeginDataType ::
+  SharedContext ->
+  Ident {- ^ The name of this datatype -} ->
+  [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
+  Sort {- ^ The universe of this datatype -} ->
+  IO ()
+scBeginDataType sc dtName dtParams dtIndices dtSort =
+  do dtVarIndex <- scFreshGlobalVar sc
+     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     let dt = DataType { dtCtors = [], .. }
+     let mnm = identModule dtName
+     scModifyModule sc mnm (\m -> beginDataType m dt)
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
