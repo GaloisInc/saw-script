@@ -183,7 +183,7 @@ jobs:
             saw-core-tests
             cryptol-saw-core-tests
             saw-core-coq-tests
-            prover-tests
+            heapster-prover-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether

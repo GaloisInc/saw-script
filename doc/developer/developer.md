@@ -143,7 +143,7 @@ The following can be run with `cabal test`:
 - `saw-core-tests`
 - `cryptol-saw-core-tests`
 - `saw-core-coq-tests`
-- `prover-tests`
+- `heapster-prover-tests`
 - `crux-mir-comp-tests`
 
 There are three other sets of tests:
