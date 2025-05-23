@@ -86,6 +86,7 @@ module SAWCore.SharedTerm
   , scBuildCtor
     -- ** Modules
   , scLoadModule
+  , scImportModule
   , scUnloadModule
   , scModifyModule
   , scDeclarePrim
@@ -322,7 +323,7 @@ import Text.URI
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
-import SAWCore.Module (insInjectCode, beginDataType, completeDataType)
+import SAWCore.Module (insInjectCode, beginDataType, completeDataType, resolvedNameIdent)
 import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
@@ -574,6 +575,17 @@ scLoadModule sc m =
   HMap.insertWith (error $ "scLoadModule: module "
                    ++ show (moduleName m) ++ " already loaded!")
   (moduleName m) m
+
+scImportModule ::
+  SharedContext ->
+  (Ident -> Bool) {- ^ which names to import -} ->
+  ModuleName {- ^ from this module -} ->
+  ModuleName {- ^ into this module -} ->
+  IO ()
+scImportModule sc p mn1 mn2 =
+  do i_exists <- scModuleIsLoaded sc mn1
+     i <- if i_exists then scFindModule sc mn1 else pure (emptyModule mn1)
+     scModifyModule sc mn2 (insImport (p . resolvedNameIdent) i)
 
 -- | Remove a module from the current shared context, or do nothing if it does
 -- not exist
