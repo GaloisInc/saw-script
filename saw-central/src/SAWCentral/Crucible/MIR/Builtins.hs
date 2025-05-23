@@ -5,6 +5,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 -- | Implementations of Crucible-related SAWScript primitives for MIR.
 module SAWCentral.Crucible.MIR.Builtins
@@ -12,6 +14,7 @@ module SAWCentral.Crucible.MIR.Builtins
     -- ** Setup
     mir_alloc
   , mir_alloc_mut
+  , mir_ref_of
   , mir_assert
   , mir_execute_func
   , mir_equal
@@ -212,6 +215,32 @@ mir_alloc_internal mut mty =
                           , _maLen = 1
                           })
      return (MS.SetupVar n)
+
+-- | Allocate a MIR reference and initialize it to point to a given SetupValue.
+-- This is a convenience function that avoids requiring the caller to manually
+-- pair @mir_alloc@ and @mir_points_to@.
+mir_ref_of :: SetupValue -> MIRSetupM SetupValue
+mir_ref_of val = do
+  cc  <- MIRSetupM getMIRCrucibleContext
+  loc <- MIRSetupM $ getW4Position "mir_ref_of"
+  st  <- MIRSetupM get
+
+  let env     = MS.csAllocations (st ^. Setup.csMethodSpec)
+      nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+
+  ty  <- MIRSetupM $ typeOfSetupValue cc env nameEnv val
+  ptr <- mir_alloc_internal Mir.Immut ty
+
+  tags <- MIRSetupM $ view Setup.croTags
+  let md = MS.ConditionMetadata
+            { MS.conditionLoc     = loc
+            , MS.conditionTags    = tags
+            , MS.conditionType    = "MIR ref-of"
+            , MS.conditionContext = ""
+            }
+
+  MIRSetupM $ Setup.addPointsTo (MirPointsTo md ptr [val])
+  return ptr
 
 mir_execute_func :: [SetupValue] -> MIRSetupM ()
 mir_execute_func args =

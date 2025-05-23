@@ -1,0 +1,17 @@
+enable_experimental;
+
+m <- mir_load_module "../test1973/test.linked-mir.json";
+
+let s_adt = mir_find_adt m "test::S" [];
+
+let f_spec = do {
+  let ty = mir_adt s_adt;
+  s <- mir_fresh_expanded_value "s" ty;
+  s_ref <- mir_ref_of s;
+
+  mir_execute_func [s_ref];
+
+  mir_return s_ref;
+};
+
+mir_verify m "test::f" [] false f_spec z3;
