@@ -19,6 +19,13 @@ Portability : non-portable (language extensions)
 
 -- Prettyprinting infrastructure.
 --
+-- This module is meant to be used like this:
+--    import qualified SAWSupport.Pretty as PPS
+--
+-- or if you like, it's reasonable to import the print functions unqualified:
+--    import SAWSupport.Pretty (ppNat, ppTypeConstraint)
+--    import qualified SAWSupport.Pretty as PPS
+--
 -- This module is a haphazard collection of prettyprinting
 -- infrastructure that used to be scattered in random places around
 -- the tree. Most of it came from (a) saw-core's Term prettyprinter,
@@ -44,18 +51,18 @@ Portability : non-portable (language extensions)
 --
 
 module SAWSupport.Pretty (
-    SawDoc,
-    SawStyle(..),
+    Doc,
+    Style(..),
     MemoStyle(..),
-    PPOpts(..),
-    defaultPPOpts,
+    Opts(..),
+    defaultOpts,
     PrettyPrintPrec(..),
     ppNat,
     ppTypeConstraint,
     prettyTypeSig,
     replicateDoc,
     commaSepAll,
-    renderSawDoc,
+    render,
     pShow,
     pShowText,
     commaSep,
@@ -69,15 +76,16 @@ import Data.Text (Text)
 import qualified Data.Text.Lazy as TextL
 import Data.List (intersperse)
 
-import Prettyprinter as PP
-import Prettyprinter.Render.Terminal as PP
+import Prettyprinter (pretty, (<+>) )
+import qualified Prettyprinter as PP
+import qualified Prettyprinter.Render.Terminal as PP
 import qualified Prettyprinter.Render.Text as PPT
 
 
 ------------------------------------------------------------
 -- Document and document style
 
-data SawStyle
+data Style
   = PrimitiveStyle
   | ConstantStyle
   | ExtCnsStyle
@@ -88,26 +96,27 @@ data SawStyle
   | FieldNameStyle
 
 -- TODO: assign colors for more styles
-colorStyle :: SawStyle -> AnsiStyle
+-- FUTURE: is it possible to get non-angry-fruit-salad colors?
+colorStyle :: Style -> PP.AnsiStyle
 colorStyle =
   \case
     PrimitiveStyle -> mempty
-    ConstantStyle -> colorDull Blue
-    ExtCnsStyle -> colorDull Red
-    LocalVarStyle -> colorDull Green
+    ConstantStyle -> PP.colorDull PP.Blue
+    ExtCnsStyle -> PP.colorDull PP.Red
+    LocalVarStyle -> PP.colorDull PP.Green
     DataTypeStyle -> mempty
     CtorAppStyle -> mempty
     RecursorStyle -> mempty
     FieldNameStyle -> mempty
 
-type SawDoc = Doc SawStyle
+type Doc = PP.Doc Style
 
 
 ------------------------------------------------------------
 -- Options
 
 -- | Global options for pretty-printing
-data PPOpts = PPOpts {
+data Opts = Opts {
     -- | Passed to the "useAscii" setting of Cryptol's prettyprinter.
     --   Default is false.
     ppUseAscii :: Bool,
@@ -161,8 +170,8 @@ data MemoStyle
 --   If the default 'ppMemoStyle' changes, be sure to update the help
 --   text in the interpreter functions that control the memoization
 --   style to reflect this change to users.
-defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts {
+defaultOpts :: Opts
+defaultOpts = Opts {
     ppUseAscii = False,
     ppBase = 10,
     ppColor = False,
@@ -186,8 +195,8 @@ class PrettyPrintPrec p where
 -- (for base types and common constructs not tied to any particular AST)
 
 -- | Pretty-print an integer in the correct base
-ppNat :: PPOpts -> Integer -> SawDoc
-ppNat (PPOpts{..}) i
+ppNat :: Opts -> Integer -> Doc
+ppNat (Opts{..}) i
   | ppBase > 36 = pretty i
   | otherwise = prefix <> pretty value
   where
@@ -203,26 +212,26 @@ ppNat (PPOpts{..}) i
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 --   This is the formatting used by SAWCore.
-ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
+ppTypeConstraint :: Doc -> Doc -> Doc
 ppTypeConstraint x tp =
-  hang 2 $ group $ vsep [annotate LocalVarStyle x, ":" <+> tp]
+  PP.hang 2 $ PP.group $ PP.vsep [PP.annotate LocalVarStyle x, ":" <+> tp]
 
 -- | Pretty-print a type signature.
 --   This is the formatting used by SAWScript.
 --   XXX: should probably unify with ppTypeConstraint
 prettyTypeSig :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-prettyTypeSig n t = n PP.<+> PP.pretty ':' PP.<+> t
+prettyTypeSig n t = n <+> PP.pretty ':' <+> t
 
 -- | Concatenate n copies of a doc.
 replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
 replicateDoc n d
   | n < 1 = PP.emptyDoc
-  | True  = d PP.<> replicateDoc (n-1) d
+  | True  = d <> replicateDoc (n-1) d
 
 -- | Add a comma to d1 and append d2.
 --   (Functionally internal to commaSepAll.)
 commaSepDoc :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-commaSepDoc d1 d2 = d1 PP.<> PP.comma <+> d2
+commaSepDoc d1 d2 = d1 <> PP.comma <+> d2
 
 -- | Concatenate ds, appending a comma to each.
 commaSepAll :: [PP.Doc ann] -> PP.Doc ann
@@ -234,13 +243,13 @@ commaSepAll ds = case ds of
 ------------------------------------------------------------
 -- Render documents
 
-renderSawDoc :: PPOpts -> SawDoc -> String
-renderSawDoc ppOpts doc =
-  TextL.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
+render :: Opts -> Doc -> String
+render opts doc =
+  TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))
   where
     -- ribbon width 64, with effectively unlimited right margin
-    layoutOpts = LayoutOptions (AvailablePerLine 8000 0.008)
-    style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
+    layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
+    style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 
 pShow :: PrettyPrintPrec a => a -> String
 pShow = show . prettyPrec 0

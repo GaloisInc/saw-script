@@ -62,7 +62,7 @@ import Data.Traversable (Traversable(..))
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
-import SAWSupport.Pretty (defaultPPOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Conversion (natConversions)
 import SAWCore.Recognizer
@@ -279,7 +279,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
+    (\(ctx,_) -> "  " ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError

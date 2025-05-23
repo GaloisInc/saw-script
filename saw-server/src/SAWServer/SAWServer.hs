@@ -44,7 +44,7 @@ import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
 
-import SAWSupport.Pretty (defaultPPOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
@@ -253,7 +253,7 @@ initialState readFileFn =
                 , rwCryptol = cenv
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
-                , rwPPOpts = defaultPPOpts
+                , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc

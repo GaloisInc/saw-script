@@ -118,7 +118,7 @@ import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
 
-import SAWSupport.Pretty (defaultPPOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Name
 import SAWCore.Term.Functor
@@ -497,7 +497,7 @@ type MonadifyTypeCtx = [(LocalName, Term, Maybe SomeTpExpr)]
 -- | Pretty-print a 'Term' relative to a 'MonadifyTypeCtx'
 ppTermInTypeCtx :: MonadifyTypeCtx -> Term -> String
 ppTermInTypeCtx ctx t =
-  scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
+  scPrettyTermInCtx PPS.defaultOpts (map (\(x,_,_) -> x) ctx) t
 
 -- | Extract the variables and their original types from a 'MonadifyTypeCtx'
 typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
@@ -922,7 +922,7 @@ ctxToTypeCtx = map (\(x,tp,arg) ->
 -- | Pretty-print a 'Term' relative to a 'MonadifyCtx'
 ppTermInMonCtx :: MonadifyCtx -> Term -> String
 ppTermInMonCtx ctx t =
-  scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
+  scPrettyTermInCtx PPS.defaultOpts (map (\(x,_,_) -> x) ctx) t
 
 -- | A memoization table for monadifying terms: a map from 'TermIndex'es to
 -- 'MonTerm's and, possibly, corresponding 'ArgMonTerm's. The latter are simply

@@ -54,7 +54,7 @@ import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), PPOpts(..), defaultPPOpts, pShow, pShowText)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
@@ -634,7 +634,7 @@ buildTopLevelEnv proxy opts =
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
-                   , rwPPOpts     = PPS.defaultPPOpts
+                   , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB

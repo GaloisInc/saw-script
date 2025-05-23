@@ -61,7 +61,7 @@ import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
-import qualified SAWSupport.Pretty as PPS
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, commaSep)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
@@ -240,7 +240,7 @@ isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
 isVUnit _ = False
 
-showsProofResult :: PPS.PPOpts -> ProofResult -> ShowS
+showsProofResult :: PPS.Opts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
     ValidProof _ _ -> showString "Valid"
@@ -254,7 +254,7 @@ showsProofResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showsSatResult :: PPS.PPOpts -> SatResult -> ShowS
+showsSatResult :: PPS.Opts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
@@ -267,7 +267,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPS.PPOpts -> Simpset a -> String
+showSimpset :: PPS.Opts -> Simpset a -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -279,7 +279,7 @@ showSimpset opts ss =
     ppTerm t = SAWCorePP.ppTerm opts t
 
 -- | Pretty-print a 'Refnset' to a 'String'
-showRefnset :: PPS.PPOpts -> MRSolver.Refnset a -> String
+showRefnset :: PPS.Opts -> MRSolver.Refnset a -> String
 showRefnset opts ss =
   unlines ("Refinements" : "=============" : map (show . ppFunAssump)
                                                  (MRSolver.listFunAssumps ss))
@@ -294,7 +294,7 @@ showRefnset opts ss =
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
       SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
 
-showsPrecValue :: PPS.PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
+showsPrecValue :: PPS.Opts -> SAWNamingEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
     VBool True -> showString "true"
@@ -360,7 +360,7 @@ showsPrecValue opts nenv p v =
     VMIRSetupValue x -> shows x
 
 instance Show Value where
-    showsPrec p v = showsPrecValue PPS.defaultPPOpts emptySAWNamingEnv p v
+    showsPrec p v = showsPrecValue PPS.defaultOpts emptySAWNamingEnv p v
 
 indexValue :: Value -> Value -> Value
 indexValue (VArray vs) (VInteger x)
@@ -513,7 +513,7 @@ data TopLevelRW =
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
-  , rwPPOpts  :: PPS.PPOpts
+  , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext
   , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB

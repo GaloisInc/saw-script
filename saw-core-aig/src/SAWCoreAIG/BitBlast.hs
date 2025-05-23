@@ -35,7 +35,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWSupport.Pretty (defaultPPOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import qualified SAWCore.Simulator as Sim
@@ -498,7 +498,7 @@ asAIGType sc t = do
     (R.asTupleType -> Just _)    -> return []
     (R.asRecordType -> Just _)   -> return []
     _                            -> fail $ "SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: "
-                                    ++ scPrettyTerm defaultPPOpts t'
+                                    ++ scPrettyTerm PPS.defaultOpts t'
 
 bitBlastTerm ::
   AIG.IsAIG l g =>
@@ -540,7 +540,7 @@ asFiniteType sc t =
   case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty Map.empty t) of
     Just ft -> return ft
     Nothing ->
-      fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t
+      fail $ "asFiniteType: unsupported type " ++ scPrettyTerm PPS.defaultOpts t
 
 processVar ::
   (ExtCns Term, FirstOrderType) ->

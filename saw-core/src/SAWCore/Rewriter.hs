@@ -76,7 +76,7 @@ import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
-import SAWSupport.Pretty (defaultPPOpts)
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Cache
 import SAWCore.Conversion
@@ -251,8 +251,8 @@ scMatch sc pat term =
     match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s
       | termIsClosed t && i == j = return s
     match depth env x y s@(MatchState m cs) =
-      -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
-      -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
+      -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>
+      -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm PPS.defaultOpts y) >>
       case asVarPat depth x of
         Just (i, js) ->
           do -- ensure parameter variables are distinct
@@ -719,11 +719,11 @@ rewriteSharedTerm sc ss t0 =
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
-                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm defaultPPOpts lhs
+                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
           | Map.keys inst /= take (length ctxt) [0 ..] ->
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
-                 ++ scPrettyTerm defaultPPOpts lhs
+                 ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
           | permutative ->
             do
@@ -864,7 +864,7 @@ rewritingSharedContext sc ss = sc'
         Nothing -> apply rules t
         Just inst
           | l == r ->
-            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm defaultPPOpts l
+            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm PPS.defaultOpts l
                apply rules t
           | otherwise -> instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
@@ -883,7 +883,7 @@ replaceTerm :: Ord a =>
   IO (Set a, Term)
 replaceTerm sc ss (pat, repl) t = do
     unless (termIsClosed pat) $ fail $ unwords
-       [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
+       [ "replaceTerm: term to replace has free variables!", scPrettyTerm PPS.defaultOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
     rewriteSharedTerm sc ss' t

@@ -34,7 +34,7 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
-import SAWSupport.Pretty (SawDoc, PPOpts, defaultPPOpts, renderSawDoc)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
@@ -410,8 +410,9 @@ neutralToSharedTerm sc = loop
   loop (NeutralConstant ec) =
     do scTermF sc (Constant ec Nothing)
 
-ppNeutral :: PPOpts -> NeutralTerm -> SawDoc
+ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
 ppNeutral opts = ppTerm opts . neutralToTerm
 
+-- XXX this shouldn't be a Show instance
 instance Show NeutralTerm where
-  show = renderSawDoc defaultPPOpts . ppNeutral defaultPPOpts
+  show = PPS.render PPS.defaultOpts . ppNeutral PPS.defaultOpts
