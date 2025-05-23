@@ -142,9 +142,11 @@ import           Mir.Intrinsics (MIR)
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
+import           SAWSupport.Pretty (defaultPPOpts)
+
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Pretty (defaultPPOpts, ppTerm)
+import           SAWCore.Term.Pretty (ppTerm)
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)

@@ -90,6 +90,8 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
+import SAWSupport.Pretty (SawDoc, PPOpts)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Term.CtxTerm

@@ -44,6 +44,8 @@ import GHC.Generics
 import Prettyprinter
 import Data.Text (Text, unpack)
 
+import SAWSupport.Pretty (SawDoc, PPOpts, renderSawDoc)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty

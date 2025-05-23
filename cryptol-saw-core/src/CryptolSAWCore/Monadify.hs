@@ -118,11 +118,13 @@ import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
 
+import SAWSupport.Pretty (defaultPPOpts)
+
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.OpenTerm
-import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTermInCtx)
+import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
 import CryptolSAWCore.Panic
 import CryptolSAWCore.TypedTerm

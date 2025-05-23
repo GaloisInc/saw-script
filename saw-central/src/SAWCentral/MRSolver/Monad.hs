@@ -50,6 +50,8 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
+import SAWSupport.Pretty (SawDoc, PPOpts, renderSawDoc)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty

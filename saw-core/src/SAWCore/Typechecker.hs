@@ -41,13 +41,15 @@ import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
 
+import SAWSupport.Pretty (SawDoc)
+
 import SAWCore.Utils (internalError)
 
 import SAWCore.Module
 import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (SawDoc, showTerm)
+import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.SCTypeCheck

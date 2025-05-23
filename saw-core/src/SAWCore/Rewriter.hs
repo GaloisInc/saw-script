@@ -76,6 +76,7 @@ import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
+import SAWSupport.Pretty (defaultPPOpts)
 
 import SAWCore.Cache
 import SAWCore.Conversion
@@ -83,7 +84,7 @@ import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.TypedAST
-import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTerm)
+import SAWCore.Term.Pretty (scPrettyTerm)
 import qualified SAWCore.TermNet as Net
 import SAWCore.Prelude.Constants
 

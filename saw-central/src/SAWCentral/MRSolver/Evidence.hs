@@ -35,8 +35,9 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import SAWSupport.Pretty (PPOpts, defaultPPOpts)
+
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats

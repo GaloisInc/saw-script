@@ -78,7 +78,10 @@ library saw-support
   build-depends:
     -- upstream packages from hackage
     base >= 4.9,
+    containers,
     panic,
+    prettyprinter >= 1.7.0,
+    prettyprinter-ansi-terminal >= 1.1.2,
     text,
 
     -- packages in git submodules
@@ -90,6 +93,7 @@ library saw-support
   hs-source-dirs: saw-support/src
   exposed-modules:
     SAWSupport.PanicSupport
+    SAWSupport.Pretty
 
 
 ------------------------------------------------------------
@@ -124,7 +128,6 @@ library saw-core
     mtl,
     pretty,
     prettyprinter >= 1.7.0,
-    prettyprinter-ansi-terminal >= 1.1.2,
     random,
     template-haskell,
     text,
@@ -827,6 +830,7 @@ library saw-server
     parameterized-utils,
 
     -- internal subpackages in the saw tree
+    saw:saw-support,
     saw:saw-core,
     saw:cryptol-saw-core,
     saw:saw-central
@@ -1074,7 +1078,8 @@ test-suite saw-core-tests
     unordered-containers,
     vector,
 
-    -- the saw-core library in the saw tree
+    -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core,
 
   type: exitcode-stdio-1.0

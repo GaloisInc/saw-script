@@ -62,6 +62,8 @@ import Data.Traversable (Traversable(..))
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
+import SAWSupport.Pretty (defaultPPOpts)
+
 import SAWCore.Conversion (natConversions)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
@@ -69,7 +71,7 @@ import SAWCore.SharedTerm
 import SAWCore.TypedAST
 import SAWCore.Module
 import SAWCore.Position
-import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTermInCtx)
+import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term

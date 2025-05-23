@@ -43,11 +43,13 @@ import qualified Lang.JVM.Codebase as JSS
 import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
+
+import SAWSupport.Pretty (defaultPPOpts)
+
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
 import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
 import SAWCore.Term.Functor (mkModuleName)
-import SAWCore.Term.Pretty (defaultPPOpts)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)

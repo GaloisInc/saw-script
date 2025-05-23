@@ -310,6 +310,8 @@ import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
+import qualified SAWSupport.Pretty as PPS (PPOpts)
+
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
@@ -454,7 +456,7 @@ scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
      pure (resolveName env nm)
 
-scShowTerm :: SharedContext -> PPOpts -> Term -> IO String
+scShowTerm :: SharedContext -> PPS.PPOpts -> Term -> IO String
 scShowTerm sc opts t =
   do env <- readIORef (scNamingEnv sc)
      pure (showTermWithNames opts env t)

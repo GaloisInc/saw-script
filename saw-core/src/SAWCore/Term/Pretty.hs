@@ -18,13 +18,7 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Term.Pretty
-  ( SawDoc
-  , renderSawDoc
-  , PPOpts(..)
-  , MemoStyle(..)
-  , defaultPPOpts
-  , ppNat
-  , ppTerm
+  ( ppTerm
   , ppTermInCtx
   , showTerm
   , scPrettyTerm
@@ -50,121 +44,24 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Fold
 import Data.Hashable (hash)
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Numeric (showIntAtBase, showHex)
+import Numeric (showHex)
 import Prettyprinter
-import Prettyprinter.Render.Terminal
 import Text.URI
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+
+import SAWSupport.Pretty (SawDoc, SawStyle(..), MemoStyle(..), PPOpts(..), defaultPPOpts, ppNat, ppTypeConstraint, renderSawDoc)
 
 import SAWCore.Panic (panic)
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.Recognizer
 
---------------------------------------------------------------------------------
--- * Doc annotations
-
-data SawStyle
-  = PrimitiveStyle
-  | ConstantStyle
-  | ExtCnsStyle
-  | LocalVarStyle
-  | DataTypeStyle
-  | CtorAppStyle
-  | RecursorStyle
-  | FieldNameStyle
-
--- TODO: assign colors for more styles
-colorStyle :: SawStyle -> AnsiStyle
-colorStyle =
-  \case
-    PrimitiveStyle -> mempty
-    ConstantStyle -> colorDull Blue
-    ExtCnsStyle -> colorDull Red
-    LocalVarStyle -> colorDull Green
-    DataTypeStyle -> mempty
-    CtorAppStyle -> mempty
-    RecursorStyle -> mempty
-    FieldNameStyle -> mempty
-
-type SawDoc = Doc SawStyle
-
---------------------------------------------------------------------------------
--- * Pretty-Printing Options and Precedences
---------------------------------------------------------------------------------
-
--- | Global options for pretty-printing
-data PPOpts = PPOpts {
-    -- | Passed to the "useAscii" setting of Cryptol's prettyprinter.
-    --   Default is false.
-    ppUseAscii :: Bool,
-
-    -- | The base to print integers in; default is 10.
-    ppBase :: Int,
-    -- | Whether to print in color; default is false.
-    ppColor :: Bool,
-
-    -- | Whether to show the names of local variables. Default is
-    --   true. If set to false, prints the deBruijn indexes instead.
-    ppShowLocalNames :: Bool,
-
-    -- | Maximum depth to recurse into terms. If not set, no limit.
-    --   Default is unset.
-    ppMaxDepth :: Maybe Int,
-
-    -- | The numeric identifiers, as seen in the 'memoFresh' field of
-    --   'MemoVar', of SAWCore variables that shouldn't be inlined.
-    ppNoInlineMemoFresh :: [Int],
-
-    -- | The way to display SAWCore memoization variables.
-    --   Default is Incremental.
-    ppMemoStyle :: MemoStyle,
-
-    -- | Minimum sharing level required to memoize SAWCore subterms.
-    --   Default is 2 (i.e., any sharing).
-    ppMinSharing :: Int
- }
-
--- | How should memoization variables be displayed?
---
--- Note: actual text stylization is the province of 'ppMemoVar', this just
--- describes the semantic information 'ppMemoVar' should be prepared to display.
-data MemoStyle
-  = Incremental
-  -- ^ 'Incremental' says to display a term's memoization variable with the
-  -- value of a counter that increments after a term is memoized. The first
-  -- term to be memoized will be displayed with '1', the second with '2', etc.
-  | Hash Int
-  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
-  -- digits of the term's hash.
-  | HashIncremental Int
-  -- ^ 'HashIncremental i' says to display a term's memoization variable with
-  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
-  -- counter described in 'Incremental'.
-
--- | Default options for pretty-printing.
---
--- If the default 'ppMemoStyle' changes, be sure to update the help
--- text in the interpreter functions that control the memoization
--- style to reflect this change to users.
-defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts {
-    ppUseAscii = False,
-    ppBase = 10,
-    ppColor = False,
-    ppNoInlineMemoFresh = mempty,
-    ppShowLocalNames = True,
-    ppMaxDepth = Nothing,
-    ppMinSharing = 2,
-    ppMemoStyle = Incremental
- }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -409,22 +306,6 @@ withMemoVar global_p termIdx termHash f =
 ppIdent :: Ident -> SawDoc
 ppIdent = viaShow
 
--- | Pretty-print an integer in the correct base
-ppNat :: PPOpts -> Integer -> SawDoc
-ppNat (PPOpts{..}) i
-  | ppBase > 36 = pretty i
-  | otherwise = prefix <> pretty value
-  where
-    prefix = case ppBase of
-      2  -> "0b"
-      8  -> "0o"
-      10 -> mempty
-      16 -> "0x"
-      _  -> "0" <> pretty '<' <> pretty ppBase <> pretty '>'
-
-    value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
-    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
-
 -- | Pretty-print a memoization variable, according to 'ppMemoStyle'
 ppMemoVar :: MemoVar -> PPM SawDoc
 ppMemoVar MemoVar{..} = asks (ppMemoStyle . ppOpts) >>= \case
@@ -436,11 +317,6 @@ ppMemoVar MemoVar{..} = asks (ppMemoStyle . ppOpts) >>= \case
     pure ("x" <> pretty memoFresh <> "@" <> pretty (take prefixLen hashStr))
   where
     hashStr = showHex (abs memoHash) ""
-
--- | Pretty-print a type constraint (also known as an ascription) @x : tp@
-ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
-ppTypeConstraint x tp =
-  hang 2 $ group $ vsep [annotate LocalVarStyle x, ":" <+> tp]
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
 ppAppList :: Prec -> SawDoc -> [SawDoc] -> SawDoc
@@ -819,14 +695,6 @@ ppTermInCtx opts ctx trm =
   runPPM opts emptySAWNamingEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm True trm
-
-renderSawDoc :: PPOpts -> SawDoc -> String
-renderSawDoc ppOpts doc =
-  Text.Lazy.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
-  where
-    -- ribbon width 64, with effectively unlimited right margin
-    layoutOpts = LayoutOptions (AvailablePerLine 8000 0.008)
-    style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
 
 -- | Pretty-print a term and render it to a string, using the given options
 scPrettyTerm :: PPOpts -> Term -> String

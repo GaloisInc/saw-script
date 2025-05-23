@@ -49,6 +49,8 @@ import Prettyprinter
 import Data.Reflection
 import Data.Parameterized.BoolRepr
 
+import SAWSupport.Pretty (renderSawDoc)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm

@@ -35,6 +35,8 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWSupport.Pretty (defaultPPOpts)
+
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -45,7 +47,7 @@ import SAWCore.TypedAST
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
-import SAWCore.Term.Pretty (defaultPPOpts, scPrettyTerm)
+import SAWCore.Term.Pretty (scPrettyTerm)
 
 import SAWCoreAIG.Panic
 

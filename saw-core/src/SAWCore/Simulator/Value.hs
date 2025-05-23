@@ -34,6 +34,8 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
+import SAWSupport.Pretty (SawDoc, PPOpts, defaultPPOpts, renderSawDoc)
+
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
 import SAWCore.SharedTerm

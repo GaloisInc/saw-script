@@ -116,6 +116,8 @@ import Numeric.Natural
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import SAWSupport.Pretty (defaultPPOpts, renderSawDoc)
+
 import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty

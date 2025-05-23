@@ -34,6 +34,8 @@ import Prettyprinter hiding (Doc)
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
+import SAWSupport.Pretty (SawDoc, PPOpts, defaultPPOpts, ppNat)
+
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.TypedAST

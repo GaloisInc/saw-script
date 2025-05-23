@@ -39,8 +39,10 @@ module SAWCentral.AST
        , tBlock, tContext, tVar
        , isContext
 
-       , PrettyPrintPrec(..), pShow, pShowText, commaSepAll, prettyWholeModule
+       , prettyWholeModule
        ) where
+
+import qualified SAWSupport.Pretty as PPS (PrettyPrintPrec(..), prettyTypeSig, commaSepAll, replicateDoc)
 
 import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
@@ -57,7 +59,6 @@ import Data.Traversable (Traversable)
 #endif
 import qualified Prettyprinter as PP
 import           Prettyprinter (Pretty)
-import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
@@ -352,13 +353,13 @@ instance Pretty Expr where
                 (map prettyDef decls))
       , "in" PP.<+> PP.pretty expr
       ]
-    TSig _ expr typ -> PP.parens $ PP.pretty expr PP.<+> PP.colon PP.<+> prettyPrec 0 typ
+    TSig _ expr typ -> PP.parens $ PP.pretty expr PP.<+> PP.colon PP.<+> PPS.prettyPrec 0 typ
     IfThenElse _ e1 e2 e3 ->
       "if" PP.<+> PP.pretty e1 PP.<+>
       "then" PP.<+> PP.pretty e2 PP.<+>
       "else" PP.<+> PP.pretty e3
 
-instance PrettyPrintPrec Expr where
+instance PPS.PrettyPrintPrec Expr where
   prettyPrec _ e = PP.pretty e
 
 instance Pretty Pattern where
@@ -404,7 +405,7 @@ instance Pretty Stmt where
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.emptyDoc)
       StmtTypedef _ (Located name _ _) ty ->
-         "typedef" PP.<+> PP.pretty name PP.<+> prettyPrec 0 ty
+         "typedef" PP.<+> PP.pretty name PP.<+> PPS.prettyPrec 0 ty
       --expr -> PP.cyan . PP.viaShow expr
 
       where
@@ -425,49 +426,40 @@ prettyMaybeTypedArg :: (Name, Maybe Type) -> PP.Doc ann
 prettyMaybeTypedArg (name,Nothing) =
    PP.pretty name
 prettyMaybeTypedArg (name,Just typ) =
-   PP.parens $ PP.pretty name PP.<+> PP.colon PP.<+> prettyPrec 0 typ
+   PP.parens $ PP.pretty name PP.<+> PP.colon PP.<+> PPS.prettyPrec 0 typ
 
 dissectLambda :: Expr -> ([Pattern], Expr)
 dissectLambda = \case
   Function _ pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
   expr -> ([], expr)
 
-pShow :: PrettyPrintPrec a => a -> String
-pShow = show . prettyPrec 0
-
-pShowText :: PrettyPrintPrec a => a -> Text
-pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec 0
-
-class PrettyPrintPrec p where
-  prettyPrec :: Int -> p -> PP.Doc ann
-
-instance PrettyPrintPrec Schema where
+instance PPS.PrettyPrintPrec Schema where
   prettyPrec _ (Forall ns t) = case ns of
-    [] -> prettyPrec 0 t
-    _  -> PP.braces (commaSepAll $ map PP.pretty ns') PP.<+> prettyPrec 0 t
+    [] -> PPS.prettyPrec 0 t
+    _  -> PP.braces (PPS.commaSepAll $ map PP.pretty ns') PP.<+> PPS.prettyPrec 0 t
           where ns' = map (\(_pos, n) -> n) ns
 
-instance PrettyPrintPrec Type where
+instance PPS.PrettyPrintPrec Type where
   prettyPrec par t@(TyCon _ tc ts) = case (tc,ts) of
-    (_,[])                 -> prettyPrec par tc
-    (TupleCon _,_)         -> PP.parens $ commaSepAll $ map (prettyPrec 0) ts
-    (ArrayCon,[typ])       -> PP.brackets (prettyPrec 0 typ)
+    (_,[])                 -> PPS.prettyPrec par tc
+    (TupleCon _,_)         -> PP.parens $ PPS.commaSepAll $ map (PPS.prettyPrec 0) ts
+    (ArrayCon,[typ])       -> PP.brackets (PPS.prettyPrec 0 typ)
     (FunCon,[f,v])         -> (if par > 0 then PP.parens else id) $
-                                prettyPrec 1 f PP.<+> "->" PP.<+> prettyPrec 0 v
+                                PPS.prettyPrec 1 f PP.<+> "->" PP.<+> PPS.prettyPrec 0 v
     (BlockCon,[cxt,typ])   -> (if par > 1 then PP.parens else id) $
-                                prettyPrec 1 cxt PP.<+> prettyPrec 2 typ
+                                PPS.prettyPrec 1 cxt PP.<+> PPS.prettyPrec 2 typ
     _ -> error $ "malformed TyCon: " ++ show t
   prettyPrec _par (TyRecord _ fs) =
       PP.braces
-    $ commaSepAll
-    $ map (\(n,t) -> PP.pretty n `prettyTypeSig` prettyPrec 0 t)
+    $ PPS.commaSepAll
+    $ map (\(n,t) -> PP.pretty n `PPS.prettyTypeSig` PPS.prettyPrec 0 t)
     $ Map.toList fs
   prettyPrec _par (TyUnifyVar _ i)    = "t." PP.<> PP.pretty i
   prettyPrec _par (TyVar _ n)         = PP.pretty n
 
-instance PrettyPrintPrec TyCon where
+instance PPS.PrettyPrintPrec TyCon where
   prettyPrec par tc = case tc of
-    TupleCon n     -> PP.parens $ replicateDoc (n - 1) $ PP.pretty ','
+    TupleCon n     -> PP.parens $ PPS.replicateDoc (n - 1) $ PP.pretty ','
     ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
     FunCon         -> PP.parens $ "->"
     StringCon      -> "String"
@@ -481,9 +473,9 @@ instance PrettyPrintPrec TyCon where
     LLVMSpecCon    -> "LLVMSpec"
     MIRSpecCon     -> "MIRSpec"
     BlockCon       -> "<Block>"
-    ContextCon cxt -> prettyPrec par cxt
+    ContextCon cxt -> PPS.prettyPrec par cxt
 
-instance PrettyPrintPrec Context where
+instance PPS.PrettyPrintPrec Context where
   prettyPrec _ c = case c of
     CryptolSetup -> "CryptolSetup"
     JavaSetup    -> "JavaSetup"
@@ -493,26 +485,10 @@ instance PrettyPrintPrec Context where
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
 
-instance PrettyPrintPrec NamedType where
+instance PPS.PrettyPrintPrec NamedType where
   prettyPrec par ty = case ty of
-    ConcreteType ty' -> prettyPrec par ty'
+    ConcreteType ty' -> PPS.prettyPrec par ty'
     AbstractType -> "<opaque>"
-
-replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
-replicateDoc n d
-  | n < 1 = PP.emptyDoc
-  | True  = d PP.<> replicateDoc (n-1) d
-
-prettyTypeSig :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-prettyTypeSig n t = n PP.<+> PP.pretty ':' PP.<+> t
-
-commaSep :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
-commaSep = ((PP.<+>) . (PP.<> PP.comma))
-
-commaSepAll :: [PP.Doc ann] -> PP.Doc ann
-commaSepAll ds = case ds of
-  [] -> PP.emptyDoc
-  _  -> foldl1 commaSep ds
 
 -- }}}
 

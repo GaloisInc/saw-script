@@ -66,6 +66,9 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified CryptolSAWCore.Monadify as Monadify
 
+-- saw-support
+import SAWSupport.Pretty (SawDoc, MemoStyle(..), PPOpts(..), defaultPPOpts, renderSawDoc, pShow)
+
 -- saw-core
 import SAWCore.Grammar (parseSAWTerm)
 import SAWCore.ExternalFormat
@@ -80,7 +83,7 @@ import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (MemoStyle(..), PPOpts(..), defaultPPOpts, ppTerm, scPrettyTerm)
+import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCore.Simulator.Concrete as Concrete
@@ -89,7 +92,6 @@ import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 import SAWCore.TypedAST
 import qualified SAWCore.Simulator.TermModel as TM
-import SAWCore.Term.Pretty (SawDoc, renderSawDoc)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -129,7 +131,7 @@ import Lang.Crucible.CFG.Common (freshGlobalVar)
 import qualified SAWCentral.SBVParser as SBV
 import SAWCentral.ImportAIG
 
-import SAWCentral.AST (getVal, pShow, Located(..))
+import SAWCentral.AST (getVal, Located(..))
 import SAWCentral.Options as Opts
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))

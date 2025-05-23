@@ -84,6 +84,8 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
 
+import qualified SAWSupport.Pretty as PPS (defaultPPOpts)
+
 import SAWCore.Term.Functor
 import SAWCore.Name
 import SAWCore.Module as Mod
@@ -93,7 +95,7 @@ import SAWCore.Recognizer
 import SAWCore.OpenTerm
 import SAWCore.Typechecker
 import SAWCore.SCTypeCheck
-import qualified SAWCore.Term.Pretty as Pretty (defaultPPOpts, scPrettyTerm, scPrettyTermInCtx)
+import qualified SAWCore.Term.Pretty as Pretty (scPrettyTerm, scPrettyTermInCtx)
 import qualified SAWCore.UntypedAST as Un
 import qualified SAWCore.Grammar as Un
 
@@ -164,9 +166,9 @@ checkTypeAgreesWithDesc sc env nm tp_ident ctx d_ident =
           fail ("Type description for " ++ nm ++
                 " does not match user-supplied type\n" ++
                 "Type for description:\n" ++
-                Pretty.scPrettyTermInCtx Pretty.defaultPPOpts [] d_tp_norm ++ "\n" ++
+                Pretty.scPrettyTermInCtx PPS.defaultPPOpts [] d_tp_norm ++ "\n" ++
                 "User-supplied type:\n" ++
-                Pretty.scPrettyTermInCtx Pretty.defaultPPOpts [] tp_norm)
+                Pretty.scPrettyTermInCtx PPS.defaultPPOpts [] tp_norm)
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in

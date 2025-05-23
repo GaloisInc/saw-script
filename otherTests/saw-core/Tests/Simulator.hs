@@ -17,7 +17,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import GHC.Natural
 
-import SAWCore.Term.Pretty (ppTerm, defaultPPOpts)
+import SAWSupport.Pretty (defaultPPOpts)
+
+import SAWCore.Term.Pretty (ppTerm)
 import SAWCore.Prelude
 import SAWCore.SharedTerm
 import SAWCore.Simulator.TermModel
