@@ -690,7 +690,7 @@ scRequireCtor sc i =
     Just ctor -> return ctor
     Nothing -> fail ("Could not find constructor: " ++ show i)
 
--- | Insert an "injectCode" declaration to the given SAWCore module.
+-- | Insert an \"injectCode\" declaration to the given SAWCore module.
 -- This declaration has no logical effect within SAW; it is used to
 -- add extra code (like class instance declarations, for example) to
 -- exported SAWCore modules in certain translation backends.
