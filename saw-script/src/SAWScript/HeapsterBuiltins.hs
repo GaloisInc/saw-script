@@ -982,8 +982,6 @@ insPrimitive henv nm tp =
   do sc <- getSharedContext
      let mnm = heapsterEnvSAWModule henv
      let ident = mkSafeIdent mnm nm
-     i <- liftIO $ scFreshGlobalVar sc
-     liftIO $ scRegisterName sc i (ModuleIdentifier ident)
      liftIO $ scDeclarePrim sc mnm ident PrimQualifier tp
      return ident
 

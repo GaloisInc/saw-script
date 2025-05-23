@@ -596,6 +596,7 @@ scModifyModule sc mnm f =
 scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc mnm ident q def_tp =
   do i <- scFreshGlobalVar sc
+     scRegisterName sc i (ModuleIdentifier ident)
      let pn = PrimName i ident def_tp
      t <- scFlatTermF sc (Primitive pn)
      scRegisterGlobal sc ident t
@@ -650,6 +651,7 @@ scBeginDataType ::
   IO (PrimName Term)
 scBeginDataType sc dtName dtParams dtIndices dtSort =
   do dtVarIndex <- scFreshGlobalVar sc
+     scRegisterName sc dtVarIndex (ModuleIdentifier dtName)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
      let mnm = identModule dtName
