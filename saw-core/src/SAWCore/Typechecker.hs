@@ -447,8 +447,6 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
 -- | Typecheck a module and, on success, insert it into the current context
 tcInsertModule :: SharedContext -> Un.Module -> IO ()
 tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
-  let myfail :: String -> IO a
-      myfail msg = scUnloadModule sc mnm >> fail msg
   -- First, insert an empty module for mnm
   scLoadModule sc $ emptyModule mnm
   -- Next, process all the imports
@@ -460,7 +458,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm) []
   case decls_res of
-    Left err -> myfail $ unlines $ prettyTCError err
+    Left err -> fail $ unlines $ prettyTCError err
     Right _ -> return ()
 
 
