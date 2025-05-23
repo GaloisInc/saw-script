@@ -639,7 +639,7 @@ scRequireDef sc i =
     Just d -> return d
     Nothing -> fail ("Could not find definition: " ++ show i)
 
--- | Insert an "incomplete" datatype, used as part of building up a
+-- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. The constructors must be
 -- registered separately with @scCompleteDataType@.
 scBeginDataType ::
