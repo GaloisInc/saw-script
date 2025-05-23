@@ -33,21 +33,50 @@ Portability : non-portable (language extensions)
 -- prettyprinter, none of which shared any logic other than the
 -- upstream prettyprinter package.
 --
--- Someone should try to systematize the naming. In particular we'd
--- like to have some kind of convention like (perhaps) "prettyFoo"
--- generates a Doc for a Foo and "ppFoo" generates a Doc and also
--- renders it to Text. (Note that in the prettyprinter package,
--- "pretty" generates Doc and there is no "pp", so this choice seems
--- preferable to the other way around.)
+-- XXX: there's more in MrSolver but it will require untangling.
 --
--- I'd prefer to kill off all "show"-related naming because we don't
--- want people writing or using Show instances except maybe for
--- extremely simple types.
+-- XXX: Someone should try to systematize the naming. In particular
+-- we'd like to have some kind of convention like (perhaps)
+-- "prettyFoo" generates a Doc for a Foo and "ppFoo" generates a Doc
+-- and also renders it to Text. (Note that in the prettyprinter
+-- package, "pretty" generates Doc and there is no "pp", so this
+-- choice seems preferable to the other way around.) I've done some
+-- of this, but there's a lot more out in the rest of the tree that
+-- ought to be updated to match it.
+--
+-- XXX: should come up with a better name for pShowText, and remove
+-- pShow entirely. These should be called "show" because they aren't
+-- Show instances and don't have the properties of Show instances.
+-- And we don't want people writing or using Show instances except
+-- maybe for extremely simple types.
+--
+-- XXX: The ShowS material at the bottom should go away; that requires
+-- cleaning up the callers to use prettyprinting instead of Show
+-- instances.
+--
+-- XXX: Also we should crack down on callers using "show" instead of
+-- "render" to produce output text.
 --
 -- It would also be nice in the long run to be able to do
 --    import qualified Prettyprinter as PP
 --    import qualified SAWSupport.Pretty as PP
 -- without this causing problems.
+--
+-- It may also be that this should be split into two or more modules,
+-- one meant to be used qualified and one meant for selective import,
+-- or something. It isn't at all clear yet what a good interface is.
+--
+-- FUTURE: there's also been some talk of adopting Cryptol's technique
+-- of wrapping the upstream prettyprinter and exposing a monad, or
+-- some other similar way of allowing options to be applied to the
+-- document after it's assembled instead of needing to be threaded
+-- through everywhere.
+--
+-- XXX: in any event, it's problematic that seemingly more than half
+-- of the call sites for things that want options pass the default
+-- options. If we're actually going to support the things the options
+-- allows the user to set, we should make sure the user's settings
+-- make it to the places that do prints. This includes errors.
 --
 
 module SAWSupport.Pretty (
@@ -56,19 +85,21 @@ module SAWSupport.Pretty (
     MemoStyle(..),
     Opts(..),
     defaultOpts,
-    PrettyPrintPrec(..),
-    ppNat,
-    ppTypeConstraint,
+    PrettyPrec(..),
+    prettyNat,
+    prettyTypeConstraint,
     prettyTypeSig,
-    replicateDoc,
+    replicate,
     commaSepAll,
     render,
     pShow,
     pShowText,
-    commaSep,
+    showCommaSep,
     showBrackets,
     showBraces
  ) where
+
+import Prelude hiding (replicate)
 
 import Numeric (showIntAtBase)
 import Data.Text (Text)
@@ -186,7 +217,7 @@ defaultOpts = Opts {
 ------------------------------------------------------------
 -- Precedence prettyprinting
 
-class PrettyPrintPrec p where
+class PrettyPrec p where
   prettyPrec :: Int -> p -> PP.Doc ann
 
 
@@ -195,8 +226,8 @@ class PrettyPrintPrec p where
 -- (for base types and common constructs not tied to any particular AST)
 
 -- | Pretty-print an integer in the correct base
-ppNat :: Opts -> Integer -> Doc
-ppNat (Opts{..}) i
+prettyNat :: Opts -> Integer -> Doc
+prettyNat (Opts{..}) i
   | ppBase > 36 = pretty i
   | otherwise = prefix <> pretty value
   where
@@ -212,21 +243,21 @@ ppNat (Opts{..}) i
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 --   This is the formatting used by SAWCore.
-ppTypeConstraint :: Doc -> Doc -> Doc
-ppTypeConstraint x tp =
+prettyTypeConstraint :: Doc -> Doc -> Doc
+prettyTypeConstraint x tp =
   PP.hang 2 $ PP.group $ PP.vsep [PP.annotate LocalVarStyle x, ":" <+> tp]
 
 -- | Pretty-print a type signature.
 --   This is the formatting used by SAWScript.
---   XXX: should probably unify with ppTypeConstraint
+--   XXX: should probably unify with prettyTypeConstraint
 prettyTypeSig :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
 prettyTypeSig n t = n <+> PP.pretty ':' <+> t
 
 -- | Concatenate n copies of a doc.
-replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
-replicateDoc n d
+replicate :: Integer -> PP.Doc ann -> PP.Doc ann
+replicate n d
   | n < 1 = PP.emptyDoc
-  | True  = d <> replicateDoc (n-1) d
+  | True  = d <> replicate (n-1) d
 
 -- | Add a comma to d1 and append d2.
 --   (Functionally internal to commaSepAll.)
@@ -251,10 +282,10 @@ render opts doc =
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
     style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 
-pShow :: PrettyPrintPrec a => a -> String
+pShow :: PrettyPrec a => a -> String
 pShow = show . prettyPrec 0
 
-pShowText :: PrettyPrintPrec a => a -> Text
+pShowText :: PrettyPrec a => a -> Text
 pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyPrec 0
 
 
@@ -262,8 +293,8 @@ pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . prettyP
 -- Show infrastructure
 -- XXX: these should go away
 
-commaSep :: [ShowS] -> ShowS
-commaSep ss = foldr (.) id (intersperse (showString ",") ss)
+showCommaSep :: [ShowS] -> ShowS
+showCommaSep ss = foldr (.) id (intersperse (showString ",") ss)
 
 showBrackets :: ShowS -> ShowS
 showBrackets s = showString "[" . s . showString "]"

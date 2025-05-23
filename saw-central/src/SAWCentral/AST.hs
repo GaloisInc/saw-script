@@ -42,7 +42,7 @@ module SAWCentral.AST
        , prettyWholeModule
        ) where
 
-import qualified SAWSupport.Pretty as PPS (PrettyPrintPrec(..), prettyTypeSig, commaSepAll, replicateDoc)
+import qualified SAWSupport.Pretty as PPS (PrettyPrec(..), prettyTypeSig, commaSepAll, replicate)
 
 import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
@@ -359,7 +359,7 @@ instance Pretty Expr where
       "then" PP.<+> PP.pretty e2 PP.<+>
       "else" PP.<+> PP.pretty e3
 
-instance PPS.PrettyPrintPrec Expr where
+instance PPS.PrettyPrec Expr where
   prettyPrec _ e = PP.pretty e
 
 instance Pretty Pattern where
@@ -433,13 +433,13 @@ dissectLambda = \case
   Function _ pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
   expr -> ([], expr)
 
-instance PPS.PrettyPrintPrec Schema where
+instance PPS.PrettyPrec Schema where
   prettyPrec _ (Forall ns t) = case ns of
     [] -> PPS.prettyPrec 0 t
     _  -> PP.braces (PPS.commaSepAll $ map PP.pretty ns') PP.<+> PPS.prettyPrec 0 t
           where ns' = map (\(_pos, n) -> n) ns
 
-instance PPS.PrettyPrintPrec Type where
+instance PPS.PrettyPrec Type where
   prettyPrec par t@(TyCon _ tc ts) = case (tc,ts) of
     (_,[])                 -> PPS.prettyPrec par tc
     (TupleCon _,_)         -> PP.parens $ PPS.commaSepAll $ map (PPS.prettyPrec 0) ts
@@ -457,9 +457,9 @@ instance PPS.PrettyPrintPrec Type where
   prettyPrec _par (TyUnifyVar _ i)    = "t." PP.<> PP.pretty i
   prettyPrec _par (TyVar _ n)         = PP.pretty n
 
-instance PPS.PrettyPrintPrec TyCon where
+instance PPS.PrettyPrec TyCon where
   prettyPrec par tc = case tc of
-    TupleCon n     -> PP.parens $ PPS.replicateDoc (n - 1) $ PP.pretty ','
+    TupleCon n     -> PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','
     ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
     FunCon         -> PP.parens $ "->"
     StringCon      -> "String"
@@ -475,7 +475,7 @@ instance PPS.PrettyPrintPrec TyCon where
     BlockCon       -> "<Block>"
     ContextCon cxt -> PPS.prettyPrec par cxt
 
-instance PPS.PrettyPrintPrec Context where
+instance PPS.PrettyPrec Context where
   prettyPrec _ c = case c of
     CryptolSetup -> "CryptolSetup"
     JavaSetup    -> "JavaSetup"
@@ -485,7 +485,7 @@ instance PPS.PrettyPrintPrec Context where
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
 
-instance PPS.PrettyPrintPrec NamedType where
+instance PPS.PrettyPrec NamedType where
   prettyPrec par ty = case ty of
     ConcreteType ty' -> PPS.prettyPrec par ty'
     AbstractType -> "<opaque>"

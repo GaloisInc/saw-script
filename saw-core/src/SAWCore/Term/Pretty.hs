@@ -55,7 +55,7 @@ import Text.URI
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import SAWSupport.Pretty (ppNat, ppTypeConstraint)
+import SAWSupport.Pretty (prettyNat, prettyTypeConstraint)
 import qualified SAWSupport.Pretty as PPS (
     Style(..), Doc, MemoStyle(..), Opts(..), defaultOpts, render
  )
@@ -382,19 +382,19 @@ ppArrayValue = list
 ppLambda :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
 ppLambda tp (name, body) =
   group $ hang 2 $
-  vsep ["\\" <> parens (ppTypeConstraint (pretty name) tp) <+> "->", body]
+  vsep ["\\" <> parens (prettyTypeConstraint (pretty name) tp) <+> "->", body]
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
 ppPi :: PPS.Doc -> (LocalName, PPS.Doc) -> PPS.Doc
 ppPi tp (name, body) = vsep [lhs, "->" <+> body]
   where
-    lhs = if name == "_" then tp else parens (ppTypeConstraint (pretty name) tp)
+    lhs = if name == "_" then tp else parens (prettyTypeConstraint (pretty name) tp)
 
 -- | Pretty-print a definition @d :: tp = body@
 ppDef :: PPS.Doc -> PPS.Doc -> Maybe PPS.Doc -> PPS.Doc
-ppDef d tp Nothing = ppTypeConstraint d tp
-ppDef d tp (Just body) = ppTypeConstraint d tp <+> equals <+> body
+ppDef d tp Nothing = prettyTypeConstraint d tp
+ppDef d tp (Just body) = prettyTypeConstraint d tp <+> equals <+> body
 
 -- | Pretty-print a datatype declaration of the form
 -- > data d (p1:tp1) .. (pN:tpN) : tp where {
@@ -475,7 +475,7 @@ ppFlatTermF prec tf =
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
     Sort s h -> return (viaShow h <> viaShow s)
-    NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
+    NatLit i -> prettyNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->
         if length bits `mod` 4 == 0 then
@@ -678,7 +678,7 @@ ppWithBoundCtx :: [(LocalName, Term)] -> PPM a -> PPM (PPS.Doc, a)
 ppWithBoundCtx [] m = (mempty ,) <$> m
 ppWithBoundCtx ((x,tp):ctx) m =
   (\tp_d (x', (ctx_d, ret)) ->
-    (parens (ppTypeConstraint (pretty x') tp_d) <+> ctx_d, ret))
+    (parens (prettyTypeConstraint (pretty x') tp_d) <+> ctx_d, ret))
   <$> ppTerm' PrecTerm tp <*> withBoundVarM x (ppWithBoundCtx ctx m)
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
@@ -779,7 +779,7 @@ ppPPModule opts (PPModule importNames decls) =
       ((,) <$>
        ppWithBoundCtx dtIndices (return $ viaShow dtSort) <*>
        mapM (\(ctorName,ctorType) ->
-              ppTypeConstraint (ppIdent ctorName) <$>
+              prettyTypeConstraint (ppIdent ctorName) <$>
               ppTerm' PrecTerm ctorType)
        dtCtors)
     ppDecl (PPDefDecl defIdent defType defBody) =

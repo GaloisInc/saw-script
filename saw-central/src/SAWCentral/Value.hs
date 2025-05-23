@@ -61,7 +61,7 @@ import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, commaSep)
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
@@ -301,12 +301,12 @@ showsPrecValue opts nenv p v =
     VBool False -> showString "false"
     VString s -> shows s
     VInteger n -> shows n
-    VArray vs -> PPS.showBrackets $ PPS.commaSep $ map (showsPrecValue opts nenv 0) vs
-    VTuple vs -> showParen True $ PPS.commaSep $ map (showsPrecValue opts nenv 0) vs
+    VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
+    VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
     VRecord m ->
-      PPS.showBraces $ PPS.commaSep $ map showFld (M.toList m)
+      PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
         where
           showFld (n, fv) =
             showString (unpack n) . showString "=" . showsPrecValue opts nenv 0 fv

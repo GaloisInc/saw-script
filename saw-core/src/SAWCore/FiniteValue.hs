@@ -34,7 +34,7 @@ import Prettyprinter hiding (Doc)
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
-import SAWSupport.Pretty (ppNat)
+import SAWSupport.Pretty (prettyNat)
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
 
 import qualified SAWCore.Recognizer as R
@@ -228,7 +228,7 @@ ppFirstOrderValue opts = loop
      | otherwise -> pretty "False"
    FOVInt i      -> pretty i
    FOVIntMod _ i -> pretty i
-   FOVWord _w i  -> ppNat opts i
+   FOVWord _w i  -> prettyNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
    FOVArray _kty d vs ->
       let ppEntry' k' v = k' <+> pretty ":=" <+> loop v
