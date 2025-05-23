@@ -698,7 +698,8 @@ scInjectCode ::
   SharedContext ->
   ModuleName ->
   Text {- ^ Code namespace -} ->
-  Text {- ^ Code to inject -} -> IO ()
+  Text {- ^ Code to inject -} ->
+  IO ()
 scInjectCode sc mnm ns txt =
   scModifyModule sc mnm $ \m -> insInjectCode m ns txt
 
