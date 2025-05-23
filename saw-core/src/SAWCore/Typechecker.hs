@@ -33,7 +33,7 @@ module SAWCore.Typechecker
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (forM, forM_, void)
+import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
 import Data.Text (Text)
@@ -453,12 +453,10 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   scLoadModule sc $ emptyModule mnm
   -- Next, process all the imports
   forM_ imports $ \imp ->
-    do i_exists <- scModuleIsLoaded sc (val $ Un.importModName imp)
-       i <- if i_exists then scFindModule sc $ val $ Un.importModName imp else
-              myfail $ "Imported module not found: " ++ show mnm
-       scModifyModule sc mnm
-         (insImport (Un.nameSatsConstraint (Un.importConstraints imp)
-                     . identName . resolvedNameIdent) i)
+    do let imn = val $ Un.importModName imp
+       i_exists <- scModuleIsLoaded sc imn
+       unless i_exists $ fail $ "Imported module not found: " ++ show imn
+       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . identName) imn mnm
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm) []
   case decls_res of
