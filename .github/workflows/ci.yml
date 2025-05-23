@@ -179,11 +179,11 @@ jobs:
         id: cabal-test-suites
         with:
           targets: |
-            integration_tests
-            test-sawcore
-            cryptol-saw-core-tc-test
+            integration-tests
+            saw-core-tests
+            cryptol-saw-core-tests
             saw-core-coq-tests
-            prover_tests
+            heapster-prover-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -584,18 +584,18 @@ jobs:
         os: [ubuntu-24.04]
         continue-on-error: [false]
         include:
-          - suite: integration_tests
+          - suite: integration-tests
             os: macos-14
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-          - suite: integration_tests
+          - suite: integration-tests
             os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
-          - suite: integration_tests
+          - suite: integration-tests
             os: macos-14
             continue-on-error: false
-          - suite: integration_tests
+          - suite: integration-tests
             os: windows-2019
             continue-on-error: false
     steps:
@@ -632,7 +632,7 @@ jobs:
         run: chmod +x dist-tests/*
 
       - uses: actions/setup-java@v1
-        if: "matrix.suite == 'integration_tests'"
+        if: "matrix.suite == 'integration-tests'"
         with:
           java-version: "8"
           java-package: jdk
@@ -640,7 +640,7 @@ jobs:
 
       - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
-        if: "matrix.suite == 'integration_tests'"
+        if: "matrix.suite == 'integration-tests'"
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
@@ -649,7 +649,7 @@ jobs:
 
       - shell: bash
         name: Enable solver caching
-        if: "matrix.suite == 'integration_tests'"
+        if: "matrix.suite == 'integration-tests'"
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
@@ -663,7 +663,7 @@ jobs:
 
       - uses: actions/cache/save@v4
         name: Save SMT solver result cache
-        if: "matrix.suite == 'integration_tests'"
+        if: "matrix.suite == 'integration-tests'"
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
@@ -682,7 +682,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
     strategy:
       matrix:
-        suite: ['integration_tests']
+        suite: ['integration-tests']
         os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
@@ -748,7 +748,7 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
-          dist-tests/integration_tests
+          dist-tests/integration-tests
         env:
           ENABLE_HPC: true
 

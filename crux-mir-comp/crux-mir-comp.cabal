@@ -93,7 +93,7 @@ executable crux-mir-comp
   ghc-prof-options: -O2 -fprof-auto-top
 
 
-test-suite crux-mir-comp-test
+test-suite crux-mir-comp-tests
   default-language: Haskell2010
 
   build-depends:
