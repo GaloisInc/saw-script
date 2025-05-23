@@ -87,8 +87,6 @@ module SAWCore.SharedTerm
     -- ** Modules
   , scLoadModule
   , scImportModule
-  , scUnloadModule
-  , scModifyModule
   , scDeclarePrim
   , scInsertDef
   , scModuleIsLoaded
@@ -586,12 +584,6 @@ scImportModule sc p mn1 mn2 =
   do i_exists <- scModuleIsLoaded sc mn1
      i <- if i_exists then scFindModule sc mn1 else pure (emptyModule mn1)
      scModifyModule sc mn2 (insImport (p . resolvedNameIdent) i)
-
--- | Remove a module from the current shared context, or do nothing if it does
--- not exist
-scUnloadModule :: SharedContext -> ModuleName -> IO ()
-scUnloadModule sc mnm =
-  modifyIORef' (scModuleMap sc) $ HMap.delete mnm
 
 -- | Modify an already loaded module, raising an error if it is not loaded
 scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
