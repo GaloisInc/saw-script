@@ -574,6 +574,7 @@ scLoadModule sc m =
                    ++ show (moduleName m) ++ " already loaded!")
   (moduleName m) m
 
+-- | Bring a subset of names from one module into scope in a second module.
 scImportModule ::
   SharedContext ->
   (Ident -> Bool) {- ^ which names to import -} ->
