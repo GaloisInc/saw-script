@@ -116,6 +116,8 @@ import Numeric.Natural
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
+
 import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
@@ -179,8 +181,12 @@ bindPPOpenTerm (OpenTerm m) f =
   OpenTerm $
   do ctx <- askCtx
      t <- typedVal <$> m
-     unOpenTerm $ f $ renderSawDoc defaultPPOpts $
-       ppTermInCtx defaultPPOpts (map fst ctx) t
+     -- XXX: this could use scPrettyTermInCtx (which builds in the call to
+     -- PPS.render) except that it's slightly different under the covers
+     -- (in its use of the "global" flag, and it isn't entirely clear what
+     -- that actually does)
+     unOpenTerm $ f $ PPS.render PPS.defaultOpts $
+       ppTermInCtx PPS.defaultOpts (map fst ctx) t
 
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
@@ -423,7 +429,7 @@ piArgOpenTerm (OpenTerm m) =
   t ->
     do ctx <- askCtx
        fail ("piArgOpenTerm: not a pi type: " ++
-             scPrettyTermInCtx defaultPPOpts (map fst ctx) (typedVal t))
+             scPrettyTermInCtx PPS.defaultOpts (map fst ctx) (typedVal t))
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has

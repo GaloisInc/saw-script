@@ -26,13 +26,15 @@ import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Parameterized.Nonce
 
 import qualified Lang.Crucible.JVM as CJ
+
+import qualified SAWSupport.Pretty as PPS (Opts)
+
 import SAWCentral.Crucible.Common.MethodSpec
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWCentral.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import qualified SAWCore.Term.Pretty as PP
 import SAWCore.Name (SAWNamingEnv)
 import What4.ProgramLoc (ProgramLoc(..))
 import What4.FunctionName
@@ -126,7 +128,7 @@ theoremStatus summary = case summary of
         , ("admitmsg" .= msg)
         ]
 
---    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
+--    , ("term" .= (show $ ppProp PPS.defaultOpts $ thmProp thm))
 
 plocToJSON :: ProgramLoc -> Value
 plocToJSON ploc = object
@@ -143,7 +145,7 @@ jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
     thmvals = thmToJSON <$> thms
 
-prettyVerificationSummary :: PP.PPOpts -> SAWNamingEnv -> VerificationSummary -> String
+prettyVerificationSummary :: PPS.Opts -> SAWNamingEnv -> VerificationSummary -> String
 prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =
   show $ vsep
   [ prettyJVMSpecs jspecs

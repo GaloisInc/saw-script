@@ -96,6 +96,7 @@ import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.TypedAST (mkSort, FieldName, LocalName)
 import SAWCore.Name (preludeName)
+import SAWCore.Term.Pretty (showTerm)
 
 -- local modules:
 import CryptolSAWCore.Panic

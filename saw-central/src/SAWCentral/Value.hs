@@ -61,6 +61,8 @@ import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
+
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
 import SAWCentral.BisimulationTheorem (BisimTheorem)
@@ -94,8 +96,7 @@ import CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import SAWCore.SharedTerm hiding (PPOpts(..), defaultPPOpts,
-                                       ppTerm, scPrettyTerm)
+import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
 import CryptolSAWCore.TypedTerm
 import SAWCore.Term.Functor (ModuleName)
@@ -105,7 +106,6 @@ import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete as C
 import CryptolSAWCore.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified Cryptol.Utils.Logger as C (quietLogger)
 import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
@@ -240,76 +240,34 @@ isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
 isVUnit _ = False
 
-data PPOpts = PPOpts
-  { ppOptsAnnotate :: Bool
-  , ppOptsAscii :: Bool
-  , ppOptsBase :: Int
-  , ppOptsColor :: Bool
-  , ppOptsMinSharing :: Int
-  , ppOptsMemoStyle :: SAWCorePP.MemoStyle
-  }
-
-defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10 False 2 SAWCorePP.Incremental
-
-cryptolPPOpts :: PPOpts -> C.PPOpts
-cryptolPPOpts opts =
-  C.defaultPPOpts
-    { C.useAscii = ppOptsAscii opts
-    , C.useBase = ppOptsBase opts
-    }
-
-sawPPOpts :: PPOpts -> SAWCorePP.PPOpts
-sawPPOpts opts =
-  SAWCorePP.defaultPPOpts
-    { SAWCorePP.ppBase = ppOptsBase opts
-    , SAWCorePP.ppColor = ppOptsColor opts
-    , SAWCorePP.ppMinSharing = ppOptsMinSharing opts
-    , SAWCorePP.ppMemoStyle = ppOptsMemoStyle opts
-    }
-
-quietEvalOpts :: C.EvalOpts
-quietEvalOpts = C.EvalOpts C.quietLogger C.defaultPPOpts
-
-commaSep :: [ShowS] -> ShowS
-commaSep ss = foldr (.) id (intersperse (showString ",") ss)
-
-showBrackets :: ShowS -> ShowS
-showBrackets s = showString "[" . s . showString "]"
-
-showBraces :: ShowS -> ShowS
-showBraces s = showString "{" . s . showString "}"
-
-showsProofResult :: PPOpts -> ProofResult -> ShowS
+showsProofResult :: PPS.Opts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
     ValidProof _ _ -> showString "Valid"
     InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
     UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
-    opts' = sawPPOpts opts
-    showVal t = shows (ppFirstOrderValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts t)
     showEqn (x, t) = showEC x . showString " = " . showVal t
     showEC ec = showString (unpack (toShortName (ecName ec)))
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showsSatResult :: PPOpts -> SatResult -> ShowS
+showsSatResult :: PPS.Opts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
     Sat _ ts -> showString "Sat: [" . showMulti "" ts
     SatUnknown  -> showString "Unknown"
   where
-    opts' = sawPPOpts opts
-    showVal t = shows (ppFirstOrderValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts t)
     showEC ec = showString (unpack (toShortName (ecName ec)))
     showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset a -> String
+showSimpset :: PPS.Opts -> Simpset a -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -318,11 +276,10 @@ showSimpset opts ss =
       (PP.nest 2 $ PP.fillSep
        [ ppTerm (lhsRewriteRule r)
        , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
-    ppTerm t = SAWCorePP.ppTerm opts' t
-    opts' = sawPPOpts opts
+    ppTerm t = SAWCorePP.ppTerm opts t
 
 -- | Pretty-print a 'Refnset' to a 'String'
-showRefnset :: PPOpts -> MRSolver.Refnset a -> String
+showRefnset :: PPS.Opts -> MRSolver.Refnset a -> String
 showRefnset opts ss =
   unlines ("Refinements" : "=============" : map (show . ppFunAssump)
                                                  (MRSolver.listFunAssumps ss))
@@ -330,33 +287,32 @@ showRefnset opts ss =
     ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
       PP.pretty '*' PP.<+>
       (PP.nest 2 $ PP.fillSep
-       [ ppTermAppInCtx opts' ctx (funNameTerm f) args
+       [ ppTermAppInCtx opts ctx (funNameTerm f) args
        , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
     ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
-      ppTermAppInCtx opts' ctx (funNameTerm f) args
+      ppTermAppInCtx opts ctx (funNameTerm f) args
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
-      SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs
-    opts' = sawPPOpts opts
+      SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
 
-showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
+showsPrecValue :: PPS.Opts -> SAWNamingEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
     VBool True -> showString "true"
     VBool False -> showString "false"
     VString s -> shows s
     VInteger n -> shows n
-    VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts nenv 0) vs
-    VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts nenv 0) vs
+    VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
+    VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
     VRecord m ->
-      showBraces $ commaSep $ map showFld (M.toList m)
+      PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
         where
           showFld (n, fv) =
             showString (unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (SAWCorePP.showTermWithNames opts' nenv (ttTerm t))
+    VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
@@ -366,7 +322,7 @@ showsPrecValue opts nenv p v =
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (prettyProp opts' nenv (thmProp thm)))
+      showParen True (showString (prettyProp opts nenv (thmProp thm)))
     VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
@@ -402,11 +358,9 @@ showsPrecValue opts nenv p v =
     VMIRSetup{} -> showString "<<MIR Setup>>"
     VMIRMethodSpec{} -> showString "<<MIR MethodSpec>>"
     VMIRSetupValue x -> shows x
-  where
-    opts' = sawPPOpts opts
 
 instance Show Value where
-    showsPrec p v = showsPrecValue defaultPPOpts emptySAWNamingEnv p v
+    showsPrec p v = showsPrecValue PPS.defaultOpts emptySAWNamingEnv p v
 
 indexValue :: Value -> Value -> Value
 indexValue (VArray vs) (VInteger x)
@@ -559,7 +513,7 @@ data TopLevelRW =
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
-  , rwPPOpts  :: PPOpts
+  , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext
   , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB

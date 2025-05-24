@@ -35,6 +35,7 @@ import Text.Encoding.Z (zEncodeString)
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 import qualified SAWCore.SCTypeCheck as SC.TC
+import qualified SAWCore.Term.Pretty as SC (showTerm)
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C

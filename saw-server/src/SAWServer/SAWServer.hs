@@ -43,6 +43,9 @@ import qualified Lang.JVM.Codebase as JSS
 import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
+
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
 import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
@@ -58,7 +61,7 @@ import SAWCentral.Options (Options(..), processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -250,7 +253,7 @@ initialState readFileFn =
                 , rwCryptol = cenv
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
-                , rwPPOpts = defaultPPOpts
+                , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc

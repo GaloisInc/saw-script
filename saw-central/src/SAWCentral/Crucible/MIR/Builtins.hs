@@ -1063,7 +1063,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-           opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
+           opts <- rwPPOpts <$> getTopLevelRW
            let showEC ec = Text.unpack (toShortName (ecName ec))
            let showAssignment (name, val) = "  " ++ showEC name ++ ": " ++ show (ppFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals

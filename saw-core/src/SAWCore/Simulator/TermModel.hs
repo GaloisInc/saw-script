@@ -50,6 +50,7 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.TypedAST
        ( ModuleMap, FlatTermF(..), toShortName, dtPrimName )
 import SAWCore.SharedTerm
+import SAWCore.Term.Pretty (showTerm)
 
 ------------------------------------------------------------
 

@@ -52,10 +52,11 @@ import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import qualified SAWSupport.Pretty as PPS (pShow)
+
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
 import qualified SAWCentral.AST as SS (
-     pShow,
      Located(..),
      LName,
      Decl(..),
@@ -208,7 +209,7 @@ typeOfCmd str
        io $ mapM_ issueWarning warns
        either failTypecheck return errs_or_results
      let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
-     io $ putStrLn $ SS.pShow schema
+     io $ putStrLn $ PPS.pShow schema
 
 searchCmd :: String -> REPL ()
 searchCmd str
@@ -279,7 +280,7 @@ searchCmd str
 
          printMatch (lname, (lc, ty)) = do
            let name = Text.unpack $ SS.getVal lname
-               ty' = SS.pShow ty
+               ty' = PPS.pShow ty
                lc' = case lc of
                    Current -> ""
                    WarnDeprecated -> "  (DEPRECATED AND WILL WARN)"
@@ -338,7 +339,7 @@ envCmd = do
   let avail = rwPrimsAvail rw
       valueInfo = rwValueInfo rw
       valueInfo' = Map.filter (\(lc, _ty, _v) -> Set.member lc avail) valueInfo
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
+  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ PPS.pShow ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
@@ -346,7 +347,7 @@ tenvCmd = do
   let avail = rwPrimsAvail rw
       typeInfo = rwTypeInfo rw
       typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
-  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ PPS.pShow ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd

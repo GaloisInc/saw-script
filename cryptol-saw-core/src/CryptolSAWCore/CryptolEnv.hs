@@ -63,7 +63,8 @@ import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 import CryptolSAWCore.Panic
 import SAWCore.Name (ecName)
 import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars, showTerm)
+import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars)
+import SAWCore.Term.Pretty (showTerm)
 
 import qualified CryptolSAWCore.Cryptol as C
 

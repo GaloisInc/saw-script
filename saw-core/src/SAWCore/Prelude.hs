@@ -23,6 +23,7 @@ import SAWCore.ParserUtils
 import SAWCore.Prelude.Constants
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
+import SAWCore.Term.Pretty (showTerm)
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue)

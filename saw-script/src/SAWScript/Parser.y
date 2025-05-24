@@ -21,6 +21,7 @@ import Data.List
 import qualified Data.Map as Map (fromList)
 import qualified Data.Text as Text
 import Data.Text (Text, pack, unpack)
+import SAWSupport.Pretty (pShow)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWCentral.AST

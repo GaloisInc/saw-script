@@ -41,13 +41,15 @@ import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
 
+import qualified SAWSupport.Pretty as PPS (Doc)
+
 import SAWCore.Utils (internalError)
 
 import SAWCore.Module
 import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (SawDoc)
+import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.SCTypeCheck
@@ -58,14 +60,14 @@ import Debug.Trace
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
-                     IO (Either SawDoc Term)
+                     IO (Either PPS.Doc Term)
 inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
 inferCompleteTermCtx ::
   SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
-  Un.UTerm -> IO (Either SawDoc Term)
+  Un.UTerm -> IO (Either PPS.Doc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of

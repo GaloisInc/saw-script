@@ -62,6 +62,8 @@ import Data.Traversable (Traversable(..))
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
 import SAWCore.Conversion (natConversions)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
@@ -69,6 +71,7 @@ import SAWCore.SharedTerm
 import SAWCore.TypedAST
 import SAWCore.Module
 import SAWCore.Position
+import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term
@@ -276,7 +279,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
+    (\(ctx,_) -> "  " ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError

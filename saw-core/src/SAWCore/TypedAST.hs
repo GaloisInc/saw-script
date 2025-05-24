@@ -60,14 +60,6 @@ module SAWCore.TypedAST
  , freesTermF
  , termToPat
  , CompiledRecursor(..)
-
- , PPOpts(..)
- , defaultPPOpts
- , ppTerm
- , ppTermDepth
- , showTerm
- , scPrettyTerm
- , scPrettyTermInCtx
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf, maxSort
  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
@@ -92,7 +84,6 @@ import Prelude hiding (all, foldr)
 
 import SAWCore.Module
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 
 -- | Returns the number of nested pi expressions.
 piArgCount :: Term -> Int
