@@ -70,7 +70,6 @@ module SAWCore.SharedTerm
   , scFlatTermF
     -- ** Implicit versions of functions.
   , scDefTerm
-  , scFreshGlobalVar
   , scFreshGlobal
   , scFreshEC
   , scExtCns

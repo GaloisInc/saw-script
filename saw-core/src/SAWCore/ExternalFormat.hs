@@ -280,7 +280,7 @@ scReadExternal sc input =
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ EC vi' nmi t'
                  Nothing ->
-                   do vi' <- lift $ scFreshGlobalVar sc
+                   do vi' <- lift $ scRegisterName sc nmi
                       State.put (ts, nms, Map.insert vi vi' vs)
                       pure $ EC vi' nmi t'
 
