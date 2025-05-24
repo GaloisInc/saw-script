@@ -33,7 +33,7 @@ module SAWCore.Typechecker
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (forM, forM_, void)
+import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
 import Data.Text (Text)
@@ -309,7 +309,7 @@ processDecls [] = return ()
 
 processDecls (Un.InjectCodeDecl ns txt : rest) =
   do mnm <- getModuleName
-     liftTCM scModifyModule mnm $ \m -> insInjectCode m ns txt
+     liftTCM scInjectCode mnm ns txt
      processDecls rest
 
 processDecls (Un.TypedDef nm params rty body : rest) =
@@ -350,13 +350,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
      let ident = mkIdent mnm nm
-     t <- liftTCM scConstant' (ModuleIdentifier ident) def_tm def_tp
-     liftTCM scRegisterGlobal ident t
-     liftTCM scModifyModule mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
-                        defQualifier = NoQualifier,
-                        defType = def_tp,
-                        defBody = Just def_tm }) >>
+     liftTCM scInsertDef mnm ident def_tp def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
@@ -372,17 +366,8 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
       let ident = mkIdent mnm nm
-      i <- liftTCM scFreshGlobalVar
-      liftTCM scRegisterName i (ModuleIdentifier ident)
       let def_tp = typedVal typed_tp
-      let pn = PrimName i ident def_tp
-      t <- liftTCM scFlatTermF (Primitive pn)
-      liftTCM scRegisterGlobal ident t
-      liftTCM scModifyModule mnm $ \m ->
-        insDef m $ Def { defIdent = ident,
-                         defQualifier = q,
-                         defType = typedVal typed_tp,
-                         defBody = Nothing }) >>
+      liftTCM scDeclarePrim mnm ident q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
@@ -410,8 +395,6 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs
   let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed
       ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
-  dtType <- (liftTCM scPiList (dtParams ++ dtIndices)
-             =<< liftTCM scSort dtSort)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative
   -- (non-Prop) inductive type, which includes:
@@ -430,11 +413,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
   let dtName = mkIdent mnm nm
-  dtVarIndex <- liftTCM scFreshGlobalVar
-  liftTCM scRegisterName dtVarIndex (ModuleIdentifier dtName)
-
-  let dt = DataType { dtCtors = [], .. }
-  liftTCM scModifyModule mnm (\m -> beginDataType m dt)
+  pn <- liftTCM scBeginDataType dtName dtParams dtIndices dtSort
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
@@ -456,34 +435,30 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                 Nothing -> error ("Internal error: type of the type of" ++
                                   " constructor is not a sort!")) >>
             let tp = typedVal typed_tp in
-            case mkCtorArgStruct (dtPrimName dt) p_ctx ix_ctx tp of
+            case mkCtorArgStruct pn p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor (dtPrimName dt) (mkIdent mnm c) arg_struct
+                liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
-  liftTCM scModifyModule mnm (\m -> completeDataType m dtName ctors)
+  liftTCM scCompleteDataType dtName ctors
 
 
 -- | Typecheck a module and, on success, insert it into the current context
 tcInsertModule :: SharedContext -> Un.Module -> IO ()
 tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
-  let myfail :: String -> IO a
-      myfail msg = scUnloadModule sc mnm >> fail msg
   -- First, insert an empty module for mnm
   scLoadModule sc $ emptyModule mnm
   -- Next, process all the imports
   forM_ imports $ \imp ->
-    do i_exists <- scModuleIsLoaded sc (val $ Un.importModName imp)
-       i <- if i_exists then scFindModule sc $ val $ Un.importModName imp else
-              myfail $ "Imported module not found: " ++ show mnm
-       scModifyModule sc mnm
-         (insImport (Un.nameSatsConstraint (Un.importConstraints imp)
-                     . identName . resolvedNameIdent) i)
+    do let imn = val $ Un.importModName imp
+       i_exists <- scModuleIsLoaded sc imn
+       unless i_exists $ fail $ "Imported module not found: " ++ show imn
+       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . identName) imn mnm
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm) []
   case decls_res of
-    Left err -> myfail $ unlines $ prettyTCError err
+    Left err -> fail $ unlines $ prettyTCError err
     Right _ -> return ()
 
 

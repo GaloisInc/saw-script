@@ -86,17 +86,20 @@ module SAWCore.SharedTerm
   , scBuildCtor
     -- ** Modules
   , scLoadModule
-  , scUnloadModule
-  , scModifyModule
+  , scImportModule
+  , scDeclarePrim
   , scInsertDef
   , scModuleIsLoaded
   , scFindModule
   , scFindDef
+  , scBeginDataType
+  , scCompleteDataType
   , scFindDataType
   , scFindCtor
   , scRequireDef
   , scRequireDataType
   , scRequireCtor
+  , scInjectCode
     -- ** Term construction
     -- *** Datatypes and constructors
   , scDataTypeAppParams
@@ -318,6 +321,7 @@ import Text.URI
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
+import SAWCore.Module (insInjectCode, beginDataType, completeDataType, resolvedNameIdent)
 import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
@@ -570,11 +574,17 @@ scLoadModule sc m =
                    ++ show (moduleName m) ++ " already loaded!")
   (moduleName m) m
 
--- | Remove a module from the current shared context, or do nothing if it does
--- not exist
-scUnloadModule :: SharedContext -> ModuleName -> IO ()
-scUnloadModule sc mnm =
-  modifyIORef' (scModuleMap sc) $ HMap.delete mnm
+-- | Bring a subset of names from one module into scope in a second module.
+scImportModule ::
+  SharedContext ->
+  (Ident -> Bool) {- ^ which names to import -} ->
+  ModuleName {- ^ from this module -} ->
+  ModuleName {- ^ into this module -} ->
+  IO ()
+scImportModule sc p mn1 mn2 =
+  do i_exists <- scModuleIsLoaded sc mn1
+     i <- if i_exists then scFindModule sc mn1 else pure (emptyModule mn1)
+     scModifyModule sc mn2 (insImport (p . resolvedNameIdent) i)
 
 -- | Modify an already loaded module, raising an error if it is not loaded
 scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
@@ -582,6 +592,20 @@ scModifyModule sc mnm f =
   let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
   modifyIORef' (scModuleMap sc) $
   HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
+
+-- | Declare a SAW core primitive of the specified type.
+scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc mnm ident q def_tp =
+  do i <- scFreshGlobalVar sc
+     scRegisterName sc i (ModuleIdentifier ident)
+     let pn = PrimName i ident def_tp
+     t <- scFlatTermF sc (Primitive pn)
+     scRegisterGlobal sc ident t
+     scModifyModule sc mnm $ \m ->
+       insDef m $ Def { defIdent = ident,
+                        defQualifier = q,
+                        defType = def_tp,
+                        defBody = Nothing }
 
 -- | Insert a definition into a SAW core module
 scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
@@ -616,6 +640,31 @@ scRequireDef sc i =
     Just d -> return d
     Nothing -> fail ("Could not find definition: " ++ show i)
 
+-- | Insert an \"incomplete\" datatype, used as part of building up a
+-- 'DataType' to typecheck its constructors. The constructors must be
+-- registered separately with @scCompleteDataType@.
+scBeginDataType ::
+  SharedContext ->
+  Ident {- ^ The name of this datatype -} ->
+  [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
+  Sort {- ^ The universe of this datatype -} ->
+  IO (PrimName Term)
+scBeginDataType sc dtName dtParams dtIndices dtSort =
+  do dtVarIndex <- scFreshGlobalVar sc
+     scRegisterName sc dtVarIndex (ModuleIdentifier dtName)
+     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     let dt = DataType { dtCtors = [], .. }
+     let mnm = identModule dtName
+     scModifyModule sc mnm (\m -> beginDataType m dt)
+     pure $ PrimName dtVarIndex dtName dtType
+
+-- | Complete a datatype, by adding its constructors. See also @scBeginDataType@.
+scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
+scCompleteDataType sc dtName ctors =
+  do let mnm = identModule dtName
+     scModifyModule sc mnm (\m -> completeDataType m dtName ctors)
+
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
 scFindDataType sc i =
@@ -641,6 +690,19 @@ scRequireCtor sc i =
   case maybe_ctor of
     Just ctor -> return ctor
     Nothing -> fail ("Could not find constructor: " ++ show i)
+
+-- | Insert an \"injectCode\" declaration to the given SAWCore module.
+-- This declaration has no logical effect within SAW; it is used to
+-- add extra code (like class instance declarations, for example) to
+-- exported SAWCore modules in certain translation backends.
+scInjectCode ::
+  SharedContext ->
+  ModuleName ->
+  Text {- ^ Code namespace -} ->
+  Text {- ^ Code to inject -} ->
+  IO ()
+scInjectCode sc mnm ns txt =
+  scModifyModule sc mnm $ \m -> insInjectCode m ns txt
 
 -- SharedContext implementation.
 

@@ -982,16 +982,7 @@ insPrimitive henv nm tp =
   do sc <- getSharedContext
      let mnm = heapsterEnvSAWModule henv
      let ident = mkSafeIdent mnm nm
-     i <- liftIO $ scFreshGlobalVar sc
-     liftIO $ scRegisterName sc i (ModuleIdentifier ident)
-     let pn = PrimName i ident tp
-     t <- liftIO $ scFlatTermF sc (Primitive pn)
-     liftIO $ scRegisterGlobal sc ident t
-     liftIO $ scModifyModule sc mnm $ \m ->
-        insDef m $ Def { defIdent = ident,
-                         defQualifier = PrimQualifier,
-                         defType = tp,
-                         defBody = Nothing }
+     liftIO $ scDeclarePrim sc mnm ident PrimQualifier tp
      return ident
 
 -- | Assume that the given named function has the supplied type and translates
