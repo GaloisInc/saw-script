@@ -52,7 +52,7 @@ span.spaces    { background: white }
 <span class="lineno">   33 </span>#if !MIN_VERSION_base(4,8,0)
 <span class="lineno">   34 </span>import Control.Applicative
 <span class="lineno">   35 </span>#endif
-<span class="lineno">   36 </span>import Control.Monad (forM, forM_, void)
+<span class="lineno">   36 </span>import Control.Monad (forM, forM_, void, unless)
 <span class="lineno">   37 </span>import Control.Monad.IO.Class (MonadIO(..))
 <span class="lineno">   38 </span>import Data.List (findIndex)
 <span class="lineno">   39 </span>import Data.Text (Text)
@@ -330,7 +330,7 @@ span.spaces    { background: white }
 <span class="lineno">  311 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  312 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.InjectCodeDecl ns txt : rest) =</span>
 <span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">do mnm &lt;- getModuleName</span>
-<span class="lineno">  314 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scModifyModule mnm $ \m -&gt; insInjectCode m <span class="nottickedoff">ns</span> <span class="nottickedoff">txt</span></span>
+<span class="lineno">  314 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scInjectCode mnm <span class="nottickedoff">ns</span> <span class="nottickedoff">txt</span></span>
 <span class="lineno">  315 </span><span class="spaces">     </span><span class="istickedoff">processDecls rest</span>
 <span class="lineno">  316 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  317 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypedDef nm params rty body : rest) =</span>
@@ -371,155 +371,130 @@ span.spaces    { background: white }
 <span class="lineno">  352 </span><span class="spaces">     </span><span class="istickedoff">-- Step 4: add the definition to the current module</span>
 <span class="lineno">  353 </span><span class="spaces">     </span><span class="istickedoff">mnm &lt;- getModuleName</span>
 <span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">let ident = mkIdent mnm nm</span>
-<span class="lineno">  355 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- liftTCM scConstant' (ModuleIdentifier ident) def_tm def_tp</span>
-<span class="lineno">  356 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scRegisterGlobal ident t</span>
-<span class="lineno">  357 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scModifyModule mnm $ \m -&gt;</span>
-<span class="lineno">  358 </span><span class="spaces">       </span><span class="istickedoff">insDef m $ Def { defIdent = ident,</span>
-<span class="lineno">  359 </span><span class="spaces">                        </span><span class="istickedoff">defQualifier = <span class="nottickedoff">NoQualifier</span>,</span>
-<span class="lineno">  360 </span><span class="spaces">                        </span><span class="istickedoff">defType = def_tp,</span>
-<span class="lineno">  361 </span><span class="spaces">                        </span><span class="istickedoff">defBody = Just def_tm }) &gt;&gt;</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
-<span class="lineno">  363 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  364 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =</span>
-<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Definition without defining equation&quot;</span></span>
-<span class="lineno">  366 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  367 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl _ (PosPair p nm) _ :</span>
-<span class="lineno">  368 </span><span class="spaces">              </span><span class="istickedoff">Un.TermDef (PosPair _ ((== nm) -&gt; True)) _ _ : _) =</span>
-<span class="lineno">  369 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Primitive or axiom with definition&quot;</span></span>
-<span class="lineno">  370 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  371 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =</span>
-<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">(atPos <span class="nottickedoff">p</span> $</span>
-<span class="lineno">  373 </span><span class="spaces">   </span><span class="istickedoff">do typed_tp &lt;- typeInferComplete tp</span>
-<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">void $ ensureSort $ typedType typed_tp</span>
-<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">mnm &lt;- getModuleName</span>
-<span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">let ident = mkIdent mnm nm</span>
-<span class="lineno">  377 </span><span class="spaces">      </span><span class="istickedoff">i &lt;- liftTCM scFreshGlobalVar</span>
-<span class="lineno">  378 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scRegisterName i (ModuleIdentifier ident)</span>
-<span class="lineno">  379 </span><span class="spaces">      </span><span class="istickedoff">let def_tp = typedVal typed_tp</span>
-<span class="lineno">  380 </span><span class="spaces">      </span><span class="istickedoff">let pn = PrimName i ident def_tp</span>
-<span class="lineno">  381 </span><span class="spaces">      </span><span class="istickedoff">t &lt;- liftTCM scFlatTermF (Primitive pn)</span>
-<span class="lineno">  382 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scRegisterGlobal ident t</span>
-<span class="lineno">  383 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scModifyModule mnm $ \m -&gt;</span>
-<span class="lineno">  384 </span><span class="spaces">        </span><span class="istickedoff">insDef m $ Def { defIdent = ident,</span>
-<span class="lineno">  385 </span><span class="spaces">                         </span><span class="istickedoff">defQualifier = <span class="nottickedoff">q</span>,</span>
-<span class="lineno">  386 </span><span class="spaces">                         </span><span class="istickedoff">defType = typedVal typed_tp,</span>
-<span class="lineno">  387 </span><span class="spaces">                         </span><span class="istickedoff">defBody = Nothing }) &gt;&gt;</span>
-<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
-<span class="lineno">  389 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  390 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TermDef (PosPair p nm) _ _ : _) =</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Dangling definition without a type&quot;</span></span>
-<span class="lineno">  392 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  393 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">-- This top line makes sure that we process the rest of the decls after the</span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">-- main body of the code below, which processes just the current data decl</span>
-<span class="lineno">  396 </span><span class="spaces">  </span><span class="istickedoff">(&gt;&gt; processDecls rest) $ atPos <span class="nottickedoff">p</span> $</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">-- Step 1: type-check the parameters</span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">typeInferCompleteInCtx param_ctx $ \params -&gt; do</span>
-<span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">let dtParams = map (\(x,tp,_) -&gt; (x,tp)) params</span>
-<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">let param_sort = maxSort (map (\(_,_,s) -&gt; s) params)</span>
-<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">let err :: String -&gt; TCM a</span>
-<span class="lineno">  402 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">err msg = throwTCError $ DeclError nm msg</span></span>
-<span class="lineno">  403 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">-- Step 2: type-check the type given for d, and make sure it is of the form</span>
-<span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">-- (i1:ix1) -&gt; ... -&gt; (in:ixn) -&gt; Type s for some sort s. Then form the full</span>
-<span class="lineno">  406 </span><span class="spaces">  </span><span class="istickedoff">-- type of d as (p1:param1) -&gt; ... -&gt; (i1:ix1) -&gt; ... -&gt; Type s</span>
-<span class="lineno">  407 </span><span class="spaces">  </span><span class="istickedoff">(dt_ixs, dtSort) &lt;-</span>
-<span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff">case Un.asPiList dt_tp of</span>
-<span class="lineno">  409 </span><span class="spaces">      </span><span class="istickedoff">(ixs, Un.Sort _ s h) | <span class="tickonlytrue">h == noFlags</span> -&gt;</span>
-<span class="lineno">  410 </span><span class="spaces">        </span><span class="istickedoff">return (ixs, s) -- NB, don't allow `isort`, etc.</span>
-<span class="lineno">  411 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">err &quot;Wrong form for type of datatype&quot;</span></span>
-<span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">dt_ixs_typed &lt;- typeInferCompleteCtx dt_ixs</span>
-<span class="lineno">  413 </span><span class="spaces">  </span><span class="istickedoff">let dtIndices = map (\(x,tp,_) -&gt; (x,tp)) dt_ixs_typed</span>
-<span class="lineno">  414 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map (\(_,_,s) -&gt; s) dt_ixs_typed)</span>
-<span class="lineno">  415 </span><span class="spaces">  </span><span class="istickedoff">dtType &lt;- (liftTCM scPiList (dtParams ++ dtIndices)</span>
-<span class="lineno">  416 </span><span class="spaces">             </span><span class="istickedoff">=&lt;&lt; liftTCM scSort dtSort)</span>
-<span class="lineno">  417 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">-- Step 3: do the necessary universe inclusion checking for any predicative</span>
-<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">-- (non-Prop) inductive type, which includes:</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">-- 1. All ix types must be of sort dtSort; AND</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">-- 2. All param types must be of sort dtSort+1</span>
-<span class="lineno">  423 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; param_sort &gt; sortOf dtSort</span> then</span>
-<span class="lineno">  424 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of parameters should be no greater&quot; ++</span></span>
-<span class="lineno">  425 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; than that of the datatype&quot;)</span></span>
-<span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
-<span class="lineno">  427 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ixs_max_sort &gt; dtSort</span> then</span>
-<span class="lineno">  428 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of indices should be strictly contained&quot; ++</span></span>
-<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; in that of the datatype&quot;)</span></span>
-<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
-<span class="lineno">  431 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  432 </span><span class="spaces">  </span><span class="istickedoff">-- Step 4: Add d as an empty datatype, so we can typecheck the constructors</span>
-<span class="lineno">  433 </span><span class="spaces">  </span><span class="istickedoff">mnm &lt;- getModuleName</span>
-<span class="lineno">  434 </span><span class="spaces">  </span><span class="istickedoff">let dtName = mkIdent mnm nm</span>
-<span class="lineno">  435 </span><span class="spaces">  </span><span class="istickedoff">dtVarIndex &lt;- liftTCM scFreshGlobalVar</span>
-<span class="lineno">  436 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scRegisterName dtVarIndex (ModuleIdentifier dtName)</span>
-<span class="lineno">  437 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  438 </span><span class="spaces">  </span><span class="istickedoff">let dt = DataType { dtCtors = [], .. }</span>
-<span class="lineno">  439 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scModifyModule mnm (\m -&gt; beginDataType m dt)</span>
-<span class="lineno">  440 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  441 </span><span class="spaces">  </span><span class="istickedoff">-- Step 5: typecheck the constructors, and build Ctors for them</span>
-<span class="lineno">  442 </span><span class="spaces">  </span><span class="istickedoff">typed_ctors &lt;-</span>
-<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">mapM (\(Un.Ctor (PosPair p' c) ctx body) -&gt;</span>
-<span class="lineno">  444 </span><span class="spaces">           </span><span class="istickedoff">(c,) &lt;$&gt; typeInferComplete (Un.Pi <span class="nottickedoff">p'</span> ctx body)) c_decls</span>
-<span class="lineno">  445 </span><span class="spaces">  </span><span class="istickedoff">ctors &lt;-</span>
-<span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">case ctxBindingsOfTerms dtParams of</span>
-<span class="lineno">  447 </span><span class="spaces">      </span><span class="istickedoff">ExistsTp p_ctx -&gt;</span>
-<span class="lineno">  448 </span><span class="spaces">        </span><span class="istickedoff">case ctxBindingsOfTerms dtIndices of</span>
-<span class="lineno">  449 </span><span class="spaces">          </span><span class="istickedoff">ExistsTp ix_ctx -&gt;</span>
-<span class="lineno">  450 </span><span class="spaces">            </span><span class="istickedoff">forM typed_ctors $ \(c, typed_tp) -&gt;</span>
-<span class="lineno">  451 </span><span class="spaces">            </span><span class="istickedoff">-- Check that the universe level of the type of each constructor</span>
-<span class="lineno">  452 </span><span class="spaces">            </span><span class="istickedoff">(case asSort (typedType typed_tp) of</span>
-<span class="lineno">  453 </span><span class="spaces">                </span><span class="istickedoff">Just ctor_sort</span>
-<span class="lineno">  454 </span><span class="spaces">                  </span><span class="istickedoff">| <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort</span> -&gt;</span>
-<span class="lineno">  455 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span></span>
-<span class="lineno">  456 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot; contained in that of the datatype&quot;)</span></span>
-<span class="lineno">  457 </span><span class="spaces">                </span><span class="istickedoff">Just _ -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno">  458 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error (&quot;Internal error: type of the type of&quot; ++</span></span>
-<span class="lineno">  459 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">&quot; constructor is not a sort!&quot;)</span>) &gt;&gt;</span>
-<span class="lineno">  460 </span><span class="spaces">            </span><span class="istickedoff">let tp = typedVal typed_tp in</span>
-<span class="lineno">  461 </span><span class="spaces">            </span><span class="istickedoff">case mkCtorArgStruct (dtPrimName dt) p_ctx ix_ctx tp of</span>
-<span class="lineno">  462 </span><span class="spaces">              </span><span class="istickedoff">Just arg_struct -&gt;</span>
-<span class="lineno">  463 </span><span class="spaces">                </span><span class="istickedoff">liftTCM scBuildCtor (dtPrimName dt) (mkIdent mnm c) arg_struct</span>
-<span class="lineno">  464 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">err (&quot;Malformed type form constructor: &quot; ++ show c)</span></span>
-<span class="lineno">  465 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  466 </span><span class="spaces">  </span><span class="istickedoff">-- Step 6: complete the datatype with the given ctors</span>
-<span class="lineno">  467 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scModifyModule mnm (\m -&gt; completeDataType m dtName ctors)</span></span>
-<span class="lineno">  468 </span>
-<span class="lineno">  469 </span>
-<span class="lineno">  470 </span>-- | Typecheck a module and, on success, insert it into the current context
-<span class="lineno">  471 </span>tcInsertModule :: SharedContext -&gt; Un.Module -&gt; IO ()
-<span class="lineno">  472 </span><span class="decl"><span class="istickedoff">tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do</span>
-<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">let myfail :: String -&gt; IO a</span>
-<span class="lineno">  474 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">myfail msg = scUnloadModule sc mnm &gt;&gt; fail msg</span></span>
-<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">-- First, insert an empty module for mnm</span>
-<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">scLoadModule sc $ emptyModule mnm</span>
-<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">-- Next, process all the imports</span>
-<span class="lineno">  478 </span><span class="spaces">  </span><span class="istickedoff">forM_ imports $ \imp -&gt;</span>
-<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">do i_exists &lt;- scModuleIsLoaded sc (val $ Un.importModName imp)</span>
-<span class="lineno">  480 </span><span class="spaces">       </span><span class="istickedoff">i &lt;- if <span class="tickonlytrue">i_exists</span> then scFindModule sc $ val $ Un.importModName imp else</span>
-<span class="lineno">  481 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">myfail $ &quot;Imported module not found: &quot; ++ show mnm</span></span>
-<span class="lineno">  482 </span><span class="spaces">       </span><span class="istickedoff">scModifyModule sc mnm</span>
-<span class="lineno">  483 </span><span class="spaces">         </span><span class="istickedoff">(insImport (Un.nameSatsConstraint (Un.importConstraints imp)</span>
-<span class="lineno">  484 </span><span class="spaces">                     </span><span class="istickedoff">. <span class="nottickedoff">identName . resolvedNameIdent</span>) i)</span>
-<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
-<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
-<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">myfail $ unlines $ prettyTCError err</span></span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return ()</span></span>
-<span class="lineno">  490 </span>
-<span class="lineno">  491 </span>
-<span class="lineno">  492 </span>--
-<span class="lineno">  493 </span>-- Helper functions for type-checking modules
-<span class="lineno">  494 </span>--
-<span class="lineno">  495 </span>
-<span class="lineno">  496 </span>-- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
-<span class="lineno">  497 </span>-- far as the supplied list of variables, and use them as the new names
-<span class="lineno">  498 </span>matchPiWithNames :: [LocalName] -&gt; Term -&gt; Maybe ([(LocalName, Term)], Term)
-<span class="lineno">  499 </span><span class="decl"><span class="istickedoff">matchPiWithNames [] tp = return ([], tp)</span>
-<span class="lineno">  500 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames (var:vars) (asPi -&gt; Just (_, arg_tp, body_tp)) =</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">do (ctx,body) &lt;- matchPiWithNames vars body_tp</span>
-<span class="lineno">  502 </span><span class="spaces">     </span><span class="istickedoff">return ((var,arg_tp):ctx,body)</span>
-<span class="lineno">  503 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  355 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scInsertDef mnm ident def_tp def_tm) &gt;&gt;</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
+<span class="lineno">  357 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  358 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Definition without defining equation&quot;</span></span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  361 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl _ (PosPair p nm) _ :</span>
+<span class="lineno">  362 </span><span class="spaces">              </span><span class="istickedoff">Un.TermDef (PosPair _ ((== nm) -&gt; True)) _ _ : _) =</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Primitive or axiom with definition&quot;</span></span>
+<span class="lineno">  364 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  365 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">(atPos <span class="nottickedoff">p</span> $</span>
+<span class="lineno">  367 </span><span class="spaces">   </span><span class="istickedoff">do typed_tp &lt;- typeInferComplete tp</span>
+<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff">void $ ensureSort $ typedType typed_tp</span>
+<span class="lineno">  369 </span><span class="spaces">      </span><span class="istickedoff">mnm &lt;- getModuleName</span>
+<span class="lineno">  370 </span><span class="spaces">      </span><span class="istickedoff">let ident = mkIdent mnm nm</span>
+<span class="lineno">  371 </span><span class="spaces">      </span><span class="istickedoff">let def_tp = typedVal typed_tp</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scDeclarePrim mnm ident <span class="nottickedoff">q</span> def_tp) &gt;&gt;</span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
+<span class="lineno">  374 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TermDef (PosPair p nm) _ _ : _) =</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Dangling definition without a type&quot;</span></span>
+<span class="lineno">  377 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  378 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =</span>
+<span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">-- This top line makes sure that we process the rest of the decls after the</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">-- main body of the code below, which processes just the current data decl</span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">(&gt;&gt; processDecls rest) $ atPos <span class="nottickedoff">p</span> $</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="istickedoff">-- Step 1: type-check the parameters</span>
+<span class="lineno">  383 </span><span class="spaces">  </span><span class="istickedoff">typeInferCompleteInCtx param_ctx $ \params -&gt; do</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">let dtParams = map (\(x,tp,_) -&gt; (x,tp)) params</span>
+<span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">let param_sort = maxSort (map (\(_,_,s) -&gt; s) params)</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">let err :: String -&gt; TCM a</span>
+<span class="lineno">  387 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">err msg = throwTCError $ DeclError nm msg</span></span>
+<span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">-- Step 2: type-check the type given for d, and make sure it is of the form</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">-- (i1:ix1) -&gt; ... -&gt; (in:ixn) -&gt; Type s for some sort s. Then form the full</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">-- type of d as (p1:param1) -&gt; ... -&gt; (i1:ix1) -&gt; ... -&gt; Type s</span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">(dt_ixs, dtSort) &lt;-</span>
+<span class="lineno">  393 </span><span class="spaces">    </span><span class="istickedoff">case Un.asPiList dt_tp of</span>
+<span class="lineno">  394 </span><span class="spaces">      </span><span class="istickedoff">(ixs, Un.Sort _ s h) | <span class="tickonlytrue">h == noFlags</span> -&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">        </span><span class="istickedoff">return (ixs, s) -- NB, don't allow `isort`, etc.</span>
+<span class="lineno">  396 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">err &quot;Wrong form for type of datatype&quot;</span></span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">dt_ixs_typed &lt;- typeInferCompleteCtx dt_ixs</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">let dtIndices = map (\(x,tp,_) -&gt; (x,tp)) dt_ixs_typed</span>
+<span class="lineno">  399 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map (\(_,_,s) -&gt; s) dt_ixs_typed)</span>
+<span class="lineno">  400 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">-- Step 3: do the necessary universe inclusion checking for any predicative</span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="istickedoff">-- (non-Prop) inductive type, which includes:</span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">-- 1. All ix types must be of sort dtSort; AND</span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">-- 2. All param types must be of sort dtSort+1</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; param_sort &gt; sortOf dtSort</span> then</span>
+<span class="lineno">  407 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of parameters should be no greater&quot; ++</span></span>
+<span class="lineno">  408 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; than that of the datatype&quot;)</span></span>
+<span class="lineno">  409 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
+<span class="lineno">  410 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ixs_max_sort &gt; dtSort</span> then</span>
+<span class="lineno">  411 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of indices should be strictly contained&quot; ++</span></span>
+<span class="lineno">  412 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; in that of the datatype&quot;)</span></span>
+<span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
+<span class="lineno">  414 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="istickedoff">-- Step 4: Add d as an empty datatype, so we can typecheck the constructors</span>
+<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">mnm &lt;- getModuleName</span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">let dtName = mkIdent mnm nm</span>
+<span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">pn &lt;- liftTCM scBeginDataType dtName dtParams dtIndices dtSort</span>
+<span class="lineno">  419 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">-- Step 5: typecheck the constructors, and build Ctors for them</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">typed_ctors &lt;-</span>
+<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">mapM (\(Un.Ctor (PosPair p' c) ctx body) -&gt;</span>
+<span class="lineno">  423 </span><span class="spaces">           </span><span class="istickedoff">(c,) &lt;$&gt; typeInferComplete (Un.Pi <span class="nottickedoff">p'</span> ctx body)) c_decls</span>
+<span class="lineno">  424 </span><span class="spaces">  </span><span class="istickedoff">ctors &lt;-</span>
+<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">case ctxBindingsOfTerms dtParams of</span>
+<span class="lineno">  426 </span><span class="spaces">      </span><span class="istickedoff">ExistsTp p_ctx -&gt;</span>
+<span class="lineno">  427 </span><span class="spaces">        </span><span class="istickedoff">case ctxBindingsOfTerms dtIndices of</span>
+<span class="lineno">  428 </span><span class="spaces">          </span><span class="istickedoff">ExistsTp ix_ctx -&gt;</span>
+<span class="lineno">  429 </span><span class="spaces">            </span><span class="istickedoff">forM typed_ctors $ \(c, typed_tp) -&gt;</span>
+<span class="lineno">  430 </span><span class="spaces">            </span><span class="istickedoff">-- Check that the universe level of the type of each constructor</span>
+<span class="lineno">  431 </span><span class="spaces">            </span><span class="istickedoff">(case asSort (typedType typed_tp) of</span>
+<span class="lineno">  432 </span><span class="spaces">                </span><span class="istickedoff">Just ctor_sort</span>
+<span class="lineno">  433 </span><span class="spaces">                  </span><span class="istickedoff">| <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort</span> -&gt;</span>
+<span class="lineno">  434 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span></span>
+<span class="lineno">  435 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot; contained in that of the datatype&quot;)</span></span>
+<span class="lineno">  436 </span><span class="spaces">                </span><span class="istickedoff">Just _ -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno">  437 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error (&quot;Internal error: type of the type of&quot; ++</span></span>
+<span class="lineno">  438 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">&quot; constructor is not a sort!&quot;)</span>) &gt;&gt;</span>
+<span class="lineno">  439 </span><span class="spaces">            </span><span class="istickedoff">let tp = typedVal typed_tp in</span>
+<span class="lineno">  440 </span><span class="spaces">            </span><span class="istickedoff">case mkCtorArgStruct pn p_ctx ix_ctx tp of</span>
+<span class="lineno">  441 </span><span class="spaces">              </span><span class="istickedoff">Just arg_struct -&gt;</span>
+<span class="lineno">  442 </span><span class="spaces">                </span><span class="istickedoff">liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct</span>
+<span class="lineno">  443 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">err (&quot;Malformed type form constructor: &quot; ++ show c)</span></span>
+<span class="lineno">  444 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="istickedoff">-- Step 6: complete the datatype with the given ctors</span>
+<span class="lineno">  446 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scCompleteDataType dtName ctors</span></span>
+<span class="lineno">  447 </span>
+<span class="lineno">  448 </span>
+<span class="lineno">  449 </span>-- | Typecheck a module and, on success, insert it into the current context
+<span class="lineno">  450 </span>tcInsertModule :: SharedContext -&gt; Un.Module -&gt; IO ()
+<span class="lineno">  451 </span><span class="decl"><span class="istickedoff">tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do</span>
+<span class="lineno">  452 </span><span class="spaces">  </span><span class="istickedoff">-- First, insert an empty module for mnm</span>
+<span class="lineno">  453 </span><span class="spaces">  </span><span class="istickedoff">scLoadModule sc $ emptyModule mnm</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="istickedoff">-- Next, process all the imports</span>
+<span class="lineno">  455 </span><span class="spaces">  </span><span class="istickedoff">forM_ imports $ \imp -&gt;</span>
+<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">do let imn = val $ Un.importModName imp</span>
+<span class="lineno">  457 </span><span class="spaces">       </span><span class="istickedoff">i_exists &lt;- scModuleIsLoaded sc imn</span>
+<span class="lineno">  458 </span><span class="spaces">       </span><span class="istickedoff">unless i_exists $ <span class="nottickedoff">fail $ &quot;Imported module not found: &quot; ++ show imn</span></span>
+<span class="lineno">  459 </span><span class="spaces">       </span><span class="istickedoff">scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . <span class="nottickedoff">identName</span>) imn mnm</span>
+<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
+<span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ unlines $ prettyTCError err</span></span>
+<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return ()</span></span>
+<span class="lineno">  465 </span>
+<span class="lineno">  466 </span>
+<span class="lineno">  467 </span>--
+<span class="lineno">  468 </span>-- Helper functions for type-checking modules
+<span class="lineno">  469 </span>--
+<span class="lineno">  470 </span>
+<span class="lineno">  471 </span>-- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
+<span class="lineno">  472 </span>-- far as the supplied list of variables, and use them as the new names
+<span class="lineno">  473 </span>matchPiWithNames :: [LocalName] -&gt; Term -&gt; Maybe ([(LocalName, Term)], Term)
+<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">matchPiWithNames [] tp = return ([], tp)</span>
+<span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames (var:vars) (asPi -&gt; Just (_, arg_tp, body_tp)) =</span>
+<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">do (ctx,body) &lt;- matchPiWithNames vars body_tp</span>
+<span class="lineno">  477 </span><span class="spaces">     </span><span class="istickedoff">return ((var,arg_tp):ctx,body)</span>
+<span class="lineno">  478 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = <span class="nottickedoff">Nothing</span></span></span>
 
 </pre>
 </body>
