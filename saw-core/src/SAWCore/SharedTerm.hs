@@ -70,7 +70,6 @@ module SAWCore.SharedTerm
   , scFlatTermF
     -- ** Implicit versions of functions.
   , scDefTerm
-  , scFreshGlobalVar
   , scFreshGlobal
   , scFreshEC
   , scExtCns
@@ -381,7 +380,7 @@ data SharedContext = SharedContext
   , scTermF          :: TermF Term -> IO Term
   , scNamingEnv      :: IORef SAWNamingEnv
   , scGlobalEnv      :: IORef (HashMap Ident Term)
-  , scFreshGlobalVar :: IO VarIndex
+  , scVarIndexRef    :: IORef VarIndex
   }
 
 data SharedContextCheckpoint =
@@ -423,13 +422,26 @@ instance Show DuplicateNameException where
   show (DuplicateNameException uri) =
       "Attempted to register the following name twice: " ++ Text.unpack (render uri)
 
-scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
-scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
+scFreshGlobalVar :: SharedContext -> IO VarIndex
+scFreshGlobalVar sc = atomicModifyIORef' (scVarIndexRef sc) (\i -> (i + 1, i))
+
+scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
+scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
   where
     f env =
       case registerName i nmi env of
         Left uri -> throw (DuplicateNameException uri)
         Right env' -> env'
+
+-- | Generate a fresh @VarIndex@ for the given @NameInfo@ and register
+-- them together in the @SAWNamingEnv@ of the @SharedContext@. Throws
+-- @DuplicateNameException@ if the URI in the @NameInfo@ is already
+-- registered.
+scRegisterName :: SharedContext -> NameInfo -> IO VarIndex
+scRegisterName sc nmi =
+  do i <- scFreshGlobalVar sc
+     scRegisterNameWithIndex sc i nmi
+     pure i
 
 scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
 scLookupNameInfo sc i = do
@@ -473,7 +485,7 @@ scFreshEC sc x tp =
   do i <- scFreshGlobalVar sc
      let uri = scFreshNameURI x i
      let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
-     scRegisterName sc i nmi
+     scRegisterNameWithIndex sc i nmi
      pure (EC i nmi tp)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
@@ -596,8 +608,7 @@ scModifyModule sc mnm f =
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc mnm ident q def_tp =
-  do i <- scFreshGlobalVar sc
-     scRegisterName sc i (ModuleIdentifier ident)
+  do i <- scRegisterName sc (ModuleIdentifier ident)
      let pn = PrimName i ident def_tp
      t <- scFlatTermF sc (Primitive pn)
      scRegisterGlobal sc ident t
@@ -651,8 +662,7 @@ scBeginDataType ::
   Sort {- ^ The universe of this datatype -} ->
   IO (PrimName Term)
 scBeginDataType sc dtName dtParams dtIndices dtSort =
-  do dtVarIndex <- scFreshGlobalVar sc
-     scRegisterName sc dtVarIndex (ModuleIdentifier dtName)
+  do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtName)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
      let mnm = identModule dtName
@@ -779,8 +789,7 @@ scBuildCtor sc d c arg_struct =
   do
     -- Step 0: allocate a fresh unique variable index for this constructor
     -- and register its name in the naming environment
-    varidx <- scFreshGlobalVar sc
-    scRegisterName sc varidx (ModuleIdentifier c)
+    varidx <- scRegisterName sc (ModuleIdentifier c)
 
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
@@ -1660,8 +1669,7 @@ scConstant' sc nmi rhs ty =
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
-     i <- scFreshGlobalVar sc
-     scRegisterName sc i nmi
+     i <- scRegisterName sc nmi
      let ec = EC i nmi ty'
      t <- scTermF sc (Constant ec (Just rhs'))
      args <- mapM (scFlatTermF sc . ExtCns) ecs
@@ -1677,8 +1685,7 @@ scOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   IO Term
 scOpaqueConstant sc nmi ty =
-  do i <- scFreshGlobalVar sc
-     scRegisterName sc i nmi
+  do i <- scRegisterName sc nmi
      let ec = EC i nmi ty
      scTermF sc (Constant ec Nothing)
 
@@ -2471,16 +2478,15 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
 mkSharedContext = do
-  vr <- newMVar 0 -- Reference for getting variables.
+  vr <- newIORef 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
-  let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
   envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
-           , scFreshGlobalVar = freshGlobalVar
+           , scVarIndexRef = vr
            , scNamingEnv = envRef
            , scGlobalEnv = gr
            }
