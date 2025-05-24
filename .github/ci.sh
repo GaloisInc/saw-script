@@ -36,8 +36,11 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
+  # This prints nothing if the tree is clean
+  git status --porcelain
   # Run build.sh to capture the git info so we can do plain cabal builds
   ./build.sh gitrev
+
   # Configure with --disable-documentation and --haddock-internal so
   # that the haddock run later, if enabled, doesn't recompile the
   # world by using those flags. (See haddock() below for discussion of
@@ -45,15 +48,17 @@ build() {
   # we're intending to do the haddock run, but it should have no
   # effect otherwise and unconditional is simpler.
   cabal v2-configure -j --enable-tests --disable-documentation --haddock-internal
-  git status --porcelain
+  # cabal configure produces cabal.project.local.
+  # Now adjust the config behind cabal's back.
+  cat cabal.project.ci >> cabal.project.local
+  if [[ "$ENABLE_HPC" == "true" ]]; then
+    cat cabal.project.ci-hpc >> cabal.project.local
+  fi
+
   if $IS_WIN; then
     pkgs=(saw crux-mir-comp)
   else
     pkgs=(saw crux-mir-comp saw-remote-api)
-  fi
-  cat cabal.project.ci >> cabal.project.local
-  if [[ "$ENABLE_HPC" == "true" ]]; then
-    cat cabal.project.ci-hpc >> cabal.project.local
   fi
   # In the distant past, we had to retry the `cabal build` command to work
   # around issues with caching dylib files on macOS. These issues appear to
