@@ -381,7 +381,7 @@ data SharedContext = SharedContext
   , scTermF          :: TermF Term -> IO Term
   , scNamingEnv      :: IORef SAWNamingEnv
   , scGlobalEnv      :: IORef (HashMap Ident Term)
-  , scFreshGlobalVar :: IO VarIndex
+  , scVarIndexRef    :: IORef VarIndex
   }
 
 data SharedContextCheckpoint =
@@ -422,6 +422,9 @@ instance Exception DuplicateNameException
 instance Show DuplicateNameException where
   show (DuplicateNameException uri) =
       "Attempted to register the following name twice: " ++ Text.unpack (render uri)
+
+scFreshGlobalVar :: SharedContext -> IO VarIndex
+scFreshGlobalVar sc = atomicModifyIORef' (scVarIndexRef sc) (\i -> (i + 1, i))
 
 scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
@@ -2471,16 +2474,15 @@ scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a,
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: IO SharedContext
 mkSharedContext = do
-  vr <- newMVar 0 -- Reference for getting variables.
+  vr <- newIORef 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
-  let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
   envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
-           , scFreshGlobalVar = freshGlobalVar
+           , scVarIndexRef = vr
            , scNamingEnv = envRef
            , scGlobalEnv = gr
            }
