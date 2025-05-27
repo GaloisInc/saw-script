@@ -1913,7 +1913,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1894 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1895 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1896 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1897 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl <span class="nottickedoff">(stats &lt;&gt; stats')</span> <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1897 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl <span class="nottickedoff">(stats &lt;&gt; stats')</span> timeout evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1898 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1899 </span>
 <span class="lineno"> 1900 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -1989,7 +1989,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1970 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars (e:es) =</span>
 <span class="lineno"> 1971 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT <span class="nottickedoff">mmap</span> (ecType e) of</span>
 <span class="lineno"> 1972 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es</span></span>
-<span class="lineno"> 1973 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars <span class="nottickedoff">mmap</span> (Map.insert e <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 1973 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars <span class="nottickedoff">mmap</span> (Map.insert e fot fovars) absvars es</span>
 <span class="lineno"> 1974 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1975 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 1976 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
@@ -2009,7 +2009,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1990 </span><span class="spaces">                    </span><span class="istickedoff">do ec  &lt;- scFreshEC sc lnm tp'</span>
 <span class="lineno"> 1991 </span><span class="spaces">                       </span><span class="istickedoff">etm &lt;- scExtCns sc ec</span>
 <span class="lineno"> 1992 </span><span class="spaces">                       </span><span class="istickedoff">body' &lt;- instantiateVar sc 0 etm body</span>
-<span class="lineno"> 1993 </span><span class="spaces">                       </span><span class="istickedoff">processUnivAssert <span class="nottickedoff">mmap</span> ((ec,<span class="nottickedoff">fot</span>):vars) xs body'</span>
+<span class="lineno"> 1993 </span><span class="spaces">                       </span><span class="istickedoff">processUnivAssert <span class="nottickedoff">mmap</span> ((ec,fot):vars) xs body'</span>
 <span class="lineno"> 1994 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1995 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">termIsClosed body</span> -&gt;</span>
 <span class="lineno"> 1996 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
