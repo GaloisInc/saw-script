@@ -45,10 +45,10 @@ Portability : non-portable (language extensions)
 -- ought to be updated to match it.
 --
 -- XXX: should come up with a better name for pShowText, and remove
--- pShow entirely. These should be called "show" because they aren't
--- Show instances and don't have the properties of Show instances.
--- And we don't want people writing or using Show instances except
--- maybe for extremely simple types.
+-- pShow entirely. These shouldn't be called "show" because they
+-- aren't Show instances and don't have the properties of Show
+-- instances. And we don't want people writing or using Show instances
+-- except maybe for extremely simple types.
 --
 -- XXX: The ShowS material at the bottom should go away; that requires
 -- cleaning up the callers to use prettyprinting instead of Show

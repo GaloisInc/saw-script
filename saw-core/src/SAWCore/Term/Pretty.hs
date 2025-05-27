@@ -188,7 +188,7 @@ data PPState =
     -- indices to "memoization variables" that are in scope
     ppLocalMemoTable :: IntMap MemoVar,
 
-    -- | Terms to not inline (apparently)
+    -- | Terms to not inline because they're memoized (see 'withMemoVar')
     ppNoInlineIdx :: Set TermIndex
   }
 
