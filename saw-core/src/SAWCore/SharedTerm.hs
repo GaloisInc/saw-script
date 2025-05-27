@@ -433,9 +433,9 @@ scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> 
         Left uri -> throw (DuplicateNameException uri)
         Right env' -> env'
 
--- | Generate a fresh @VarIndex@ for the given @NameInfo@ and register
--- them together in the @SAWNamingEnv@ of the @SharedContext@. Throws
--- @DuplicateNameException@ if the URI in the @NameInfo@ is already
+-- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
+-- them together in the 'SAWNamingEnv' of the 'SharedContext'. Throws
+-- 'DuplicateNameException' if the URI in the 'NameInfo' is already
 -- registered.
 scRegisterName :: SharedContext -> NameInfo -> IO VarIndex
 scRegisterName sc nmi =
