@@ -637,6 +637,7 @@ scDeclarePrim sc mnm ident q def_tp =
      scRegisterGlobal sc ident t
      scModifyModule sc mnm $ \m ->
        insDef m $ Def { defIdent = ident,
+                        defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
                         defBody = Nothing }
@@ -646,8 +647,11 @@ scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
 scInsertDef sc mnm ident def_tp def_tm =
   do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
      scRegisterGlobal sc ident t
+     mi <- scResolveNameByURI sc (moduleIdentToURI ident)
+     let i = fromMaybe (panic "scInsertDef" ["name not found"]) mi
      scModifyModule sc mnm $ \m ->
        insDef m $ Def { defIdent = ident,
+                        defVarIndex = i,
                         defQualifier = NoQualifier,
                         defType = def_tp,
                         defBody = Just def_tm }

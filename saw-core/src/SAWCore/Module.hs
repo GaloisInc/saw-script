@@ -111,6 +111,7 @@ instance Hashable DefQualifier -- automatically derived
 data Def =
   Def
   { defIdent :: Ident
+  , defVarIndex :: VarIndex
   , defQualifier :: DefQualifier
   , defType :: Term
   , defBody :: Maybe Term
