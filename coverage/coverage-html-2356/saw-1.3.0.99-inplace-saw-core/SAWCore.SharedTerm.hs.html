@@ -452,9 +452,9 @@ span.spaces    { background: white }
 <span class="lineno">  433 </span><span class="spaces">        </span><span class="istickedoff">Left uri -&gt; <span class="nottickedoff">throw (DuplicateNameException uri)</span></span>
 <span class="lineno">  434 </span><span class="spaces">        </span><span class="istickedoff">Right env' -&gt; env'</span></span>
 <span class="lineno">  435 </span>
-<span class="lineno">  436 </span>-- | Generate a fresh @VarIndex@ for the given @NameInfo@ and register
-<span class="lineno">  437 </span>-- them together in the @SAWNamingEnv@ of the @SharedContext@. Throws
-<span class="lineno">  438 </span>-- @DuplicateNameException@ if the URI in the @NameInfo@ is already
+<span class="lineno">  436 </span>-- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
+<span class="lineno">  437 </span>-- them together in the 'SAWNamingEnv' of the 'SharedContext'. Throws
+<span class="lineno">  438 </span>-- 'DuplicateNameException' if the URI in the 'NameInfo' is already
 <span class="lineno">  439 </span>-- registered.
 <span class="lineno">  440 </span>scRegisterName :: SharedContext -&gt; NameInfo -&gt; IO VarIndex
 <span class="lineno">  441 </span><span class="decl"><span class="istickedoff">scRegisterName sc nmi =</span>
