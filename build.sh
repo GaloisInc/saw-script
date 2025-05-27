@@ -7,6 +7,9 @@
 #    gitrev (included in build, needed before building)
 #    submodules (included in build, at least for now)
 #    clean
+#
+# Setting environment variable SAW_SUPPRESS_GITREV suppresses updating
+# GitRev.hs. See savegitinfo.sh.
 
 set -e
 
@@ -39,9 +42,19 @@ tgt_build() {
     tgt_gitrev
     tgt_submodules
 
+    # Keep the list of tests in sync. There are four lists of tests:
+    #   - here
+    #   - .github/workflows/ci.yml
+    #   - doc/developer/developer.md
+    #   - and of course the definitions in the *.cabal files
+
     echo "cabal build ..."
     cabal build exe:cryptol exe:saw exe:saw-remote-api \
-                exe:crux-mir-comp exe:extcore-info exe:verif-viewer
+                exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
+                test-suite:integration-tests test-suite:saw-core-tests \
+                test-suite:cryptol-saw-core-tests \
+                test-suite:saw-core-coq-tests \
+                test-suite:heapster-prover-tests
 
     echo "rm -rf bin && mkdir bin"
     rm -rf bin && mkdir bin

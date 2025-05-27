@@ -137,6 +137,14 @@ There are multiple test suites in the SAW repository.
 The main test suite is called `integration-tests` and the contents
 can be found in the `intTests` directory.
 
+<!--
+  -- Keep the list of tests in sync. There are four copies:
+  --    o here
+  --    o .github/workflows/ci.yml
+  --    o build.sh
+  --    o and of course the definitions in the *.cabal files
+  -->
+
 The following can be run with `cabal test`:
 
 - `integration-tests` (this is the main test suite)

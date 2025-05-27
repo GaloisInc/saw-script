@@ -25,7 +25,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 9
+  CABAL_CACHE_VERSION: 10
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -178,6 +178,11 @@ jobs:
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
         with:
+          # Keep this list in sync. There are four lists of tests:
+          #   - here
+          #   - build.sh (in the "build" target)
+          #   - doc/developer/developer.md
+          #   - and of course the definitions in the *.cabal files
           targets: |
             integration-tests
             saw-core-tests
