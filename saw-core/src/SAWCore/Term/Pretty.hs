@@ -66,10 +66,6 @@ import SAWCore.Term.Functor
 import SAWCore.Recognizer
 
 
--- | Options for printing with a maximum depth
-depthPPOpts :: Int -> PPS.Opts
-depthPPOpts max_d = PPS.defaultOpts { PPS.ppMaxDepth = Just max_d }
-
 -- | Test if a depth is "allowed", meaning not greater than the max depth
 depthAllowed :: PPS.Opts -> Int -> Bool
 depthAllowed (PPS.Opts { ppMaxDepth = Just max_d }) d = d < max_d
@@ -685,13 +681,6 @@ ppWithBoundCtx ((x,tp):ctx) m =
 -- more than once at the same binding level
 ppTerm :: PPS.Opts -> Term -> PPS.Doc
 ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
-
--- | Pretty-print a term, but only to a maximum depth
---
--- Not used, but I'm not ready to rip this functionality out just yet.
--- FUTURE: figure out if we really want it or not
-_ppTermDepth :: Int -> Term -> PPS.Doc
-_ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context

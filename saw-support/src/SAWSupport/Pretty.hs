@@ -85,6 +85,7 @@ module SAWSupport.Pretty (
     MemoStyle(..),
     Opts(..),
     defaultOpts,
+    limitMaxDepth,
     PrettyPrec(..),
     prettyNat,
     prettyTypeConstraint,
@@ -212,6 +213,14 @@ defaultOpts = Opts {
     ppMemoStyle = Incremental,
     ppMinSharing = 2
  }
+
+limitMaxDepth :: Opts -> Int -> Opts
+limitMaxDepth opts limit =
+  let adjust depth = case depth of
+        Nothing -> Just limit
+        Just d -> Just $ if d > limit then limit else d
+  in
+  opts { ppMaxDepth = adjust $ ppMaxDepth opts }
 
 
 ------------------------------------------------------------
