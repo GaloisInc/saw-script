@@ -96,7 +96,7 @@ build interface and additional manual steps may appear in the future.
 For example, be aware that while `build.sh` compiles the test code as
 part of the default build, `cabal build` does not.
 
-You can also set the environment variable SAW_SUPPRESS_GITREV to
+You can also set the environment variable `SAW_SUPPRESS_GITREV` to
 something nonempty to prevent updating the git checkout state.
 
 This is not recommended except when actively developing; however, when
