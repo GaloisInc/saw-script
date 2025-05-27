@@ -380,7 +380,7 @@ data SharedContext = SharedContext
   , scTermF          :: TermF Term -> IO Term
   , scNamingEnv      :: IORef SAWNamingEnv
   , scGlobalEnv      :: IORef (HashMap Ident Term)
-  , scVarIndexRef    :: IORef VarIndex
+  , scNextVarIndex   :: IORef VarIndex
   }
 
 data SharedContextCheckpoint =
@@ -422,9 +422,12 @@ instance Show DuplicateNameException where
   show (DuplicateNameException uri) =
       "Attempted to register the following name twice: " ++ Text.unpack (render uri)
 
-scFreshGlobalVar :: SharedContext -> IO VarIndex
-scFreshGlobalVar sc = atomicModifyIORef' (scVarIndexRef sc) (\i -> (i + 1, i))
+-- | Internal function to get the next available 'VarIndex'. Not exported.
+scFreshVarIndex :: SharedContext -> IO VarIndex
+scFreshVarIndex sc = atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 
+-- | Internal function to register a name with a caller-provided
+-- 'VarIndex'. Not exported.
 scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
   where
@@ -439,7 +442,7 @@ scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> 
 -- registered.
 scRegisterName :: SharedContext -> NameInfo -> IO VarIndex
 scRegisterName sc nmi =
-  do i <- scFreshGlobalVar sc
+  do i <- scFreshVarIndex sc
      scRegisterNameWithIndex sc i nmi
      pure i
 
@@ -482,7 +485,7 @@ scShowTerm sc opts t =
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
-  do i <- scFreshGlobalVar sc
+  do i <- scFreshVarIndex sc
      let uri = scFreshNameURI x i
      let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
      scRegisterNameWithIndex sc i nmi
@@ -2486,7 +2489,7 @@ mkSharedContext = do
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
-           , scVarIndexRef = vr
+           , scNextVarIndex = vr
            , scNamingEnv = envRef
            , scGlobalEnv = gr
            }
