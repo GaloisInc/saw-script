@@ -90,6 +90,8 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
+import qualified SAWSupport.Pretty as PPS (Doc, Opts)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Term.CtxTerm
@@ -499,7 +501,10 @@ allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
 
 
 -- | Pretty-print a 'Module'
-ppModule :: PPOpts -> Module -> SawDoc
+--
+--   This converts to the PPModule representation used by the actual module
+--   printer in Pretty.hs.
+ppModule :: PPS.Opts -> Module -> PPS.Doc
 ppModule opts m =
   ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
   where

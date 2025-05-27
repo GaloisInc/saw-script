@@ -104,9 +104,12 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
+
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.TypedAST as SAWVerifier
+import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -324,8 +327,8 @@ ppOverrideFailureReason rsn = case rsn of
   BadTermMatch x y ->
     PP.vcat
     [ PP.pretty "terms do not match"
-    , PP.indent 2 (PP.unAnnotate (ppTerm defaultPPOpts x))
-    , PP.indent 2 (PP.unAnnotate (ppTerm defaultPPOpts y))
+    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts x))
+    , PP.indent 2 (PP.unAnnotate (ppTerm PPS.defaultOpts y))
     ]
   BadPointerCast ->
     PP.pretty "bad pointer cast"
@@ -723,8 +726,12 @@ matchTerm sc md prepost real expect =
 
        _ ->
          do t <- liftIO $ scEq sc real expect
-            let expect' = showTerm expect
-                real' = showTerm real
+            -- XXX get the user's ppOpts setting from somewhere
+            let ppOpts = PPS.defaultOpts
+            -- clamp the print depth to 20
+            let ppOpts' = PPS.limitMaxDepth ppOpts 20
+                expect' = scPrettyTerm ppOpts' expect
+                real' = scPrettyTerm ppOpts' real
             let msg = unlines $
                   [ "Literal equality " ++ MS.stateCond prepost
                   , "Expected term: "
@@ -733,7 +740,6 @@ matchTerm sc md prepost real expect =
                   , real'
                   ]
             addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
---  where prettyTerm = show . ppTermDepth 20
 
 assignTerm ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->

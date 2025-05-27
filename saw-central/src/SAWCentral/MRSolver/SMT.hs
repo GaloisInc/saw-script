@@ -49,6 +49,8 @@ import Prettyprinter
 import Data.Reflection
 import Data.Parameterized.BoolRepr
 
+import qualified SAWSupport.Pretty as PPS (render)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
@@ -283,7 +285,7 @@ mrProvableRaw prop_term =
          mrDebugPrint 2 "SMT solver response: not provable" >>
          mrDebugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
            "\n - " ++ show (ppName $ ecName x) ++
-           " = " ++ renderSawDoc opts (ppFirstOrderValue opts v)) cex) >>
+           " = " ++ PPS.render opts (ppFirstOrderValue opts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->
          mrDebugPrint 2 "SMT solver response: provable" >>

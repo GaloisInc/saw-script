@@ -66,6 +66,9 @@ import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified CryptolSAWCore.Monadify as Monadify
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS (Doc, MemoStyle(..), Opts(..), defaultOpts, render, pShow)
+
 -- saw-core
 import SAWCore.Grammar (parseSAWTerm)
 import SAWCore.ExternalFormat
@@ -80,7 +83,7 @@ import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (MemoStyle(..))
+import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCore.Simulator.Concrete as Concrete
@@ -89,7 +92,6 @@ import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 import SAWCore.TypedAST
 import qualified SAWCore.Simulator.TermModel as TM
-import SAWCore.Term.Pretty (SawDoc, renderSawDoc)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -129,7 +131,7 @@ import Lang.Crucible.CFG.Common (freshGlobalVar)
 import qualified SAWCentral.SBVParser as SBV
 import SAWCentral.ImportAIG
 
-import SAWCentral.AST (getVal, pShow, Located(..))
+import SAWCentral.AST (getVal, Located(..))
 import SAWCentral.Options as Opts
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
@@ -423,10 +425,9 @@ split_goal =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticSplit sc)
 
-getTopLevelPPOpts :: TopLevel PPOpts
-getTopLevelPPOpts = do
-  opts <- fmap rwPPOpts getTopLevelRW
-  return (SV.sawPPOpts opts)
+getTopLevelPPOpts :: TopLevel PPS.Opts
+getTopLevelPPOpts =
+  rwPPOpts <$> getTopLevelRW
 
 show_term :: Term -> TopLevel String
 show_term t =
@@ -441,7 +442,7 @@ print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     let opts' = opts { ppMaxDepth = Just d }
+     let opts' = opts { PPS.ppMaxDepth = Just d }
      output <- liftIO $ scShowTerm sc opts' t
      printOutLnTop Info output
 
@@ -485,10 +486,10 @@ print_goal_inline noInline =
     do
       opts <- getTopLevelPPOpts
       opts' <-
-        case ppMemoStyle opts of
-          Incremental -> pure opts { ppNoInlineMemoFresh = sort noInline }
-          HashIncremental _ -> pure opts { ppNoInlineMemoFresh = sort noInline }
-          Hash _ -> warnIncremental >> pure opts
+        case PPS.ppMemoStyle opts of
+          PPS.Incremental -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
+          PPS.HashIncremental _ -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
+          PPS.Hash _ -> warnIncremental >> pure opts
       sc <- getSharedContext
       nenv <- io (scGetNamingEnv sc)
       let output = prettySequent opts' nenv (goalSequent goal)
@@ -533,7 +534,7 @@ print_goal_depth n =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     let opts' = opts { ppMaxDepth = Just n }
+     let opts' = opts { PPS.ppMaxDepth = Just n }
      nenv <- io (scGetNamingEnv sc)
      let output = prettySequent opts' nenv (goalSequent goal)
      printOutLnTop Info (unlines [goalSummary goal, output])
@@ -1293,14 +1294,14 @@ proveHelper nm script t f = do
              , goalSequent = propToSequent prop
              , goalTags = mempty
              }
-  opts <- rwPPOpts <$> getTopLevelRW
+  opts <- getTopLevelPPOpts
   res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True False
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -1313,7 +1314,7 @@ proveByBVInduction ::
   TopLevel Theorem
 proveByBVInduction script t =
   do sc <- getSharedContext
-     opts <- rwPPOpts <$> getTopLevelRW
+     opts <- getTopLevelPPOpts
      ty <- io $ scTypeCheckError sc (ttTerm t)
      io (checkInductionScheme sc opts [] ty) >>= \case
        Nothing -> badTy opts ty
@@ -1502,7 +1503,7 @@ proveByBVInduction script t =
   badTy opts ty =
     fail $ unlines [ "Incorrect type for proof by induction!"
                    , "Run `:help prove_by_bv_induction` to see a description of what is expected."
-                   , show (ppTerm (SV.sawPPOpts opts) ty)
+                   , show (ppTerm opts ty)
                    ]
 
 provePrintPrim ::
@@ -1551,7 +1552,7 @@ satPrintPrim ::
   TopLevel ()
 satPrintPrim script t = do
   result <- satPrim script t
-  opts <- rwPPOpts <$> getTopLevelRW
+  opts <- getTopLevelPPOpts
   printOutLnTop Info (SV.showsSatResult opts result "")
 
 -- | Quick check (random test) a term and print the result. The
@@ -1823,7 +1824,7 @@ envCmd = do
       keep (_x, (lc, _ty, _v)) = Set.member lc avail
       vals' = filter keep $ Map.assocs vals
       showLName = Text.unpack . getVal
-      printit (x, (_lc, ty, _v)) = showLName x ++ " : " ++ pShow ty
+      printit (x, (_lc, ty, _v)) = showLName x ++ " : " ++ PPS.pShow ty
   opts <- getOptions
   io $ sequence_ [ printOutLn opts Info (printit item) | item <- vals' ]
 
@@ -2096,7 +2097,7 @@ prove_core script input =
      t <- parseCore input
      p <- io (termToProp sc t)
      pos <- SV.getPosition
-     opts <- rwPPOpts <$> getTopLevelRW
+     opts <- getTopLevelPPOpts
      let goal = ProofGoal
                 { goalNum = 0
                 , goalType = "prove"
@@ -2269,7 +2270,7 @@ ensureMonadicTerm sc t = monadifyTypedTerm sc t
 -- followed by an abridged version of the refinement represented by the two
 -- terms.
 mrSolverNormalizeAndPrintArgs ::
-  SharedContext -> Maybe SawDoc ->
+  SharedContext -> Maybe PPS.Doc ->
   TypedTerm -> TypedTerm -> TopLevel (Term, Term)
 mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
   do m1 <- ttTerm <$> ensureMonadicTerm sc tt1
@@ -2278,7 +2279,7 @@ mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
      m2' <- io $ collapseEta <$> betaNormalize sc m2
      case printStr of
        Nothing -> return ()
-       Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
+       Just str -> printOutLnTop Info $ PPS.render PPS.defaultOpts $
          "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
                                " |= " <> ppTmHead m2'
      return (m1', m2')
@@ -2292,12 +2293,12 @@ mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
         -- Pretty-print the name of the top-level function call, followed by
         -- "..." if it is given any arguments, or just "..." if there is no
         -- top-level call
-        ppTmHead :: Term -> SawDoc
+        ppTmHead :: Term -> PPS.Doc
         ppTmHead (asLambdaList -> (_,
                   asApplyAll -> (t@(
                   Prover.asProjAll -> (
                   Monadify.asTypedGlobalDef -> Just _, _)), args))) =
-          ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+          ppTerm PPS.defaultOpts t <> if length args > 0 then " ..." else ""
         ppTmHead _ = "..."
 
 -- | The calback to be used by MRSolver for making SMT queries
@@ -2376,7 +2377,7 @@ mrSolverSetDebugDepth :: Int -> TopLevel ()
 mrSolverSetDebugDepth depth =
   modify (\rw -> rw { rwMRSolverEnv = (rwMRSolverEnv rw) {
                         Prover.mrePPOpts = (Prover.mrePPOpts (rwMRSolverEnv rw)) {
-                          ppMaxDepth = Just depth }}})
+                          PPS.ppMaxDepth = Just depth }}})
 
 -- | Given a list of names and types representing variables over which to
 -- quantify as as well as two terms containing those variables, which may be
@@ -2494,7 +2495,7 @@ summarize_verification =
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
      let summary = computeVerificationSummary db jspecs lspecs thms
-     opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+     opts <- getTopLevelPPOpts
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
@@ -2520,7 +2521,7 @@ writeVerificationSummary = do
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     nenv <- io . scGetNamingEnv =<< getSharedContext
-    ppOpts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+    ppOpts <- getTopLevelPPOpts
 
     case summaryFile opts of
       Nothing -> return ()

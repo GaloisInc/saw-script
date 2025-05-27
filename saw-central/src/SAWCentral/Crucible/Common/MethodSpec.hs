@@ -142,8 +142,11 @@ import           Mir.Intrinsics (MIR)
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
+import           SAWCore.Term.Pretty (ppTerm)
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -294,7 +297,7 @@ ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
 
 ppTypedTerm :: TypedTerm -> PP.Doc ann
 ppTypedTerm (TypedTerm tp tm) =
-  PP.unAnnotate (ppTerm defaultPPOpts tm)
+  PP.unAnnotate (ppTerm PPS.defaultOpts tm)
   PP.<+> PP.pretty ":" PP.<+>
   ppTypedTermType tp
 
@@ -304,7 +307,7 @@ ppTypedTermType (TypedTermSchema sch) =
 ppTypedTermType (TypedTermKind k) =
   PP.viaShow (Cryptol.ppPrec 0 k)
 ppTypedTermType (TypedTermOther tp) =
-  PP.unAnnotate (ppTerm defaultPPOpts tp)
+  PP.unAnnotate (ppTerm PPS.defaultOpts tp)
 
 ppTypedExtCns :: TypedExtCns -> PP.Doc ann
 ppTypedExtCns (TypedExtCns tp ec) =

@@ -32,9 +32,12 @@ import Prettyprinter
 
 import qualified Data.AIG as AIG
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm hiding (scNot, scAnd, scOr)
+import SAWCore.Term.Pretty (ppTerm)
 import SAWCentral.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
@@ -63,7 +66,7 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
 bitblastSharedTerm _ _ tp = throwTP $ show $
   vcat
   [ "Could not parse AIG input type:"
-  , indent 2 (ppTerm defaultPPOpts tp)
+  , indent 2 (ppTerm PPS.defaultOpts tp)
   ]
 
 parseAIGResultType :: SharedContext

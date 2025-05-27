@@ -34,6 +34,9 @@ import Prettyprinter hiding (Doc)
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
+import SAWSupport.Pretty (prettyNat)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
+
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.TypedAST
@@ -213,10 +216,10 @@ instance Show FirstOrderValue where
       showEntry (k, v) = shows k . showString " := " . shows v
       showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
 
-ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
+ppFiniteValue :: PPS.Opts -> FiniteValue -> PPS.Doc
 ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)
 
-ppFirstOrderValue :: PPOpts -> FirstOrderValue -> SawDoc
+ppFirstOrderValue :: PPS.Opts -> FirstOrderValue -> PPS.Doc
 ppFirstOrderValue opts = loop
  where
  loop fv = case fv of
@@ -225,7 +228,7 @@ ppFirstOrderValue opts = loop
      | otherwise -> pretty "False"
    FOVInt i      -> pretty i
    FOVIntMod _ i -> pretty i
-   FOVWord _w i  -> ppNat opts i
+   FOVWord _w i  -> prettyNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
    FOVArray _kty d vs ->
       let ppEntry' k' v = k' <+> pretty ":=" <+> loop v
@@ -338,14 +341,14 @@ asFiniteType sc t = do
       -> FTTuple <$> traverse (asFiniteType sc) ts
     (R.asRecordType -> Just tm)
       -> FTRec <$> traverse (asFiniteType sc) tm
-    _ -> fail $ "asFiniteType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
+    _ -> fail $ "asFiniteType: unsupported argument type: " ++ scPrettyTerm PPS.defaultOpts t'
 
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
 asFirstOrderType sc t = maybe err pure =<< runMaybeT (asFirstOrderTypeMaybe sc t)
   where
     err =
       do t' <- scWhnf sc t
-         fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t')
+         fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm PPS.defaultOpts t')
 
 asFirstOrderTypeMaybe :: SharedContext -> Term -> MaybeT IO FirstOrderType
 asFirstOrderTypeMaybe sc t =

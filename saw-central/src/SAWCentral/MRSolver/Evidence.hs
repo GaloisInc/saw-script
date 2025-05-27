@@ -35,8 +35,9 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
+
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats
@@ -169,12 +170,12 @@ data MREnv = MREnv {
   mreDebugLevel :: Int,
   -- | The options for pretty-printing to be used by MRSolver in error messages
   -- and debug printing
-  mrePPOpts :: PPOpts
+  mrePPOpts :: PPS.Opts
 }
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreDebugLevel = 0, mrePPOpts = defaultPPOpts }
+emptyMREnv = MREnv { mreDebugLevel = 0, mrePPOpts = PPS.defaultOpts }
 
 -- | Set the debug level of a Mr Solver environment
 mrEnvSetDebugLevel :: Int -> MREnv -> MREnv

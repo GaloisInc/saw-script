@@ -98,6 +98,7 @@ import SAWCentral.Value
 import qualified CryptolSAWCore.Cryptol as C
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
+import SAWCore.Term.Pretty (showTerm)
 import CryptolSAWCore.TypedTerm
 import SAWCore.Recognizer
 

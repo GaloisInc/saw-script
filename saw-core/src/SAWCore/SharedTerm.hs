@@ -49,14 +49,6 @@ module SAWCore.SharedTerm
   , scFindBestName
   , scShowTerm
   , DuplicateNameException(..)
-    -- * Re-exported pretty-printing functions
-  , PPOpts(..)
-  , defaultPPOpts
-  , ppTerm
-  , ppTermDepth
-  , showTerm
-  , scPrettyTerm
-  , scPrettyTermInCtx
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
@@ -317,6 +309,8 @@ import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
+import qualified SAWSupport.Pretty as PPS (Opts)
+
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
@@ -477,7 +471,7 @@ scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
      pure (resolveName env nm)
 
-scShowTerm :: SharedContext -> PPOpts -> Term -> IO String
+scShowTerm :: SharedContext -> PPS.Opts -> Term -> IO String
 scShowTerm sc opts t =
   do env <- readIORef (scNamingEnv sc)
      pure (showTermWithNames opts env t)

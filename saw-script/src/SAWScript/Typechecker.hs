@@ -41,6 +41,9 @@ import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
+import SAWSupport.Pretty (pShow)
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
 import SAWScript.Panic (panic)
@@ -283,8 +286,8 @@ kindStar = Kind 0
 --kindStarToStarToStar :: Kind
 --kindStarToStarToStar = Kind 2
 
-instance PrettyPrint Kind where
-  pretty _ (Kind n) =
+instance PPS.PrettyPrec Kind where
+  prettyPrec _ (Kind n) =
      PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
 
 

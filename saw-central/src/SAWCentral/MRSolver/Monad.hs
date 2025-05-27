@@ -50,6 +50,8 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
+
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
@@ -119,20 +121,20 @@ mrFailureWithoutCtx (MRFailureDisj err1 err2) =
 mrFailureWithoutCtx err = err
 
 -- | Pretty-print an object prefixed with a 'String' that describes it
-prettyPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
+prettyPrefix :: PrettyInCtx a => String -> a -> PPInCtxM PPS.Doc
 prettyPrefix str a =
   (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
 
 -- | Pretty-print two objects, prefixed with a 'String' and with a separator
 prettyPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
-                   String -> a -> String -> b -> PPInCtxM SawDoc
+                   String -> a -> String -> b -> PPInCtxM PPS.Doc
 prettyPrefixSep d1 t2 d3 t4 =
   prettyInCtx t2 >>= \d2 -> prettyInCtx t4 >>= \d4 ->
   return $ group (pretty d1 <> nest 2 (line <> d2) <> line <>
                   pretty d3 <> nest 2 (line <> d4))
 
 -- | Apply 'vsep' to a list of pretty-printing computations
-vsepM :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
+vsepM :: [PPInCtxM PPS.Doc] -> PPInCtxM PPS.Doc
 vsepM = fmap vsep . sequence
 
 instance PrettyInCtx FailCtx where
@@ -436,7 +438,7 @@ mrDebugLevel :: MRM t Int
 mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
 
 -- | Get the current pretty-printing options
-mrPPOpts :: MRM t PPOpts
+mrPPOpts :: MRM t PPS.Opts
 mrPPOpts = mrePPOpts <$> mriEnv <$> ask
 
 -- | Get the current value of 'mriEnv'
@@ -462,7 +464,7 @@ mrPPInCtxM m = mrPPOpts >>= \opts -> mrUVars >>= \ctx ->
   return $ runPPInCtxM m opts ctx
 
 -- | Pretty-print an object in the current context and with the current 'PPOpts'
-mrPPInCtx :: PrettyInCtx a => a -> MRM t SawDoc
+mrPPInCtx :: PrettyInCtx a => a -> MRM t PPS.Doc
 mrPPInCtx a = mrPPOpts >>= \opts -> mrUVars >>= \ctx ->
   return $ ppInCtx opts ctx a
 
@@ -1420,15 +1422,15 @@ mrDebugPrint i str =
 
 -- | Print a document to 'stderr' if the debug level is at least the supplied
 -- 'Int'
-mrDebugPretty :: Int -> SawDoc -> MRM t ()
+mrDebugPretty :: Int -> PPS.Doc -> MRM t ()
 mrDebugPretty i pp =
   mrPPOpts >>= \opts ->
-  mrDebugPrint i (renderSawDoc opts pp)
+  mrDebugPrint i (PPS.render opts pp)
 
 -- | Print to 'stderr' the result of running a 'PPInCtxM' computation in the
 -- current context and with the current 'PPOpts' if the current debug level is
 -- at least the supplied 'Int'
-mrDebugPPInCtxM :: Int -> PPInCtxM SawDoc -> MRM t ()
+mrDebugPPInCtxM :: Int -> PPInCtxM PPS.Doc -> MRM t ()
 mrDebugPPInCtxM i m = mrDebugPretty i =<< mrPPInCtxM m
 
 -- | Pretty-print an object to 'stderr' in the current context and with the

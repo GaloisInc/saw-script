@@ -17,6 +17,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import GHC.Natural
 
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
+
+import SAWCore.Term.Pretty (ppTerm)
 import SAWCore.Prelude
 import SAWCore.SharedTerm
 import SAWCore.Simulator.TermModel
@@ -174,7 +177,7 @@ normalizeSharedTermTests = [
 newtype PrettyTerm = PrettyTerm Term deriving (Eq)
 
 instance Show PrettyTerm where
-  show (PrettyTerm t) = show (ppTerm defaultPPOpts t)
+  show (PrettyTerm t) = show (ppTerm PPS.defaultOpts t)
 
 type NormalizeSharedTermTest = (String, (SharedContext -> IO Term),
                                         (SharedContext -> IO Term))
