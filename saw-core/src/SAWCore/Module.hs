@@ -9,6 +9,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : SAWCore.Module
@@ -92,10 +93,11 @@ import Prelude hiding (all, foldr, sum)
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts)
 
+import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Term.CtxTerm
-import SAWCore.Utils (internalError)
+
 
 -- Definitions -----------------------------------------------------------------
 
@@ -326,8 +328,10 @@ insResolvedName :: Module -> ResolvedName -> Module
 insResolvedName m nm =
   let str = identBaseName $ resolvedNameIdent nm in
   if Map.member str (moduleResolveMap m) then
-    internalError ("Duplicate name " ++ show str ++ " being inserted into module "
-                   ++ show (moduleName m))
+    panic "insResolvedName" [
+        "inserting duplicate name " <> str <> " into module " <>
+            moduleNameText (moduleName m)
+    ]
   else
     m { moduleResolveMap = Map.insert str nm (moduleResolveMap m) }
 
@@ -352,9 +356,10 @@ insDataType m dt =
 -- completed by 'completeDataType'.
 beginDataType :: Module -> DataType -> Module
 beginDataType m dt =
-   if null (dtCtors dt) then insResolvedName m (ResolvedDataType dt) else
-     internalError
-     "insTempDataType: attempt to insert a non-empty temporary datatype"
+   if null (dtCtors dt) then
+     insResolvedName m (ResolvedDataType dt)
+   else
+     panic "insTempDataType" ["attempt to insert a non-empty temporary datatype"]
 
 -- | Complete a datatype, by adding its constructors
 completeDataType :: Module -> Ident -> [Ctor] -> Module
@@ -368,11 +373,11 @@ completeDataType m (identBaseName -> str) ctors =
               Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
               moduleRDecls = TypeDecl dt' : moduleRDecls m }
     Just (ResolvedDataType _) ->
-      internalError $ "completeDataType: datatype already completed: " ++ show str
+      panic "completeDataType" ["datatype already completed: " <> str]
     Just _ ->
-      internalError $ "completeDataType: not a datatype: " ++ show str
+      panic "completeDataType" ["not a datatype: " <> str]
     Nothing ->
-      internalError $ "completeDataType: datatype not found: " ++ show str
+      panic "completeDataType" ["datatype not found: " <> str]
 
 
 -- | Insert an "injectCode" declaration

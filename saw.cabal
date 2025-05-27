@@ -186,7 +186,6 @@ library saw-core
     SAWCore.Unique
     SAWCore.UntypedAST
     SAWCore.Change
-    SAWCore.Utils
   other-modules:
     SAWCore.Panic
     SAWCore.UnionFind
