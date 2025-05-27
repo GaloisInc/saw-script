@@ -1,6 +1,37 @@
 #!/bin/sh
 # savegitinfo.sh - extract git information and generate GitRev.hs
 # usage: saw-version/src/SAWVersion/savegitinfo.sh
+#
+
+# Setting the environment variable SAW_SUPPRESS_GITREV to something
+# nonempty suppresses updating GitRev.hs.
+#
+# This should obviously not be done for production builds and is not
+# recommended when one is _using_ SAW, because even if one is fairly
+# careful it is still possible to get confused about when you last
+# recompiled and exactly which version that was, plus when reporting
+# bugs you want to be able to report the version accurately.
+#
+# However, when one is actively _developing_ SAW, the version you're
+# using is essentially always the one you just built, and if it panics
+# the version info in the panic message isn't especially informative.
+# Meanwhile, keeping that message up to date incurs a lot of build
+# time, because among other things every git change causes a rebuild
+# of the SAWCore prelude (so the Template Haskell executes with the
+# latest code, which is good in general but quite pointless when all
+# that's changed is the git hash in the panic string) and this is
+# quite slow.
+#
+# So, because it's preferable to other possible mechanisms for
+# suppressing that rebuild, we provide an escape hatch. Use at your
+# own risk.
+#
+# Note that while in theory the version string might cue you to notice
+# that you forgot to recompile before testing, which is why e.g.
+# traditionally Unix kernels print a build serial number when you boot
+# them, this isn't at all effective with hashcode versions so there's
+# no point.
+
 
 set -e
 unset CDPATH   # `./` ensure no echoing of current directory in output
@@ -92,6 +123,13 @@ EOF
 # contains useful info and don't clobber it with a new one that won't.
 if ! [ -d .git ] && [ -f "$WHERE"/GitRev.hs ]; then
     echo 'Keeping existing GitRev; no .git directory'
+    exit 0
+fi
+
+# If SAW_SUPPRESS_GITREV is set and we already have a GitRev.hs, leave
+# it alone, whether or not it's current.
+if [ "x$SAW_SUPPRESS_GITREV" != x ] && [ -f "$WHERE"/GitRev.hs ]; then
+    echo 'Keeping existing GitRev; SAW_SUPPRESS_GITREV is set'
     exit 0
 fi
 

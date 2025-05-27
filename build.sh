@@ -7,6 +7,9 @@
 #    gitrev (included in build, needed before building)
 #    submodules (included in build, at least for now)
 #    clean
+#
+# Setting environment variable SAW_SUPPRESS_GITREV suppresses updating
+# GitRev.hs. See savegitinfo.sh.
 
 set -e
 

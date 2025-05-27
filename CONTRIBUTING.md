@@ -94,6 +94,18 @@ cabal commands as needed.
 However, running `cabal` by hand is not the recommended or supported
 build interface and additional manual steps may appear in the future.
 
+You can also set the environment variable SAW_SUPPRESS_GITREV to
+something nonempty to prevent updating the git checkout state.
+
+This is not recommended except when actively developing; however, when
+actively developing it avoids recompiling certain slow things (that do
+not actually need to be rebuilt) over and over again every time the
+git state changes.
+If you use this method be sure to include the correct git hash when
+reporting issues, particularly when pasting panic messages.
+This is a hack and will hopefully be replaced by some other better
+solution when we can find one.
+
 As a contributor there are a few additional quirks to be aware of.
 
 One is that test infrastructure is not compiled by default and will
