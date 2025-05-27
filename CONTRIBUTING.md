@@ -93,6 +93,8 @@ Once the git data has been updated you can run `cabal build` or other
 cabal commands as needed.
 However, running `cabal` by hand is not the recommended or supported
 build interface and additional manual steps may appear in the future.
+For example, be aware that while `build.sh` compiles the test code as
+part of the default build, `cabal build` does not.
 
 You can also set the environment variable SAW_SUPPRESS_GITREV to
 something nonempty to prevent updating the git checkout state.
@@ -107,11 +109,6 @@ This is a hack and will hopefully be replaced by some other better
 solution when we can find one.
 
 As a contributor there are a few additional quirks to be aware of.
-
-One is that test infrastructure is not compiled by default and will
-only be built when you go to run the test that requires it or if you
-explicitly build it with `cabal`.
-This can occasionally bite you.
 
 A second is that `build.sh` runs `git submodule update --init` and
 this will silently reset any uncommitted submodule changes you are

@@ -44,7 +44,11 @@ tgt_build() {
 
     echo "cabal build ..."
     cabal build exe:cryptol exe:saw exe:saw-remote-api \
-                exe:crux-mir-comp exe:extcore-info exe:verif-viewer
+                exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
+                test-suite:integration-tests test-suite:saw-core-tests \
+                test-suite:cryptol-saw-core-tests \
+                test-suite:saw-core-coq-tests \
+                test-suite:heapster-prover-tests
 
     echo "rm -rf bin && mkdir bin"
     rm -rf bin && mkdir bin
