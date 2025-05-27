@@ -178,6 +178,11 @@ jobs:
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
         with:
+          # Keep this list in sync. There are four lists of tests:
+          #   - here
+          #   - build.sh (in the "build" target)
+          #   - doc/developer/developer.md
+          #   - and of course the definitions in the *.cabal files
           targets: |
             integration-tests
             saw-core-tests

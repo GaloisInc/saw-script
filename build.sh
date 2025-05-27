@@ -42,6 +42,12 @@ tgt_build() {
     tgt_gitrev
     tgt_submodules
 
+    # Keep the list of tests in sync. There are four lists of tests:
+    #   - here
+    #   - .github/workflows/ci.yml
+    #   - doc/developer/developer.md
+    #   - and of course the definitions in the *.cabal files
+
     echo "cabal build ..."
     cabal build exe:cryptol exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \

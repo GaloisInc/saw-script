@@ -1030,6 +1030,12 @@ executable extcore-info
 ------------------------------------------------------------
 -- test suites
 
+-- If you add or rename a test suite there are (at least) three other
+-- places to update:
+--    build.sh (controls what gets built by default)
+--    .github/workflows/ci.yml (controls what runs during CI)
+--    doc/developer/developer.md (tells people they exist)
+
 -- The integration-tests/intTests test suite is the main SAW test
 -- suite.
 test-suite integration-tests
