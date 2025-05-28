@@ -202,8 +202,8 @@ MIR types are built up using the following functions:
 - `mir_f32 : MIRType`
 - `mir_f64 : MIRType`
 - `mir_lifetime : MIRType`
-- `mir_ptr_const : MIRType -> MIRType`
-- `mir_ptr_mut : MIRType -> MIRType`
+- `mir_raw_ptr_const : MIRType -> MIRType`
+- `mir_raw_ptr_mut : MIRType -> MIRType`
 - `mir_ref : MIRType -> MIRType`
 - `mir_ref_mut : MIRType -> MIRType`
 - `mir_slice : MIRType -> MIRType`
@@ -755,12 +755,12 @@ is important to use the right allocation command for a given reference type.
 
 In addition, MIR also has immutable and mutable raw pointers, written in Rust as
 `*const T` and `*mut T` respectively. As far as SAW is concerned, they behave
-similarly to references, and they can be created with `mir_alloc_ptr_const` and
-`mir_alloc_ptr_mut` respectively.
+similarly to references, and they can be created with `mir_alloc_raw_ptr_const`
+and `mir_alloc_raw_ptr_mut` respectively.
 
-- `mir_alloc_ptr_const : MIRType -> MIRSetup MIRValue`
+- `mir_alloc_raw_ptr_const : MIRType -> MIRSetup MIRValue`
 
-- `mir_alloc_ptr_mut : MIRType -> MIRSetup MIRValue`
+- `mir_alloc_raw_ptr_mut : MIRType -> MIRSetup MIRValue`
 
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that

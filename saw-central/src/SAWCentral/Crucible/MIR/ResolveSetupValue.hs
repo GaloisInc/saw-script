@@ -1451,7 +1451,7 @@ readPartExprMaybe _sym (W4.PE p v)
   | otherwise = Nothing
 
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
--- 'mir_alloc_ptr_const', or 'mir_alloc_ptr_raw'.
+-- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
 doAlloc ::
      MIRCrucibleContext
   -> SymGlobalState Sym

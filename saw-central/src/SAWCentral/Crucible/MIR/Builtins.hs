@@ -12,8 +12,8 @@ module SAWCentral.Crucible.MIR.Builtins
     -- ** Setup
     mir_alloc
   , mir_alloc_mut
-  , mir_alloc_ptr_const
-  , mir_alloc_ptr_mut
+  , mir_alloc_raw_ptr_const
+  , mir_alloc_raw_ptr_mut
   , mir_assert
   , mir_execute_func
   , mir_equal
@@ -52,8 +52,8 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_f32
   , mir_f64
   , mir_lifetime
-  , mir_ptr_const
-  , mir_ptr_mut
+  , mir_raw_ptr_const
+  , mir_raw_ptr_mut
   , mir_ref
   , mir_ref_mut
   , mir_slice
@@ -171,14 +171,14 @@ mir_alloc = mir_alloc_internal MirPointerRef Mir.Immut
 mir_alloc_mut :: Mir.Ty -> MIRSetupM SetupValue
 mir_alloc_mut = mir_alloc_internal MirPointerRef Mir.Mut
 
-mir_alloc_ptr_const :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_ptr_const = mir_alloc_internal MirPointerRaw Mir.Immut
+mir_alloc_raw_ptr_const :: Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_const = mir_alloc_internal MirPointerRaw Mir.Immut
 
-mir_alloc_ptr_mut :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_ptr_mut = mir_alloc_internal MirPointerRaw Mir.Mut
+mir_alloc_raw_ptr_mut :: Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_mut = mir_alloc_internal MirPointerRaw Mir.Mut
 
--- | The workhorse for 'mir_alloc', 'mir_alloc_mut', 'mir_alloc_ptr_const', and
--- 'mir_alloc_ptr_mut'.
+-- | The workhorse for 'mir_alloc', 'mir_alloc_mut', 'mir_alloc_raw_ptr_const',
+-- and 'mir_alloc_raw_ptr_mut'.
 mir_alloc_internal :: MirPointerKind -> Mir.Mutability -> Mir.Ty -> MIRSetupM SetupValue
 mir_alloc_internal pkind mut mty =
   MIRSetupM $
@@ -876,11 +876,11 @@ mir_f64 = Mir.TyFloat Mir.F64
 mir_lifetime :: Mir.Ty
 mir_lifetime = Mir.TyLifetime
 
-mir_ptr_const :: Mir.Ty -> Mir.Ty
-mir_ptr_const ty = Mir.TyRawPtr ty Mir.Immut
+mir_raw_ptr_const :: Mir.Ty -> Mir.Ty
+mir_raw_ptr_const ty = Mir.TyRawPtr ty Mir.Immut
 
-mir_ptr_mut :: Mir.Ty -> Mir.Ty
-mir_ptr_mut ty = Mir.TyRawPtr ty Mir.Mut
+mir_raw_ptr_mut :: Mir.Ty -> Mir.Ty
+mir_raw_ptr_mut ty = Mir.TyRawPtr ty Mir.Mut
 
 mir_ref :: Mir.Ty -> Mir.Ty
 mir_ref ty = Mir.TyRef ty Mir.Immut

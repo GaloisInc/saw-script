@@ -50,10 +50,10 @@ The most notable changes are:
   but work on arbitrary terms rather than proof goals.
 
 * Support writing MIR specifications involving raw pointers. This is done with
-  the new SAWScript commands `mir_ptr_const`, `mir_ptr_mut`,
-  `mir_alloc_ptr_const`, and `mir_alloc_ptr_mut`, which are similar to the
-  existing `mir_ref`, `mir_ref_mut`, `mir_alloc`, and `mir_alloc_mut` commands
-  for reference types.
+  the new SAWScript commands `mir_raw_ptr_const`, `mir_raw_ptr_mut`,
+  `mir_alloc_raw_ptr_const`, and `mir_alloc_raw_ptr_mut`, which are similar to
+  the existing `mir_ref`, `mir_ref_mut`, `mir_alloc`, and `mir_alloc_mut`
+  commands for reference types.
 
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 
