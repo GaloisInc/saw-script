@@ -13,7 +13,7 @@ module CryptolSAWCore.Simpset
   ( mkCryptolSimpset
   ) where
 
-import SAWCore.Module
+import SAWCore.Module (moduleDefs, Def(..))
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor

@@ -39,7 +39,7 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 
 import SAWCore.Simulator.MonadLazy

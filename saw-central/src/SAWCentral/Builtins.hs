@@ -83,6 +83,7 @@ import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
 
@@ -90,7 +91,6 @@ import qualified SAWCore.Simulator.Concrete as Concrete
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
-import SAWCore.TypedAST
 import qualified SAWCore.Simulator.TermModel as TM
 
 -- cryptol-saw-core

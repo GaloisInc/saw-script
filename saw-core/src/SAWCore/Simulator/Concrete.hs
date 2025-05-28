@@ -30,13 +30,13 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
+import SAWCore.Module (ModuleMap)
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
-import SAWCore.TypedAST (ModuleMap)
 import SAWCore.SharedTerm
 
 ------------------------------------------------------------

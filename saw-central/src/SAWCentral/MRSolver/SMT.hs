@@ -56,7 +56,7 @@ import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 
-import SAWCore.Module
+import SAWCore.Module (Def(..))
 import SAWCore.Prim (widthNat, EvalError(..))
 import qualified SAWCore.Prim as Prim
 import SAWCore.Simulator (SimulatorConfig, evalSharedTerm)

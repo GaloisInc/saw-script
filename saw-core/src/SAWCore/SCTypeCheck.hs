@@ -65,12 +65,19 @@ import Prelude hiding (mapM, maximum)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Conversion (natConversions)
+import SAWCore.Module
+  ( ctorNumArgs
+  , ctorNumParams
+  , ctorPrimName
+  , dtPrimName
+  , Ctor(..)
+  , DataType(..)
+  )
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
-import SAWCore.Module
 import SAWCore.Position
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
 
 -- | The state for a type-checking computation = a memoization table

@@ -93,7 +93,9 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import SAWCore.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
+import SAWCore.Module (ModuleMap, ctorPrimName)
+import SAWCore.Name (toShortName, identBaseName)
+import SAWCore.Term.Functor (FieldName)
 
 -- what4
 import qualified What4.Expr.Builder as B

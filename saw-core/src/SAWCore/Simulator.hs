@@ -52,12 +52,19 @@ import GHC.Stack
 
 import SAWCore.Panic (panic)
 import SAWCore.Module
+  ( allModuleActualDefs
+  , allModulePrimitives
+  , defIdent
+  , findCtorInMap
+  , Ctor(..)
+  , ModuleMap
+  )
 import SAWCore.Name
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
 import SAWCore.Prelude.Constants
 
 import SAWCore.Simulator.Value
+import SAWCore.Term.Functor
 import qualified SAWCore.Simulator.Prims as Prims
 
 type Id = Identity

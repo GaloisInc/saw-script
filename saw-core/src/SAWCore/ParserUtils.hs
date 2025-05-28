@@ -12,9 +12,8 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.ParserUtils
- ( module SAWCore.TypedAST
-   -- * Parser utilities.
- , readModuleFromFile
+ ( -- * Parser utilities.
+   readModuleFromFile
    -- * Template haskell utilities.
  , DecWriter
  , runDecWriter
@@ -41,10 +40,10 @@ import Language.Haskell.TH.Syntax (qAddDependentFile)
 import System.Directory
 import qualified Language.Haskell.TH.Syntax as TH (lift)
 
+import SAWCore.Name (ModuleName)
 import qualified SAWCore.UntypedAST as Un
 import qualified SAWCore.Grammar as Un
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
 import SAWCore.Typechecker (tcInsertModule)
 
 -- | Parse an untyped module declaration from a (lazy) Text

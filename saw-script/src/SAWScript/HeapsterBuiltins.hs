@@ -88,7 +88,8 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Term.Functor
 import SAWCore.Name
-import SAWCore.Module as Mod
+import SAWCore.Module (Def(..), DefQualifier(..), Module(..), emptyModule, insImport)
+import SAWCore.Module as Mod (resolveName)
 import CryptolSAWCore.Monadify
 import SAWCore.SharedTerm
 import SAWCore.Recognizer

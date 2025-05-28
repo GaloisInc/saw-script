@@ -53,12 +53,13 @@ import qualified Data.Text as Text
 import qualified Language.Haskell.TH.Syntax as TH
 import Numeric.Natural
 
+import SAWCore.Module (DefQualifier)
+import SAWCore.Name (ModuleName, mkModuleName)
 import SAWCore.Position
-import SAWCore.TypedAST
-  ( ModuleName, mkModuleName
-  , Sort, mkSort, propSort, sortOf
+import SAWCore.Term.Functor
+  ( Sort, mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
-  , FieldName, DefQualifier
+  , FieldName
   , LocalName
   )
 

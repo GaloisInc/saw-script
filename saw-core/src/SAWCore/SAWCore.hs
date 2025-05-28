@@ -12,7 +12,6 @@ Portability : non-portable (language extensions)
 module SAWCore.SAWCore
   ( module SAWCore.SharedTerm
   , module SAWCore.ExternalFormat
-  , Module
   , preludeModule
   , scLoadPreludeModule
   ) where

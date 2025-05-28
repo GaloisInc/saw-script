@@ -34,7 +34,7 @@ import Text.URI
 
 import SAWCore.Name
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
+import SAWCore.Term.Functor
 
 --------------------------------------------------------------------------------
 -- External text format

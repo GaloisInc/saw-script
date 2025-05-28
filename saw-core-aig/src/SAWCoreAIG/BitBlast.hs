@@ -38,12 +38,13 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
+import SAWCore.Name (toShortName)
+import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
