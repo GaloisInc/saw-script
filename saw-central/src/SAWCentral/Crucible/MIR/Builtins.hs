@@ -220,9 +220,13 @@ mir_alloc_internal mut mty = do
 mir_ref_of :: SetupValue -> MIRSetupM SetupValue
 mir_ref_of = mir_ref_of_internal "ref-of" Mir.Immut
 
+-- | Allocate an mutable MIR reference and initialize it to point to a given SetupValue.
+-- This is a convenience function that avoids requiring the caller to manually
+-- pair @mir_alloc_mut@ and @mir_points_to@.
 mir_ref_of_mut :: SetupValue -> MIRSetupM SetupValue
 mir_ref_of_mut = mir_ref_of_internal "ref-of-mut" Mir.Mut
 
+-- | The workhorse for @mir_ref_of@' and  @mir_ref_of_mut@.
 mir_ref_of_internal :: String -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
 mir_ref_of_internal label mut val = MIRSetupM $ do
   cc  <- getMIRCrucibleContext
