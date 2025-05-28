@@ -125,3 +125,35 @@ There are two interesting things worth calling out in this spec:
    function has been called swap the order of `a_val` and `b_val`, reflecting
    the fact that the `swap` function itself swaps the values that the references
    point to.
+
+### Convenience: `mir_ref_of` and `mir_ref_of_mut`
+
+Because this pattern of allocating a reference and initializing it with
+`mir_points_to` is so common, SAW provides helpers: `mir_ref_of` for immutable
+references and `mir_ref_of_mut` for mutable references.
+
+:::{code-block} console
+sawscript> :type mir_ref_of
+MIRValue -> MIRSetup MIRValue
+:::
+
+`mir_ref_of` combines `mir_alloc` and `mir_points_to` into a single operation,
+returning a reference to the specified value. Likewise `mir_ref_of_mut`
+combines `mir_alloc_mut` and `mir_points_to`. This portion of a spec:
+
+:::{code-block} console
+s <- mir_alloc (mir_adt s_adt);
+s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
+mir_points_to s s_val;
+:::
+
+can be rewritten more concisely as:
+
+:::{code-block} console
+s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
+s <- mir_ref_of s_val;
+:::
+
+This version mirrors how one would write the function in Rust, where a `&T`
+points to an already-initialized value. Using `mir_ref_of` encourages that 
+style and avoids the risk of forgetting to initialize allocated memory.

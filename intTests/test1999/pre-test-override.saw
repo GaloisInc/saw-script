@@ -1,0 +1,22 @@
+enable_experimental;
+
+m <- mir_load_module "pre-test.linked-mir.json";
+let ty = mir_u32;
+
+let x_override_spec = do {
+  val <- mir_fresh_var "val" ty;
+  ref <- mir_ref_of (mir_term val);
+
+  mir_precond {{ val == 42 }};
+  mir_execute_func [ref];
+  mir_return ref;
+};
+
+x_ov <- mir_unsafe_assume_spec m "pre_test::x" x_override_spec;
+
+let is42_spec = do {
+  mir_execute_func [];
+  mir_return (mir_term {{ True }});
+};
+
+mir_verify m "pre_test::is42" [x_ov] false is42_spec z3;

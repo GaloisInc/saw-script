@@ -4468,6 +4468,16 @@ primitives = Map.fromList
     , "method being verified."
     ]
 
+  , prim "mir_ref_of" "MIRValue -> MIRSetup MIRValue"
+    (pureVal mir_ref_of)
+    Experimental
+    [ "Allocates an immutable reference and initializes it to point to the given MIRValue." ]
+
+  , prim "mir_ref_of_mut" "MIRValue -> MIRSetup MIRValue"
+    (pureVal mir_ref_of_mut)
+    Experimental
+    [ "Allocates a mutable reference and initializes it to point to the given MIRValue." ]
+
   , prim "mir_return" "MIRValue -> MIRSetup ()"
     (pureVal mir_return)
     Experimental
