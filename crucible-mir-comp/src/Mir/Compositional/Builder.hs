@@ -744,7 +744,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         let mutbl = case refTy of
                 M.TyRef _ M.Immut -> M.Immut
                 _ -> M.Mut
-        alloc <- refToAlloc bak pp mutbl ty' tpr startRef len
+        alloc <- refToAlloc bak pp (tyToPtrKind refTy) mutbl ty' tpr startRef len
         let offsetSv sv = if idx == 0 then sv else MS.SetupElem () sv idx
         return $ offsetSv $ MS.SetupVar alloc
     go (SliceShape _ ty mutbl tpr) (Empty :> RV refRV :> RV lenRV) = do
@@ -773,9 +773,10 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
 
 refToAlloc :: forall sym bak t st fs tp p rtp args ret.
     (IsSymBackend sym bak, sym ~ W4.ExprBuilder t st fs) =>
-    bak -> PrePost -> M.Mutability -> M.Ty -> TypeRepr tp -> MirReferenceMux sym -> Int ->
+    bak -> PrePost -> MirPointerKind -> M.Mutability -> M.Ty -> TypeRepr tp ->
+    MirReferenceMux sym -> Int ->
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex
-refToAlloc bak p mutbl ty tpr ref len = do
+refToAlloc bak p pkind mutbl ty tpr ref len = do
     refs <- use $ msbPrePost p . seRefs
     mAlloc <- liftIO $ lookupAlloc (toList refs)
     case mAlloc of
@@ -790,7 +791,7 @@ refToAlloc bak p mutbl ty tpr ref len = do
                      , MS.conditionType = "reference-to-allocation conversion"
                      , MS.conditionContext = ""
                      }
-            let fr = FoundRef alloc (MirAllocSpec md tpr mutbl ty len) ref
+            let fr = FoundRef alloc (MirAllocSpec md tpr pkind mutbl ty len) ref
             msbPrePost p . seRefs %= (Seq.|> Some fr)
             msbPrePost p . seNewRefs %= (Seq.|> Some fr)
             return alloc

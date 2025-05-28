@@ -1060,8 +1060,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
   mccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
   case (actual, expectedTy, expected) of
-    (MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) ->
-      do assignVar cc md var (Some (MirPointer tpr mutbl pointeeTy ref))
+    (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) ->
+      assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
 
     -- match arrays point-wise
     (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)

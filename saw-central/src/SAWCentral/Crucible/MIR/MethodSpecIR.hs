@@ -31,6 +31,7 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , MirAllocSpec(..)
   , maConditionMetadata
   , maType
+  , maPtrKind
   , maMutbl
   , maMirType
   , maLen
@@ -41,9 +42,15 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
     -- * @MirPointer@
   , MirPointer(..)
   , mpType
+  , mpKind
   , mpMutbl
   , mpMirType
   , mpRef
+
+    -- * @MirPointerKind@
+  , MirPointerKind(..)
+  , ptrKindToTy
+  , tyToPtrKind
 
     -- * @MIRMethodSpec@
   , MIRMethodSpec
@@ -66,6 +73,7 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
 import Control.Lens (Getter, Iso', Lens', (^.), iso, to)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
+import qualified Data.Text as Text
 import qualified Prettyprinter as PP
 
 import Lang.Crucible.FunctionHandle (HandleAllocator)
@@ -81,6 +89,7 @@ import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 import           SAWCentral.Crucible.MIR.Setup.Value
+import           SAWCentral.Panic
 
 mccHandleAllocator :: Getter MIRCrucibleContext HandleAllocator
 mccHandleAllocator = mccSimContext . to simHandleAllocator
@@ -114,6 +123,18 @@ mutIso =
 
 isMut :: Lens' (MirAllocSpec tp) Bool
 isMut = maMutbl . mutIso
+
+-- | Converts a 'MirPointerKind' to a 'M.Ty' constructor.
+ptrKindToTy :: MirPointerKind -> M.Ty -> M.Mutability -> M.Ty
+ptrKindToTy MirPointerRef = M.TyRef
+ptrKindToTy MirPointerRaw = M.TyRawPtr
+
+-- | Gets the 'MirPointerKind' for a reference or pointer type.
+tyToPtrKind :: M.Ty -> MirPointerKind
+tyToPtrKind (M.TyRef _ _) = MirPointerRef
+tyToPtrKind (M.TyRawPtr _ _) = MirPointerRaw
+tyToPtrKind ty = panic "tyToPtrKind"
+  ["Type is not a reference or pointer: " <> Text.pack (show ty)]
 
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 

@@ -202,6 +202,8 @@ MIR types are built up using the following functions:
 - `mir_f32 : MIRType`
 - `mir_f64 : MIRType`
 - `mir_lifetime : MIRType`
+- `mir_ptr_const : MIRType -> MIRType`
+- `mir_ptr_mut : MIRType -> MIRType`
 - `mir_ref : MIRType -> MIRType`
 - `mir_ref_mut : MIRType -> MIRType`
 - `mir_slice : MIRType -> MIRType`
@@ -751,6 +753,15 @@ but there is also a `mir_alloc_mut` function for creating a mutable reference:
 MIR tracks whether references are mutable or immutable at the type level, so it
 is important to use the right allocation command for a given reference type.
 
+In addition, MIR also has immutable and mutable raw pointers, written in Rust as
+`*const T` and `*mut T` respectively. As far as SAW is concerned, they behave
+similarly to references, and they can be created with `mir_alloc_ptr_const` and
+`mir_alloc_ptr_mut` respectively.
+
+- `mir_alloc_ptr_const : MIRType -> MIRSetup MIRValue`
+
+- `mir_alloc_ptr_mut : MIRType -> MIRSetup MIRValue`
+
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
@@ -776,14 +787,14 @@ will not modify. Unlike `llvm_alloc`, regions allocated with
 ## Specifying Heap Values
 
 Pointers returned by `llvm_alloc`, `jvm_alloc_{array,object}`, or
-`mir_alloc{,_mut}` don't initially point to anything. So if you pass such a
-pointer directly into a function that tried to dereference it, symbolic
-execution will fail with a message about an invalid load. For some functions,
-such as those that are intended to initialize data structures (writing to the
-memory pointed to, but never reading from it), this sort of uninitialized
-memory is appropriate. In most cases, however, it's more useful to state that a
-pointer points to some specific (usually symbolic) value, which you can do with
-the _points-to_ family of commands.
+`mir_alloc{,_mut,_ptr_const,_ptr_mut}` don't initially point to anything. So if
+you pass such a pointer directly into a function that tried to dereference it,
+symbolic execution will fail with a message about an invalid load. For some
+functions, such as those that are intended to initialize data structures
+(writing to the memory pointed to, but never reading from it), this sort of
+uninitialized memory is appropriate. In most cases, however, it's more useful to
+state that a pointer points to some specific (usually symbolic) value, which you
+can do with the _points-to_ family of commands.
 
 ### LLVM heap values
 
@@ -847,11 +858,10 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
-takes two `SetupValue` arguments, the first of which must be a reference,
-and states that the memory specified by that reference should contain the
-value given in the second argument (which may be any type of
-`SetupValue`).
+- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `SetupValue`
+arguments, the first of which must be a reference or pointer, and states that
+the memory specified by that reference or pointer should contain the value given
+in the second argument (which may be any type of `SetupValue`).
 
 ## Working with Compound Types
 
