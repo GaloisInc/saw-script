@@ -71,8 +71,6 @@ module SAWCore.Module
   , allModuleActualDefs
   , allModuleDataTypes
   , allModuleCtors
-    -- * Pretty-printing
-  , ppModule
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -91,11 +89,8 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts)
-
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.Term.CtxTerm
 
 
@@ -503,20 +498,3 @@ allModuleDataTypes modmap = concatMap moduleDataTypes (HMap.elems modmap)
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
 allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
-
-
--- | Pretty-print a 'Module'
---
---   This converts to the PPModule representation used by the actual module
---   printer in Pretty.hs.
-ppModule :: PPS.Opts -> Module -> PPS.Doc
-ppModule opts m =
-  ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
-  where
-    toDecl (TypeDecl (DataType {..})) =
-      PPTypeDecl dtName dtParams dtIndices dtSort
-      (map (\c -> (ctorName c, ctorType c)) dtCtors)
-    toDecl (DefDecl (Def {..})) =
-      PPDefDecl defIdent defType defBody
-    toDecl (InjectCodeDecl ns text) =
-      PPInjectCode ns text
