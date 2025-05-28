@@ -70,7 +70,6 @@ import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Panic (panic)
-import SAWCore.Utils (internalError)
 
 
 -- Module Names ----------------------------------------------------------------
@@ -155,9 +154,9 @@ mkSafeIdent mnm nm =
 parseIdent :: String -> Ident
 parseIdent s0 =
     case reverse (breakEach s0) of
-      (_:[]) -> internalError $ "parseIdent given empty module name."
+      (_:[]) -> panic "parseIdent" ["Empty module name"]
       (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
-      _ -> internalError $ "parseIdent given bad identifier " ++ show s0
+      _ -> panic "parseIdent" ["Bad identifier " <> Text.pack s0]
   where breakEach s =
           case break (=='.') s of
             (h, []) -> [Text.pack h]
