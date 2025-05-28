@@ -13,6 +13,16 @@ info.
 course.)
 Note that build.sh is in any case the recommended way to build.
 
+`build.sh` now accepts the `-j` option to control parallelism (which
+is passed through to `cabal build`).
+Note that typical installations of `cabal` configure themselves to use
+the number of CPUs for this, even though the `cabal` documentation
+says that the default is 1.
+Also, the semaphore-based build coordination in GHC 9.8 and up is now
+enabled by default.
+(It is enabled unconditionally; `cabal` ignores it when using earlier
+GHC versions.)
+
 The names of the various test suites used with `cabal test` have been
 normalized.
 See saw.cabal for the full list.
