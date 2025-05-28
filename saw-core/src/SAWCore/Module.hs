@@ -40,8 +40,6 @@ module SAWCore.Module
   , ResolvedName(..)
   , resolvedNameIdent
   , moduleName
-  , moduleImports
-  , moduleImportNames
   , emptyModule
   , resolveName
   , findDataType
@@ -277,19 +275,13 @@ resolvedNameIdent (ResolvedDef d) = defIdent d
 -- build them.
 data Module = Module {
           moduleName    :: !ModuleName
-        , moduleImports :: !(Map ModuleName Module)
         , moduleResolveMap :: !(Map Text ResolvedName)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
--- | Get the names of all modules imported by the given one
-moduleImportNames :: Module -> [ModuleName]
-moduleImportNames m = Map.keys (moduleImports m)
-
 emptyModule :: ModuleName -> Module
 emptyModule nm =
   Module { moduleName = nm
-         , moduleImports = Map.empty
          , moduleResolveMap = Map.empty
          , moduleRDecls = []
          }
@@ -337,7 +329,6 @@ insImport :: (ResolvedName -> Bool) -> Module -> Module -> Module
 insImport name_p i m =
   (foldl' insResolvedName m $ Map.elems $
    Map.filter name_p (moduleResolveMap i))
-  { moduleImports = Map.insert (moduleName i) i (moduleImports m) }
 
 -- | Insert a 'DataType' declaration, along with its 'Ctor's, into a module
 insDataType :: Module -> DataType -> Module
