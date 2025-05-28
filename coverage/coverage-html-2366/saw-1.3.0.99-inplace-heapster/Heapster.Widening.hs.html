@@ -1,0 +1,1069 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    2 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    3 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    4 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    5 </span>{-# LANGUAGE UndecidableInstances #-}
+<span class="lineno">    6 </span>{-# LANGUAGE KindSignatures #-}
+<span class="lineno">    7 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    8 </span>{-# LANGUAGE PolyKinds #-}
+<span class="lineno">    9 </span>{-# LANGUAGE ConstraintKinds #-}
+<span class="lineno">   10 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   11 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   12 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   13 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   14 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   15 </span>{-# LANGUAGE FunctionalDependencies #-}
+<span class="lineno">   16 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   17 </span>{-# LANGUAGE PartialTypeSignatures #-}
+<span class="lineno">   18 </span>{-# LANGUAGE RecordWildCards #-}
+<span class="lineno">   19 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   20 </span>{-# LANGUAGE QuasiQuotes #-}
+<span class="lineno">   21 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">   22 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   23 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   24 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">   25 </span>{-# LANGUAGE PatternGuards #-}
+<span class="lineno">   26 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">   27 </span>{-# LANGUAGE BangPatterns #-}
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>module Heapster.Widening where
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import Data.Maybe
+<span class="lineno">   32 </span>import Data.List (findIndex)
+<span class="lineno">   33 </span>import Data.Functor (void)
+<span class="lineno">   34 </span>import Data.Functor.Constant
+<span class="lineno">   35 </span>import Data.Functor.Product
+<span class="lineno">   36 </span>import Control.Monad (ap, zipWithM)
+<span class="lineno">   37 </span>import Control.Monad.State (MonadState(..), StateT(..), modify)
+<span class="lineno">   38 </span>import Control.Monad.Trans.Class (MonadTrans(..))
+<span class="lineno">   39 </span>import GHC.TypeLits (KnownNat)
+<span class="lineno">   40 </span>import Control.Lens hiding ((:&gt;), Index, Empty, ix, op)
+<span class="lineno">   41 </span>import Control.Monad.Extra (concatMapM)
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import Data.Parameterized.Some
+<span class="lineno">   44 </span>import Data.Parameterized.BoolRepr
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import Prettyprinter
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>import Lang.Crucible.LLVM.MemModel
+<span class="lineno">   49 </span>import Heapster.CruUtil
+<span class="lineno">   50 </span>import Heapster.Permissions
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>import qualified Data.Type.RList as RL
+<span class="lineno">   53 </span>import Data.Binding.Hobbits
+<span class="lineno">   54 </span>import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
+<span class="lineno">   55 </span>import qualified Data.Binding.Hobbits.NameMap as NameMap
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>import Lang.Crucible.Types
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>----------------------------------------------------------------------
+<span class="lineno">   61 </span>-- * The Widening Monad
+<span class="lineno">   62 </span>----------------------------------------------------------------------
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- | A sequence of permissions for some list of variables that extends @vars@
+<span class="lineno">   65 </span>data ExtVarPerms vars
+<span class="lineno">   66 </span>  = ExtVarPerms_Base (ValuePerms vars)
+<span class="lineno">   67 </span>  | forall var. ExtVarPerms_Mb (TypeRepr var) (Binding var
+<span class="lineno">   68 </span>                                               (ExtVarPerms (vars :&gt; var)))
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>$<span class="nottickedoff"><span class="decl"><span class="nottickedoff">(mkNuMatching [t| forall vars. ExtVarPerms vars |])</span></span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>extVarPerms_MbMulti :: CruCtx ctx -&gt; Mb ctx (ExtVarPerms (vars :++: ctx)) -&gt;
+<span class="lineno">   73 </span>                       ExtVarPerms vars
+<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">extVarPerms_MbMulti CruCtxNil mb_ewid = elimEmptyMb mb_ewid</span>
+<span class="lineno">   75 </span><span class="spaces"></span><span class="nottickedoff">extVarPerms_MbMulti (CruCtxCons ctx tp) mb_ewid =</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="nottickedoff">extVarPerms_MbMulti ctx $</span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="nottickedoff">fmap (ExtVarPerms_Mb tp) $ mbSeparate (MNil :&gt;: Proxy) mb_ewid</span></span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>newtype ExtVarPermsFun vars =
+<span class="lineno">   80 </span>  ExtVarPermsFun { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">applyExtVarPermsFun</span></span></span> ::
+<span class="lineno">   81 </span>                     RAssign Name vars -&gt; ExtVarPerms vars }
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>-- | A map from free variables to their permissions and whether they have been
+<span class="lineno">   84 </span>-- \&quot;visited\&quot; yet
+<span class="lineno">   85 </span>type WidNameMap = NameMap (Product ValuePerm (Constant Bool))
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>-- | Modify the entry in a 'WidNameMap' associated with a particular free
+<span class="lineno">   88 </span>-- variable, starting from the default entry of @('ValPerm_True','False')@ if
+<span class="lineno">   89 </span>-- the variable has not been entered into the map yet
+<span class="lineno">   90 </span>wnMapAlter :: (Product ValuePerm (Constant Bool) a -&gt;
+<span class="lineno">   91 </span>               Product ValuePerm (Constant Bool) a) -&gt; ExprVar a -&gt;
+<span class="lineno">   92 </span>              WidNameMap -&gt; WidNameMap
+<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">wnMapAlter f =</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">NameMap.alter $ \case</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="nottickedoff">Just entry -&gt; Just $ f entry</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; Just $ f (Pair ValPerm_True (Constant False))</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>-- | Look up the permission for a name in a 'WidNameMap'
+<span class="lineno">   99 </span>wnMapGetPerm :: Name a -&gt; WidNameMap -&gt; ValuePerm a
+<span class="lineno">  100 </span><span class="decl"><span class="nottickedoff">wnMapGetPerm n nmap | Just (Pair p _) &lt;- NameMap.lookup n nmap = p</span>
+<span class="lineno">  101 </span><span class="spaces"></span><span class="nottickedoff">wnMapGetPerm _ _ = ValPerm_True</span></span>
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>-- | Build an 'ExtVarPermsFun' from a widening name map
+<span class="lineno">  104 </span>wnMapExtWidFun :: WidNameMap -&gt; ExtVarPermsFun vars
+<span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">wnMapExtWidFun wnmap =</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">ExtVarPermsFun $ \ns -&gt; ExtVarPerms_Base $ RL.map (flip wnMapGetPerm wnmap) ns</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>-- | Assign the trivial @true@ permission to any variable that has not yet been
+<span class="lineno">  109 </span>-- visited
+<span class="lineno">  110 </span>wnMapDropUnvisiteds :: WidNameMap -&gt; WidNameMap
+<span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">wnMapDropUnvisiteds =</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">NameMap.map $ \case</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">p@(Pair _ (Constant True)) -&gt; p</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">(Pair _ (Constant False)) -&gt; Pair ValPerm_True (Constant False)</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>-- | Look up a variable of block type in a 'WidNameMap' to see if it has an
+<span class="lineno">  117 </span>-- associated @shape(sh)@ permission
+<span class="lineno">  118 </span>wnMapBlockShape :: WidNameMap -&gt; ExprVar (LLVMBlockType w) -&gt;
+<span class="lineno">  119 </span>                   Maybe (PermExpr (LLVMShapeType w))
+<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">wnMapBlockShape nmap n =</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">NameMap.lookup n nmap &gt;&gt;= \case</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">Pair (ValPerm_Conj1 (Perm_LLVMBlockShape sh)) _ -&gt; Just sh</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>newtype PolyContT r m a =
+<span class="lineno">  126 </span>  PolyContT { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">runPolyContT</span></span></span> :: forall x. (forall y. a -&gt; m (r y)) -&gt; m (r x) }
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>instance <span class="decl"><span class="nottickedoff">Functor (PolyContT r m)</span></span> where
+<span class="lineno">  129 </span>  <span class="decl"><span class="nottickedoff">fmap f m = m &gt;&gt;= return . f</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative (PolyContT r m)</span></span></span></span></span></span> where
+<span class="lineno">  132 </span>  <span class="decl"><span class="nottickedoff">pure x = PolyContT $ \k -&gt; k x</span></span>
+<span class="lineno">  133 </span>  <span class="decl"><span class="nottickedoff">(&lt;*&gt;) = ap</span></span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>instance <span class="decl"><span class="nottickedoff">Monad (PolyContT r m)</span></span> where
+<span class="lineno">  136 </span>  <span class="decl"><span class="nottickedoff">return = pure</span></span>
+<span class="lineno">  137 </span>  <span class="decl"><span class="nottickedoff">(PolyContT m) &gt;&gt;= f =</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">PolyContT $ \k -&gt; m $ \a -&gt; runPolyContT (f a) k</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>data WidState = WidState { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_wsNameMap</span></span></span> :: WidNameMap,
+<span class="lineno">  141 </span>                           <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_wsPPInfo</span></span></span> :: PPInfo,
+<span class="lineno">  142 </span>                           <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_wsPermEnv</span></span></span> :: PermEnv,
+<span class="lineno">  143 </span>                           <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_wsDebugLevel</span></span></span> :: DebugLevel,
+<span class="lineno">  144 </span>                           <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_wsRecFlag</span></span></span> :: RecurseFlag }
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''WidState</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>type WideningM =
+<span class="lineno">  149 </span>  StateT WidState (PolyContT ExtVarPermsFun Identity)
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>runWideningM :: WideningM () -&gt; DebugLevel -&gt; PermEnv -&gt; RAssign Name args -&gt;
+<span class="lineno">  152 </span>                ExtVarPerms args
+<span class="lineno">  153 </span><span class="decl"><span class="nottickedoff">runWideningM m dlevel env =</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="nottickedoff">applyExtVarPermsFun $ runIdentity $</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="nottickedoff">runPolyContT (runStateT m $</span>
+<span class="lineno">  156 </span><span class="spaces">                </span><span class="nottickedoff">WidState NameMap.empty emptyPPInfo env dlevel RecNone)</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">(Identity . wnMapExtWidFun . _wsNameMap . snd)</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>openMb :: CruCtx ctx -&gt; Mb ctx a -&gt; WideningM (RAssign Name ctx, a)
+<span class="lineno">  160 </span><span class="decl"><span class="nottickedoff">openMb ctx mb_a =</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="nottickedoff">lift $ PolyContT $ \k -&gt; Identity $ ExtVarPermsFun $ \ns -&gt;</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">extVarPerms_MbMulti ctx $</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">mbMap2 (\ns' a -&gt;</span>
+<span class="lineno">  164 </span><span class="spaces">           </span><span class="nottickedoff">applyExtVarPermsFun (runIdentity $ k (ns',a)) (RL.append ns ns'))</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">(nuMulti (cruCtxProxies ctx) id) mb_a</span></span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>bindFreshVar :: TypeRepr tp -&gt; WideningM (ExprVar tp)
+<span class="lineno">  168 </span><span class="decl"><span class="nottickedoff">bindFreshVar tp =</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="nottickedoff">(snd &lt;$&gt; openMb (singletonCruCtx tp) (nu id)) &gt;&gt;= \n -&gt;</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="nottickedoff">setVarNameM &quot;var&quot; n &gt;&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">return n</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>visitM :: ExprVar a -&gt; WideningM ()
+<span class="lineno">  174 </span><span class="decl"><span class="nottickedoff">visitM n = modify $ over wsNameMap $ wnMapAlter (\(Pair p _) -&gt;</span>
+<span class="lineno">  175 </span><span class="spaces">                                                  </span><span class="nottickedoff">Pair p (Constant True)) n</span></span>
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>isVisitedM :: ExprVar a -&gt; WideningM Bool
+<span class="lineno">  178 </span><span class="decl"><span class="nottickedoff">isVisitedM n =</span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="nottickedoff">maybe False (\(Pair _ (Constant b)) -&gt; b) &lt;$&gt;</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="nottickedoff">NameMap.lookup n &lt;$&gt; view wsNameMap &lt;$&gt; get</span></span>
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>getVarPermM :: ExprVar a -&gt; WideningM (ValuePerm a)
+<span class="lineno">  183 </span><span class="decl"><span class="nottickedoff">getVarPermM n = wnMapGetPerm n &lt;$&gt; view wsNameMap &lt;$&gt; get</span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>setVarPermM :: ExprVar a -&gt; ValuePerm a -&gt; WideningM ()
+<span class="lineno">  186 </span><span class="decl"><span class="nottickedoff">setVarPermM n p =</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="nottickedoff">modify $ over wsNameMap $ wnMapAlter (\(Pair _ isv) -&gt; Pair p isv) n</span></span>
+<span class="lineno">  188 </span>
+<span class="lineno">  189 </span>-- | Set the permissions for @x &amp;+ off@ to @p@, by setting the permissions for
+<span class="lineno">  190 </span>-- @x@ to @p - off@
+<span class="lineno">  191 </span>setOffVarPermM :: ExprVar a -&gt; PermOffset a -&gt; ValuePerm a -&gt; WideningM ()
+<span class="lineno">  192 </span><span class="decl"><span class="nottickedoff">setOffVarPermM x off p =</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="nottickedoff">setVarPermM x (offsetPerm (negatePermOffset off) p)</span></span>
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>setVarPermsM :: RAssign Name ctx -&gt; RAssign ValuePerm ctx -&gt; WideningM ()
+<span class="lineno">  196 </span><span class="decl"><span class="nottickedoff">setVarPermsM MNil MNil = return ()</span>
+<span class="lineno">  197 </span><span class="spaces"></span><span class="nottickedoff">setVarPermsM (ns :&gt;: n) (ps :&gt;: p) = setVarPermsM ns ps &gt;&gt; setVarPermM n p</span></span>
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>setVarNameM :: String -&gt; ExprVar tp -&gt; WideningM ()
+<span class="lineno">  200 </span><span class="decl"><span class="nottickedoff">setVarNameM base x = modify $ over wsPPInfo $ ppInfoAddExprName base x</span></span>
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>setVarNamesM :: String -&gt; RAssign ExprVar tps -&gt; WideningM ()
+<span class="lineno">  203 </span><span class="decl"><span class="nottickedoff">setVarNamesM base xs = modify $ over wsPPInfo $ ppInfoAddExprNames base xs</span></span>
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>traceM :: (PPInfo -&gt; Doc ()) -&gt; WideningM ()
+<span class="lineno">  206 </span><span class="decl"><span class="nottickedoff">traceM f = do</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="nottickedoff">dlevel &lt;- view wsDebugLevel &lt;$&gt; get</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="nottickedoff">str &lt;- renderDoc &lt;$&gt; f &lt;$&gt; view wsPPInfo &lt;$&gt; get</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">debugTraceTraceLvl dlevel str $ return ()</span></span>
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>-- | Unfold an 'AtomicPerm' if it is a named conjunct, otherwise leave it alone
+<span class="lineno">  212 </span>widUnfoldConjPerm :: AtomicPerm a -&gt; WideningM [AtomicPerm a]
+<span class="lineno">  213 </span><span class="decl"><span class="nottickedoff">widUnfoldConjPerm (Perm_NamedConj npn args off)</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="nottickedoff">| TrueRepr &lt;- nameCanFoldRepr npn =</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">do env &lt;- use wsPermEnv</span>
+<span class="lineno">  216 </span><span class="spaces">       </span><span class="nottickedoff">let np = requireNamedPerm env npn</span>
+<span class="lineno">  217 </span><span class="spaces">       </span><span class="nottickedoff">return $ unfoldConjPerm np args off</span>
+<span class="lineno">  218 </span><span class="spaces"></span><span class="nottickedoff">widUnfoldConjPerm p = return [p]</span></span>
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>----------------------------------------------------------------------
+<span class="lineno">  222 </span>-- * Widening Itself
+<span class="lineno">  223 </span>----------------------------------------------------------------------
+<span class="lineno">  224 </span>
+<span class="lineno">  225 </span>{-
+<span class="lineno">  226 </span>-- | Test if an expression in a binding is a free variable plus offset
+<span class="lineno">  227 </span>mbAsOffsetVar :: KnownCruCtx vars -&gt; Mb vars (PermExpr a) -&gt;
+<span class="lineno">  228 </span>                 Maybe (Name a, PermOffset a)
+<span class="lineno">  229 </span>mbAsOffsetVar vars [nuP| PExpr_Var mb_x |]
+<span class="lineno">  230 </span>  | Right n &lt;- mbNameBoundP mb_x = Just (n, NoPermOffset)
+<span class="lineno">  231 </span>mbAsOffsetVar vars [nuP| PExpr_LLVMOffset mb_x mb_off |]
+<span class="lineno">  232 </span>  | Right n &lt;- mbNameBoundP mb_x
+<span class="lineno">  233 </span>  , Just off &lt;- partialSubst (emptyPSubst vars) mb_off
+<span class="lineno">  234 </span>  = Just (n, LLVMPermOffset off)
+<span class="lineno">  235 </span>mbAsOffsetVar _ _ = Nothing
+<span class="lineno">  236 </span>-}
+<span class="lineno">  237 </span>
+<span class="lineno">  238 </span>-- | Take a permission @p1@ at some existing location and split it into some
+<span class="lineno">  239 </span>-- @p1'*p1''@ such that @p1'@ will remain at the existing location and @p1''@
+<span class="lineno">  240 </span>-- will be widened against @p1''@. Return @p1'@ and the result of widening
+<span class="lineno">  241 </span>-- @p1''@ against @p2@.
+<span class="lineno">  242 </span>splitWidenPerm :: TypeRepr a -&gt; ValuePerm a -&gt; ValuePerm a -&gt;
+<span class="lineno">  243 </span>                  WideningM (ValuePerm a, ValuePerm a)
+<span class="lineno">  244 </span><span class="decl"><span class="nottickedoff">splitWidenPerm tp p1 p2</span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">| permIsCopyable p1 = (p1,) &lt;$&gt; widenPerm tp p1 p2</span>
+<span class="lineno">  246 </span><span class="spaces"></span><span class="nottickedoff">splitWidenPerm _ p1 _ = return (p1, ValPerm_True)</span></span>
+<span class="lineno">  247 </span>
+<span class="lineno">  248 </span>-- | Take permissions @p1@ and @p2@ that are both on existing locations and
+<span class="lineno">  249 </span>-- split them both into @p1'*p1''@ and @p2'*p2''@ such that @p1'@ and @p2'@
+<span class="lineno">  250 </span>-- remain at the existing locations and @p1''@ and @p2''@ are widened against
+<span class="lineno">  251 </span>-- each other. Return @p1'@, @p2'@, and the result of the further widening of
+<span class="lineno">  252 </span>-- @p1''@ against @p2''@.
+<span class="lineno">  253 </span>doubleSplitWidenPerm :: TypeRepr a -&gt; ValuePerm a -&gt; ValuePerm a -&gt;
+<span class="lineno">  254 </span>                        WideningM ((ValuePerm a, ValuePerm a), ValuePerm a)
+<span class="lineno">  255 </span><span class="decl"><span class="nottickedoff">doubleSplitWidenPerm tp p1 p2</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="nottickedoff">| permIsCopyable p1 &amp;&amp; permIsCopyable p2</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="nottickedoff">= ((p1,p2),) &lt;$&gt; widenPerm tp p1 p2</span>
+<span class="lineno">  258 </span><span class="spaces"></span><span class="nottickedoff">doubleSplitWidenPerm _ p1 p2 =</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">return ((p1, p2), ValPerm_True)</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>-- | Replace all variables @x@ in an expression or permission that have an
+<span class="lineno">  263 </span>-- equality permission @eq(e)@ with the expression @e@
+<span class="lineno">  264 </span>substEqVars :: Substable PermSubst a Identity =&gt; PermPretty a =&gt;
+<span class="lineno">  265 </span>               AbstractVars a =&gt; FreeVars a =&gt; WidNameMap -&gt; a -&gt; a
+<span class="lineno">  266 </span><span class="decl"><span class="nottickedoff">substEqVars wnmap a</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="nottickedoff">| AbsObj vars cl_mb_a &lt;- abstractFreeVars a =</span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="nottickedoff">subst (substOfExprs $</span>
+<span class="lineno">  269 </span><span class="spaces">           </span><span class="nottickedoff">RL.map (\x -&gt; case wnMapGetPerm x wnmap of</span>
+<span class="lineno">  270 </span><span class="spaces">                      </span><span class="nottickedoff">ValPerm_Eq e -&gt; substEqVars wnmap e</span>
+<span class="lineno">  271 </span><span class="spaces">                      </span><span class="nottickedoff">_ -&gt; PExpr_Var x)</span>
+<span class="lineno">  272 </span><span class="spaces">           </span><span class="nottickedoff">vars) $</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">unClosed cl_mb_a</span></span>
+<span class="lineno">  274 </span>
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>-- | Widen two expressions against each other
+<span class="lineno">  277 </span>--
+<span class="lineno">  278 </span>-- FIXME: document this more
+<span class="lineno">  279 </span>widenExpr :: TypeRepr a -&gt; PermExpr a -&gt; PermExpr a -&gt; WideningM (PermExpr a)
+<span class="lineno">  280 </span><span class="decl"><span class="nottickedoff">widenExpr tp e1 e2 =</span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">traceM (\i -&gt;</span>
+<span class="lineno">  282 </span><span class="spaces">           </span><span class="nottickedoff">fillSep [pretty &quot;widenExpr&quot;, permPretty i e1, permPretty i e2]) &gt;&gt;</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="nottickedoff">widenExpr' tp e1 e2</span></span>
+<span class="lineno">  284 </span>
+<span class="lineno">  285 </span>widenExpr' :: TypeRepr a -&gt; PermExpr a -&gt; PermExpr a -&gt; WideningM (PermExpr a)
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>-- If both sides are equal, return one of the sides
+<span class="lineno">  288 </span><span class="decl"><span class="nottickedoff">widenExpr' _ e1 e2 | e1 == e2 = return e1</span>
+<span class="lineno">  289 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff">-- If both sides are variables, look up their permissions and whether they have</span>
+<span class="lineno">  291 </span><span class="spaces"></span><span class="nottickedoff">-- been visited and use that information to decide what to do</span>
+<span class="lineno">  292 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp e1@(asVarOffset -&gt; Just (x1, off1)) e2@(asVarOffset -&gt;</span>
+<span class="lineno">  293 </span><span class="spaces">                                                     </span><span class="nottickedoff">Just (x2, off2)) =</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="nottickedoff">do p1 &lt;- getVarPermM x1</span>
+<span class="lineno">  295 </span><span class="spaces">     </span><span class="nottickedoff">p2 &lt;- getVarPermM x2</span>
+<span class="lineno">  296 </span><span class="spaces">     </span><span class="nottickedoff">isv1 &lt;- isVisitedM x1</span>
+<span class="lineno">  297 </span><span class="spaces">     </span><span class="nottickedoff">isv2 &lt;- isVisitedM x2</span>
+<span class="lineno">  298 </span><span class="spaces">     </span><span class="nottickedoff">case (p1, p2, isv1, isv2) of</span>
+<span class="lineno">  299 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  300 </span><span class="spaces">       </span><span class="nottickedoff">-- If we have the same variable with the same offsets (it can avoid the</span>
+<span class="lineno">  301 </span><span class="spaces">       </span><span class="nottickedoff">-- case above of e1 == e2 if the offsets are offsetsEq but not ==) then</span>
+<span class="lineno">  302 </span><span class="spaces">       </span><span class="nottickedoff">-- we are done, though we do want to visit the variable</span>
+<span class="lineno">  303 </span><span class="spaces">       </span><span class="nottickedoff">_ | x1 == x2 &amp;&amp; offsetsEq off1 off2 -&gt;</span>
+<span class="lineno">  304 </span><span class="spaces">           </span><span class="nottickedoff">visitM x1 &gt;&gt; return e1</span>
+<span class="lineno">  305 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  306 </span><span class="spaces">       </span><span class="nottickedoff">-- If we have the same variable but different offsets, we widen them</span>
+<span class="lineno">  307 </span><span class="spaces">       </span><span class="nottickedoff">-- using 'widenOffsets'. Note that we cannot have the same variable</span>
+<span class="lineno">  308 </span><span class="spaces">       </span><span class="nottickedoff">-- x on both sides unless they have been visited, so we can safely</span>
+<span class="lineno">  309 </span><span class="spaces">       </span><span class="nottickedoff">-- ignore the isv1 and isv2 flags. The complexity of having these two</span>
+<span class="lineno">  310 </span><span class="spaces">       </span><span class="nottickedoff">-- cases is to find the BVType of one of off1 or off2; because the</span>
+<span class="lineno">  311 </span><span class="spaces">       </span><span class="nottickedoff">-- previous case did not match, we know at least one is LLVMPermOffset.</span>
+<span class="lineno">  312 </span><span class="spaces">       </span><span class="nottickedoff">_ | x1 == x2, LLVMPermOffset (exprType -&gt; off_tp) &lt;- off1 -&gt;</span>
+<span class="lineno">  313 </span><span class="spaces">           </span><span class="nottickedoff">PExpr_LLVMOffset x1 &lt;$&gt; widenOffsets off_tp off1 off2</span>
+<span class="lineno">  314 </span><span class="spaces">       </span><span class="nottickedoff">_ | x1 == x2, LLVMPermOffset (exprType -&gt; off_tp) &lt;- off2 -&gt;</span>
+<span class="lineno">  315 </span><span class="spaces">           </span><span class="nottickedoff">PExpr_LLVMOffset x1 &lt;$&gt; widenOffsets off_tp off1 off2</span>
+<span class="lineno">  316 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  317 </span><span class="spaces">       </span><span class="nottickedoff">-- If a variable has an eq(e) permission, replace it with e and recurse</span>
+<span class="lineno">  318 </span><span class="spaces">       </span><span class="nottickedoff">(ValPerm_Eq e1', _, _, _) -&gt;</span>
+<span class="lineno">  319 </span><span class="spaces">         </span><span class="nottickedoff">visitM x1 &gt;&gt; widenExpr tp (offsetExpr off1 e1') e2</span>
+<span class="lineno">  320 </span><span class="spaces">       </span><span class="nottickedoff">(_, ValPerm_Eq e2', _, _) -&gt;</span>
+<span class="lineno">  321 </span><span class="spaces">         </span><span class="nottickedoff">visitM x2 &gt;&gt; widenExpr tp e1 (offsetExpr off2 e2')</span>
+<span class="lineno">  322 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  323 </span><span class="spaces">       </span><span class="nottickedoff">-- If both variables have been visited and are not equal and do not have</span>
+<span class="lineno">  324 </span><span class="spaces">       </span><span class="nottickedoff">-- eq permissions, then they are equal to different locations elsewhere</span>
+<span class="lineno">  325 </span><span class="spaces">       </span><span class="nottickedoff">-- in our widening, and so this location should not be equated to either</span>
+<span class="lineno">  326 </span><span class="spaces">       </span><span class="nottickedoff">-- of them; thus we make a fresh variable</span>
+<span class="lineno">  327 </span><span class="spaces">       </span><span class="nottickedoff">(_, _, True, True) -&gt;</span>
+<span class="lineno">  328 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  329 </span><span class="spaces">            </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  330 </span><span class="spaces">            </span><span class="nottickedoff">((p1',p2'), p') &lt;-</span>
+<span class="lineno">  331 </span><span class="spaces">              </span><span class="nottickedoff">doubleSplitWidenPerm tp (offsetPerm off1 p1) (offsetPerm off2 p2)</span>
+<span class="lineno">  332 </span><span class="spaces">            </span><span class="nottickedoff">setOffVarPermM x1 off1 p1'</span>
+<span class="lineno">  333 </span><span class="spaces">            </span><span class="nottickedoff">setOffVarPermM x2 off2 p2'</span>
+<span class="lineno">  334 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x p'</span>
+<span class="lineno">  335 </span><span class="spaces">            </span><span class="nottickedoff">return $ PExpr_Var x</span>
+<span class="lineno">  336 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  337 </span><span class="spaces">       </span><span class="nottickedoff">-- If only one variable has been visited, its perms need to be split</span>
+<span class="lineno">  338 </span><span class="spaces">       </span><span class="nottickedoff">-- between its other location(s) and here</span>
+<span class="lineno">  339 </span><span class="spaces">       </span><span class="nottickedoff">(_, _, True, _) -&gt;</span>
+<span class="lineno">  340 </span><span class="spaces">         </span><span class="nottickedoff">do (p1', p2') &lt;-</span>
+<span class="lineno">  341 </span><span class="spaces">              </span><span class="nottickedoff">splitWidenPerm tp (offsetPerm off1 p1) (offsetPerm off2 p2)</span>
+<span class="lineno">  342 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x1 (offsetPerm (negatePermOffset off1) p1')</span>
+<span class="lineno">  343 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x2 (offsetPerm (negatePermOffset off2) p2')</span>
+<span class="lineno">  344 </span><span class="spaces">            </span><span class="nottickedoff">return e2</span>
+<span class="lineno">  345 </span><span class="spaces">       </span><span class="nottickedoff">(_, _, _, True) -&gt;</span>
+<span class="lineno">  346 </span><span class="spaces">         </span><span class="nottickedoff">do (p2', p1') &lt;-</span>
+<span class="lineno">  347 </span><span class="spaces">              </span><span class="nottickedoff">splitWidenPerm tp (offsetPerm off2 p2) (offsetPerm off1 p2)</span>
+<span class="lineno">  348 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x1 (offsetPerm (negatePermOffset off1) p1')</span>
+<span class="lineno">  349 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x2 (offsetPerm (negatePermOffset off2) p2')</span>
+<span class="lineno">  350 </span><span class="spaces">            </span><span class="nottickedoff">return e1</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  352 </span><span class="spaces">       </span><span class="nottickedoff">-- If we get here, then neither x1 nor x2 has been visited, so choose x1,</span>
+<span class="lineno">  353 </span><span class="spaces">       </span><span class="nottickedoff">-- set x2 equal to x1 &amp;+ (off1 - off2), and set x1's permissions to be</span>
+<span class="lineno">  354 </span><span class="spaces">       </span><span class="nottickedoff">-- the result of widening p1 against p2</span>
+<span class="lineno">  355 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  356 </span><span class="spaces">         </span><span class="nottickedoff">do visitM x1 &gt;&gt; visitM x2</span>
+<span class="lineno">  357 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x2 (ValPerm_Eq $</span>
+<span class="lineno">  358 </span><span class="spaces">                            </span><span class="nottickedoff">offsetExpr (addPermOffsets off1 $</span>
+<span class="lineno">  359 </span><span class="spaces">                                        </span><span class="nottickedoff">negatePermOffset off2) $ PExpr_Var x1)</span>
+<span class="lineno">  360 </span><span class="spaces">            </span><span class="nottickedoff">p' &lt;- widenPerm tp (offsetPerm off1 p1) (offsetPerm off2 p2)</span>
+<span class="lineno">  361 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x1 (offsetPerm (negatePermOffset off1) p')</span>
+<span class="lineno">  362 </span><span class="spaces">            </span><span class="nottickedoff">return e1</span>
+<span class="lineno">  363 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  364 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  365 </span><span class="spaces"></span><span class="nottickedoff">-- If one side is a variable x and the other is not, then the non-variable side</span>
+<span class="lineno">  366 </span><span class="spaces"></span><span class="nottickedoff">-- cannot have any permissions, and there are fewer cases than the above</span>
+<span class="lineno">  367 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (asVarOffset -&gt; Just (x1, off1)) e2 =</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">do p1 &lt;- getVarPermM x1</span>
+<span class="lineno">  369 </span><span class="spaces">     </span><span class="nottickedoff">case p1 of</span>
+<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  371 </span><span class="spaces">       </span><span class="nottickedoff">-- If x1 has an eq(e) permission, replace it with e and recurse</span>
+<span class="lineno">  372 </span><span class="spaces">       </span><span class="nottickedoff">ValPerm_Eq e1' -&gt;</span>
+<span class="lineno">  373 </span><span class="spaces">         </span><span class="nottickedoff">visitM x1 &gt;&gt; widenExpr tp (offsetExpr off1 e1') e2</span>
+<span class="lineno">  374 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  375 </span><span class="spaces">       </span><span class="nottickedoff">-- Otherwise bind a fresh variable, because even if x1 has not been</span>
+<span class="lineno">  376 </span><span class="spaces">       </span><span class="nottickedoff">-- visited before, it could still occur somewhere we haven't visited yet</span>
+<span class="lineno">  377 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  378 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  379 </span><span class="spaces">            </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  380 </span><span class="spaces">            </span><span class="nottickedoff">return $ PExpr_Var x</span>
+<span class="lineno">  381 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  382 </span><span class="spaces"></span><span class="nottickedoff">-- Similar to the previous case, but with the variable on the right</span>
+<span class="lineno">  383 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp e1 (asVarOffset -&gt; Just (x2, off2)) =</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">do p2 &lt;- getVarPermM x2</span>
+<span class="lineno">  385 </span><span class="spaces">     </span><span class="nottickedoff">case p2 of</span>
+<span class="lineno">  386 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  387 </span><span class="spaces">       </span><span class="nottickedoff">-- If x2 has an eq(e) permission, replace it with e and recurse</span>
+<span class="lineno">  388 </span><span class="spaces">       </span><span class="nottickedoff">ValPerm_Eq e2' -&gt;</span>
+<span class="lineno">  389 </span><span class="spaces">         </span><span class="nottickedoff">visitM x2 &gt;&gt; widenExpr tp e1 (offsetExpr off2 e2')</span>
+<span class="lineno">  390 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  391 </span><span class="spaces">       </span><span class="nottickedoff">-- Otherwise bind a fresh variable, because even if x1 has not been</span>
+<span class="lineno">  392 </span><span class="spaces">       </span><span class="nottickedoff">-- visited before, it could still occur somewhere we haven't visited yet</span>
+<span class="lineno">  393 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  394 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  395 </span><span class="spaces">            </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  396 </span><span class="spaces">            </span><span class="nottickedoff">return $ PExpr_Var x</span>
+<span class="lineno">  397 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  398 </span><span class="spaces"></span><span class="nottickedoff">-- Widen two structs by widening their contents</span>
+<span class="lineno">  399 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' (StructRepr tps) (PExpr_Struct es1) (PExpr_Struct es2) =</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_Struct &lt;$&gt; widenExprs (mkCruCtx tps) es1 es2</span>
+<span class="lineno">  401 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  402 </span><span class="spaces"></span><span class="nottickedoff">-- Widen llvmwords by widening the words</span>
+<span class="lineno">  403 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' (LLVMPointerRepr w) (PExpr_LLVMWord e1) (PExpr_LLVMWord e2) =</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_LLVMWord &lt;$&gt; widenExpr (BVRepr w) e1 e2</span>
+<span class="lineno">  405 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  406 </span><span class="spaces"></span><span class="nottickedoff">-- Widen named shapes with the same names</span>
+<span class="lineno">  407 </span><span class="spaces"></span><span class="nottickedoff">--</span>
+<span class="lineno">  408 </span><span class="spaces"></span><span class="nottickedoff">-- FIXME: we currently only handle shapes with no modalities, because the</span>
+<span class="lineno">  409 </span><span class="spaces"></span><span class="nottickedoff">-- modalities only come about when proving equality shapes, which themselves are</span>
+<span class="lineno">  410 </span><span class="spaces"></span><span class="nottickedoff">-- only really used by memcpy and similar functions</span>
+<span class="lineno">  411 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' _ (PExpr_NamedShape Nothing Nothing nmsh1 args1)</span>
+<span class="lineno">  412 </span><span class="spaces">  </span><span class="nottickedoff">(PExpr_NamedShape Nothing Nothing nmsh2 args2)</span>
+<span class="lineno">  413 </span><span class="spaces">  </span><span class="nottickedoff">| Just (Refl,Refl) &lt;- namedShapeEq nmsh1 nmsh2 =</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="nottickedoff">PExpr_NamedShape Nothing Nothing nmsh1 &lt;$&gt;</span>
+<span class="lineno">  415 </span><span class="spaces">    </span><span class="nottickedoff">widenExprs (namedShapeArgs nmsh1) args1 args2</span>
+<span class="lineno">  416 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  417 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' (LLVMShapeRepr w) (PExpr_EqShape len1 e1) (PExpr_EqShape len2 e2)</span>
+<span class="lineno">  418 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq len1 len2</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="nottickedoff">= PExpr_EqShape len1 &lt;$&gt; widenExpr (LLVMBlockRepr w) e1 e2</span>
+<span class="lineno">  420 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  421 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (PExpr_PtrShape Nothing Nothing sh1)</span>
+<span class="lineno">  422 </span><span class="spaces">  </span><span class="nottickedoff">(PExpr_PtrShape Nothing Nothing sh2) =</span>
+<span class="lineno">  423 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_PtrShape Nothing Nothing &lt;$&gt; widenExpr tp sh1 sh2</span>
+<span class="lineno">  424 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  425 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' _ (PExpr_FieldShape (LLVMFieldShape p1)) (PExpr_FieldShape</span>
+<span class="lineno">  426 </span><span class="spaces">                                                    </span><span class="nottickedoff">(LLVMFieldShape p2))</span>
+<span class="lineno">  427 </span><span class="spaces">  </span><span class="nottickedoff">| Just Refl &lt;- testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) =</span>
+<span class="lineno">  428 </span><span class="spaces">    </span><span class="nottickedoff">PExpr_FieldShape &lt;$&gt; LLVMFieldShape &lt;$&gt; widenPerm knownRepr p1 p2</span>
+<span class="lineno">  429 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  430 </span><span class="spaces"></span><span class="nottickedoff">-- Array shapes can be widened if they have the same length and stride</span>
+<span class="lineno">  431 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' _ (PExpr_ArrayShape</span>
+<span class="lineno">  432 </span><span class="spaces">              </span><span class="nottickedoff">len1 stride1 sh1) (PExpr_ArrayShape len2 stride2 sh2)</span>
+<span class="lineno">  433 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq len1 len2 &amp;&amp; stride1 == stride2 =</span>
+<span class="lineno">  434 </span><span class="spaces">    </span><span class="nottickedoff">PExpr_ArrayShape len1 stride1 &lt;$&gt; widenExpr knownRepr sh1 sh2</span>
+<span class="lineno">  435 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  436 </span><span class="spaces"></span><span class="nottickedoff">-- An array shape of length 1 can be replaced by its sole cell</span>
+<span class="lineno">  437 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (PExpr_ArrayShape len1 _ sh1) sh2</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq len1 (bvInt 1) = widenExpr' tp sh1 sh2</span>
+<span class="lineno">  439 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp sh1 (PExpr_ArrayShape len2 _ sh2)</span>
+<span class="lineno">  440 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq len2 (bvInt 1) = widenExpr' tp sh1 sh2</span>
+<span class="lineno">  441 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  442 </span><span class="spaces"></span><span class="nottickedoff">-- FIXME: there should be some check that the first shapes have the same length,</span>
+<span class="lineno">  443 </span><span class="spaces"></span><span class="nottickedoff">-- though this is more complex if they might have free variables...?</span>
+<span class="lineno">  444 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (PExpr_SeqShape sh1 sh1') (PExpr_SeqShape sh2 sh2') =</span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_SeqShape &lt;$&gt; widenExpr tp sh1 sh2 &lt;*&gt; widenExpr tp sh1' sh2'</span>
+<span class="lineno">  446 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  447 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (PExpr_OrShape sh1 sh1') (PExpr_OrShape sh2 sh2') =</span>
+<span class="lineno">  448 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_OrShape &lt;$&gt; widenExpr tp sh1 sh2 &lt;*&gt; widenExpr tp sh1' sh2'</span>
+<span class="lineno">  449 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  450 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp (PExpr_ExShape mb_sh1) sh2 =</span>
+<span class="lineno">  451 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar knownRepr</span>
+<span class="lineno">  452 </span><span class="spaces">     </span><span class="nottickedoff">widenExpr tp (varSubst (singletonVarSubst x) mb_sh1) sh2</span>
+<span class="lineno">  453 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  454 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp sh1 (PExpr_ExShape mb_sh2) =</span>
+<span class="lineno">  455 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar knownRepr</span>
+<span class="lineno">  456 </span><span class="spaces">     </span><span class="nottickedoff">widenExpr tp sh1 (varSubst (singletonVarSubst x) mb_sh2)</span>
+<span class="lineno">  457 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  458 </span><span class="spaces"></span><span class="nottickedoff">-- For two shapes that don't match any of the above cases, return the most</span>
+<span class="lineno">  459 </span><span class="spaces"></span><span class="nottickedoff">-- general shape, which is the empty shape</span>
+<span class="lineno">  460 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' (LLVMShapeRepr _) _ _ = return $ PExpr_EmptyShape</span>
+<span class="lineno">  461 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  462 </span><span class="spaces"></span><span class="nottickedoff">-- NOTE: this assumes that permission expressions only occur in covariant</span>
+<span class="lineno">  463 </span><span class="spaces"></span><span class="nottickedoff">-- positions</span>
+<span class="lineno">  464 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' (ValuePermRepr tp) (PExpr_ValPerm p1) (PExpr_ValPerm p2) =</span>
+<span class="lineno">  465 </span><span class="spaces">  </span><span class="nottickedoff">PExpr_ValPerm &lt;$&gt; widenPerm tp p1 p2</span>
+<span class="lineno">  466 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  467 </span><span class="spaces"></span><span class="nottickedoff">-- Default case: widen two unequal expressions by making a fresh output</span>
+<span class="lineno">  468 </span><span class="spaces"></span><span class="nottickedoff">-- existential variable, which could be equal to either</span>
+<span class="lineno">  469 </span><span class="spaces"></span><span class="nottickedoff">widenExpr' tp _ _ =</span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  471 </span><span class="spaces">     </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  472 </span><span class="spaces">     </span><span class="nottickedoff">return $ PExpr_Var x</span></span>
+<span class="lineno">  473 </span>
+<span class="lineno">  474 </span>
+<span class="lineno">  475 </span>-- | Widen a sequence of expressions
+<span class="lineno">  476 </span>widenExprs :: CruCtx tps -&gt; PermExprs tps -&gt; PermExprs tps -&gt;
+<span class="lineno">  477 </span>              WideningM (PermExprs tps)
+<span class="lineno">  478 </span><span class="decl"><span class="nottickedoff">widenExprs _ MNil MNil = return MNil</span>
+<span class="lineno">  479 </span><span class="spaces"></span><span class="nottickedoff">widenExprs (CruCtxCons tps tp) (es1 :&gt;: e1) (es2 :&gt;: e2) =</span>
+<span class="lineno">  480 </span><span class="spaces">  </span><span class="nottickedoff">(:&gt;:) &lt;$&gt; widenExprs tps es1 es2 &lt;*&gt; widenExpr tp e1 e2</span></span>
+<span class="lineno">  481 </span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>-- | Widen two bitvector offsets by trying to widen them additively
+<span class="lineno">  484 </span>-- ('widenBVsAddy'), or if that is not possible, by widening them
+<span class="lineno">  485 </span>-- multiplicatively ('widenBVsMulty')
+<span class="lineno">  486 </span>widenOffsets :: (1 &lt;= w, KnownNat w) =&gt; TypeRepr (BVType w) -&gt;
+<span class="lineno">  487 </span>                PermOffset (LLVMPointerType w) -&gt;
+<span class="lineno">  488 </span>                PermOffset (LLVMPointerType w) -&gt;
+<span class="lineno">  489 </span>                WideningM (PermExpr (BVType w))
+<span class="lineno">  490 </span><span class="decl"><span class="nottickedoff">widenOffsets tp (llvmPermOffsetExpr -&gt; off1) (llvmPermOffsetExpr -&gt; off2) =</span>
+<span class="lineno">  491 </span><span class="spaces">  </span><span class="nottickedoff">widenBVsAddy tp off1 off2 &gt;&gt;= maybe (widenBVsMulty tp off1 off2) return</span></span>
+<span class="lineno">  492 </span>
+<span class="lineno">  493 </span>-- | Widen two bitvectors @bv1@ and @bv2@ additively, i.e. bind a fresh
+<span class="lineno">  494 </span>-- variable @bv@ and return @(bv2 - bv1) * bv + bv1@, assuming @bv2 - bv1@
+<span class="lineno">  495 </span>-- is a constant
+<span class="lineno">  496 </span>widenBVsAddy :: (1 &lt;= w, KnownNat w) =&gt; TypeRepr (BVType w) -&gt;
+<span class="lineno">  497 </span>                PermExpr (BVType w) -&gt; PermExpr (BVType w) -&gt;
+<span class="lineno">  498 </span>                WideningM (Maybe (PermExpr (BVType w)))
+<span class="lineno">  499 </span><span class="decl"><span class="nottickedoff">widenBVsAddy tp bv1 bv2 =</span>
+<span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">case bvMatchConst (bvSub bv2 bv1) of</span>
+<span class="lineno">  501 </span><span class="spaces">    </span><span class="nottickedoff">Just d -&gt; do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  502 </span><span class="spaces">                 </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  503 </span><span class="spaces">                 </span><span class="nottickedoff">return $ Just (bvAdd (bvFactorExpr d x) bv1)</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return Nothing</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>-- | Widen two bitvectors @bv1@ and @bv2@ multiplicatively, i.e. bind a fresh
+<span class="lineno">  507 </span>-- variable @bv@ and return @(bvGCD bv1 bv2) * bv@
+<span class="lineno">  508 </span>widenBVsMulty :: (1 &lt;= w, KnownNat w) =&gt; TypeRepr (BVType w) -&gt;
+<span class="lineno">  509 </span>                 PermExpr (BVType w) -&gt; PermExpr (BVType w) -&gt;
+<span class="lineno">  510 </span>                 WideningM (PermExpr (BVType w))
+<span class="lineno">  511 </span><span class="decl"><span class="nottickedoff">widenBVsMulty tp bv1 bv2 =</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  513 </span><span class="spaces">     </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  514 </span><span class="spaces">     </span><span class="nottickedoff">return $ bvFactorExpr (bvGCD bv1 bv2) x</span></span>
+<span class="lineno">  515 </span>
+<span class="lineno">  516 </span>
+<span class="lineno">  517 </span>-- | Take two block permissions @bp1@ and @bp2@ with the same offset and use
+<span class="lineno">  518 </span>-- 'splitLLVMBlockPerm' to remove any parts of them that do not overlap,
+<span class="lineno">  519 </span>-- returning some @bp1'@ and @bp2'@ with the same range, along with additional
+<span class="lineno">  520 </span>-- portions of @bp1@ and @bp2@ that were removed
+<span class="lineno">  521 </span>equalizeLLVMBlockRanges' :: (1 &lt;= w, KnownNat w) =&gt;
+<span class="lineno">  522 </span>                            WidNameMap -&gt; LLVMBlockPerm w -&gt; LLVMBlockPerm w -&gt;
+<span class="lineno">  523 </span>                            Maybe (LLVMBlockPerm w, LLVMBlockPerm w,
+<span class="lineno">  524 </span>                                   [LLVMBlockPerm w], [LLVMBlockPerm w])
+<span class="lineno">  525 </span><span class="decl"><span class="nottickedoff">equalizeLLVMBlockRanges' _ bp1 bp2</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">| not (bvEq (llvmBlockOffset bp1) (llvmBlockOffset bp2)) =</span>
+<span class="lineno">  527 </span><span class="spaces">    </span><span class="nottickedoff">error &quot;equalizeLLVMBlockRanges'&quot;</span>
+<span class="lineno">  528 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges' _ bp1 bp2</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq (llvmBlockLen bp1) (llvmBlockLen bp2) =</span>
+<span class="lineno">  530 </span><span class="spaces">    </span><span class="nottickedoff">return (bp1, bp2, [], [])</span>
+<span class="lineno">  531 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges' wnmap bp1 bp2</span>
+<span class="lineno">  532 </span><span class="spaces">  </span><span class="nottickedoff">| bvLt (llvmBlockLen bp1) (llvmBlockLen bp2) =</span>
+<span class="lineno">  533 </span><span class="spaces">    </span><span class="nottickedoff">do let blsubst = wnMapBlockShape wnmap</span>
+<span class="lineno">  534 </span><span class="spaces">       </span><span class="nottickedoff">(bp2', bp2'') &lt;- splitLLVMBlockPerm blsubst (llvmBlockEndOffset bp1) bp2</span>
+<span class="lineno">  535 </span><span class="spaces">       </span><span class="nottickedoff">return (bp1, bp2', [], [bp2''])</span>
+<span class="lineno">  536 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges' wnmap bp1 bp2</span>
+<span class="lineno">  537 </span><span class="spaces">  </span><span class="nottickedoff">| bvLt (llvmBlockLen bp2) (llvmBlockLen bp1) =</span>
+<span class="lineno">  538 </span><span class="spaces">    </span><span class="nottickedoff">do let blsubst = wnMapBlockShape wnmap</span>
+<span class="lineno">  539 </span><span class="spaces">       </span><span class="nottickedoff">(bp1', bp1'') &lt;- splitLLVMBlockPerm blsubst (llvmBlockEndOffset bp2) bp1</span>
+<span class="lineno">  540 </span><span class="spaces">       </span><span class="nottickedoff">return (bp1', bp2, [bp1''], [])</span>
+<span class="lineno">  541 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges' _ _ _ = Nothing</span></span>
+<span class="lineno">  542 </span>
+<span class="lineno">  543 </span>-- | Take two block permissions @bp1@ and @bp2@ whose ranges overlap and use
+<span class="lineno">  544 </span>-- 'splitLLVMBlockPerm' to remove any parts of them that do not overlap,
+<span class="lineno">  545 </span>-- returning some @bp1'@ and @bp2'@ with the same range, along with additional
+<span class="lineno">  546 </span>-- portions of @bp1@ and @bp2@ that were removed
+<span class="lineno">  547 </span>equalizeLLVMBlockRanges :: (1 &lt;= w, KnownNat w) =&gt;
+<span class="lineno">  548 </span>                           WidNameMap -&gt; LLVMBlockPerm w -&gt; LLVMBlockPerm w -&gt;
+<span class="lineno">  549 </span>                           Maybe (LLVMBlockPerm w, LLVMBlockPerm w,
+<span class="lineno">  550 </span>                                  [LLVMBlockPerm w], [LLVMBlockPerm w])
+<span class="lineno">  551 </span><span class="decl"><span class="nottickedoff">equalizeLLVMBlockRanges wnmap bp1 bp2</span>
+<span class="lineno">  552 </span><span class="spaces">  </span><span class="nottickedoff">| bvEq (llvmBlockOffset bp1) (llvmBlockOffset bp2) =</span>
+<span class="lineno">  553 </span><span class="spaces">    </span><span class="nottickedoff">equalizeLLVMBlockRanges' wnmap bp1 bp2</span>
+<span class="lineno">  554 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges wnmap bp1 bp2</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">| bvLt (llvmBlockOffset bp1) (llvmBlockOffset bp2) =</span>
+<span class="lineno">  556 </span><span class="spaces">    </span><span class="nottickedoff">do let blsubst = wnMapBlockShape wnmap</span>
+<span class="lineno">  557 </span><span class="spaces">       </span><span class="nottickedoff">(bp1', bp1'') &lt;- splitLLVMBlockPerm blsubst (llvmBlockOffset bp2) bp1</span>
+<span class="lineno">  558 </span><span class="spaces">       </span><span class="nottickedoff">(bp1_ret, bp2_ret, bps1, bps2) &lt;- equalizeLLVMBlockRanges' wnmap bp1'' bp2</span>
+<span class="lineno">  559 </span><span class="spaces">       </span><span class="nottickedoff">return (bp1_ret, bp2_ret, bp1':bps1, bps2)</span>
+<span class="lineno">  560 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges wnmap bp1 bp2</span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">| bvLt (llvmBlockOffset bp2) (llvmBlockOffset bp1) =</span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="nottickedoff">do let blsubst = wnMapBlockShape wnmap</span>
+<span class="lineno">  563 </span><span class="spaces">       </span><span class="nottickedoff">(bp2', bp2'') &lt;- splitLLVMBlockPerm blsubst (llvmBlockOffset bp1) bp2</span>
+<span class="lineno">  564 </span><span class="spaces">       </span><span class="nottickedoff">(bp1_ret, bp2_ret, bps1, bps2) &lt;- equalizeLLVMBlockRanges' wnmap bp1 bp2''</span>
+<span class="lineno">  565 </span><span class="spaces">       </span><span class="nottickedoff">return (bp1_ret, bp2_ret, bps1, bp2':bps2)</span>
+<span class="lineno">  566 </span><span class="spaces"></span><span class="nottickedoff">equalizeLLVMBlockRanges _ _ _ = Nothing</span></span>
+<span class="lineno">  567 </span>
+<span class="lineno">  568 </span>
+<span class="lineno">  569 </span>-- | Widen two block permissions against each other, assuming they already have
+<span class="lineno">  570 </span>-- the same range
+<span class="lineno">  571 </span>widenBlockPerm :: (1 &lt;= w, KnownNat w) =&gt; LLVMBlockPerm w -&gt; LLVMBlockPerm w -&gt;
+<span class="lineno">  572 </span>                  WideningM (LLVMBlockPerm w)
+<span class="lineno">  573 </span><span class="decl"><span class="nottickedoff">widenBlockPerm bp1 bp2 =</span>
+<span class="lineno">  574 </span><span class="spaces">  </span><span class="nottickedoff">LLVMBlockPerm &lt;$&gt;</span>
+<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">widenExpr knownRepr (llvmBlockRW bp1) (llvmBlockRW bp2) &lt;*&gt;</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">widenExpr knownRepr (llvmBlockLifetime bp1) (llvmBlockLifetime bp2) &lt;*&gt;</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">return (llvmBlockOffset bp1) &lt;*&gt; return (llvmBlockLen bp1) &lt;*&gt;</span>
+<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">widenExpr knownRepr (llvmBlockShape bp1) (llvmBlockShape bp2)</span></span>
+<span class="lineno">  579 </span>
+<span class="lineno">  580 </span>
+<span class="lineno">  581 </span>-- | Widen a sequence of atomic permissions against each other
+<span class="lineno">  582 </span>widenAtomicPerms :: TypeRepr a -&gt; [AtomicPerm a] -&gt; [AtomicPerm a] -&gt;
+<span class="lineno">  583 </span>                    WideningM [AtomicPerm a]
+<span class="lineno">  584 </span><span class="decl"><span class="nottickedoff">widenAtomicPerms tp ps1 ps2 =</span>
+<span class="lineno">  585 </span><span class="spaces">  </span><span class="nottickedoff">do traceM (\i -&gt;</span>
+<span class="lineno">  586 </span><span class="spaces">              </span><span class="nottickedoff">fillSep [pretty &quot;widenAtomicPerms&quot;,</span>
+<span class="lineno">  587 </span><span class="spaces">                       </span><span class="nottickedoff">permPretty i ps1, permPretty i ps2])</span>
+<span class="lineno">  588 </span><span class="spaces">     </span><span class="nottickedoff">wnmap &lt;- view wsNameMap &lt;$&gt; get</span>
+<span class="lineno">  589 </span><span class="spaces">     </span><span class="nottickedoff">widenAtomicPerms' wnmap tp ps1 ps2</span></span>
+<span class="lineno">  590 </span>
+<span class="lineno">  591 </span>widenAtomicPerms' :: WidNameMap -&gt; TypeRepr a -&gt;
+<span class="lineno">  592 </span>                     [AtomicPerm a] -&gt; [AtomicPerm a] -&gt;
+<span class="lineno">  593 </span>                     WideningM [AtomicPerm a]
+<span class="lineno">  594 </span>
+<span class="lineno">  595 </span>-- If one side is empty, we return the empty list, i.e., true
+<span class="lineno">  596 </span><span class="decl"><span class="nottickedoff">widenAtomicPerms' _ _ [] _ = return []</span>
+<span class="lineno">  597 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' _ _ _ [] = return []</span>
+<span class="lineno">  598 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  599 </span><span class="spaces"></span><span class="nottickedoff">-- If there is a permission on the right that equals p1, use p1, and recursively</span>
+<span class="lineno">  600 </span><span class="spaces"></span><span class="nottickedoff">-- widen the remaining permissions</span>
+<span class="lineno">  601 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' _ tp (p1 : ps1) ps2</span>
+<span class="lineno">  602 </span><span class="spaces">  </span><span class="nottickedoff">| Just i &lt;- findIndex (== p1) ps2 =</span>
+<span class="lineno">  603 </span><span class="spaces">    </span><span class="nottickedoff">(p1 :) &lt;$&gt; widenAtomicPerms tp ps1 (deleteNth i ps2)</span>
+<span class="lineno">  604 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  605 </span><span class="spaces"></span><span class="nottickedoff">-- If we have array permissions with the same offset, length, and stride on both</span>
+<span class="lineno">  606 </span><span class="spaces"></span><span class="nottickedoff">-- sides, check that their fields are the same and equalize their borrows</span>
+<span class="lineno">  607 </span><span class="spaces"></span><span class="nottickedoff">--</span>
+<span class="lineno">  608 </span><span class="spaces"></span><span class="nottickedoff">-- FIXME: handle arrays with different lengths, and widen their fields</span>
+<span class="lineno">  609 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' wnmap tp (Perm_LLVMArray ap1 : ps1) ps2 =</span>
+<span class="lineno">  610 </span><span class="spaces">  </span><span class="nottickedoff">case findIndex</span>
+<span class="lineno">  611 </span><span class="spaces">       </span><span class="nottickedoff">(\case</span>
+<span class="lineno">  612 </span><span class="spaces">           </span><span class="nottickedoff">Perm_LLVMArray ap2 -&gt;</span>
+<span class="lineno">  613 </span><span class="spaces">             </span><span class="nottickedoff">substEqVars wnmap (llvmArrayOffset ap1)</span>
+<span class="lineno">  614 </span><span class="spaces">             </span><span class="nottickedoff">== substEqVars wnmap (llvmArrayOffset ap2) &amp;&amp;</span>
+<span class="lineno">  615 </span><span class="spaces">             </span><span class="nottickedoff">substEqVars wnmap (llvmArrayLen ap1)</span>
+<span class="lineno">  616 </span><span class="spaces">             </span><span class="nottickedoff">== substEqVars wnmap (llvmArrayLen ap2) &amp;&amp;</span>
+<span class="lineno">  617 </span><span class="spaces">             </span><span class="nottickedoff">llvmArrayStride ap1 == llvmArrayStride ap2 &amp;&amp;</span>
+<span class="lineno">  618 </span><span class="spaces">             </span><span class="nottickedoff">-- FIXME: widen the rw modalities?</span>
+<span class="lineno">  619 </span><span class="spaces">             </span><span class="nottickedoff">substEqVars wnmap (llvmArrayRW ap1)</span>
+<span class="lineno">  620 </span><span class="spaces">             </span><span class="nottickedoff">== substEqVars wnmap (llvmArrayRW ap2) &amp;&amp;</span>
+<span class="lineno">  621 </span><span class="spaces">             </span><span class="nottickedoff">substEqVars wnmap (llvmArrayLifetime ap1)</span>
+<span class="lineno">  622 </span><span class="spaces">             </span><span class="nottickedoff">== substEqVars wnmap (llvmArrayLifetime ap2)</span>
+<span class="lineno">  623 </span><span class="spaces">           </span><span class="nottickedoff">_ -&gt; False) ps2 of</span>
+<span class="lineno">  624 </span><span class="spaces">    </span><span class="nottickedoff">Just i</span>
+<span class="lineno">  625 </span><span class="spaces">      </span><span class="nottickedoff">| Perm_LLVMArray ap2 &lt;- ps2!!i -&gt;</span>
+<span class="lineno">  626 </span><span class="spaces">        </span><span class="nottickedoff">-- NOTE: at this point, ap1 and ap2 are equal except for perhaps their</span>
+<span class="lineno">  627 </span><span class="spaces">        </span><span class="nottickedoff">-- borrows and shapes, so we just filter out the borrows in ap1 that are</span>
+<span class="lineno">  628 </span><span class="spaces">        </span><span class="nottickedoff">-- also in ap2 and widen the shapes</span>
+<span class="lineno">  629 </span><span class="spaces">        </span><span class="nottickedoff">widenExpr knownRepr (llvmArrayCellShape ap1) (llvmArrayCellShape ap2)</span>
+<span class="lineno">  630 </span><span class="spaces">        </span><span class="nottickedoff">&gt;&gt;= \sh -&gt;</span>
+<span class="lineno">  631 </span><span class="spaces">        </span><span class="nottickedoff">(Perm_LLVMArray (ap1 { llvmArrayCellShape = sh,</span>
+<span class="lineno">  632 </span><span class="spaces">                               </span><span class="nottickedoff">llvmArrayBorrows =</span>
+<span class="lineno">  633 </span><span class="spaces">                                 </span><span class="nottickedoff">filter (flip elem (llvmArrayBorrows ap2))</span>
+<span class="lineno">  634 </span><span class="spaces">                                 </span><span class="nottickedoff">(llvmArrayBorrows ap1) }) :) &lt;$&gt;</span>
+<span class="lineno">  635 </span><span class="spaces">        </span><span class="nottickedoff">widenAtomicPerms tp ps1 (deleteNth i ps2)</span>
+<span class="lineno">  636 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  637 </span><span class="spaces">      </span><span class="nottickedoff">-- We did not find an appropriate array on the RHS, so drop this one</span>
+<span class="lineno">  638 </span><span class="spaces">      </span><span class="nottickedoff">widenAtomicPerms tp ps1 ps2</span>
+<span class="lineno">  639 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  640 </span><span class="spaces"></span><span class="nottickedoff">-- If the first permission on the left is an LLVM permission overlaps with some</span>
+<span class="lineno">  641 </span><span class="spaces"></span><span class="nottickedoff">-- permission on the right, widen these against each other</span>
+<span class="lineno">  642 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' wnmap tp@(LLVMPointerRepr w) (p1 : ps1) ps2</span>
+<span class="lineno">  643 </span><span class="spaces">  </span><span class="nottickedoff">| Just bp1 &lt;- llvmAtomicPermToBlock p1</span>
+<span class="lineno">  644 </span><span class="spaces">  </span><span class="nottickedoff">, rng1 &lt;- llvmBlockRange bp1</span>
+<span class="lineno">  645 </span><span class="spaces">  </span><span class="nottickedoff">, Just i &lt;-</span>
+<span class="lineno">  646 </span><span class="spaces">      </span><span class="nottickedoff">withKnownNat w (findIndex ((== Just True) . fmap (bvRangesOverlap rng1)</span>
+<span class="lineno">  647 </span><span class="spaces">                                 </span><span class="nottickedoff">. llvmAtomicPermRange) ps2)</span>
+<span class="lineno">  648 </span><span class="spaces">  </span><span class="nottickedoff">, Just bp2 &lt;- llvmAtomicPermToBlock (ps2!!i)</span>
+<span class="lineno">  649 </span><span class="spaces">  </span><span class="nottickedoff">, Just (bp1', bp2', bps1_rem, bps2_rem) &lt;-</span>
+<span class="lineno">  650 </span><span class="spaces">      </span><span class="nottickedoff">withKnownNat w (equalizeLLVMBlockRanges wnmap bp1 bp2)</span>
+<span class="lineno">  651 </span><span class="spaces">  </span><span class="nottickedoff">= withKnownNat w (</span>
+<span class="lineno">  652 </span><span class="spaces">      </span><span class="nottickedoff">(:) &lt;$&gt; (Perm_LLVMBlock &lt;$&gt; widenBlockPerm bp1' bp2') &lt;*&gt;</span>
+<span class="lineno">  653 </span><span class="spaces">      </span><span class="nottickedoff">widenAtomicPerms tp (map Perm_LLVMBlock bps1_rem ++ ps1)</span>
+<span class="lineno">  654 </span><span class="spaces">      </span><span class="nottickedoff">(map Perm_LLVMBlock bps2_rem ++ deleteNth i ps2))</span>
+<span class="lineno">  655 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  656 </span><span class="spaces"></span><span class="nottickedoff">-- If the LHS is a frame permission such that there is a frame permission on the</span>
+<span class="lineno">  657 </span><span class="spaces"></span><span class="nottickedoff">-- RHS with the same list of lengths, widen the expressions</span>
+<span class="lineno">  658 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' _ tp@(LLVMFrameRepr w) (Perm_LLVMFrame frmps1 : ps1) ps2</span>
+<span class="lineno">  659 </span><span class="spaces">  </span><span class="nottickedoff">| Just i &lt;- findIndex (\case</span>
+<span class="lineno">  660 </span><span class="spaces">                            </span><span class="nottickedoff">Perm_LLVMFrame _ -&gt; True</span>
+<span class="lineno">  661 </span><span class="spaces">                            </span><span class="nottickedoff">_ -&gt; False) ps2</span>
+<span class="lineno">  662 </span><span class="spaces">  </span><span class="nottickedoff">, Perm_LLVMFrame frmps2 &lt;- ps2 !! i</span>
+<span class="lineno">  663 </span><span class="spaces">  </span><span class="nottickedoff">, map snd frmps1 == map snd frmps2 =</span>
+<span class="lineno">  664 </span><span class="spaces">    </span><span class="nottickedoff">do es &lt;- zipWithM (widenExpr</span>
+<span class="lineno">  665 </span><span class="spaces">                       </span><span class="nottickedoff">(LLVMPointerRepr w)) (map fst frmps1) (map fst frmps2)</span>
+<span class="lineno">  666 </span><span class="spaces">       </span><span class="nottickedoff">(Perm_LLVMFrame (zip es (map snd frmps1)) :) &lt;$&gt;</span>
+<span class="lineno">  667 </span><span class="spaces">         </span><span class="nottickedoff">widenAtomicPerms tp ps1 (deleteNth i ps2)</span>
+<span class="lineno">  668 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  669 </span><span class="spaces"></span><span class="nottickedoff">-- If either side has unfoldable named permissions, unfold them and recurse</span>
+<span class="lineno">  670 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' _ tp ps1 ps2</span>
+<span class="lineno">  671 </span><span class="spaces">  </span><span class="nottickedoff">| any isFoldableConjPerm (ps1 ++ ps2)</span>
+<span class="lineno">  672 </span><span class="spaces">  </span><span class="nottickedoff">= do ps1' &lt;- concatMapM widUnfoldConjPerm ps1</span>
+<span class="lineno">  673 </span><span class="spaces">       </span><span class="nottickedoff">ps2' &lt;- concatMapM widUnfoldConjPerm ps2</span>
+<span class="lineno">  674 </span><span class="spaces">       </span><span class="nottickedoff">widenAtomicPerms tp ps1' ps2'</span>
+<span class="lineno">  675 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  676 </span><span class="spaces"></span><span class="nottickedoff">-- Default: cannot widen p1 against any p2 on the right, so drop it and recurse</span>
+<span class="lineno">  677 </span><span class="spaces"></span><span class="nottickedoff">widenAtomicPerms' _ tp (_ : ps1) ps2 = widenAtomicPerms tp ps1 ps2</span></span>
+<span class="lineno">  678 </span>
+<span class="lineno">  679 </span>
+<span class="lineno">  680 </span>-- | Widen permissions against each other
+<span class="lineno">  681 </span>widenPerm :: TypeRepr a -&gt; ValuePerm a -&gt; ValuePerm a -&gt; WideningM (ValuePerm a)
+<span class="lineno">  682 </span><span class="decl"><span class="nottickedoff">widenPerm tp p1 p2 =</span>
+<span class="lineno">  683 </span><span class="spaces">  </span><span class="nottickedoff">traceM (\i -&gt;</span>
+<span class="lineno">  684 </span><span class="spaces">           </span><span class="nottickedoff">fillSep [pretty &quot;widenPerm&quot;, permPretty i p1, permPretty i p2]) &gt;&gt;</span>
+<span class="lineno">  685 </span><span class="spaces">  </span><span class="nottickedoff">widenPerm' tp p1 p2</span></span>
+<span class="lineno">  686 </span>
+<span class="lineno">  687 </span>widenPerm' :: TypeRepr a -&gt; ValuePerm a -&gt; ValuePerm a -&gt;
+<span class="lineno">  688 </span>              WideningM (ValuePerm a)
+<span class="lineno">  689 </span>
+<span class="lineno">  690 </span><span class="decl"><span class="nottickedoff">widenPerm' tp (ValPerm_Eq e1) (ValPerm_Eq e2) =</span>
+<span class="lineno">  691 </span><span class="spaces">  </span><span class="nottickedoff">ValPerm_Eq &lt;$&gt; widenExpr tp e1 e2</span>
+<span class="lineno">  692 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  693 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Eq (asVarOffset -&gt; Just (x1, off1))) p2 =</span>
+<span class="lineno">  694 </span><span class="spaces">  </span><span class="nottickedoff">do p1 &lt;- getVarPermM x1</span>
+<span class="lineno">  695 </span><span class="spaces">     </span><span class="nottickedoff">isv1 &lt;- isVisitedM x1</span>
+<span class="lineno">  696 </span><span class="spaces">     </span><span class="nottickedoff">case (p1, isv1) of</span>
+<span class="lineno">  697 </span><span class="spaces">       </span><span class="nottickedoff">(ValPerm_Eq e1, _) -&gt;</span>
+<span class="lineno">  698 </span><span class="spaces">         </span><span class="nottickedoff">visitM x1 &gt;&gt; widenPerm tp (ValPerm_Eq $ offsetExpr off1 e1) p2</span>
+<span class="lineno">  699 </span><span class="spaces">       </span><span class="nottickedoff">(_, False) -&gt;</span>
+<span class="lineno">  700 </span><span class="spaces">         </span><span class="nottickedoff">do visitM x1</span>
+<span class="lineno">  701 </span><span class="spaces">            </span><span class="nottickedoff">p1' &lt;- widenPerm tp (offsetPerm off1 p1) p2</span>
+<span class="lineno">  702 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x1 (offsetPerm (negatePermOffset off1) p1')</span>
+<span class="lineno">  703 </span><span class="spaces">            </span><span class="nottickedoff">return (ValPerm_Eq $ offsetExpr off1 $ PExpr_Var x1)</span>
+<span class="lineno">  704 </span><span class="spaces">       </span><span class="nottickedoff">(_, True) -&gt;</span>
+<span class="lineno">  705 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  706 </span><span class="spaces">            </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  707 </span><span class="spaces">            </span><span class="nottickedoff">(p1', p1'') &lt;- splitWidenPerm tp (offsetPerm off1 p1) p2</span>
+<span class="lineno">  708 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x1 p1'</span>
+<span class="lineno">  709 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x p1''</span>
+<span class="lineno">  710 </span><span class="spaces">            </span><span class="nottickedoff">return (ValPerm_Eq $ PExpr_Var x)</span>
+<span class="lineno">  711 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  712 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp p1 (ValPerm_Eq (asVarOffset -&gt; Just (x2, off2))) =</span>
+<span class="lineno">  713 </span><span class="spaces">  </span><span class="nottickedoff">do p2 &lt;- getVarPermM x2</span>
+<span class="lineno">  714 </span><span class="spaces">     </span><span class="nottickedoff">isv2 &lt;- isVisitedM x2</span>
+<span class="lineno">  715 </span><span class="spaces">     </span><span class="nottickedoff">case (p2, isv2) of</span>
+<span class="lineno">  716 </span><span class="spaces">       </span><span class="nottickedoff">(ValPerm_Eq e2, _) -&gt;</span>
+<span class="lineno">  717 </span><span class="spaces">         </span><span class="nottickedoff">visitM x2 &gt;&gt; widenPerm tp p1 (ValPerm_Eq $ offsetExpr off2 e2)</span>
+<span class="lineno">  718 </span><span class="spaces">       </span><span class="nottickedoff">(_, False) -&gt;</span>
+<span class="lineno">  719 </span><span class="spaces">         </span><span class="nottickedoff">do visitM x2</span>
+<span class="lineno">  720 </span><span class="spaces">            </span><span class="nottickedoff">p2' &lt;- widenPerm tp p1 (offsetPerm off2 p2)</span>
+<span class="lineno">  721 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x2 (offsetPerm (negatePermOffset off2) p2')</span>
+<span class="lineno">  722 </span><span class="spaces">            </span><span class="nottickedoff">return (ValPerm_Eq $ offsetExpr off2 $ PExpr_Var x2)</span>
+<span class="lineno">  723 </span><span class="spaces">       </span><span class="nottickedoff">(_, True) -&gt;</span>
+<span class="lineno">  724 </span><span class="spaces">         </span><span class="nottickedoff">do x &lt;- bindFreshVar tp</span>
+<span class="lineno">  725 </span><span class="spaces">            </span><span class="nottickedoff">visitM x</span>
+<span class="lineno">  726 </span><span class="spaces">            </span><span class="nottickedoff">(p2', p2'') &lt;- splitWidenPerm tp (offsetPerm off2 p2) p1</span>
+<span class="lineno">  727 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x2 p2'</span>
+<span class="lineno">  728 </span><span class="spaces">            </span><span class="nottickedoff">setVarPermM x p2''</span>
+<span class="lineno">  729 </span><span class="spaces">            </span><span class="nottickedoff">return (ValPerm_Eq $ PExpr_Var x)</span>
+<span class="lineno">  730 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  731 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Or p1 p1') (ValPerm_Or p2 p2') =</span>
+<span class="lineno">  732 </span><span class="spaces">  </span><span class="nottickedoff">ValPerm_Or &lt;$&gt; widenPerm tp p1 p2 &lt;*&gt; widenPerm tp p1' p2'</span>
+<span class="lineno">  733 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Exists mb_p1) p2 =</span>
+<span class="lineno">  734 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar knownRepr</span>
+<span class="lineno">  735 </span><span class="spaces">     </span><span class="nottickedoff">widenPerm tp (varSubst (singletonVarSubst x) mb_p1) p2</span>
+<span class="lineno">  736 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp p1 (ValPerm_Exists mb_p2) =</span>
+<span class="lineno">  737 </span><span class="spaces">  </span><span class="nottickedoff">do x &lt;- bindFreshVar knownRepr</span>
+<span class="lineno">  738 </span><span class="spaces">     </span><span class="nottickedoff">widenPerm tp p1 (varSubst (singletonVarSubst x) mb_p2)</span>
+<span class="lineno">  739 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' _ (ValPerm_Named npn1 args1 off1) (ValPerm_Named npn2 args2 off2)</span>
+<span class="lineno">  740 </span><span class="spaces">  </span><span class="nottickedoff">| Just (Refl, Refl, Refl) &lt;- testNamedPermNameEq npn1 npn2</span>
+<span class="lineno">  741 </span><span class="spaces">  </span><span class="nottickedoff">, offsetsEq off1 off2 =</span>
+<span class="lineno">  742 </span><span class="spaces">    </span><span class="nottickedoff">(\args -&gt; ValPerm_Named npn1 args off1) &lt;$&gt;</span>
+<span class="lineno">  743 </span><span class="spaces">    </span><span class="nottickedoff">widenExprs (namedPermNameArgs npn1) args1 args2</span>
+<span class="lineno">  744 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Named npn1 args1 off1) p2</span>
+<span class="lineno">  745 </span><span class="spaces">  </span><span class="nottickedoff">| DefinedSortRepr _ &lt;- namedPermNameSort npn1 =</span>
+<span class="lineno">  746 </span><span class="spaces">    </span><span class="nottickedoff">do env &lt;- use wsPermEnv</span>
+<span class="lineno">  747 </span><span class="spaces">       </span><span class="nottickedoff">let np1 = requireNamedPerm env npn1</span>
+<span class="lineno">  748 </span><span class="spaces">       </span><span class="nottickedoff">widenPerm tp (unfoldPerm np1 args1 off1) p2</span>
+<span class="lineno">  749 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp p1 (ValPerm_Named npn2 args2 off2)</span>
+<span class="lineno">  750 </span><span class="spaces">  </span><span class="nottickedoff">| DefinedSortRepr _ &lt;- namedPermNameSort npn2 =</span>
+<span class="lineno">  751 </span><span class="spaces">    </span><span class="nottickedoff">do env &lt;- use wsPermEnv</span>
+<span class="lineno">  752 </span><span class="spaces">       </span><span class="nottickedoff">let np2 = requireNamedPerm env npn2</span>
+<span class="lineno">  753 </span><span class="spaces">       </span><span class="nottickedoff">widenPerm tp p1 (unfoldPerm np2 args2 off2)</span>
+<span class="lineno">  754 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Named npn1 args1 off1) p2</span>
+<span class="lineno">  755 </span><span class="spaces">  </span><span class="nottickedoff">| RecursiveSortRepr _ _ &lt;- namedPermNameSort npn1 =</span>
+<span class="lineno">  756 </span><span class="spaces">    </span><span class="nottickedoff">use wsRecFlag &gt;&gt;= \case</span>
+<span class="lineno">  757 </span><span class="spaces">      </span><span class="nottickedoff">RecRight -&gt;</span>
+<span class="lineno">  758 </span><span class="spaces">        </span><span class="nottickedoff">-- If we have already unfolded on the right, don't unfold on the left</span>
+<span class="lineno">  759 </span><span class="spaces">        </span><span class="nottickedoff">-- (for termination reasons); instead just give up and return true</span>
+<span class="lineno">  760 </span><span class="spaces">        </span><span class="nottickedoff">return ValPerm_True</span>
+<span class="lineno">  761 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  762 </span><span class="spaces">        </span><span class="nottickedoff">do wsRecFlag .= RecLeft</span>
+<span class="lineno">  763 </span><span class="spaces">           </span><span class="nottickedoff">env &lt;- use wsPermEnv</span>
+<span class="lineno">  764 </span><span class="spaces">           </span><span class="nottickedoff">let np1 = requireNamedPerm env npn1</span>
+<span class="lineno">  765 </span><span class="spaces">           </span><span class="nottickedoff">widenPerm tp (unfoldPerm np1 args1 off1) p2</span>
+<span class="lineno">  766 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp p1 (ValPerm_Named npn2 args2 off2)</span>
+<span class="lineno">  767 </span><span class="spaces">  </span><span class="nottickedoff">| RecursiveSortRepr _ _ &lt;- namedPermNameSort npn2 =</span>
+<span class="lineno">  768 </span><span class="spaces">    </span><span class="nottickedoff">use wsRecFlag &gt;&gt;= \case</span>
+<span class="lineno">  769 </span><span class="spaces">      </span><span class="nottickedoff">RecLeft -&gt;</span>
+<span class="lineno">  770 </span><span class="spaces">        </span><span class="nottickedoff">-- If we have already unfolded on the left, don't unfold on the right</span>
+<span class="lineno">  771 </span><span class="spaces">        </span><span class="nottickedoff">-- (for termination reasons); instead just give up and return true</span>
+<span class="lineno">  772 </span><span class="spaces">        </span><span class="nottickedoff">return ValPerm_True</span>
+<span class="lineno">  773 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  774 </span><span class="spaces">        </span><span class="nottickedoff">do wsRecFlag .= RecRight</span>
+<span class="lineno">  775 </span><span class="spaces">           </span><span class="nottickedoff">env &lt;- use wsPermEnv</span>
+<span class="lineno">  776 </span><span class="spaces">           </span><span class="nottickedoff">let np2 = requireNamedPerm env npn2</span>
+<span class="lineno">  777 </span><span class="spaces">           </span><span class="nottickedoff">widenPerm tp p1 (unfoldPerm np2 args2 off2)</span>
+<span class="lineno">  778 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' _ (ValPerm_Var x1 off1) (ValPerm_Var x2 off2)</span>
+<span class="lineno">  779 </span><span class="spaces">  </span><span class="nottickedoff">| x1 == x2 &amp;&amp; offsetsEq off1 off2 = return $ ValPerm_Var x1 off1</span>
+<span class="lineno">  780 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' tp (ValPerm_Conj ps1) (ValPerm_Conj ps2) =</span>
+<span class="lineno">  781 </span><span class="spaces">  </span><span class="nottickedoff">ValPerm_Conj &lt;$&gt; widenAtomicPerms tp ps1 ps2</span>
+<span class="lineno">  782 </span><span class="spaces"></span><span class="nottickedoff">widenPerm' _ _ _ = return ValPerm_True</span></span>
+<span class="lineno">  783 </span>
+<span class="lineno">  784 </span>
+<span class="lineno">  785 </span>-- | Widen a sequence of permissions
+<span class="lineno">  786 </span>widenPerms :: CruCtx tps -&gt; ValuePerms tps -&gt; ValuePerms tps -&gt;
+<span class="lineno">  787 </span>              WideningM (ValuePerms tps)
+<span class="lineno">  788 </span><span class="decl"><span class="nottickedoff">widenPerms _ MNil MNil = return MNil</span>
+<span class="lineno">  789 </span><span class="spaces"></span><span class="nottickedoff">widenPerms (CruCtxCons tps tp) (ps1 :&gt;: p1) (ps2 :&gt;: p2) =</span>
+<span class="lineno">  790 </span><span class="spaces">  </span><span class="nottickedoff">(:&gt;:) &lt;$&gt; widenPerms tps ps1 ps2 &lt;*&gt; widenPerm tp p1 p2</span></span>
+<span class="lineno">  791 </span>
+<span class="lineno">  792 </span>
+<span class="lineno">  793 </span>----------------------------------------------------------------------
+<span class="lineno">  794 </span>-- * Extension-Specific Widening
+<span class="lineno">  795 </span>----------------------------------------------------------------------
+<span class="lineno">  796 </span>
+<span class="lineno">  797 </span>data SomeLLVMFrameMember ctx =
+<span class="lineno">  798 </span>  forall w. SomeLLVMFrameMember (TypeRepr (LLVMFrameType w)) (Member ctx
+<span class="lineno">  799 </span>                                                              (LLVMFrameType w))
+<span class="lineno">  800 </span>-- | Find some LLVM frame variable type in a 'CruCtx'
+<span class="lineno">  801 </span>findLLVMFrameType :: CruCtx ctx -&gt; Maybe (SomeLLVMFrameMember ctx)
+<span class="lineno">  802 </span><span class="decl"><span class="nottickedoff">findLLVMFrameType CruCtxNil = Nothing</span>
+<span class="lineno">  803 </span><span class="spaces"></span><span class="nottickedoff">findLLVMFrameType (CruCtxCons _ tp@(LLVMFrameRepr _)) =</span>
+<span class="lineno">  804 </span><span class="spaces">  </span><span class="nottickedoff">Just (SomeLLVMFrameMember tp Member_Base)</span>
+<span class="lineno">  805 </span><span class="spaces"></span><span class="nottickedoff">findLLVMFrameType (CruCtxCons tps _) =</span>
+<span class="lineno">  806 </span><span class="spaces">  </span><span class="nottickedoff">fmap (\(SomeLLVMFrameMember tp memb) -&gt;</span>
+<span class="lineno">  807 </span><span class="spaces">         </span><span class="nottickedoff">SomeLLVMFrameMember tp (Member_Step memb)) $</span>
+<span class="lineno">  808 </span><span class="spaces">  </span><span class="nottickedoff">findLLVMFrameType tps</span></span>
+<span class="lineno">  809 </span>
+<span class="lineno">  810 </span>-- | Infer which ghost variables on the LHS and RHS correspond to
+<span class="lineno">  811 </span>-- extension-specific state, and widen them against each other
+<span class="lineno">  812 </span>--
+<span class="lineno">  813 </span>-- FIXME: instead of this guessing which variables correspond to
+<span class="lineno">  814 </span>-- extension-specific state, that state should really be part of what is
+<span class="lineno">  815 </span>-- widened, and, correspondingly, should thus be part of @CallSiteImplRet@. That
+<span class="lineno">  816 </span>-- is, @CallSiteImplRet@ should contain a @PermCheckExtState@, which should be
+<span class="lineno">  817 </span>-- passed to 'widen' along with the permissions. This change would additionally
+<span class="lineno">  818 </span>-- eliminate @setInputExtState@, which also has to guess which variables
+<span class="lineno">  819 </span>-- correspond to extension-specific state. It would also require @ExtRepr@ and
+<span class="lineno">  820 </span>-- @PermCheckExtState@ to be factored out into their own module.
+<span class="lineno">  821 </span>widenExtGhostVars :: CruCtx tp1 -&gt; RAssign Name tp1 -&gt;
+<span class="lineno">  822 </span>                     CruCtx tp2 -&gt; RAssign Name tp2 -&gt; WideningM ()
+<span class="lineno">  823 </span><span class="decl"><span class="nottickedoff">widenExtGhostVars tps1 vars1 tps2 vars2</span>
+<span class="lineno">  824 </span><span class="spaces">  </span><span class="nottickedoff">| Just (SomeLLVMFrameMember tp1 memb1) &lt;- findLLVMFrameType tps1</span>
+<span class="lineno">  825 </span><span class="spaces">  </span><span class="nottickedoff">, Just (SomeLLVMFrameMember tp2 memb2) &lt;- findLLVMFrameType tps2</span>
+<span class="lineno">  826 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality tp1 tp2 =</span>
+<span class="lineno">  827 </span><span class="spaces">    </span><span class="nottickedoff">void $ widenExpr tp1 (PExpr_Var $ RL.get memb1 vars1) (PExpr_Var $</span>
+<span class="lineno">  828 </span><span class="spaces">                                                           </span><span class="nottickedoff">RL.get memb2 vars2)</span>
+<span class="lineno">  829 </span><span class="spaces"></span><span class="nottickedoff">widenExtGhostVars _ _ _ _ = return ()</span></span>
+<span class="lineno">  830 </span>
+<span class="lineno">  831 </span>
+<span class="lineno">  832 </span>----------------------------------------------------------------------
+<span class="lineno">  833 </span>-- * The Result Type for Widening
+<span class="lineno">  834 </span>----------------------------------------------------------------------
+<span class="lineno">  835 </span>
+<span class="lineno">  836 </span>-- | A sequence of permissions on some regular and ghost arguments
+<span class="lineno">  837 </span>data ArgVarPerms args vars =
+<span class="lineno">  838 </span>  ArgVarPerms { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">wideningVars</span></span></span> :: CruCtx vars,
+<span class="lineno">  839 </span>                <span class="nottickedoff"><span class="decl"><span class="nottickedoff">wideningPerms</span></span></span> :: MbValuePerms (args :++: vars) }
+<span class="lineno">  840 </span>
+<span class="lineno">  841 </span>$<span class="nottickedoff"><span class="decl"><span class="nottickedoff">(mkNuMatching [t| forall args vars. ArgVarPerms args vars |])</span></span></span>
+<span class="lineno">  842 </span>
+<span class="lineno">  843 </span>completeMbArgVarPerms :: CruCtx vars -&gt;
+<span class="lineno">  844 </span>                         Mb (args :++: vars) (ExtVarPerms (args :++: vars)) -&gt;
+<span class="lineno">  845 </span>                         Some (ArgVarPerms args)
+<span class="lineno">  846 </span><span class="decl"><span class="nottickedoff">completeMbArgVarPerms vars (mbMatch -&gt; [nuMP| ExtVarPerms_Base ps |]) =</span>
+<span class="lineno">  847 </span><span class="spaces">  </span><span class="nottickedoff">Some $ ArgVarPerms vars ps</span>
+<span class="lineno">  848 </span><span class="spaces"></span><span class="nottickedoff">completeMbArgVarPerms vars (mbMatch -&gt;</span>
+<span class="lineno">  849 </span><span class="spaces">                            </span><span class="nottickedoff">[nuMP| ExtVarPerms_Mb var mb_ext_wid |]) =</span>
+<span class="lineno">  850 </span><span class="spaces">  </span><span class="nottickedoff">completeMbArgVarPerms</span>
+<span class="lineno">  851 </span><span class="spaces">    </span><span class="nottickedoff">(CruCtxCons vars (mbLift var))</span>
+<span class="lineno">  852 </span><span class="spaces">    </span><span class="nottickedoff">(mbCombine RL.typeCtxProxies mb_ext_wid)</span></span>
+<span class="lineno">  853 </span>
+<span class="lineno">  854 </span>completeArgVarPerms :: Mb args (ExtVarPerms args) -&gt; Some (ArgVarPerms args)
+<span class="lineno">  855 </span><span class="decl"><span class="nottickedoff">completeArgVarPerms = completeMbArgVarPerms CruCtxNil</span></span>
+<span class="lineno">  856 </span>
+<span class="lineno">  857 </span>{-
+<span class="lineno">  858 </span>completeWideningM :: CruCtx args -&gt; MbValuePerms args -&gt; Mb args (WideningM ()) -&gt;
+<span class="lineno">  859 </span>                     Some (Widening args)
+<span class="lineno">  860 </span>completeWideningM args mb_arg_perms mb_m =
+<span class="lineno">  861 </span>  widMapWidening args $
+<span class="lineno">  862 </span>  flip nuMultiWithElim (MNil :&gt;: mb_m :&gt;: mb_arg_perms) $
+<span class="lineno">  863 </span>  \ns (_ :&gt;: Identity m :&gt;: Identity arg_perms) -&gt;
+<span class="lineno">  864 </span>  unWideningM m $ wnMapFromPerms ns arg_perms
+<span class="lineno">  865 </span>-}
+<span class="lineno">  866 </span>
+<span class="lineno">  867 </span>{-
+<span class="lineno">  868 </span>rlMap2ToList :: (forall a. f a -&gt; g a -&gt; c) -&gt; RAssign f ctx -&gt;
+<span class="lineno">  869 </span>                RAssign g ctx -&gt; [c]
+<span class="lineno">  870 </span>rlMap2ToList _ MNil MNil = []
+<span class="lineno">  871 </span>rlMap2ToList f (xs :&gt;: x) (ys :&gt;: y) = rlMap2ToList f xs ys ++ [f x y]
+<span class="lineno">  872 </span>
+<span class="lineno">  873 </span>-- | Extend the context of a name-binding on the left with multiple types
+<span class="lineno">  874 </span>extMbMultiL :: RAssign f ctx1 -&gt; Mb ctx2 a -&gt; Mb (ctx1 :++: ctx2) a
+<span class="lineno">  875 </span>extMbMultiL ns mb = mbCombine $ nuMulti ns $ const mb
+<span class="lineno">  876 </span>
+<span class="lineno">  877 </span>-}
+<span class="lineno">  878 </span>
+<span class="lineno">  879 </span>data FoundPerm ctx ps where
+<span class="lineno">  880 </span>  FoundPerm :: RAssign Proxy ps1 -&gt; RAssign Proxy ps2 -&gt;
+<span class="lineno">  881 </span>               Mb ctx (ValuePerm a) -&gt; FoundPerm ctx (ps1 :&gt; a :++: ps2)
+<span class="lineno">  882 </span>
+<span class="lineno">  883 </span>extFoundPerm :: FoundPerm ctx ps -&gt; FoundPerm ctx (ps :&gt; a)
+<span class="lineno">  884 </span><span class="decl"><span class="nottickedoff">extFoundPerm (FoundPerm prxs1 prxs2 mb_p) =</span>
+<span class="lineno">  885 </span><span class="spaces">  </span><span class="nottickedoff">FoundPerm prxs1 (prxs2 :&gt;: Proxy) mb_p</span></span>
+<span class="lineno">  886 </span>
+<span class="lineno">  887 </span>findPerms :: (forall a. Mb ctx (ValuePerm a) -&gt; Bool) -&gt;
+<span class="lineno">  888 </span>             Mb ctx (ValuePerms ps) -&gt; [FoundPerm ctx ps]
+<span class="lineno">  889 </span><span class="decl"><span class="nottickedoff">findPerms perm_pred mb_ps_top = case mbMatch mb_ps_top of</span>
+<span class="lineno">  890 </span><span class="spaces">  </span><span class="nottickedoff">[nuMP| MNil |] -&gt; []</span>
+<span class="lineno">  891 </span><span class="spaces">  </span><span class="nottickedoff">[nuMP| mb_ps :&gt;: mb_p |] -&gt;</span>
+<span class="lineno">  892 </span><span class="spaces">    </span><span class="nottickedoff">(if perm_pred mb_p</span>
+<span class="lineno">  893 </span><span class="spaces">     </span><span class="nottickedoff">then (FoundPerm (mbRAssignProxies mb_ps) MNil mb_p :) else id) $</span>
+<span class="lineno">  894 </span><span class="spaces">    </span><span class="nottickedoff">map extFoundPerm (findPerms perm_pred mb_ps)</span></span>
+<span class="lineno">  895 </span>
+<span class="lineno">  896 </span>findGhostPerm :: (forall a. Mb (args :++: vars) (ValuePerm a) -&gt; Bool) -&gt;
+<span class="lineno">  897 </span>                 ArgVarPerms args vars -&gt; [FoundPerm (args :++: vars) vars]
+<span class="lineno">  898 </span><span class="decl"><span class="nottickedoff">findGhostPerm perm_pred (avps :: ArgVarPerms args vars) =</span>
+<span class="lineno">  899 </span><span class="spaces">  </span><span class="nottickedoff">findPerms perm_pred $</span>
+<span class="lineno">  900 </span><span class="spaces">  </span><span class="nottickedoff">fmap (snd . RL.split (Proxy :: Proxy args) (cruCtxProxies $</span>
+<span class="lineno">  901 </span><span class="spaces">                                              </span><span class="nottickedoff">wideningVars avps)) $</span>
+<span class="lineno">  902 </span><span class="spaces">  </span><span class="nottickedoff">wideningPerms avps</span></span>
+<span class="lineno">  903 </span>
+<span class="lineno">  904 </span>findGhostSimplPerm :: ArgVarPerms args vars -&gt; [FoundPerm (args :++: vars) vars]
+<span class="lineno">  905 </span><span class="decl"><span class="nottickedoff">findGhostSimplPerm =</span>
+<span class="lineno">  906 </span><span class="spaces">  </span><span class="nottickedoff">findGhostPerm (\case</span>
+<span class="lineno">  907 </span><span class="spaces">                    </span><span class="nottickedoff">[nuP| ValPerm_Eq _ |] -&gt; True</span>
+<span class="lineno">  908 </span><span class="spaces">                    </span><span class="nottickedoff">[nuP| ValPerm_True |] -&gt; True</span>
+<span class="lineno">  909 </span><span class="spaces">                    </span><span class="nottickedoff">_ -&gt; False)</span></span>
+<span class="lineno">  910 </span>
+<span class="lineno">  911 </span>-- | Swap a name in the middle of a binding list to the inner-most position, as
+<span class="lineno">  912 </span>-- its own binding
+<span class="lineno">  913 </span>--
+<span class="lineno">  914 </span>-- NOTE: this is specifically implemented in a way to avoid using 'fmap' so that
+<span class="lineno">  915 </span>-- name-bindings in pair representation maintain that pair representation
+<span class="lineno">  916 </span>mbSwapMidToEnd :: RAssign Proxy ctx1 -&gt; RAssign Proxy ctx2 -&gt; Proxy a -&gt;
+<span class="lineno">  917 </span>                  Mb (ctx1 :&gt; a :++: ctx2) b -&gt;
+<span class="lineno">  918 </span>                  Mb (ctx1 :++: ctx2) (Binding a b)
+<span class="lineno">  919 </span><span class="decl"><span class="nottickedoff">mbSwapMidToEnd ctx1 ctx2 a mb_b =</span>
+<span class="lineno">  920 </span><span class="spaces">  </span><span class="nottickedoff">mbCombine ctx2 $ mbSwap ctx1 $ mbSeparate ctx1 $</span>
+<span class="lineno">  921 </span><span class="spaces">  </span><span class="nottickedoff">mbSeparate (MNil :&gt;: a) $</span>
+<span class="lineno">  922 </span><span class="spaces">  </span><span class="nottickedoff">mbCombine (ctx1 :&gt;: a) $ mbSwap ctx2 $ mbSeparate ctx2 mb_b</span></span>
+<span class="lineno">  923 </span>
+<span class="lineno">  924 </span>cruCtxRemMid :: RAssign Proxy ctx1 -&gt; RAssign Proxy ctx2 -&gt; prx a -&gt;
+<span class="lineno">  925 </span>                CruCtx (ctx1 :&gt; a :++: ctx2) -&gt; CruCtx (ctx1 :++: ctx2)
+<span class="lineno">  926 </span><span class="decl"><span class="nottickedoff">cruCtxRemMid _ MNil _ (CruCtxCons tps _) = tps</span>
+<span class="lineno">  927 </span><span class="spaces"></span><span class="nottickedoff">cruCtxRemMid ctx1 (ctx2 :&gt;: _) a (CruCtxCons tps tp) =</span>
+<span class="lineno">  928 </span><span class="spaces">  </span><span class="nottickedoff">CruCtxCons (cruCtxRemMid ctx1 ctx2 a tps) tp</span></span>
+<span class="lineno">  929 </span>
+<span class="lineno">  930 </span>rlRemMid :: RAssign Proxy ctx1 -&gt; RAssign Proxy ctx2 -&gt; prx a -&gt;
+<span class="lineno">  931 </span>            RAssign f (ctx1 :&gt; a :++: ctx2) -&gt; RAssign f (ctx1 :++: ctx2)
+<span class="lineno">  932 </span><span class="decl"><span class="nottickedoff">rlRemMid _ MNil _ (fs :&gt;: _) = fs</span>
+<span class="lineno">  933 </span><span class="spaces"></span><span class="nottickedoff">rlRemMid ctx1 (ctx2 :&gt;: _) a (fs :&gt;: f) =</span>
+<span class="lineno">  934 </span><span class="spaces">  </span><span class="nottickedoff">rlRemMid ctx1 ctx2 a fs :&gt;: f</span></span>
+<span class="lineno">  935 </span>
+<span class="lineno">  936 </span>subst1Mid :: Substable PermSubst b Identity =&gt;
+<span class="lineno">  937 </span>             RAssign Proxy ctx1 -&gt; RAssign Proxy ctx2 -&gt;
+<span class="lineno">  938 </span>             Mb (ctx1 :++: ctx2) (PermExpr a) -&gt;
+<span class="lineno">  939 </span>             Mb (ctx1 :&gt; a :++: ctx2) b -&gt; Mb (ctx1 :++: ctx2) b
+<span class="lineno">  940 </span><span class="decl"><span class="nottickedoff">subst1Mid ctx1 ctx2 mb_e mb_b =</span>
+<span class="lineno">  941 </span><span class="spaces">  </span><span class="nottickedoff">mbMap2 subst1 mb_e $ mbSwapMidToEnd ctx1 ctx2 Proxy mb_b</span></span>
+<span class="lineno">  942 </span>
+<span class="lineno">  943 </span>tryLift1Mid :: NuMatching b =&gt; Substable PartialSubst b Maybe =&gt;
+<span class="lineno">  944 </span>               RAssign Proxy ctx1 -&gt; RAssign Proxy ctx2 -&gt;
+<span class="lineno">  945 </span>               Proxy (a :: CrucibleType) -&gt;
+<span class="lineno">  946 </span>               Mb (ctx1 :&gt; a :++: ctx2) b -&gt;
+<span class="lineno">  947 </span>               Maybe (Mb (ctx1 :++: ctx2) b)
+<span class="lineno">  948 </span><span class="decl"><span class="nottickedoff">tryLift1Mid ctx1 ctx2 a mb_e =</span>
+<span class="lineno">  949 </span><span class="spaces">  </span><span class="nottickedoff">mbMaybe $ fmap (partialSubst $ emptyPSubst' (MNil :&gt;: a)) $</span>
+<span class="lineno">  950 </span><span class="spaces">  </span><span class="nottickedoff">mbSwapMidToEnd ctx1 ctx2 a mb_e</span></span>
+<span class="lineno">  951 </span>
+<span class="lineno">  952 </span>emptyPSubst' :: RAssign any ctx -&gt; PartialSubst ctx
+<span class="lineno">  953 </span><span class="decl"><span class="nottickedoff">emptyPSubst' = PartialSubst . RL.map (PSubstElem . const Nothing)</span></span>
+<span class="lineno">  954 </span>
+<span class="lineno">  955 </span>mbExprProxy :: Mb ctx (f a) -&gt; Proxy a
+<span class="lineno">  956 </span><span class="decl"><span class="nottickedoff">mbExprProxy _ = Proxy</span></span>
+<span class="lineno">  957 </span>
+<span class="lineno">  958 </span>simplify1GhostPerm :: RAssign Proxy args -&gt;
+<span class="lineno">  959 </span>                      FoundPerm (args :++: vars) vars -&gt;
+<span class="lineno">  960 </span>                      ArgVarPerms args vars -&gt;
+<span class="lineno">  961 </span>                      Maybe (Some (ArgVarPerms args))
+<span class="lineno">  962 </span><span class="decl"><span class="nottickedoff">simplify1GhostPerm args (FoundPerm vars1 vars2</span>
+<span class="lineno">  963 </span><span class="spaces">                         </span><span class="nottickedoff">[nuP| ValPerm_Eq mb_e |]) (ArgVarPerms</span>
+<span class="lineno">  964 </span><span class="spaces">                                                    </span><span class="nottickedoff">vars mb_perms)</span>
+<span class="lineno">  965 </span><span class="spaces">  </span><span class="nottickedoff">| a &lt;- mbExprProxy mb_e</span>
+<span class="lineno">  966 </span><span class="spaces">  </span><span class="nottickedoff">, Refl &lt;- RL.appendAssoc args vars1 vars2</span>
+<span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">, Refl &lt;- RL.appendAssoc args (vars1 :&gt;: a) vars2</span>
+<span class="lineno">  968 </span><span class="spaces">  </span><span class="nottickedoff">, args_vars1 &lt;- RL.append args vars1</span>
+<span class="lineno">  969 </span><span class="spaces">  </span><span class="nottickedoff">, Just mb_e' &lt;- tryLift1Mid args_vars1 vars2 a mb_e =</span>
+<span class="lineno">  970 </span><span class="spaces">    </span><span class="nottickedoff">Just (Some $ ArgVarPerms (cruCtxRemMid vars1 vars2 a vars)</span>
+<span class="lineno">  971 </span><span class="spaces">          </span><span class="nottickedoff">(subst1Mid args_vars1 vars2 mb_e' $</span>
+<span class="lineno">  972 </span><span class="spaces">           </span><span class="nottickedoff">fmap (rlRemMid args_vars1 vars2 a) mb_perms))</span>
+<span class="lineno">  973 </span><span class="spaces"></span><span class="nottickedoff">simplify1GhostPerm args (FoundPerm vars1 vars2</span>
+<span class="lineno">  974 </span><span class="spaces">                         </span><span class="nottickedoff">p@[nuP| ValPerm_True |]) (ArgVarPerms</span>
+<span class="lineno">  975 </span><span class="spaces">                                                   </span><span class="nottickedoff">vars mb_perms)</span>
+<span class="lineno">  976 </span><span class="spaces">  </span><span class="nottickedoff">| a &lt;- mbExprProxy p</span>
+<span class="lineno">  977 </span><span class="spaces">  </span><span class="nottickedoff">, Refl &lt;- RL.appendAssoc args vars1 vars2</span>
+<span class="lineno">  978 </span><span class="spaces">  </span><span class="nottickedoff">, Refl &lt;- RL.appendAssoc args (vars1 :&gt;: a) vars2</span>
+<span class="lineno">  979 </span><span class="spaces">  </span><span class="nottickedoff">, args_vars1 &lt;- RL.append args vars1</span>
+<span class="lineno">  980 </span><span class="spaces">  </span><span class="nottickedoff">, Just mb_perms' &lt;- (tryLift1Mid args_vars1 vars2 a $</span>
+<span class="lineno">  981 </span><span class="spaces">                       </span><span class="nottickedoff">fmap (rlRemMid args_vars1 vars2 a) mb_perms) =</span>
+<span class="lineno">  982 </span><span class="spaces">    </span><span class="nottickedoff">Just $ Some $ ArgVarPerms (cruCtxRemMid vars1 vars2 a vars) mb_perms'</span>
+<span class="lineno">  983 </span><span class="spaces"></span><span class="nottickedoff">simplify1GhostPerm _ _ _ = Nothing</span></span>
+<span class="lineno">  984 </span>
+<span class="lineno">  985 </span>
+<span class="lineno">  986 </span>simplifyGhostPerms :: RAssign Proxy args -&gt; Some (ArgVarPerms args) -&gt;
+<span class="lineno">  987 </span>                      Some (ArgVarPerms args)
+<span class="lineno">  988 </span><span class="decl"><span class="nottickedoff">simplifyGhostPerms args (Some avps)</span>
+<span class="lineno">  989 </span><span class="spaces">  </span><span class="nottickedoff">| some_avps':_ &lt;-</span>
+<span class="lineno">  990 </span><span class="spaces">      </span><span class="nottickedoff">mapMaybe (flip (simplify1GhostPerm args) avps) (findGhostSimplPerm avps)</span>
+<span class="lineno">  991 </span><span class="spaces">  </span><span class="nottickedoff">= simplifyGhostPerms args some_avps'</span>
+<span class="lineno">  992 </span><span class="spaces"></span><span class="nottickedoff">simplifyGhostPerms _ some_avps = some_avps</span></span>
+<span class="lineno">  993 </span>
+<span class="lineno">  994 </span>
+<span class="lineno">  995 </span>----------------------------------------------------------------------
+<span class="lineno">  996 </span>-- * Top-Level Entrypoint
+<span class="lineno">  997 </span>----------------------------------------------------------------------
+<span class="lineno">  998 </span>
+<span class="lineno">  999 </span>-- | Widen two lists of permissions-in-bindings
+<span class="lineno"> 1000 </span>widen :: DebugLevel -&gt; PermEnv -&gt; CruCtx tops -&gt; CruCtx args -&gt;
+<span class="lineno"> 1001 </span>         Some (ArgVarPerms (tops :++: args)) -&gt;
+<span class="lineno"> 1002 </span>         Some (ArgVarPerms (tops :++: args)) -&gt;
+<span class="lineno"> 1003 </span>         Some (ArgVarPerms (tops :++: args))
+<span class="lineno"> 1004 </span><span class="decl"><span class="nottickedoff">widen dlevel env tops args (Some (ArgVarPerms</span>
+<span class="lineno"> 1005 </span><span class="spaces">                                  </span><span class="nottickedoff">vars1 mb_perms1)) (Some (ArgVarPerms</span>
+<span class="lineno"> 1006 </span><span class="spaces">                                                           </span><span class="nottickedoff">vars2 mb_perms2)) =</span>
+<span class="lineno"> 1007 </span><span class="spaces">  </span><span class="nottickedoff">let all_args = appendCruCtx tops args</span>
+<span class="lineno"> 1008 </span><span class="spaces">      </span><span class="nottickedoff">prxs1 = cruCtxProxies vars1</span>
+<span class="lineno"> 1009 </span><span class="spaces">      </span><span class="nottickedoff">prxs2 = cruCtxProxies vars2</span>
+<span class="lineno"> 1010 </span><span class="spaces">      </span><span class="nottickedoff">mb_mb_perms1 = mbSeparate prxs1 mb_perms1 in</span>
+<span class="lineno"> 1011 </span><span class="spaces">  </span><span class="nottickedoff">simplifyGhostPerms (cruCtxProxies all_args) $</span>
+<span class="lineno"> 1012 </span><span class="spaces">  </span><span class="nottickedoff">completeArgVarPerms $ flip nuMultiWithElim1 mb_mb_perms1 $</span>
+<span class="lineno"> 1013 </span><span class="spaces">  </span><span class="nottickedoff">\args_ns1 mb_perms1' -&gt;</span>
+<span class="lineno"> 1014 </span><span class="spaces">  </span><span class="nottickedoff">(\m -&gt; runWideningM m dlevel env args_ns1) $</span>
+<span class="lineno"> 1015 </span><span class="spaces">  </span><span class="nottickedoff">do (vars1_ns, ps1) &lt;- openMb vars1 mb_perms1'</span>
+<span class="lineno"> 1016 </span><span class="spaces">     </span><span class="nottickedoff">(ns2, ps2) &lt;- openMb (appendCruCtx all_args vars2) mb_perms2</span>
+<span class="lineno"> 1017 </span><span class="spaces">     </span><span class="nottickedoff">let (args_ns2, vars2_ns) = RL.split all_args prxs2 ns2</span>
+<span class="lineno"> 1018 </span><span class="spaces">     </span><span class="nottickedoff">setVarPermsM (RL.append args_ns1 vars1_ns) ps1</span>
+<span class="lineno"> 1019 </span><span class="spaces">     </span><span class="nottickedoff">setVarPermsM ns2 ps2</span>
+<span class="lineno"> 1020 </span><span class="spaces">     </span><span class="nottickedoff">let (tops1, locals1) = RL.split tops (cruCtxProxies args) args_ns1</span>
+<span class="lineno"> 1021 </span><span class="spaces">     </span><span class="nottickedoff">let (tops2, locals2) = RL.split tops (cruCtxProxies args) args_ns2</span>
+<span class="lineno"> 1022 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;topL&quot; tops1</span>
+<span class="lineno"> 1023 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;topR&quot; tops2</span>
+<span class="lineno"> 1024 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;localL&quot; locals1</span>
+<span class="lineno"> 1025 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;localR&quot; locals2</span>
+<span class="lineno"> 1026 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;varL&quot; vars1_ns</span>
+<span class="lineno"> 1027 </span><span class="spaces">     </span><span class="nottickedoff">setVarNamesM &quot;varR&quot; vars2_ns</span>
+<span class="lineno"> 1028 </span><span class="spaces">     </span><span class="nottickedoff">let dist_ps1 = RL.map2 VarAndPerm (RL.append args_ns1 vars1_ns) ps1</span>
+<span class="lineno"> 1029 </span><span class="spaces">     </span><span class="nottickedoff">let dist_ps2 = RL.map2 VarAndPerm ns2 ps2</span>
+<span class="lineno"> 1030 </span><span class="spaces">     </span><span class="nottickedoff">traceM (\i -&gt;</span>
+<span class="lineno"> 1031 </span><span class="spaces">              </span><span class="nottickedoff">pretty &quot;Widening&quot; &lt;&gt; line &lt;&gt;</span>
+<span class="lineno"> 1032 </span><span class="spaces">              </span><span class="nottickedoff">indent 2 (permPretty i dist_ps1) &lt;&gt; line &lt;&gt;</span>
+<span class="lineno"> 1033 </span><span class="spaces">              </span><span class="nottickedoff">pretty &quot;Against&quot; &lt;&gt; line &lt;&gt;</span>
+<span class="lineno"> 1034 </span><span class="spaces">              </span><span class="nottickedoff">indent 2 (permPretty i dist_ps2))</span>
+<span class="lineno"> 1035 </span><span class="spaces">     </span><span class="nottickedoff">void $ widenExprs all_args (RL.map PExpr_Var args_ns1) (RL.map</span>
+<span class="lineno"> 1036 </span><span class="spaces">                                                             </span><span class="nottickedoff">PExpr_Var args_ns2)</span>
+<span class="lineno"> 1037 </span><span class="spaces">     </span><span class="nottickedoff">widenExtGhostVars vars1 vars1_ns vars2 vars2_ns</span>
+<span class="lineno"> 1038 </span><span class="spaces">     </span><span class="nottickedoff">modifying wsNameMap wnMapDropUnvisiteds</span>
+<span class="lineno"> 1039 </span><span class="spaces">     </span><span class="nottickedoff">wnmap &lt;- view wsNameMap &lt;$&gt; get</span>
+<span class="lineno"> 1040 </span><span class="spaces">     </span><span class="nottickedoff">traceM (\i -&gt;</span>
+<span class="lineno"> 1041 </span><span class="spaces">              </span><span class="nottickedoff">pretty &quot;Widening returning:&quot; &lt;&gt; line &lt;&gt;</span>
+<span class="lineno"> 1042 </span><span class="spaces">              </span><span class="nottickedoff">indent 2 (fillSep $</span>
+<span class="lineno"> 1043 </span><span class="spaces">                        </span><span class="nottickedoff">map (\(NameAndElem x (Pair p _)) -&gt;</span>
+<span class="lineno"> 1044 </span><span class="spaces">                              </span><span class="nottickedoff">permPretty i x &lt;&gt; colon &lt;&gt; permPretty i p) $</span>
+<span class="lineno"> 1045 </span><span class="spaces">                        </span><span class="nottickedoff">NameMap.assocs wnmap))</span>
+<span class="lineno"> 1046 </span><span class="spaces">     </span><span class="nottickedoff">return ()</span></span>
+
+</pre>
+</body>
+</html>

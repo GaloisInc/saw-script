@@ -1,0 +1,336 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    2 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">    4 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    5 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">    6 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    7 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>module Heapster.LLVMGlobalConst (
+<span class="lineno">   10 </span>  permEnvAddGlobalConst
+<span class="lineno">   11 </span>  ) where
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>import Data.Bits
+<span class="lineno">   14 </span>import Data.List (intercalate)
+<span class="lineno">   15 </span>import Control.Monad (MonadPlus(..))
+<span class="lineno">   16 </span>import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+<span class="lineno">   17 </span>import Control.Monad.Trans.Class (MonadTrans(..))
+<span class="lineno">   18 </span>import GHC.TypeLits (KnownNat)
+<span class="lineno">   19 </span>import qualified Text.PrettyPrint.HughesPJ as PPHPJ
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   22 </span>import qualified Text.LLVM.AST as L
+<span class="lineno">   23 </span>import qualified Text.LLVM.PP as L
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import Data.Binding.Hobbits hiding (sym)
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import Data.Parameterized.NatRepr
+<span class="lineno">   28 </span>import Data.Parameterized.Some
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import Lang.Crucible.Types
+<span class="lineno">   31 </span>import Lang.Crucible.LLVM.DataLayout
+<span class="lineno">   32 </span>import Lang.Crucible.LLVM.MemModel
+<span class="lineno">   33 </span>import Lang.Crucible.LLVM.PrettyPrint
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>import SAWCore.Name (mkSafeIdent)
+<span class="lineno">   36 </span>import SAWCore.OpenTerm
+<span class="lineno">   37 </span>import SAWCore.Term.Functor (ModuleName)
+<span class="lineno">   38 </span>import SAWCore.SharedTerm
+<span class="lineno">   39 </span>import Heapster.Permissions
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- FIXME: move these utilities to OpenTerm.hs
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- | Generate a SAW core term for a bitvector literal whose length is given by
+<span class="lineno">   45 </span>-- the first integer and whose value is given by the second
+<span class="lineno">   46 </span>bvLitOfIntOpenTerm :: Integer -&gt; Integer -&gt; OpenTerm
+<span class="lineno">   47 </span><span class="decl"><span class="nottickedoff">bvLitOfIntOpenTerm n i =</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="nottickedoff">bvLitOpenTerm (map (testBit i) $ reverse [0..(fromIntegral n)-1])</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>-- | Helper function to build a SAW core term of type @BVVec w len a@, i.e., a
+<span class="lineno">   51 </span>-- bitvector-indexed vector, containing a given list of elements of type
+<span class="lineno">   52 </span>-- @a@. The roundabout way we do this currently requires a default element of
+<span class="lineno">   53 </span>-- type @a@, even though this value is never actually used. Also required is the
+<span class="lineno">   54 </span>-- bitvector width @w@.
+<span class="lineno">   55 </span>bvVecValueOpenTerm :: NatRepr w -&gt; OpenTerm -&gt; [OpenTerm] -&gt; OpenTerm -&gt;
+<span class="lineno">   56 </span>                      OpenTerm
+<span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">bvVecValueOpenTerm w tp ts def_tm =</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">applyOpenTermMulti (globalOpenTerm &quot;Prelude.genBVVecFromVec&quot;)</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">[natOpenTerm (fromIntegral $ length ts), tp, arrayValueOpenTerm tp ts,</span>
+<span class="lineno">   60 </span><span class="spaces">   </span><span class="nottickedoff">def_tm, natOpenTerm (natValue w),</span>
+<span class="lineno">   61 </span><span class="spaces">   </span><span class="nottickedoff">bvLitOfIntOpenTerm (intValue w) (fromIntegral $ length ts)]</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>-- | Helper function to build a SAW core term of type @BVVec w len a@, i.e., a
+<span class="lineno">   64 </span>-- bitvector-indexed vector, containing a single repeated value
+<span class="lineno">   65 </span>repeatBVVecOpenTerm :: NatRepr w -&gt; OpenTerm -&gt; OpenTerm -&gt; OpenTerm -&gt;
+<span class="lineno">   66 </span>                       OpenTerm
+<span class="lineno">   67 </span><span class="decl"><span class="nottickedoff">repeatBVVecOpenTerm w len tp t =</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">applyOpenTermMulti (globalOpenTerm &quot;Prelude.repeatBVVec&quot;)</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">[natOpenTerm (natValue w), len, tp, t]</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>-- | The information needed to translate an LLVM global to Heapster
+<span class="lineno">   72 </span>data LLVMTransInfo = LLVMTransInfo {
+<span class="lineno">   73 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">llvmTransInfoEnv</span></span></span> :: PermEnv,
+<span class="lineno">   74 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">llvmTransInfoEndianness</span></span></span> :: EndianForm,
+<span class="lineno">   75 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">llvmTransInfoDebugLevel</span></span></span> :: DebugLevel }
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>-- | The monad for translating LLVM globals to Heapster
+<span class="lineno">   78 </span>type LLVMTransM = ReaderT LLVMTransInfo Maybe
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>-- | Run the 'LLVMTransM' monad
+<span class="lineno">   81 </span>runLLVMTransM :: LLVMTransM a -&gt; LLVMTransInfo -&gt; Maybe a
+<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">runLLVMTransM = runReaderT</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>-- | Use 'debugTrace' to output a string message and then call 'mzero'
+<span class="lineno">   85 </span>traceAndZeroM :: String -&gt; LLVMTransM a
+<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">traceAndZeroM msg =</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="nottickedoff">do dlevel &lt;- llvmTransInfoDebugLevel &lt;$&gt; ask</span>
+<span class="lineno">   88 </span><span class="spaces">     </span><span class="nottickedoff">debugTraceTraceLvl dlevel msg mzero</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>-- | Helper function to pretty-print the value of a global
+<span class="lineno">   91 </span>ppLLVMValue :: L.Value -&gt; String
+<span class="lineno">   92 </span><span class="decl"><span class="nottickedoff">ppLLVMValue val =</span>
+<span class="lineno">   93 </span><span class="spaces">  </span><span class="nottickedoff">show $ PPHPJ.nest 2 $ ppValue val</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- | Helper function to pretty-print an LLVM constant expression
+<span class="lineno">   96 </span>ppLLVMConstExpr :: L.ConstExpr -&gt; String
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">ppLLVMConstExpr ce =</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">ppLLVMLatest (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>-- | Translate a typed LLVM 'L.Value' to a Heapster shape + elements of the
+<span class="lineno">  101 </span>-- translation of that shape to 0 or more SAW core types
+<span class="lineno">  102 </span>translateLLVMValue :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.Type -&gt; L.Value -&gt;
+<span class="lineno">  103 </span>                      LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  104 </span><span class="decl"><span class="nottickedoff">translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =</span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">translateLLVMType w tp &gt;&gt;= \(sh,_) -&gt;</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">return (sh, [bvLitOfIntOpenTerm (fromIntegral n) i])</span>
+<span class="lineno">  107 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w _ (L.ValSymbol sym) =</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">do env &lt;- llvmTransInfoEnv &lt;$&gt; ask</span>
+<span class="lineno">  109 </span><span class="spaces">     </span><span class="nottickedoff">-- (p, ts) &lt;- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)</span>
+<span class="lineno">  110 </span><span class="spaces">     </span><span class="nottickedoff">(p, ts) &lt;- case lookupGlobalSymbol env (GlobalSymbol sym) w of</span>
+<span class="lineno">  111 </span><span class="spaces">       </span><span class="nottickedoff">Just (p, GlobalTrans ts) -&gt; return (p, ts)</span>
+<span class="lineno">  112 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; traceAndZeroM (&quot;Could not find symbol: &quot; ++ show sym)</span>
+<span class="lineno">  113 </span><span class="spaces">     </span><span class="nottickedoff">return (PExpr_FieldShape (LLVMFieldShape p), ts)</span>
+<span class="lineno">  114 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w _ (L.ValArray tp elems) =</span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">do</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">-- First, translate the elements and their type</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="nottickedoff">ts &lt;- concat &lt;$&gt; map snd &lt;$&gt; mapM (translateLLVMValue w tp) elems</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="nottickedoff">(sh, saw_tps) &lt;- translateLLVMType w tp</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="nottickedoff">let saw_tp = tupleTypeOpenTerm' saw_tps</span>
+<span class="lineno">  120 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="nottickedoff">-- Compute the array stride as the length of the element shape</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="nottickedoff">sh_len_expr &lt;- lift $ llvmShapeLength sh</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="nottickedoff">sh_len &lt;- fromInteger &lt;$&gt; lift (bvMatchConstInt sh_len_expr)</span>
+<span class="lineno">  124 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">-- Generate a default element of type tp using the zero initializer; this is</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">-- currently needed by bvVecValueOpenTerm</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="nottickedoff">(_,def_tms) &lt;- translateZeroInit w tp</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">let def_tm = tupleOpenTerm' def_tms</span>
+<span class="lineno">  129 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">-- Finally, build our array shape and SAW core value</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="nottickedoff">return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len sh,</span>
+<span class="lineno">  132 </span><span class="spaces">            </span><span class="nottickedoff">[bvVecValueOpenTerm w saw_tp ts def_tm])</span>
+<span class="lineno">  133 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w _ (L.ValPackedStruct elems) =</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">mapM (translateLLVMTypedValue w) elems &gt;&gt;= \(unzip -&gt; (shs,tss)) -&gt;</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">return (foldr PExpr_SeqShape PExpr_EmptyShape shs, concat tss)</span>
+<span class="lineno">  136 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue _ _ (L.ValString []) = mzero</span>
+<span class="lineno">  137 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue _ _ (L.ValString bytes) =</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">let sh =</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">foldr1 PExpr_SeqShape $</span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="nottickedoff">map (PExpr_FieldShape . LLVMFieldShape . ValPerm_Eq .</span>
+<span class="lineno">  141 </span><span class="spaces">             </span><span class="nottickedoff">PExpr_LLVMWord . bvBV . BV.word8) bytes in</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="nottickedoff">-- let tm = foldr1 pairOpenTerm $ map (const unitOpenTerm) bytes in</span>
+<span class="lineno">  143 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">-- NOTE: the equality permissions have no translations, so the sequence of</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">-- them doesn't either</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">return (sh, [])</span>
+<span class="lineno">  147 </span><span class="spaces"></span><span class="nottickedoff">-- NOTE: we don't translate strings to one big bitvector value because that</span>
+<span class="lineno">  148 </span><span class="spaces"></span><span class="nottickedoff">-- seems to mess up the endianness</span>
+<span class="lineno">  149 </span><span class="spaces"></span><span class="nottickedoff">{-</span>
+<span class="lineno">  150 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue _ _ (L.ValString bytes) =</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">do endianness &lt;- llvmTransInfoEndianness &lt;$&gt; ask</span>
+<span class="lineno">  152 </span><span class="spaces">     </span><span class="nottickedoff">case bvFromBytes endianness bytes of</span>
+<span class="lineno">  153 </span><span class="spaces">       </span><span class="nottickedoff">Some (BVExpr e) -&gt;</span>
+<span class="lineno">  154 </span><span class="spaces">         </span><span class="nottickedoff">return (PExpr_FieldShape (LLVMFieldShape $</span>
+<span class="lineno">  155 </span><span class="spaces">                                   </span><span class="nottickedoff">ValPerm_Eq $ PExpr_LLVMWord e),</span>
+<span class="lineno">  156 </span><span class="spaces">                 </span><span class="nottickedoff">unitOpenTerm)</span>
+<span class="lineno">  157 </span><span class="spaces"></span><span class="nottickedoff">-}</span>
+<span class="lineno">  158 </span><span class="spaces"></span><span class="nottickedoff">-- NOTE: we don't convert string values to arrays because we sometimes need to</span>
+<span class="lineno">  159 </span><span class="spaces"></span><span class="nottickedoff">-- statically know the values of the bytes in a string value as eq perms</span>
+<span class="lineno">  160 </span><span class="spaces"></span><span class="nottickedoff">{-</span>
+<span class="lineno">  161 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w tp (L.ValString bytes) =</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">translateLLVMValue w tp (L.ValArray</span>
+<span class="lineno">  163 </span><span class="spaces">                           </span><span class="nottickedoff">(L.PrimType (L.Integer 8))</span>
+<span class="lineno">  164 </span><span class="spaces">                           </span><span class="nottickedoff">(map (L.ValInteger . toInteger) bytes))</span>
+<span class="lineno">  165 </span><span class="spaces"></span><span class="nottickedoff">-}</span>
+<span class="lineno">  166 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w _ (L.ValConstExpr ce) =</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="nottickedoff">translateLLVMConstExpr w ce</span>
+<span class="lineno">  168 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue w tp L.ValZeroInit =</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="nottickedoff">translateZeroInit w tp</span>
+<span class="lineno">  170 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMValue _ _ v =</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">traceAndZeroM (&quot;translateLLVMValue does not yet handle:\n&quot; ++ ppLLVMValue v)</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>-- | Helper function for 'translateLLVMValue'
+<span class="lineno">  174 </span>translateLLVMTypedValue :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.Typed L.Value -&gt;
+<span class="lineno">  175 </span>                           LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">translateLLVMTypedValue w (L.Typed tp v) = translateLLVMValue w tp v</span></span>
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>-- | Translate an LLVM type into a shape plus the SAW core types of the 0 or
+<span class="lineno">  179 </span>-- more elements of the translation of that shape
+<span class="lineno">  180 </span>translateLLVMType :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.Type -&gt;
+<span class="lineno">  181 </span>                     LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">translateLLVMType _ (L.PrimType (L.Integer n))</span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">| Just (Some (n_repr :: NatRepr n)) &lt;- someNat n</span>
+<span class="lineno">  184 </span><span class="spaces">  </span><span class="nottickedoff">, Left leq_pf &lt;- decideLeq (knownNat @1) n_repr =</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="nottickedoff">withKnownNat n_repr $ withLeqProof leq_pf $</span>
+<span class="lineno">  186 </span><span class="spaces">    </span><span class="nottickedoff">return (PExpr_FieldShape (LLVMFieldShape $ ValPerm_Exists $ nu $ \bv -&gt;</span>
+<span class="lineno">  187 </span><span class="spaces">                               </span><span class="nottickedoff">ValPerm_Eq $ PExpr_LLVMWord $</span>
+<span class="lineno">  188 </span><span class="spaces">                               </span><span class="nottickedoff">PExpr_Var (bv :: Name (BVType n))),</span>
+<span class="lineno">  189 </span><span class="spaces">            </span><span class="nottickedoff">[bvTypeOpenTerm n])</span>
+<span class="lineno">  190 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMType _ tp =</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="nottickedoff">traceAndZeroM (&quot;translateLLVMType does not yet handle:\n&quot;</span>
+<span class="lineno">  192 </span><span class="spaces">                 </span><span class="nottickedoff">++ show (ppType tp))</span></span>
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>-- | Helper function for 'translateLLVMValue' applied to a constant expression
+<span class="lineno">  195 </span>translateLLVMConstExpr :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.ConstExpr -&gt;
+<span class="lineno">  196 </span>                          LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  197 </span><span class="decl"><span class="nottickedoff">translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr) ixs) =</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">translateLLVMValue w tp ptr &gt;&gt;= \ptr_trans -&gt;</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="nottickedoff">translateLLVMGEP w tp ptr_trans ixs</span>
+<span class="lineno">  200 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMConstExpr w (L.ConstConv L.BitCast</span>
+<span class="lineno">  201 </span><span class="spaces">                          </span><span class="nottickedoff">(L.Typed fromTp v) toTp)</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">| L.isPointer fromTp &amp;&amp; L.isPointer toTp</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="nottickedoff">= -- A bitcast from one LLVM pointer type to another is a no-op for us</span>
+<span class="lineno">  204 </span><span class="spaces">    </span><span class="nottickedoff">translateLLVMValue w fromTp v</span>
+<span class="lineno">  205 </span><span class="spaces"></span><span class="nottickedoff">translateLLVMConstExpr _ ce =</span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="nottickedoff">traceAndZeroM (&quot;translateLLVMConstExpr does not yet handle:\n&quot;</span>
+<span class="lineno">  207 </span><span class="spaces">                 </span><span class="nottickedoff">++ ppLLVMConstExpr ce)</span></span>
+<span class="lineno">  208 </span>
+<span class="lineno">  209 </span>-- | Helper function for 'translateLLVMValue' applied to a constant
+<span class="lineno">  210 </span>-- @getelementptr@ expression.
+<span class="lineno">  211 </span>--
+<span class="lineno">  212 </span>-- For now, we only support uses of @getelementptr@ where all indices are zero,
+<span class="lineno">  213 </span>-- as this will return the pointer argument without needing to compute an offset
+<span class="lineno">  214 </span>-- into the pointer. Of course, this does mean that any @getelementptr@
+<span class="lineno">  215 </span>-- expressions involving non-zero indices aren't supported (see #1875 for a
+<span class="lineno">  216 </span>-- contrived example of this). Thankfully, this function is only used to
+<span class="lineno">  217 </span>-- translate LLVM globals, and using @getelementptr@ to initialize globals is
+<span class="lineno">  218 </span>-- quite rare in practice. As such, we choose to live with this limitation until
+<span class="lineno">  219 </span>-- someone complains about it.
+<span class="lineno">  220 </span>translateLLVMGEP :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.Type -&gt;
+<span class="lineno">  221 </span>                    (PermExpr (LLVMShapeType w), [OpenTerm]) -&gt;
+<span class="lineno">  222 </span>                    [L.Typed L.Value] -&gt;
+<span class="lineno">  223 </span>                    LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  224 </span><span class="decl"><span class="nottickedoff">translateLLVMGEP _ tp vtrans ixs</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="nottickedoff">| all (isZeroIdx . L.typedValue) ixs</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="nottickedoff">= return vtrans</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">= traceAndZeroM (&quot;translateLLVMGEP cannot handle arguments:\n&quot; ++</span>
+<span class="lineno">  229 </span><span class="spaces">                   </span><span class="nottickedoff">&quot;  &quot; ++ intercalate &quot;,&quot; (show tp : map show ixs))</span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="nottickedoff">-- Check if an index is equal to 0.</span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="nottickedoff">isZeroIdx :: L.Value -&gt; Bool</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="nottickedoff">isZeroIdx (L.ValInteger 0) = True</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="nottickedoff">isZeroIdx _                = False</span></span>
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>-- | Build an LLVM value for a @zeroinitializer@ field of the supplied type
+<span class="lineno">  237 </span>translateZeroInit :: (1 &lt;= w, KnownNat w) =&gt; NatRepr w -&gt; L.Type -&gt;
+<span class="lineno">  238 </span>                     LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">translateZeroInit w tp@(L.PrimType (L.Integer _)) =</span>
+<span class="lineno">  240 </span><span class="spaces">   </span><span class="nottickedoff">translateLLVMValue w tp (L.ValInteger 0)</span>
+<span class="lineno">  241 </span><span class="spaces"></span><span class="nottickedoff">translateZeroInit w (L.Array len tp) =</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">-- First, translate the zero element and its type</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="nottickedoff">do (sh, elem_tms) &lt;- translateZeroInit w tp</span>
+<span class="lineno">  244 </span><span class="spaces">     </span><span class="nottickedoff">let elem_tm = tupleOpenTerm' elem_tms</span>
+<span class="lineno">  245 </span><span class="spaces">     </span><span class="nottickedoff">(_, saw_tps) &lt;- translateLLVMType w tp</span>
+<span class="lineno">  246 </span><span class="spaces">     </span><span class="nottickedoff">let saw_tp = tupleTypeOpenTerm' saw_tps</span>
+<span class="lineno">  247 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  248 </span><span class="spaces">     </span><span class="nottickedoff">-- Compute the array stride as the length of the element shape</span>
+<span class="lineno">  249 </span><span class="spaces">     </span><span class="nottickedoff">sh_len_expr &lt;- lift $ llvmShapeLength sh</span>
+<span class="lineno">  250 </span><span class="spaces">     </span><span class="nottickedoff">sh_len &lt;- fromInteger &lt;$&gt; lift (bvMatchConstInt sh_len_expr)</span>
+<span class="lineno">  251 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  252 </span><span class="spaces">     </span><span class="nottickedoff">let arr_len = bvInt $ fromIntegral len</span>
+<span class="lineno">  253 </span><span class="spaces">     </span><span class="nottickedoff">let saw_len = bvLitOfIntOpenTerm (intValue w) (fromIntegral len)</span>
+<span class="lineno">  254 </span><span class="spaces">     </span><span class="nottickedoff">return (PExpr_ArrayShape arr_len sh_len sh,</span>
+<span class="lineno">  255 </span><span class="spaces">             </span><span class="nottickedoff">[repeatBVVecOpenTerm w saw_len saw_tp elem_tm])</span>
+<span class="lineno">  256 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  257 </span><span class="spaces"></span><span class="nottickedoff">translateZeroInit w (L.PackedStruct tps) =</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="nottickedoff">mapM (translateZeroInit w) tps &gt;&gt;= \(unzip -&gt; (shs,tss)) -&gt;</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">return (foldr PExpr_SeqShape PExpr_EmptyShape shs, concat tss)</span>
+<span class="lineno">  260 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  261 </span><span class="spaces"></span><span class="nottickedoff">translateZeroInit _ tp =</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="nottickedoff">traceAndZeroM (&quot;translateZeroInit cannot handle type:\n&quot;</span>
+<span class="lineno">  263 </span><span class="spaces">                 </span><span class="nottickedoff">++ show (ppType tp))</span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>
+<span class="lineno">  266 </span>-- | Top-level call to 'translateLLVMValue', running the 'LLVMTransM' monad
+<span class="lineno">  267 </span>translateLLVMValueTop :: (1 &lt;= w, KnownNat w) =&gt; DebugLevel -&gt; EndianForm -&gt;
+<span class="lineno">  268 </span>                         NatRepr w -&gt; PermEnv -&gt; L.Global -&gt;
+<span class="lineno">  269 </span>                         Maybe (PermExpr (LLVMShapeType w), [OpenTerm])
+<span class="lineno">  270 </span><span class="decl"><span class="nottickedoff">translateLLVMValueTop dlevel endianness w env global =</span>
+<span class="lineno">  271 </span><span class="spaces">  </span><span class="nottickedoff">let sym = show (L.globalSym global) in</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">let trans_info = LLVMTransInfo { llvmTransInfoEnv = env,</span>
+<span class="lineno">  273 </span><span class="spaces">                                   </span><span class="nottickedoff">llvmTransInfoEndianness = endianness,</span>
+<span class="lineno">  274 </span><span class="spaces">                                   </span><span class="nottickedoff">llvmTransInfoDebugLevel = dlevel } in</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">debugTraceTraceLvl dlevel (&quot;Global: &quot; ++ sym ++ &quot;; value =\n&quot; ++</span>
+<span class="lineno">  276 </span><span class="spaces">                             </span><span class="nottickedoff">maybe &quot;None&quot; ppLLVMValue</span>
+<span class="lineno">  277 </span><span class="spaces">                             </span><span class="nottickedoff">(L.globalValue global)) $</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">(\x -&gt; case x of</span>
+<span class="lineno">  279 </span><span class="spaces">      </span><span class="nottickedoff">Just (sh,ts) -&gt;</span>
+<span class="lineno">  280 </span><span class="spaces">        </span><span class="nottickedoff">debugTraceTraceLvl dlevel (sym ++ &quot; translated to &quot; ++</span>
+<span class="lineno">  281 </span><span class="spaces">                                   </span><span class="nottickedoff">show (length ts) ++ &quot; terms for perm:\n&quot; ++</span>
+<span class="lineno">  282 </span><span class="spaces">                                   </span><span class="nottickedoff">permPrettyString emptyPPInfo sh) x</span>
+<span class="lineno">  283 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; debugTraceTraceLvl dlevel (sym ++ &quot; not translated&quot;) x) $</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="nottickedoff">flip runLLVMTransM trans_info $</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="nottickedoff">do val &lt;- lift $ L.globalValue global</span>
+<span class="lineno">  286 </span><span class="spaces">     </span><span class="nottickedoff">translateLLVMValue w (L.globalType global) val</span></span>
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>-- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
+<span class="lineno">  289 </span>-- value we can translate to Heapster, otherwise silently ignore it
+<span class="lineno">  290 </span>permEnvAddGlobalConst :: (1 &lt;= w, KnownNat w) =&gt; SharedContext -&gt; ModuleName -&gt;
+<span class="lineno">  291 </span>                         DebugLevel -&gt; EndianForm -&gt; NatRepr w -&gt; PermEnv -&gt;
+<span class="lineno">  292 </span>                         L.Global -&gt; IO PermEnv
+<span class="lineno">  293 </span><span class="decl"><span class="nottickedoff">permEnvAddGlobalConst sc mod_name dlevel endianness w env global =</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="nottickedoff">case translateLLVMValueTop dlevel endianness w env global of</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return env</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="nottickedoff">Just (sh, []) -&gt;</span>
+<span class="lineno">  297 </span><span class="spaces">      </span><span class="nottickedoff">let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh in</span>
+<span class="lineno">  298 </span><span class="spaces">      </span><span class="nottickedoff">return $ permEnvAddGlobalSyms env [PermEnvGlobalEntry (GlobalSymbol $</span>
+<span class="lineno">  299 </span><span class="spaces">                                                             </span><span class="nottickedoff">L.globalSym global)</span>
+<span class="lineno">  300 </span><span class="spaces">                                         </span><span class="nottickedoff">p (GlobalTrans [])]</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="nottickedoff">Just (sh, ts) -&gt;</span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="nottickedoff">do let (L.Symbol glob_str) = L.globalSym global</span>
+<span class="lineno">  303 </span><span class="spaces">         </span><span class="nottickedoff">ident &lt;-</span>
+<span class="lineno">  304 </span><span class="spaces">           </span><span class="nottickedoff">scFreshenGlobalIdent sc $ mkSafeIdent mod_name $ show glob_str</span>
+<span class="lineno">  305 </span><span class="spaces">         </span><span class="nottickedoff">let t = tupleOpenTerm' ts</span>
+<span class="lineno">  306 </span><span class="spaces">         </span><span class="nottickedoff">complete_t &lt;- completeOpenTerm sc t</span>
+<span class="lineno">  307 </span><span class="spaces">         </span><span class="nottickedoff">let tps = map openTermType ts</span>
+<span class="lineno">  308 </span><span class="spaces">         </span><span class="nottickedoff">complete_tp &lt;- completeOpenTerm sc $ tupleTypeOpenTerm' tps</span>
+<span class="lineno">  309 </span><span class="spaces">         </span><span class="nottickedoff">scInsertDef sc mod_name ident complete_tp complete_t</span>
+<span class="lineno">  310 </span><span class="spaces">         </span><span class="nottickedoff">let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh</span>
+<span class="lineno">  311 </span><span class="spaces">         </span><span class="nottickedoff">return $ permEnvAddGlobalSyms env</span>
+<span class="lineno">  312 </span><span class="spaces">           </span><span class="nottickedoff">[PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p</span>
+<span class="lineno">  313 </span><span class="spaces">            </span><span class="nottickedoff">(GlobalTrans [globalOpenTerm ident])]</span></span>
+
+</pre>
+</body>
+</html>
