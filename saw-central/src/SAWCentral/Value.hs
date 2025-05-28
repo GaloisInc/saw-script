@@ -57,8 +57,6 @@ module SAWCentral.Value (
     showsSatResult,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     showsPrecValue,
-    -- XXX rename to evaluateTerm
-    evaluate,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     evaluateTypedTerm,
     -- used by SAWCentral.Builtins
@@ -529,14 +527,14 @@ showsPrecValue opts nenv p v =
 instance Show Value where
     showsPrec p v = showsPrecValue PPS.defaultOpts emptySAWNamingEnv p v
 
-evaluate :: SharedContext -> Term -> IO Concrete.CValue
-evaluate sc t =
+evaluateTerm:: SharedContext -> Term -> IO Concrete.CValue
+evaluateTerm sc t =
   (\modmap -> Concrete.evalSharedTerm modmap mempty mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
-  C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
+  C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
 evaluateTypedTerm _sc (TypedTerm tp _) =
   fail $ unlines [ "Could not evaluate term with type"
                  , show (CMS.ppTypedTermType tp)
