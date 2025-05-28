@@ -94,19 +94,23 @@ import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
+import SAWCore.SAWCore (SharedContext)
+
 import SAWCentral.AST (Located(getVal))
-import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
-import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
-                            makeCheckpoint, restoreCheckpoint)
+import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value
   ( AIGProxy(..), mergeLocalEnv, IsValue, Value
   , ProofScript(..), showsProofResult, toValue
   )
-import SAWCore.SAWCore (SharedContext)
+
+import SAWScript.Interpreter (buildTopLevelEnv)
+import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
+
 
 deriving instance Typeable AIG.Proxy
+
 
 -- REPL Environment ------------------------------------------------------------
 

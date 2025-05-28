@@ -74,6 +74,7 @@ import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
 import SAWCentral.Value
+import SAWScript.ValueOps
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWCentral.Proof (emptyTheoremDB)

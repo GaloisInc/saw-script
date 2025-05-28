@@ -772,6 +772,7 @@ library saw-script
     SAWScript.Search
     SAWScript.Token
     SAWScript.Typechecker
+    SAWScript.ValueOps
 
     SAWScript.HeapsterBuiltins
 

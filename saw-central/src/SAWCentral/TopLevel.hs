@@ -34,10 +34,6 @@ module SAWCentral.TopLevel
     -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.LLVM.Builtins,
     --    SAWCentral.Builtins, SAWScript.Interpreter
   , putTopLevelRW
-    -- used by SAWScript.REPL.Monad
-  , makeCheckpoint
-    -- used by SAWScript.REPL.Monad
-  , restoreCheckpoint
   ) where
 
 import SAWCentral.Value
