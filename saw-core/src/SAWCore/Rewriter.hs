@@ -80,10 +80,15 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Cache
 import SAWCore.Conversion
+import SAWCore.Module
+  ( ctorPrimName
+  , Ctor(..)
+  , DataType(..)
+  , Def(..)
+  )
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
-import SAWCore.TypedAST
 import SAWCore.Term.Pretty (scPrettyTerm)
 import qualified SAWCore.TermNet as Net
 import SAWCore.Prelude.Constants

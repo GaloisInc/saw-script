@@ -46,6 +46,18 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Utils (internalError)
 
 import SAWCore.Module
+  ( ctorNumParams
+  , ctorPrimName
+  , dtPrimName
+  , emptyModule
+  , findDataType
+  , resolveName
+  , DataType(..)
+  , Def(..)
+  , DefQualifier(..)
+  , Module
+  , ResolvedName(..)
+  )
 import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm

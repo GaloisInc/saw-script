@@ -314,14 +314,34 @@ import qualified SAWSupport.Pretty as PPS (Opts)
 import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
-import SAWCore.Module (insInjectCode, beginDataType, completeDataType, resolvedNameIdent)
+import SAWCore.Module
+  ( insInjectCode
+  , beginDataType
+  , completeDataType
+  , resolvedNameIdent
+  , dtPrimName
+  , ctorNumParams
+  , ctorPrimName
+  , emptyModule
+  , findCtor
+  , findDataType
+  , findDef
+  , moduleName
+  , insDef
+  , insImport
+  , Ctor(..)
+  , DefQualifier(..)
+  , DataType(..)
+  , Def(..)
+  , Module
+  , ModuleMap
+  )
 import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty
-import SAWCore.TypedAST
 import SAWCore.Unique
 
 

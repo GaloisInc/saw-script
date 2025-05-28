@@ -10,8 +10,7 @@ Portability : non-portable (language extensions)
 -}
 
 module CryptolSAWCore.Prelude
-  ( Module
-  , module CryptolSAWCore.Prelude
+  ( module CryptolSAWCore.Prelude
   , scLoadPreludeModule
   ) where
 

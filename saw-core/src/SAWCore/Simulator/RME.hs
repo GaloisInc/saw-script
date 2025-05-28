@@ -41,6 +41,7 @@ import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
+import SAWCore.Module (ModuleMap)
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Simulator as Sim
@@ -48,7 +49,6 @@ import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
 import SAWCore.SharedTerm
-import SAWCore.TypedAST (ModuleMap)
 import SAWCore.SATQuery
 
 #if !MIN_VERSION_base(4,8,0)

@@ -61,8 +61,9 @@ import qualified What4.Expr.WeightedSum as WSum
 import qualified What4.SemiRing as B
 import           What4.Symbol
 
+import qualified SAWCore.Name as SC
 import qualified SAWCore.SharedTerm as SC
-import qualified SAWCore.TypedAST as SC
+import qualified SAWCore.Term.Functor as SC
 
 import           SAWCoreWhat4.Panic
 
