@@ -40,6 +40,7 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
+import SAWCore.Module (ModuleMap, dtPrimName)
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
 import qualified SAWCore.Prim as Prim
@@ -47,9 +48,8 @@ import SAWCore.Prelude.Constants
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
-import SAWCore.TypedAST
-       ( ModuleMap, FlatTermF(..), toShortName, dtPrimName )
 import SAWCore.SharedTerm
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
 
 ------------------------------------------------------------

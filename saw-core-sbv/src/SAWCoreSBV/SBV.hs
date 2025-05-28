@@ -64,6 +64,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
+import SAWCore.Name (toShortName, identBaseName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -71,7 +72,7 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
-import SAWCore.TypedAST (FieldName, toShortName, identBaseName)
+import SAWCore.Term.Functor (FieldName)
 import SAWCore.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
             , fovVec, firstOrderTypeOf, asFirstOrderType

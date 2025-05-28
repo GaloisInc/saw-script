@@ -156,9 +156,10 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
+import SAWCore.Module (ModuleMap)
 import SAWCore.Name (SAWNamingEnv)
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
+import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
 import SAWCore.FiniteValue (FirstOrderValue)
 import SAWCore.Term.Pretty

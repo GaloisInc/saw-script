@@ -12,8 +12,7 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Prelude
-  ( Module
-  , module SAWCore.Prelude
+  ( module SAWCore.Prelude
   , module SAWCore.Prelude.Constants
   ) where
 

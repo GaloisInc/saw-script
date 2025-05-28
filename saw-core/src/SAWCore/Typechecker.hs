@@ -10,6 +10,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -37,15 +38,28 @@ import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
 
 import qualified SAWSupport.Pretty as PPS (Doc)
 
-import SAWCore.Utils (internalError)
+import SAWCore.Panic (panic)
 
 import SAWCore.Module
+  ( ctorNumParams
+  , ctorPrimName
+  , dtPrimName
+  , emptyModule
+  , findDataType
+  , resolveName
+  , DataType(..)
+  , Def(..)
+  , DefQualifier(..)
+  , Module
+  , ResolvedName(..)
+  )
 import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
@@ -82,7 +96,7 @@ getModuleName =
      case maybe_modname of
        Just mnm -> return mnm
        Nothing ->
-         internalError "Current module name not set during typechecking"
+         panic "getModuleName" ["Current module name not set during typechecking"]
 
 -- | Look up the current module
 getModule :: TCM Module
@@ -293,7 +307,7 @@ typeInferCompleteTerm (Un.BVLit _ bits) =
 typeInferCompleteTerm (Un.BadTerm _) =
   -- Should be unreachable, since BadTerms represent parse errors, that should
   -- already have been signaled before type inference
-  internalError "Type inference encountered a BadTerm"
+  panic "typeInferCompleteTerm" ["Type inference encountered a BadTerm"]
 
 
 instance TypeInferCtx Un.UTermVar Un.UTerm where
@@ -433,9 +447,15 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                   | dtSort /= propSort && ctor_sort > dtSort ->
                     err ("Universe level of constructors should be strictly" ++
                          " contained in that of the datatype")
-                Just _ -> return ()
-                Nothing -> error ("Internal error: type of the type of" ++
-                                  " constructor is not a sort!")) >>
+                Just _ ->
+                    return ()
+                Nothing ->
+                    panic "processDecls" [
+                        "Type of the type of constructor is not a sort!",
+                        "Constructor type: " <> Text.pack (showTerm $ typedVal typed_tp),
+                        "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
+                    ]
+            ) >>
             let tp = typedVal typed_tp in
             case mkCtorArgStruct pn p_ctx ix_ctx tp of
               Just arg_struct ->

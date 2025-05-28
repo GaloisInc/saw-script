@@ -124,6 +124,13 @@ import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
+  ( ctorNumParams
+  , ctorPrimName
+  , dtNumParams
+  , dtPrimName
+  , Ctor(..)
+  , DataType(..)
+  )
 import SAWCore.Recognizer
 
 

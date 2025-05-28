@@ -82,10 +82,11 @@ import SAWCentral.Prover.Exporter
 import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys
 import SAWCore.Conversion
+import SAWCore.Module (Def(..), emptyModule, moduleDefs)
+import SAWCore.Name (mkModuleName)
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
-import SAWCore.TypedAST hiding (FlatTermF(..))
 import CryptolSAWCore.TypedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import qualified CryptolSAWCore.Monadify as Monadify
@@ -4486,6 +4487,16 @@ primitives = Map.fromList
     [ "State that the given predicate is a pre-condition on execution of the"
     , "method being verified."
     ]
+
+  , prim "mir_ref_of" "MIRValue -> MIRSetup MIRValue"
+    (pureVal mir_ref_of)
+    Experimental
+    [ "Allocates an immutable reference and initializes it to point to the given MIRValue." ]
+
+  , prim "mir_ref_of_mut" "MIRValue -> MIRSetup MIRValue"
+    (pureVal mir_ref_of_mut)
+    Experimental
+    [ "Allocates a mutable reference and initializes it to point to the given MIRValue." ]
 
   , prim "mir_return" "MIRValue -> MIRSetup ()"
     (pureVal mir_return)

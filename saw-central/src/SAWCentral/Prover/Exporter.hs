@@ -78,12 +78,12 @@ import CryptolSAWCore.Monadify (defaultMonEnv, monadifyCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
+import SAWCore.Name (mkModuleName, toShortName)
 import SAWCore.Prelude (preludeModule)
 import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 import qualified SAWCoreCoq.Coq as Coq
-import SAWCore.TypedAST (mkModuleName, toShortName)
 import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim

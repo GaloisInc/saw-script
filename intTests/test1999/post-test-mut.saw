@@ -1,0 +1,12 @@
+enable_experimental;
+
+m <- mir_load_module "post-test-mut.linked-mir.json";
+
+let get41_spec = do {
+  mir_execute_func [];
+
+  ref_41 <- mir_ref_of_mut (mir_term {{ 41 : [32] }});
+  mir_return ref_41;
+};
+
+mir_verify m "post_test_mut::get41" [] false get41_spec z3;

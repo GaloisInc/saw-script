@@ -181,8 +181,8 @@ import qualified Data.Parameterized.TraversableFC as Ctx
 -- saw-core
 import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
 import SAWCore.Recognizer
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip

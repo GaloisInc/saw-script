@@ -182,11 +182,9 @@ library saw-core
     SAWCore.TermNet
     SAWCore.Testing.Random
     SAWCore.Typechecker
-    SAWCore.TypedAST
     SAWCore.Unique
     SAWCore.UntypedAST
     SAWCore.Change
-    SAWCore.Utils
   other-modules:
     SAWCore.Panic
     SAWCore.UnionFind

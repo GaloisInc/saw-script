@@ -30,8 +30,9 @@ import qualified Data.Text as Text
 import Data.Traversable (mapM)
 import Numeric.Natural (Natural)
 
-import SAWCore.TypedAST
+import SAWCore.Name (preludeName)
 import SAWCore.SharedTerm
+import SAWCore.Term.Functor (FieldName)
 import qualified SAWCentral.SBVModel as SBV
 import SAWCentral.Options
 

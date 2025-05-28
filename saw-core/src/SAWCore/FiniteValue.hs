@@ -39,7 +39,7 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
 
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
-import SAWCore.TypedAST
+import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.

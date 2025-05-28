@@ -63,6 +63,10 @@ The most notable changes are:
 
 * Support verifying Rust code up to version 1.86.
 
+* Added `mir_ref_of` and `mir_ref_of_mut` to SAWScript's MIR support. These
+  helpers combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to`, simplifying the common
+  pattern of allocating a reference and immediately initializing it.
+
 ## Bug fixes
 
 * The `head` and `tail` primitives are now implemented in the SAW-Core

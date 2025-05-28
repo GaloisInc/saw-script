@@ -76,9 +76,9 @@ import Text.Read hiding (lift)
 import Lang.JVM.Codebase as JSS
 
 import CryptolSAWCore.Cryptol
+import SAWCore.Name (toShortName)
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
-import SAWCore.TypedAST (toShortName)
 
 import qualified SAWCentral.CongruenceClosure as CC
 import SAWCentral.Position

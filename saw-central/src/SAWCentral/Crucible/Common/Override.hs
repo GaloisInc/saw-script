@@ -106,9 +106,10 @@ import           Data.Parameterized.TraversableFC (toListFC)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 
+import           SAWCore.Name (toShortName)
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.TypedAST as SAWVerifier
+import           SAWCore.Term.Functor (FlatTermF(..), unwrapTermF)
 import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 

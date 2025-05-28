@@ -1,0 +1,15 @@
+enable_experimental;
+
+m <- mir_load_module "pre-test.linked-mir.json";
+let ty = mir_u32;
+
+let x_spec = do {
+  val <- mir_fresh_var "val" ty;
+  ref <- mir_ref_of (mir_term val);
+
+  mir_precond {{ val == 42 }};
+  mir_execute_func [ref];
+  mir_return ref;
+};
+
+mir_verify m "pre_test::x" [] false x_spec z3;
