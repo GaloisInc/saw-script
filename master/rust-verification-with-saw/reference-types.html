@@ -67,7 +67,10 @@
 <li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
 <li class="toctree-l2"><a class="reference internal" href="about-mir-json.html">About <code class="docutils literal notranslate"><span class="pre">mir-json</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="saw-basics.html">SAW basics</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Reference types</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Reference types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#convenience-mir-ref-of-and-mir-ref-of-mut">Convenience: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="compound-data-types.html">Compound data types</a></li>
 <li class="toctree-l2"><a class="reference internal" href="overrides-and-compositional-verification.html">Overrides and compositional verification</a></li>
 <li class="toctree-l2"><a class="reference internal" href="static-items.html">Static items</a></li>
@@ -241,6 +244,32 @@ function has been called swap the order of <code class="docutils literal notrans
 the fact that the <code class="docutils literal notranslate"><span class="pre">swap</span></code> function itself swaps the values that the references
 point to.</p></li>
 </ol>
+<section id="convenience-mir-ref-of-and-mir-ref-of-mut">
+<h2>Convenience: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code><a class="headerlink" href="#convenience-mir-ref-of-and-mir-ref-of-mut" title="Link to this heading"></a></h2>
+<p>Because this pattern of allocating a reference and initializing it with
+<code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> is so common, SAW provides helpers: <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> for immutable
+references and <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code> for mutable references.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; :type mir_ref_of</span>
+<span class="go">MIRValue -&gt; MIRSetup MIRValue</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> combines <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single operation,
+returning a reference to the specified value. Likewise <code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span></code>
+combines <code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code>. This portion of a spec:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s &lt;- mir_alloc (mir_adt s_adt);</span>
+<span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
+<span class="go">mir_points_to s s_val;</span>
+</pre></div>
+</div>
+<p>can be rewritten more concisely as:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">s_val &lt;- mir_fresh_expanded_value &quot;s_val&quot; (mir_adt s_adt);</span>
+<span class="go">s &lt;- mir_ref_of s_val;</span>
+</pre></div>
+</div>
+<p>This version mirrors how one would write the function in Rust, where a <code class="docutils literal notranslate"><span class="pre">&amp;T</span></code>
+points to an already-initialized value. Using <code class="docutils literal notranslate"><span class="pre">mir_ref_of</span></code> encourages that
+style and avoids the risk of forgetting to initialize allocated memory.</p>
+</section>
 </section>
 
 

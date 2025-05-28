@@ -949,6 +949,12 @@ and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
 <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code>).</p></li>
 </ul>
+<p>As a convenience, SAW also provides:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">SetupValue</span></code></p></li>
+</ul>
+<p>which combine <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single operation.</p>
 </section>
 </section>
 <section id="working-with-compound-types">
