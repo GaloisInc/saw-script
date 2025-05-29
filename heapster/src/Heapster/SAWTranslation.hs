@@ -6506,7 +6506,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms@(cfg_
                                 ++ "__bodies")
     bodies_tp <- completeOpenTerm sc $ multiFixBodiesOpenTerm ev ds
     bodies_tm <- completeOpenTerm sc bodies
-    scInsertDef sc mod_name bodies_id bodies_tp bodies_tm
+    scInsertDef sc bodies_id bodies_tp bodies_tm
 
     -- Now insert SAW core definitions for the translations of all the CFGs,
     -- putting them all into new entries for the permissions environment
@@ -6517,7 +6517,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms@(cfg_
         do tp_trm <- completeOpenTerm sc tp
            f_trm <- completeOpenTerm sc f
            let ident = mkSafeIdent mod_name nm
-           scInsertDef sc mod_name ident tp_trm f_trm
+           scInsertDef sc ident tp_trm f_trm
            let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
            return $ PermEnvGlobalEntry sym perm (GlobalTrans
                                                  [globalOpenTerm ident]))

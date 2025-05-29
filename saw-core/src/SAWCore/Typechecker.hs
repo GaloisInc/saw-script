@@ -366,7 +366,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
      let ident = mkIdent mnm nm
-     liftTCM scInsertDef mnm ident def_tp def_tm) >>
+     liftTCM scInsertDef ident def_tp def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
@@ -383,7 +383,7 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
       mnm <- getModuleName
       let ident = mkIdent mnm nm
       let def_tp = typedVal typed_tp
-      liftTCM scDeclarePrim mnm ident q def_tp) >>
+      liftTCM scDeclarePrim ident q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =

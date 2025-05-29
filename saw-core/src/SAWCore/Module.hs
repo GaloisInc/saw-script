@@ -74,6 +74,7 @@ module SAWCore.Module
   , allModuleActualDefs
   , allModuleDataTypes
   , allModuleCtors
+  , insDefInMap
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -85,7 +86,7 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -557,3 +558,26 @@ allModuleDataTypes mm = mapMaybe asResolvedDataType (IntMap.elems (mmIndexMap mm
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
 allModuleCtors mm = mapMaybe asResolvedCtor (IntMap.elems (mmIndexMap mm))
+
+-- | Insert a 'ResolvedName' into a 'ModuleMap', adding a mapping from
+-- the 'Ident' name of that resolved name to it. Return 'Left' in the
+-- case of a name clash, i.e., an existing binding for the same
+-- 'Ident' name.
+insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Ident ModuleMap
+insResolvedNameInMap r mm =
+  let ident = resolvedNameIdent r in
+  if Map.member ident (mmIdentMap mm)
+  then Left ident
+  else Right $ mm { mmIdentMap = Map.insert ident (resolvedNameVarIndex r) (mmIdentMap mm)
+                  , mmIndexMap = IntMap.insert (resolvedNameVarIndex r) r (mmIndexMap mm)
+                  }
+
+insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
+insDeclInMap mname decl mm =
+  mm { mmRDecls = Map.alter (Just . (decl :) . fromMaybe []) mname (mmRDecls mm) }
+
+-- | Insert a definition into a 'ModuleMap'.
+insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
+insDefInMap d mm =
+  insResolvedNameInMap (ResolvedDef d) $
+  insDeclInMap (identModule (defIdent d)) (DefDecl d) mm

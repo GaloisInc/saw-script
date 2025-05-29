@@ -306,7 +306,7 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
          complete_t <- completeOpenTerm sc t
          let tps = map openTermType ts
          complete_tp <- completeOpenTerm sc $ tupleTypeOpenTerm' tps
-         scInsertDef sc mod_name ident complete_tp complete_t
+         scInsertDef sc ident complete_tp complete_t
          let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
          return $ permEnvAddGlobalSyms env
            [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p

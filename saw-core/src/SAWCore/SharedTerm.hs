@@ -332,8 +332,8 @@ import SAWCore.Module
   , loadModule
   , modifyModule
   , findModule
-  , insDef
   , insImport
+  , insDefInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -628,29 +628,41 @@ scModifyModule sc mnm f =
                    ++ show mnm ++ " not found!"
      modifyIORef' (scModuleMap sc) (modifyModule mnm f)
 
+-- | Internal function to insert a definition into the 'ModuleMap' of
+-- the 'SharedContext'. Throws 'DuplicateNameException' if the name is
+-- already registered.
+scInsDefInMap :: SharedContext -> Def -> IO ()
+scInsDefInMap sc d =
+  do let f mm =
+           case insDefInMap d mm of
+             Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+             Right mm' -> (mm', Nothing)
+     e <- atomicModifyIORef' (scModuleMap sc) f
+     maybe (pure ()) throw e
+
 -- | Declare a SAW core primitive of the specified type.
-scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
-scDeclarePrim sc mnm ident q def_tp =
+scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc ident q def_tp =
   do i <- scRegisterName sc (ModuleIdentifier ident)
      let pn = PrimName i ident def_tp
      t <- scFlatTermF sc (Primitive pn)
      scRegisterGlobal sc ident t
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
+     scInsDefInMap sc $
+                  Def { defIdent = ident,
                         defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
                         defBody = Nothing }
 
 -- | Insert a definition into a SAW core module
-scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-scInsertDef sc mnm ident def_tp def_tm =
+scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
+scInsertDef sc ident def_tp def_tm =
   do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
      scRegisterGlobal sc ident t
      mi <- scResolveNameByURI sc (moduleIdentToURI ident)
      let i = fromMaybe (panic "scInsertDef" ["name not found"]) mi
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
+     scInsDefInMap sc $
+                  Def { defIdent = ident,
                         defVarIndex = i,
                         defQualifier = NoQualifier,
                         defType = def_tp,
