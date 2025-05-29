@@ -245,6 +245,12 @@ withStackTraceFrame str val =
       doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
       doLLVM (LLVMCrucibleSetupM m) =
         LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
+      doJVM :: JVMSetupM a -> JVMSetupM a
+      doJVM (JVMSetupM m) =
+        JVMSetupM (underReaderT (underStateT doTopLevel) m)
+      doMIR :: MIRSetupM a -> MIRSetupM a
+      doMIR (MIRSetupM m) =
+        MIRSetupM (underReaderT (underStateT doTopLevel) m)
   in
   case val of
     VLambda f ->
@@ -272,7 +278,16 @@ withStackTraceFrame str val =
             withStackTraceFrame str `fmap` doLLVM m
       in
       VLLVMCrucibleSetup m'
-    -- TODO: JVM and MIR setup blocks too
+    VJVMSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doJVM m
+      in
+      VJVMSetup m'
+    VMIRSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doMIR m
+      in
+      VMIRSetup m'
     _ ->
       val
 
