@@ -124,7 +124,11 @@ instance FromJSON ProofTactic where
         "use prover"       -> UseProver <$> o .: "prover"
         "unfold"           -> Unfold <$> o .: "names"
         "beta reduce goal" -> pure BetaReduceGoal
-        "evalute goal"     -> EvaluateGoal <$> o .: "uninterpreted functions"
+        -- The "evaluate" was misspelled "evalute" until 20250329;
+        -- since the python side has the correct spelling, it wouldn't
+        -- have worked and probably hasn't been used; therefore, I'm
+        -- going to just fix it and not worry about backwards compat.
+        "evaluate goal"    -> EvaluateGoal <$> o .: "uninterpreted functions"
         "simplify"         -> Simplify <$> o .: "rules"
         "admit"            -> pure Admit
         "trivial"          -> pure Trivial
