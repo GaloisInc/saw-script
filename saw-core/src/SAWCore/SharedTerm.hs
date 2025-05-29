@@ -315,8 +315,7 @@ import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Module
-  ( insInjectCode
-  , beginDataType
+  ( beginDataType
   , completeDataType
   , resolvedNameIdent
   , dtPrimName
@@ -334,6 +333,7 @@ import SAWCore.Module
   , findModule
   , insImport
   , insDefInMap
+  , insInjectCodeInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -751,7 +751,7 @@ scInjectCode ::
   Text {- ^ Code to inject -} ->
   IO ()
 scInjectCode sc mnm ns txt =
-  scModifyModule sc mnm $ \m -> insInjectCode m ns txt
+  modifyIORef' (scModuleMap sc) $ insInjectCodeInMap mnm ns txt
 
 -- SharedContext implementation.
 

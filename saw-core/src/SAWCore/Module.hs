@@ -75,6 +75,7 @@ module SAWCore.Module
   , allModuleDataTypes
   , allModuleCtors
   , insDefInMap
+  , insInjectCodeInMap
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -581,3 +582,7 @@ insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
 insDefInMap d mm =
   insResolvedNameInMap (ResolvedDef d) $
   insDeclInMap (identModule (defIdent d)) (DefDecl d) mm
+
+-- | Insert an injectCode declaration into a 'ModuleMap'.
+insInjectCodeInMap :: ModuleName -> Text -> Text -> ModuleMap -> ModuleMap
+insInjectCodeInMap mname ns txt = insDeclInMap mname (InjectCodeDecl ns txt)
