@@ -4350,6 +4350,26 @@ primitives = Map.fromList
     , "`mir_slice_value` or `mir_slice_range_value` functions instead."
     ]
 
+  , prim "mir_alloc_raw_ptr_const" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_raw_ptr_const)
+    Experimental
+    [ "Declare that an immutable raw pointer to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
+  , prim "mir_alloc_raw_ptr_mut" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_raw_ptr_mut)
+    Experimental
+    [ "Declare that a mutable raw pointer to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
     Experimental
@@ -4649,6 +4669,16 @@ primitives = Map.fromList
     (pureVal mir_lifetime)
     Experimental
     [ "The type of MIR lifetimes." ]
+
+  , prim "mir_raw_ptr_const" "MIRType -> MIRType"
+    (pureVal mir_raw_ptr_const)
+    Experimental
+    [ "The type of MIR immutable raw pointers." ]
+
+  , prim "mir_raw_ptr_mut" "MIRType -> MIRType"
+    (pureVal mir_raw_ptr_mut)
+    Experimental
+    [ "The type of MIR mutable raw pointers." ]
 
   , prim "mir_ref" "MIRType -> MIRType"
     (pureVal mir_ref)

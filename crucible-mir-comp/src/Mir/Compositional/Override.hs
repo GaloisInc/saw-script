@@ -287,6 +287,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         ref <- newMirRefSim (allocSpec ^. maType)
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
+                                   (allocSpec ^. maPtrKind)
                                    (allocSpec ^. maMutbl)
                                    (allocSpec ^. maMirType)
                                    ref
@@ -496,7 +497,8 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
                     show tpr ++ " does not match " ++ show (ptr ^. mpType)
-        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr mutbl pointeeTy ref')
+        MS.setupValueSub %= Map.insert alloc
+            (Some $ MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref')
 
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,

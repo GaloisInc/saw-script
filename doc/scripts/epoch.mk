@@ -24,6 +24,6 @@
 #    - the devel version can then be bumped to the current day if needed
 #
 
-# BSD/Linux: date +%s -d "04/04/2025 00:00:00 GMT"
-# OSX: date -j -f "%m/%d/%Y %H:%M:%S %Z" "4/4/2025 00:00:00 GMT" +%s
-SOURCE_DATE_EPOCH=1743724800
+# BSD/Linux: date +%s -d "05/28/2025 00:00:00 GMT"
+# OSX: date -j -f "%m/%d/%Y %H:%M:%S %Z" "5/28/2025 00:00:00 GMT" +%s
+SOURCE_DATE_EPOCH=1748390400
