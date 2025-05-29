@@ -83,8 +83,7 @@ import Data.Foldable (foldl', foldr')
 import Data.Hashable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HMap
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -297,20 +296,26 @@ emptyModule nm =
 resolveName :: Module -> Text -> Maybe ResolvedName
 resolveName m str = Map.lookup str (moduleResolveMap m)
 
+asResolvedCtor :: ResolvedName -> Maybe Ctor
+asResolvedCtor = \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
+
+asResolvedDataType :: ResolvedName -> Maybe DataType
+asResolvedDataType = \case { ResolvedDataType d -> Just d; _ -> Nothing }
+
+asResolvedDef :: ResolvedName -> Maybe Def
+asResolvedDef = \case { ResolvedDef d -> Just d; _ -> Nothing }
+
 -- | Resolve a 'Text' name to a 'Ctor'
 findCtor :: Module -> Text -> Maybe Ctor
-findCtor m str =
-  resolveName m str >>= \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
+findCtor m str = resolveName m str >>= asResolvedCtor
 
 -- | Resolve a 'Text' name to a 'DataType'
 findDataType :: Module -> Text -> Maybe DataType
-findDataType m str =
-  resolveName m str >>= \case { ResolvedDataType d -> Just d; _ -> Nothing }
+findDataType m str = resolveName m str >>= asResolvedDataType
 
 -- | Resolve a 'Text' name to a 'Def'
 findDef :: Module -> Text -> Maybe Def
-findDef m str =
-  resolveName m str >>= \case { ResolvedDef d -> Just d; _ -> Nothing }
+findDef m str = resolveName m str >>= asResolvedDef
 
 
 -- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'Text'
@@ -438,43 +443,64 @@ moduleActualDefs m =
     ]
 
 -- | The type of mappings from module names to modules
-newtype ModuleMap = ModuleMap (HashMap ModuleName Module)
+data ModuleMap =
+  ModuleMap
+  { mmResolveMap :: !(Map Ident ResolvedName)
+  , mmRDecls :: !(Map ModuleName [ModuleDecl])
+  }
 
 emptyModuleMap :: ModuleMap
-emptyModuleMap = ModuleMap HMap.empty
+emptyModuleMap = ModuleMap Map.empty Map.empty
 
 -- | Test whether a 'ModuleName' is in a 'ModuleMap'.
 moduleIsLoaded :: ModuleName -> ModuleMap -> Bool
-moduleIsLoaded mn (ModuleMap m) = HMap.member mn m
+moduleIsLoaded mn mm = Map.member mn (mmRDecls mm)
 
 loadModule :: Module -> ModuleMap -> ModuleMap
-loadModule m (ModuleMap h) = ModuleMap (HMap.insert (moduleName m) m h)
+loadModule m mm =
+  ModuleMap
+  { mmResolveMap =
+      Map.union
+      (Map.mapKeys (mkIdent (moduleName m)) (moduleResolveMap m))
+      (mmResolveMap mm)
+  , mmRDecls = Map.insert (moduleName m) (moduleRDecls m) (mmRDecls mm)
+  }
 
 modifyModule :: ModuleName -> (Module -> Module) -> ModuleMap -> ModuleMap
-modifyModule mnm f (ModuleMap h) = ModuleMap (HMap.alter (fmap f) mnm h)
+modifyModule mnm f mm =
+  case findModule mnm mm of
+    Just m -> loadModule (f m) mm
+    Nothing -> mm
 
 findModule :: ModuleName -> ModuleMap -> Maybe Module
-findModule mnm (ModuleMap h) = HMap.lookup mnm h
+findModule mnm mm =
+  do decls <- Map.lookup mnm (mmRDecls mm)
+     let rmap =
+           Map.mapKeys identBaseName $
+           Map.filterWithKey (\i _ -> identModule i == mnm) $
+           mmResolveMap mm
+     Just $ Module { moduleName = mnm, moduleResolveMap = rmap, moduleRDecls = decls }
+
+resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
+resolveNameInMap mm i = Map.lookup i (mmResolveMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
-findCtorInMap (ModuleMap m) i =
-  HMap.lookup (identModule i) m >>= flip findCtor (identBaseName i)
+findCtorInMap mm i = resolveNameInMap mm i >>= asResolvedCtor
 
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
-findDataTypeInMap (ModuleMap m) i =
-  HMap.lookup (identModule i) m >>= flip findDataType (identBaseName i)
+findDataTypeInMap mm i = resolveNameInMap mm i >>= asResolvedDataType
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /
 -- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
-allModuleDefs (ModuleMap m) = concatMap moduleDefs (HMap.elems m)
+allModuleDefs mm = mapMaybe asResolvedDef (Map.elems (mmResolveMap mm))
 
 -- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
-allModuleDecls (ModuleMap m) = concatMap moduleDecls (HMap.elems m)
+allModuleDecls mm = concat (Map.elems (mmRDecls mm))
 
 -- | Get all local declarations from all modules in an entire module map that
 -- are marked as primitives
@@ -505,8 +531,8 @@ allModuleActualDefs modmap =
 
 -- | Get all datatypes in all modules in a module map
 allModuleDataTypes :: ModuleMap -> [DataType]
-allModuleDataTypes (ModuleMap m) = concatMap moduleDataTypes (HMap.elems m)
+allModuleDataTypes mm = mapMaybe asResolvedDataType (Map.elems (mmResolveMap mm))
 
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
-allModuleCtors (ModuleMap m) = concatMap moduleCtors (HMap.elems m)
+allModuleCtors mm = mapMaybe asResolvedCtor (Map.elems (mmResolveMap mm))
