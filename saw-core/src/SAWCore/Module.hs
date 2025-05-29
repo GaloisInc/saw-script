@@ -81,6 +81,8 @@ import Data.Foldable (Foldable)
 #endif
 import Data.Foldable (foldl', foldr')
 import Data.Hashable
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -455,7 +457,7 @@ moduleActualDefs m =
 data ModuleMap =
   ModuleMap
   { mmIdentMap :: !(Map Ident VarIndex)
-  , mmIndexMap :: !(Map VarIndex ResolvedName)
+  , mmIndexMap :: !(IntMap ResolvedName) -- keyed by VarIndex
   , mmRDecls :: !(Map ModuleName [ModuleDecl])
   }
 
@@ -463,7 +465,7 @@ emptyModuleMap :: ModuleMap
 emptyModuleMap =
   ModuleMap
   { mmIdentMap = Map.empty
-  , mmIndexMap = Map.empty
+  , mmIndexMap = IntMap.empty
   , mmRDecls = Map.empty
   }
 
@@ -475,12 +477,12 @@ loadModule :: Module -> ModuleMap -> ModuleMap
 loadModule m mm =
   ModuleMap
   { mmIdentMap = Map.union identMap (mmIdentMap mm)
-  , mmIndexMap = Map.union indexMap (mmIndexMap mm)
+  , mmIndexMap = IntMap.union indexMap (mmIndexMap mm)
   , mmRDecls = Map.insert (moduleName m) (moduleRDecls m) (mmRDecls mm)
   }
   where
     identMap = Map.mapKeys (mkIdent (moduleName m)) (fmap resolvedNameVarIndex (moduleResolveMap m))
-    indexMap = Map.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
+    indexMap = IntMap.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
 
 modifyModule :: ModuleName -> (Module -> Module) -> ModuleMap -> ModuleMap
 modifyModule mnm f mm =
@@ -492,7 +494,7 @@ findModule :: ModuleName -> ModuleMap -> Maybe Module
 findModule mnm mm =
   do decls <- Map.lookup mnm (mmRDecls mm)
      let rmap =
-           Map.mapMaybe (\vi -> Map.lookup vi (mmIndexMap mm)) $
+           Map.mapMaybe (\vi -> IntMap.lookup vi (mmIndexMap mm)) $
            Map.mapKeys identBaseName $
            Map.filterWithKey (\i _ -> identModule i == mnm) $
            mmIdentMap mm
@@ -501,7 +503,7 @@ findModule mnm mm =
 resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
 resolveNameInMap mm i =
   do vi <- Map.lookup i (mmIdentMap mm)
-     Map.lookup vi (mmIndexMap mm)
+     IntMap.lookup vi (mmIndexMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
@@ -515,7 +517,7 @@ findDataTypeInMap mm i = resolveNameInMap mm i >>= asResolvedDataType
 -- that the returned list might have redundancies if a definition is visible /
 -- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
-allModuleDefs mm = mapMaybe asResolvedDef (Map.elems (mmIndexMap mm))
+allModuleDefs mm = mapMaybe asResolvedDef (IntMap.elems (mmIndexMap mm))
 
 -- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
@@ -550,8 +552,8 @@ allModuleActualDefs modmap =
 
 -- | Get all datatypes in all modules in a module map
 allModuleDataTypes :: ModuleMap -> [DataType]
-allModuleDataTypes mm = mapMaybe asResolvedDataType (Map.elems (mmIndexMap mm))
+allModuleDataTypes mm = mapMaybe asResolvedDataType (IntMap.elems (mmIndexMap mm))
 
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
-allModuleCtors mm = mapMaybe asResolvedCtor (Map.elems (mmIndexMap mm))
+allModuleCtors mm = mapMaybe asResolvedCtor (IntMap.elems (mmIndexMap mm))
