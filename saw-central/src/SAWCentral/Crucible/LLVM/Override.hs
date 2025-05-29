@@ -203,7 +203,7 @@ ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
   let pretty2 = PP.pretty val
   pure $ PP.vcat [ "Pointer:" PP.<+> pretty1
                  , "Pointee:" PP.<+> pretty2
-                 , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> MS.ppTypedTerm tt) cond
+                 , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> ppTypedTerm tt) cond
                  , "Assertion made at:" PP.<+>
                    PP.pretty (W4.plSourceLoc (MS.conditionLoc md))
                  ]
@@ -1464,7 +1464,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
             let errMsg = PP.vcat $ map (PP.pretty . unwords)
                   [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
                   , [ "in the ", MS.stateCond prepost, "of an override" ]
-                  , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
+                  , [ "Tried to read an array prefix of size:", show (ppTypedTerm expected_sz_tm) ]
                   ]
             case maybe_allocation_array of
               Just (ok, arr, sz)

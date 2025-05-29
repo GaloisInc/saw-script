@@ -323,7 +323,7 @@ ppOverrideFailureReason rsn = case rsn of
   AmbiguousVars vs ->
     PP.vcat
     [ PP.pretty "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
-    , PP.indent 2 $ PP.vcat (map MS.ppTypedExtCns vs)
+    , PP.indent 2 $ PP.vcat (map ppTypedExtCns vs)
     ]
   BadTermMatch x y ->
     PP.vcat
@@ -676,7 +676,7 @@ learnGhost _sc _md _prepost _var (TypedTerm tp _)
   = fail $ unlines
       [ "Ghost variable expected value has improper type"
       , "expected Cryptol schema type, but got"
-      , show (MS.ppTypedTermType tp)
+      , show (ppTypedTermType tp)
       ]
 
 executeGhost ::
@@ -693,7 +693,7 @@ executeGhost _sc _md _var (TypedTerm tp _) =
   fail $ unlines
     [ "executeGhost: improper value type"
     , "expected Cryptol schema type, but got"
-    , show (MS.ppTypedTermType tp)
+    , show (ppTypedTermType tp)
     ]
 
 -- | NOTE: The two 'Term' arguments must have the same type.

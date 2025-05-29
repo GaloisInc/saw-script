@@ -6,24 +6,33 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE PatternGuards #-}
-module CryptolSAWCore.TypedTerm where
+module CryptolSAWCore.TypedTerm
+ -- ppTypedTerm,
+ -- ppTypedTermType,
+ -- ppTypedExtCns,
+ where
 
 import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 
+import qualified Prettyprinter as PP
+
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
-import Cryptol.Utils.PP (pretty)
+import qualified Cryptol.Utils.PP as C (pretty, ppPrec)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
+
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
 import SAWCore.Recognizer (asExtCns)
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck (scTypeCheckError)
+import SAWCore.Term.Pretty (ppTerm)
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -47,6 +56,27 @@ data TypedTermType
   | TypedTermKind   C.Kind
   | TypedTermOther  Term
  deriving Show
+
+
+ppTypedTerm :: TypedTerm -> PP.Doc ann
+ppTypedTerm (TypedTerm tp tm) =
+  PP.unAnnotate (ppTerm PPS.defaultOpts tm)
+  PP.<+> PP.pretty ":" PP.<+>
+  ppTypedTermType tp
+
+ppTypedTermType :: TypedTermType -> PP.Doc ann
+ppTypedTermType (TypedTermSchema sch) =
+  PP.viaShow (C.ppPrec 0 sch)
+ppTypedTermType (TypedTermKind k) =
+  PP.viaShow (C.ppPrec 0 k)
+ppTypedTermType (TypedTermOther tp) =
+  PP.unAnnotate (ppTerm PPS.defaultOpts tp)
+
+ppTypedExtCns :: TypedExtCns -> PP.Doc ann
+ppTypedExtCns (TypedExtCns tp ec) =
+  PP.unAnnotate (ppName (ecName ec))
+  PP.<+> PP.pretty ":" PP.<+>
+  PP.viaShow (C.ppPrec 0 tp)
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
@@ -214,9 +244,9 @@ showCryptolModule (CryptolModule sm tm) =
     "Symbols" : "=======" : concatMap showBinding (Map.assocs tm)
   where
     showTSyn (C.TySyn name params _props rhs _doc) =
-      "    " ++ unwords (pretty (nameIdent name) : map pretty params) ++ " = " ++ pretty rhs
+      "    " ++ unwords (C.pretty (nameIdent name) : map C.pretty params) ++ " = " ++ C.pretty rhs
 
     showBinding (name, TypedTerm (TypedTermSchema schema) _) =
-      ["    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema]
+      ["    " ++ C.pretty (nameIdent name) ++ " : " ++ C.pretty schema]
     showBinding _ =
       []

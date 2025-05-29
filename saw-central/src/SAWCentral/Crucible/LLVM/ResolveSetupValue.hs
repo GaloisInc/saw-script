@@ -82,7 +82,7 @@ import SAWCoreWhat4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
-import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 import           SAWCentral.Crucible.Common.ResolveSetupValue (checkBooleanType)
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR

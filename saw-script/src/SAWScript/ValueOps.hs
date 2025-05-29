@@ -11,6 +11,8 @@ Stability   : provisional
 
 module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
+    isVUnit,
+    -- used by SAWScript.Interpreter
     -- XXX: name overlaps with unrelated fn from Data.Parameterized.Nonce
     --      and should be changed
     indexValue,
@@ -83,6 +85,9 @@ import SAWCentral.Value
 
 
 
+isVUnit :: Value -> Bool
+isVUnit (VTuple []) = True
+isVUnit _ = False
 
 indexValue :: Value -> Value -> Value
 indexValue (VArray vs) (VInteger x)

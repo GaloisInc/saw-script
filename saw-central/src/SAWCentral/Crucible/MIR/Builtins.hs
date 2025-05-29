@@ -1072,7 +1072,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm tp _ ->
           fail $ unlines
             [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (MS.ppTypedTermType tp)
+            , show (ppTypedTermType tp)
             ]
 
 verifyObligations ::

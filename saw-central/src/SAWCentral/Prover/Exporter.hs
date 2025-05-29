@@ -94,7 +94,6 @@ import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 import qualified SAWCore.UntypedAST as Un
 
 import SAWCentral.Crucible.Common
-import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWCentral.Proof
   (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
 import SAWCentral.Prover.SolverStats

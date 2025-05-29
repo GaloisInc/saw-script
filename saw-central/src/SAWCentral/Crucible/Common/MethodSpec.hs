@@ -28,6 +28,7 @@ Grow\", and is prevalent across the Crucible codebase.
 
 module SAWCentral.Crucible.Common.MethodSpec
   ( AllocIndex(..)
+  , ppAllocIndex
   , nextAllocIndex
 
   , PrePost(..)
@@ -58,10 +59,6 @@ module SAWCentral.Crucible.Common.MethodSpec
   , SetupValueHas
 
   , ppSetupValue
-  , ppAllocIndex
-  , ppTypedTerm
-  , ppTypedTermType
-  , ppTypedExtCns
 
   , setupToTypedTerm
   , setupToTerm
@@ -142,11 +139,8 @@ import           Mir.Intrinsics (MIR)
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
-
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Pretty (ppTerm)
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -291,29 +285,6 @@ ppSetupValue setupval = case setupval of
     ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
       ppSetupValue arr <> PP.pretty "[" <> PP.pretty start <>
       PP.pretty ".." <> PP.pretty end <> PP.pretty "]"
-
-ppAllocIndex :: AllocIndex -> PP.Doc ann
-ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
-
-ppTypedTerm :: TypedTerm -> PP.Doc ann
-ppTypedTerm (TypedTerm tp tm) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tm)
-  PP.<+> PP.pretty ":" PP.<+>
-  ppTypedTermType tp
-
-ppTypedTermType :: TypedTermType -> PP.Doc ann
-ppTypedTermType (TypedTermSchema sch) =
-  PP.viaShow (Cryptol.ppPrec 0 sch)
-ppTypedTermType (TypedTermKind k) =
-  PP.viaShow (Cryptol.ppPrec 0 k)
-ppTypedTermType (TypedTermOther tp) =
-  PP.unAnnotate (ppTerm PPS.defaultOpts tp)
-
-ppTypedExtCns :: TypedExtCns -> PP.Doc ann
-ppTypedExtCns (TypedExtCns tp ec) =
-  PP.unAnnotate (ppName (ecName ec))
-  PP.<+> PP.pretty ":" PP.<+>
-  PP.viaShow (Cryptol.ppPrec 0 tp)
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->

@@ -26,6 +26,7 @@ module, plus additional functionality) instead.
 
 module SAWCentral.Crucible.Common.Setup.Value
   ( AllocIndex(..)
+  , ppAllocIndex
   , nextAllocIndex
 
   , CrucibleContext
@@ -65,6 +66,8 @@ import           Data.Constraint (Constraint)
 import           Data.Kind (Type)
 import           Data.Set (Set)
 
+import qualified Prettyprinter as PP
+
 import           What4.ProgramLoc (ProgramLoc)
 
 import           CryptolSAWCore.TypedTerm
@@ -72,6 +75,9 @@ import           CryptolSAWCore.TypedTerm
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
+
+ppAllocIndex :: AllocIndex -> PP.Doc ann
+ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
 
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)

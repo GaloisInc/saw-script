@@ -589,7 +589,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm tp _ ->
           fail $ unlines
             [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (MS.ppTypedTermType tp)
+            , show (ppTypedTermType tp)
             ]
 
 --------------------------------------------------------------------------------
@@ -1072,7 +1072,7 @@ instance Show JVMSetupError where
       JVMNonValueType tp ->
         unlines
         [ "Expected term with value type, but got"
-        , show (MS.ppTypedTermType tp)
+        , show (ppTypedTermType tp)
         ]
 
 -- | Returns Cryptol type of actual type if it is an array or

@@ -45,12 +45,10 @@ module SAWCentral.Value (
     -- used by SAWScript.Interpreter, SAWScript.HeapsterBuiltins,
     --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
     BuiltinContext(..),
-    -- used by SAWScript.HeapsterBuiltins
-    HeapsterEnv(..), (and the Value type)
+    -- used by SAWScript.HeapsterBuiltins (and the Value type)
+    HeapsterEnv(..),
     -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
     SatResult(..),
-    -- used by SAWScript.Interpreter (and the Value type)
-    isVUnit,
     -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
     showsProofResult,
     -- used by SAWCentral.Builtins
@@ -401,10 +399,6 @@ data SatResult
   | SatUnknown
     deriving (Show)
 
-isVUnit :: Value -> Bool
-isVUnit (VTuple []) = True
-isVUnit _ = False
-
 showsProofResult :: PPS.Opts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
@@ -537,7 +531,7 @@ evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
 evaluateTypedTerm _sc (TypedTerm tp _) =
   fail $ unlines [ "Could not evaluate term with type"
-                 , show (CMS.ppTypedTermType tp)
+                 , show (ppTypedTermType tp)
                  ]
 
 applyValue :: Value -> Value -> TopLevel Value

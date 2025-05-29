@@ -74,6 +74,8 @@ import qualified Lang.JVM.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
+import CryptolSAWCore.TypedTerm (ppTypedTerm)
+
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
@@ -143,7 +145,7 @@ ppPointsTo =
     JVMPointsToArray _loc ptr val ->
       MS.ppAllocIndex ptr
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.ppTypedTerm val
+      PPL.<+> opt ppTypedTerm val
   where
     opt = maybe (PPL.pretty "<unspecified>")
 

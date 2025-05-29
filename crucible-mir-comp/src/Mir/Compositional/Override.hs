@@ -237,7 +237,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
             let var = SAW.ecVarIndex $ SAW.tecExt tec
             when (not $ Map.member var termSub) $ do
                 error $ "argument matching failed to produce a binding for " ++
-                    show (MS.ppTypedExtCns tec)
+                    show (SAW.ppTypedExtCns tec)
 
         -- All pre-state allocs must be bound.
         allocSub <- use MS.setupValueSub
