@@ -66,6 +66,7 @@ module SAWCore.Module
   , findModule
   , findCtorInMap
   , findDataTypeInMap
+  , findDefInMap
   , allModuleDefs
   , allModuleDecls
   , allModulePrimitives
@@ -511,6 +512,10 @@ findCtorInMap mm i = resolveNameInMap mm i >>= asResolvedCtor
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
 findDataTypeInMap mm i = resolveNameInMap mm i >>= asResolvedDataType
+
+-- | Resolve an 'Ident' to a 'Def' in a 'ModuleMap'.
+findDefInMap :: ModuleMap -> Ident -> Maybe Def
+findDefInMap mm i = resolveNameInMap mm i >>= asResolvedDef
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

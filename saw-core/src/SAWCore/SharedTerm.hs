@@ -320,13 +320,13 @@ import SAWCore.Module
   , dtPrimName
   , ctorNumParams
   , ctorPrimName
-  , findCtor
-  , findDataType
-  , findDef
   , emptyModuleMap
   , moduleIsLoaded
   , moduleName
   , loadModule
+  , findCtorInMap
+  , findDataTypeInMap
+  , findDefInMap
   , findModule
   , insDefInMap
   , insInjectCodeInMap
@@ -667,8 +667,7 @@ scFindModule sc name =
 
 -- | Look up a definition by its identifier
 scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
-scFindDef sc i =
-  findDef <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindDef sc i = flip findDefInMap i <$> scGetModuleMap sc
 
 -- | Look up a 'Def' by its identifier, throwing an error if it is not found
 scRequireDef :: SharedContext -> Ident -> IO Def
@@ -710,8 +709,7 @@ scCompleteDataType sc dtName ctors =
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
-scFindDataType sc i =
-  findDataType <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindDataType sc i = flip findDataTypeInMap i <$> scGetModuleMap sc
 
 -- | Look up a datatype by its identifier, throwing an error if it is not found
 scRequireDataType :: SharedContext -> Ident -> IO DataType
@@ -723,8 +721,7 @@ scRequireDataType sc i =
 
 -- | Look up a constructor by its identifier
 scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
-scFindCtor sc i =
-  findCtor <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindCtor sc i = flip findCtorInMap i <$> scGetModuleMap sc
 
 -- | Look up a constructor by its identifier, throwing an error if not found
 scRequireCtor :: SharedContext -> Ident -> IO Ctor
