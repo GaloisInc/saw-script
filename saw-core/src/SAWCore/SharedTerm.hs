@@ -629,12 +629,11 @@ scModifyModule sc mnm f =
 -- already registered.
 scInsDefInMap :: SharedContext -> Def -> IO ()
 scInsDefInMap sc d =
-  do let f mm =
-           case insDefInMap d mm of
-             Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
-             Right mm' -> (mm', Nothing)
-     e <- atomicModifyIORef' (scModuleMap sc) f
-     maybe (pure ()) throw e
+  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case insDefInMap d mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
 
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
