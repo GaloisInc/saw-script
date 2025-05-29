@@ -45,20 +45,12 @@ module SAWCore.Module
   , resolveNameInMap
   , findDataType
   , insImport
-  , insDataType
   , beginDataType
   , completeDataType
-  , moduleDataTypes
-  , moduleCtors
   , findCtor
   , moduleDefs
   , findDef
-  , insDef
-  , insInjectCode
   , moduleDecls
-  , modulePrimitives
-  , moduleAxioms
-  , moduleActualDefs
     -- * Module Maps
   , ModuleMap
   , emptyModuleMap
@@ -356,12 +348,6 @@ insImport name_p i m =
   (foldl' insResolvedName m $ Map.elems $
    Map.filter name_p (moduleResolveMap i))
 
--- | Insert a 'DataType' declaration, along with its 'Ctor's, into a module
-insDataType :: Module -> DataType -> Module
-insDataType m dt =
-  foldl' insResolvedName (m { moduleRDecls = TypeDecl dt : moduleRDecls m}) $
-  (ResolvedDataType dt : map ResolvedCtor (dtCtors dt))
-
 -- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. This incomplete datatype
 -- must have no constructors, and it will not be added to the
@@ -394,35 +380,11 @@ completeDataType ident ctors mm0 =
       panic "completeDataType" ["datatype not found: " <> str]
 
 
--- | Insert an "injectCode" declaration
-insInjectCode :: Module -> Text -> Text -> Module
-insInjectCode m ns txt =
-  m{ moduleRDecls = InjectCodeDecl ns txt : moduleRDecls m }
-
--- | Insert a definition into a module
-insDef :: Module -> Def -> Module
-insDef m d =
-  insResolvedName
-  (m { moduleRDecls = DefDecl d : moduleRDecls m })
-  (ResolvedDef d)
-
 -- | Get the resolved names that are local to a module
 localResolvedNames :: Module -> [ResolvedName]
 localResolvedNames m =
   filter ((== moduleName m) . identModule . resolvedNameIdent)
   (Map.elems $ moduleResolveMap m)
-
--- | Get all data types defined in a module
-moduleDataTypes :: Module -> [DataType]
-moduleDataTypes =
-  foldr' (\case { ResolvedDataType dt -> (dt :); _ -> id } ) [] .
-  localResolvedNames
-
--- | Get all constructors defined in a module
-moduleCtors :: Module -> [Ctor]
-moduleCtors =
-  foldr' (\case { ResolvedCtor ctor -> (ctor :); _ -> id } ) [] .
-  localResolvedNames
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]
@@ -434,31 +396,6 @@ moduleDefs =
 -- that were not imported from some other module
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls
-
--- | Get all local declarations in a module that are marked as primitives
-modulePrimitives :: Module -> [Def]
-modulePrimitives m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == PrimQualifier
-    ]
-
--- | Get all local declarations in a module that are marked as axioms
-moduleAxioms :: Module -> [Def]
-moduleAxioms m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == AxiomQualifier
-    ]
-
--- | Get all local declarations in a module that are not marked as primitives or
--- axioms
-moduleActualDefs :: Module -> [Def]
-moduleActualDefs m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == NoQualifier
-    ]
 
 -- | The type of mappings from module names to modules
 data ModuleMap =
