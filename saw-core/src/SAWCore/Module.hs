@@ -273,6 +273,14 @@ resolvedNameIdent (ResolvedCtor ctor) = ctorName ctor
 resolvedNameIdent (ResolvedDataType dt) = dtName dt
 resolvedNameIdent (ResolvedDef d) = defIdent d
 
+-- | Get the 'VarIndex' for a 'ResolvedName'.
+resolvedNameVarIndex :: ResolvedName -> VarIndex
+resolvedNameVarIndex r =
+  case r of
+    ResolvedCtor ctor -> ctorVarIndex ctor
+    ResolvedDataType dt -> dtVarIndex dt
+    ResolvedDef def -> defVarIndex def
+
 -- | Modules define namespaces of datatypes, constructors, and definitions,
 -- i.e., mappings from 'Text' names to these objects. A module is allowed to
 -- map a 'Text' name to an object defined in a different module. Modules also
@@ -446,12 +454,18 @@ moduleActualDefs m =
 -- | The type of mappings from module names to modules
 data ModuleMap =
   ModuleMap
-  { mmResolveMap :: !(Map Ident ResolvedName)
+  { mmIdentMap :: !(Map Ident VarIndex)
+  , mmIndexMap :: !(Map VarIndex ResolvedName)
   , mmRDecls :: !(Map ModuleName [ModuleDecl])
   }
 
 emptyModuleMap :: ModuleMap
-emptyModuleMap = ModuleMap Map.empty Map.empty
+emptyModuleMap =
+  ModuleMap
+  { mmIdentMap = Map.empty
+  , mmIndexMap = Map.empty
+  , mmRDecls = Map.empty
+  }
 
 -- | Test whether a 'ModuleName' is in a 'ModuleMap'.
 moduleIsLoaded :: ModuleName -> ModuleMap -> Bool
@@ -460,12 +474,13 @@ moduleIsLoaded mn mm = Map.member mn (mmRDecls mm)
 loadModule :: Module -> ModuleMap -> ModuleMap
 loadModule m mm =
   ModuleMap
-  { mmResolveMap =
-      Map.union
-      (Map.mapKeys (mkIdent (moduleName m)) (moduleResolveMap m))
-      (mmResolveMap mm)
+  { mmIdentMap = Map.union identMap (mmIdentMap mm)
+  , mmIndexMap = Map.union indexMap (mmIndexMap mm)
   , mmRDecls = Map.insert (moduleName m) (moduleRDecls m) (mmRDecls mm)
   }
+  where
+    identMap = Map.mapKeys (mkIdent (moduleName m)) (fmap resolvedNameVarIndex (moduleResolveMap m))
+    indexMap = Map.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
 
 modifyModule :: ModuleName -> (Module -> Module) -> ModuleMap -> ModuleMap
 modifyModule mnm f mm =
@@ -477,13 +492,16 @@ findModule :: ModuleName -> ModuleMap -> Maybe Module
 findModule mnm mm =
   do decls <- Map.lookup mnm (mmRDecls mm)
      let rmap =
+           Map.mapMaybe (\vi -> Map.lookup vi (mmIndexMap mm)) $
            Map.mapKeys identBaseName $
            Map.filterWithKey (\i _ -> identModule i == mnm) $
-           mmResolveMap mm
+           mmIdentMap mm
      Just $ Module { moduleName = mnm, moduleResolveMap = rmap, moduleRDecls = decls }
 
 resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
-resolveNameInMap mm i = Map.lookup i (mmResolveMap mm)
+resolveNameInMap mm i =
+  do vi <- Map.lookup i (mmIdentMap mm)
+     Map.lookup vi (mmIndexMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
@@ -497,7 +515,7 @@ findDataTypeInMap mm i = resolveNameInMap mm i >>= asResolvedDataType
 -- that the returned list might have redundancies if a definition is visible /
 -- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
-allModuleDefs mm = mapMaybe asResolvedDef (Map.elems (mmResolveMap mm))
+allModuleDefs mm = mapMaybe asResolvedDef (Map.elems (mmIndexMap mm))
 
 -- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
@@ -532,8 +550,8 @@ allModuleActualDefs modmap =
 
 -- | Get all datatypes in all modules in a module map
 allModuleDataTypes :: ModuleMap -> [DataType]
-allModuleDataTypes mm = mapMaybe asResolvedDataType (Map.elems (mmResolveMap mm))
+allModuleDataTypes mm = mapMaybe asResolvedDataType (Map.elems (mmIndexMap mm))
 
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
-allModuleCtors mm = mapMaybe asResolvedCtor (Map.elems (mmResolveMap mm))
+allModuleCtors mm = mapMaybe asResolvedCtor (Map.elems (mmIndexMap mm))
