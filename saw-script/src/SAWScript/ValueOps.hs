@@ -222,29 +222,58 @@ withLocalEnvProof env (ProofScript m) = do
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
-localOptions f (TopLevel_ m) = TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
+localOptions f (TopLevel_ m) =
+  TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 -- | Implement stack tracing by adding error handlers that rethrow
 -- user errors, prepended with the given string.
 withStackTraceFrame :: String -> Value -> Value
 withStackTraceFrame str val =
+  let doTopLevel :: TopLevel a -> TopLevel a
+      doTopLevel action = do
+        trace <- gets rwStackTrace
+        modify (\rw -> rw { rwStackTrace = str : trace })
+        result <- action
+        modify (\rw -> rw { rwStackTrace = trace })
+        return result
+      doProofScript :: ProofScript a -> ProofScript a
+      doProofScript (ProofScript m) =
+        let m' =
+              underExceptT (underStateT doTopLevel) m
+        in
+        ProofScript m'
+      doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
+      doLLVM (LLVMCrucibleSetupM m) =
+        LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
+  in
   case val of
-    VLambda        f -> VLambda        (\x -> withStackTraceFrame str `fmap` withStackTraceFrameTopLevel str (f x))
-    VTopLevel      m -> VTopLevel      (withStackTraceFrame str `fmap` withStackTraceFrameTopLevel str m)
-    VProofScript   m -> VProofScript   (withStackTraceFrame str `fmap` withStackTraceFrameProofScript str m)
-    VBind pos v1 v2  -> VBind pos      (withStackTraceFrame str v1) (withStackTraceFrame str v2)
-    VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        withStackTraceFrame str `fmap` underReaderT (underStateT (withStackTraceFrameTopLevel str)) m
-  -- TODO? JVM setup blocks too?
-    _                -> val
+    VLambda f ->
+      let wrap x =
+            withStackTraceFrame str `fmap` doTopLevel (f x)
+      in
+      VLambda wrap
+    VTopLevel m ->
+      let m' =
+            withStackTraceFrame str `fmap` doTopLevel m
+      in
+      VTopLevel m'
+    VProofScript m ->
+      let m' =
+            withStackTraceFrame str `fmap` doProofScript m
+      in
+      VProofScript m'
+    VBind pos v1 v2 ->
+      let v1' = withStackTraceFrame str v1
+          v2' = withStackTraceFrame str v2
+      in
+      VBind pos v1' v2'
+    VLLVMCrucibleSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doLLVM m
+      in
+      VLLVMCrucibleSetup m'
+    -- TODO: JVM and MIR setup blocks too
+    _ ->
+      val
 
-withStackTraceFrameProofScript :: String -> ProofScript a -> ProofScript a
-withStackTraceFrameProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (withStackTraceFrameTopLevel str)) m)
 
-withStackTraceFrameTopLevel :: String -> TopLevel a -> TopLevel a
-withStackTraceFrameTopLevel str action = do
-  trace <- gets rwStackTrace
-  modify (\rw -> rw { rwStackTrace = str : trace })
-  result <- action
-  modify (\rw -> rw { rwStackTrace = trace })
-  return result
