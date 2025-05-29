@@ -404,6 +404,11 @@ data ModuleMap =
   , mmIndexMap :: !(IntMap ResolvedName) -- keyed by VarIndex
   , mmRDecls :: !(Map ModuleName [ModuleDecl])
   }
+  -- NOTE: If mmIdentMap contains a key "M.foo", this simply means
+  -- that the name name "foo" is in scope in the saw-core module "M".
+  -- It does NOT mean that "foo" is necessarily defined in module "M".
+  -- If "foo" was originally defined in module "N", then "N.foo" will
+  -- also be present in mmIdentMap, with the same VarIndex.
 
 emptyModuleMap :: ModuleMap
 emptyModuleMap =
