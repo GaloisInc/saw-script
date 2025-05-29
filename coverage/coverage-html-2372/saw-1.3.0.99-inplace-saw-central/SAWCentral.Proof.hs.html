@@ -1265,7 +1265,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1246 </span><span class="spaces">  </span><span class="istickedoff">loop p (t:ts) =</span>
 <span class="lineno"> 1247 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do prop &lt;- liftIO (scSort sc propSort)</span></span>
 <span class="lineno"> 1248 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- TC.typeInferComplete t</span></span>
-<span class="lineno"> 1249 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.TypedTerm p prop) t') p t'</span></span>
+<span class="lineno"> 1249 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.SCTypedTerm p prop) t') p t'</span></span>
 <span class="lineno"> 1250 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">loop p' ts</span></span></span>
 <span class="lineno"> 1251 </span>
 <span class="lineno"> 1252 </span>-- | Admit the given theorem without evidence.
@@ -1585,7 +1585,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1566 </span><span class="spaces">    </span><span class="istickedoff">checkApply nenv mkSqt (Prop p) (Left tm:es) =</span>
 <span class="lineno"> 1567 </span><span class="spaces">      </span><span class="istickedoff">do propTerm &lt;- scSort sc propSort</span>
 <span class="lineno"> 1568 </span><span class="spaces">         </span><span class="istickedoff">let m = do tm' &lt;- TC.typeInferComplete tm</span>
-<span class="lineno"> 1569 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'</span></span>
+<span class="lineno"> 1569 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp (TC.SCTypedTerm p propTerm) tm'</span></span>
 <span class="lineno"> 1570 </span><span class="spaces">                    </span><span class="istickedoff">TC.applyPiTyped <span class="nottickedoff">err</span> p tm'</span>
 <span class="lineno"> 1571 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc <span class="nottickedoff">Nothing</span> <span class="nottickedoff">[]</span></span>
 <span class="lineno"> 1572 </span><span class="spaces">         </span><span class="istickedoff">case res of</span>

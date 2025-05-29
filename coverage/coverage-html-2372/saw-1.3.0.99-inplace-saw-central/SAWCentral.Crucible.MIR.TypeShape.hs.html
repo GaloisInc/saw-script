@@ -218,7 +218,7 @@ span.spaces    { background: white }
 <span class="lineno">  199 </span><span class="spaces">                </span><span class="istickedoff">M.Union -&gt; <span class="nottickedoff">error &quot;tyToShape: Union types NYI&quot;</span></span>
 <span class="lineno">  200 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;tyToShape: bad adt: &quot; ++ show ty</span></span>
 <span class="lineno">  201 </span><span class="spaces">        </span><span class="istickedoff">M.TyRef ty' mutbl -&gt; goRef ty ty' mutbl</span>
-<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">M.TyRawPtr ty' mutbl -&gt; <span class="nottickedoff">goRef ty ty' mutbl</span></span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">M.TyRawPtr ty' mutbl -&gt; goRef <span class="nottickedoff">ty</span> ty' <span class="nottickedoff">mutbl</span></span>
 <span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">M.TyFnPtr sig -&gt; <span class="nottickedoff">goFnPtr ty sig</span></span>
 <span class="lineno">  204 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;tyToShape: &quot; ++ show ty ++ &quot; NYI&quot;</span></span>
 <span class="lineno">  205 </span><span class="spaces"></span><span class="istickedoff"></span>

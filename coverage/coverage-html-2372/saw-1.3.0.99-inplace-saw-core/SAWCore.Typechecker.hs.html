@@ -121,21 +121,21 @@ span.spaces    { background: white }
 <span class="lineno">  102 </span>getModule :: TCM Module
 <span class="lineno">  103 </span><span class="decl"><span class="istickedoff">getModule = getModuleName &gt;&gt;= liftTCM scFindModule</span></span>
 <span class="lineno">  104 </span>
-<span class="lineno">  105 </span>-- | Build a multi-arity application of 'TypedTerm's
-<span class="lineno">  106 </span>inferApplyAll :: TypedTerm -&gt; [TypedTerm] -&gt; TCM TypedTerm
+<span class="lineno">  105 </span>-- | Build a multi-arity application of 'SCTypedTerm's
+<span class="lineno">  106 </span>inferApplyAll :: SCTypedTerm -&gt; [SCTypedTerm] -&gt; TCM SCTypedTerm
 <span class="lineno">  107 </span><span class="decl"><span class="istickedoff">inferApplyAll t [] = return t</span>
 <span class="lineno">  108 </span><span class="spaces"></span><span class="istickedoff">inferApplyAll t (arg:args) =</span>
 <span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">do app1 &lt;- typeInferComplete (App t arg)</span>
 <span class="lineno">  110 </span><span class="spaces">     </span><span class="istickedoff">inferApplyAll app1 args</span></span>
 <span class="lineno">  111 </span>
 <span class="lineno">  112 </span>-- | Resolve a name in the current module and apply it to some arguments
-<span class="lineno">  113 </span>inferResolveNameApp :: Text -&gt; [TypedTerm] -&gt; TCM TypedTerm
+<span class="lineno">  113 </span>inferResolveNameApp :: Text -&gt; [SCTypedTerm] -&gt; TCM SCTypedTerm
 <span class="lineno">  114 </span><span class="decl"><span class="istickedoff">inferResolveNameApp n args =</span>
 <span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">do ctx &lt;- askCtx</span>
 <span class="lineno">  116 </span><span class="spaces">     </span><span class="istickedoff">m &lt;- getModule</span>
 <span class="lineno">  117 </span><span class="spaces">     </span><span class="istickedoff">case (findIndex ((== n) . fst) ctx, resolveName m n) of</span>
 <span class="lineno">  118 </span><span class="spaces">       </span><span class="istickedoff">(Just i, _) -&gt;</span>
-<span class="lineno">  119 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- typeInferComplete (LocalVar i :: TermF TypedTerm)</span>
+<span class="lineno">  119 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- typeInferComplete (LocalVar i :: TermF SCTypedTerm)</span>
 <span class="lineno">  120 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll t args</span>
 <span class="lineno">  121 </span><span class="spaces">       </span><span class="istickedoff">(_, Just (ResolvedCtor ctor)) -&gt;</span>
 <span class="lineno">  122 </span><span class="spaces">         </span><span class="istickedoff">do let (params, ctor_args) = splitAt (ctorNumParams ctor) args</span>
@@ -151,7 +151,7 @@ span.spaces    { background: white }
 <span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">typeInferComplete (DataTypeApp d params ixs)</span>
 <span class="lineno">  133 </span><span class="spaces">       </span><span class="istickedoff">(_, Just (ResolvedDef d)) -&gt;</span>
 <span class="lineno">  134 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftTCM scGlobalDef (defIdent d)</span>
-<span class="lineno">  135 </span><span class="spaces">            </span><span class="istickedoff">f &lt;- TypedTerm t &lt;$&gt; liftTCM scTypeOf t</span>
+<span class="lineno">  135 </span><span class="spaces">            </span><span class="istickedoff">f &lt;- SCTypedTerm t &lt;$&gt; liftTCM scTypeOf t</span>
 <span class="lineno">  136 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll f args</span>
 <span class="lineno">  137 </span><span class="spaces">       </span><span class="istickedoff">(Nothing, Nothing) -&gt;</span>
 <span class="lineno">  138 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ UnboundName n</span></span></span>
@@ -182,7 +182,7 @@ span.spaces    { background: white }
 <span class="lineno">  163 </span><span class="spaces"></span><span class="istickedoff">typeInferDebug _ = return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  164 </span>
 <span class="lineno">  165 </span>-- The type inference engine for untyped terms, which mostly just dispatches to
-<span class="lineno">  166 </span>-- the type inference engine for (FTermF TypedTerm) defined in SCTypeCheck.hs
+<span class="lineno">  166 </span>-- the type inference engine for (FTermF SCTypedTerm) defined in SCTypeCheck.hs
 <span class="lineno">  167 </span>instance TypeInfer Un.UTerm where
 <span class="lineno">  168 </span>  <span class="decl"><span class="nottickedoff">typeInfer t = typedVal &lt;$&gt; typeInferComplete t</span></span>
 <span class="lineno">  169 </span>
@@ -194,7 +194,7 @@ span.spaces    { background: white }
 <span class="lineno">  175 </span><span class="spaces">       </span><span class="istickedoff">return res</span></span>
 <span class="lineno">  176 </span>
 <span class="lineno">  177 </span>-- | Main workhorse function for type inference on untyped terms
-<span class="lineno">  178 </span>typeInferCompleteTerm :: Un.UTerm -&gt; TCM TypedTerm
+<span class="lineno">  178 </span>typeInferCompleteTerm :: Un.UTerm -&gt; TCM SCTypedTerm
 <span class="lineno">  179 </span>
 <span class="lineno">  180 </span>-- Names
 <span class="lineno">  181 </span><span class="decl"><span class="istickedoff">typeInferCompleteTerm (matchAppliedName -&gt; Just (n, args)) =</span>
@@ -206,7 +206,7 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  188 </span><span class="spaces"></span><span class="istickedoff">-- Sorts</span>
 <span class="lineno">  189 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.Sort _ srt h) =</span>
-<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (Sort srt h :: FlatTermF TypedTerm)</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (Sort srt h :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  191 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  192 </span><span class="spaces"></span><span class="istickedoff">-- Recursors (must come before applications)</span>
 <span class="lineno">  193 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (matchAppliedRecursor -&gt; Just (maybe_mnm, str, args)) =</span>
@@ -279,9 +279,9 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  261 </span><span class="spaces"></span><span class="istickedoff">-- Unit</span>
 <span class="lineno">  262 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.UnitValue _) =</span>
-<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (UnitValue :: FlatTermF TypedTerm)</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (UnitValue :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  264 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.UnitType _) =</span>
-<span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (UnitType :: FlatTermF TypedTerm)</span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (UnitType :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  266 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  267 </span><span class="spaces"></span><span class="istickedoff">-- Simple pairs</span>
 <span class="lineno">  268 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.PairValue _ t1 t2) =</span>
@@ -305,9 +305,9 @@ span.spaces    { background: white }
 <span class="lineno">  286 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  287 </span><span class="spaces"></span><span class="istickedoff">-- Literals</span>
 <span class="lineno">  288 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.NatLit _ i) =</span>
-<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (NatLit i :: FlatTermF TypedTerm)</span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (NatLit i :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  290 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.StringLit _ str) =</span>
-<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (StringLit str :: FlatTermF TypedTerm)</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (StringLit str :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  292 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ []) = <span class="nottickedoff">throwTCError EmptyVectorLit</span></span>
 <span class="lineno">  293 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ ts) =</span>
 <span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">do typed_ts &lt;- mapM typeInferComplete ts</span>
@@ -315,7 +315,7 @@ span.spaces    { background: white }
 <span class="lineno">  296 </span><span class="spaces">       </span><span class="istickedoff">(t1:_) -&gt; return $ typedType t1</span>
 <span class="lineno">  297 </span><span class="spaces">       </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">throwTCError $ EmptyVectorLit</span></span>
 <span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">type_of_tp &lt;- typeInfer tp</span>
-<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $</span>
+<span class="lineno">  299 </span><span class="spaces">     </span><span class="istickedoff">typeInferComplete (ArrayValue (SCTypedTerm tp type_of_tp) $</span>
 <span class="lineno">  300 </span><span class="spaces">                        </span><span class="istickedoff">V.fromList typed_ts)</span>
 <span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.BVLit _ []) = <span class="nottickedoff">throwTCError EmptyVectorLit</span></span>
 <span class="lineno">  302 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.BVLit _ bits) =</span>
@@ -385,7 +385,7 @@ span.spaces    { background: white }
 <span class="lineno">  366 </span><span class="spaces">     </span><span class="istickedoff">-- Step 4: add the definition to the current module</span>
 <span class="lineno">  367 </span><span class="spaces">     </span><span class="istickedoff">mnm &lt;- getModuleName</span>
 <span class="lineno">  368 </span><span class="spaces">     </span><span class="istickedoff">let ident = mkIdent mnm nm</span>
-<span class="lineno">  369 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scInsertDef mnm ident def_tp def_tm) &gt;&gt;</span>
+<span class="lineno">  369 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scInsertDef ident def_tp def_tm) &gt;&gt;</span>
 <span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
 <span class="lineno">  371 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  372 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =</span>
@@ -402,7 +402,7 @@ span.spaces    { background: white }
 <span class="lineno">  383 </span><span class="spaces">      </span><span class="istickedoff">mnm &lt;- getModuleName</span>
 <span class="lineno">  384 </span><span class="spaces">      </span><span class="istickedoff">let ident = mkIdent mnm nm</span>
 <span class="lineno">  385 </span><span class="spaces">      </span><span class="istickedoff">let def_tp = typedVal typed_tp</span>
-<span class="lineno">  386 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scDeclarePrim mnm ident <span class="nottickedoff">q</span> def_tp) &gt;&gt;</span>
+<span class="lineno">  386 </span><span class="spaces">      </span><span class="istickedoff">liftTCM scDeclarePrim ident <span class="nottickedoff">q</span> def_tp) &gt;&gt;</span>
 <span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
 <span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  389 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TermDef (PosPair p nm) _ _ : _) =</span>
@@ -495,7 +495,7 @@ span.spaces    { background: white }
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">do let imn = val $ Un.importModName imp</span>
 <span class="lineno">  477 </span><span class="spaces">       </span><span class="istickedoff">i_exists &lt;- scModuleIsLoaded sc imn</span>
 <span class="lineno">  478 </span><span class="spaces">       </span><span class="istickedoff">unless i_exists $ <span class="nottickedoff">fail $ &quot;Imported module not found: &quot; ++ show imn</span></span>
-<span class="lineno">  479 </span><span class="spaces">       </span><span class="istickedoff">scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . <span class="nottickedoff">identName</span>) imn mnm</span>
+<span class="lineno">  479 </span><span class="spaces">       </span><span class="istickedoff">scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . <span class="nottickedoff">Text.unpack</span>) imn mnm</span>
 <span class="lineno">  480 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
 <span class="lineno">  481 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
 <span class="lineno">  482 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>

@@ -1079,8 +1079,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1060 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
 <span class="lineno"> 1061 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
 <span class="lineno"> 1062 </span><span class="spaces">  </span><span class="istickedoff">case (actual, expectedTy, expected) of</span>
-<span class="lineno"> 1063 </span><span class="spaces">    </span><span class="istickedoff">(MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) -&gt;</span>
-<span class="lineno"> 1064 </span><span class="spaces">      </span><span class="istickedoff">do assignVar cc md var (Some (MirPointer tpr <span class="nottickedoff">mutbl</span> pointeeTy ref))</span>
+<span class="lineno"> 1063 </span><span class="spaces">    </span><span class="istickedoff">(MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) -&gt;</span>
+<span class="lineno"> 1064 </span><span class="spaces">      </span><span class="istickedoff">assignVar cc md var (Some (MirPointer tpr <span class="nottickedoff">(tyToPtrKind refTy)</span> <span class="nottickedoff">mutbl</span> pointeeTy ref))</span>
 <span class="lineno"> 1065 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1066 </span><span class="spaces">    </span><span class="istickedoff">-- match arrays point-wise</span>
 <span class="lineno"> 1067 </span><span class="spaces">    </span><span class="istickedoff">(MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)</span>

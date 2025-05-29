@@ -2355,7 +2355,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2336 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2337 </span><span class="spaces">  </span><span class="istickedoff">tl_rhs   &lt;- addTypeAbstractions =&lt;&lt; scMakeListSort represType_eachCtor</span>
 <span class="lineno"> 2338 </span><span class="spaces">  </span><span class="istickedoff">tl_type  &lt;- scFunAll sc tyParamsKinds scListSort</span>
-<span class="lineno"> 2339 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc preludeName tl_ident tl_type tl_rhs</span>
+<span class="lineno"> 2339 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc tl_ident tl_type tl_rhs</span>
 <span class="lineno"> 2340 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2341 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
 <span class="lineno"> 2342 </span><span class="spaces">  </span><span class="istickedoff">-- Create the definition for the SAWCore sum (to which we map the</span>
@@ -2371,7 +2371,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2352 </span><span class="spaces">  </span><span class="istickedoff">sumTy_type &lt;- scFunAll sc tyParamsKinds sort0</span>
 <span class="lineno"> 2353 </span><span class="spaces">  </span><span class="istickedoff">sumTy_rhs  &lt;- addTypeAbstractions =&lt;&lt; scEithersV tl_applied</span>
 <span class="lineno"> 2354 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2355 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs</span>
+<span class="lineno"> 2355 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc sumTy_ident sumTy_type sumTy_rhs</span>
 <span class="lineno"> 2356 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2357 </span><span class="spaces">  </span><span class="istickedoff">-------------------------------------------------------------</span>
 <span class="lineno"> 2358 </span><span class="spaces">  </span><span class="istickedoff">-- Create a `case` function specialized to the enum type.</span>
@@ -2438,7 +2438,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2419 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; sc_eithersV b</span>
 <span class="lineno"> 2420 </span><span class="spaces">        </span><span class="istickedoff">=&lt;&lt; scMakeFunsTo b (zip represType_eachCtor funcDefs)</span>
 <span class="lineno"> 2421 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2422 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc preludeName case_ident case_type case_rhs</span>
+<span class="lineno"> 2422 </span><span class="spaces">  </span><span class="istickedoff">scInsertDef sc case_ident case_type case_rhs</span>
 <span class="lineno"> 2423 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2424 </span><span class="spaces">  </span><span class="istickedoff">assertSAWCoreTypeChecks sc <span class="nottickedoff">case_ident</span> case_rhs (Just <span class="nottickedoff">case_type</span>)</span>
 <span class="lineno"> 2425 </span><span class="spaces"></span><span class="istickedoff"></span>

@@ -333,7 +333,7 @@ span.spaces    { background: white }
 <span class="lineno">  314 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">&quot;Unresolved prestate variable: &quot; &lt;&gt; Text.pack (show i)</span></span>
 <span class="lineno">  315 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  316 </span><span class="spaces">        </span><span class="istickedoff">Just (Some alloc) -&gt;</span>
-<span class="lineno">  317 </span><span class="spaces">          </span><span class="istickedoff">return $ Mir.TyRef (alloc^.maMirType) (alloc^.maMutbl)</span>
+<span class="lineno">  317 </span><span class="spaces">          </span><span class="istickedoff">pure $ ptrKindToTy (alloc^.maPtrKind) (alloc^.maMirType) (alloc^.maMutbl)</span>
 <span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupTerm tt -&gt;</span>
 <span class="lineno">  319 </span><span class="spaces">      </span><span class="istickedoff">typeOfTypedTerm tt</span>
 <span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupArray elemTy vs -&gt;</span>
@@ -431,7 +431,7 @@ span.spaces    { background: white }
 <span class="lineno">  412 </span><span class="spaces">      </span><span class="istickedoff">Some ptr &lt;- pure $ lookupAllocIndex env i</span>
 <span class="lineno">  413 </span><span class="spaces">      </span><span class="istickedoff">let pointeeType = ptr ^. mpMirType</span>
 <span class="lineno">  414 </span><span class="spaces">      </span><span class="istickedoff">pure $ MIRVal (RefShape</span>
-<span class="lineno">  415 </span><span class="spaces">                        </span><span class="istickedoff">(Mir.TyRef pointeeType (ptr ^. mpMutbl))</span>
+<span class="lineno">  415 </span><span class="spaces">                        </span><span class="istickedoff">(ptrKindToTy (ptr ^. mpKind) pointeeType (ptr ^. mpMutbl))</span>
 <span class="lineno">  416 </span><span class="spaces">                        </span><span class="istickedoff">pointeeType</span>
 <span class="lineno">  417 </span><span class="spaces">                        </span><span class="istickedoff">(ptr ^. mpMutbl)</span>
 <span class="lineno">  418 </span><span class="spaces">                        </span><span class="istickedoff">(ptr ^. mpType))</span>
@@ -1400,7 +1400,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1381 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyStr = TyViewStr</span>
 <span class="lineno"> 1382 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyFnPtr sig) = <span class="nottickedoff">TyViewFnPtr (fnSigView sig)</span></span>
 <span class="lineno"> 1383 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyDynamic trait) = <span class="nottickedoff">TyViewDynamic trait</span></span>
-<span class="lineno"> 1384 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyRawPtr ty mut) = <span class="nottickedoff">TyViewRawPtr (tyView ty) mut</span></span>
+<span class="lineno"> 1384 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut</span>
 <span class="lineno"> 1385 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyFloat fk) = <span class="nottickedoff">TyViewFloat fk</span></span>
 <span class="lineno"> 1386 </span><span class="spaces"></span><span class="istickedoff">tyView (Mir.TyDowncast ty n) = <span class="nottickedoff">TyViewDowncast (tyView ty) n</span></span>
 <span class="lineno"> 1387 </span><span class="spaces"></span><span class="istickedoff">tyView Mir.TyNever = <span class="nottickedoff">TyViewNever</span></span>
@@ -1469,271 +1469,273 @@ span.spaces    { background: white }
 <span class="lineno"> 1450 </span><span class="spaces">  </span><span class="istickedoff">| Just True &lt;- W4.asConstantPred p = Just v</span>
 <span class="lineno"> 1451 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno"> 1452 </span>
-<span class="lineno"> 1453 </span>-- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
-<span class="lineno"> 1454 </span>doAlloc ::
-<span class="lineno"> 1455 </span>     MIRCrucibleContext
-<span class="lineno"> 1456 </span>  -&gt; SymGlobalState Sym
-<span class="lineno"> 1457 </span>  -&gt; Some MirAllocSpec
-<span class="lineno"> 1458 </span>  -&gt; IO (Some (MirPointer Sym), SymGlobalState Sym)
-<span class="lineno"> 1459 </span><span class="decl"><span class="istickedoff">doAlloc cc globals (Some ma) =</span>
-<span class="lineno"> 1460 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt;</span>
-<span class="lineno"> 1461 </span><span class="spaces">  </span><span class="istickedoff">do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span>
-<span class="lineno"> 1462 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">halloc = cc^.mccHandleAllocator</span></span>
-<span class="lineno"> 1463 </span><span class="spaces">     </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 1464 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">iTypes = cc^.mccIntrinsicTypes</span></span>
-<span class="lineno"> 1465 </span><span class="spaces">     </span><span class="istickedoff">Some tpr &lt;- pure $ Mir.tyToRepr col (ma^.maMirType)</span>
-<span class="lineno"> 1466 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1467 </span><span class="spaces">     </span><span class="istickedoff">-- Create an uninitialized `MirVector_PartialVector` of length 1 and</span>
-<span class="lineno"> 1468 </span><span class="spaces">     </span><span class="istickedoff">-- return a pointer to its element.</span>
-<span class="lineno"> 1469 </span><span class="spaces">     </span><span class="istickedoff">let vecRepr = Mir.MirVectorRepr tpr</span>
-<span class="lineno"> 1470 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- Mir.newMirRefIO sym <span class="nottickedoff">halloc</span> vecRepr</span>
-<span class="lineno"> 1471 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1472 </span><span class="spaces">     </span><span class="istickedoff">one &lt;- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1</span>
-<span class="lineno"> 1473 </span><span class="spaces">     </span><span class="istickedoff">vec &lt;- Mir.mirVector_uninitIO <span class="nottickedoff">bak</span> one</span>
-<span class="lineno"> 1474 </span><span class="spaces">     </span><span class="istickedoff">globals' &lt;- Mir.writeMirRefIO <span class="nottickedoff">bak</span> globals <span class="nottickedoff">iTypes</span> vecRepr ref vec</span>
-<span class="lineno"> 1475 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1476 </span><span class="spaces">     </span><span class="istickedoff">zero &lt;- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0</span>
-<span class="lineno"> 1477 </span><span class="spaces">     </span><span class="istickedoff">ptr &lt;- Mir.subindexMirRefIO bak <span class="nottickedoff">iTypes</span> tpr ref zero</span>
-<span class="lineno"> 1478 </span><span class="spaces">     </span><span class="istickedoff">let mirPtr = Some MirPointer</span>
-<span class="lineno"> 1479 </span><span class="spaces">           </span><span class="istickedoff">{ _mpType = tpr</span>
-<span class="lineno"> 1480 </span><span class="spaces">           </span><span class="istickedoff">, _mpMutbl = ma^.maMutbl</span>
-<span class="lineno"> 1481 </span><span class="spaces">           </span><span class="istickedoff">, _mpMirType = ma^.maMirType</span>
-<span class="lineno"> 1482 </span><span class="spaces">           </span><span class="istickedoff">, _mpRef = ptr</span>
-<span class="lineno"> 1483 </span><span class="spaces">           </span><span class="istickedoff">}</span>
-<span class="lineno"> 1484 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1485 </span><span class="spaces">     </span><span class="istickedoff">pure (mirPtr, globals')</span></span>
-<span class="lineno"> 1486 </span>
-<span class="lineno"> 1487 </span>doPointsTo ::
-<span class="lineno"> 1488 </span>     MS.CrucibleMethodSpecIR MIR
-<span class="lineno"> 1489 </span>  -&gt; MIRCrucibleContext
-<span class="lineno"> 1490 </span>  -&gt; Map MS.AllocIndex (Some (MirPointer Sym))
-<span class="lineno"> 1491 </span>  -&gt; SymGlobalState Sym
-<span class="lineno"> 1492 </span>  -&gt; MirPointsTo
-<span class="lineno"> 1493 </span>  -&gt; IO (SymGlobalState Sym)
-<span class="lineno"> 1494 </span><span class="decl"><span class="istickedoff">doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =</span>
-<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 1496 </span><span class="spaces">    </span><span class="istickedoff">MIRVal referenceShp referenceVal &lt;-</span>
-<span class="lineno"> 1497 </span><span class="spaces">      </span><span class="istickedoff">resolveSetupVal cc env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> reference</span>
-<span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">-- By the time we reach here, we have already checked (in mir_points_to)</span>
-<span class="lineno"> 1499 </span><span class="spaces">    </span><span class="istickedoff">-- that we are in fact dealing with a reference value, so the call to</span>
-<span class="lineno"> 1500 </span><span class="spaces">    </span><span class="istickedoff">-- `testRefShape` below should always succeed.</span>
-<span class="lineno"> 1501 </span><span class="spaces">    </span><span class="istickedoff">IsRefShape _ _ _ referenceInnerTy &lt;-</span>
-<span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">case testRefShape referenceShp of</span>
-<span class="lineno"> 1503 </span><span class="spaces">        </span><span class="istickedoff">Just irs -&gt; pure irs</span>
-<span class="lineno"> 1504 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1505 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;doPointsTo&quot; [</span></span>
-<span class="lineno"> 1506 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected non-reference type: &quot;,</span></span>
-<span class="lineno"> 1507 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)</span></span>
-<span class="lineno"> 1508 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1509 </span><span class="spaces">    </span><span class="istickedoff">referent &lt;- firstPointsToReferent referents</span>
-<span class="lineno"> 1510 </span><span class="spaces">    </span><span class="istickedoff">MIRVal referentShp referentVal &lt;-</span>
-<span class="lineno"> 1511 </span><span class="spaces">      </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> referent</span>
-<span class="lineno"> 1512 </span><span class="spaces">    </span><span class="istickedoff">-- By the time we reach here, we have already checked (in mir_points_to)</span>
-<span class="lineno"> 1513 </span><span class="spaces">    </span><span class="istickedoff">-- that the type of the reference is compatible with the right-hand side</span>
-<span class="lineno"> 1514 </span><span class="spaces">    </span><span class="istickedoff">-- value, so the equality check below should never fail.</span>
-<span class="lineno"> 1515 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;-</span>
-<span class="lineno"> 1516 </span><span class="spaces">      </span><span class="istickedoff">case W4.testEquality referenceInnerTy (shapeType referentShp) of</span>
-<span class="lineno"> 1517 </span><span class="spaces">        </span><span class="istickedoff">Just r -&gt; pure r</span>
-<span class="lineno"> 1518 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1519 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;doPointsTo&quot; [</span></span>
-<span class="lineno"> 1520 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected type mismatch between reference and referent&quot;,</span></span>
-<span class="lineno"> 1521 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Reference type: &quot; &lt;&gt; Text.pack (show referenceInnerTy),</span></span>
-<span class="lineno"> 1522 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Referent type:  &quot; &lt;&gt; Text.pack (show (shapeType referentShp))</span></span>
-<span class="lineno"> 1523 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1524 </span><span class="spaces">    </span><span class="istickedoff">Mir.writeMirRefIO bak globals <span class="nottickedoff">iTypes</span> referenceInnerTy referenceVal referentVal</span>
-<span class="lineno"> 1525 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1526 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">iTypes = cc ^. mccIntrinsicTypes</span></span>
-<span class="lineno"> 1527 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tyenv = MS.csAllocations mspec</span></span>
-<span class="lineno"> 1528 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames</span></span></span>
-<span class="lineno"> 1529 </span>
-<span class="lineno"> 1530 </span>-- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
-<span class="lineno"> 1531 </span>-- referent on the right-hand side. As a result, this function should never
-<span class="lineno"> 1532 </span>-- fail.
-<span class="lineno"> 1533 </span>firstPointsToReferent ::
-<span class="lineno"> 1534 </span>  MonadFail m =&gt; [MS.SetupValue MIR] -&gt; m (MS.SetupValue MIR)
-<span class="lineno"> 1535 </span><span class="decl"><span class="istickedoff">firstPointsToReferent referents =</span>
-<span class="lineno"> 1536 </span><span class="spaces">  </span><span class="istickedoff">case referents of</span>
-<span class="lineno"> 1537 </span><span class="spaces">    </span><span class="istickedoff">[referent] -&gt; pure referent</span>
-<span class="lineno"> 1538 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $</span></span>
-<span class="lineno"> 1539 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected mir_points_to statement with &quot; ++ show (length referents) ++</span></span>
-<span class="lineno"> 1540 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot; referent(s)&quot;</span></span></span>
-<span class="lineno"> 1541 </span>
-<span class="lineno"> 1542 </span>-- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
-<span class="lineno"> 1543 </span>mirAdtToTy :: Mir.Adt -&gt; Mir.Ty
-<span class="lineno"> 1544 </span><span class="decl"><span class="istickedoff">mirAdtToTy adt =</span>
-<span class="lineno"> 1545 </span><span class="spaces">  </span><span class="istickedoff">Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)</span></span>
-<span class="lineno"> 1546 </span>
-<span class="lineno"> 1547 </span>-- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
-<span class="lineno"> 1548 </span>findDefId :: MonadFail m =&gt; Mir.CollectionState -&gt; Text -&gt; m Mir.DefId
-<span class="lineno"> 1549 </span><span class="decl"><span class="istickedoff">findDefId cs defName =</span>
-<span class="lineno"> 1550 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">fail</span> pure $ findDefIdEither cs defName</span></span>
-<span class="lineno"> 1551 </span>
-<span class="lineno"> 1552 </span>-- | Given a definition name @defName@, attempt to look up its corresponding
-<span class="lineno"> 1553 </span>-- 'Mir.DefId'. If successful, return it with 'Right'. Currently, the following
-<span class="lineno"> 1554 </span>-- types of definition names are permitted:
-<span class="lineno"> 1555 </span>--
-<span class="lineno"> 1556 </span>-- * @&lt;crate_name&gt;/&lt;disambiguator&gt;::&lt;def_name&gt;: A fully disambiguated name.
+<span class="lineno"> 1453 </span>-- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
+<span class="lineno"> 1454 </span>-- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
+<span class="lineno"> 1455 </span>doAlloc ::
+<span class="lineno"> 1456 </span>     MIRCrucibleContext
+<span class="lineno"> 1457 </span>  -&gt; SymGlobalState Sym
+<span class="lineno"> 1458 </span>  -&gt; Some MirAllocSpec
+<span class="lineno"> 1459 </span>  -&gt; IO (Some (MirPointer Sym), SymGlobalState Sym)
+<span class="lineno"> 1460 </span><span class="decl"><span class="istickedoff">doAlloc cc globals (Some ma) =</span>
+<span class="lineno"> 1461 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt;</span>
+<span class="lineno"> 1462 </span><span class="spaces">  </span><span class="istickedoff">do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span>
+<span class="lineno"> 1463 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">halloc = cc^.mccHandleAllocator</span></span>
+<span class="lineno"> 1464 </span><span class="spaces">     </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 1465 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">iTypes = cc^.mccIntrinsicTypes</span></span>
+<span class="lineno"> 1466 </span><span class="spaces">     </span><span class="istickedoff">Some tpr &lt;- pure $ Mir.tyToRepr col (ma^.maMirType)</span>
+<span class="lineno"> 1467 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1468 </span><span class="spaces">     </span><span class="istickedoff">-- Create an uninitialized `MirVector_PartialVector` of length 1 and</span>
+<span class="lineno"> 1469 </span><span class="spaces">     </span><span class="istickedoff">-- return a pointer to its element.</span>
+<span class="lineno"> 1470 </span><span class="spaces">     </span><span class="istickedoff">let vecRepr = Mir.MirVectorRepr tpr</span>
+<span class="lineno"> 1471 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- Mir.newMirRefIO sym <span class="nottickedoff">halloc</span> vecRepr</span>
+<span class="lineno"> 1472 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1473 </span><span class="spaces">     </span><span class="istickedoff">one &lt;- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1</span>
+<span class="lineno"> 1474 </span><span class="spaces">     </span><span class="istickedoff">vec &lt;- Mir.mirVector_uninitIO <span class="nottickedoff">bak</span> one</span>
+<span class="lineno"> 1475 </span><span class="spaces">     </span><span class="istickedoff">globals' &lt;- Mir.writeMirRefIO <span class="nottickedoff">bak</span> globals <span class="nottickedoff">iTypes</span> vecRepr ref vec</span>
+<span class="lineno"> 1476 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1477 </span><span class="spaces">     </span><span class="istickedoff">zero &lt;- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0</span>
+<span class="lineno"> 1478 </span><span class="spaces">     </span><span class="istickedoff">ptr &lt;- Mir.subindexMirRefIO bak <span class="nottickedoff">iTypes</span> tpr ref zero</span>
+<span class="lineno"> 1479 </span><span class="spaces">     </span><span class="istickedoff">let mirPtr = Some MirPointer</span>
+<span class="lineno"> 1480 </span><span class="spaces">           </span><span class="istickedoff">{ _mpType = tpr</span>
+<span class="lineno"> 1481 </span><span class="spaces">           </span><span class="istickedoff">, _mpKind = ma^.maPtrKind</span>
+<span class="lineno"> 1482 </span><span class="spaces">           </span><span class="istickedoff">, _mpMutbl = ma^.maMutbl</span>
+<span class="lineno"> 1483 </span><span class="spaces">           </span><span class="istickedoff">, _mpMirType = ma^.maMirType</span>
+<span class="lineno"> 1484 </span><span class="spaces">           </span><span class="istickedoff">, _mpRef = ptr</span>
+<span class="lineno"> 1485 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno"> 1486 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1487 </span><span class="spaces">     </span><span class="istickedoff">pure (mirPtr, globals')</span></span>
+<span class="lineno"> 1488 </span>
+<span class="lineno"> 1489 </span>doPointsTo ::
+<span class="lineno"> 1490 </span>     MS.CrucibleMethodSpecIR MIR
+<span class="lineno"> 1491 </span>  -&gt; MIRCrucibleContext
+<span class="lineno"> 1492 </span>  -&gt; Map MS.AllocIndex (Some (MirPointer Sym))
+<span class="lineno"> 1493 </span>  -&gt; SymGlobalState Sym
+<span class="lineno"> 1494 </span>  -&gt; MirPointsTo
+<span class="lineno"> 1495 </span>  -&gt; IO (SymGlobalState Sym)
+<span class="lineno"> 1496 </span><span class="decl"><span class="istickedoff">doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =</span>
+<span class="lineno"> 1497 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff">MIRVal referenceShp referenceVal &lt;-</span>
+<span class="lineno"> 1499 </span><span class="spaces">      </span><span class="istickedoff">resolveSetupVal cc env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> reference</span>
+<span class="lineno"> 1500 </span><span class="spaces">    </span><span class="istickedoff">-- By the time we reach here, we have already checked (in mir_points_to)</span>
+<span class="lineno"> 1501 </span><span class="spaces">    </span><span class="istickedoff">-- that we are in fact dealing with a reference value, so the call to</span>
+<span class="lineno"> 1502 </span><span class="spaces">    </span><span class="istickedoff">-- `testRefShape` below should always succeed.</span>
+<span class="lineno"> 1503 </span><span class="spaces">    </span><span class="istickedoff">IsRefShape _ _ _ referenceInnerTy &lt;-</span>
+<span class="lineno"> 1504 </span><span class="spaces">      </span><span class="istickedoff">case testRefShape referenceShp of</span>
+<span class="lineno"> 1505 </span><span class="spaces">        </span><span class="istickedoff">Just irs -&gt; pure irs</span>
+<span class="lineno"> 1506 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1507 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;doPointsTo&quot; [</span></span>
+<span class="lineno"> 1508 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected non-reference type: &quot;,</span></span>
+<span class="lineno"> 1509 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)</span></span>
+<span class="lineno"> 1510 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1511 </span><span class="spaces">    </span><span class="istickedoff">referent &lt;- firstPointsToReferent referents</span>
+<span class="lineno"> 1512 </span><span class="spaces">    </span><span class="istickedoff">MIRVal referentShp referentVal &lt;-</span>
+<span class="lineno"> 1513 </span><span class="spaces">      </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> referent</span>
+<span class="lineno"> 1514 </span><span class="spaces">    </span><span class="istickedoff">-- By the time we reach here, we have already checked (in mir_points_to)</span>
+<span class="lineno"> 1515 </span><span class="spaces">    </span><span class="istickedoff">-- that the type of the reference is compatible with the right-hand side</span>
+<span class="lineno"> 1516 </span><span class="spaces">    </span><span class="istickedoff">-- value, so the equality check below should never fail.</span>
+<span class="lineno"> 1517 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;-</span>
+<span class="lineno"> 1518 </span><span class="spaces">      </span><span class="istickedoff">case W4.testEquality referenceInnerTy (shapeType referentShp) of</span>
+<span class="lineno"> 1519 </span><span class="spaces">        </span><span class="istickedoff">Just r -&gt; pure r</span>
+<span class="lineno"> 1520 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1521 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;doPointsTo&quot; [</span></span>
+<span class="lineno"> 1522 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected type mismatch between reference and referent&quot;,</span></span>
+<span class="lineno"> 1523 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Reference type: &quot; &lt;&gt; Text.pack (show referenceInnerTy),</span></span>
+<span class="lineno"> 1524 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;Referent type:  &quot; &lt;&gt; Text.pack (show (shapeType referentShp))</span></span>
+<span class="lineno"> 1525 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1526 </span><span class="spaces">    </span><span class="istickedoff">Mir.writeMirRefIO bak globals <span class="nottickedoff">iTypes</span> referenceInnerTy referenceVal referentVal</span>
+<span class="lineno"> 1527 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1528 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">iTypes = cc ^. mccIntrinsicTypes</span></span>
+<span class="lineno"> 1529 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tyenv = MS.csAllocations mspec</span></span>
+<span class="lineno"> 1530 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames</span></span></span>
+<span class="lineno"> 1531 </span>
+<span class="lineno"> 1532 </span>-- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
+<span class="lineno"> 1533 </span>-- referent on the right-hand side. As a result, this function should never
+<span class="lineno"> 1534 </span>-- fail.
+<span class="lineno"> 1535 </span>firstPointsToReferent ::
+<span class="lineno"> 1536 </span>  MonadFail m =&gt; [MS.SetupValue MIR] -&gt; m (MS.SetupValue MIR)
+<span class="lineno"> 1537 </span><span class="decl"><span class="istickedoff">firstPointsToReferent referents =</span>
+<span class="lineno"> 1538 </span><span class="spaces">  </span><span class="istickedoff">case referents of</span>
+<span class="lineno"> 1539 </span><span class="spaces">    </span><span class="istickedoff">[referent] -&gt; pure referent</span>
+<span class="lineno"> 1540 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $</span></span>
+<span class="lineno"> 1541 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected mir_points_to statement with &quot; ++ show (length referents) ++</span></span>
+<span class="lineno"> 1542 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot; referent(s)&quot;</span></span></span>
+<span class="lineno"> 1543 </span>
+<span class="lineno"> 1544 </span>-- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
+<span class="lineno"> 1545 </span>mirAdtToTy :: Mir.Adt -&gt; Mir.Ty
+<span class="lineno"> 1546 </span><span class="decl"><span class="istickedoff">mirAdtToTy adt =</span>
+<span class="lineno"> 1547 </span><span class="spaces">  </span><span class="istickedoff">Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)</span></span>
+<span class="lineno"> 1548 </span>
+<span class="lineno"> 1549 </span>-- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
+<span class="lineno"> 1550 </span>findDefId :: MonadFail m =&gt; Mir.CollectionState -&gt; Text -&gt; m Mir.DefId
+<span class="lineno"> 1551 </span><span class="decl"><span class="istickedoff">findDefId cs defName =</span>
+<span class="lineno"> 1552 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">fail</span> pure $ findDefIdEither cs defName</span></span>
+<span class="lineno"> 1553 </span>
+<span class="lineno"> 1554 </span>-- | Given a definition name @defName@, attempt to look up its corresponding
+<span class="lineno"> 1555 </span>-- 'Mir.DefId'. If successful, return it with 'Right'. Currently, the following
+<span class="lineno"> 1556 </span>-- types of definition names are permitted:
 <span class="lineno"> 1557 </span>--
-<span class="lineno"> 1558 </span>-- * @&lt;crate_name&gt;::&lt;def_name&gt;: A name without a disambiguator. In this
-<span class="lineno"> 1559 </span>--   case, SAW will attempt to look up a disambiguator from the
-<span class="lineno"> 1560 </span>--   'Mir.crateHashesMap'. If none can be found, or if there are multiple
-<span class="lineno"> 1561 </span>--   disambiguators for the given @&lt;crate_name&gt;@, then this will return an error
-<span class="lineno"> 1562 </span>--   message with 'Left'.
-<span class="lineno"> 1563 </span>--
-<span class="lineno"> 1564 </span>-- This also consults the 'Mir.langItems' so that if a user looks up the
-<span class="lineno"> 1565 </span>-- original 'DefId' for a lang item (e.g., @core::option::Option@), then this
-<span class="lineno"> 1566 </span>-- function will return the @$lang@-based 'DefId' instead (e.g.,
-<span class="lineno"> 1567 </span>-- @$lang::Option@), as the latter 'DefId' is what will be used throughout the
-<span class="lineno"> 1568 </span>-- rest of the MIR code.
-<span class="lineno"> 1569 </span>findDefIdEither :: Mir.CollectionState -&gt; Text -&gt; Either String Mir.DefId
-<span class="lineno"> 1570 </span><span class="decl"><span class="istickedoff">findDefIdEither cs defName = do</span>
-<span class="lineno"> 1571 </span><span class="spaces">    </span><span class="istickedoff">(crate, path) &lt;-</span>
-<span class="lineno"> 1572 </span><span class="spaces">      </span><span class="istickedoff">case edid of</span>
-<span class="lineno"> 1573 </span><span class="spaces">        </span><span class="istickedoff">crate:path -&gt; pure (crate, path)</span>
-<span class="lineno"> 1574 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">Left $ unlines</span></span>
-<span class="lineno"> 1575 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The definition `&quot; ++ defNameStr ++ &quot;` lacks a crate.&quot;</span></span>
-<span class="lineno"> 1576 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, &quot;Consider providing one, e.g., `&lt;crate_name&gt;::&quot; ++ defNameStr ++ &quot;`.&quot;</span></span>
-<span class="lineno"> 1577 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1578 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">crateStr = Text.unpack crate</span></span>
-<span class="lineno"> 1579 </span><span class="spaces">    </span><span class="istickedoff">origDefId &lt;-</span>
-<span class="lineno"> 1580 </span><span class="spaces">      </span><span class="istickedoff">case Text.splitOn &quot;/&quot; crate of</span>
-<span class="lineno"> 1581 </span><span class="spaces">        </span><span class="istickedoff">[crateNoDisambig, disambig] -&gt;</span>
-<span class="lineno"> 1582 </span><span class="spaces">          </span><span class="istickedoff">Right $ Mir.textId $ Text.intercalate &quot;::&quot;</span>
-<span class="lineno"> 1583 </span><span class="spaces">                </span><span class="istickedoff">$ (crateNoDisambig &lt;&gt; &quot;/&quot; &lt;&gt; disambig) : path</span>
-<span class="lineno"> 1584 </span><span class="spaces">        </span><span class="istickedoff">[_] -&gt;</span>
-<span class="lineno"> 1585 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup crate crateDisambigs of</span>
-<span class="lineno"> 1586 </span><span class="spaces">              </span><span class="istickedoff">Just allDisambigs@(disambig :| otherDisambigs)</span>
-<span class="lineno"> 1587 </span><span class="spaces">                </span><span class="istickedoff">|  <span class="tickonlytrue">F.null otherDisambigs</span></span>
-<span class="lineno"> 1588 </span><span class="spaces">                </span><span class="istickedoff">-&gt; Right $ Mir.textId $ Text.intercalate &quot;::&quot;</span>
-<span class="lineno"> 1589 </span><span class="spaces">                         </span><span class="istickedoff">$ (crate &lt;&gt; &quot;/&quot; &lt;&gt; disambig) : path</span>
-<span class="lineno"> 1590 </span><span class="spaces">                </span><span class="istickedoff">|  <span class="nottickedoff">otherwise</span></span>
-<span class="lineno"> 1591 </span><span class="spaces">                </span><span class="istickedoff">-&gt; <span class="nottickedoff">Left $ unlines $</span></span>
-<span class="lineno"> 1592 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">[ &quot;ambiguous crate &quot; ++ crateStr</span></span>
-<span class="lineno"> 1593 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, &quot;crate disambiguators:&quot;</span></span>
-<span class="lineno"> 1594 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">] ++ F.toList (Text.unpack &lt;$&gt; allDisambigs)</span></span>
-<span class="lineno"> 1595 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Left $ &quot;unknown crate &quot; ++ crateStr</span></span>
-<span class="lineno"> 1596 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Left $ &quot;Malformed crate name: &quot; ++ show crateStr</span></span>
-<span class="lineno"> 1597 </span><span class="spaces">    </span><span class="istickedoff">Right $ Map.findWithDefault origDefId origDefId langItemDefIds</span>
-<span class="lineno"> 1598 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1599 </span><span class="spaces">    </span><span class="istickedoff">crateDisambigs = cs ^. Mir.crateHashesMap</span>
-<span class="lineno"> 1600 </span><span class="spaces">    </span><span class="istickedoff">langItemDefIds = cs ^. Mir.collection . Mir.langItems</span>
-<span class="lineno"> 1601 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1602 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">defNameStr = Text.unpack defName</span></span>
-<span class="lineno"> 1603 </span><span class="spaces">    </span><span class="istickedoff">edid = Text.splitOn &quot;::&quot; defName</span></span>
-<span class="lineno"> 1604 </span>
-<span class="lineno"> 1605 </span>-- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
-<span class="lineno"> 1606 </span>-- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
-<span class="lineno"> 1607 </span>-- will raise an error.
-<span class="lineno"> 1608 </span>findStatic :: X.MonadThrow m =&gt; Mir.CollectionState -&gt; String -&gt; m Mir.Static
-<span class="lineno"> 1609 </span><span class="decl"><span class="istickedoff">findStatic cs name = do</span>
-<span class="lineno"> 1610 </span><span class="spaces">  </span><span class="istickedoff">did &lt;- case findDefIdEither cs (Text.pack name) of</span>
-<span class="lineno"> 1611 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">X.throwM $ MIRInvalidIdentifier err</span></span>
-<span class="lineno"> 1612 </span><span class="spaces">    </span><span class="istickedoff">Right did -&gt; pure did</span>
-<span class="lineno"> 1613 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup did (cs ^. Mir.collection . Mir.statics) of</span>
-<span class="lineno"> 1614 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; X.throwM $ MIRStaticNotFound did</span>
-<span class="lineno"> 1615 </span><span class="spaces">    </span><span class="istickedoff">Just static -&gt; pure static</span></span>
-<span class="lineno"> 1616 </span>
-<span class="lineno"> 1617 </span>-- | Consult the given 'MIRCrucibleContext' to find the 'MIRVal' used to
-<span class="lineno"> 1618 </span>-- initialize a 'Mir.Static' value. If such a 'MIRVal' cannot be found, this
-<span class="lineno"> 1619 </span>-- will raise an error.
-<span class="lineno"> 1620 </span>findStaticInitializer ::
-<span class="lineno"> 1621 </span>  X.MonadThrow m =&gt;
-<span class="lineno"> 1622 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 1623 </span>  Mir.Static -&gt;
-<span class="lineno"> 1624 </span>  m MIRVal
-<span class="lineno"> 1625 </span><span class="decl"><span class="istickedoff">findStaticInitializer mcc static = do</span>
-<span class="lineno"> 1626 </span><span class="spaces">  </span><span class="istickedoff">Mir.StaticVar gv &lt;- findStaticVar cs staticDefId</span>
-<span class="lineno"> 1627 </span><span class="spaces">  </span><span class="istickedoff">let staticShp = tyToShapeEq <span class="nottickedoff">col</span> (static ^. Mir.sTy) (globalType gv)</span>
-<span class="lineno"> 1628 </span><span class="spaces">  </span><span class="istickedoff">case MapF.lookup gv (mcc^.mccStaticInitializerMap) of</span>
-<span class="lineno"> 1629 </span><span class="spaces">    </span><span class="istickedoff">Just (RV staticInitVal) -&gt;</span>
-<span class="lineno"> 1630 </span><span class="spaces">      </span><span class="istickedoff">pure $ MIRVal staticShp staticInitVal</span>
-<span class="lineno"> 1631 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1632 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">X.throwM $ MIRStaticNotFound staticDefId</span></span>
-<span class="lineno"> 1633 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1634 </span><span class="spaces">    </span><span class="istickedoff">staticDefId = static ^. Mir.sName</span>
-<span class="lineno"> 1635 </span><span class="spaces">    </span><span class="istickedoff">cs  = mcc ^. mccRustModule . Mir.rmCS</span>
-<span class="lineno"> 1636 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">col = cs ^. Mir.collection</span></span></span>
-<span class="lineno"> 1637 </span>
-<span class="lineno"> 1638 </span>-- | Consult the given 'Mir.CollectionState' to find a 'Mir.StaticVar' with the
-<span class="lineno"> 1639 </span>-- given 'Mir.DefId'. If such a 'Mir.StaticVar' cannot be found, this will raise
-<span class="lineno"> 1640 </span>-- an error.
-<span class="lineno"> 1641 </span>findStaticVar ::
-<span class="lineno"> 1642 </span>  X.MonadThrow m =&gt;
-<span class="lineno"> 1643 </span>  Mir.CollectionState -&gt;
-<span class="lineno"> 1644 </span>  Mir.DefId -&gt;
-<span class="lineno"> 1645 </span>  m Mir.StaticVar
-<span class="lineno"> 1646 </span><span class="decl"><span class="istickedoff">findStaticVar cs staticDefId =</span>
-<span class="lineno"> 1647 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup staticDefId (cs ^. Mir.staticMap) of</span>
-<span class="lineno"> 1648 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">X.throwM $ MIRStaticNotFound staticDefId</span></span>
-<span class="lineno"> 1649 </span><span class="spaces">    </span><span class="istickedoff">Just sv -&gt; pure sv</span></span>
-<span class="lineno"> 1650 </span>
-<span class="lineno"> 1651 </span>-- | Compute the 'Mir.Mutability' of a 'Mir.Static' value.
-<span class="lineno"> 1652 </span>staticMutability :: Mir.Static -&gt; Mir.Mutability
-<span class="lineno"> 1653 </span><span class="decl"><span class="istickedoff">staticMutability static</span>
-<span class="lineno"> 1654 </span><span class="spaces">  </span><span class="istickedoff">| static ^. Mir.sMutable = Mir.Mut</span>
-<span class="lineno"> 1655 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>              = Mir.Immut</span></span>
-<span class="lineno"> 1656 </span>
-<span class="lineno"> 1657 </span>-- | Compute a 'Mir.MirReferenceMux' pointing to a static value's 'GlobalVar'.
-<span class="lineno"> 1658 </span>staticRefMux ::
-<span class="lineno"> 1659 </span>  W4.IsSymExprBuilder sym =&gt;
-<span class="lineno"> 1660 </span>  sym -&gt;
-<span class="lineno"> 1661 </span>  GlobalVar tp -&gt;
-<span class="lineno"> 1662 </span>  Mir.MirReferenceMux sym
-<span class="lineno"> 1663 </span><span class="decl"><span class="istickedoff">staticRefMux sym gv =</span>
-<span class="lineno"> 1664 </span><span class="spaces">  </span><span class="istickedoff">Mir.MirReferenceMux $</span>
-<span class="lineno"> 1665 </span><span class="spaces">  </span><span class="istickedoff">Mir.toFancyMuxTree sym $</span>
-<span class="lineno"> 1666 </span><span class="spaces">  </span><span class="istickedoff">Mir.MirReference (globalType gv) (Mir.GlobalVar_RefRoot gv) Mir.Empty_RefPath</span></span>
-<span class="lineno"> 1667 </span>
-<span class="lineno"> 1668 </span>-- | Compute the 'Mir.Ty' of a reference to a 'Mir.Static' value.
-<span class="lineno"> 1669 </span>staticTyRef :: Mir.Static -&gt; Mir.Ty
-<span class="lineno"> 1670 </span><span class="decl"><span class="istickedoff">staticTyRef static =</span>
-<span class="lineno"> 1671 </span><span class="spaces">  </span><span class="istickedoff">Mir.TyRef</span>
-<span class="lineno"> 1672 </span><span class="spaces">    </span><span class="istickedoff">(static ^. Mir.sTy)</span>
-<span class="lineno"> 1673 </span><span class="spaces">    </span><span class="istickedoff">(staticMutability static)</span></span>
-<span class="lineno"> 1674 </span>
-<span class="lineno"> 1675 </span>-- | Retrieve the discriminant corresponding to an enum variant. This function
-<span class="lineno"> 1676 </span>-- will panic if the variant does not contain a discriminant.
-<span class="lineno"> 1677 </span>getEnumVariantDiscr :: Mir.Variant -&gt; Integer
-<span class="lineno"> 1678 </span><span class="decl"><span class="istickedoff">getEnumVariantDiscr variant =</span>
-<span class="lineno"> 1679 </span><span class="spaces">  </span><span class="istickedoff">case variant ^. Mir.discrval of</span>
-<span class="lineno"> 1680 </span><span class="spaces">    </span><span class="istickedoff">Just discr -&gt;</span>
-<span class="lineno"> 1681 </span><span class="spaces">      </span><span class="istickedoff">discr</span>
-<span class="lineno"> 1682 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1683 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;getEnumVariantDiscr&quot; [</span></span>
-<span class="lineno"> 1684 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;discrval not set for variant: &quot; &lt;&gt; Text.pack (show (variant ^. Mir.vname))</span></span>
-<span class="lineno"> 1685 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno"> 1686 </span>
-<span class="lineno"> 1687 </span>-- | An enum's discriminant should have an integral type such as @isize@ or
-<span class="lineno"> 1688 </span>-- @i8@, which this function checks. If this is not the case, this function will
-<span class="lineno"> 1689 </span>-- panic.
-<span class="lineno"> 1690 </span>testDiscriminantIsBV :: TypeShape shp -&gt; IsBVShape shp
-<span class="lineno"> 1691 </span><span class="decl"><span class="istickedoff">testDiscriminantIsBV discrShp =</span>
-<span class="lineno"> 1692 </span><span class="spaces">  </span><span class="istickedoff">case testBVShape discrShp of</span>
-<span class="lineno"> 1693 </span><span class="spaces">    </span><span class="istickedoff">Just ibvs -&gt; ibvs</span>
-<span class="lineno"> 1694 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1695 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;testDiscriminantIsBV&quot; [</span></span>
-<span class="lineno"> 1696 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected non-integral discriminant type:&quot;,</span></span>
-<span class="lineno"> 1697 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show $ PP.pretty $ shapeMirTy discrShp)</span></span>
-<span class="lineno"> 1698 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno"> 1699 </span>
-<span class="lineno"> 1700 </span>-- | Compute the index of a variant as an 'Ctx.Index'. If the index is out of
-<span class="lineno"> 1701 </span>-- range, this function will panic.
-<span class="lineno"> 1702 </span>variantIntIndex ::
-<span class="lineno"> 1703 </span>  Mir.DefId {-^ The enum identifier. (Only used for error messages.) -} -&gt;
-<span class="lineno"> 1704 </span>  Int {-^ The index of the variant as an 'Int'. -} -&gt;
-<span class="lineno"> 1705 </span>  Ctx.Size ctx {-^ The number of variants as a 'Ctx.Size'. -} -&gt;
-<span class="lineno"> 1706 </span>  Some (Ctx.Index ctx)
-<span class="lineno"> 1707 </span><span class="decl"><span class="istickedoff">variantIntIndex adtNm variantIdx variantsSize =</span>
-<span class="lineno"> 1708 </span><span class="spaces">  </span><span class="istickedoff">case Ctx.intIndex variantIdx variantsSize of</span>
-<span class="lineno"> 1709 </span><span class="spaces">    </span><span class="istickedoff">Just someIdx -&gt;</span>
-<span class="lineno"> 1710 </span><span class="spaces">      </span><span class="istickedoff">someIdx</span>
-<span class="lineno"> 1711 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1712 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;variantIntIndex&quot; [</span></span>
-<span class="lineno"> 1713 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Enum variant index out of range&quot;,</span></span>
-<span class="lineno"> 1714 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Enum: &quot; &lt;&gt; Text.pack (show adtNm),</span></span>
-<span class="lineno"> 1715 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Index: &quot; &lt;&gt; Text.pack (show variantIdx),</span></span>
-<span class="lineno"> 1716 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Number of variants: &quot; &lt;&gt; Text.pack (show variantsSize)</span></span>
-<span class="lineno"> 1717 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno"> 1558 </span>-- * @&lt;crate_name&gt;/&lt;disambiguator&gt;::&lt;def_name&gt;: A fully disambiguated name.
+<span class="lineno"> 1559 </span>--
+<span class="lineno"> 1560 </span>-- * @&lt;crate_name&gt;::&lt;def_name&gt;: A name without a disambiguator. In this
+<span class="lineno"> 1561 </span>--   case, SAW will attempt to look up a disambiguator from the
+<span class="lineno"> 1562 </span>--   'Mir.crateHashesMap'. If none can be found, or if there are multiple
+<span class="lineno"> 1563 </span>--   disambiguators for the given @&lt;crate_name&gt;@, then this will return an error
+<span class="lineno"> 1564 </span>--   message with 'Left'.
+<span class="lineno"> 1565 </span>--
+<span class="lineno"> 1566 </span>-- This also consults the 'Mir.langItems' so that if a user looks up the
+<span class="lineno"> 1567 </span>-- original 'DefId' for a lang item (e.g., @core::option::Option@), then this
+<span class="lineno"> 1568 </span>-- function will return the @$lang@-based 'DefId' instead (e.g.,
+<span class="lineno"> 1569 </span>-- @$lang::Option@), as the latter 'DefId' is what will be used throughout the
+<span class="lineno"> 1570 </span>-- rest of the MIR code.
+<span class="lineno"> 1571 </span>findDefIdEither :: Mir.CollectionState -&gt; Text -&gt; Either String Mir.DefId
+<span class="lineno"> 1572 </span><span class="decl"><span class="istickedoff">findDefIdEither cs defName = do</span>
+<span class="lineno"> 1573 </span><span class="spaces">    </span><span class="istickedoff">(crate, path) &lt;-</span>
+<span class="lineno"> 1574 </span><span class="spaces">      </span><span class="istickedoff">case edid of</span>
+<span class="lineno"> 1575 </span><span class="spaces">        </span><span class="istickedoff">crate:path -&gt; pure (crate, path)</span>
+<span class="lineno"> 1576 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">Left $ unlines</span></span>
+<span class="lineno"> 1577 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The definition `&quot; ++ defNameStr ++ &quot;` lacks a crate.&quot;</span></span>
+<span class="lineno"> 1578 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, &quot;Consider providing one, e.g., `&lt;crate_name&gt;::&quot; ++ defNameStr ++ &quot;`.&quot;</span></span>
+<span class="lineno"> 1579 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1580 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">crateStr = Text.unpack crate</span></span>
+<span class="lineno"> 1581 </span><span class="spaces">    </span><span class="istickedoff">origDefId &lt;-</span>
+<span class="lineno"> 1582 </span><span class="spaces">      </span><span class="istickedoff">case Text.splitOn &quot;/&quot; crate of</span>
+<span class="lineno"> 1583 </span><span class="spaces">        </span><span class="istickedoff">[crateNoDisambig, disambig] -&gt;</span>
+<span class="lineno"> 1584 </span><span class="spaces">          </span><span class="istickedoff">Right $ Mir.textId $ Text.intercalate &quot;::&quot;</span>
+<span class="lineno"> 1585 </span><span class="spaces">                </span><span class="istickedoff">$ (crateNoDisambig &lt;&gt; &quot;/&quot; &lt;&gt; disambig) : path</span>
+<span class="lineno"> 1586 </span><span class="spaces">        </span><span class="istickedoff">[_] -&gt;</span>
+<span class="lineno"> 1587 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup crate crateDisambigs of</span>
+<span class="lineno"> 1588 </span><span class="spaces">              </span><span class="istickedoff">Just allDisambigs@(disambig :| otherDisambigs)</span>
+<span class="lineno"> 1589 </span><span class="spaces">                </span><span class="istickedoff">|  <span class="tickonlytrue">F.null otherDisambigs</span></span>
+<span class="lineno"> 1590 </span><span class="spaces">                </span><span class="istickedoff">-&gt; Right $ Mir.textId $ Text.intercalate &quot;::&quot;</span>
+<span class="lineno"> 1591 </span><span class="spaces">                         </span><span class="istickedoff">$ (crate &lt;&gt; &quot;/&quot; &lt;&gt; disambig) : path</span>
+<span class="lineno"> 1592 </span><span class="spaces">                </span><span class="istickedoff">|  <span class="nottickedoff">otherwise</span></span>
+<span class="lineno"> 1593 </span><span class="spaces">                </span><span class="istickedoff">-&gt; <span class="nottickedoff">Left $ unlines $</span></span>
+<span class="lineno"> 1594 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">[ &quot;ambiguous crate &quot; ++ crateStr</span></span>
+<span class="lineno"> 1595 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, &quot;crate disambiguators:&quot;</span></span>
+<span class="lineno"> 1596 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">] ++ F.toList (Text.unpack &lt;$&gt; allDisambigs)</span></span>
+<span class="lineno"> 1597 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Left $ &quot;unknown crate &quot; ++ crateStr</span></span>
+<span class="lineno"> 1598 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Left $ &quot;Malformed crate name: &quot; ++ show crateStr</span></span>
+<span class="lineno"> 1599 </span><span class="spaces">    </span><span class="istickedoff">Right $ Map.findWithDefault origDefId origDefId langItemDefIds</span>
+<span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">crateDisambigs = cs ^. Mir.crateHashesMap</span>
+<span class="lineno"> 1602 </span><span class="spaces">    </span><span class="istickedoff">langItemDefIds = cs ^. Mir.collection . Mir.langItems</span>
+<span class="lineno"> 1603 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1604 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">defNameStr = Text.unpack defName</span></span>
+<span class="lineno"> 1605 </span><span class="spaces">    </span><span class="istickedoff">edid = Text.splitOn &quot;::&quot; defName</span></span>
+<span class="lineno"> 1606 </span>
+<span class="lineno"> 1607 </span>-- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
+<span class="lineno"> 1608 </span>-- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
+<span class="lineno"> 1609 </span>-- will raise an error.
+<span class="lineno"> 1610 </span>findStatic :: X.MonadThrow m =&gt; Mir.CollectionState -&gt; String -&gt; m Mir.Static
+<span class="lineno"> 1611 </span><span class="decl"><span class="istickedoff">findStatic cs name = do</span>
+<span class="lineno"> 1612 </span><span class="spaces">  </span><span class="istickedoff">did &lt;- case findDefIdEither cs (Text.pack name) of</span>
+<span class="lineno"> 1613 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">X.throwM $ MIRInvalidIdentifier err</span></span>
+<span class="lineno"> 1614 </span><span class="spaces">    </span><span class="istickedoff">Right did -&gt; pure did</span>
+<span class="lineno"> 1615 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup did (cs ^. Mir.collection . Mir.statics) of</span>
+<span class="lineno"> 1616 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; X.throwM $ MIRStaticNotFound did</span>
+<span class="lineno"> 1617 </span><span class="spaces">    </span><span class="istickedoff">Just static -&gt; pure static</span></span>
+<span class="lineno"> 1618 </span>
+<span class="lineno"> 1619 </span>-- | Consult the given 'MIRCrucibleContext' to find the 'MIRVal' used to
+<span class="lineno"> 1620 </span>-- initialize a 'Mir.Static' value. If such a 'MIRVal' cannot be found, this
+<span class="lineno"> 1621 </span>-- will raise an error.
+<span class="lineno"> 1622 </span>findStaticInitializer ::
+<span class="lineno"> 1623 </span>  X.MonadThrow m =&gt;
+<span class="lineno"> 1624 </span>  MIRCrucibleContext -&gt;
+<span class="lineno"> 1625 </span>  Mir.Static -&gt;
+<span class="lineno"> 1626 </span>  m MIRVal
+<span class="lineno"> 1627 </span><span class="decl"><span class="istickedoff">findStaticInitializer mcc static = do</span>
+<span class="lineno"> 1628 </span><span class="spaces">  </span><span class="istickedoff">Mir.StaticVar gv &lt;- findStaticVar cs staticDefId</span>
+<span class="lineno"> 1629 </span><span class="spaces">  </span><span class="istickedoff">let staticShp = tyToShapeEq <span class="nottickedoff">col</span> (static ^. Mir.sTy) (globalType gv)</span>
+<span class="lineno"> 1630 </span><span class="spaces">  </span><span class="istickedoff">case MapF.lookup gv (mcc^.mccStaticInitializerMap) of</span>
+<span class="lineno"> 1631 </span><span class="spaces">    </span><span class="istickedoff">Just (RV staticInitVal) -&gt;</span>
+<span class="lineno"> 1632 </span><span class="spaces">      </span><span class="istickedoff">pure $ MIRVal staticShp staticInitVal</span>
+<span class="lineno"> 1633 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1634 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">X.throwM $ MIRStaticNotFound staticDefId</span></span>
+<span class="lineno"> 1635 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1636 </span><span class="spaces">    </span><span class="istickedoff">staticDefId = static ^. Mir.sName</span>
+<span class="lineno"> 1637 </span><span class="spaces">    </span><span class="istickedoff">cs  = mcc ^. mccRustModule . Mir.rmCS</span>
+<span class="lineno"> 1638 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">col = cs ^. Mir.collection</span></span></span>
+<span class="lineno"> 1639 </span>
+<span class="lineno"> 1640 </span>-- | Consult the given 'Mir.CollectionState' to find a 'Mir.StaticVar' with the
+<span class="lineno"> 1641 </span>-- given 'Mir.DefId'. If such a 'Mir.StaticVar' cannot be found, this will raise
+<span class="lineno"> 1642 </span>-- an error.
+<span class="lineno"> 1643 </span>findStaticVar ::
+<span class="lineno"> 1644 </span>  X.MonadThrow m =&gt;
+<span class="lineno"> 1645 </span>  Mir.CollectionState -&gt;
+<span class="lineno"> 1646 </span>  Mir.DefId -&gt;
+<span class="lineno"> 1647 </span>  m Mir.StaticVar
+<span class="lineno"> 1648 </span><span class="decl"><span class="istickedoff">findStaticVar cs staticDefId =</span>
+<span class="lineno"> 1649 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup staticDefId (cs ^. Mir.staticMap) of</span>
+<span class="lineno"> 1650 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">X.throwM $ MIRStaticNotFound staticDefId</span></span>
+<span class="lineno"> 1651 </span><span class="spaces">    </span><span class="istickedoff">Just sv -&gt; pure sv</span></span>
+<span class="lineno"> 1652 </span>
+<span class="lineno"> 1653 </span>-- | Compute the 'Mir.Mutability' of a 'Mir.Static' value.
+<span class="lineno"> 1654 </span>staticMutability :: Mir.Static -&gt; Mir.Mutability
+<span class="lineno"> 1655 </span><span class="decl"><span class="istickedoff">staticMutability static</span>
+<span class="lineno"> 1656 </span><span class="spaces">  </span><span class="istickedoff">| static ^. Mir.sMutable = Mir.Mut</span>
+<span class="lineno"> 1657 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>              = Mir.Immut</span></span>
+<span class="lineno"> 1658 </span>
+<span class="lineno"> 1659 </span>-- | Compute a 'Mir.MirReferenceMux' pointing to a static value's 'GlobalVar'.
+<span class="lineno"> 1660 </span>staticRefMux ::
+<span class="lineno"> 1661 </span>  W4.IsSymExprBuilder sym =&gt;
+<span class="lineno"> 1662 </span>  sym -&gt;
+<span class="lineno"> 1663 </span>  GlobalVar tp -&gt;
+<span class="lineno"> 1664 </span>  Mir.MirReferenceMux sym
+<span class="lineno"> 1665 </span><span class="decl"><span class="istickedoff">staticRefMux sym gv =</span>
+<span class="lineno"> 1666 </span><span class="spaces">  </span><span class="istickedoff">Mir.MirReferenceMux $</span>
+<span class="lineno"> 1667 </span><span class="spaces">  </span><span class="istickedoff">Mir.toFancyMuxTree sym $</span>
+<span class="lineno"> 1668 </span><span class="spaces">  </span><span class="istickedoff">Mir.MirReference (globalType gv) (Mir.GlobalVar_RefRoot gv) Mir.Empty_RefPath</span></span>
+<span class="lineno"> 1669 </span>
+<span class="lineno"> 1670 </span>-- | Compute the 'Mir.Ty' of a reference to a 'Mir.Static' value.
+<span class="lineno"> 1671 </span>staticTyRef :: Mir.Static -&gt; Mir.Ty
+<span class="lineno"> 1672 </span><span class="decl"><span class="istickedoff">staticTyRef static =</span>
+<span class="lineno"> 1673 </span><span class="spaces">  </span><span class="istickedoff">Mir.TyRef</span>
+<span class="lineno"> 1674 </span><span class="spaces">    </span><span class="istickedoff">(static ^. Mir.sTy)</span>
+<span class="lineno"> 1675 </span><span class="spaces">    </span><span class="istickedoff">(staticMutability static)</span></span>
+<span class="lineno"> 1676 </span>
+<span class="lineno"> 1677 </span>-- | Retrieve the discriminant corresponding to an enum variant. This function
+<span class="lineno"> 1678 </span>-- will panic if the variant does not contain a discriminant.
+<span class="lineno"> 1679 </span>getEnumVariantDiscr :: Mir.Variant -&gt; Integer
+<span class="lineno"> 1680 </span><span class="decl"><span class="istickedoff">getEnumVariantDiscr variant =</span>
+<span class="lineno"> 1681 </span><span class="spaces">  </span><span class="istickedoff">case variant ^. Mir.discrval of</span>
+<span class="lineno"> 1682 </span><span class="spaces">    </span><span class="istickedoff">Just discr -&gt;</span>
+<span class="lineno"> 1683 </span><span class="spaces">      </span><span class="istickedoff">discr</span>
+<span class="lineno"> 1684 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1685 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;getEnumVariantDiscr&quot; [</span></span>
+<span class="lineno"> 1686 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;discrval not set for variant: &quot; &lt;&gt; Text.pack (show (variant ^. Mir.vname))</span></span>
+<span class="lineno"> 1687 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno"> 1688 </span>
+<span class="lineno"> 1689 </span>-- | An enum's discriminant should have an integral type such as @isize@ or
+<span class="lineno"> 1690 </span>-- @i8@, which this function checks. If this is not the case, this function will
+<span class="lineno"> 1691 </span>-- panic.
+<span class="lineno"> 1692 </span>testDiscriminantIsBV :: TypeShape shp -&gt; IsBVShape shp
+<span class="lineno"> 1693 </span><span class="decl"><span class="istickedoff">testDiscriminantIsBV discrShp =</span>
+<span class="lineno"> 1694 </span><span class="spaces">  </span><span class="istickedoff">case testBVShape discrShp of</span>
+<span class="lineno"> 1695 </span><span class="spaces">    </span><span class="istickedoff">Just ibvs -&gt; ibvs</span>
+<span class="lineno"> 1696 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1697 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;testDiscriminantIsBV&quot; [</span></span>
+<span class="lineno"> 1698 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Unexpected non-integral discriminant type:&quot;,</span></span>
+<span class="lineno"> 1699 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show $ PP.pretty $ shapeMirTy discrShp)</span></span>
+<span class="lineno"> 1700 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno"> 1701 </span>
+<span class="lineno"> 1702 </span>-- | Compute the index of a variant as an 'Ctx.Index'. If the index is out of
+<span class="lineno"> 1703 </span>-- range, this function will panic.
+<span class="lineno"> 1704 </span>variantIntIndex ::
+<span class="lineno"> 1705 </span>  Mir.DefId {-^ The enum identifier. (Only used for error messages.) -} -&gt;
+<span class="lineno"> 1706 </span>  Int {-^ The index of the variant as an 'Int'. -} -&gt;
+<span class="lineno"> 1707 </span>  Ctx.Size ctx {-^ The number of variants as a 'Ctx.Size'. -} -&gt;
+<span class="lineno"> 1708 </span>  Some (Ctx.Index ctx)
+<span class="lineno"> 1709 </span><span class="decl"><span class="istickedoff">variantIntIndex adtNm variantIdx variantsSize =</span>
+<span class="lineno"> 1710 </span><span class="spaces">  </span><span class="istickedoff">case Ctx.intIndex variantIdx variantsSize of</span>
+<span class="lineno"> 1711 </span><span class="spaces">    </span><span class="istickedoff">Just someIdx -&gt;</span>
+<span class="lineno"> 1712 </span><span class="spaces">      </span><span class="istickedoff">someIdx</span>
+<span class="lineno"> 1713 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1714 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;variantIntIndex&quot; [</span></span>
+<span class="lineno"> 1715 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Enum variant index out of range&quot;,</span></span>
+<span class="lineno"> 1716 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Enum: &quot; &lt;&gt; Text.pack (show adtNm),</span></span>
+<span class="lineno"> 1717 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Index: &quot; &lt;&gt; Text.pack (show variantIdx),</span></span>
+<span class="lineno"> 1718 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Number of variants: &quot; &lt;&gt; Text.pack (show variantsSize)</span></span>
+<span class="lineno"> 1719 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 
 </pre>
 </body>

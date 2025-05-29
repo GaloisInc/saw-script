@@ -325,7 +325,7 @@ span.spaces    { background: white }
 <span class="lineno">  306 </span><span class="spaces">         </span><span class="nottickedoff">complete_t &lt;- completeOpenTerm sc t</span>
 <span class="lineno">  307 </span><span class="spaces">         </span><span class="nottickedoff">let tps = map openTermType ts</span>
 <span class="lineno">  308 </span><span class="spaces">         </span><span class="nottickedoff">complete_tp &lt;- completeOpenTerm sc $ tupleTypeOpenTerm' tps</span>
-<span class="lineno">  309 </span><span class="spaces">         </span><span class="nottickedoff">scInsertDef sc mod_name ident complete_tp complete_t</span>
+<span class="lineno">  309 </span><span class="spaces">         </span><span class="nottickedoff">scInsertDef sc ident complete_tp complete_t</span>
 <span class="lineno">  310 </span><span class="spaces">         </span><span class="nottickedoff">let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh</span>
 <span class="lineno">  311 </span><span class="spaces">         </span><span class="nottickedoff">return $ permEnvAddGlobalSyms env</span>
 <span class="lineno">  312 </span><span class="spaces">           </span><span class="nottickedoff">[PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p</span>

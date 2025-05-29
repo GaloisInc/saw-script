@@ -1151,7 +1151,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1132 </span><span class="spaces">     </span><span class="nottickedoff">var_tp &lt;- mrSubstEVars $ mrVarType var</span>
 <span class="lineno"> 1133 </span><span class="spaces">     </span><span class="nottickedoff">-- FIXME: catch subtyping errors and report them as being evar failures</span>
 <span class="lineno"> 1134 </span><span class="spaces">     </span><span class="nottickedoff">eith_err &lt;-</span>
-<span class="lineno"> 1135 </span><span class="spaces">       </span><span class="nottickedoff">liftSC2 (runTCM $ checkSubtype (TypedTerm val val_tp) var_tp) Nothing []</span>
+<span class="lineno"> 1135 </span><span class="spaces">       </span><span class="nottickedoff">liftSC2 (runTCM $ checkSubtype (SCTypedTerm val val_tp) var_tp) Nothing []</span>
 <span class="lineno"> 1136 </span><span class="spaces">     </span><span class="nottickedoff">case eith_err of</span>
 <span class="lineno"> 1137 </span><span class="spaces">       </span><span class="nottickedoff">Left _ -&gt;</span>
 <span class="lineno"> 1138 </span><span class="spaces">         </span><span class="nottickedoff">error (&quot;mrSetEVarClosed: incorrect instantiation for evar &quot; ++</span>

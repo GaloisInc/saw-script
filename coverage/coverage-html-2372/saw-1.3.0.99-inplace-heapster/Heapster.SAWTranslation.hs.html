@@ -6525,7 +6525,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6506 </span><span class="spaces">                                </span><span class="nottickedoff">++ &quot;__bodies&quot;)</span>
 <span class="lineno"> 6507 </span><span class="spaces">    </span><span class="nottickedoff">bodies_tp &lt;- completeOpenTerm sc $ multiFixBodiesOpenTerm ev ds</span>
 <span class="lineno"> 6508 </span><span class="spaces">    </span><span class="nottickedoff">bodies_tm &lt;- completeOpenTerm sc bodies</span>
-<span class="lineno"> 6509 </span><span class="spaces">    </span><span class="nottickedoff">scInsertDef sc mod_name bodies_id bodies_tp bodies_tm</span>
+<span class="lineno"> 6509 </span><span class="spaces">    </span><span class="nottickedoff">scInsertDef sc bodies_id bodies_tp bodies_tm</span>
 <span class="lineno"> 6510 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 6511 </span><span class="spaces">    </span><span class="nottickedoff">-- Now insert SAW core definitions for the translations of all the CFGs,</span>
 <span class="lineno"> 6512 </span><span class="spaces">    </span><span class="nottickedoff">-- putting them all into new entries for the permissions environment</span>
@@ -6536,7 +6536,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6517 </span><span class="spaces">        </span><span class="nottickedoff">do tp_trm &lt;- completeOpenTerm sc tp</span>
 <span class="lineno"> 6518 </span><span class="spaces">           </span><span class="nottickedoff">f_trm &lt;- completeOpenTerm sc f</span>
 <span class="lineno"> 6519 </span><span class="spaces">           </span><span class="nottickedoff">let ident = mkSafeIdent mod_name nm</span>
-<span class="lineno"> 6520 </span><span class="spaces">           </span><span class="nottickedoff">scInsertDef sc mod_name ident tp_trm f_trm</span>
+<span class="lineno"> 6520 </span><span class="spaces">           </span><span class="nottickedoff">scInsertDef sc ident tp_trm f_trm</span>
 <span class="lineno"> 6521 </span><span class="spaces">           </span><span class="nottickedoff">let perm = mkPtrFunPerm $ tpcfgFunPerm cfg</span>
 <span class="lineno"> 6522 </span><span class="spaces">           </span><span class="nottickedoff">return $ PermEnvGlobalEntry sym perm (GlobalTrans</span>
 <span class="lineno"> 6523 </span><span class="spaces">                                                 </span><span class="nottickedoff">[globalOpenTerm ident]))</span>
