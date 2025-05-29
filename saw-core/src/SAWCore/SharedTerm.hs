@@ -688,7 +688,7 @@ scRequireDef sc i =
 
 -- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with @scCompleteDataType@.
+-- registered separately with 'scCompleteDataType'.
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
@@ -704,7 +704,7 @@ scBeginDataType sc dtName dtParams dtIndices dtSort =
      scModifyModule sc mnm (\m -> beginDataType m dt)
      pure $ PrimName dtVarIndex dtName dtType
 
--- | Complete a datatype, by adding its constructors. See also @scBeginDataType@.
+-- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
 scCompleteDataType sc dtName ctors =
   do let mnm = identModule dtName
