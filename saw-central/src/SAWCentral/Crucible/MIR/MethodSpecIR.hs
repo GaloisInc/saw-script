@@ -129,7 +129,8 @@ ptrKindToTy :: MirPointerKind -> M.Ty -> M.Mutability -> M.Ty
 ptrKindToTy MirPointerRef = M.TyRef
 ptrKindToTy MirPointerRaw = M.TyRawPtr
 
--- | Gets the 'MirPointerKind' for a reference or pointer type.
+-- | Gets the 'MirPointerKind' for a reference or pointer type. Panics if the
+-- given 'M.Ty' is not a reference or pointer.
 tyToPtrKind :: M.Ty -> MirPointerKind
 tyToPtrKind (M.TyRef _ _) = MirPointerRef
 tyToPtrKind (M.TyRawPtr _ _) = MirPointerRaw
