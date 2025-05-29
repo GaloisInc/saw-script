@@ -67,9 +67,10 @@ module SAWCentral.Value (
     addTypedef,
     -- used by SAWScript.REPL.Monad, and by getMergedEnv
     mergeLocalEnv,
-    -- used by SAWCentral.Crucible.LLVM.FFI (XXX: alas), SAWCentral.Builtins,
-    --   SAWScript.Interpreter
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
     getMergedEnv,
+    -- used by SAWCentral.Crucible.LLVM.FFI
+    getCryptolEnv,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
     TopLevelRO(..),
@@ -571,6 +572,10 @@ getMergedEnv =
      rw <- getTopLevelRW
      liftIO $ mergeLocalEnv sc env rw
 
+getCryptolEnv :: TopLevel CEnv.CryptolEnv
+getCryptolEnv = do
+  env <- getMergedEnv
+  return $ rwCryptol env
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
