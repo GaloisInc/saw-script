@@ -327,7 +327,6 @@ import SAWCore.Module
   , moduleIsLoaded
   , moduleName
   , loadModule
-  , modifyModule
   , findModule
   , insDefInMap
   , insInjectCodeInMap
@@ -446,12 +445,14 @@ scFreshVarIndex sc = atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 -- | Internal function to register a name with a caller-provided
 -- 'VarIndex'. Not exported.
 scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
-scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
-  where
-    f env =
-      case registerName i nmi env of
-        Left uri -> throw (DuplicateNameException uri)
-        Right env' -> env'
+scRegisterNameWithIndex sc i nmi =
+  do let f env =
+           case registerName i nmi env of
+             Left uri -> (env, Just (DuplicateNameException uri))
+             Right env' -> (env', Nothing)
+     e <- atomicModifyIORef' (scNamingEnv sc) f
+     maybe (pure ()) throwIO e
+
 
 -- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
 -- them together in the 'SAWNamingEnv' of the 'SharedContext'. Throws
@@ -616,14 +617,6 @@ scImportModule ::
 scImportModule sc p mn1 mn2 =
   modifyIORef' (scModuleMap sc) (insImportInMap p mn1 mn2)
 
--- | Modify an already loaded module, raising an error if it is not loaded
-scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
-scModifyModule sc mnm f =
-  do loaded <- scModuleIsLoaded sc mnm
-     unless loaded $ fail $ "scModifyModule: module "
-                   ++ show mnm ++ " not found!"
-     modifyIORef' (scModuleMap sc) (modifyModule mnm f)
-
 -- | Internal function to insert a definition into the 'ModuleMap' of
 -- the 'SharedContext'. Throws 'DuplicateNameException' if the name is
 -- already registered.
@@ -699,15 +692,21 @@ scBeginDataType sc dtName dtParams dtIndices dtSort =
   do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtName)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
-     let mnm = identModule dtName
-     scModifyModule sc mnm (\m -> beginDataType m dt)
+     e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case beginDataType dt mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
      pure $ PrimName dtVarIndex dtName dtType
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
 scCompleteDataType sc dtName ctors =
-  do let mnm = identModule dtName
-     scModifyModule sc mnm (\m -> completeDataType m dtName ctors)
+  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case completeDataType dtName ctors mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)

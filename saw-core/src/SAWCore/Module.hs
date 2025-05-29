@@ -79,6 +79,7 @@ module SAWCore.Module
   , insImportInMap
   ) where
 
+import Control.Monad (foldM)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
@@ -360,28 +361,30 @@ insDataType m dt =
   foldl' insResolvedName (m { moduleRDecls = TypeDecl dt : moduleRDecls m}) $
   (ResolvedDataType dt : map ResolvedCtor (dtCtors dt))
 
--- | Insert an "incomplete" datatype, used as part of building up a 'DataType'
--- to typecheck its constructors. This incomplete datatype must have no
--- constructors, and it will not be added to the 'moduleRDecls' list until it is
--- completed by 'completeDataType'.
-beginDataType :: Module -> DataType -> Module
-beginDataType m dt =
-   if null (dtCtors dt) then
-     insResolvedName m (ResolvedDataType dt)
-   else
-     panic "insTempDataType" ["attempt to insert a non-empty temporary datatype"]
+-- | Insert an \"incomplete\" datatype, used as part of building up a
+-- 'DataType' to typecheck its constructors. This incomplete datatype
+-- must have no constructors, and it will not be added to the
+-- declaration list until it is completed by 'completeDataType'.
+-- Return 'Left' in the case of a name clash, i.e., an existing
+-- binding for the same 'Ident' name.
+beginDataType :: DataType -> ModuleMap -> Either Ident ModuleMap
+beginDataType dt =
+  insResolvedNameInMap (ResolvedDataType dt')
+  where dt' = dt { dtCtors = [] }
 
--- | Complete a datatype, by adding its constructors
-completeDataType :: Module -> Ident -> [Ctor] -> Module
-completeDataType m (identBaseName -> str) ctors =
-  case resolveName m str of
+-- | Complete a datatype, by adding its constructors. Return 'Left' if
+-- there is a name clash with any constructor name.
+completeDataType :: Ident -> [Ctor] -> ModuleMap -> Either Ident ModuleMap
+completeDataType ident ctors mm0 =
+  let str = identBaseName ident in
+  case resolveNameInMap mm0 ident of
     Just (ResolvedDataType dt)
       | null (dtCtors dt) ->
-        let dt' = dt {dtCtors = ctors} in
-        flip (foldl' insResolvedName) (map ResolvedCtor ctors) $
-        m { moduleResolveMap =
-              Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
-              moduleRDecls = TypeDecl dt' : moduleRDecls m }
+        do let dt' = dt {dtCtors = ctors}
+           let r = ResolvedDataType dt'
+           let mm1 = insDeclInMap (identModule ident) (TypeDecl dt') mm0
+           let mm2 = mm1 { mmIndexMap = IntMap.insert (dtVarIndex dt) r (mmIndexMap mm1) }
+           foldM (flip insResolvedNameInMap) mm2 (map ResolvedCtor ctors)
     Just (ResolvedDataType _) ->
       panic "completeDataType" ["datatype already completed: " <> str]
     Just _ ->
