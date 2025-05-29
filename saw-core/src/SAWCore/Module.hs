@@ -60,6 +60,11 @@ module SAWCore.Module
   , moduleActualDefs
     -- * Module Maps
   , ModuleMap
+  , emptyModuleMap
+  , moduleIsLoaded
+  , loadModule
+  , modifyModule
+  , findModule
   , findCtorInMap
   , findDataTypeInMap
   , allModuleDefs
@@ -433,27 +438,43 @@ moduleActualDefs m =
     ]
 
 -- | The type of mappings from module names to modules
-type ModuleMap = HashMap ModuleName Module
+newtype ModuleMap = ModuleMap (HashMap ModuleName Module)
+
+emptyModuleMap :: ModuleMap
+emptyModuleMap = ModuleMap HMap.empty
+
+-- | Test whether a 'ModuleName' is in a 'ModuleMap'.
+moduleIsLoaded :: ModuleName -> ModuleMap -> Bool
+moduleIsLoaded mn (ModuleMap m) = HMap.member mn m
+
+loadModule :: Module -> ModuleMap -> ModuleMap
+loadModule m (ModuleMap h) = ModuleMap (HMap.insert (moduleName m) m h)
+
+modifyModule :: ModuleName -> (Module -> Module) -> ModuleMap -> ModuleMap
+modifyModule mnm f (ModuleMap h) = ModuleMap (HMap.alter (fmap f) mnm h)
+
+findModule :: ModuleName -> ModuleMap -> Maybe Module
+findModule mnm (ModuleMap h) = HMap.lookup mnm h
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
-findCtorInMap m i =
+findCtorInMap (ModuleMap m) i =
   HMap.lookup (identModule i) m >>= flip findCtor (identBaseName i)
 
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
-findDataTypeInMap m i =
+findDataTypeInMap (ModuleMap m) i =
   HMap.lookup (identModule i) m >>= flip findDataType (identBaseName i)
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /
 -- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
-allModuleDefs modmap = concatMap moduleDefs (HMap.elems modmap)
+allModuleDefs (ModuleMap m) = concatMap moduleDefs (HMap.elems m)
 
 -- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
-allModuleDecls modmap = concatMap moduleDecls (HMap.elems modmap)
+allModuleDecls (ModuleMap m) = concatMap moduleDecls (HMap.elems m)
 
 -- | Get all local declarations from all modules in an entire module map that
 -- are marked as primitives
@@ -484,8 +505,8 @@ allModuleActualDefs modmap =
 
 -- | Get all datatypes in all modules in a module map
 allModuleDataTypes :: ModuleMap -> [DataType]
-allModuleDataTypes modmap = concatMap moduleDataTypes (HMap.elems modmap)
+allModuleDataTypes (ModuleMap m) = concatMap moduleDataTypes (HMap.elems m)
 
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
-allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
+allModuleCtors (ModuleMap m) = concatMap moduleCtors (HMap.elems m)

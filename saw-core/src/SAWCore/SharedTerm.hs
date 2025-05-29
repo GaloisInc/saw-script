@@ -326,7 +326,12 @@ import SAWCore.Module
   , findCtor
   , findDataType
   , findDef
+  , emptyModuleMap
+  , moduleIsLoaded
   , moduleName
+  , loadModule
+  , modifyModule
+  , findModule
   , insDef
   , insImport
   , Ctor(..)
@@ -592,16 +597,16 @@ scGetModuleMap sc = readIORef (scModuleMap sc)
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
 scModuleIsLoaded sc name =
-  HMap.member name <$> scGetModuleMap sc
+  moduleIsLoaded name <$> scGetModuleMap sc
 
 -- | Load a module into the current shared context, raising an error if a module
 -- of the same name is already loaded
 scLoadModule :: SharedContext -> Module -> IO ()
 scLoadModule sc m =
-  modifyIORef' (scModuleMap sc) $
-  HMap.insertWith (error $ "scLoadModule: module "
-                   ++ show (moduleName m) ++ " already loaded!")
-  (moduleName m) m
+  do loaded <- scModuleIsLoaded sc (moduleName m)
+     when loaded $ fail $ "scLoadModule: module "
+                   ++ show (moduleName m) ++ " already loaded!"
+     modifyIORef' (scModuleMap sc) (loadModule m)
 
 -- | Bring a subset of names from one module into scope in a second module.
 scImportModule ::
@@ -618,9 +623,10 @@ scImportModule sc p mn1 mn2 =
 -- | Modify an already loaded module, raising an error if it is not loaded
 scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
 scModifyModule sc mnm f =
-  let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
-  modifyIORef' (scModuleMap sc) $
-  HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
+  do loaded <- scModuleIsLoaded sc mnm
+     unless loaded $ fail $ "scModifyModule: module "
+                   ++ show mnm ++ " not found!"
+     modifyIORef' (scModuleMap sc) (modifyModule mnm f)
 
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
@@ -649,7 +655,7 @@ scInsertDef sc mnm ident def_tp def_tm =
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
 scFindModule sc name =
-  do maybe_mod <- HMap.lookup name <$> scGetModuleMap sc
+  do maybe_mod <- findModule name <$> scGetModuleMap sc
      case maybe_mod of
        Just m -> return m
        Nothing ->
@@ -2498,7 +2504,7 @@ mkSharedContext = do
   vr <- newIORef 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
-  mod_map_ref <- newIORef HMap.empty
+  mod_map_ref <- newIORef emptyModuleMap
   envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref
