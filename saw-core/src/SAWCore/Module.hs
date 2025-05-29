@@ -63,7 +63,6 @@ module SAWCore.Module
   , emptyModuleMap
   , moduleIsLoaded
   , loadModule
-  , modifyModule
   , findModule
   , findCtorInMap
   , findDataTypeInMap
@@ -489,12 +488,6 @@ loadModule m mm =
   where
     identMap = Map.mapKeys (mkIdent (moduleName m)) (fmap resolvedNameVarIndex (moduleResolveMap m))
     indexMap = IntMap.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
-
-modifyModule :: ModuleName -> (Module -> Module) -> ModuleMap -> ModuleMap
-modifyModule mnm f mm =
-  case findModule mnm mm of
-    Just m -> loadModule (f m) mm
-    Nothing -> mm
 
 findModule :: ModuleName -> ModuleMap -> Maybe Module
 findModule mnm mm =
