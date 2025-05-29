@@ -136,7 +136,7 @@ import SAWCore.Recognizer
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
-newtype OpenTerm = OpenTerm { unOpenTerm :: TCM TypedTerm }
+newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SCTypedTerm }
 
 -- | \"Complete\" an 'OpenTerm' to a closed term or 'fail' on type-checking
 -- error
@@ -198,10 +198,10 @@ bindPPOpenTerm (OpenTerm m) f =
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
 openTermType (OpenTerm m) =
-  OpenTerm $ do TypedTerm _ tp <- m
+  OpenTerm $ do SCTypedTerm _ tp <- m
                 ctx <- askCtx
                 tp_tp <- liftTCM scTypeOf' (map snd ctx) tp
-                return (TypedTerm tp tp_tp)
+                return (SCTypedTerm tp tp_tp)
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
@@ -368,7 +368,7 @@ globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
   OpenTerm (do trm <- liftTCM scGlobalDef ident
                tp <- liftTCM scTypeOfGlobal ident
-               return $ TypedTerm trm tp)
+               return $ SCTypedTerm trm tp)
 
 -- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
 -- a constructor, or a datatype
@@ -425,7 +425,7 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
      ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedVal f) arg
      ctx <- askCtx
      ret_tp <- liftTCM scTypeOf' (map snd ctx) ret
-     return (TypedTerm ret ret_tp)
+     return (SCTypedTerm ret ret_tp)
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
 -- not a function type
@@ -452,8 +452,8 @@ openTermTopVar =
 
 -- | Build an open term inside a binder of a variable with the given name and
 -- type, where the binder is represented as a Haskell function on 'OpenTerm's
-bindOpenTerm :: LocalName -> TypedTerm -> (OpenTerm -> OpenTerm) ->
-                TCM TypedTerm
+bindOpenTerm :: LocalName -> SCTypedTerm -> (OpenTerm -> OpenTerm) ->
+                TCM SCTypedTerm
 bindOpenTerm x tp body_f =
   do tp_whnf <- typeCheckWHNF $ typedVal tp
      withVar x tp_whnf (openTermTopVar >>= (unOpenTerm . body_f))
@@ -899,15 +899,15 @@ dedupOpenTermM (OpenTerm trmM) =
 bindOpenTermAuxM ::
   LocalName -> OpenTerm ->
   (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-  OpenTermM (TypedTerm, TypedTerm, a)
+  OpenTermM (SCTypedTerm, SCTypedTerm, a)
 bindOpenTermAuxM x (OpenTerm tpM) body_f =
   OpenTermM $
-  do TypedTerm tp tp_tp <- tpM
+  do SCTypedTerm tp tp_tp <- tpM
      tp_whnf <- typeCheckWHNF tp
      (OpenTerm bodyM, a) <-
        withVar x tp_whnf (openTermTopVar >>= (unOpenTermM . body_f))
      body <- bodyM
-     return (TypedTerm tp_whnf tp_tp, body, a)
+     return (SCTypedTerm tp_whnf tp_tp, body, a)
 
 -- | Build a lambda abstraction in the 'OpenTermM' monad
 lambdaOpenTermM ::

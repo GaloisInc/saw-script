@@ -1246,7 +1246,7 @@ specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc Nothing []
   loop p (t:ts) =
     do prop <- liftIO (scSort sc propSort)
        t' <- TC.typeInferComplete t
-       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.TypedTerm p prop) t') p t'
+       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.SCTypedTerm p prop) t') p t'
        loop p' ts
 
 -- | Admit the given theorem without evidence.
@@ -1566,7 +1566,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
       do propTerm <- scSort sc propSort
          let m = do tm' <- TC.typeInferComplete tm
-                    let err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'
+                    let err = TC.NotFuncTypeInApp (TC.SCTypedTerm p propTerm) tm'
                     TC.applyPiTyped err p tm'
          res <- TC.runTCM m sc Nothing []
          case res of
