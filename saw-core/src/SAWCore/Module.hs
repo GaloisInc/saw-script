@@ -76,6 +76,7 @@ module SAWCore.Module
   , allModuleCtors
   , insDefInMap
   , insInjectCodeInMap
+  , insImportInMap
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -586,3 +587,18 @@ insDefInMap d mm =
 -- | Insert an injectCode declaration into a 'ModuleMap'.
 insInjectCodeInMap :: ModuleName -> Text -> Text -> ModuleMap -> ModuleMap
 insInjectCodeInMap mname ns txt = insDeclInMap mname (InjectCodeDecl ns txt)
+
+-- | @insImportInMap p m1 m2@ adds all the names from module @m1@ into
+-- module @m2@ in the name table of the 'ModuleMap'. The predicate @p@
+-- determines which names to import.
+insImportInMap :: (Text -> Bool) -> ModuleName -> ModuleName -> ModuleMap -> ModuleMap
+insImportInMap p name1 name2 mm =
+  mm { mmIdentMap = Map.union identMap (mmIdentMap mm) }
+  where
+    identMap =
+      Map.fromList
+      [ (mkIdent name2 (identBaseName ident), vi)
+      | (ident, vi) <- Map.assocs (mmIdentMap mm)
+      , identModule ident == name1
+      , p (identBaseName ident)
+      ]

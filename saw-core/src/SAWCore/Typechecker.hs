@@ -476,7 +476,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
     do let imn = val $ Un.importModName imp
        i_exists <- scModuleIsLoaded sc imn
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
-       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . identName) imn mnm
+       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm) []
   case decls_res of

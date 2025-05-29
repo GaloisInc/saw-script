@@ -317,11 +317,9 @@ import SAWCore.Change
 import SAWCore.Module
   ( beginDataType
   , completeDataType
-  , resolvedNameIdent
   , dtPrimName
   , ctorNumParams
   , ctorPrimName
-  , emptyModule
   , findCtor
   , findDataType
   , findDef
@@ -331,9 +329,9 @@ import SAWCore.Module
   , loadModule
   , modifyModule
   , findModule
-  , insImport
   , insDefInMap
   , insInjectCodeInMap
+  , insImportInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -611,14 +609,12 @@ scLoadModule sc m =
 -- | Bring a subset of names from one module into scope in a second module.
 scImportModule ::
   SharedContext ->
-  (Ident -> Bool) {- ^ which names to import -} ->
+  (Text -> Bool) {- ^ which names to import -} ->
   ModuleName {- ^ from this module -} ->
   ModuleName {- ^ into this module -} ->
   IO ()
 scImportModule sc p mn1 mn2 =
-  do i_exists <- scModuleIsLoaded sc mn1
-     i <- if i_exists then scFindModule sc mn1 else pure (emptyModule mn1)
-     scModifyModule sc mn2 (insImport (p . resolvedNameIdent) i)
+  modifyIORef' (scModuleMap sc) (insImportInMap p mn1 mn2)
 
 -- | Modify an already loaded module, raising an error if it is not loaded
 scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
