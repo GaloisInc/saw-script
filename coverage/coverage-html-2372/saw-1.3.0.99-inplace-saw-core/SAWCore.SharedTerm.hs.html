@@ -656,7 +656,7 @@ span.spaces    { background: white }
 <span class="lineno">  637 </span><span class="spaces">     </span><span class="istickedoff">scRegisterGlobal sc ident t</span>
 <span class="lineno">  638 </span><span class="spaces">     </span><span class="istickedoff">scModifyModule sc mnm $ \m -&gt;</span>
 <span class="lineno">  639 </span><span class="spaces">       </span><span class="istickedoff">insDef m $ Def { defIdent = ident,</span>
-<span class="lineno">  640 </span><span class="spaces">                        </span><span class="istickedoff">defVarIndex = <span class="nottickedoff">i</span>,</span>
+<span class="lineno">  640 </span><span class="spaces">                        </span><span class="istickedoff">defVarIndex = i,</span>
 <span class="lineno">  641 </span><span class="spaces">                        </span><span class="istickedoff">defQualifier = <span class="nottickedoff">q</span>,</span>
 <span class="lineno">  642 </span><span class="spaces">                        </span><span class="istickedoff">defType = def_tp,</span>
 <span class="lineno">  643 </span><span class="spaces">                        </span><span class="istickedoff">defBody = Nothing }</span></span>
@@ -667,10 +667,10 @@ span.spaces    { background: white }
 <span class="lineno">  648 </span><span class="spaces">  </span><span class="istickedoff">do t &lt;- scConstant' sc (ModuleIdentifier ident) def_tm def_tp</span>
 <span class="lineno">  649 </span><span class="spaces">     </span><span class="istickedoff">scRegisterGlobal sc ident t</span>
 <span class="lineno">  650 </span><span class="spaces">     </span><span class="istickedoff">mi &lt;- scResolveNameByURI sc (moduleIdentToURI ident)</span>
-<span class="lineno">  651 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">i = fromMaybe (panic &quot;scInsertDef&quot; [&quot;name not found&quot;]) mi</span></span>
+<span class="lineno">  651 </span><span class="spaces">     </span><span class="istickedoff">let i = fromMaybe <span class="nottickedoff">(panic &quot;scInsertDef&quot; [&quot;name not found&quot;])</span> mi</span>
 <span class="lineno">  652 </span><span class="spaces">     </span><span class="istickedoff">scModifyModule sc mnm $ \m -&gt;</span>
 <span class="lineno">  653 </span><span class="spaces">       </span><span class="istickedoff">insDef m $ Def { defIdent = ident,</span>
-<span class="lineno">  654 </span><span class="spaces">                        </span><span class="istickedoff">defVarIndex = <span class="nottickedoff">i</span>,</span>
+<span class="lineno">  654 </span><span class="spaces">                        </span><span class="istickedoff">defVarIndex = i,</span>
 <span class="lineno">  655 </span><span class="spaces">                        </span><span class="istickedoff">defQualifier = <span class="nottickedoff">NoQualifier</span>,</span>
 <span class="lineno">  656 </span><span class="spaces">                        </span><span class="istickedoff">defType = def_tp,</span>
 <span class="lineno">  657 </span><span class="spaces">                        </span><span class="istickedoff">defBody = Just def_tm }</span></span>
