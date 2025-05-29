@@ -233,7 +233,6 @@ initialState readFileFn =
                 { roJavaCodebase = jcb
                 , roOptions = opts
                 , roHandleAlloc = halloc
-                , roPosition = PosInternal "SAWServer"
 #if USE_BUILTIN_ABC
                 , roProxy = AIGProxy GIA.proxy
 #else
@@ -241,16 +240,17 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
-                , roStackTrace = []
                 , roSubshell = fail "SAW server does not support subshells."
                 , roProofSubshell = fail "SAW server does not support subshells."
-                , roLocalEnv = []
                 }
          rw = TopLevelRW
                 { rwValueInfo = mempty
                 , rwTypeInfo = mempty
                 , rwDocs = mempty
                 , rwCryptol = cenv
+                , rwPosition = PosInternal "SAWServer"
+                , rwStackTrace = []
+                , rwLocalEnv = []
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = PPS.defaultOpts

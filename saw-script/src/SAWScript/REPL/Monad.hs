@@ -488,9 +488,8 @@ getEnvironment = readRef environment
 
 getValueEnvironment :: REPL TopLevelRW
 getValueEnvironment =
-  do ro <- getTopLevelRO
-     rw <- getEnvironment
-     io (mergeLocalEnv (rwSharedContext rw) (roLocalEnv ro) rw)
+  do rw <- getEnvironment
+     io (mergeLocalEnv (rwSharedContext rw) (rwLocalEnv rw) rw)
 
 putEnvironment :: TopLevelRW -> REPL ()
 putEnvironment = modifyEnvironment . const

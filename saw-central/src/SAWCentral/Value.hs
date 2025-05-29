@@ -86,7 +86,7 @@ module SAWCentral.Value (
     -- used in various places in SAWCentral
     throwTopLevel,
     -- used by SAWScript.Interpreter plus locally in a bunch of GetValue instances
-    withPosition,
+    pushPosition, popPosition,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
     getLocalEnv,
     -- used in various places in SAWCentral
@@ -207,7 +207,7 @@ import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(..), ask, asks, local)
+import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
@@ -583,15 +583,9 @@ data TopLevelRO =
   { roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
-  , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roStackTrace    :: [String]
-    -- ^ SAWScript-internal backtrace for use
-    --   when displaying exceptions and such
-    --   NB, stored with most recent calls on
-    --   top of the stack.
   , roSubshell      :: TopLevel ()
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
@@ -602,7 +596,6 @@ data TopLevelRO =
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
 
-  , roLocalEnv      :: LocalEnv
   }
 
 data TopLevelRW =
@@ -611,6 +604,14 @@ data TopLevelRW =
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
+  , rwPosition   :: SS.Pos
+  , rwStackTrace :: [String]
+    -- ^ SAWScript-internal backtrace for use
+    --   when displaying exceptions and such
+    --   NB, stored with most recent calls on
+    --   top of the stack.
+  , rwLocalEnv   :: LocalEnv
+
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
@@ -711,17 +712,37 @@ throwTopLevel msg = do
   stk <- getStackTrace
   throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
 
-withPosition :: SS.Pos -> TopLevel a -> TopLevel a
-withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
+-- deprecated
+--withPosition :: SS.Pos -> TopLevel a -> TopLevel a
+--withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
+
+-- | Replacement pair for withPosition.
+--   Usage:
+--      savepos = pushPosition newpos
+--      ...
+--      popPosition savepos
+--
+pushPosition :: SS.Pos -> TopLevel SS.Pos
+pushPosition newpos = do
+  oldpos <- gets rwPosition
+  modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
+  return oldpos
+
+popPosition :: SS.Pos -> TopLevel ()
+popPosition restorepos = do
+  modifyTopLevelRW (\rw -> rw { rwPosition = restorepos })
 
 getLocalEnv :: TopLevel LocalEnv
-getLocalEnv = TopLevel_ (asks roLocalEnv)
+getLocalEnv =
+  gets rwLocalEnv
 
 getPosition :: TopLevel SS.Pos
-getPosition = TopLevel_ (asks roPosition)
+getPosition =
+  gets rwPosition
 
 getStackTrace :: TopLevel [String]
-getStackTrace = TopLevel_ (reverse <$> asks roStackTrace)
+getStackTrace =
+  reverse <$> gets rwStackTrace
 
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)
@@ -900,7 +921,9 @@ throwLLVMFun nm msg = do
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
-getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
+getW4Position s = do
+  pos <- lift $ lift $ gets rwPosition
+  return $ SS.toW4Loc s pos
 
 --
 
@@ -1032,7 +1055,9 @@ instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = do
-      v1 <- withPosition pos (fromValue m1)
+      savepos <- pushPosition pos
+      v1 <- fromValue m1
+      popPosition savepos
       m2 <- applyValue v2 v1
       fromValue m2
     fromValue v = error $ "fromValue TopLevel:" <> show v
@@ -1048,7 +1073,9 @@ instance FromValue a => FromValue (ProofScript a) where
     fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = ProofScript $ do
-      v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- unProofScript (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
@@ -1062,8 +1089,9 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runLLVMCrucibleSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runLLVMCrucibleSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
@@ -1075,8 +1103,9 @@ instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = JVMSetupM $ do
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runJVMSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runJVMSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
@@ -1088,8 +1117,9 @@ instance FromValue a => FromValue (MIRSetupM a) where
     fromValue (VMIRSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = MIRSetupM $ do
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runMIRSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runMIRSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runMIRSetupM (fromValue m2)
     fromValue _ = error "fromValue MIRSetup"

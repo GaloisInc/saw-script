@@ -359,13 +359,19 @@ interpretDeclGroup (SS.Recursive ds) =
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
-    -- XXX are the uses of withPosition here suitable? not super clear
+    -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
+             savepos <- pushPosition pos
+             result <- interpret e
+             popPosition savepos
+             return result
       SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
-             v1 <- withPosition pos (interpret e)
+             savepos <- pushPosition pos
+             v1 <- interpret e
+             popPosition savepos
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
              bindValue pos v1 (VLambda f)
       SS.StmtLet pos bs : ss ->
@@ -505,7 +511,11 @@ interpretStmt printBinds stmt = do
   case stmt' of
 
     SS.StmtBind pos pat expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
+      liftTopLevel $ do
+        savepos <- pushPosition pos
+        result <- processStmtBind printBinds pat expr
+        popPosition savepos
+        return result
 
     SS.StmtLet _pos dg ->
       liftTopLevel $ do
@@ -611,14 +621,11 @@ buildTopLevelEnv proxy opts =
                    { roJavaCodebase = jcb
                    , roOptions = opts
                    , roHandleAlloc = halloc
-                   , roPosition = SS.Unknown
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
                    , roProofSubshell = fail "Proof subshells not supported"
-                   , roLocalEnv = []
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -633,6 +640,9 @@ buildTopLevelEnv proxy opts =
                    , rwTypeInfo   = primNamedTypeEnv
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
+                   , rwPosition = SS.Unknown
+                   , rwStackTrace = []
+                   , rwLocalEnv = []
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []

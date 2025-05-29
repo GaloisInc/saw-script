@@ -61,6 +61,7 @@ module SAWScript.ValueOps (
 import Prelude hiding (fail)
 
 import Control.Monad.Catch (MonadThrow(..), try)
+import Control.Monad.State (gets, modify)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask, local)
@@ -209,10 +210,15 @@ proof_checkpoint =
           put ps
 
 withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
-withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
+withLocalEnv env m = do
+  prevEnv <- gets rwLocalEnv
+  modify (\rw -> rw { rwLocalEnv = env })
+  result <- m
+  modify (\rw -> rw { rwLocalEnv = prevEnv })
+  return result
 
 withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
-withLocalEnvProof env (ProofScript m) =
+withLocalEnvProof env (ProofScript m) = do
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
@@ -236,5 +242,9 @@ addTraceProofScript :: String -> ProofScript a -> ProofScript a
 addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
 
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
-addTraceTopLevel str (TopLevel_ action) =
-  TopLevel_ (local (\ro -> ro{ roStackTrace = str : roStackTrace ro }) action)
+addTraceTopLevel str action = do
+  trace <- gets rwStackTrace
+  modify (\rw -> rw { rwStackTrace = str : trace })
+  result <- action
+  modify (\rw -> rw { rwStackTrace = trace })
+  return result
