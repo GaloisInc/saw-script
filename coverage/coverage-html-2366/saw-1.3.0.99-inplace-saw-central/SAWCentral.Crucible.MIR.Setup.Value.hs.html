@@ -156,262 +156,268 @@ span.spaces    { background: white }
 <span class="lineno">  137 </span>
 <span class="lineno">  138 </span>data MirAllocSpec tp = MirAllocSpec
 <span class="lineno">  139 </span>    { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maConditionMetadata</span></span></span> :: MS.ConditionMetadata
-<span class="lineno">  140 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maType</span></span></span> :: TypeRepr tp
-<span class="lineno">  141 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maPtrKind</span></span></span> :: MirPointerKind
-<span class="lineno">  142 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maMutbl</span></span></span> :: M.Mutability
-<span class="lineno">  143 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maMirType</span></span></span> :: M.Ty
-<span class="lineno">  144 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maLen</span></span></span> :: Int
-<span class="lineno">  145 </span>    }
-<span class="lineno">  146 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
-<span class="lineno">  147 </span>
-<span class="lineno">  148 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ShowF MirAllocSpec</span></span></span></span></span></span> where
-<span class="lineno">  149 </span>
-<span class="lineno">  150 </span>data MirPointer sym tp = MirPointer
-<span class="lineno">  151 </span>    { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpType</span></span></span> :: TypeRepr tp
-<span class="lineno">  152 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpKind</span></span></span> :: MirPointerKind
-<span class="lineno">  153 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpMutbl</span></span></span> :: M.Mutability
-<span class="lineno">  154 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpMirType</span></span></span> :: M.Ty
-<span class="lineno">  155 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpRef</span></span></span> :: MirReferenceMux sym
-<span class="lineno">  156 </span>    }
-<span class="lineno">  157 </span>
-<span class="lineno">  158 </span>-- | The kind of a MIR pointer.
-<span class="lineno">  159 </span>data MirPointerKind
-<span class="lineno">  160 </span>  = MirPointerRef -- ^ a reference
-<span class="lineno">  161 </span>  | MirPointerRaw -- ^ a raw pointer
-<span class="lineno">  162 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  140 </span>    -- | TypeRepr of the /pointee/ type
+<span class="lineno">  141 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maType</span></span></span> :: TypeRepr tp
+<span class="lineno">  142 </span>    -- | Which kind of /pointer/
+<span class="lineno">  143 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maPtrKind</span></span></span> :: MirPointerKind 
+<span class="lineno">  144 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maMutbl</span></span></span> :: M.Mutability
+<span class="lineno">  145 </span>    -- | MIR Ty of the /pointee/ type
+<span class="lineno">  146 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maMirType</span></span></span> :: M.Ty
+<span class="lineno">  147 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_maLen</span></span></span> :: Int
+<span class="lineno">  148 </span>    }
+<span class="lineno">  149 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ShowF MirAllocSpec</span></span></span></span></span></span> where
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>data MirPointer sym tp = MirPointer
+<span class="lineno">  154 </span>    { -- | TypeRepr of the /pointee/ type
+<span class="lineno">  155 </span>      <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpType</span></span></span> :: TypeRepr tp
+<span class="lineno">  156 </span>      -- | Which kind of /pointer/
+<span class="lineno">  157 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpKind</span></span></span> :: MirPointerKind
+<span class="lineno">  158 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpMutbl</span></span></span> :: M.Mutability
+<span class="lineno">  159 </span>      -- | MIR Ty of the /pointee/ type
+<span class="lineno">  160 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpMirType</span></span></span> :: M.Ty
+<span class="lineno">  161 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mpRef</span></span></span> :: MirReferenceMux sym
+<span class="lineno">  162 </span>    }
 <span class="lineno">  163 </span>
-<span class="lineno">  164 </span>-- | A enum-related MIR 'SetupValue'.
-<span class="lineno">  165 </span>data MirSetupEnum where
-<span class="lineno">  166 </span>  -- | A specific variant of an enum.
-<span class="lineno">  167 </span>  MirSetupEnumVariant ::
-<span class="lineno">  168 </span>       M.Adt
-<span class="lineno">  169 </span>       -- ^ The enum type.
-<span class="lineno">  170 </span>    -&gt; M.Variant
-<span class="lineno">  171 </span>       -- ^ The variant to use.
-<span class="lineno">  172 </span>    -&gt; Int
-<span class="lineno">  173 </span>       -- ^ The index of the variant within the list of all the enum's variants.
-<span class="lineno">  174 </span>       -- In most circumstances, this index will be the same as the discriminant
-<span class="lineno">  175 </span>       -- value, but the index can be different if a variant uses an explicit
-<span class="lineno">  176 </span>       -- value. For instance, in this example:
-<span class="lineno">  177 </span>       --
-<span class="lineno">  178 </span>       -- @
-<span class="lineno">  179 </span>       -- enum A {
-<span class="lineno">  180 </span>       --     A0,
-<span class="lineno">  181 </span>       --     A1,
-<span class="lineno">  182 </span>       -- }
+<span class="lineno">  164 </span>-- | The kind of a MIR pointer.
+<span class="lineno">  165 </span>data MirPointerKind
+<span class="lineno">  166 </span>  = MirPointerRef -- ^ a reference
+<span class="lineno">  167 </span>  | MirPointerRaw -- ^ a raw pointer
+<span class="lineno">  168 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>-- | A enum-related MIR 'SetupValue'.
+<span class="lineno">  171 </span>data MirSetupEnum where
+<span class="lineno">  172 </span>  -- | A specific variant of an enum.
+<span class="lineno">  173 </span>  MirSetupEnumVariant ::
+<span class="lineno">  174 </span>       M.Adt
+<span class="lineno">  175 </span>       -- ^ The enum type.
+<span class="lineno">  176 </span>    -&gt; M.Variant
+<span class="lineno">  177 </span>       -- ^ The variant to use.
+<span class="lineno">  178 </span>    -&gt; Int
+<span class="lineno">  179 </span>       -- ^ The index of the variant within the list of all the enum's variants.
+<span class="lineno">  180 </span>       -- In most circumstances, this index will be the same as the discriminant
+<span class="lineno">  181 </span>       -- value, but the index can be different if a variant uses an explicit
+<span class="lineno">  182 </span>       -- value. For instance, in this example:
 <span class="lineno">  183 </span>       --
-<span class="lineno">  184 </span>       -- enum B {
-<span class="lineno">  185 </span>       --     B0 = 42,
-<span class="lineno">  186 </span>       --     B1,
-<span class="lineno">  187 </span>       -- }
-<span class="lineno">  188 </span>       -- @
+<span class="lineno">  184 </span>       -- @
+<span class="lineno">  185 </span>       -- enum A {
+<span class="lineno">  186 </span>       --     A0,
+<span class="lineno">  187 </span>       --     A1,
+<span class="lineno">  188 </span>       -- }
 <span class="lineno">  189 </span>       --
-<span class="lineno">  190 </span>       -- The indexes for @A0@ and @B0@ are both @0@, and the indexes for @A1@
-<span class="lineno">  191 </span>       -- and @B1@ are both @1@. The discriminant values are different, however.
-<span class="lineno">  192 </span>       -- The discriminants for @A0@ and @A1@ are @0@ and @1@, respectively,
-<span class="lineno">  193 </span>       -- while the discriminants for @B0@ and @B1@ are @42@ and @43@,
-<span class="lineno">  194 </span>       -- respectively.
+<span class="lineno">  190 </span>       -- enum B {
+<span class="lineno">  191 </span>       --     B0 = 42,
+<span class="lineno">  192 </span>       --     B1,
+<span class="lineno">  193 </span>       -- }
+<span class="lineno">  194 </span>       -- @
 <span class="lineno">  195 </span>       --
-<span class="lineno">  196 </span>       -- Note that the index is accessible within the 'M.Variant' argument, but
-<span class="lineno">  197 </span>       -- retrieving the information is somewhat involved. (See the
-<span class="lineno">  198 </span>       -- implementation of @mir_enum_value@.) For this reason, we store this
-<span class="lineno">  199 </span>       -- information separately in 'MirSetupEnumVariant' to make it easier to
-<span class="lineno">  200 </span>       -- look up later.
-<span class="lineno">  201 </span>    -&gt; [MS.SetupValue MIR]
-<span class="lineno">  202 </span>       -- ^ The values of the variant's fields.
-<span class="lineno">  203 </span>    -&gt; MirSetupEnum
-<span class="lineno">  204 </span>
-<span class="lineno">  205 </span>  -- | A symbolic enum value, where the 'M.Adt' represents the enum type.
-<span class="lineno">  206 </span>  -- This is only used in the implementation of @mir_fresh_expanded_value@.
-<span class="lineno">  207 </span>  -- See @Note [Symbolic enums]@ for a more detailed explanation.
-<span class="lineno">  208 </span>  --
-<span class="lineno">  209 </span>  -- Note that @repr(transparent)@ enums never use 'MirSetupEnumSymbolic'.
-<span class="lineno">  210 </span>  -- Instead, they are represented as a 'MirSetupEnumVariant' where the
-<span class="lineno">  211 </span>  -- underlying variant field is symbolic. This makes it simpler to ensure that
-<span class="lineno">  212 </span>  -- resolving a @repr(transparent@ enum value will yield a 'MIRVal' whose
-<span class="lineno">  213 </span>  -- 'TypeShape' is 'TransparentShape'.
-<span class="lineno">  214 </span>  MirSetupEnumSymbolic ::
-<span class="lineno">  215 </span>       M.Adt
-<span class="lineno">  216 </span>       -- ^ The enum type.
-<span class="lineno">  217 </span>    -&gt; MS.SetupValue MIR
-<span class="lineno">  218 </span>       -- ^ The symbolic discriminant value.
-<span class="lineno">  219 </span>    -&gt; [[MS.SetupValue MIR]]
-<span class="lineno">  220 </span>       -- ^ The symbolic values that are used for the fields in each variant.
-<span class="lineno">  221 </span>       -- For instance, if one created a symbolic value of this type:
-<span class="lineno">  222 </span>       --
-<span class="lineno">  223 </span>       -- @
-<span class="lineno">  224 </span>       -- enum E {
-<span class="lineno">  225 </span>       --     E1(u16),
-<span class="lineno">  226 </span>       --     E2(u32, u32),
-<span class="lineno">  227 </span>       -- @
+<span class="lineno">  196 </span>       -- The indexes for @A0@ and @B0@ are both @0@, and the indexes for @A1@
+<span class="lineno">  197 </span>       -- and @B1@ are both @1@. The discriminant values are different, however.
+<span class="lineno">  198 </span>       -- The discriminants for @A0@ and @A1@ are @0@ and @1@, respectively,
+<span class="lineno">  199 </span>       -- while the discriminants for @B0@ and @B1@ are @42@ and @43@,
+<span class="lineno">  200 </span>       -- respectively.
+<span class="lineno">  201 </span>       --
+<span class="lineno">  202 </span>       -- Note that the index is accessible within the 'M.Variant' argument, but
+<span class="lineno">  203 </span>       -- retrieving the information is somewhat involved. (See the
+<span class="lineno">  204 </span>       -- implementation of @mir_enum_value@.) For this reason, we store this
+<span class="lineno">  205 </span>       -- information separately in 'MirSetupEnumVariant' to make it easier to
+<span class="lineno">  206 </span>       -- look up later.
+<span class="lineno">  207 </span>    -&gt; [MS.SetupValue MIR]
+<span class="lineno">  208 </span>       -- ^ The values of the variant's fields.
+<span class="lineno">  209 </span>    -&gt; MirSetupEnum
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>  -- | A symbolic enum value, where the 'M.Adt' represents the enum type.
+<span class="lineno">  212 </span>  -- This is only used in the implementation of @mir_fresh_expanded_value@.
+<span class="lineno">  213 </span>  -- See @Note [Symbolic enums]@ for a more detailed explanation.
+<span class="lineno">  214 </span>  --
+<span class="lineno">  215 </span>  -- Note that @repr(transparent)@ enums never use 'MirSetupEnumSymbolic'.
+<span class="lineno">  216 </span>  -- Instead, they are represented as a 'MirSetupEnumVariant' where the
+<span class="lineno">  217 </span>  -- underlying variant field is symbolic. This makes it simpler to ensure that
+<span class="lineno">  218 </span>  -- resolving a @repr(transparent@ enum value will yield a 'MIRVal' whose
+<span class="lineno">  219 </span>  -- 'TypeShape' is 'TransparentShape'.
+<span class="lineno">  220 </span>  MirSetupEnumSymbolic ::
+<span class="lineno">  221 </span>       M.Adt
+<span class="lineno">  222 </span>       -- ^ The enum type.
+<span class="lineno">  223 </span>    -&gt; MS.SetupValue MIR
+<span class="lineno">  224 </span>       -- ^ The symbolic discriminant value.
+<span class="lineno">  225 </span>    -&gt; [[MS.SetupValue MIR]]
+<span class="lineno">  226 </span>       -- ^ The symbolic values that are used for the fields in each variant.
+<span class="lineno">  227 </span>       -- For instance, if one created a symbolic value of this type:
 <span class="lineno">  228 </span>       --
-<span class="lineno">  229 </span>       -- Then the list of fields would be @[[x], [y, z]]@, where @x: u16@
-<span class="lineno">  230 </span>       -- are the fields of @E1@, and @y: u32@ and @z: u32@ are the fields of
-<span class="lineno">  231 </span>       -- @E2@.
-<span class="lineno">  232 </span>    -&gt; MirSetupEnum
-<span class="lineno">  233 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
-<span class="lineno">  234 </span>
-<span class="lineno">  235 </span>-- | A slice-related MIR 'SetupValue'. This is used to power the @mir_slice_*@
-<span class="lineno">  236 </span>-- and @mir_str_slice_*@ family of SAWScript functions.
-<span class="lineno">  237 </span>data MirSetupSlice
-<span class="lineno">  238 </span>  = MirSetupSliceRaw (MS.SetupValue MIR) (MS.SetupValue MIR)
-<span class="lineno">  239 </span>    -- ^ A \&quot;raw\&quot; slice constructed directly from a pointer and a length.
-<span class="lineno">  240 </span>    -- Currently, this is only used by @crucible-mir-comp@. SAWScript offers no
-<span class="lineno">  241 </span>    -- way to use this, although we may consider doing so in the future.
-<span class="lineno">  242 </span>  | MirSetupSlice MirSliceInfo (MS.SetupValue MIR)
-<span class="lineno">  243 </span>    -- ^ A slice of a reference to a contiguous sequence 'SetupValue'.
-<span class="lineno">  244 </span>  | MirSetupSliceRange MirSliceInfo (MS.SetupValue MIR) Int Int
-<span class="lineno">  245 </span>    -- ^ A slice of a reference to a contiguous sequence 'SetupValue', where the
-<span class="lineno">  246 </span>    -- slice only covers the range specified by the given start and end values
-<span class="lineno">  247 </span>    -- (the first and second 'Int', respectively). Currently, this only supports
-<span class="lineno">  248 </span>    -- concrete ranges.
-<span class="lineno">  249 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
-<span class="lineno">  250 </span>
-<span class="lineno">  251 </span>-- | Are we dealing with an array slice (@[T]@) or a string slice (@str@)?
-<span class="lineno">  252 </span>data MirSliceInfo
-<span class="lineno">  253 </span>  = -- | @[T]@ (for some type @T@)
-<span class="lineno">  254 </span>    MirArraySlice
-<span class="lineno">  255 </span>  | -- | @str@
-<span class="lineno">  256 </span>    MirStrSlice
-<span class="lineno">  257 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
-<span class="lineno">  258 </span>
-<span class="lineno">  259 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MIRCrucibleContext</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  260 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MirAllocSpec</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  261 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MirPointer</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno">  262 </span>
-<span class="lineno">  263 </span>{-
-<span class="lineno">  264 </span>Note [Symbolic enums]
-<span class="lineno">  265 </span>~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno">  266 </span>Creating a symbolic MIR enum value is not quite as straightforward as creating
-<span class="lineno">  267 </span>symbolic versions of other compound types, mostly due to the atypical Crucible
-<span class="lineno">  268 </span>representation that enums use. To recap, if we have an enum like this:
-<span class="lineno">  269 </span>
-<span class="lineno">  270 </span>  enum E {
-<span class="lineno">  271 </span>    E1(u16),
-<span class="lineno">  272 </span>    E2(u32, u32),
-<span class="lineno">  273 </span>  }
-<span class="lineno">  274 </span>
-<span class="lineno">  275 </span>Then this will be implemented using (roughly) the following Crucible `Type`
-<span class="lineno">  276 </span>under the hood:
-<span class="lineno">  277 </span>
-<span class="lineno">  278 </span>  (BVType 64, VariantType [StructType [BVType 16], StructType [BVType 32, BVType 32]])
-<span class="lineno">  279 </span>
-<span class="lineno">  280 </span>Where:
-<span class="lineno">  281 </span>
-<span class="lineno">  282 </span>* The `BVType 64` is a /discriminant/, whose value indicates which variant is
-<span class="lineno">  283 </span>  in use. For instance, a discriminant value of `0` indicates that the `E1`
-<span class="lineno">  284 </span>  variant is in use, and a discriminant value of `1` indicates that the `E2`
-<span class="lineno">  285 </span>  variant is in use.
-<span class="lineno">  286 </span>* The `VariantType ...` indicates that there are two variants in this enum,
-<span class="lineno">  287 </span>  where each variant is represented as a struct with the corresponding fields
-<span class="lineno">  288 </span>  in that variant.
-<span class="lineno">  289 </span>
-<span class="lineno">  290 </span>At simulation time, VariantTypes are represented as a sequence of
-<span class="lineno">  291 </span>VariantBranches, where a VariantBranch is (roughly) a pair of:
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>* A (possibly symbolic) predicate indicating if that variant is being used, and
-<span class="lineno">  294 </span>* A payload representing the fields of the enum. If the predicate does not
-<span class="lineno">  295 </span>  hold, then the payload will likely be symbolic, since it does not matter what
-<span class="lineno">  296 </span>  the payload value is in that case.
-<span class="lineno">  297 </span>
-<span class="lineno">  298 </span>OK, recap over. Let's get back to the original question: how do we make a
-<span class="lineno">  299 </span>symbolic value of this type? A naïve first attempt is to generate fresh
-<span class="lineno">  300 </span>symbolic values for everything. That is, a symbolic discriminant, as well as a
-<span class="lineno">  301 </span>symbolic predicate and payload for each VariantBranch. While tempting, this
-<span class="lineno">  302 </span>approach won't work. To see why, consider what happens when one pattern matches
-<span class="lineno">  303 </span>on a symbolic enum value. For example, the `match` expression in this function:
-<span class="lineno">  304 </span>
-<span class="lineno">  305 </span>  fn foo(x: E) -&gt; u32 {
-<span class="lineno">  306 </span>      match x {
-<span class="lineno">  307 </span>          E::E1(a) =&gt; bar(y),
-<span class="lineno">  308 </span>          E::E2(b, c) =&gt; baz(b, c),
-<span class="lineno">  309 </span>      }
-<span class="lineno">  310 </span>  }
-<span class="lineno">  311 </span>
-<span class="lineno">  312 </span>Would turn into the (roughly) following MIR:
-<span class="lineno">  313 </span>
-<span class="lineno">  314 </span>  fn foo(x : E) -&gt; u32 {
-<span class="lineno">  315 </span>      start_block: {
-<span class="lineno">  316 </span>          discr = Discriminant(x, isize);
-<span class="lineno">  317 </span>          switchint discr :isize [0, 1] -&gt; [e1_block, e2_block, fallthrough_block]
-<span class="lineno">  318 </span>      }
-<span class="lineno">  319 </span>      e1_block: {
-<span class="lineno">  320 </span>          ... call bar() ...
-<span class="lineno">  321 </span>      }
-<span class="lineno">  322 </span>      e2_block: {
-<span class="lineno">  323 </span>          ... call baz() ...
+<span class="lineno">  229 </span>       -- @
+<span class="lineno">  230 </span>       -- enum E {
+<span class="lineno">  231 </span>       --     E1(u16),
+<span class="lineno">  232 </span>       --     E2(u32, u32),
+<span class="lineno">  233 </span>       -- @
+<span class="lineno">  234 </span>       --
+<span class="lineno">  235 </span>       -- Then the list of fields would be @[[x], [y, z]]@, where @x: u16@
+<span class="lineno">  236 </span>       -- are the fields of @E1@, and @y: u32@ and @z: u32@ are the fields of
+<span class="lineno">  237 </span>       -- @E2@.
+<span class="lineno">  238 </span>    -&gt; MirSetupEnum
+<span class="lineno">  239 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>-- | A slice-related MIR 'SetupValue'. This is used to power the @mir_slice_*@
+<span class="lineno">  242 </span>-- and @mir_str_slice_*@ family of SAWScript functions.
+<span class="lineno">  243 </span>data MirSetupSlice
+<span class="lineno">  244 </span>  = MirSetupSliceRaw (MS.SetupValue MIR) (MS.SetupValue MIR)
+<span class="lineno">  245 </span>    -- ^ A \&quot;raw\&quot; slice constructed directly from a pointer and a length.
+<span class="lineno">  246 </span>    -- Currently, this is only used by @crucible-mir-comp@. SAWScript offers no
+<span class="lineno">  247 </span>    -- way to use this, although we may consider doing so in the future.
+<span class="lineno">  248 </span>  | MirSetupSlice MirSliceInfo (MS.SetupValue MIR)
+<span class="lineno">  249 </span>    -- ^ A slice of a reference to a contiguous sequence 'SetupValue'.
+<span class="lineno">  250 </span>  | MirSetupSliceRange MirSliceInfo (MS.SetupValue MIR) Int Int
+<span class="lineno">  251 </span>    -- ^ A slice of a reference to a contiguous sequence 'SetupValue', where the
+<span class="lineno">  252 </span>    -- slice only covers the range specified by the given start and end values
+<span class="lineno">  253 </span>    -- (the first and second 'Int', respectively). Currently, this only supports
+<span class="lineno">  254 </span>    -- concrete ranges.
+<span class="lineno">  255 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>-- | Are we dealing with an array slice (@[T]@) or a string slice (@str@)?
+<span class="lineno">  258 </span>data MirSliceInfo
+<span class="lineno">  259 </span>  = -- | @[T]@ (for some type @T@)
+<span class="lineno">  260 </span>    MirArraySlice
+<span class="lineno">  261 </span>  | -- | @str@
+<span class="lineno">  262 </span>    MirStrSlice
+<span class="lineno">  263 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MIRCrucibleContext</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  266 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MirAllocSpec</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  267 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''MirPointer</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  268 </span>
+<span class="lineno">  269 </span>{-
+<span class="lineno">  270 </span>Note [Symbolic enums]
+<span class="lineno">  271 </span>~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno">  272 </span>Creating a symbolic MIR enum value is not quite as straightforward as creating
+<span class="lineno">  273 </span>symbolic versions of other compound types, mostly due to the atypical Crucible
+<span class="lineno">  274 </span>representation that enums use. To recap, if we have an enum like this:
+<span class="lineno">  275 </span>
+<span class="lineno">  276 </span>  enum E {
+<span class="lineno">  277 </span>    E1(u16),
+<span class="lineno">  278 </span>    E2(u32, u32),
+<span class="lineno">  279 </span>  }
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>Then this will be implemented using (roughly) the following Crucible `Type`
+<span class="lineno">  282 </span>under the hood:
+<span class="lineno">  283 </span>
+<span class="lineno">  284 </span>  (BVType 64, VariantType [StructType [BVType 16], StructType [BVType 32, BVType 32]])
+<span class="lineno">  285 </span>
+<span class="lineno">  286 </span>Where:
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>* The `BVType 64` is a /discriminant/, whose value indicates which variant is
+<span class="lineno">  289 </span>  in use. For instance, a discriminant value of `0` indicates that the `E1`
+<span class="lineno">  290 </span>  variant is in use, and a discriminant value of `1` indicates that the `E2`
+<span class="lineno">  291 </span>  variant is in use.
+<span class="lineno">  292 </span>* The `VariantType ...` indicates that there are two variants in this enum,
+<span class="lineno">  293 </span>  where each variant is represented as a struct with the corresponding fields
+<span class="lineno">  294 </span>  in that variant.
+<span class="lineno">  295 </span>
+<span class="lineno">  296 </span>At simulation time, VariantTypes are represented as a sequence of
+<span class="lineno">  297 </span>VariantBranches, where a VariantBranch is (roughly) a pair of:
+<span class="lineno">  298 </span>
+<span class="lineno">  299 </span>* A (possibly symbolic) predicate indicating if that variant is being used, and
+<span class="lineno">  300 </span>* A payload representing the fields of the enum. If the predicate does not
+<span class="lineno">  301 </span>  hold, then the payload will likely be symbolic, since it does not matter what
+<span class="lineno">  302 </span>  the payload value is in that case.
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>OK, recap over. Let's get back to the original question: how do we make a
+<span class="lineno">  305 </span>symbolic value of this type? A naïve first attempt is to generate fresh
+<span class="lineno">  306 </span>symbolic values for everything. That is, a symbolic discriminant, as well as a
+<span class="lineno">  307 </span>symbolic predicate and payload for each VariantBranch. While tempting, this
+<span class="lineno">  308 </span>approach won't work. To see why, consider what happens when one pattern matches
+<span class="lineno">  309 </span>on a symbolic enum value. For example, the `match` expression in this function:
+<span class="lineno">  310 </span>
+<span class="lineno">  311 </span>  fn foo(x: E) -&gt; u32 {
+<span class="lineno">  312 </span>      match x {
+<span class="lineno">  313 </span>          E::E1(a) =&gt; bar(y),
+<span class="lineno">  314 </span>          E::E2(b, c) =&gt; baz(b, c),
+<span class="lineno">  315 </span>      }
+<span class="lineno">  316 </span>  }
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>Would turn into the (roughly) following MIR:
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>  fn foo(x : E) -&gt; u32 {
+<span class="lineno">  321 </span>      start_block: {
+<span class="lineno">  322 </span>          discr = Discriminant(x, isize);
+<span class="lineno">  323 </span>          switchint discr :isize [0, 1] -&gt; [e1_block, e2_block, fallthrough_block]
 <span class="lineno">  324 </span>      }
-<span class="lineno">  325 </span>      fallthrough_block: {
-<span class="lineno">  326 </span>          unreachable;
+<span class="lineno">  325 </span>      e1_block: {
+<span class="lineno">  326 </span>          ... call bar() ...
 <span class="lineno">  327 </span>      }
-<span class="lineno">  328 </span>      ...
-<span class="lineno">  329 </span>  }
-<span class="lineno">  330 </span>
-<span class="lineno">  331 </span>Here, the `switchint discr` statement will check the value of `discr` (the
-<span class="lineno">  332 </span>discriminant), and if it equals `0`, go to `e1_block`; if it equals `1`, go to
-<span class="lineno">  333 </span>`e2_block`; and if it equals something else, go to `fallthrough_block`. In
-<span class="lineno">  334 </span>normal circumstances, `discr` should only ever be equal to `0` or `1`, which
-<span class="lineno">  335 </span>implies that `fallthrough_block` should never be accessible (as indicated by
-<span class="lineno">  336 </span>its `unreachable` instruction).
-<span class="lineno">  337 </span>
-<span class="lineno">  338 </span>Now consider what would happen if the discriminant were an unconstrained,
-<span class="lineno">  339 </span>symbolic value. While a symbolic discriminant could be equal to `0` or `1`, it
-<span class="lineno">  340 </span>could also be equal to any other value! This would spell disaster if Crucible
-<span class="lineno">  341 </span>tried to perform a symbolic branch on, say, `discr == 2`, since that would
-<span class="lineno">  342 </span>cause execution to reach `fallthrough_block` and crash. We want a symbolic
-<span class="lineno">  343 </span>discriminant, but we don't want it to be /that/ symbolic!
-<span class="lineno">  344 </span>
-<span class="lineno">  345 </span>For this reason, after we create a symbolic discriminant value, we also add a
-<span class="lineno">  346 </span>Crucible assumption that the discriminant must be equal to one of the possible
-<span class="lineno">  347 </span>enum variants' discriminants. In the example above, this means that we would
-<span class="lineno">  348 </span>assume assume the following:
-<span class="lineno">  349 </span>
-<span class="lineno">  350 </span>  (discr == 0) \/ (discr == 1)
-<span class="lineno">  351 </span>
-<span class="lineno">  352 </span>This way, symbolic execution will never reach `fallthrough_block`. This
-<span class="lineno">  353 </span>Crucible assumption is created in
-<span class="lineno">  354 </span>SAWCentral.Crucible.MIR.Builtins.constructExpandedSetupValue.goEnum`.
+<span class="lineno">  328 </span>      e2_block: {
+<span class="lineno">  329 </span>          ... call baz() ...
+<span class="lineno">  330 </span>      }
+<span class="lineno">  331 </span>      fallthrough_block: {
+<span class="lineno">  332 </span>          unreachable;
+<span class="lineno">  333 </span>      }
+<span class="lineno">  334 </span>      ...
+<span class="lineno">  335 </span>  }
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>Here, the `switchint discr` statement will check the value of `discr` (the
+<span class="lineno">  338 </span>discriminant), and if it equals `0`, go to `e1_block`; if it equals `1`, go to
+<span class="lineno">  339 </span>`e2_block`; and if it equals something else, go to `fallthrough_block`. In
+<span class="lineno">  340 </span>normal circumstances, `discr` should only ever be equal to `0` or `1`, which
+<span class="lineno">  341 </span>implies that `fallthrough_block` should never be accessible (as indicated by
+<span class="lineno">  342 </span>its `unreachable` instruction).
+<span class="lineno">  343 </span>
+<span class="lineno">  344 </span>Now consider what would happen if the discriminant were an unconstrained,
+<span class="lineno">  345 </span>symbolic value. While a symbolic discriminant could be equal to `0` or `1`, it
+<span class="lineno">  346 </span>could also be equal to any other value! This would spell disaster if Crucible
+<span class="lineno">  347 </span>tried to perform a symbolic branch on, say, `discr == 2`, since that would
+<span class="lineno">  348 </span>cause execution to reach `fallthrough_block` and crash. We want a symbolic
+<span class="lineno">  349 </span>discriminant, but we don't want it to be /that/ symbolic!
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>For this reason, after we create a symbolic discriminant value, we also add a
+<span class="lineno">  352 </span>Crucible assumption that the discriminant must be equal to one of the possible
+<span class="lineno">  353 </span>enum variants' discriminants. In the example above, this means that we would
+<span class="lineno">  354 </span>assume assume the following:
 <span class="lineno">  355 </span>
-<span class="lineno">  356 </span>Similarly, we cannot make the VariantBranch predicates completely symbolic, as
-<span class="lineno">  357 </span>whether a predicate holds or not depends on the value of the discriminant. For
-<span class="lineno">  358 </span>this reason, we do not create fresh variables for each predicate, but instead
-<span class="lineno">  359 </span>make each predicate the result of checking the discriminant against particular
-<span class="lineno">  360 </span>values. For instance, the predicate for the `E1` VariantBranch is defined to be
-<span class="lineno">  361 </span>`discr == 0`, and the predicate for the `E2` VariantBranch is defined to be
-<span class="lineno">  362 </span>`discr == 1`. These predicates are defined in
-<span class="lineno">  363 </span>`SAWCentral.Crucible.MIR.ResolveSetupValue.resolveSetupValue`, along with the
-<span class="lineno">  364 </span>fields in the associated payloads.
-<span class="lineno">  365 </span>
-<span class="lineno">  366 </span>Lastly, there are the payloads (i.e., the fields of each variant) in each
-<span class="lineno">  367 </span>VariantBranch. These are created as completely symbolic values—the trick is to
-<span class="lineno">  368 </span>only access the fields when the corresponding predicate holds. For example,
-<span class="lineno">  369 </span>`SAWCentral.Crucible.MIR.Override.matchArg` (in the `MirSetupEnumSymbolic` case)
-<span class="lineno">  370 </span>must be able to match two possibly symbolic enum values together, but it must
-<span class="lineno">  371 </span>be careful to only match the fields in a variant if that VariantBranch's
-<span class="lineno">  372 </span>predicate holds.
-<span class="lineno">  373 </span>
-<span class="lineno">  374 </span>To make this a bit more specific, suppose we have two symbolic enum values
-<span class="lineno">  375 </span>`enumA` and `enumA`, where:
-<span class="lineno">  376 </span>
-<span class="lineno">  377 </span>* `enumA` has the discriminant value `discrA`, and
-<span class="lineno">  378 </span>  `enumB` has the discriminant value `discrB`.
-<span class="lineno">  379 </span>* `enumA` has the VariantBranches [(e1_pred_a, [e1_fld1_a]), (e2_pred_a, [e2_fld1_a, e2_fld2_a])], and
-<span class="lineno">  380 </span>  `enumB` has the VariantBranches [(e1_pred_b, [e1_fld1_b]), (e2_pred_b, [e2_fld1_b, e2_fld2_b])].
-<span class="lineno">  381 </span>
-<span class="lineno">  382 </span>We only want to match `e1_fld1_a` against `e1_fld1_b` if both enums are using
-<span class="lineno">  383 </span>the `E1` variant, that is, if `e1_pred_a` and `e_pred_b` hold. To this end, the
-<span class="lineno">  384 </span>`matchArg` function checks this by generating (roughly) the following
-<span class="lineno">  385 </span>assertion:
-<span class="lineno">  386 </span>
-<span class="lineno">  387 </span>  (discrA == discrB) /\
-<span class="lineno">  388 </span>  (e1_pred_a ==&gt; (e1_fld1_a == e1_fld1_b))
-<span class="lineno">  389 </span>
-<span class="lineno">  390 </span>(Note that instead of `e1_pred_a ==&gt; ...`, we could have alternatively used
-<span class="lineno">  391 </span>`e1_pred_b ==&gt; ...`, `(discrA == 0) ==&gt; ...`, or `(discrB == 0) ==&gt; ...`. All
-<span class="lineno">  392 </span>formulations are equivalent.)
-<span class="lineno">  393 </span>
-<span class="lineno">  394 </span>Phew! Enums are surprisingly tricky.
-<span class="lineno">  395 </span>-}
+<span class="lineno">  356 </span>  (discr == 0) \/ (discr == 1)
+<span class="lineno">  357 </span>
+<span class="lineno">  358 </span>This way, symbolic execution will never reach `fallthrough_block`. This
+<span class="lineno">  359 </span>Crucible assumption is created in
+<span class="lineno">  360 </span>SAWCentral.Crucible.MIR.Builtins.constructExpandedSetupValue.goEnum`.
+<span class="lineno">  361 </span>
+<span class="lineno">  362 </span>Similarly, we cannot make the VariantBranch predicates completely symbolic, as
+<span class="lineno">  363 </span>whether a predicate holds or not depends on the value of the discriminant. For
+<span class="lineno">  364 </span>this reason, we do not create fresh variables for each predicate, but instead
+<span class="lineno">  365 </span>make each predicate the result of checking the discriminant against particular
+<span class="lineno">  366 </span>values. For instance, the predicate for the `E1` VariantBranch is defined to be
+<span class="lineno">  367 </span>`discr == 0`, and the predicate for the `E2` VariantBranch is defined to be
+<span class="lineno">  368 </span>`discr == 1`. These predicates are defined in
+<span class="lineno">  369 </span>`SAWCentral.Crucible.MIR.ResolveSetupValue.resolveSetupValue`, along with the
+<span class="lineno">  370 </span>fields in the associated payloads.
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>Lastly, there are the payloads (i.e., the fields of each variant) in each
+<span class="lineno">  373 </span>VariantBranch. These are created as completely symbolic values—the trick is to
+<span class="lineno">  374 </span>only access the fields when the corresponding predicate holds. For example,
+<span class="lineno">  375 </span>`SAWCentral.Crucible.MIR.Override.matchArg` (in the `MirSetupEnumSymbolic` case)
+<span class="lineno">  376 </span>must be able to match two possibly symbolic enum values together, but it must
+<span class="lineno">  377 </span>be careful to only match the fields in a variant if that VariantBranch's
+<span class="lineno">  378 </span>predicate holds.
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>To make this a bit more specific, suppose we have two symbolic enum values
+<span class="lineno">  381 </span>`enumA` and `enumA`, where:
+<span class="lineno">  382 </span>
+<span class="lineno">  383 </span>* `enumA` has the discriminant value `discrA`, and
+<span class="lineno">  384 </span>  `enumB` has the discriminant value `discrB`.
+<span class="lineno">  385 </span>* `enumA` has the VariantBranches [(e1_pred_a, [e1_fld1_a]), (e2_pred_a, [e2_fld1_a, e2_fld2_a])], and
+<span class="lineno">  386 </span>  `enumB` has the VariantBranches [(e1_pred_b, [e1_fld1_b]), (e2_pred_b, [e2_fld1_b, e2_fld2_b])].
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>We only want to match `e1_fld1_a` against `e1_fld1_b` if both enums are using
+<span class="lineno">  389 </span>the `E1` variant, that is, if `e1_pred_a` and `e_pred_b` hold. To this end, the
+<span class="lineno">  390 </span>`matchArg` function checks this by generating (roughly) the following
+<span class="lineno">  391 </span>assertion:
+<span class="lineno">  392 </span>
+<span class="lineno">  393 </span>  (discrA == discrB) /\
+<span class="lineno">  394 </span>  (e1_pred_a ==&gt; (e1_fld1_a == e1_fld1_b))
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>(Note that instead of `e1_pred_a ==&gt; ...`, we could have alternatively used
+<span class="lineno">  397 </span>`e1_pred_b ==&gt; ...`, `(discrA == 0) ==&gt; ...`, or `(discrB == 0) ==&gt; ...`. All
+<span class="lineno">  398 </span>formulations are equivalent.)
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>Phew! Enums are surprisingly tricky.
+<span class="lineno">  401 </span>-}
 
 </pre>
 </body>

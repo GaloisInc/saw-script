@@ -148,49 +148,50 @@ span.spaces    { background: white }
 <span class="lineno">  129 </span><span class="decl"><span class="istickedoff">ptrKindToTy MirPointerRef = M.TyRef</span>
 <span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff">ptrKindToTy MirPointerRaw = M.TyRawPtr</span></span>
 <span class="lineno">  131 </span>
-<span class="lineno">  132 </span>-- | Gets the 'MirPointerKind' for a reference or pointer type.
-<span class="lineno">  133 </span>tyToPtrKind :: M.Ty -&gt; MirPointerKind
-<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">tyToPtrKind (M.TyRef _ _) = MirPointerRef</span>
-<span class="lineno">  135 </span><span class="spaces"></span><span class="nottickedoff">tyToPtrKind (M.TyRawPtr _ _) = MirPointerRaw</span>
-<span class="lineno">  136 </span><span class="spaces"></span><span class="nottickedoff">tyToPtrKind ty = panic &quot;tyToPtrKind&quot;</span>
-<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">[&quot;Type is not a reference or pointer: &quot; &lt;&gt; Text.pack (show ty)]</span></span>
-<span class="lineno">  138 </span>
-<span class="lineno">  139 </span>type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
-<span class="lineno">  140 </span>
-<span class="lineno">  141 </span>initialDefCrucibleMethodSpecIR ::
-<span class="lineno">  142 </span>  CollectionState -&gt;
-<span class="lineno">  143 </span>  M.Fn -&gt;
-<span class="lineno">  144 </span>  ProgramLoc -&gt;
-<span class="lineno">  145 </span>  MS.CrucibleMethodSpecIR MIR
-<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">initialDefCrucibleMethodSpecIR rm fn loc =</span>
-<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">let fname = fn ^. M.fname</span>
-<span class="lineno">  148 </span><span class="spaces">      </span><span class="istickedoff">fsig = fn ^. M.fsig</span>
-<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">argTys = fsig ^. M.fsarg_tys</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">retTy = case fsig ^. M.fsreturn_ty of</span>
-<span class="lineno">  151 </span><span class="spaces">                </span><span class="istickedoff">M.TyTuple [] -&gt; Nothing</span>
-<span class="lineno">  152 </span><span class="spaces">                </span><span class="istickedoff">ty -&gt; Just ty in</span>
-<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">MS.makeCrucibleMethodSpecIR fname argTys retTy loc <span class="nottickedoff">rm</span></span></span>
-<span class="lineno">  154 </span>
-<span class="lineno">  155 </span>initialCrucibleSetupState ::
-<span class="lineno">  156 </span>  MIRCrucibleContext -&gt;
-<span class="lineno">  157 </span>  M.Fn -&gt;
-<span class="lineno">  158 </span>  ProgramLoc -&gt;
-<span class="lineno">  159 </span>  Setup.CrucibleSetupState MIR
-<span class="lineno">  160 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupState cc fn loc =</span>
-<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">Setup.makeCrucibleSetupState <span class="nottickedoff">()</span> cc $</span>
-<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">initialDefCrucibleMethodSpecIR</span>
-<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cc ^. mccRustModule ^. rmCS)</span></span>
-<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff">fn</span>
-<span class="lineno">  165 </span><span class="spaces">      </span><span class="istickedoff">loc</span></span>
-<span class="lineno">  166 </span>
-<span class="lineno">  167 </span>-- | The default MIR intrinsics extended with the 'MS.GhostValue' intrinsic,
-<span class="lineno">  168 </span>-- which powers ghost state.
-<span class="lineno">  169 </span>intrinsics :: MapF.MapF SymbolRepr (IntrinsicMuxFn Sym)
-<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">intrinsics =</span>
-<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">MapF.insert</span>
-<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">(knownSymbol :: SymbolRepr MS.GhostValue)</span>
-<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">IntrinsicMuxFn</span>
-<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">mirIntrinsicTypes</span></span>
+<span class="lineno">  132 </span>-- | Gets the 'MirPointerKind' for a reference or pointer type. Panics if the
+<span class="lineno">  133 </span>-- given 'M.Ty' is not a reference or pointer.
+<span class="lineno">  134 </span>tyToPtrKind :: M.Ty -&gt; MirPointerKind
+<span class="lineno">  135 </span><span class="decl"><span class="nottickedoff">tyToPtrKind (M.TyRef _ _) = MirPointerRef</span>
+<span class="lineno">  136 </span><span class="spaces"></span><span class="nottickedoff">tyToPtrKind (M.TyRawPtr _ _) = MirPointerRaw</span>
+<span class="lineno">  137 </span><span class="spaces"></span><span class="nottickedoff">tyToPtrKind ty = panic &quot;tyToPtrKind&quot;</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">[&quot;Type is not a reference or pointer: &quot; &lt;&gt; Text.pack (show ty)]</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>initialDefCrucibleMethodSpecIR ::
+<span class="lineno">  143 </span>  CollectionState -&gt;
+<span class="lineno">  144 </span>  M.Fn -&gt;
+<span class="lineno">  145 </span>  ProgramLoc -&gt;
+<span class="lineno">  146 </span>  MS.CrucibleMethodSpecIR MIR
+<span class="lineno">  147 </span><span class="decl"><span class="istickedoff">initialDefCrucibleMethodSpecIR rm fn loc =</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">let fname = fn ^. M.fname</span>
+<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">fsig = fn ^. M.fsig</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">argTys = fsig ^. M.fsarg_tys</span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">retTy = case fsig ^. M.fsreturn_ty of</span>
+<span class="lineno">  152 </span><span class="spaces">                </span><span class="istickedoff">M.TyTuple [] -&gt; Nothing</span>
+<span class="lineno">  153 </span><span class="spaces">                </span><span class="istickedoff">ty -&gt; Just ty in</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">MS.makeCrucibleMethodSpecIR fname argTys retTy loc <span class="nottickedoff">rm</span></span></span>
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>initialCrucibleSetupState ::
+<span class="lineno">  157 </span>  MIRCrucibleContext -&gt;
+<span class="lineno">  158 </span>  M.Fn -&gt;
+<span class="lineno">  159 </span>  ProgramLoc -&gt;
+<span class="lineno">  160 </span>  Setup.CrucibleSetupState MIR
+<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">initialCrucibleSetupState cc fn loc =</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">Setup.makeCrucibleSetupState <span class="nottickedoff">()</span> cc $</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">initialDefCrucibleMethodSpecIR</span>
+<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cc ^. mccRustModule ^. rmCS)</span></span>
+<span class="lineno">  165 </span><span class="spaces">      </span><span class="istickedoff">fn</span>
+<span class="lineno">  166 </span><span class="spaces">      </span><span class="istickedoff">loc</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>-- | The default MIR intrinsics extended with the 'MS.GhostValue' intrinsic,
+<span class="lineno">  169 </span>-- which powers ghost state.
+<span class="lineno">  170 </span>intrinsics :: MapF.MapF SymbolRepr (IntrinsicMuxFn Sym)
+<span class="lineno">  171 </span><span class="decl"><span class="istickedoff">intrinsics =</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">MapF.insert</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">(knownSymbol :: SymbolRepr MS.GhostValue)</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">IntrinsicMuxFn</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">mirIntrinsicTypes</span></span>
 
 </pre>
 </body>
