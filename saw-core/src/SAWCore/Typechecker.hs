@@ -52,12 +52,11 @@ import SAWCore.Module
   , ctorPrimName
   , dtPrimName
   , emptyModule
-  , findDataType
-  , resolveName
+  , findDataTypeInMap
+  , resolveNameInMap
   , DataType(..)
   , Def(..)
   , DefQualifier(..)
-  , Module
   , ResolvedName(..)
   )
 import SAWCore.Position
@@ -98,10 +97,6 @@ getModuleName =
        Nothing ->
          panic "getModuleName" ["Current module name not set during typechecking"]
 
--- | Look up the current module
-getModule :: TCM Module
-getModule = getModuleName >>= liftTCM scFindModule
-
 -- | Build a multi-arity application of 'TypedTerm's
 inferApplyAll :: TypedTerm -> [TypedTerm] -> TCM TypedTerm
 inferApplyAll t [] = return t
@@ -113,8 +108,10 @@ inferApplyAll t (arg:args) =
 inferResolveNameApp :: Text -> [TypedTerm] -> TCM TypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
-     m <- getModule
-     case (findIndex ((== n) . fst) ctx, resolveName m n) of
+     mnm <- getModuleName
+     mm <- liftTCM scGetModuleMap
+     let ident = mkIdent mnm n
+     case (findIndex ((== n) . fst) ctx, resolveNameInMap mm ident) of
        (Just i, _) ->
          do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
             inferApplyAll t args
@@ -195,9 +192,9 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
        case maybe_mnm of
          Just mnm -> return mnm
          Nothing -> getModuleName
-     m <- liftTCM scFindModule mnm
+     mm <- liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
-     dt <- case findDataType m str of
+     dt <- case findDataTypeInMap mm dt_ident of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType dt_ident
      typed_args <- mapM typeInferComplete args

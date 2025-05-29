@@ -42,6 +42,7 @@ module SAWCore.Module
   , moduleName
   , emptyModule
   , resolveName
+  , resolveNameInMap
   , findDataType
   , insImport
   , insDataType
