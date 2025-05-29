@@ -297,7 +297,7 @@ interpret expr =
                                        Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
                                        Just (lc, _ty, v)
                                          | Set.member lc (rwPrimsAvail rw) ->
-                                              return (addTrace (show x) v)
+                                              return (withStackTraceFrame (show x) v)
                                          | otherwise ->
                                               fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
       SS.Function _ pat e      -> do env <- getLocalEnv

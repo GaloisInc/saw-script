@@ -55,7 +55,7 @@ module SAWScript.ValueOps (
     -- used in SAWScript.Interpreter
     localOptions,
     -- used in SAWScript.Interpreter
-    addTrace,
+    withStackTraceFrame,
  ) where
 
 import Prelude hiding (fail)
@@ -226,23 +226,23 @@ localOptions f (TopLevel_ m) = TopLevel_ (local (\x -> x {roOptions = f (roOptio
 
 -- | Implement stack tracing by adding error handlers that rethrow
 -- user errors, prepended with the given string.
-addTrace :: String -> Value -> Value
-addTrace str val =
+withStackTraceFrame :: String -> Value -> Value
+withStackTraceFrame str val =
   case val of
-    VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
-    VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
-    VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
+    VLambda        f -> VLambda        (\x -> withStackTraceFrame str `fmap` withStackTraceFrameTopLevel str (f x))
+    VTopLevel      m -> VTopLevel      (withStackTraceFrame str `fmap` withStackTraceFrameTopLevel str m)
+    VProofScript   m -> VProofScript   (withStackTraceFrame str `fmap` withStackTraceFrameProofScript str m)
+    VBind pos v1 v2  -> VBind pos      (withStackTraceFrame str v1) (withStackTraceFrame str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        addTrace str `fmap` underReaderT (underStateT (addTraceTopLevel str)) m
+        withStackTraceFrame str `fmap` underReaderT (underStateT (withStackTraceFrameTopLevel str)) m
   -- TODO? JVM setup blocks too?
     _                -> val
 
-addTraceProofScript :: String -> ProofScript a -> ProofScript a
-addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
+withStackTraceFrameProofScript :: String -> ProofScript a -> ProofScript a
+withStackTraceFrameProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (withStackTraceFrameTopLevel str)) m)
 
-addTraceTopLevel :: String -> TopLevel a -> TopLevel a
-addTraceTopLevel str action = do
+withStackTraceFrameTopLevel :: String -> TopLevel a -> TopLevel a
+withStackTraceFrameTopLevel str action = do
   trace <- gets rwStackTrace
   modify (\rw -> rw { rwStackTrace = str : trace })
   result <- action
