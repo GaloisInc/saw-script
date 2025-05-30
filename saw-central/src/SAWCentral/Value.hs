@@ -918,11 +918,10 @@ throwLLVMFun nm msg = do
   loc <- LLVMCrucibleSetupM $ getW4Position nm
   throwLLVM loc msg
 
--- | This gets more accurate locations than @lift (lift getPosition)@ because
---   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
+-- | Get the current interpreter position and convert to a What4 position.
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
 getW4Position s = do
-  pos <- lift $ lift $ gets rwPosition
+  pos <- lift $ lift $ getPosition
   return $ SS.toW4Loc s pos
 
 --
