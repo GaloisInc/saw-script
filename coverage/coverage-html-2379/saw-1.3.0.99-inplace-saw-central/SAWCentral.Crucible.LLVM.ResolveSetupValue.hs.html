@@ -1,0 +1,1126 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.LLVM.ResolveSetupValue
+<span class="lineno">    3 </span>Description : Turn SetupValues back into LLVMVals
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : atomb
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">   10 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">   11 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   12 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">   13 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   14 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   15 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   16 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCentral.Crucible.LLVM.ResolveSetupValue
+<span class="lineno">   19 </span>  ( LLVMVal, LLVMPtr
+<span class="lineno">   20 </span>  , resolveSetupVal
+<span class="lineno">   21 </span>  , resolveSetupValBitfield
+<span class="lineno">   22 </span>  , typeOfSetupValue
+<span class="lineno">   23 </span>  , exceptToFail
+<span class="lineno">   24 </span>  , resolveTypedTerm
+<span class="lineno">   25 </span>  , resolveSAWPred
+<span class="lineno">   26 </span>  , resolveSAWSymBV
+<span class="lineno">   27 </span>  , recoverStructFieldInfo
+<span class="lineno">   28 </span>  , resolveSetupValueInfo
+<span class="lineno">   29 </span>  , BitfieldIndex(..)
+<span class="lineno">   30 </span>  , resolveSetupBitfield
+<span class="lineno">   31 </span>  , resolveSetupElemOffset
+<span class="lineno">   32 </span>  , equalValsPred
+<span class="lineno">   33 </span>  , memArrayToSawCoreTerm
+<span class="lineno">   34 </span>  , scPtrWidthBvNat
+<span class="lineno">   35 </span>  , W4EvalTactic(..)
+<span class="lineno">   36 </span>  ) where
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import Control.Lens ( (^.), view )
+<span class="lineno">   39 </span>import Control.Monad
+<span class="lineno">   40 </span>import Control.Monad.Except
+<span class="lineno">   41 </span>import Control.Monad.State
+<span class="lineno">   42 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   43 </span>import Data.Maybe (fromMaybe, fromJust)
+<span class="lineno">   44 </span>import Data.Void (absurd)
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import qualified Data.Dwarf as Dwarf
+<span class="lineno">   47 </span>import           Data.Map (Map)
+<span class="lineno">   48 </span>import qualified Data.Map as Map
+<span class="lineno">   49 </span>import qualified Data.Set as Set
+<span class="lineno">   50 </span>import qualified Data.Vector as V
+<span class="lineno">   51 </span>import           Data.Word (Word64)
+<span class="lineno">   52 </span>import           Numeric.Natural
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>import qualified Text.LLVM.AST as L
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
+<span class="lineno">   57 </span>import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+<span class="lineno">   58 </span>import qualified CryptolSAWCore.Simpset as Cryptol
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>import           Data.Parameterized.Some (Some(..))
+<span class="lineno">   61 </span>import           Data.Parameterized.NatRepr
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>import qualified What4.BaseTypes    as W4
+<span class="lineno">   64 </span>import qualified What4.Interface    as W4
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>import qualified Lang.Crucible.LLVM.Bytes       as Crucible
+<span class="lineno">   67 </span>import qualified Lang.Crucible.LLVM.MemModel    as Crucible
+<span class="lineno">   68 </span>import qualified Lang.Crucible.LLVM.MemType     as Crucible
+<span class="lineno">   69 </span>import qualified Lang.Crucible.LLVM.Translation as Crucible
+<span class="lineno">   70 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>import SAWCore.Rewriter
+<span class="lineno">   73 </span>import SAWCore.SharedTerm
+<span class="lineno">   74 </span>import qualified SAWCore.Prim as Prim
+<span class="lineno">   75 </span>import qualified SAWCore.Simulator.Concrete as Concrete
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>import CryptolSAWCore.Cryptol (importType, emptyEnv)
+<span class="lineno">   78 </span>import SAWCore.Name
+<span class="lineno">   79 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">   80 </span>import SAWCoreWhat4.What4
+<span class="lineno">   81 </span>import SAWCoreWhat4.ReturnTrip
+<span class="lineno">   82 </span>import qualified Text.LLVM.DebugUtils as L
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
+<span class="lineno">   85 </span>import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
+<span class="lineno">   86 </span>import           SAWCentral.Crucible.Common.ResolveSetupValue (checkBooleanType)
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>import SAWCentral.Crucible.LLVM.MethodSpecIR
+<span class="lineno">   89 </span>import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
+<span class="lineno">   90 </span>import qualified SAWCentral.Proof as SP
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>type LLVMVal = Crucible.LLVMVal Sym
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>exceptToFail :: MonadFail m =&gt; Except String a -&gt; m a
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">exceptToFail m = either fail pure $ runExcept m</span></span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>-- | Attempt to look up LLVM debug metadata regarding the type of the
+<span class="lineno">  100 </span>--   given setup value.  This is a best-effort procedure, as the
+<span class="lineno">  101 </span>--   necessary debug information may not be avaliable. Even if this
+<span class="lineno">  102 </span>--   procedure succeeds, the returned information may be partial, in
+<span class="lineno">  103 </span>--   the sense that it may contain `Unknown` nodes.
+<span class="lineno">  104 </span>resolveSetupValueInfo ::
+<span class="lineno">  105 </span>  LLVMCrucibleContext wptr        {- ^ crucible context  -} -&gt;
+<span class="lineno">  106 </span>  Map AllocIndex LLVMAllocSpec    {- ^ allocation types  -} -&gt;
+<span class="lineno">  107 </span>  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} -&gt;
+<span class="lineno">  108 </span>  SetupValue (LLVM arch)          {- ^ pointer value -} -&gt;
+<span class="lineno">  109 </span>  Except String L.Info            {- ^ debug type info of pointed-to type -}
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">resolveSetupValueInfo cc env nameEnv v =</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobal _ name -&gt;</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">case lookup (L.Symbol name) globalTys of</span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="istickedoff">Just (L.Alias alias) -&gt; pure (L.guessAliasInfo mdMap alias)</span>
+<span class="lineno">  115 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwError $ &quot;Debug info for global name '&quot;++name++&quot;' not found.&quot;</span></span>
+<span class="lineno">  116 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">SetupVar i -&gt;</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i nameEnv of</span>
+<span class="lineno">  119 </span><span class="spaces">        </span><span class="istickedoff">Just alias -&gt; pure (L.guessAliasInfo mdMap alias)</span>
+<span class="lineno">  120 </span><span class="spaces">        </span><span class="istickedoff">Nothing    -&gt;</span>
+<span class="lineno">  121 </span><span class="spaces">           </span><span class="istickedoff">-- TODO? is this a panic situation?</span>
+<span class="lineno">  122 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwError $ &quot;Type information for local allocation value not found: &quot; ++ show i</span></span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">SetupCast (L.Alias alias) _ -&gt; pure (L.guessAliasInfo mdMap alias)</span>
+<span class="lineno">  125 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">SetupField () a n -&gt;</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff">do i &lt;- resolveSetupValueInfo cc <span class="nottickedoff">env</span> nameEnv a</span>
+<span class="lineno">  128 </span><span class="spaces">         </span><span class="istickedoff">case findStruct i of</span>
+<span class="lineno">  129 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  131 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct field name: '&quot; ++ n ++ &quot;'&quot;</span></span>
+<span class="lineno">  132 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;Could not resolve setup value debug information into a struct type.&quot;</span></span>
+<span class="lineno">  133 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, case i of</span></span>
+<span class="lineno">  134 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">L.Unknown -&gt; &quot;Perhaps you need to compile with debug symbols enabled.&quot;</span></span>
+<span class="lineno">  135 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; show i</span></span>
+<span class="lineno">  136 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  137 </span><span class="spaces">           </span><span class="istickedoff">Just (snm, xs) -&gt;</span>
+<span class="lineno">  138 </span><span class="spaces">             </span><span class="istickedoff">case [ i' | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i' } &lt;- xs, n == n' ] of</span>
+<span class="lineno">  139 </span><span class="spaces">               </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  140 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct field name: '&quot; ++ n ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  141 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Struct with name '&quot; ++ str ++ &quot;' found.&quot;  | Just str &lt;- [snm] ] ++</span></span>
+<span class="lineno">  142 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The following field names were found for this struct:&quot; ] ++</span></span>
+<span class="lineno">  143 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">map (&quot;- &quot;++) [n' | L.StructFieldInfo{L.sfiName = n'} &lt;- xs]</span></span>
+<span class="lineno">  144 </span><span class="spaces">               </span><span class="istickedoff">i':_ -&gt; pure i'</span>
+<span class="lineno">  145 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">SetupUnion () a u -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">      </span><span class="istickedoff">do i &lt;- resolveSetupValueInfo cc <span class="nottickedoff">env</span> nameEnv a</span>
+<span class="lineno">  148 </span><span class="spaces">         </span><span class="istickedoff">case findUnion i of</span>
+<span class="lineno">  149 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  151 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve union field name: '&quot; ++ u ++ &quot;'&quot;</span></span>
+<span class="lineno">  152 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;Could not resolve setup value debug information into a union type.&quot;</span></span>
+<span class="lineno">  153 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, case i of</span></span>
+<span class="lineno">  154 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">L.Unknown -&gt; &quot;Perhaps you need to compile with debug symbols enabled.&quot;</span></span>
+<span class="lineno">  155 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; show i</span></span>
+<span class="lineno">  156 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  157 </span><span class="spaces">           </span><span class="istickedoff">Just (unm, xs) -&gt;</span>
+<span class="lineno">  158 </span><span class="spaces">             </span><span class="istickedoff">case [ i' | L.UnionFieldInfo{L.ufiName = n', L.ufiInfo = i'} &lt;- xs, u == n' ] of</span>
+<span class="lineno">  159 </span><span class="spaces">               </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  160 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve union field name: '&quot; ++ u ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  161 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Union with name '&quot; ++ str ++ &quot;' found.&quot;  | Just str &lt;- [unm] ] ++</span></span>
+<span class="lineno">  162 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The following field names were found for this union:&quot; ] ++</span></span>
+<span class="lineno">  163 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">map (&quot;- &quot;++) [n' | L.UnionFieldInfo{L.ufiName = n'} &lt;- xs]</span></span>
+<span class="lineno">  164 </span><span class="spaces">               </span><span class="istickedoff">i':_ -&gt; pure i'</span>
+<span class="lineno">  165 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure L.Unknown</span></span>
+<span class="lineno">  167 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">globalTys = [ (L.globalSym g, L.globalType g) | g &lt;- L.modGlobals (ccLLVMModuleAST cc) ]</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>-- | Given DWARF type information that is expected to describe a
+<span class="lineno">  173 </span>--   struct, find its name (if any) and information about its fields.
+<span class="lineno">  174 </span>--   This procedure handles the common case where a typedef is used to
+<span class="lineno">  175 </span>--   give a name to an anonymous struct. If a struct both has a direct
+<span class="lineno">  176 </span>--   name and is included in a typedef, the direct name will be preferred.
+<span class="lineno">  177 </span>findStruct :: L.Info -&gt; Maybe (Maybe String, [L.StructFieldInfo])
+<span class="lineno">  178 </span><span class="decl"><span class="istickedoff">findStruct = loop <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  179 </span><span class="spaces"> </span><span class="istickedoff">where loop _  (L.Typedef nm i)     = loop <span class="nottickedoff">(Just nm)</span> i</span>
+<span class="lineno">  180 </span><span class="spaces">       </span><span class="istickedoff">loop nm (L.Structure nm' xs) = Just (<span class="nottickedoff">nm' &lt;&gt; nm</span>, xs)</span>
+<span class="lineno">  181 </span><span class="spaces">       </span><span class="istickedoff">loop _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- | Given DWARF type information that is expected to describe a
+<span class="lineno">  184 </span>--   union, find its name (if any) and information about its fields.
+<span class="lineno">  185 </span>--   This procedure handles the common case where a typedef is used to
+<span class="lineno">  186 </span>--   give a name to an anonymous union. If a union both has a direct
+<span class="lineno">  187 </span>--   name and is included in a typedef, the direct name will be preferred.
+<span class="lineno">  188 </span>findUnion :: L.Info -&gt; Maybe (Maybe String, [L.UnionFieldInfo])
+<span class="lineno">  189 </span><span class="decl"><span class="istickedoff">findUnion = loop <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">where loop _  (L.Typedef nm i) = <span class="nottickedoff">loop (Just nm) i</span></span>
+<span class="lineno">  191 </span><span class="spaces">        </span><span class="istickedoff">loop nm (L.Union nm' xs) = Just (<span class="nottickedoff">nm' &lt;&gt; nm</span>, xs)</span>
+<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff">loop _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>-- | Given LLVM debug information about a setup value, attempt to
+<span class="lineno">  195 </span>--   find the corresponding @FieldInfo@ structure for the named
+<span class="lineno">  196 </span>--   field.
+<span class="lineno">  197 </span>recoverStructFieldInfo ::
+<span class="lineno">  198 </span>  LLVMCrucibleContext arch      {- ^ crucible context  -} -&gt;
+<span class="lineno">  199 </span>  Map AllocIndex LLVMAllocSpec  {- ^ allocation types  -} -&gt;
+<span class="lineno">  200 </span>  Map AllocIndex Crucible.Ident {- ^ allocation type names -} -&gt;
+<span class="lineno">  201 </span>  SetupValue (LLVM arch)        {- ^ the value to examine -} -&gt;
+<span class="lineno">  202 </span>  L.Info                        {- ^ extracted LLVM debug information about the type of the value -} -&gt;
+<span class="lineno">  203 </span>  String                        {- ^ the name of the field -} -&gt;
+<span class="lineno">  204 </span>  Except String Crucible.FieldInfo
+<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">recoverStructFieldInfo cc env nameEnv v info n =</span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">case findStruct info of</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  208 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  209 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct field name: '&quot; ++ show n ++ &quot;'&quot;</span></span>
+<span class="lineno">  210 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;Could not resolve setup value debug information into a struct type.&quot;</span></span>
+<span class="lineno">  211 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, case info of</span></span>
+<span class="lineno">  212 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">L.Unknown -&gt; &quot;Perhaps you need to compile with debug symbols enabled.&quot;</span></span>
+<span class="lineno">  213 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; show info</span></span>
+<span class="lineno">  214 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">Just (snm,xs) -&gt;</span>
+<span class="lineno">  216 </span><span class="spaces">      </span><span class="istickedoff">case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} &lt;- xs, n == n' ] of</span>
+<span class="lineno">  217 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  218 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct field name: '&quot; ++ n ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  219 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Struct with name '&quot; ++ str ++ &quot;' found.&quot;  | Just str &lt;- [snm] ] ++</span></span>
+<span class="lineno">  220 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The following field names were found for this struct:&quot; ] ++</span></span>
+<span class="lineno">  221 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">map (&quot;- &quot;++) [n' | L.StructFieldInfo{L.sfiName = n'} &lt;- xs]</span></span>
+<span class="lineno">  222 </span><span class="spaces">        </span><span class="istickedoff">o:_ -&gt;</span>
+<span class="lineno">  223 </span><span class="spaces">          </span><span class="istickedoff">do vty &lt;- typeOfSetupValue cc env nameEnv v</span>
+<span class="lineno">  224 </span><span class="spaces">             </span><span class="istickedoff">case do Crucible.PtrType symTy &lt;- pure vty</span>
+<span class="lineno">  225 </span><span class="spaces">                     </span><span class="istickedoff">Crucible.StructType si &lt;- let ?lc = ccTypeCtx cc</span>
+<span class="lineno">  226 </span><span class="spaces">                                        </span><span class="istickedoff">in either <span class="nottickedoff">(\_ -&gt; Nothing)</span> Just $ Crucible.asMemType symTy</span>
+<span class="lineno">  227 </span><span class="spaces">                     </span><span class="istickedoff">V.find (\fi -&gt; Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o)</span>
+<span class="lineno">  228 </span><span class="spaces">                            </span><span class="istickedoff">(Crucible.siFields si)</span>
+<span class="lineno">  229 </span><span class="spaces">               </span><span class="istickedoff">of</span>
+<span class="lineno">  230 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  231 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  232 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Found struct field name: '&quot; ++ n ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  233 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;in struct with name '&quot; ++ str ++ &quot;'.&quot;  | Just str &lt;- [snm] ] ++</span></span>
+<span class="lineno">  234 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;However, the offset of this field found in the debug information could not&quot;</span></span>
+<span class="lineno">  235 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, &quot;be correlated with the computed LLVM type of the setup value:&quot;</span></span>
+<span class="lineno">  236 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, show vty</span></span>
+<span class="lineno">  237 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  238 </span><span class="spaces">               </span><span class="istickedoff">Just fld -&gt; return fld</span></span>
+<span class="lineno">  239 </span>
+<span class="lineno">  240 </span>-- | Attempt to turn type information from DWARF debug data back into
+<span class="lineno">  241 </span>--   the corresponding LLVM type. This is a best-effort procedure, as
+<span class="lineno">  242 </span>--   we may have to make educated guesses about names, and there might
+<span class="lineno">  243 </span>--   not be enough data to succeed.
+<span class="lineno">  244 </span>reverseDebugInfoType :: L.Info -&gt; Maybe L.Type
+<span class="lineno">  245 </span><span class="decl"><span class="istickedoff">reverseDebugInfoType = loop <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">loop n i = case i of</span>
+<span class="lineno">  248 </span><span class="spaces">      </span><span class="istickedoff">L.Unknown -&gt;</span>
+<span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case n of</span></span>
+<span class="lineno">  250 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Just nm -&gt; Just (L.Alias (L.Ident nm))</span></span>
+<span class="lineno">  251 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  252 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  253 </span><span class="spaces">      </span><span class="istickedoff">L.Pointer i' -&gt; <span class="nottickedoff">L.PtrTo &lt;$&gt; loop Nothing i'</span></span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">L.Union n' _ -&gt;</span>
+<span class="lineno">  256 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case n' &lt;&gt; n of</span></span>
+<span class="lineno">  257 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Just nm -&gt; Just (L.Alias (L.Ident (&quot;union.&quot;++ nm)))</span></span>
+<span class="lineno">  258 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  260 </span><span class="spaces">      </span><span class="istickedoff">L.Structure n' xs -&gt;</span>
+<span class="lineno">  261 </span><span class="spaces">        </span><span class="istickedoff">case n' &lt;&gt; n of</span>
+<span class="lineno">  262 </span><span class="spaces">          </span><span class="istickedoff">Just nm -&gt; Just (L.Alias (L.Ident (&quot;struct.&quot; ++ nm)))</span>
+<span class="lineno">  263 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">L.Struct &lt;$&gt; mapM (reverseDebugInfoType . L.sfiInfo) xs</span></span>
+<span class="lineno">  264 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">L.Typedef nm x -&gt; loop (Just nm) x</span>
+<span class="lineno">  266 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  267 </span><span class="spaces">      </span><span class="istickedoff">L.ArrInfo x -&gt; <span class="nottickedoff">L.Array 0 &lt;$&gt; loop Nothing x</span></span>
+<span class="lineno">  268 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff">L.BaseType _nm bt -&gt; <span class="nottickedoff">reverseBaseTypeInfo bt</span></span></span>
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>-- | Attempt to turn DWARF basic type information back into
+<span class="lineno">  272 </span>--   LLVM type syntax.  This process is currently rather
+<span class="lineno">  273 </span>--   ad-hoc, and may miss cases.
+<span class="lineno">  274 </span>reverseBaseTypeInfo :: L.DIBasicType -&gt; Maybe L.Type
+<span class="lineno">  275 </span><span class="decl"><span class="nottickedoff">reverseBaseTypeInfo dibt =</span>
+<span class="lineno">  276 </span><span class="spaces"> </span><span class="nottickedoff">case Dwarf.DW_ATE (fromIntegral (L.dibtEncoding dibt)) of</span>
+<span class="lineno">  277 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_boolean -&gt; Just $ L.PrimType $ L.Integer 1</span>
+<span class="lineno">  278 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  279 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_float -&gt;</span>
+<span class="lineno">  280 </span><span class="spaces">     </span><span class="nottickedoff">case L.dibtSize dibt of</span>
+<span class="lineno">  281 </span><span class="spaces">       </span><span class="nottickedoff">16  -&gt; Just $ L.PrimType $ L.FloatType $ L.Half</span>
+<span class="lineno">  282 </span><span class="spaces">       </span><span class="nottickedoff">32  -&gt; Just $ L.PrimType $ L.FloatType $ L.Float</span>
+<span class="lineno">  283 </span><span class="spaces">       </span><span class="nottickedoff">64  -&gt; Just $ L.PrimType $ L.FloatType $ L.Double</span>
+<span class="lineno">  284 </span><span class="spaces">       </span><span class="nottickedoff">80  -&gt; Just $ L.PrimType $ L.FloatType $ L.X86_fp80</span>
+<span class="lineno">  285 </span><span class="spaces">       </span><span class="nottickedoff">128 -&gt; Just $ L.PrimType $ L.FloatType $ L.Fp128</span>
+<span class="lineno">  286 </span><span class="spaces">       </span><span class="nottickedoff">_   -&gt; Nothing</span>
+<span class="lineno">  287 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  288 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_signed -&gt;</span>
+<span class="lineno">  289 </span><span class="spaces">     </span><span class="nottickedoff">Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))</span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  291 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_signed_char -&gt;</span>
+<span class="lineno">  292 </span><span class="spaces">     </span><span class="nottickedoff">Just $ L.PrimType $ L.Integer 8</span>
+<span class="lineno">  293 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  294 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_unsigned -&gt;</span>
+<span class="lineno">  295 </span><span class="spaces">     </span><span class="nottickedoff">Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))</span>
+<span class="lineno">  296 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  297 </span><span class="spaces">   </span><span class="nottickedoff">Dwarf.DW_ATE_unsigned_char -&gt;</span>
+<span class="lineno">  298 </span><span class="spaces">     </span><span class="nottickedoff">Just $ L.PrimType $ L.Integer 8</span>
+<span class="lineno">  299 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  300 </span><span class="spaces">   </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>-- | Information about a field within a bitfield in a struct. For example,
+<span class="lineno">  305 </span>-- given the following C struct:
+<span class="lineno">  306 </span>--
+<span class="lineno">  307 </span>-- @
+<span class="lineno">  308 </span>-- struct s {
+<span class="lineno">  309 </span>--   int32_t w;
+<span class="lineno">  310 </span>--   uint8_t x1:1;
+<span class="lineno">  311 </span>--   uint8_t x2:2;
+<span class="lineno">  312 </span>--   uint8_t y:1;
+<span class="lineno">  313 </span>--   int32_t z;
+<span class="lineno">  314 </span>-- };
+<span class="lineno">  315 </span>-- @
+<span class="lineno">  316 </span>--
+<span class="lineno">  317 </span>-- The 'BitfieldIndex'es for @x1@, @x2@, and @y@ are as follows:
+<span class="lineno">  318 </span>--
+<span class="lineno">  319 </span>-- @
+<span class="lineno">  320 </span>-- -- x1
+<span class="lineno">  321 </span>-- 'BitfieldIndex'
+<span class="lineno">  322 </span>--   { 'biFieldSize' = 1
+<span class="lineno">  323 </span>--   , 'biFieldOffset' = 0
+<span class="lineno">  324 </span>--   , 'biBitfieldByteOffset' = 4
+<span class="lineno">  325 </span>--   , 'biBitfieldType' = i8
+<span class="lineno">  326 </span>--   }
+<span class="lineno">  327 </span>--
+<span class="lineno">  328 </span>-- -- x2
+<span class="lineno">  329 </span>-- 'BitfieldIndex'
+<span class="lineno">  330 </span>--   { 'biFieldSize' = 2
+<span class="lineno">  331 </span>--   , 'biFieldOffset' = 1
+<span class="lineno">  332 </span>--   , 'biBitfieldByteOffset' = 4
+<span class="lineno">  333 </span>--   , 'biBitfieldType' = i8
+<span class="lineno">  334 </span>--   }
+<span class="lineno">  335 </span>--
+<span class="lineno">  336 </span>-- -- y
+<span class="lineno">  337 </span>-- 'BitfieldIndex'
+<span class="lineno">  338 </span>--   { 'biFieldSize' = 1
+<span class="lineno">  339 </span>--   , 'biFieldOffset' = 3
+<span class="lineno">  340 </span>--   , 'biBitfieldByteOffset' = 4
+<span class="lineno">  341 </span>--   , 'biBitfieldType' = i8
+<span class="lineno">  342 </span>--   }
+<span class="lineno">  343 </span>-- @
+<span class="lineno">  344 </span>--
+<span class="lineno">  345 </span>-- Note that the 'biFieldSize's and 'biFieldOffset's are specific to each
+<span class="lineno">  346 </span>-- individual field, while the 'biBitfieldByteOffest's and 'biBitfieldType's are
+<span class="lineno">  347 </span>-- all the same, as the latter two all describe the same bitfield.
+<span class="lineno">  348 </span>data BitfieldIndex = BitfieldIndex
+<span class="lineno">  349 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">biFieldSize</span></span></span> :: Word64
+<span class="lineno">  350 </span>    -- ^ The size (in bits) of the field within the bitfield.
+<span class="lineno">  351 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">biFieldOffset</span></span></span> :: Word64
+<span class="lineno">  352 </span>    -- ^ The offset (in bits) of the field from the start of the bitfield,
+<span class="lineno">  353 </span>    --   counting from the least significant bit.
+<span class="lineno">  354 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">biFieldByteOffset</span></span></span> :: Crucible.Bytes
+<span class="lineno">  355 </span>    -- ^ The offset (in bytes) of the struct member in which this bitfield resides.
+<span class="lineno">  356 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">biBitfieldType</span></span></span> :: Crucible.MemType
+<span class="lineno">  357 </span>    -- ^ The 'Crucible.MemType' of the overall bitfield.
+<span class="lineno">  358 </span>  } deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  359 </span>
+<span class="lineno">  360 </span>-- | Given a pointer setup value and the name of a bitfield, attempt to
+<span class="lineno">  361 </span>--   determine were in the struct that bitfield resides by examining
+<span class="lineno">  362 </span>--   DWARF type metadata.
+<span class="lineno">  363 </span>resolveSetupBitfield ::
+<span class="lineno">  364 </span>  LLVMCrucibleContext arch {- ^ crucible context  -} -&gt;
+<span class="lineno">  365 </span>  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} -&gt;
+<span class="lineno">  366 </span>  Map AllocIndex Crucible.Ident {- ^ allocation type names -} -&gt;
+<span class="lineno">  367 </span>  SetupValue (LLVM arch) {- ^ pointer to struct -} -&gt;
+<span class="lineno">  368 </span>  String {- ^ field name -} -&gt;
+<span class="lineno">  369 </span>  Except String BitfieldIndex {- ^ information about bitfield -}
+<span class="lineno">  370 </span><span class="decl"><span class="istickedoff">resolveSetupBitfield cc env nameEnv v n =</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">do info &lt;- resolveSetupValueInfo cc <span class="nottickedoff">env</span> nameEnv v</span>
+<span class="lineno">  372 </span><span class="spaces">     </span><span class="istickedoff">case findStruct info of</span>
+<span class="lineno">  373 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  374 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  375 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct bitfield name: '&quot; ++ show n ++ &quot;'&quot;</span></span>
+<span class="lineno">  376 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, &quot;Could not resolve setup value debug information into a struct type.&quot;</span></span>
+<span class="lineno">  377 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, case info of</span></span>
+<span class="lineno">  378 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">L.Unknown -&gt; &quot;Perhaps you need to compile with debug symbols enabled.&quot;</span></span>
+<span class="lineno">  379 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; show info</span></span>
+<span class="lineno">  380 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  381 </span><span class="spaces">       </span><span class="istickedoff">Just (snm, xs) -&gt;</span>
+<span class="lineno">  382 </span><span class="spaces">         </span><span class="istickedoff">case [ (fieldOffsetStartingFromStruct, bfInfo) | L.StructFieldInfo</span>
+<span class="lineno">  383 </span><span class="spaces">                     </span><span class="istickedoff">{ L.sfiName = n'</span>
+<span class="lineno">  384 </span><span class="spaces">                     </span><span class="istickedoff">, L.sfiOffset = fieldOffsetStartingFromStruct</span>
+<span class="lineno">  385 </span><span class="spaces">                     </span><span class="istickedoff">, L.sfiBitfield = Just bfInfo</span>
+<span class="lineno">  386 </span><span class="spaces">                     </span><span class="istickedoff">} &lt;- xs, n == n' ] of</span>
+<span class="lineno">  387 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  388 </span><span class="spaces">           </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  389 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unable to resolve struct bitfield name: '&quot; ++ n ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  390 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Struct with name '&quot; ++ str ++ &quot;' found.&quot;  | Just str &lt;- [snm] ] ++</span></span>
+<span class="lineno">  391 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The following bitfield names were found for this struct:&quot; ] ++</span></span>
+<span class="lineno">  392 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">map (&quot;- &quot;++) [n' | L.StructFieldInfo{L.sfiName = n', L.sfiBitfield = Just{}} &lt;- xs]</span></span>
+<span class="lineno">  393 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  394 </span><span class="spaces">           </span><span class="istickedoff">((fieldOffsetStartingFromStruct, bfInfo):_) -&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">             </span><span class="istickedoff">do memTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> v</span>
+<span class="lineno">  396 </span><span class="spaces">                </span><span class="istickedoff">case do Crucible.PtrType symTy &lt;- pure memTy</span>
+<span class="lineno">  397 </span><span class="spaces">                        </span><span class="istickedoff">Crucible.StructType si &lt;- let ?lc = <span class="nottickedoff">ccTypeCtx cc</span></span>
+<span class="lineno">  398 </span><span class="spaces">                                                   </span><span class="istickedoff">in either <span class="nottickedoff">(\_ -&gt; Nothing)</span> Just $ Crucible.asMemType symTy</span>
+<span class="lineno">  399 </span><span class="spaces">                        </span><span class="istickedoff">fi &lt;- V.find (\fi -&gt; Crucible.bytesToBits (Crucible.fiOffset fi)</span>
+<span class="lineno">  400 </span><span class="spaces">                                                      </span><span class="istickedoff">== fromIntegral (L.biBitfieldOffset bfInfo))</span>
+<span class="lineno">  401 </span><span class="spaces">                                      </span><span class="istickedoff">(Crucible.siFields si)</span>
+<span class="lineno">  402 </span><span class="spaces">                        </span><span class="istickedoff">let fieldOffsetStartingFromBitfield =</span>
+<span class="lineno">  403 </span><span class="spaces">                              </span><span class="istickedoff">fieldOffsetStartingFromStruct - L.biBitfieldOffset bfInfo</span>
+<span class="lineno">  404 </span><span class="spaces">                        </span><span class="istickedoff">pure $ BitfieldIndex { biFieldSize       = L.biFieldSize bfInfo</span>
+<span class="lineno">  405 </span><span class="spaces">                                             </span><span class="istickedoff">, biFieldOffset     = fieldOffsetStartingFromBitfield</span>
+<span class="lineno">  406 </span><span class="spaces">                                             </span><span class="istickedoff">, biBitfieldType    = Crucible.fiType fi</span>
+<span class="lineno">  407 </span><span class="spaces">                                             </span><span class="istickedoff">, biFieldByteOffset = Crucible.fiOffset fi</span>
+<span class="lineno">  408 </span><span class="spaces">                                             </span><span class="istickedoff">}</span>
+<span class="lineno">  409 </span><span class="spaces">                  </span><span class="istickedoff">of</span>
+<span class="lineno">  410 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  411 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines $</span></span>
+<span class="lineno">  412 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Found struct field name: '&quot; ++ n ++ &quot;'&quot;] ++</span></span>
+<span class="lineno">  413 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;in struct with name '&quot; ++ str ++ &quot;'.&quot;  | Just str &lt;- [snm] ] ++</span></span>
+<span class="lineno">  414 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;However, the offset of this field found in the debug information could not&quot;</span></span>
+<span class="lineno">  415 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;be correlated with the computed LLVM type of the setup value, or the field&quot;</span></span>
+<span class="lineno">  416 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, &quot;is not a bitfield.&quot;</span></span>
+<span class="lineno">  417 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">, show memTy</span></span>
+<span class="lineno">  418 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  419 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  420 </span><span class="spaces">                  </span><span class="istickedoff">Just bfi -&gt; return bfi</span></span>
+<span class="lineno">  421 </span>
+<span class="lineno">  422 </span>-- | Attempt to compute the @MemType@ of a setup value.
+<span class="lineno">  423 </span>typeOfSetupValue :: forall arch.
+<span class="lineno">  424 </span>  LLVMCrucibleContext arch      {- ^ crucible context  -} -&gt;
+<span class="lineno">  425 </span>  Map AllocIndex LLVMAllocSpec  {- ^ allocation types  -} -&gt;
+<span class="lineno">  426 </span>  Map AllocIndex Crucible.Ident {- ^ allocation type names -} -&gt;
+<span class="lineno">  427 </span>  SetupValue (LLVM arch)        {- ^ value to compute the type of -} -&gt;
+<span class="lineno">  428 </span>  Except String Crucible.MemType
+<span class="lineno">  429 </span><span class="decl"><span class="istickedoff">typeOfSetupValue cc env nameEnv val =</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">SetupVar i -&gt;</span>
+<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i env of</span>
+<span class="lineno">  433 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError (&quot;typeOfSetupValue: Unresolved prestate variable:&quot; ++ show i)</span></span>
+<span class="lineno">  434 </span><span class="spaces">        </span><span class="istickedoff">Just spec -&gt;</span>
+<span class="lineno">  435 </span><span class="spaces">          </span><span class="istickedoff">return (Crucible.PtrType (Crucible.MemType (spec ^. allocSpecType)))</span>
+<span class="lineno">  436 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm tt -&gt;</span>
+<span class="lineno">  438 </span><span class="spaces">      </span><span class="istickedoff">case ttType tt of</span>
+<span class="lineno">  439 </span><span class="spaces">        </span><span class="istickedoff">TypedTermSchema (Cryptol.Forall [] [] ty) -&gt;</span>
+<span class="lineno">  440 </span><span class="spaces">          </span><span class="istickedoff">case toLLVMType dl (Cryptol.evalValType <span class="nottickedoff">mempty</span> ty) of</span>
+<span class="lineno">  441 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError (toLLVMTypeErrToString err)</span></span>
+<span class="lineno">  442 </span><span class="spaces">            </span><span class="istickedoff">Right memTy -&gt; return memTy</span>
+<span class="lineno">  443 </span><span class="spaces">        </span><span class="istickedoff">tp -&gt; <span class="nottickedoff">throwError $ unlines</span></span>
+<span class="lineno">  444 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;typeOfSetupValue: expected monomorphic term&quot;</span></span>
+<span class="lineno">  445 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead got:&quot;</span></span>
+<span class="lineno">  446 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno">  447 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  448 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">SetupStruct packed vs -&gt;</span>
+<span class="lineno">  450 </span><span class="spaces">      </span><span class="istickedoff">do memTys &lt;- traverse (typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span>) vs</span>
+<span class="lineno">  451 </span><span class="spaces">         </span><span class="istickedoff">let si = Crucible.mkStructInfo dl packed memTys</span>
+<span class="lineno">  452 </span><span class="spaces">         </span><span class="istickedoff">return (Crucible.StructType si)</span>
+<span class="lineno">  453 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">SetupEnum empty -&gt;</span>
+<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">SetupTuple empty _ -&gt;</span>
+<span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  458 </span><span class="spaces">    </span><span class="istickedoff">SetupSlice empty -&gt;</span>
+<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  460 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () [] -&gt; <span class="nottickedoff">throwError &quot;typeOfSetupValue: invalid empty llvm_array_value&quot;</span></span>
+<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () (v : vs) -&gt;</span>
+<span class="lineno">  463 </span><span class="spaces">      </span><span class="istickedoff">do memTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> v</span>
+<span class="lineno">  464 </span><span class="spaces">         </span><span class="istickedoff">_memTys &lt;- traverse (typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span>) vs</span>
+<span class="lineno">  465 </span><span class="spaces">         </span><span class="istickedoff">-- TODO: check that all memTys are compatible with memTy</span>
+<span class="lineno">  466 </span><span class="spaces">         </span><span class="istickedoff">return (Crucible.ArrayType (fromIntegral (length (<span class="nottickedoff">v</span>:vs))) memTy)</span>
+<span class="lineno">  467 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  468 </span><span class="spaces">    </span><span class="istickedoff">SetupField () v n -&gt;</span>
+<span class="lineno">  469 </span><span class="spaces">      </span><span class="istickedoff">do info &lt;- resolveSetupValueInfo cc <span class="nottickedoff">env</span> nameEnv v</span>
+<span class="lineno">  470 </span><span class="spaces">         </span><span class="istickedoff">fld &lt;- recoverStructFieldInfo cc env nameEnv v info n</span>
+<span class="lineno">  471 </span><span class="spaces">         </span><span class="istickedoff">pure $ Crucible.PtrType $ Crucible.MemType $ Crucible.fiType fld</span>
+<span class="lineno">  472 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  473 </span><span class="spaces">    </span><span class="istickedoff">SetupUnion () v n -&gt;</span>
+<span class="lineno">  474 </span><span class="spaces">      </span><span class="istickedoff">do info &lt;- resolveSetupValueInfo cc <span class="nottickedoff">env</span> nameEnv (SetupUnion () v n)</span>
+<span class="lineno">  475 </span><span class="spaces">         </span><span class="istickedoff">case reverseDebugInfoType info of</span>
+<span class="lineno">  476 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError $ unlines</span></span>
+<span class="lineno">  477 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not determine LLVM type from computed debug type information:&quot;</span></span>
+<span class="lineno">  478 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">, show info</span></span>
+<span class="lineno">  479 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  480 </span><span class="spaces">           </span><span class="istickedoff">Just ltp -&gt; typeOfSetupValue cc env nameEnv (SetupCast ltp v)</span>
+<span class="lineno">  481 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">SetupCast ltp v -&gt;</span>
+<span class="lineno">  483 </span><span class="spaces">      </span><span class="istickedoff">do memTy &lt;- typeOfSetupValue cc env nameEnv v</span>
+<span class="lineno">  484 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">Crucible.isPointerMemType memTy</span></span>
+<span class="lineno">  485 </span><span class="spaces">           </span><span class="istickedoff">then</span>
+<span class="lineno">  486 </span><span class="spaces">             </span><span class="istickedoff">case let ?lc = <span class="nottickedoff">lc</span> in Crucible.liftMemType (L.PtrTo ltp) of</span>
+<span class="lineno">  487 </span><span class="spaces">               </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError $ unlines</span></span>
+<span class="lineno">  488 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">[ &quot;typeOfSetupValue: invalid type &quot; ++ show ltp</span></span>
+<span class="lineno">  489 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
+<span class="lineno">  490 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
+<span class="lineno">  491 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  492 </span><span class="spaces">               </span><span class="istickedoff">Right mt -&gt; pure mt</span>
+<span class="lineno">  493 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  494 </span><span class="spaces">           </span><span class="istickedoff">else</span>
+<span class="lineno">  495 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">throwError $ unwords $</span></span>
+<span class="lineno">  496 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;typeOfSetupValue: tried to cast the type of a non-pointer value&quot;</span></span>
+<span class="lineno">  497 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, &quot;actual type of value: &quot; ++ show memTy</span></span>
+<span class="lineno">  498 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  499 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">SetupElem () v i -&gt; do</span>
+<span class="lineno">  501 </span><span class="spaces">      </span><span class="istickedoff">do memTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> v</span>
+<span class="lineno">  502 </span><span class="spaces">         </span><span class="istickedoff">let <span class="nottickedoff">msg = &quot;typeOfSetupValue: llvm_elem requires pointer to struct or array, found &quot; ++ show memTy</span></span>
+<span class="lineno">  503 </span><span class="spaces">         </span><span class="istickedoff">case memTy of</span>
+<span class="lineno">  504 </span><span class="spaces">           </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
+<span class="lineno">  505 </span><span class="spaces">             </span><span class="istickedoff">case let ?lc = <span class="nottickedoff">lc</span> in Crucible.asMemType symTy of</span>
+<span class="lineno">  506 </span><span class="spaces">               </span><span class="istickedoff">Right memTy' -&gt;</span>
+<span class="lineno">  507 </span><span class="spaces">                 </span><span class="istickedoff">case memTy' of</span>
+<span class="lineno">  508 </span><span class="spaces">                   </span><span class="istickedoff">Crucible.ArrayType n memTy''</span>
+<span class="lineno">  509 </span><span class="spaces">                     </span><span class="istickedoff">| fromIntegral i &lt; n -&gt; return (Crucible.PtrType (Crucible.MemType memTy''))</span>
+<span class="lineno">  510 </span><span class="spaces">                     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; throwError $ unwords $</span>
+<span class="lineno">  511 </span><span class="spaces">                         </span><span class="istickedoff">[ &quot;typeOfSetupValue: array type index out of bounds&quot;</span>
+<span class="lineno">  512 </span><span class="spaces">                         </span><span class="istickedoff">, &quot;(index: &quot; ++ show i ++ &quot;)&quot;</span>
+<span class="lineno">  513 </span><span class="spaces">                         </span><span class="istickedoff">, &quot;(array length: &quot; ++ show n ++ &quot;)&quot;</span>
+<span class="lineno">  514 </span><span class="spaces">                         </span><span class="istickedoff">]</span>
+<span class="lineno">  515 </span><span class="spaces">                   </span><span class="istickedoff">Crucible.StructType si -&gt;</span>
+<span class="lineno">  516 </span><span class="spaces">                     </span><span class="istickedoff">case Crucible.siFieldInfo si i of</span>
+<span class="lineno">  517 </span><span class="spaces">                       </span><span class="istickedoff">Just fi -&gt; return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))</span>
+<span class="lineno">  518 </span><span class="spaces">                       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError $ &quot;typeOfSetupValue: struct type index out of bounds: &quot; ++ show i</span></span>
+<span class="lineno">  519 </span><span class="spaces">                   </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwError msg</span></span>
+<span class="lineno">  520 </span><span class="spaces">               </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError (unlines [msg, &quot;Details:&quot;, err])</span></span>
+<span class="lineno">  521 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwError msg</span></span>
+<span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">SetupNull () -&gt;</span>
+<span class="lineno">  524 </span><span class="spaces">      </span><span class="istickedoff">-- We arbitrarily set the type of NULL to void*, because a) it</span>
+<span class="lineno">  525 </span><span class="spaces">      </span><span class="istickedoff">-- is memory-compatible with any type that NULL can be used at,</span>
+<span class="lineno">  526 </span><span class="spaces">      </span><span class="istickedoff">-- and b) it prevents us from doing a type-safe dereference</span>
+<span class="lineno">  527 </span><span class="spaces">      </span><span class="istickedoff">-- operation.</span>
+<span class="lineno">  528 </span><span class="spaces">      </span><span class="istickedoff">return (Crucible.PtrType <span class="nottickedoff">Crucible.VoidType</span>)</span>
+<span class="lineno">  529 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  530 </span><span class="spaces">    </span><span class="istickedoff">-- A global and its initializer have the same type.</span>
+<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobal () name -&gt; do</span>
+<span class="lineno">  532 </span><span class="spaces">      </span><span class="istickedoff">let m = ccLLVMModuleAST cc</span>
+<span class="lineno">  533 </span><span class="spaces">          </span><span class="istickedoff">tys = [ (L.globalSym g, L.globalType g) | g &lt;- L.modGlobals m ] ++</span>
+<span class="lineno">  534 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ (L.decName d, L.decFunType d) | d &lt;- L.modDeclares m ] ++</span></span>
+<span class="lineno">  535 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ (L.defName d, L.defFunType d) | d &lt;- L.modDefines m ]</span></span>
+<span class="lineno">  536 </span><span class="spaces">      </span><span class="istickedoff">case lookup (L.Symbol name) tys of</span>
+<span class="lineno">  537 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError $ &quot;typeOfSetupValue: unknown global &quot; ++ show name</span></span>
+<span class="lineno">  538 </span><span class="spaces">        </span><span class="istickedoff">Just ty -&gt;</span>
+<span class="lineno">  539 </span><span class="spaces">          </span><span class="istickedoff">case let ?lc = lc in Crucible.liftType ty of</span>
+<span class="lineno">  540 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError $ unlines</span></span>
+<span class="lineno">  541 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">[ &quot;typeOfSetupValue: invalid type &quot; ++ show ty</span></span>
+<span class="lineno">  542 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
+<span class="lineno">  543 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
+<span class="lineno">  544 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  545 </span><span class="spaces">            </span><span class="istickedoff">Right symTy -&gt; return (Crucible.PtrType symTy)</span>
+<span class="lineno">  546 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  547 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobalInitializer () name -&gt; do</span>
+<span class="lineno">  548 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (L.Symbol name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of</span>
+<span class="lineno">  549 </span><span class="spaces">        </span><span class="istickedoff">Just (g, _) -&gt;</span>
+<span class="lineno">  550 </span><span class="spaces">          </span><span class="istickedoff">case let ?lc = <span class="nottickedoff">lc</span> in Crucible.liftMemType (L.globalType g) of</span>
+<span class="lineno">  551 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError $ unlines</span></span>
+<span class="lineno">  552 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">[ &quot;typeOfSetupValue: invalid type &quot; ++ show (L.globalType g)</span></span>
+<span class="lineno">  553 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
+<span class="lineno">  554 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
+<span class="lineno">  555 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  556 </span><span class="spaces">            </span><span class="istickedoff">Right memTy -&gt; return memTy</span>
+<span class="lineno">  557 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError $ &quot;resolveSetupVal: global not found: &quot; ++ name</span></span>
+<span class="lineno">  558 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  559 </span><span class="spaces">    </span><span class="istickedoff">SetupMux empty _ _ _ -&gt;</span>
+<span class="lineno">  560 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">lc = ccTypeCtx cc</span>
+<span class="lineno">  563 </span><span class="spaces">    </span><span class="istickedoff">dl = Crucible.llvmDataLayout lc</span></span>
+<span class="lineno">  564 </span>
+<span class="lineno">  565 </span>-- | Given a pointer setup value that points to an aggregate
+<span class="lineno">  566 </span>--   type (struct or array), attempt to compute  the byte offset of
+<span class="lineno">  567 </span>--   the nth element of that aggregate structure.
+<span class="lineno">  568 </span>resolveSetupElemOffset ::
+<span class="lineno">  569 </span>  LLVMCrucibleContext arch        {- ^ crucible context  -} -&gt;
+<span class="lineno">  570 </span>  Map AllocIndex LLVMAllocSpec    {- ^ allocation types  -} -&gt;
+<span class="lineno">  571 </span>  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} -&gt;
+<span class="lineno">  572 </span>  SetupValue (LLVM arch)          {- ^ base pointer -} -&gt;
+<span class="lineno">  573 </span>  Int                             {- ^ element index -} -&gt;
+<span class="lineno">  574 </span>  Except String Crucible.Bytes    {- ^ element offset -}
+<span class="lineno">  575 </span><span class="decl"><span class="istickedoff">resolveSetupElemOffset cc env nameEnv v i = do</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="istickedoff">do memTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> v</span>
+<span class="lineno">  577 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">msg = &quot;resolveSetupVal: llvm_elem requires pointer to struct or array, found &quot; ++ show memTy</span></span>
+<span class="lineno">  578 </span><span class="spaces">     </span><span class="istickedoff">case memTy of</span>
+<span class="lineno">  579 </span><span class="spaces">       </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
+<span class="lineno">  580 </span><span class="spaces">         </span><span class="istickedoff">case let ?lc = <span class="nottickedoff">lc</span> in Crucible.asMemType symTy of</span>
+<span class="lineno">  581 </span><span class="spaces">           </span><span class="istickedoff">Right memTy' -&gt;</span>
+<span class="lineno">  582 </span><span class="spaces">             </span><span class="istickedoff">case memTy' of</span>
+<span class="lineno">  583 </span><span class="spaces">               </span><span class="istickedoff">Crucible.ArrayType n memTy''</span>
+<span class="lineno">  584 </span><span class="spaces">                 </span><span class="istickedoff">| <span class="tickonlytrue">fromIntegral i &lt; n</span> -&gt; return (fromIntegral i * Crucible.memTypeSize <span class="nottickedoff">dl</span> memTy'')</span>
+<span class="lineno">  585 </span><span class="spaces">               </span><span class="istickedoff">Crucible.StructType si -&gt;</span>
+<span class="lineno">  586 </span><span class="spaces">                 </span><span class="istickedoff">case Crucible.siFieldOffset si i of</span>
+<span class="lineno">  587 </span><span class="spaces">                   </span><span class="istickedoff">Just d -&gt; return d</span>
+<span class="lineno">  588 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwError $ &quot;resolveSetupVal: struct type index out of bounds: &quot; ++ show (i, memTy')</span></span>
+<span class="lineno">  589 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwError msg</span></span>
+<span class="lineno">  590 </span><span class="spaces">           </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwError $ unlines [msg, &quot;Details:&quot;, err]</span></span>
+<span class="lineno">  591 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwError msg</span></span>
+<span class="lineno">  592 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  593 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">lc = ccTypeCtx cc</span></span>
+<span class="lineno">  594 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">dl = Crucible.llvmDataLayout lc</span></span></span>
+<span class="lineno">  595 </span>
+<span class="lineno">  596 </span>
+<span class="lineno">  597 </span>-- | The tactic for What4 translation for SAWCore expressions during
+<span class="lineno">  598 </span>-- Crucible symbolic execution. The boolean option specifies whether
+<span class="lineno">  599 </span>-- non-user-defined symbols are translated. Note that ground constants are
+<span class="lineno">  600 </span>-- always translated.
+<span class="lineno">  601 </span>newtype W4EvalTactic = W4EvalTactic { <span class="istickedoff"><span class="decl"><span class="istickedoff">doW4Eval</span></span></span> :: Bool }
+<span class="lineno">  602 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  603 </span>
+<span class="lineno">  604 </span>-- | Translate a SetupValue into a Crucible LLVM value, resolving
+<span class="lineno">  605 </span>--   references.
+<span class="lineno">  606 </span>resolveSetupVal :: forall arch.
+<span class="lineno">  607 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno">  608 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  609 </span>  Crucible.MemImpl Sym -&gt;
+<span class="lineno">  610 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
+<span class="lineno">  611 </span>  Map AllocIndex LLVMAllocSpec -&gt;
+<span class="lineno">  612 </span>  Map AllocIndex Crucible.Ident -&gt;
+<span class="lineno">  613 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno">  614 </span>  IO LLVMVal
+<span class="lineno">  615 </span><span class="decl"><span class="istickedoff">resolveSetupVal cc mem env tyenv nameEnv val =</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt;</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno">  618 </span><span class="spaces">      </span><span class="istickedoff">lc = ccTypeCtx cc</span>
+<span class="lineno">  619 </span><span class="spaces">      </span><span class="istickedoff">dl = Crucible.llvmDataLayout lc</span>
+<span class="lineno">  620 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  621 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff">SetupVar i</span>
+<span class="lineno">  623 </span><span class="spaces">      </span><span class="istickedoff">| Just ptr &lt;- Map.lookup i env -&gt; return (Crucible.ptrToPtrVal ptr)</span>
+<span class="lineno">  624 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">fail (&quot;resolveSetupVal: Unresolved prestate variable:&quot; ++ show i)</span></span>
+<span class="lineno">  625 </span><span class="spaces">    </span><span class="istickedoff">SetupTerm tm -&gt; resolveTypedTerm cc tm</span>
+<span class="lineno">  626 </span><span class="spaces">    </span><span class="istickedoff">-- NB, SetupCast values should always be pointers. Pointer casts have no</span>
+<span class="lineno">  627 </span><span class="spaces">    </span><span class="istickedoff">-- effect on the actual computed LLVMVal.</span>
+<span class="lineno">  628 </span><span class="spaces">    </span><span class="istickedoff">SetupCast _lty v -&gt; resolveSetupVal cc <span class="nottickedoff">mem</span> env tyenv nameEnv v</span>
+<span class="lineno">  629 </span><span class="spaces">    </span><span class="istickedoff">-- NB, SetupUnion values should always be pointers. Pointer casts have no</span>
+<span class="lineno">  630 </span><span class="spaces">    </span><span class="istickedoff">-- effect on the actual computed LLVMVal.</span>
+<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">SetupUnion () v _n -&gt; resolveSetupVal cc <span class="nottickedoff">mem</span> env tyenv nameEnv v</span>
+<span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">SetupStruct packed vs -&gt; do</span>
+<span class="lineno">  633 </span><span class="spaces">      </span><span class="istickedoff">vals &lt;- mapM (resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span>) vs</span>
+<span class="lineno">  634 </span><span class="spaces">      </span><span class="istickedoff">let tps = map Crucible.llvmValStorableType vals</span>
+<span class="lineno">  635 </span><span class="spaces">      </span><span class="istickedoff">let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))</span>
+<span class="lineno">  636 </span><span class="spaces">      </span><span class="istickedoff">let flds = case Crucible.storageTypeF t of</span>
+<span class="lineno">  637 </span><span class="spaces">                   </span><span class="istickedoff">Crucible.Struct v -&gt; v</span>
+<span class="lineno">  638 </span><span class="spaces">                   </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error &quot;impossible&quot;</span></span>
+<span class="lineno">  639 </span><span class="spaces">      </span><span class="istickedoff">return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))</span>
+<span class="lineno">  640 </span><span class="spaces">    </span><span class="istickedoff">SetupEnum empty -&gt;</span>
+<span class="lineno">  641 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  642 </span><span class="spaces">    </span><span class="istickedoff">SetupTuple empty _ -&gt;</span>
+<span class="lineno">  643 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff">SetupSlice empty -&gt;</span>
+<span class="lineno">  645 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () [] -&gt; <span class="nottickedoff">fail &quot;resolveSetupVal: invalid empty array&quot;</span></span>
+<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">SetupArray () vs -&gt; do</span>
+<span class="lineno">  648 </span><span class="spaces">      </span><span class="istickedoff">vals &lt;- V.mapM (resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span>) (V.fromList vs)</span>
+<span class="lineno">  649 </span><span class="spaces">      </span><span class="istickedoff">let tp = Crucible.llvmValStorableType (V.head vals)</span>
+<span class="lineno">  650 </span><span class="spaces">      </span><span class="istickedoff">return $ Crucible.LLVMValArray tp vals</span>
+<span class="lineno">  651 </span><span class="spaces">    </span><span class="istickedoff">SetupField () v n -&gt; do</span>
+<span class="lineno">  652 </span><span class="spaces">      </span><span class="istickedoff">do fld &lt;- exceptToFail $</span>
+<span class="lineno">  653 </span><span class="spaces">                  </span><span class="istickedoff">do info &lt;- resolveSetupValueInfo cc <span class="nottickedoff">tyenv</span> nameEnv v</span>
+<span class="lineno">  654 </span><span class="spaces">                     </span><span class="istickedoff">recoverStructFieldInfo cc tyenv nameEnv v info n</span>
+<span class="lineno">  655 </span><span class="spaces">         </span><span class="istickedoff">ptr &lt;- resolveSetupVal cc mem env tyenv nameEnv v</span>
+<span class="lineno">  656 </span><span class="spaces">         </span><span class="istickedoff">case ptr of</span>
+<span class="lineno">  657 </span><span class="spaces">           </span><span class="istickedoff">Crucible.LLVMValInt blk off -&gt;</span>
+<span class="lineno">  658 </span><span class="spaces">             </span><span class="istickedoff">do delta &lt;- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) (Crucible.fiOffset fld))</span>
+<span class="lineno">  659 </span><span class="spaces">                </span><span class="istickedoff">off'  &lt;- W4.bvAdd sym off delta</span>
+<span class="lineno">  660 </span><span class="spaces">                </span><span class="istickedoff">return (Crucible.LLVMValInt blk off')</span>
+<span class="lineno">  661 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;resolveSetupVal: llvm_field requires pointer value&quot;</span></span>
+<span class="lineno">  662 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff">SetupElem () v i -&gt;</span>
+<span class="lineno">  664 </span><span class="spaces">      </span><span class="istickedoff">do delta &lt;- exceptToFail (resolveSetupElemOffset <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> v i)</span>
+<span class="lineno">  665 </span><span class="spaces">         </span><span class="istickedoff">ptr &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> env tyenv <span class="nottickedoff">nameEnv</span> v</span>
+<span class="lineno">  666 </span><span class="spaces">         </span><span class="istickedoff">case ptr of</span>
+<span class="lineno">  667 </span><span class="spaces">           </span><span class="istickedoff">Crucible.LLVMValInt blk off -&gt;</span>
+<span class="lineno">  668 </span><span class="spaces">             </span><span class="istickedoff">do delta' &lt;- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)</span>
+<span class="lineno">  669 </span><span class="spaces">                </span><span class="istickedoff">off' &lt;- W4.bvAdd sym off delta'</span>
+<span class="lineno">  670 </span><span class="spaces">                </span><span class="istickedoff">return (Crucible.LLVMValInt blk off')</span>
+<span class="lineno">  671 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;resolveSetupVal: llvm_elem requires pointer value&quot;</span></span>
+<span class="lineno">  672 </span><span class="spaces">    </span><span class="istickedoff">SetupNull () -&gt;</span>
+<span class="lineno">  673 </span><span class="spaces">      </span><span class="istickedoff">Crucible.ptrToPtrVal &lt;$&gt; Crucible.mkNullPointer sym Crucible.PtrWidth</span>
+<span class="lineno">  674 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobal () name -&gt;</span>
+<span class="lineno">  675 </span><span class="spaces">      </span><span class="istickedoff">Crucible.ptrToPtrVal &lt;$&gt; Crucible.doResolveGlobal <span class="nottickedoff">bak</span> mem (L.Symbol name)</span>
+<span class="lineno">  676 </span><span class="spaces">    </span><span class="istickedoff">SetupGlobalInitializer () name -&gt;</span>
+<span class="lineno">  677 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (L.Symbol name)</span>
+<span class="lineno">  678 </span><span class="spaces">                      </span><span class="istickedoff">(view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of</span>
+<span class="lineno">  679 </span><span class="spaces">        </span><span class="istickedoff">-- There was an error in global -&gt; constant translation</span>
+<span class="lineno">  680 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Left e) -&gt; <span class="nottickedoff">fail e</span></span>
+<span class="lineno">  681 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Right (_, Just v)) -&gt;</span>
+<span class="lineno">  682 </span><span class="spaces">          </span><span class="istickedoff">let ?lc = <span class="nottickedoff">lc</span></span>
+<span class="lineno">  683 </span><span class="spaces">          </span><span class="istickedoff">in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) <span class="nottickedoff">bak</span> <span class="nottickedoff">mem</span> v</span>
+<span class="lineno">  684 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Right (_, Nothing)) -&gt;</span>
+<span class="lineno">  685 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;resolveSetupVal: global has no initializer: &quot; ++ name</span></span>
+<span class="lineno">  686 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  687 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;resolveSetupVal: global not found: &quot; ++ name</span></span>
+<span class="lineno">  688 </span><span class="spaces">    </span><span class="istickedoff">SetupMux empty _ _ _ -&gt;</span>
+<span class="lineno">  689 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span></span>
+<span class="lineno">  690 </span>
+<span class="lineno">  691 </span>
+<span class="lineno">  692 </span>-- | Like 'resolveSetupVal', but specifically geared towards the needs of
+<span class="lineno">  693 </span>-- fields within bitfields. This is very similar to calling 'resolveSetupVal'
+<span class="lineno">  694 </span>-- on a 'SetupField', instead of computing an offset into the struct based off
+<span class="lineno">  695 </span>-- of the /field's/ offset from the beginning of the struct, this computes an
+<span class="lineno">  696 </span>-- offset based off of the overall /bitfield's/ offset from the beginning of
+<span class="lineno">  697 </span>-- the struct. This is important because in order to impose conditions on
+<span class="lineno">  698 </span>-- fields within bitfields, we must load/store the entire bitfield. The field's
+<span class="lineno">  699 </span>-- offset may be larger than the bitfield's offset, so the former offset is not
+<span class="lineno">  700 </span>-- suited for this purpose.
+<span class="lineno">  701 </span>--
+<span class="lineno">  702 </span>-- In addition to returning the resolved 'LLVMVal', this also returns the
+<span class="lineno">  703 </span>-- 'BitfieldIndex' for the field within the bitfield. This ends up being useful
+<span class="lineno">  704 </span>-- for call sites to this function so that they do not have to recompute it.
+<span class="lineno">  705 </span>resolveSetupValBitfield ::
+<span class="lineno">  706 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno">  707 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  708 </span>  Crucible.MemImpl Sym -&gt;
+<span class="lineno">  709 </span>  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) -&gt;
+<span class="lineno">  710 </span>  Map AllocIndex LLVMAllocSpec -&gt;
+<span class="lineno">  711 </span>  Map AllocIndex Crucible.Ident -&gt;
+<span class="lineno">  712 </span>  SetupValue (LLVM arch) -&gt;
+<span class="lineno">  713 </span>  String -&gt;
+<span class="lineno">  714 </span>  IO (BitfieldIndex, LLVMVal)
+<span class="lineno">  715 </span><span class="decl"><span class="istickedoff">resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =</span>
+<span class="lineno">  716 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
+<span class="lineno">  717 </span><span class="spaces">     </span><span class="istickedoff">lval &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno">  718 </span><span class="spaces">     </span><span class="istickedoff">bfIndex &lt;- exceptToFail (resolveSetupBitfield cc tyenv nameEnv val fieldName)</span>
+<span class="lineno">  719 </span><span class="spaces">     </span><span class="istickedoff">let delta = biFieldByteOffset bfIndex</span>
+<span class="lineno">  720 </span><span class="spaces">     </span><span class="istickedoff">offsetLval &lt;- case lval of</span>
+<span class="lineno">  721 </span><span class="spaces">                     </span><span class="istickedoff">Crucible.LLVMValInt blk off -&gt;</span>
+<span class="lineno">  722 </span><span class="spaces">                       </span><span class="istickedoff">do deltaBV &lt;- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)</span>
+<span class="lineno">  723 </span><span class="spaces">                          </span><span class="istickedoff">off'    &lt;- W4.bvAdd <span class="nottickedoff">sym</span> off deltaBV</span>
+<span class="lineno">  724 </span><span class="spaces">                          </span><span class="istickedoff">return (Crucible.LLVMValInt blk off')</span>
+<span class="lineno">  725 </span><span class="spaces">                     </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;resolveSetupValBitfield: expected a pointer value&quot;</span></span>
+<span class="lineno">  726 </span><span class="spaces">     </span><span class="istickedoff">return (bfIndex, offsetLval)</span></span>
+<span class="lineno">  727 </span>
+<span class="lineno">  728 </span>resolveTypedTerm ::
+<span class="lineno">  729 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno">  730 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  731 </span>  TypedTerm -&gt;
+<span class="lineno">  732 </span>  IO LLVMVal
+<span class="lineno">  733 </span><span class="decl"><span class="istickedoff">resolveTypedTerm cc tm =</span>
+<span class="lineno">  734 </span><span class="spaces">  </span><span class="istickedoff">case ttType tm of</span>
+<span class="lineno">  735 </span><span class="spaces">    </span><span class="istickedoff">TypedTermSchema (Cryptol.Forall [] [] ty) -&gt;</span>
+<span class="lineno">  736 </span><span class="spaces">      </span><span class="istickedoff">resolveSAWTerm cc (Cryptol.evalValType <span class="nottickedoff">mempty</span> ty) (ttTerm tm)</span>
+<span class="lineno">  737 </span><span class="spaces">    </span><span class="istickedoff">tp -&gt; <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  738 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[ &quot;resolveSetupVal: expected monomorphic term&quot;</span></span>
+<span class="lineno">  739 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead got term with type&quot;</span></span>
+<span class="lineno">  740 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, show (ppTypedTermType tp)</span></span>
+<span class="lineno">  741 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  742 </span>
+<span class="lineno">  743 </span>resolveSAWPred ::
+<span class="lineno">  744 </span>  (?w4EvalTactic :: W4EvalTactic) =&gt;
+<span class="lineno">  745 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  746 </span>  Term -&gt;
+<span class="lineno">  747 </span>  IO (W4.Pred Sym)
+<span class="lineno">  748 </span><span class="decl"><span class="istickedoff">resolveSAWPred cc tm = do</span>
+<span class="lineno">  749 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
+<span class="lineno">  750 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  751 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  752 </span><span class="spaces">     </span><span class="istickedoff">let ss = cc^.ccBasicSS</span>
+<span class="lineno">  753 </span><span class="spaces">     </span><span class="istickedoff">(_,tm') &lt;- rewriteSharedTerm sc ss tm</span>
+<span class="lineno">  754 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  755 </span><span class="spaces">     </span><span class="istickedoff">checkBooleanType sc tm'</span>
+<span class="lineno">  756 </span><span class="spaces">     </span><span class="istickedoff"></span>
+<span class="lineno">  757 </span><span class="spaces">     </span><span class="istickedoff">mx &lt;- case getAllExts tm' of</span>
+<span class="lineno">  758 </span><span class="spaces">             </span><span class="istickedoff">-- concretely evaluate if it is a closed term</span>
+<span class="lineno">  759 </span><span class="spaces">             </span><span class="istickedoff">[] -&gt; do modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  760 </span><span class="spaces">                      </span><span class="istickedoff">let v = Concrete.evalSharedTerm modmap mempty <span class="nottickedoff">mempty</span> tm'</span>
+<span class="lineno">  761 </span><span class="spaces">                      </span><span class="istickedoff">pure (Just (Concrete.toBool v))</span>
+<span class="lineno">  762 </span><span class="spaces">             </span><span class="istickedoff">_ -&gt; return Nothing</span>
+<span class="lineno">  763 </span><span class="spaces">     </span><span class="istickedoff">case mx of</span>
+<span class="lineno">  764 </span><span class="spaces">       </span><span class="istickedoff">Just x  -&gt; return $ W4.backendPred sym x</span>
+<span class="lineno">  765 </span><span class="spaces">       </span><span class="istickedoff">Nothing</span>
+<span class="lineno">  766 </span><span class="spaces">         </span><span class="istickedoff">| doW4Eval ?w4EvalTactic -&gt;</span>
+<span class="lineno">  767 </span><span class="spaces">           </span><span class="istickedoff">do cryptol_ss &lt;- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc</span>
+<span class="lineno">  768 </span><span class="spaces">              </span><span class="istickedoff">(_,tm'') &lt;- rewriteSharedTerm sc cryptol_ss tm'</span>
+<span class="lineno">  769 </span><span class="spaces">              </span><span class="istickedoff">(_,tm''') &lt;- rewriteSharedTerm sc ss tm''</span>
+<span class="lineno">  770 </span><span class="spaces">              </span><span class="istickedoff">if not (any (\(name, _, _) -&gt; not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then</span>
+<span class="lineno">  771 </span><span class="spaces">                </span><span class="istickedoff">do (_names, (_mlabels, p)) &lt;- w4Eval sym st sc mempty Set.empty tm'''</span>
+<span class="lineno">  772 </span><span class="spaces">                   </span><span class="istickedoff">return p</span>
+<span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">else bindSAWTerm sym st W4.BaseBoolRepr tm'</span>
+<span class="lineno">  774 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno">  775 </span><span class="spaces">           </span><span class="istickedoff">bindSAWTerm sym st W4.BaseBoolRepr tm'</span></span>
+<span class="lineno">  776 </span>
+<span class="lineno">  777 </span>resolveSAWSymBV ::
+<span class="lineno">  778 </span>  (?w4EvalTactic :: W4EvalTactic, 1 &lt;= w) =&gt;
+<span class="lineno">  779 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  780 </span>  NatRepr w -&gt;
+<span class="lineno">  781 </span>  Term -&gt;
+<span class="lineno">  782 </span>  IO (W4.SymBV Sym w)
+<span class="lineno">  783 </span><span class="decl"><span class="istickedoff">resolveSAWSymBV cc w tm =</span>
+<span class="lineno">  784 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
+<span class="lineno">  785 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  787 </span><span class="spaces">     </span><span class="istickedoff">mx &lt;- case getAllExts tm of</span>
+<span class="lineno">  788 </span><span class="spaces">             </span><span class="istickedoff">-- concretely evaluate if it is a closed term</span>
+<span class="lineno">  789 </span><span class="spaces">             </span><span class="istickedoff">[] -&gt; do modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  790 </span><span class="spaces">                      </span><span class="istickedoff">let v = Concrete.evalSharedTerm modmap mempty <span class="nottickedoff">mempty</span> tm</span>
+<span class="lineno">  791 </span><span class="spaces">                      </span><span class="istickedoff">pure (Just (Prim.unsigned (Concrete.toWord v)))</span>
+<span class="lineno">  792 </span><span class="spaces">             </span><span class="istickedoff">_ -&gt; return Nothing</span>
+<span class="lineno">  793 </span><span class="spaces">     </span><span class="istickedoff">case mx of</span>
+<span class="lineno">  794 </span><span class="spaces">       </span><span class="istickedoff">Just x  -&gt; W4.bvLit sym w (BV.mkBV w x)</span>
+<span class="lineno">  795 </span><span class="spaces">       </span><span class="istickedoff">Nothing</span>
+<span class="lineno">  796 </span><span class="spaces">         </span><span class="istickedoff">| doW4Eval ?w4EvalTactic -&gt;</span>
+<span class="lineno">  797 </span><span class="spaces">           </span><span class="istickedoff">do let ss = cc^.ccBasicSS</span>
+<span class="lineno">  798 </span><span class="spaces">              </span><span class="istickedoff">(_,tm') &lt;- rewriteSharedTerm sc ss tm</span>
+<span class="lineno">  799 </span><span class="spaces">              </span><span class="istickedoff">cryptol_ss &lt;- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc</span>
+<span class="lineno">  800 </span><span class="spaces">              </span><span class="istickedoff">(_,tm'') &lt;- rewriteSharedTerm sc cryptol_ss tm'</span>
+<span class="lineno">  801 </span><span class="spaces">              </span><span class="istickedoff">(_,tm''') &lt;- rewriteSharedTerm sc ss tm''</span>
+<span class="lineno">  802 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlytrue">not (any (\(name, _, _) -&gt; not (isPreludeName name)) (Map.elems $ getConstantSet tm'''))</span> then</span>
+<span class="lineno">  803 </span><span class="spaces">                </span><span class="istickedoff">do (_names, _, _, x) &lt;- w4EvalAny sym st sc mempty Set.empty tm'''</span>
+<span class="lineno">  804 </span><span class="spaces">                   </span><span class="istickedoff">case valueToSymExpr x of</span>
+<span class="lineno">  805 </span><span class="spaces">                     </span><span class="istickedoff">Just (Some y)</span>
+<span class="lineno">  806 </span><span class="spaces">                       </span><span class="istickedoff">| Just Refl &lt;- testEquality (W4.BaseBVRepr w) (W4.exprType y) -&gt;</span>
+<span class="lineno">  807 </span><span class="spaces">                         </span><span class="istickedoff">return y</span>
+<span class="lineno">  808 </span><span class="spaces">                     </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;resolveSAWSymBV: unexpected w4Eval result &quot; ++ show x</span></span>
+<span class="lineno">  809 </span><span class="spaces">              </span><span class="istickedoff">else <span class="nottickedoff">bindSAWTerm sym st (W4.BaseBVRepr w) tm</span></span>
+<span class="lineno">  810 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno">  811 </span><span class="spaces">           </span><span class="istickedoff">bindSAWTerm sym st (W4.BaseBVRepr w) tm</span></span>
+<span class="lineno">  812 </span>
+<span class="lineno">  813 </span>isPreludeName :: NameInfo -&gt; Bool
+<span class="lineno">  814 </span><span class="decl"><span class="istickedoff">isPreludeName = \case</span>
+<span class="lineno">  815 </span><span class="spaces">  </span><span class="istickedoff">ModuleIdentifier ident -&gt; identModule ident == preludeName</span>
+<span class="lineno">  816 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; False</span></span>
+<span class="lineno">  817 </span>
+<span class="lineno">  818 </span>resolveSAWTerm ::
+<span class="lineno">  819 </span>  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno">  820 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  821 </span>  Cryptol.TValue -&gt;
+<span class="lineno">  822 </span>  Term -&gt;
+<span class="lineno">  823 </span>  IO LLVMVal
+<span class="lineno">  824 </span><span class="decl"><span class="istickedoff">resolveSAWTerm cc tp tm =</span>
+<span class="lineno">  825 </span><span class="spaces">    </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  826 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVBit -&gt;</span>
+<span class="lineno">  827 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Bit (FIXME)&quot;</span></span>
+<span class="lineno">  828 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVInteger -&gt;</span>
+<span class="lineno">  829 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Integer (FIXME)&quot;</span></span>
+<span class="lineno">  830 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVIntMod _ -&gt;</span>
+<span class="lineno">  831 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Z n (FIXME)&quot;</span></span>
+<span class="lineno">  832 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVFloat{} -&gt;</span>
+<span class="lineno">  833 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Float e p (FIXME)&quot;</span></span>
+<span class="lineno">  834 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVArray{} -&gt;</span>
+<span class="lineno">  835 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Array a b (FIXME)&quot;</span></span>
+<span class="lineno">  836 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVRational -&gt;</span>
+<span class="lineno">  837 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented type Rational (FIXME)&quot;</span></span>
+<span class="lineno">  838 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  839 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVSeq sz Cryptol.TVBit -&gt;</span>
+<span class="lineno">  840 </span><span class="spaces">        </span><span class="istickedoff">case someNat sz of</span>
+<span class="lineno">  841 </span><span class="spaces">          </span><span class="istickedoff">Just (Some w)</span>
+<span class="lineno">  842 </span><span class="spaces">            </span><span class="istickedoff">| Just LeqProof &lt;- isPosNat w -&gt;</span>
+<span class="lineno">  843 </span><span class="spaces">              </span><span class="istickedoff">do v &lt;- resolveSAWSymBV cc w tm</span>
+<span class="lineno">  844 </span><span class="spaces">                 </span><span class="istickedoff">Crucible.ptrToPtrVal &lt;$&gt; Crucible.llvmPointer_bv sym v</span>
+<span class="lineno">  845 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail (&quot;Invalid bitvector width: &quot; ++ show sz)</span></span>
+<span class="lineno">  846 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVSeq sz tp' -&gt;</span>
+<span class="lineno">  847 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
+<span class="lineno">  848 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  849 </span><span class="spaces">           </span><span class="istickedoff">sz_tm &lt;- scNat sc (fromIntegral sz)</span>
+<span class="lineno">  850 </span><span class="spaces">           </span><span class="istickedoff">tp_tm &lt;- importType sc <span class="nottickedoff">emptyEnv</span> (Cryptol.tValTy tp')</span>
+<span class="lineno">  851 </span><span class="spaces">           </span><span class="istickedoff">let f i = do i_tm &lt;- scNat sc (fromIntegral i)</span>
+<span class="lineno">  852 </span><span class="spaces">                        </span><span class="istickedoff">tm' &lt;- scAt sc sz_tm tp_tm tm i_tm</span>
+<span class="lineno">  853 </span><span class="spaces">                        </span><span class="istickedoff">resolveSAWTerm cc tp' tm'</span>
+<span class="lineno">  854 </span><span class="spaces">           </span><span class="istickedoff">case toLLVMType dl tp' of</span>
+<span class="lineno">  855 </span><span class="spaces">             </span><span class="istickedoff">Left e -&gt; <span class="nottickedoff">fail (&quot;In resolveSAWTerm: &quot; ++ toLLVMTypeErrToString e)</span></span>
+<span class="lineno">  856 </span><span class="spaces">             </span><span class="istickedoff">Right memTy -&gt; do</span>
+<span class="lineno">  857 </span><span class="spaces">               </span><span class="istickedoff">gt &lt;- Crucible.toStorableType memTy</span>
+<span class="lineno">  858 </span><span class="spaces">               </span><span class="istickedoff">Crucible.LLVMValArray gt . V.fromList &lt;$&gt; mapM f [ 0 .. (sz-1) ]</span>
+<span class="lineno">  859 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVStream _tp' -&gt;</span>
+<span class="lineno">  860 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: invalid infinite stream type&quot;</span></span>
+<span class="lineno">  861 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVTuple tps -&gt;</span>
+<span class="lineno">  862 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
+<span class="lineno">  863 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  864 </span><span class="spaces">           </span><span class="istickedoff">tms &lt;- mapM (\i -&gt; scTupleSelector sc tm i (length tps)) [1 .. length tps]</span>
+<span class="lineno">  865 </span><span class="spaces">           </span><span class="istickedoff">vals &lt;- zipWithM (resolveSAWTerm cc) tps tms</span>
+<span class="lineno">  866 </span><span class="spaces">           </span><span class="istickedoff">storTy &lt;-</span>
+<span class="lineno">  867 </span><span class="spaces">             </span><span class="istickedoff">case toLLVMType dl tp of</span>
+<span class="lineno">  868 </span><span class="spaces">               </span><span class="istickedoff">Left e -&gt; <span class="nottickedoff">fail (&quot;In resolveSAWTerm: &quot; ++ toLLVMTypeErrToString e)</span></span>
+<span class="lineno">  869 </span><span class="spaces">               </span><span class="istickedoff">Right memTy -&gt; Crucible.toStorableType memTy</span>
+<span class="lineno">  870 </span><span class="spaces">           </span><span class="istickedoff">fields &lt;-</span>
+<span class="lineno">  871 </span><span class="spaces">             </span><span class="istickedoff">case Crucible.storageTypeF storTy of</span>
+<span class="lineno">  872 </span><span class="spaces">               </span><span class="istickedoff">Crucible.Struct fields -&gt; return fields</span>
+<span class="lineno">  873 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;resolveSAWTerm: impossible: expected struct&quot;</span></span>
+<span class="lineno">  874 </span><span class="spaces">           </span><span class="istickedoff">return (Crucible.LLVMValStruct (V.zip fields (V.fromList vals)))</span>
+<span class="lineno">  875 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVRec _flds -&gt;</span>
+<span class="lineno">  876 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unimplemented record type (FIXME)&quot;</span></span>
+<span class="lineno">  877 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVFun _ _ -&gt;</span>
+<span class="lineno">  878 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: invalid function type&quot;</span></span>
+<span class="lineno">  879 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVNominal {} -&gt;</span>
+<span class="lineno">  880 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: invalid nominal type&quot;</span></span>
+<span class="lineno">  881 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  882 </span><span class="spaces">    </span><span class="istickedoff">sym = cc^.ccSym</span>
+<span class="lineno">  883 </span><span class="spaces">    </span><span class="istickedoff">dl = Crucible.llvmDataLayout (ccTypeCtx cc)</span></span>
+<span class="lineno">  884 </span>
+<span class="lineno">  885 </span>scPtrWidthBvNat ::
+<span class="lineno">  886 </span>  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Integral a) =&gt;
+<span class="lineno">  887 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno">  888 </span>  a -&gt;
+<span class="lineno">  889 </span>  IO Term
+<span class="lineno">  890 </span><span class="decl"><span class="istickedoff">scPtrWidthBvNat cc n =</span>
+<span class="lineno">  891 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
+<span class="lineno">  892 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  893 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  894 </span><span class="spaces">     </span><span class="istickedoff">w &lt;- scNat sc $ natValue Crucible.PtrWidth</span>
+<span class="lineno">  895 </span><span class="spaces">     </span><span class="istickedoff">scBvNat sc w =&lt;&lt; scNat sc (fromIntegral n)</span></span>
+<span class="lineno">  896 </span>
+<span class="lineno">  897 </span>data ToLLVMTypeErr = NotYetSupported String | Impossible String
+<span class="lineno">  898 </span>
+<span class="lineno">  899 </span>toLLVMTypeErrToString :: ToLLVMTypeErr -&gt; String
+<span class="lineno">  900 </span><span class="decl"><span class="nottickedoff">toLLVMTypeErrToString =</span>
+<span class="lineno">  901 </span><span class="spaces">  </span><span class="nottickedoff">\case</span>
+<span class="lineno">  902 </span><span class="spaces">    </span><span class="nottickedoff">NotYetSupported ty -&gt;</span>
+<span class="lineno">  903 </span><span class="spaces">      </span><span class="nottickedoff">unwords [ &quot;SAW doesn't yet support translating Cryptol's&quot;</span>
+<span class="lineno">  904 </span><span class="spaces">              </span><span class="nottickedoff">, ty</span>
+<span class="lineno">  905 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;type(s) into crucible-llvm's type system.&quot;</span>
+<span class="lineno">  906 </span><span class="spaces">              </span><span class="nottickedoff">]</span>
+<span class="lineno">  907 </span><span class="spaces">    </span><span class="nottickedoff">Impossible ty -&gt;</span>
+<span class="lineno">  908 </span><span class="spaces">      </span><span class="nottickedoff">unwords [ &quot;User error: It's impossible to store Cryptol&quot;</span>
+<span class="lineno">  909 </span><span class="spaces">              </span><span class="nottickedoff">, ty</span>
+<span class="lineno">  910 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;values in crucible-llvm's memory model.&quot;</span>
+<span class="lineno">  911 </span><span class="spaces">              </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  912 </span>
+<span class="lineno">  913 </span>toLLVMType ::
+<span class="lineno">  914 </span>  Crucible.DataLayout -&gt;
+<span class="lineno">  915 </span>  Cryptol.TValue -&gt;
+<span class="lineno">  916 </span>  Either ToLLVMTypeErr Crucible.MemType
+<span class="lineno">  917 </span><span class="decl"><span class="istickedoff">toLLVMType dl tp =</span>
+<span class="lineno">  918 </span><span class="spaces">  </span><span class="istickedoff">case tp of</span>
+<span class="lineno">  919 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVBit -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;bit&quot;)</span> -- FIXME</span>
+<span class="lineno">  920 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVInteger -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;integer&quot;)</span></span>
+<span class="lineno">  921 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVIntMod _ -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;integer (mod n)&quot;)</span></span>
+<span class="lineno">  922 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVFloat{} -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;float e p&quot;)</span></span>
+<span class="lineno">  923 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVArray{} -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;array a b&quot;)</span></span>
+<span class="lineno">  924 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVRational -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;rational&quot;)</span></span>
+<span class="lineno">  925 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  926 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVSeq n Cryptol.TVBit</span>
+<span class="lineno">  927 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">n &gt; 0</span> -&gt; Right (Crucible.IntType (fromInteger n))</span>
+<span class="lineno">  928 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">Left (Impossible &quot;infinite sequence&quot;)</span></span>
+<span class="lineno">  929 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVSeq n t -&gt; do</span>
+<span class="lineno">  930 </span><span class="spaces">      </span><span class="istickedoff">t' &lt;- toLLVMType dl t</span>
+<span class="lineno">  931 </span><span class="spaces">      </span><span class="istickedoff">let n' = fromIntegral n</span>
+<span class="lineno">  932 </span><span class="spaces">      </span><span class="istickedoff">Right (Crucible.ArrayType n' t')</span>
+<span class="lineno">  933 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVStream _tp' -&gt; <span class="nottickedoff">Left (Impossible &quot;stream&quot;)</span></span>
+<span class="lineno">  934 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVTuple tps -&gt; do</span>
+<span class="lineno">  935 </span><span class="spaces">      </span><span class="istickedoff">tps' &lt;- mapM (toLLVMType dl) tps</span>
+<span class="lineno">  936 </span><span class="spaces">      </span><span class="istickedoff">let si = Crucible.mkStructInfo dl False tps'</span>
+<span class="lineno">  937 </span><span class="spaces">      </span><span class="istickedoff">return (Crucible.StructType si)</span>
+<span class="lineno">  938 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVRec _flds -&gt; <span class="nottickedoff">Left (NotYetSupported &quot;record&quot;)</span></span>
+<span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVFun _ _ -&gt; <span class="nottickedoff">Left (Impossible &quot;function&quot;)</span></span>
+<span class="lineno">  940 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVNominal {} -&gt; <span class="nottickedoff">Left (Impossible &quot;nominal&quot;)</span></span></span>
+<span class="lineno">  941 </span>
+<span class="lineno">  942 </span>toLLVMStorageType ::
+<span class="lineno">  943 </span>  forall w .
+<span class="lineno">  944 </span>  Crucible.HasPtrWidth w =&gt;
+<span class="lineno">  945 </span>  Crucible.DataLayout -&gt;
+<span class="lineno">  946 </span>  Cryptol.TValue -&gt;
+<span class="lineno">  947 </span>  IO Crucible.StorageType
+<span class="lineno">  948 </span><span class="decl"><span class="nottickedoff">toLLVMStorageType data_layout cryptol_type =</span>
+<span class="lineno">  949 </span><span class="spaces">  </span><span class="nottickedoff">case toLLVMType data_layout cryptol_type of</span>
+<span class="lineno">  950 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; fail $ toLLVMTypeErrToString e</span>
+<span class="lineno">  951 </span><span class="spaces">    </span><span class="nottickedoff">Right memory_type -&gt; Crucible.toStorableType @_ @w memory_type</span></span>
+<span class="lineno">  952 </span>
+<span class="lineno">  953 </span>-- FIXME: This struct-padding logic is already implemented in
+<span class="lineno">  954 </span>-- crucible-llvm. Reimplementing it here is error prone and harder to
+<span class="lineno">  955 </span>-- maintain.
+<span class="lineno">  956 </span>mkFields ::
+<span class="lineno">  957 </span>  Bool {- ^ @True@ = packed, @False@ = unpacked -} -&gt;
+<span class="lineno">  958 </span>  Crucible.DataLayout -&gt;
+<span class="lineno">  959 </span>  Crucible.Alignment -&gt;
+<span class="lineno">  960 </span>  Crucible.Bytes -&gt;
+<span class="lineno">  961 </span>  [Crucible.StorageType] -&gt;
+<span class="lineno">  962 </span>  [(Crucible.StorageType, Crucible.Bytes)]
+<span class="lineno">  963 </span><span class="decl"><span class="istickedoff">mkFields _ _ _ _ [] = []</span>
+<span class="lineno">  964 </span><span class="spaces"></span><span class="istickedoff">mkFields packed dl a off (ty : tys) =</span>
+<span class="lineno">  965 </span><span class="spaces">  </span><span class="istickedoff">(ty, pad) : mkFields packed dl a' off' tys</span>
+<span class="lineno">  966 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  967 </span><span class="spaces">    </span><span class="istickedoff">end = off + Crucible.storageTypeSize ty</span>
+<span class="lineno">  968 </span><span class="spaces">    </span><span class="istickedoff">off' = if packed then end else Crucible.padToAlignment end nextAlign</span>
+<span class="lineno">  969 </span><span class="spaces">    </span><span class="istickedoff">pad = off' - end</span>
+<span class="lineno">  970 </span><span class="spaces">    </span><span class="istickedoff">a' = max a (typeAlignment dl ty)</span>
+<span class="lineno">  971 </span><span class="spaces">    </span><span class="istickedoff">nextAlign = case tys of</span>
+<span class="lineno">  972 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; a'</span>
+<span class="lineno">  973 </span><span class="spaces">      </span><span class="istickedoff">(ty' : _) -&gt; typeAlignment dl ty'</span></span>
+<span class="lineno">  974 </span>
+<span class="lineno">  975 </span>
+<span class="lineno">  976 </span>typeAlignment :: Crucible.DataLayout -&gt; Crucible.StorageType -&gt; Crucible.Alignment
+<span class="lineno">  977 </span><span class="decl"><span class="istickedoff">typeAlignment dl ty =</span>
+<span class="lineno">  978 </span><span class="spaces">  </span><span class="istickedoff">case Crucible.storageTypeF ty of</span>
+<span class="lineno">  979 </span><span class="spaces">    </span><span class="istickedoff">Crucible.Bitvector bytes -&gt; Crucible.integerAlignment dl (Crucible.bytesToBits bytes)</span>
+<span class="lineno">  980 </span><span class="spaces">    </span><span class="istickedoff">Crucible.Float           -&gt; <span class="nottickedoff">fromJust (Crucible.floatAlignment dl 32)</span></span>
+<span class="lineno">  981 </span><span class="spaces">    </span><span class="istickedoff">Crucible.Double          -&gt; <span class="nottickedoff">fromJust (Crucible.floatAlignment dl 64)</span></span>
+<span class="lineno">  982 </span><span class="spaces">    </span><span class="istickedoff">Crucible.X86_FP80        -&gt; <span class="nottickedoff">fromJust (Crucible.floatAlignment dl 80)</span></span>
+<span class="lineno">  983 </span><span class="spaces">    </span><span class="istickedoff">Crucible.Array _sz ty'   -&gt; <span class="nottickedoff">typeAlignment dl ty'</span></span>
+<span class="lineno">  984 </span><span class="spaces">    </span><span class="istickedoff">Crucible.Struct flds     -&gt; <span class="nottickedoff">V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)</span></span></span>
+<span class="lineno">  985 </span>
+<span class="lineno">  986 </span>
+<span class="lineno">  987 </span>equalValsPred ::
+<span class="lineno">  988 </span>  LLVMCrucibleContext wptr -&gt;
+<span class="lineno">  989 </span>  LLVMVal -&gt;
+<span class="lineno">  990 </span>  LLVMVal -&gt;
+<span class="lineno">  991 </span>  IO (W4.Pred Sym)
+<span class="lineno">  992 </span><span class="decl"><span class="istickedoff">equalValsPred cc v1 v2 =</span>
+<span class="lineno">  993 </span><span class="spaces">   </span><span class="istickedoff">fromMaybe <span class="nottickedoff">(W4.falsePred sym)</span> &lt;$&gt; Crucible.testEqual sym v1 v2</span>
+<span class="lineno">  994 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  995 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">sym = cc^.ccSym</span></span>
+<span class="lineno">  997 </span>
+<span class="lineno">  998 </span>
+<span class="lineno">  999 </span>memArrayToSawCoreTerm ::
+<span class="lineno"> 1000 </span>  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =&gt;
+<span class="lineno"> 1001 </span>  LLVMCrucibleContext arch -&gt;
+<span class="lineno"> 1002 </span>  Crucible.EndianForm -&gt;
+<span class="lineno"> 1003 </span>  TypedTerm -&gt;
+<span class="lineno"> 1004 </span>  IO Term
+<span class="lineno"> 1005 </span><span class="decl"><span class="nottickedoff">memArrayToSawCoreTerm crucible_context endianess typed_term = do</span>
+<span class="lineno"> 1006 </span><span class="spaces">  </span><span class="nottickedoff">let sym = crucible_context ^. ccSym</span>
+<span class="lineno"> 1007 </span><span class="spaces">  </span><span class="nottickedoff">let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context</span>
+<span class="lineno"> 1008 </span><span class="spaces">  </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno"> 1009 </span><span class="spaces">  </span><span class="nottickedoff">let saw_context = saw_ctx st</span>
+<span class="lineno"> 1010 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1011 </span><span class="spaces">  </span><span class="nottickedoff">byte_type_term &lt;- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit</span>
+<span class="lineno"> 1012 </span><span class="spaces">  </span><span class="nottickedoff">offset_type_term &lt;- scBitvector saw_context $ natValue ?ptrWidth</span>
+<span class="lineno"> 1013 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1014 </span><span class="spaces">  </span><span class="nottickedoff">let updateArray :: Natural -&gt; Term -&gt; StateT Term IO ()</span>
+<span class="lineno"> 1015 </span><span class="spaces">      </span><span class="nottickedoff">updateArray offset byte_term = do</span>
+<span class="lineno"> 1016 </span><span class="spaces">        </span><span class="nottickedoff">ptr_width_term &lt;- liftIO $ scNat saw_context $ natValue ?ptrWidth</span>
+<span class="lineno"> 1017 </span><span class="spaces">        </span><span class="nottickedoff">offset_term &lt;- liftIO $ scBvNat saw_context ptr_width_term =&lt;&lt; scNat saw_context offset</span>
+<span class="lineno"> 1018 </span><span class="spaces">        </span><span class="nottickedoff">array_term &lt;- get</span>
+<span class="lineno"> 1019 </span><span class="spaces">        </span><span class="nottickedoff">updated_array_term &lt;- liftIO $</span>
+<span class="lineno"> 1020 </span><span class="spaces">          </span><span class="nottickedoff">scArrayUpdate saw_context offset_type_term byte_type_term array_term offset_term byte_term</span>
+<span class="lineno"> 1021 </span><span class="spaces">        </span><span class="nottickedoff">put updated_array_term</span>
+<span class="lineno"> 1022 </span><span class="spaces">      </span><span class="nottickedoff">setBytes :: Cryptol.TValue -&gt; Term -&gt; Crucible.Bytes -&gt; StateT Term IO ()</span>
+<span class="lineno"> 1023 </span><span class="spaces">      </span><span class="nottickedoff">setBytes cryptol_type saw_term offset = case cryptol_type of</span>
+<span class="lineno"> 1024 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size Cryptol.TVBit</span>
+<span class="lineno"> 1025 </span><span class="spaces">          </span><span class="nottickedoff">| (byte_count, 0) &lt;- quotRem (fromInteger size) 8 -&gt;</span>
+<span class="lineno"> 1026 </span><span class="spaces">            </span><span class="nottickedoff">if byte_count &gt; 1</span>
+<span class="lineno"> 1027 </span><span class="spaces">              </span><span class="nottickedoff">then forM_ [0 .. (byte_count - 1)] $ \byte_index -&gt; do</span>
+<span class="lineno"> 1028 </span><span class="spaces">                </span><span class="nottickedoff">bit_type_term &lt;- liftIO $ importType</span>
+<span class="lineno"> 1029 </span><span class="spaces">                  </span><span class="nottickedoff">saw_context</span>
+<span class="lineno"> 1030 </span><span class="spaces">                  </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno"> 1031 </span><span class="spaces">                  </span><span class="nottickedoff">(Cryptol.tValTy Cryptol.TVBit)</span>
+<span class="lineno"> 1032 </span><span class="spaces">                </span><span class="nottickedoff">byte_index_term &lt;- liftIO $ scNat saw_context $ byte_index * 8</span>
+<span class="lineno"> 1033 </span><span class="spaces">                </span><span class="nottickedoff">byte_size_term &lt;- liftIO $ scNat saw_context 8</span>
+<span class="lineno"> 1034 </span><span class="spaces">                </span><span class="nottickedoff">remaining_bits_size_term &lt;- liftIO $ scNat saw_context $</span>
+<span class="lineno"> 1035 </span><span class="spaces">                  </span><span class="nottickedoff">(byte_count - byte_index - 1) * 8</span>
+<span class="lineno"> 1036 </span><span class="spaces">                </span><span class="nottickedoff">saw_byte_term &lt;- liftIO $ scSlice</span>
+<span class="lineno"> 1037 </span><span class="spaces">                  </span><span class="nottickedoff">saw_context</span>
+<span class="lineno"> 1038 </span><span class="spaces">                  </span><span class="nottickedoff">bit_type_term</span>
+<span class="lineno"> 1039 </span><span class="spaces">                  </span><span class="nottickedoff">byte_index_term</span>
+<span class="lineno"> 1040 </span><span class="spaces">                  </span><span class="nottickedoff">byte_size_term</span>
+<span class="lineno"> 1041 </span><span class="spaces">                  </span><span class="nottickedoff">remaining_bits_size_term</span>
+<span class="lineno"> 1042 </span><span class="spaces">                  </span><span class="nottickedoff">saw_term</span>
+<span class="lineno"> 1043 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1044 </span><span class="spaces">                </span><span class="nottickedoff">let byte_storage_index = case endianess of</span>
+<span class="lineno"> 1045 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.BigEndian -&gt; byte_index</span>
+<span class="lineno"> 1046 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.LittleEndian -&gt; byte_count - byte_index - 1</span>
+<span class="lineno"> 1047 </span><span class="spaces">                </span><span class="nottickedoff">let byte_offset = ((fromIntegral offset) + (fromIntegral byte_storage_index))</span>
+<span class="lineno"> 1048 </span><span class="spaces">                </span><span class="nottickedoff">updateArray byte_offset saw_byte_term</span>
+<span class="lineno"> 1049 </span><span class="spaces">            </span><span class="nottickedoff">else</span>
+<span class="lineno"> 1050 </span><span class="spaces">              </span><span class="nottickedoff">updateArray (fromIntegral offset) saw_term</span>
+<span class="lineno"> 1051 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; fail $ &quot;unexpected bit count: &quot; ++ show size</span>
+<span class="lineno"> 1052 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1053 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size element_cryptol_type -&gt; do</span>
+<span class="lineno"> 1054 </span><span class="spaces">          </span><span class="nottickedoff">element_storage_size &lt;- liftIO $</span>
+<span class="lineno"> 1055 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeSize &lt;$&gt; toLLVMStorageType</span>
+<span class="lineno"> 1056 </span><span class="spaces">              </span><span class="nottickedoff">data_layout</span>
+<span class="lineno"> 1057 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
+<span class="lineno"> 1058 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1059 </span><span class="spaces">          </span><span class="nottickedoff">forM_ [0 .. (size - 1)] $ \element_index -&gt; do</span>
+<span class="lineno"> 1060 </span><span class="spaces">            </span><span class="nottickedoff">size_term &lt;- liftIO $ scNat saw_context $ fromInteger size</span>
+<span class="lineno"> 1061 </span><span class="spaces">            </span><span class="nottickedoff">elem_type_term &lt;- liftIO $ importType</span>
+<span class="lineno"> 1062 </span><span class="spaces">              </span><span class="nottickedoff">saw_context</span>
+<span class="lineno"> 1063 </span><span class="spaces">              </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno"> 1064 </span><span class="spaces">              </span><span class="nottickedoff">(Cryptol.tValTy element_cryptol_type)</span>
+<span class="lineno"> 1065 </span><span class="spaces">            </span><span class="nottickedoff">index_term &lt;- liftIO $ scNat saw_context $ fromInteger element_index</span>
+<span class="lineno"> 1066 </span><span class="spaces">            </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scAt</span>
+<span class="lineno"> 1067 </span><span class="spaces">              </span><span class="nottickedoff">saw_context</span>
+<span class="lineno"> 1068 </span><span class="spaces">              </span><span class="nottickedoff">size_term</span>
+<span class="lineno"> 1069 </span><span class="spaces">              </span><span class="nottickedoff">elem_type_term</span>
+<span class="lineno"> 1070 </span><span class="spaces">              </span><span class="nottickedoff">saw_term index_term</span>
+<span class="lineno"> 1071 </span><span class="spaces">            </span><span class="nottickedoff">setBytes</span>
+<span class="lineno"> 1072 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
+<span class="lineno"> 1073 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term</span>
+<span class="lineno"> 1074 </span><span class="spaces">              </span><span class="nottickedoff">(offset + (fromInteger element_index) * element_storage_size)</span>
+<span class="lineno"> 1075 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1076 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVTuple tuple_element_cryptol_types -&gt; do</span>
+<span class="lineno"> 1077 </span><span class="spaces">          </span><span class="nottickedoff">(Crucible.Struct field_storage_types) &lt;- liftIO $</span>
+<span class="lineno"> 1078 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeF &lt;$&gt; toLLVMStorageType data_layout cryptol_type</span>
+<span class="lineno"> 1079 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1080 </span><span class="spaces">          </span><span class="nottickedoff">V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $</span>
+<span class="lineno"> 1081 </span><span class="spaces">            </span><span class="nottickedoff">\(field_index, field_storage_type, tuple_element_cryptol_type) -&gt; do</span>
+<span class="lineno"> 1082 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scTupleSelector</span>
+<span class="lineno"> 1083 </span><span class="spaces">                </span><span class="nottickedoff">saw_context</span>
+<span class="lineno"> 1084 </span><span class="spaces">                </span><span class="nottickedoff">saw_term</span>
+<span class="lineno"> 1085 </span><span class="spaces">                </span><span class="nottickedoff">(field_index + 1)</span>
+<span class="lineno"> 1086 </span><span class="spaces">                </span><span class="nottickedoff">(length tuple_element_cryptol_types)</span>
+<span class="lineno"> 1087 </span><span class="spaces">              </span><span class="nottickedoff">setBytes</span>
+<span class="lineno"> 1088 </span><span class="spaces">                </span><span class="nottickedoff">tuple_element_cryptol_type</span>
+<span class="lineno"> 1089 </span><span class="spaces">                </span><span class="nottickedoff">inner_saw_term</span>
+<span class="lineno"> 1090 </span><span class="spaces">                </span><span class="nottickedoff">(offset + (Crucible.fieldOffset field_storage_type))</span>
+<span class="lineno"> 1091 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1092 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail $ &quot;unexpected cryptol type: &quot; ++ show cryptol_type</span>
+<span class="lineno"> 1093 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1094 </span><span class="spaces">  </span><span class="nottickedoff">case ttType typed_term of</span>
+<span class="lineno"> 1095 </span><span class="spaces">    </span><span class="nottickedoff">TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -&gt; do</span>
+<span class="lineno"> 1096 </span><span class="spaces">      </span><span class="nottickedoff">let evaluated_type = Cryptol.evalValType mempty cryptol_type</span>
+<span class="lineno"> 1097 </span><span class="spaces">      </span><span class="nottickedoff">fresh_array_const &lt;- scFreshGlobal saw_context &quot;arr&quot;</span>
+<span class="lineno"> 1098 </span><span class="spaces">        </span><span class="nottickedoff">=&lt;&lt; scArrayType saw_context offset_type_term byte_type_term</span>
+<span class="lineno"> 1099 </span><span class="spaces">      </span><span class="nottickedoff">execStateT</span>
+<span class="lineno"> 1100 </span><span class="spaces">        </span><span class="nottickedoff">(setBytes evaluated_type (ttTerm typed_term) 0)</span>
+<span class="lineno"> 1101 </span><span class="spaces">        </span><span class="nottickedoff">fresh_array_const</span>
+<span class="lineno"> 1102 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1103 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;expected monomorphic typed term: &quot; ++ show typed_term</span></span>
+
+</pre>
+</body>
+</html>
