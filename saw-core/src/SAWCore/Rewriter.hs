@@ -421,7 +421,7 @@ ruleOfProp sc term ann =
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
 scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)
-scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i <*> pure Nothing
+scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfIdent sc i <*> pure Nothing
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule a]
@@ -921,7 +921,7 @@ hoistIfs sc t = do
           `app`
           (scLocalVar sc 3)
 
-   rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfGlobal sc)
+   rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
               [ "Prelude.ite_true"
               , "Prelude.ite_false"
               , "Prelude.ite_not"
