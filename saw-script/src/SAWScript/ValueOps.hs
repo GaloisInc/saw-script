@@ -53,7 +53,7 @@ module SAWScript.ValueOps (
     -- used locally in proofScriptSubshell
     withLocalEnvProof,
     -- used in SAWScript.Interpreter
-    localOptions,
+    withOptions,
     -- used in SAWScript.Interpreter
     withStackTraceFrame,
  ) where
@@ -221,8 +221,8 @@ withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
 withLocalEnvProof env (ProofScript m) = do
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
-localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
-localOptions f (TopLevel_ m) =
+withOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
+withOptions f (TopLevel_ m) =
   TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 -- | Implement stack tracing by adding error handlers that rethrow

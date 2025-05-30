@@ -563,7 +563,7 @@ interpretFile file runMain =
                                              map (\l -> "\t"  ++ l) (lines str)
                          showLoc <- printShowPos <$> getOptions
                          if showLoc
-                           then localOptions (\o -> o { printOutFn = \lvl str ->
+                           then withOptions (\o -> o { printOutFn = \lvl str ->
                                                           printOutFn o lvl (withPos str) })
                                   (interpretStmt False s)
                            else interpretStmt False s
