@@ -1,6 +1,6 @@
 #!/bin/sh
 # build.sh: build SAW
-# usage: ./build.sh [target]
+# usage: ./build.sh [-j jobs] [target]
 #
 # Valid targets are:
 #    build (the default)
@@ -12,6 +12,35 @@
 # GitRev.hs. See savegitinfo.sh.
 
 set -e
+
+JOBS=''
+case "x$1" in
+    x-j)
+        if [ $# -lt 2 ]; then
+            echo "$0: -j expects an argument" 1>&2
+            exit 1
+        fi
+        shift; JOBS=$1; shift
+        ;;
+    x-j*)
+        JOBS=${1#-j}; shift
+        ;;
+    *)
+        ;;
+esac
+if [ "x$JOBS" != x ]; then
+    # test this with -ge so if $JOBS isn't a number the test will fail
+    # and we'll take the error branch
+    if [ "$JOBS" -ge 1 ] 2>/dev/null; then
+        JOBSOPT="-j$JOBS"
+    else
+        echo "$0: invalid job count $JOBS" 1>&2
+        exit 1
+    fi
+else
+    JOBSOPT=''
+fi
+
 
 ##############################
 # gitrev
@@ -48,8 +77,9 @@ tgt_build() {
     #   - doc/developer/developer.md
     #   - and of course the definitions in the *.cabal files
 
-    echo "cabal build ..."
-    cabal build exe:cryptol exe:saw exe:saw-remote-api \
+    echo "cabal build $JOBSOPT ..."
+    cabal build $JOBSOPT \
+                exe:cryptol exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:cryptol-saw-core-tests \

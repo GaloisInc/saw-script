@@ -78,8 +78,7 @@ import SAWCore.FiniteValue
   , scFirstOrderValue
   )
 import SAWCore.SATQuery
-import SAWCore.SCTypeCheck hiding (TypedTerm)
-import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
+import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
@@ -2074,7 +2073,7 @@ parseCoreMod mnm_str input =
      err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
-       Right (TC.TypedTerm x _) -> return x
+       Right (SCTypedTerm x _) -> return x
 
 parseCore :: String -> TopLevel Term
 parseCore = parseCoreMod "Cryptol"
@@ -2447,7 +2446,7 @@ setMonadification sc cry_str saw_str poly_p =
              Just existing_macro -> (cry_saw_tp, existing_macro)
              Nothing -> (cry_mon_tp,
                          Monadify.argGlobalMacro cry_nmi saw_ident poly_p)
-     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
+     liftIO $ scCheckSubtype sc Nothing (SCTypedTerm saw_trm saw_tp) tp_to_check
 
      -- Step 4: Add the generated macro
      put (rw { rwMonadify = Monadify.monEnvAdd cry_nmi macro (rwMonadify rw) })

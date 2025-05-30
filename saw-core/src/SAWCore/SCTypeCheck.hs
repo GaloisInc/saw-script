@@ -34,7 +34,7 @@ module SAWCore.SCTypeCheck
   , withCtx
   , atPos
   , LiftTCM(..)
-  , TypedTerm(..)
+  , SCTypedTerm(..)
   , TypeInfer(..)
   , typeCheckWHNF
   , typeInferCompleteWHNF
@@ -141,9 +141,9 @@ withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
 withErrorTermF :: TermF Term -> TCM a -> TCM a
 withErrorTermF tm = withErrorTerm (Unshared tm)
 
--- | Lift @withErrorTerm@ to `TermF TypedTerm`
-withErrorTypedTermF :: TermF TypedTerm -> TCM a -> TCM a
-withErrorTypedTermF tm = withErrorTermF (fmap typedVal tm)
+-- | Lift @withErrorTerm@ to `TermF SCTypedTerm`
+withErrorSCTypedTermF :: TermF SCTypedTerm -> TCM a -> TCM a
+withErrorSCTypedTermF tm = withErrorTermF (fmap typedVal tm)
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- given position, using the 'ErrorPos' constructor, unless that error is
@@ -170,15 +170,15 @@ instance LiftTCM b => LiftTCM (a -> b) where
 -- | Errors that can occur during type-checking
 data TCError
   = NotSort Term
-  | NotFuncTypeInApp TypedTerm TypedTerm
+  | NotFuncTypeInApp SCTypedTerm SCTypedTerm
   | NotTupleType Term
   | BadTupleIndex Int Term
   | NotStringLit Term
-  | NotRecordType TypedTerm
+  | NotRecordType SCTypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
   | UnboundName Text
-  | SubtypeFailure TypedTerm Term
+  | SubtypeFailure SCTypedTerm Term
   | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
@@ -191,7 +191,7 @@ data TCError
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
   | ErrorTerm Term TCError
-  | ExpectedRecursor TypedTerm
+  | ExpectedRecursor SCTypedTerm
 
 
 -- | Throw a type-checking error
@@ -230,7 +230,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
                 , ishow ty ]
   helper (NotStringLit trm) =
       ppWithPos [ return "Record selector is not a string literal", ishow trm ]
-  helper (NotRecordType (TypedTerm trm tp)) =
+  helper (NotRecordType (SCTypedTerm trm tp)) =
       ppWithPos [ return "Record field projection with non-record type"
                 , ishow tp
                 , return "In term:"
@@ -313,7 +313,7 @@ scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc mnm ctx
 -- | Infer the type of an @a@ and complete it to a term using
 -- 'scTypeCheckComplete', calling 'fail' on failure
 scTypeCheckCompleteError :: TypeInfer a => SharedContext ->
-                            Maybe ModuleName -> a -> IO TypedTerm
+                            Maybe ModuleName -> a -> IO SCTypedTerm
 scTypeCheckCompleteError sc mnm t0 =
   either (fail . unlines . prettyTCError) return =<<
   scTypeCheckComplete sc mnm t0
@@ -323,27 +323,27 @@ scTypeCheckCompleteError sc mnm t0 =
 -- annotations are correct. Types are evaluated to WHNF as necessary, and the
 -- returned type is in WHNF, though the returned term may not be.
 scTypeCheckComplete :: TypeInfer a => SharedContext -> Maybe ModuleName ->
-                       a -> IO (Either TCError TypedTerm)
+                       a -> IO (Either TCError SCTypedTerm)
 scTypeCheckComplete sc mnm = scTypeCheckCompleteInCtx sc mnm []
 
 -- | Like 'scTypeCheckComplete', but type-check the term relative to a typing
 -- context, which assigns types to free variables in the term
 scTypeCheckCompleteInCtx :: TypeInfer a => SharedContext ->
                             Maybe ModuleName -> [(LocalName, Term)] -> a ->
-                            IO (Either TCError TypedTerm)
+                            IO (Either TCError SCTypedTerm)
 scTypeCheckCompleteInCtx sc mnm ctx t0 =
   runTCM (typeInferComplete t0) sc mnm ctx
 
 -- | Check that one type is a subtype of another using 'checkSubtype', calling
 -- 'fail' on failure
 scCheckSubtype :: SharedContext -> Maybe ModuleName ->
-                  TypedTerm -> Term -> IO ()
+                  SCTypedTerm -> Term -> IO ()
 scCheckSubtype sc mnm arg req_tp =
   either (fail . unlines . prettyTCError) return =<<
   runTCM (checkSubtype arg req_tp) sc mnm []
 
 -- | A pair of a 'Term' and its type
-data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
+data SCTypedTerm = SCTypedTerm { typedVal :: Term, typedType :: Term }
 
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.
@@ -351,15 +351,15 @@ class TypeInfer a where
   -- | Infer the type of an @a@
   typeInfer :: a -> TCM Term
   -- | Infer the type of an @a@ and complete it to a 'Term'
-  typeInferComplete :: a -> TCM TypedTerm
+  typeInferComplete :: a -> TCM SCTypedTerm
 
 -- | Infer the type of an @a@ and complete it to a 'Term', and then evaluate the
 -- resulting term to WHNF
-typeInferCompleteWHNF :: TypeInfer a => a -> TCM TypedTerm
+typeInferCompleteWHNF :: TypeInfer a => a -> TCM SCTypedTerm
 typeInferCompleteWHNF a =
-  do TypedTerm a_trm a_tp <- typeInferComplete a
+  do SCTypedTerm a_trm a_tp <- typeInferComplete a
      a_whnf <- typeCheckWHNF a_trm
-     return $ TypedTerm a_whnf a_tp
+     return $ SCTypedTerm a_whnf a_tp
 
 
 -- | Perform type inference on a context, i.e., a list of variable names and
@@ -401,9 +401,9 @@ instance TypeInfer Term where
               x' <- typeCheckWHNF x
               modify (Map.insert i x')
               return x'
-  typeInferComplete trm = TypedTerm trm <$> withErrorTerm trm (typeInfer trm)
+  typeInferComplete trm = SCTypedTerm trm <$> withErrorTerm trm (typeInfer trm)
 
--- Type inference for TermF Term dispatches to that for TermF TypedTerm by
+-- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
 -- calling inference on all the sub-components and extending the context inside
 -- of the binding forms
 instance TypeInfer (TermF Term) where
@@ -418,7 +418,7 @@ instance TypeInfer (TermF Term) where
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_tptrm with the type of a_whnf but the value of a
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = TypedTerm a (typedType a_whnf)
+       let a_tptrm = SCTypedTerm a (typedType a_whnf)
        typeInfer (Lambda x a_tptrm rhs_tptrm)
   typeInfer (Pi x a rhs) =
     do a_whnf <- typeInferCompleteWHNF a
@@ -427,7 +427,7 @@ instance TypeInfer (TermF Term) where
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_typed with the type of a_whnf but the value of a
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = TypedTerm a (typedType a_whnf)
+       let a_tptrm = SCTypedTerm a (typedType a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
   typeInfer (Constant ec _) =
     -- NOTE: this special case is to prevent us from re-type-checking the
@@ -436,9 +436,9 @@ instance TypeInfer (TermF Term) where
     return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
-    TypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf)
+    SCTypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf)
 
--- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm,
+-- Type inference for FlatTermF Term dispatches to that for FlatTermF SCTypedTerm,
 -- with special cases for primitives and constants to avoid re-type-checking
 -- their types as we are assuming they were type-checked when they were created
 instance TypeInfer (FlatTermF Term) where
@@ -446,20 +446,20 @@ instance TypeInfer (FlatTermF Term) where
   typeInfer (ExtCns ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
-    TypedTerm <$> liftTCM scFlatTermF ftf
+    SCTypedTerm <$> liftTCM scFlatTermF ftf
               <*> withErrorTermF (FTermF ftf) (typeInfer ftf)
 
 
--- Type inference for TermF TypedTerm is the main workhorse. Intuitively, this
+-- Type inference for TermF SCTypedTerm is the main workhorse. Intuitively, this
 -- represents the case where each immediate subterm of a term is labeled with
 -- its (most general) type.
-instance TypeInfer (TermF TypedTerm) where
+instance TypeInfer (TermF SCTypedTerm) where
   typeInfer (FTermF ftf) = typeInfer ftf
-  typeInfer (App x@(TypedTerm _ x_tp) y) =
+  typeInfer (App x@(SCTypedTerm _ x_tp) y) =
     applyPiTyped (NotFuncTypeInApp x y) x_tp y
-  typeInfer (Lambda x (TypedTerm a a_tp) (TypedTerm _ b)) =
+  typeInfer (Lambda x (SCTypedTerm a a_tp) (SCTypedTerm _ b)) =
     void (ensureSort a_tp) >> liftTCM scTermF (Pi x a b)
-  typeInfer (Pi _ (TypedTerm _ a_tp) (TypedTerm _ b_tp)) =
+  typeInfer (Pi _ (SCTypedTerm _ a_tp) (SCTypedTerm _ b_tp)) =
     do s1 <- ensureSort a_tp
        s2 <- ensureSort b_tp
        -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
@@ -476,7 +476,7 @@ instance TypeInfer (TermF TypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant (EC _ n (TypedTerm req_tp req_tp_sort)) (Just (TypedTerm _ tp))) =
+  typeInfer (Constant (EC _ n (SCTypedTerm req_tp req_tp_sort)) (Just (SCTypedTerm _ tp))) =
     do void (ensureSort req_tp_sort)
        -- NOTE: we do the subtype check here, rather than call checkSubtype, so
        -- that we can throw the custom BadConstType error on failure
@@ -484,33 +484,33 @@ instance TypeInfer (TermF TypedTerm) where
        if ok then return tp else
          throwTCError $ BadConstType n tp req_tp
 
-  typeInfer (Constant (EC _ _ (TypedTerm req_tp req_tp_sort)) Nothing) =
+  typeInfer (Constant (EC _ _ (SCTypedTerm req_tp req_tp_sort)) Nothing) =
     -- Constant with no body, just return the EC type
     do void (ensureSort req_tp_sort)
        return req_tp
 
   typeInferComplete tf =
-    TypedTerm <$> liftTCM scTermF (fmap typedVal tf)
-              <*> withErrorTypedTermF tf (typeInfer tf)
+    SCTypedTerm <$> liftTCM scTermF (fmap typedVal tf)
+              <*> withErrorSCTypedTermF tf (typeInfer tf)
 
 
--- Type inference for FlatTermF TypedTerm is the main workhorse for flat
+-- Type inference for FlatTermF SCTypedTerm is the main workhorse for flat
 -- terms. Intuitively, this represents the case where each immediate subterm of
 -- a term has already been labeled with its (most general) type.
-instance TypeInfer (FlatTermF TypedTerm) where
+instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (Primitive ec) =
     typeCheckWHNF $ typedVal $ primType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
-  typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
+  typeInfer (PairValue (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =
     liftTCM scPairType tx ty
-  typeInfer (PairType (TypedTerm _ tx) (TypedTerm _ ty)) =
+  typeInfer (PairType (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =
     do sx <- ensureSort tx
        sy <- ensureSort ty
        liftTCM scSort (max sx sy)
-  typeInfer (PairLeft (TypedTerm _ tp)) =
+  typeInfer (PairLeft (SCTypedTerm _ tp)) =
     ensurePairType tp >>= \(t1,_) -> return t1
-  typeInfer (PairRight (TypedTerm _ tp)) =
+  typeInfer (PairRight (SCTypedTerm _ tp)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
   typeInfer (DataTypeApp d params args) =
@@ -554,14 +554,14 @@ instance TypeInfer (FlatTermF TypedTerm) where
        liftTCM scSort (maxSort $ mkSort 0 : sorts)
   typeInfer (RecordValue elems) =
     liftTCM scFlatTermF $ RecordType $
-    map (\(f,TypedTerm _ tp) -> (f,tp)) elems
-  typeInfer (RecordProj t@(TypedTerm _ t_tp) fld) =
+    map (\(f,SCTypedTerm _ tp) -> (f,tp)) elems
+  typeInfer (RecordProj t@(SCTypedTerm _ t_tp) fld) =
     ensureRecordType (NotRecordType t) t_tp >>= \case
     (Map.lookup fld -> Just tp) -> return tp
     _ -> throwTCError $ BadRecordField fld t_tp
   typeInfer (Sort s _) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
-  typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
+  typeInfer (ArrayValue (SCTypedTerm tp tp_tp) vs) =
     do n <- liftTCM scNat (fromIntegral (V.length vs))
        _ <- ensureSort tp_tp -- TODO: do we care about the level?
        tp' <- typeCheckWHNF tp
@@ -573,14 +573,14 @@ instance TypeInfer (FlatTermF TypedTerm) where
     typeCheckWHNF $ typedVal $ ecType ec
 
   typeInferComplete ftf =
-    TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf)
-              <*> withErrorTypedTermF (FTermF ftf) (typeInfer ftf)
+    SCTypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf)
+              <*> withErrorSCTypedTermF (FTermF ftf) (typeInfer ftf)
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
 -- @[arg/x]b@. This substitution could create redexes, so we call the
 -- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
-applyPiTyped :: TCError -> Term -> TypedTerm -> TCM Term
+applyPiTyped :: TCError -> Term -> SCTypedTerm -> TCM Term
 applyPiTyped err fun_tp arg =
   ensurePiType err fun_tp >>= \(_,arg_tp,ret_tp) ->
   do checkSubtype arg arg_tp
@@ -628,7 +628,7 @@ scTypeCheckWHNF sc t =
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s, and that they are both
 -- already in WHNF
-checkSubtype :: TypedTerm -> Term -> TCM ()
+checkSubtype :: SCTypedTerm -> Term -> TCM ()
 checkSubtype arg req_tp =
   do ok <- isSubtype (typedType arg) req_tp
      if ok then return () else throwTCError $ SubtypeFailure arg req_tp
@@ -649,10 +649,10 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  PrimName TypedTerm {- ^ data type name -} ->
-  [TypedTerm] {- ^ data type parameters -} ->
-  TypedTerm   {- ^ elimination motive -} ->
-  TypedTerm   {- ^ type of the elimination motive -} ->
+  PrimName SCTypedTerm {- ^ data type name -} ->
+  [SCTypedTerm] {- ^ data type parameters -} ->
+  SCTypedTerm   {- ^ elimination motive -} ->
+  SCTypedTerm   {- ^ type of the elimination motive -} ->
   TCM Sort
 inferRecursorType d params motive motiveTy =
   do dt <- liftTCM scRequireDataType (primName d)
@@ -693,10 +693,10 @@ inferRecursorType d params motive motiveTy =
 
 compileRecursor ::
   DataType ->
-  [TypedTerm] {- ^ datatype parameters -} ->
-  TypedTerm   {- ^ elimination motive -} ->
-  [TypedTerm] {- ^ constructor eliminators -} ->
-  TCM (CompiledRecursor TypedTerm)
+  [SCTypedTerm] {- ^ datatype parameters -} ->
+  SCTypedTerm   {- ^ elimination motive -} ->
+  [SCTypedTerm] {- ^ constructor eliminators -} ->
+  TCM (CompiledRecursor SCTypedTerm)
 compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
@@ -732,7 +732,7 @@ compileRecursor dt params motive cs_fs =
 
 
 inferRecursor ::
-  CompiledRecursor TypedTerm ->
+  CompiledRecursor SCTypedTerm ->
   TCM Term
 inferRecursor rec =
   do let d      = recursorDataType rec
@@ -746,9 +746,9 @@ inferRecursor rec =
 
 -- | Infer the type of a recursor application
 inferRecursorApp ::
-  TypedTerm   {- ^ recursor term -} ->
-  [TypedTerm] {- ^ data type indices -} ->
-  TypedTerm   {- ^ recursor argument -} ->
+  SCTypedTerm   {- ^ recursor term -} ->
+  [SCTypedTerm] {- ^ data type indices -} ->
+  SCTypedTerm   {- ^ recursor argument -} ->
   TCM Term
 inferRecursorApp r ixs arg =
   do recty <- typeCheckWHNF (typedType r)

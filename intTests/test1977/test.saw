@@ -1,0 +1,28 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let raw_assign_spec = do {
+    src <- mir_alloc_raw_ptr_const mir_i32;
+    val <- mir_fresh_var "val" mir_i32;
+    mir_points_to src (mir_term val);
+    dest <- mir_alloc_raw_ptr_mut mir_i32;
+    mir_execute_func [src, dest];
+    mir_points_to dest (mir_term val);
+};
+
+raw_assign_ov <- mir_verify m "test::raw_assign" [] false raw_assign_spec z3;
+
+let raw_swap_spec = do {
+    x <- mir_alloc_raw_ptr_mut mir_i32;
+    x_val <- mir_fresh_var "x_val" mir_i32;
+    mir_points_to x (mir_term x_val);
+    y <- mir_alloc_raw_ptr_mut mir_i32;
+    y_val <- mir_fresh_var "y_val" mir_i32;
+    mir_points_to y (mir_term y_val);
+    mir_execute_func [x, y];
+    mir_points_to x (mir_term y_val);
+    mir_points_to y (mir_term x_val);
+};
+
+mir_verify m "test::raw_swap" [raw_assign_ov] false raw_swap_spec z3;

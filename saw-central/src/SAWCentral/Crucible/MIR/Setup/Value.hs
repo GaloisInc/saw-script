@@ -40,6 +40,7 @@ module SAWCentral.Crucible.MIR.Setup.Value
   , MirAllocSpec(..)
   , maConditionMetadata
   , maType
+  , maPtrKind
   , maMutbl
   , maMirType
   , maLen
@@ -47,9 +48,13 @@ module SAWCentral.Crucible.MIR.Setup.Value
     -- * @MirPointer@
   , MirPointer(..)
   , mpType
+  , mpKind
   , mpMutbl
   , mpMirType
   , mpRef
+
+    -- * @MirPointerKind@
+  , MirPointerKind(..)
 
     -- * @MirSetupEnum@
   , MirSetupEnum(..)
@@ -132,8 +137,12 @@ data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.Setu
 
 data MirAllocSpec tp = MirAllocSpec
     { _maConditionMetadata :: MS.ConditionMetadata
+    -- | TypeRepr of the /pointee/ type
     , _maType :: TypeRepr tp
+    -- | Which kind of /pointer/
+    , _maPtrKind :: MirPointerKind 
     , _maMutbl :: M.Mutability
+    -- | MIR Ty of the /pointee/ type
     , _maMirType :: M.Ty
     , _maLen :: Int
     }
@@ -142,11 +151,21 @@ data MirAllocSpec tp = MirAllocSpec
 instance ShowF MirAllocSpec where
 
 data MirPointer sym tp = MirPointer
-    { _mpType :: TypeRepr tp
+    { -- | TypeRepr of the /pointee/ type
+      _mpType :: TypeRepr tp
+      -- | Which kind of /pointer/
+    , _mpKind :: MirPointerKind
     , _mpMutbl :: M.Mutability
+      -- | MIR Ty of the /pointee/ type
     , _mpMirType :: M.Ty
     , _mpRef :: MirReferenceMux sym
     }
+
+-- | The kind of a MIR pointer.
+data MirPointerKind
+  = MirPointerRef -- ^ a reference
+  | MirPointerRaw -- ^ a raw pointer
+  deriving (Show)
 
 -- | A enum-related MIR 'SetupValue'.
 data MirSetupEnum where

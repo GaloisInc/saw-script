@@ -12,6 +12,10 @@ module SAWCentral.Crucible.MIR.Builtins
     -- ** Setup
     mir_alloc
   , mir_alloc_mut
+  , mir_alloc_raw_ptr_const
+  , mir_alloc_raw_ptr_mut
+  , mir_ref_of
+  , mir_ref_of_mut
   , mir_assert
   , mir_execute_func
   , mir_equal
@@ -50,6 +54,8 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_f32
   , mir_f64
   , mir_lifetime
+  , mir_raw_ptr_const
+  , mir_raw_ptr_mut
   , mir_ref
   , mir_ref_mut
   , mir_slice
@@ -162,56 +168,99 @@ ppMIRAbortedResult = ppAbortedResult (\_gp -> mempty)
 -----
 
 mir_alloc :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc = mir_alloc_internal Mir.Immut
+mir_alloc = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Immut
 
 mir_alloc_mut :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_mut = mir_alloc_internal Mir.Mut
+mir_alloc_mut = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Mut
 
--- | The workhorse for 'mir_alloc' and 'mir_alloc_mut'.
-mir_alloc_internal :: Mir.Mutability -> Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_internal mut mty =
-  MIRSetupM $
-  do st <- get
-     let mcc = st ^. Setup.csCrucibleContext
-     let col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+mir_alloc_raw_ptr_const :: Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_const = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Immut
 
-     -- We disallow creating slice references (e.g., &[u8] or &str) using
-     -- mir_alloc, as it is unclear what length to give the resulting slice
-     -- value.
-     case mty of
-       Mir.TySlice _ ->
-         fail $ unlines
-           [ "mir_alloc and mir_alloc_mut cannot be used to create slice references."
-           , "Use the mir_slice_value or mir_slice_range_value functions to take a"
-           , "slice of an array reference instead."
-           ]
-       Mir.TyStr ->
-         fail $ unlines
-           [ "mir_alloc and mir_alloc_mut cannot be used to create str references."
-           , "Use the mir_str_slice_value or mir_str_slice_range_value functions"
-           , "to take a slice of a `u8` array reference instead."
-           ]
-       _ ->
-         pure ()
+mir_alloc_raw_ptr_mut :: Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_mut = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Mut
 
-     loc <- getW4Position "mir_alloc"
-     Some tpr <- pure $ Mir.tyToRepr col mty
-     n <- Setup.csVarCounter <<%= MS.nextAllocIndex
-     tags <- view Setup.croTags
-     let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
-              , MS.conditionTags = tags
-              , MS.conditionType = "fresh allocation"
-              , MS.conditionContext = ""
-              }
-     Setup.currentState . MS.csAllocs . at n ?=
-       Some (MirAllocSpec { _maConditionMetadata = md
-                          , _maType = tpr
-                          , _maMutbl = mut
-                          , _maMirType = mty
-                          , _maLen = 1
-                          })
-     return (MS.SetupVar n)
+-- | The workhorse for 'mir_alloc', 'mir_alloc_mut', 'mir_alloc_raw_ptr_const',
+-- and 'mir_alloc_raw_ptr_mut'.
+mir_alloc_internal :: MirPointerKind -> Mir.Mutability -> Mir.Ty -> CrucibleSetup MIR SetupValue
+mir_alloc_internal pkind mut mty = do
+  st <- get
+  let mcc = st ^. Setup.csCrucibleContext
+      col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+
+  -- We disallow creating slice references (e.g., &[u8] or &str) using
+  -- mir_alloc, as it is unclear what length to give the resulting slice
+  -- value.
+  case mty of
+    Mir.TySlice _ ->
+      fail $ unlines
+        [ "mir_alloc and mir_alloc_mut cannot be used to create slice references."
+        , "Use the mir_slice_value or mir_slice_range_value functions to take a"
+        , "slice of an array reference instead."
+        ]
+    Mir.TyStr ->
+      fail $ unlines
+        [ "mir_alloc and mir_alloc_mut cannot be used to create str references."
+        , "Use the mir_str_slice_value or mir_str_slice_range_value functions"
+        , "to take a slice of a `u8` array reference instead."
+        ]
+    _ ->
+      pure ()
+
+  loc <- getW4Position "mir_alloc"
+  Some tpr <- pure $ Mir.tyToRepr col mty
+  n <- Setup.csVarCounter <<%= MS.nextAllocIndex
+  tags <- view Setup.croTags
+  let md = MS.ConditionMetadata
+          { MS.conditionLoc = loc
+          , MS.conditionTags = tags
+          , MS.conditionType = "fresh allocation"
+          , MS.conditionContext = ""
+          }
+  Setup.currentState . MS.csAllocs . at n ?=
+    Some (MirAllocSpec { _maConditionMetadata = md
+                      , _maType = tpr
+                      , _maPtrKind = pkind
+                      , _maMutbl = mut
+                      , _maMirType = mty
+                      , _maLen = 1
+                      })
+  return (MS.SetupVar n)
+
+-- | Allocate an immutable MIR reference and initialize it to point to a given SetupValue.
+-- This is a convenience function that avoids requiring the caller to manually
+-- pair @mir_alloc@ and @mir_points_to@.
+mir_ref_of :: SetupValue -> MIRSetupM SetupValue
+mir_ref_of = mir_ref_of_internal "ref-of" Mir.Immut
+
+-- | Allocate an mutable MIR reference and initialize it to point to a given SetupValue.
+-- This is a convenience function that avoids requiring the caller to manually
+-- pair @mir_alloc_mut@ and @mir_points_to@.
+mir_ref_of_mut :: SetupValue -> MIRSetupM SetupValue
+mir_ref_of_mut = mir_ref_of_internal "ref-of-mut" Mir.Mut
+
+-- | The workhorse for @mir_ref_of@' and  @mir_ref_of_mut@.
+mir_ref_of_internal :: String -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
+mir_ref_of_internal label mut val = MIRSetupM $ do
+  cc  <- getMIRCrucibleContext
+  loc <- getW4Position (Text.pack label)
+  st  <- get
+
+  let env     = MS.csAllocations (st ^. Setup.csMethodSpec)
+      nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+
+  ty  <- typeOfSetupValue cc env nameEnv val
+  ptr <- mir_alloc_internal MirPointerRef mut ty
+
+  tags <- view Setup.croTags
+  let md = MS.ConditionMetadata
+            { MS.conditionLoc     = loc
+            , MS.conditionTags    = tags
+            , MS.conditionType    = "MIR " ++ label
+            , MS.conditionContext = ""
+            }
+
+  Setup.addPointsTo (MirPointsTo md ptr [val])
+  return ptr
 
 mir_execute_func :: [SetupValue] -> MIRSetupM ()
 mir_execute_func args =
@@ -596,7 +645,7 @@ mir_postcond term = MIRSetupM $ do
   Setup.crucible_postcond loc term
 
 mir_points_to ::
-  SetupValue {- ^ LHS reference -} ->
+  SetupValue {- ^ LHS reference/pointer -} ->
   SetupValue {- ^ RHS value -} ->
   MIRSetupM ()
 mir_points_to ref val =
@@ -625,14 +674,14 @@ mir_points_to ref val =
               }
      Setup.addPointsTo (MirPointsTo md ref [val])
 
--- | Perform a set of validity checks on the LHS reference value in a
+-- | Perform a set of validity checks on the LHS reference or pointer value in a
 -- 'mir_points_to' command. In particular:
 --
--- * Check that the LHS is in fact a valid reference type.
+-- * Check that the LHS is in fact a valid reference or pointer type.
 --
 -- Returns the 'Mir.Ty' that the LHS points to.
 mir_points_to_check_lhs_validity ::
-  SetupValue {- ^ LHS reference -} ->
+  SetupValue {- ^ LHS reference/pointer -} ->
   W4.ProgramLoc {- ^ The location in the program -} ->
   Setup.CrucibleSetupT MIR TopLevel Mir.Ty
 mir_points_to_check_lhs_validity ref loc =
@@ -643,7 +692,8 @@ mir_points_to_check_lhs_validity ref loc =
      refTy <- typeOfSetupValue cc env nameEnv ref
      case refTy of
        Mir.TyRef referentTy _ -> pure referentTy
-       _ -> throwCrucibleSetup loc $ "lhs not a reference type: "
+       Mir.TyRawPtr referentTy _ -> pure referentTy
+       _ -> throwCrucibleSetup loc $ "lhs not a reference or pointer type: "
                                   ++ show (PP.pretty refTy)
 
 mir_unsafe_assume_spec ::
@@ -862,6 +912,12 @@ mir_f64 = Mir.TyFloat Mir.F64
 
 mir_lifetime :: Mir.Ty
 mir_lifetime = Mir.TyLifetime
+
+mir_raw_ptr_const :: Mir.Ty -> Mir.Ty
+mir_raw_ptr_const ty = Mir.TyRawPtr ty Mir.Immut
+
+mir_raw_ptr_mut :: Mir.Ty -> Mir.Ty
+mir_raw_ptr_mut ty = Mir.TyRawPtr ty Mir.Mut
 
 mir_ref :: Mir.Ty -> Mir.Ty
 mir_ref ty = Mir.TyRef ty Mir.Immut

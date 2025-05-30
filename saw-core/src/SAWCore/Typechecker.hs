@@ -97,15 +97,15 @@ getModuleName =
        Nothing ->
          panic "getModuleName" ["Current module name not set during typechecking"]
 
--- | Build a multi-arity application of 'TypedTerm's
-inferApplyAll :: TypedTerm -> [TypedTerm] -> TCM TypedTerm
+-- | Build a multi-arity application of 'SCTypedTerm's
+inferApplyAll :: SCTypedTerm -> [SCTypedTerm] -> TCM SCTypedTerm
 inferApplyAll t [] = return t
 inferApplyAll t (arg:args) =
   do app1 <- typeInferComplete (App t arg)
      inferApplyAll app1 args
 
 -- | Resolve a name in the current module and apply it to some arguments
-inferResolveNameApp :: Text -> [TypedTerm] -> TCM TypedTerm
+inferResolveNameApp :: Text -> [SCTypedTerm] -> TCM SCTypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
      mnm <- getModuleName
@@ -113,7 +113,7 @@ inferResolveNameApp n args =
      let ident = mkIdent mnm n
      case (findIndex ((== n) . fst) ctx, resolveNameInMap mm ident) of
        (Just i, _) ->
-         do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
+         do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
          do let (params, ctor_args) = splitAt (ctorNumParams ctor) args
@@ -129,7 +129,7 @@ inferResolveNameApp n args =
             typeInferComplete (DataTypeApp d params ixs)
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scGlobalDef (defIdent d)
-            f <- TypedTerm t <$> liftTCM scTypeOf t
+            f <- SCTypedTerm t <$> liftTCM scTypeOf t
             inferApplyAll f args
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
@@ -160,7 +160,7 @@ typeInferDebug str | debugLevel > 0 = liftIO $ traceIO str
 typeInferDebug _ = return ()
 
 -- The type inference engine for untyped terms, which mostly just dispatches to
--- the type inference engine for (FTermF TypedTerm) defined in SCTypeCheck.hs
+-- the type inference engine for (FTermF SCTypedTerm) defined in SCTypeCheck.hs
 instance TypeInfer Un.UTerm where
   typeInfer t = typedVal <$> typeInferComplete t
 
@@ -172,7 +172,7 @@ instance TypeInfer Un.UTerm where
        return res
 
 -- | Main workhorse function for type inference on untyped terms
-typeInferCompleteTerm :: Un.UTerm -> TCM TypedTerm
+typeInferCompleteTerm :: Un.UTerm -> TCM SCTypedTerm
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
@@ -184,7 +184,7 @@ typeInferCompleteTerm (Un.Name (PosPair _ n)) =
 
 -- Sorts
 typeInferCompleteTerm (Un.Sort _ srt h) =
-  typeInferComplete (Sort srt h :: FlatTermF TypedTerm)
+  typeInferComplete (Sort srt h :: FlatTermF SCTypedTerm)
 
 -- Recursors (must come before applications)
 typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
@@ -257,9 +257,9 @@ typeInferCompleteTerm (Un.RecordProj t prj) =
 
 -- Unit
 typeInferCompleteTerm (Un.UnitValue _) =
-  typeInferComplete (UnitValue :: FlatTermF TypedTerm)
+  typeInferComplete (UnitValue :: FlatTermF SCTypedTerm)
 typeInferCompleteTerm (Un.UnitType _) =
-  typeInferComplete (UnitType :: FlatTermF TypedTerm)
+  typeInferComplete (UnitType :: FlatTermF SCTypedTerm)
 
 -- Simple pairs
 typeInferCompleteTerm (Un.PairValue _ t1 t2) =
@@ -283,9 +283,9 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
 
 -- Literals
 typeInferCompleteTerm (Un.NatLit _ i) =
-  typeInferComplete (NatLit i :: FlatTermF TypedTerm)
+  typeInferComplete (NatLit i :: FlatTermF SCTypedTerm)
 typeInferCompleteTerm (Un.StringLit _ str) =
-  typeInferComplete (StringLit str :: FlatTermF TypedTerm)
+  typeInferComplete (StringLit str :: FlatTermF SCTypedTerm)
 typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.VecLit _ ts) =
   do typed_ts <- mapM typeInferComplete ts
@@ -293,7 +293,7 @@ typeInferCompleteTerm (Un.VecLit _ ts) =
        (t1:_) -> return $ typedType t1
        [] -> throwTCError $ EmptyVectorLit
      type_of_tp <- typeInfer tp
-     typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $
+     typeInferComplete (ArrayValue (SCTypedTerm tp type_of_tp) $
                         V.fromList typed_ts)
 typeInferCompleteTerm (Un.BVLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.BVLit _ bits) =

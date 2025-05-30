@@ -45,3 +45,7 @@ source-repository-package
     type: git
     location: https://github.com/eddywestbrook/hobbits.git
     tag: 70963e0e3eba2b16f6fc030acb582e8100955e47
+
+-- enable ghc >= 9.8's additional build parallelism
+semaphore: true
+

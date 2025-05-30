@@ -13,6 +13,16 @@ info.
 course.)
 Note that build.sh is in any case the recommended way to build.
 
+`build.sh` now accepts the `-j` option to control parallelism (which
+is passed through to `cabal build`).
+Note that typical installations of `cabal` configure themselves to use
+the number of CPUs for this, even though the `cabal` documentation
+says that the default is 1.
+Also, the semaphore-based build coordination in GHC 9.8 and up is now
+enabled by default.
+(It is enabled unconditionally; `cabal` ignores it when using earlier
+GHC versions.)
+
 The names of the various test suites used with `cabal test` have been
 normalized.
 See saw.cabal for the full list.
@@ -49,6 +59,12 @@ The most notable changes are:
   These are like `goal_eval` and `goal_eval_unint` proof tactics
   but work on arbitrary terms rather than proof goals.
 
+* Support writing MIR specifications involving raw pointers. This is done with
+  the new SAWScript commands `mir_raw_ptr_const`, `mir_raw_ptr_mut`,
+  `mir_alloc_raw_ptr_const`, and `mir_alloc_raw_ptr_mut`, which are similar to
+  the existing `mir_ref`, `mir_ref_mut`, `mir_alloc`, and `mir_alloc_mut`
+  commands for reference types.
+
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 
 * Vacuity checking (`--detect-vacuity`) now correctly reports contradictions in specifications
@@ -56,6 +72,10 @@ The most notable changes are:
   code could go undetected.
 
 * Support verifying Rust code up to version 1.86.
+
+* Added `mir_ref_of` and `mir_ref_of_mut` to SAWScript's MIR support. These
+  helpers combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to`, simplifying the common
+  pattern of allocating a reference and immediately initializing it.
 
 ## Bug fixes
 

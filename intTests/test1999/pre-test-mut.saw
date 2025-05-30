@@ -1,0 +1,16 @@
+enable_experimental;
+
+m <- mir_load_module "pre-test-mut.linked-mir.json";
+let ty = mir_u32;
+
+let x_spec = do {
+  val <- mir_fresh_var "val" ty;
+  ref <- mir_ref_of_mut (mir_term val);
+
+  mir_precond {{ val == 42 }};
+  mir_execute_func [ref];
+  mir_points_to ref (mir_term val);
+  mir_return ref;
+};
+
+mir_verify m "pre_test_mut::x" [] false x_spec z3;

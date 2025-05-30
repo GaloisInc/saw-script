@@ -1132,7 +1132,7 @@ mrSetEVarClosed var val =
      var_tp <- mrSubstEVars $ mrVarType var
      -- FIXME: catch subtyping errors and report them as being evar failures
      eith_err <-
-       liftSC2 (runTCM $ checkSubtype (TypedTerm val val_tp) var_tp) Nothing []
+       liftSC2 (runTCM $ checkSubtype (SCTypedTerm val val_tp) var_tp) Nothing []
      case eith_err of
        Left _ ->
          error ("mrSetEVarClosed: incorrect instantiation for evar " ++

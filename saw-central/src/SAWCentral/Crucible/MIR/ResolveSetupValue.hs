@@ -314,7 +314,7 @@ typeOfSetupValue mcc env nameEnv val =
                "Unresolved prestate variable: " <> Text.pack (show i)
            ]
         Just (Some alloc) ->
-          return $ Mir.TyRef (alloc^.maMirType) (alloc^.maMutbl)
+          pure $ ptrKindToTy (alloc^.maPtrKind) (alloc^.maMirType) (alloc^.maMutbl)
     MS.SetupTerm tt ->
       typeOfTypedTerm tt
     MS.SetupArray elemTy vs ->
@@ -412,7 +412,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
       Some ptr <- pure $ lookupAllocIndex env i
       let pointeeType = ptr ^. mpMirType
       pure $ MIRVal (RefShape
-                        (Mir.TyRef pointeeType (ptr ^. mpMutbl))
+                        (ptrKindToTy (ptr ^. mpKind) pointeeType (ptr ^. mpMutbl))
                         pointeeType
                         (ptr ^. mpMutbl)
                         (ptr ^. mpType))
@@ -1450,7 +1450,8 @@ readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
 
--- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
+-- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
+-- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
 doAlloc ::
      MIRCrucibleContext
   -> SymGlobalState Sym
@@ -1477,6 +1478,7 @@ doAlloc cc globals (Some ma) =
      ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
      let mirPtr = Some MirPointer
            { _mpType = tpr
+           , _mpKind = ma^.maPtrKind
            , _mpMutbl = ma^.maMutbl
            , _mpMirType = ma^.maMirType
            , _mpRef = ptr
