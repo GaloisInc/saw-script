@@ -39,10 +39,12 @@ module SAWCore.Module
   , ModuleDecl(..)
   , ResolvedName(..)
   , resolvedNameIdent
+  , resolvedNameType
   , moduleName
   , emptyModule
   , resolveName
   , resolveNameInMap
+  , lookupVarIndexInMap
   , findDataType
   , insImport
   , beginDataType
@@ -272,6 +274,14 @@ resolvedNameIdent (ResolvedCtor ctor) = ctorName ctor
 resolvedNameIdent (ResolvedDataType dt) = dtName dt
 resolvedNameIdent (ResolvedDef d) = defIdent d
 
+-- | Get the type of a 'ResolvedName' as a 'Term'.
+resolvedNameType :: ResolvedName -> Term
+resolvedNameType r =
+  case r of
+    ResolvedCtor ctor -> ctorType ctor
+    ResolvedDataType dt -> dtType dt
+    ResolvedDef def -> defType def
+
 -- | Get the 'VarIndex' for a 'ResolvedName'.
 resolvedNameVarIndex :: ResolvedName -> VarIndex
 resolvedNameVarIndex r =
@@ -442,6 +452,9 @@ findModule mnm mm =
            Map.filterWithKey (\i _ -> identModule i == mnm) $
            mmIdentMap mm
      Just $ Module { moduleName = mnm, moduleResolveMap = rmap, moduleRDecls = decls }
+
+lookupVarIndexInMap :: VarIndex -> ModuleMap -> Maybe ResolvedName
+lookupVarIndexInMap vi mm = IntMap.lookup vi (mmIndexMap mm)
 
 resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
 resolveNameInMap mm i =
