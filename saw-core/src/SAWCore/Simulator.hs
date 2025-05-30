@@ -266,13 +266,13 @@ evalTermF cfg lam recEval tf env =
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _ps args) =
-       do ctor <- findCtorInMap (simModMap cfg) (primName c)
+       do ctor <- findCtorInMap (primName c) (simModMap cfg)
           Just (ctor, args)
     evalConstructor (VNat 0) =
-       do ctor <- findCtorInMap (simModMap cfg) preludeZeroIdent
+       do ctor <- findCtorInMap preludeZeroIdent (simModMap cfg)
           Just (ctor, [])
     evalConstructor (VNat n) =
-       do ctor <- findCtorInMap (simModMap cfg) preludeSuccIdent
+       do ctor <- findCtorInMap preludeSuccIdent (simModMap cfg)
           Just (ctor, [ ready (VNat (pred n)) ])
     evalConstructor _ =
        Nothing

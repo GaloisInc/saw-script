@@ -194,7 +194,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
          Nothing -> getModuleName
      mm <- liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
-     dt <- case findDataTypeInMap mm dt_ident of
+     dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType dt_ident
      typed_args <- mapM typeInferComplete args

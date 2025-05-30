@@ -449,16 +449,16 @@ resolveNameInMap mm i =
      IntMap.lookup vi (mmIndexMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
-findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
-findCtorInMap mm i = resolveNameInMap mm i >>= asResolvedCtor
+findCtorInMap :: Ident -> ModuleMap -> Maybe Ctor
+findCtorInMap i mm = resolveNameInMap mm i >>= asResolvedCtor
 
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
-findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
-findDataTypeInMap mm i = resolveNameInMap mm i >>= asResolvedDataType
+findDataTypeInMap :: Ident -> ModuleMap -> Maybe DataType
+findDataTypeInMap i mm = resolveNameInMap mm i >>= asResolvedDataType
 
 -- | Resolve an 'Ident' to a 'Def' in a 'ModuleMap'.
-findDefInMap :: ModuleMap -> Ident -> Maybe Def
-findDefInMap mm i = resolveNameInMap mm i >>= asResolvedDef
+findDefInMap :: Ident -> ModuleMap -> Maybe Def
+findDefInMap i mm = resolveNameInMap mm i >>= asResolvedDef
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

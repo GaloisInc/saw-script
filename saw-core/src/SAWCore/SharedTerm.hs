@@ -667,7 +667,7 @@ scFindModule sc name =
 
 -- | Look up a definition by its identifier
 scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
-scFindDef sc i = flip findDefInMap i <$> scGetModuleMap sc
+scFindDef sc i = findDefInMap i <$> scGetModuleMap sc
 
 -- | Look up a 'Def' by its identifier, throwing an error if it is not found
 scRequireDef :: SharedContext -> Ident -> IO Def
@@ -709,7 +709,7 @@ scCompleteDataType sc dtName ctors =
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
-scFindDataType sc i = flip findDataTypeInMap i <$> scGetModuleMap sc
+scFindDataType sc i = findDataTypeInMap i <$> scGetModuleMap sc
 
 -- | Look up a datatype by its identifier, throwing an error if it is not found
 scRequireDataType :: SharedContext -> Ident -> IO DataType
@@ -721,7 +721,7 @@ scRequireDataType sc i =
 
 -- | Look up a constructor by its identifier
 scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
-scFindCtor sc i = flip findCtorInMap i <$> scGetModuleMap sc
+scFindCtor sc i = findCtorInMap i <$> scGetModuleMap sc
 
 -- | Look up a constructor by its identifier, throwing an error if not found
 scRequireCtor :: SharedContext -> Ident -> IO Ctor
