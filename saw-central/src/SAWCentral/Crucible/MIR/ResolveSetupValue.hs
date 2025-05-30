@@ -250,7 +250,7 @@ instance Show MIRTypeOfError where
   show (MIRInvalidTypedTerm tp) =
     unlines
     [ "Expected typed term with Cryptol-representable type, but got"
-    , show (MS.ppTypedTermType tp)
+    , show (ppTypedTermType tp)
     ]
   show (MIRInvalidIdentifier errMsg) =
     errMsg
@@ -849,7 +849,7 @@ resolveTypedTerm mcc tm =
     tp -> fail $ unlines
             [ "resolveTypedTerm: expected monomorphic term"
             , "but got a term of type"
-            , show (MS.ppTypedTermType tp)
+            , show (ppTypedTermType tp)
             ]
 
 resolveSAWPred ::

@@ -140,7 +140,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let (funTerm, tyArgTerms) = asApplyAll appTerm
   sc <- lll getSharedContext
   let ?ctx = FFISetupCtx {..}
-  cryEnv <- lll $ rwCryptol <$> getMergedEnv
+  cryEnv <- lll getCryptolEnv
   case asConstant funTerm of
     Just (ec, funDef)
       | Just FFIFunType {..} <- Map.lookup (Term.ecName ec) (eFFITypes cryEnv) -> do

@@ -206,7 +206,7 @@ ppPointsTo (LLVMPointsTo _md cond ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.pretty "points to"
   PPL.<+> PPL.pretty val
-  PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> MS.ppTypedTerm tt) cond
+  PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> ppTypedTerm tt) cond
 ppPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =
   MS.ppSetupValue ptr <> PPL.pretty ("." ++ fieldName)
   PPL.<+> PPL.pretty "points to (bitfield)"
@@ -219,7 +219,7 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
   pretty = \case
     ConcreteSizeValue val -> MS.ppSetupValue val
     SymbolicSizeValue arr sz ->
-      MS.ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.pretty "]"
+      ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> ppTypedTerm sz PPL.<+> PPL.pretty "]"
 
 --------------------------------------------------------------------------------
 -- ** SAW LLVM intrinsics

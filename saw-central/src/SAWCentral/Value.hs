@@ -28,7 +28,171 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module SAWCentral.Value where
+module SAWCentral.Value (
+    Value(..),
+
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
+    SAWSimpset,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    SAWRefnset,
+    -- used by SAWCentral.Builtins
+    AIGNetwork(..),
+    -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
+    --    SAWScript.Interpreter and more, SAWServer.SAWServer
+    AIGProxy(..),
+    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.HeapsterBuiltins
+    SAW_CFG(..),
+    -- used by SAWScript.Interpreter, SAWScript.HeapsterBuiltins,
+    --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
+    BuiltinContext(..),
+    -- used by SAWScript.HeapsterBuiltins (and the Value type)
+    HeapsterEnv(..),
+    -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
+    SatResult(..),
+    -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
+    showsProofResult,
+    -- used by SAWCentral.Builtins
+    showsSatResult,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    showsPrecValue,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    evaluateTypedTerm,
+    -- used by SAWCentral.Builtins
+    applyValue,
+    -- used by SAWScript.Interpreter (and in LocalEnv)
+    LocalBinding(..),
+    -- used by SAWScript.Interpreter, and appears in TopLevelRO
+    LocalEnv,
+    -- used by SAWScript.Interpreter, and in mergeLocalEnv
+    addTypedef,
+    -- used by SAWScript.REPL.Monad, and by getMergedEnv
+    mergeLocalEnv,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
+    getMergedEnv,
+    -- used by SAWCentral.Crucible.LLVM.FFI
+    getCryptolEnv,
+    -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
+    --    SAWServer.SAWServer
+    TopLevelRO(..),
+    -- used by ... a lot of places, let's not try to make a list just yet
+    TopLevelRW(..),
+    -- used by ... a lot of places, let's not try to make a list just yet
+    TopLevel(..),
+    -- used by SAWCentral.Builtins, SAWScript.REPL.Monad, SAWScript.Interpreter,
+    --    SAWServer.TopLevel
+    runTopLevel,
+    -- used by ... a lot of places, let's not try to make a list just yet
+    io,
+    -- used in various places in SAWCentral
+    throwTopLevel,
+    -- used by SAWScript.Interpreter plus locally in a bunch of GetValue instances
+    pushPosition, popPosition,
+    -- used by SAWScript.Interpreter plus appears in getMergedEnv
+    getLocalEnv,
+    -- used in various places in SAWCentral
+    getPosition,
+    -- used all over the place
+    getSharedContext,
+    -- used in SAWCentral.Crucible.JVM.Builtins{,JVM} and SAWScript.AutoMatch
+    getJavaCodebase,
+    -- used in SAWCentral.Builtins
+    getTheoremDB,
+    -- used in SAWCentral.Builtins
+    putTheoremDB,
+    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+    getOptions,
+    -- used in SAWCentral.Prover.Exporter, SAWCentral.Builtins
+    getProxy,
+    -- used in SAWCentral.Crucible.LLVM.{X86,Builtins}
+    getBasicSS,
+    -- used in various places in SAWCentral, plus SAWScript.Interpreter
+    printOutLnTop,
+    -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
+    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+    getHandleAlloc,
+    -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
+    -- also accessible via SAWCentral.TopLevel
+    getTopLevelRO,
+    -- used in SAWCentral.Crucible.*.Builtins.hs, SAWCentral.Crucible.X86,
+    --    SAWCentral.Bisimulation, SAWCentral.Builtins,
+    --    SAWScript.Interpreter, SAWScript.AutoMatch,
+    --    SAWServer.Yosys
+    getTopLevelRW,
+    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.LLVM.Builtins,
+    --    SAWCentral.Builtins, SAWScript.Interpreter
+    putTopLevelRW,
+    -- used in various places in SAWCentral
+    returnProof,
+    -- used in various places in SAWCentral
+    recordProof,
+    -- used in SAWCentral.Builtins, SAWScript.Interpreter
+    onSolverCache,
+    -- used by SAWCentral.Crucible.JVM.Builtins*
+    getJVMTrans,
+    -- used by SAWCentral.Crucible.JVM.Builtins*
+    putJVMTrans,
+    -- XXX: apparently unused
+    addJVMTrans,
+    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.Interpreter
+    --    ... the use in LLVM is the abusive insertion done by llvm_compositional_extract
+    --    XXX: we're going to need to clean that up
+    --    (also appears in mergeLocalEnv)
+    extendEnv,
+    -- used by various places in SAWCentral.Crucible, SAWCentral.Builtins
+    --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
+    CrucibleSetup,
+    -- used in SAWCentral.Crucible.LLVM.*,
+    --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
+    LLVMCrucibleSetupM(..),
+    -- used in SAWCentral.Crucible.*.Builtins
+    throwCrucibleSetup,
+    -- used in SAWCentral.Crucible.LLVM.Skeleton.Builtins,
+    --    SAWCentral.Crucible.LLVM.FFI
+    throwLLVMFun,
+    -- used in SAWCentral.Crucible.*.Builtins, SAWCentral.Builtins
+    getW4Position,
+    -- used by SAWServer.SAWServer, SAWServer.JVMVerify, SAWScript.Interpreter
+    JVMSetup,
+    -- used by SAWCentral.Crucible.JVM.Builtins,
+    --    SAWServer.SAWServer, SAWServer.JVMCrucibleSetup
+    JVMSetupM(..),
+    -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
+    --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
+    MIRSetup,
+    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
+    MIRSetupM(..),
+    -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+    --    SAWCentral.Crucible.Common.Vacuity,
+    --    SAWCentral.Bisimulation, SAWCentral.Yosys, SAWCentral.Builtins
+    --    SAWScript.REPL.Monad, SAWScript.Typechecker, SAWScript.Interpreter,
+    --    SAWServer.SAWServer, SAWServer.ProofScript, SAWServer.*Verify,
+    --    SAWServer.VerifyCommon, SAWServer.Yosys, saw-remote-api Main
+    ProofScript(..),
+    -- used by SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
+    --    SAWCentral.Crucible.Common.Vacuity,
+    --    SAWCentral.Bisimulation, SAWCentral.Builtins
+    runProofScript,
+    -- used by SAWCentral.Builtins, SAWScript.Interpreter
+    scriptTopLevel,
+    -- used by SAWScript.REPL.Monad, SAWScript.Interpreter,
+    --    SAWServer.TopLevel, SAWServer.Eval
+    IsValue(..),
+    -- used by SAWCentral.Builtins,
+    --    SAWScript.Interpreter,
+    --    SAWServer.TopLevel, SAWServer.Eval
+    FromValue(..),
+    -- used in SAWScript.Interpreter
+    -- XXX: probably belongs in SAWSupport
+    underStateT,
+    -- used in SAWScript.ValueOps
+    -- XXX: probably belongs in SAWSupport
+    underReaderT,
+    -- used in SAWScript.Interpreter
+    -- XXX: probably belongs in SAWSupport
+    underExceptT,
+    -- used by SAWCentral.Crucible.LLVM.Skeleton.Builtins
+    SkeletonState(..), skelArgs
+ ) where
 
 import Prelude hiding (fail)
 
@@ -37,13 +201,13 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..), try)
+import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(..), ask, asks, local)
+import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
@@ -236,10 +400,6 @@ data SatResult
   | SatUnknown
     deriving (Show)
 
-isVUnit :: Value -> Bool
-isVUnit (VTuple []) = True
-isVUnit _ = False
-
 showsProofResult :: PPS.Opts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
@@ -362,80 +522,23 @@ showsPrecValue opts nenv p v =
 instance Show Value where
     showsPrec p v = showsPrecValue PPS.defaultOpts emptySAWNamingEnv p v
 
-indexValue :: Value -> Value -> Value
-indexValue (VArray vs) (VInteger x)
-    | i < length vs = vs !! i
-    | otherwise = error "array index out of bounds"
-    where i = fromInteger x
-indexValue _ _ = error "indexValue"
-
-lookupValue :: Value -> Text -> Value
-lookupValue (VRecord vm) name =
-    case M.lookup name vm of
-      Nothing -> error $ "no such record field: " ++ unpack name
-      Just x -> x
-lookupValue _ _ = error "lookupValue"
-
-tupleLookupValue :: Value -> Integer -> Value
-tupleLookupValue (VTuple vs) i
-  | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
-  | otherwise = error $ "no such tuple index: " ++ show i
-tupleLookupValue _ _ = error "tupleLookupValue"
-
-evaluate :: SharedContext -> Term -> IO Concrete.CValue
-evaluate sc t =
+evaluateTerm:: SharedContext -> Term -> IO Concrete.CValue
+evaluateTerm sc t =
   (\modmap -> Concrete.evalSharedTerm modmap mempty mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
-  C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
+  C.runEval mempty . exportValueWithSchema schema =<< evaluateTerm sc trm
 evaluateTypedTerm _sc (TypedTerm tp _) =
   fail $ unlines [ "Could not evaluate term with type"
-                 , show (CMS.ppTypedTermType tp)
+                 , show (ppTypedTermType tp)
                  ]
-
--- NB, the precise locations of VTopLevel constructors in this
---  operator are rather delicate, which is why we write it out
---  here explicitly.
-toplevelCallCC :: Value
-toplevelCallCC = VLambda body
-  where
-   body (VLambda m) =
-     callCC $ \(k :: Value -> TopLevel Value) ->
-           m (VLambda (\v -> return (VTopLevel (k ((VTopLevel (return v)))))))
-   body _ = error "toplevelCallCC : expected lambda"
-
-toplevelSubshell :: Value
-toplevelSubshell = VLambda $ \_ ->
-  do m <- roSubshell <$> ask
-     env <- getLocalEnv
-     return (VTopLevel (toValue <$> withLocalEnv env m))
-
-proofScriptSubshell :: Value
-proofScriptSubshell = VLambda $ \_ ->
-  do m <- roProofSubshell <$> ask
-     env <- getLocalEnv
-     return (VProofScript (toValue <$> withLocalEnvProof env m))
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
 applyValue _ _ = throwTopLevel "applyValue"
 
-thenValue :: SS.Pos -> Value -> Value -> Value
-thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
-
-bindValue :: SS.Pos -> Value -> Value -> TopLevel Value
-bindValue pos v1 v2 = return (VBind pos v1 v2)
-
-forValue :: [Value] -> Value -> TopLevel Value
-forValue [] _ = return $ VReturn (VArray [])
-forValue (x : xs) f =
-  do m1 <- applyValue f x
-     m2 <- forValue xs f
-     bindValue (SS.PosInternal "<for>") m1 (VLambda $ \v1 ->
-       bindValue (SS.PosInternal "<for>") m2 (VLambda $ \v2 ->
-         return $ VReturn (VArray (v1 : fromValue v2))))
 
 -- TopLevel Monad --------------------------------------------------------------
 
@@ -445,12 +548,6 @@ data LocalBinding
  deriving (Show)
 
 type LocalEnv = [LocalBinding]
-
-emptyLocal :: LocalEnv
-emptyLocal = []
-
-extendLocal :: SS.LName -> SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
-extendLocal x ty md v env = LocalLet x ty md v : env
 
 -- Note that the expansion type should have already been through the
 -- typechecker, so it's ok to panic if it turns out to be broken.
@@ -475,6 +572,10 @@ getMergedEnv =
      rw <- getTopLevelRW
      liftIO $ mergeLocalEnv sc env rw
 
+getCryptolEnv :: TopLevel CEnv.CryptolEnv
+getCryptolEnv = do
+  env <- getMergedEnv
+  return $ rwCryptol env
 
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
@@ -482,15 +583,9 @@ data TopLevelRO =
   { roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
-  , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roStackTrace    :: [String]
-    -- ^ SAWScript-internal backtrace for use
-    --   when displaying exceptions and such
-    --   NB, stored with most recent calls on
-    --   top of the stack.
   , roSubshell      :: TopLevel ()
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
@@ -501,7 +596,6 @@ data TopLevelRO =
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
 
-  , roLocalEnv      :: LocalEnv
   }
 
 data TopLevelRW =
@@ -510,6 +604,14 @@ data TopLevelRW =
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
+  , rwPosition   :: SS.Pos
+  , rwStackTrace :: [String]
+    -- ^ SAWScript-internal backtrace for use
+    --   when displaying exceptions and such
+    --   NB, stored with most recent calls on
+    --   top of the stack.
+  , rwLocalEnv   :: LocalEnv
+
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
@@ -567,16 +669,6 @@ runTopLevel :: IsValue a => TopLevel a -> TopLevelRO -> TopLevelRW -> IO (Value,
 runTopLevel (TopLevel_ m) ro rw =
   runStateContT (runReaderT m ro) (\a s -> return (toValue a,s)) rw
 
--- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
--- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to
--- implement 'Control.Monad.Catch.MonadMask', which it can't do.
-bracketTopLevel :: TopLevel a -> (a -> TopLevel b) -> (a -> TopLevel c) -> TopLevel c
-bracketTopLevel acquire release action =
-  do  resource <- acquire
-      try (action resource) >>= \case
-        Left (bad :: X.SomeException) -> release resource >> throwM bad
-        Right good -> release resource >> pure good
-
 instance MonadIO TopLevel where
   liftIO = io
 
@@ -614,77 +706,43 @@ io f = (TopLevel_ (liftIO f))
                Just func -> SS.FileAndFunctionPos path func
          rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ s))
 
-
-
-combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
-combineRW (TopLevelCheckpoint chk scc) rw =
-  do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
-     sc' <- restoreSharedContext scc (rwSharedContext rw)
-     return chk{ rwCryptol = cenv'
-               , rwSharedContext = sc'
-               }
-
--- | Represents the mutable state of the TopLevel monad
---   that can later be restored.
-data TopLevelCheckpoint =
-  TopLevelCheckpoint
-    TopLevelRW
-    SharedContextCheckpoint
-
-makeCheckpoint :: TopLevelRW -> IO TopLevelCheckpoint
-makeCheckpoint rw =
-  do scc <- checkpointSharedContext (rwSharedContext rw)
-     return (TopLevelCheckpoint rw scc)
-
-restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
-restoreCheckpoint chk =
-  do rw <- getTopLevelRW
-     rw' <- io (combineRW chk rw)
-     putTopLevelRW rw'
-
--- | Capture the current state of the TopLevel monad
---   and return an action that, if invoked, resets
---   the state back to that point.
-checkpoint :: TopLevel (() -> TopLevel ())
-checkpoint = TopLevel_ $
-  do chk <- liftIO . makeCheckpoint =<< get
-     return $ \_ ->
-       do printOutLnTop Info "Restoring state from checkpoint"
-          restoreCheckpoint chk
-
--- | Capture the current proof state and return an
---   action that, if invoked, resets the state back to that point.
-proof_checkpoint :: ProofScript (() -> ProofScript ())
-proof_checkpoint =
-  do ps <- get
-     return $ \_ ->
-       do scriptTopLevel (printOutLnTop Info "Restoring proof state from checkpoint")
-          put ps
-
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
   pos <- getPosition
   stk <- getStackTrace
   throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
 
-withPosition :: SS.Pos -> TopLevel a -> TopLevel a
-withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
+-- deprecated
+--withPosition :: SS.Pos -> TopLevel a -> TopLevel a
+--withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
 
-withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
-withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
+-- | Replacement pair for withPosition.
+--   Usage:
+--      savepos = pushPosition newpos
+--      ...
+--      popPosition savepos
+--
+pushPosition :: SS.Pos -> TopLevel SS.Pos
+pushPosition newpos = do
+  oldpos <- gets rwPosition
+  modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
+  return oldpos
 
-withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
-withLocalEnvProof env (ProofScript m) =
-  ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
+popPosition :: SS.Pos -> TopLevel ()
+popPosition restorepos = do
+  modifyTopLevelRW (\rw -> rw { rwPosition = restorepos })
 
 getLocalEnv :: TopLevel LocalEnv
-getLocalEnv = TopLevel_ (asks roLocalEnv)
+getLocalEnv =
+  gets rwLocalEnv
 
 getPosition :: TopLevel SS.Pos
-getPosition = TopLevel_ (asks roPosition)
+getPosition =
+  gets rwPosition
 
 getStackTrace :: TopLevel [String]
-getStackTrace = TopLevel_ (reverse <$> asks roStackTrace)
+getStackTrace =
+  reverse <$> gets rwStackTrace
 
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)
@@ -706,9 +764,6 @@ getProxy = TopLevel_ (asks roProxy)
 
 getBasicSS :: TopLevel SAWSimpset
 getBasicSS = TopLevel_ (asks roBasicSS)
-
-localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
-localOptions f (TopLevel_ m) = TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 printOutLnTop :: Verbosity -> String -> TopLevel ()
 printOutLnTop v s =
@@ -863,10 +918,11 @@ throwLLVMFun nm msg = do
   loc <- LLVMCrucibleSetupM $ getW4Position nm
   throwLLVM loc msg
 
--- | This gets more accurate locations than @lift (lift getPosition)@ because
---   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
+-- | Get the current interpreter position and convert to a What4 position.
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
-getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
+getW4Position s = do
+  pos <- lift $ lift $ getPosition
+  return $ SS.toW4Loc s pos
 
 --
 
@@ -998,7 +1054,9 @@ instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = do
-      v1 <- withPosition pos (fromValue m1)
+      savepos <- pushPosition pos
+      v1 <- fromValue m1
+      popPosition savepos
       m2 <- applyValue v2 v1
       fromValue m2
     fromValue v = error $ "fromValue TopLevel:" <> show v
@@ -1014,7 +1072,9 @@ instance FromValue a => FromValue (ProofScript a) where
     fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = ProofScript $ do
-      v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- unProofScript (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
@@ -1028,8 +1088,9 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runLLVMCrucibleSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runLLVMCrucibleSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
@@ -1041,8 +1102,9 @@ instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = JVMSetupM $ do
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runJVMSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runJVMSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
@@ -1054,8 +1116,9 @@ instance FromValue a => FromValue (MIRSetupM a) where
     fromValue (VMIRSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = MIRSetupM $ do
-      v1 <- underReaderT (underStateT (withPosition pos))
-              (runMIRSetupM (fromValue m1))
+      savepos <- lift $ lift $ pushPosition pos
+      v1 <- runMIRSetupM (fromValue m1)
+      lift $ lift $ popPosition savepos
       m2 <- lift $ lift $ applyValue v2 v1
       runMIRSetupM (fromValue m2)
     fromValue _ = error "fromValue MIRSetup"
@@ -1362,27 +1425,6 @@ underReaderT doUnder action = ReaderT $ \env -> doUnder (runReaderT action env)
 
 underExceptT :: (forall b. m b -> m b) -> ExceptT s m a -> ExceptT s m a
 underExceptT doUnder action = ExceptT $ doUnder (runExceptT action)
-
--- | Implement stack tracing by adding error handlers that rethrow
--- user errors, prepended with the given string.
-addTrace :: String -> Value -> Value
-addTrace str val =
-  case val of
-    VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
-    VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
-    VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
-    VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        addTrace str `fmap` underReaderT (underStateT (addTraceTopLevel str)) m
-  -- TODO? JVM setup blocks too?
-    _                -> val
-
-addTraceProofScript :: String -> ProofScript a -> ProofScript a
-addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
-
-addTraceTopLevel :: String -> TopLevel a -> TopLevel a
-addTraceTopLevel str (TopLevel_ action) =
-  TopLevel_ (local (\ro -> ro{ roStackTrace = str : roStackTrace ro }) action)
 
 
 data SkeletonState = SkeletonState

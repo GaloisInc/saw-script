@@ -74,6 +74,7 @@ import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
 import SAWCentral.Value
+import SAWScript.ValueOps
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWCentral.Proof (emptyTheoremDB)
@@ -296,7 +297,7 @@ interpret expr =
                                        Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
                                        Just (lc, _ty, v)
                                          | Set.member lc (rwPrimsAvail rw) ->
-                                              return (addTrace (show x) v)
+                                              return (withStackTraceFrame (show x) v)
                                          | otherwise ->
                                               fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
       SS.Function _ pat e      -> do env <- getLocalEnv
@@ -358,13 +359,19 @@ interpretDeclGroup (SS.Recursive ds) =
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
-    -- XXX are the uses of withPosition here suitable? not super clear
+    -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
+             savepos <- pushPosition pos
+             result <- interpret e
+             popPosition savepos
+             return result
       SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
-             v1 <- withPosition pos (interpret e)
+             savepos <- pushPosition pos
+             v1 <- interpret e
+             popPosition savepos
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
              bindValue pos v1 (VLambda f)
       SS.StmtLet pos bs : ss ->
@@ -504,7 +511,11 @@ interpretStmt printBinds stmt = do
   case stmt' of
 
     SS.StmtBind pos pat expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
+      liftTopLevel $ do
+        savepos <- pushPosition pos
+        result <- processStmtBind printBinds pat expr
+        popPosition savepos
+        return result
 
     SS.StmtLet _pos dg ->
       liftTopLevel $ do
@@ -552,7 +563,7 @@ interpretFile file runMain =
                                              map (\l -> "\t"  ++ l) (lines str)
                          showLoc <- printShowPos <$> getOptions
                          if showLoc
-                           then localOptions (\o -> o { printOutFn = \lvl str ->
+                           then withOptions (\o -> o { printOutFn = \lvl str ->
                                                           printOutFn o lvl (withPos str) })
                                   (interpretStmt False s)
                            else interpretStmt False s
@@ -610,14 +621,11 @@ buildTopLevelEnv proxy opts =
                    { roJavaCodebase = jcb
                    , roOptions = opts
                    , roHandleAlloc = halloc
-                   , roPosition = SS.Unknown
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
                    , roProofSubshell = fail "Proof subshells not supported"
-                   , roLocalEnv = []
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -632,6 +640,9 @@ buildTopLevelEnv proxy opts =
                    , rwTypeInfo   = primNamedTypeEnv
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
+                   , rwPosition = SS.Unknown
+                   , rwStackTrace = []
+                   , rwLocalEnv = []
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
@@ -5294,6 +5305,18 @@ primitives = Map.fromList
 
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
+
+    -- pureVal can be used for anything with a ToValue instance,
+    -- including functions. However, functions in TopLevel need to use
+    -- funVal* instead; the IsValue instances capture incorrectly and
+    -- you get a function that returns a VTopLevel instead of executing
+    -- in TopLevel. (There isn't a special-case IsValue instance for
+    -- a -> TopLevel t, because that would require overlapping instances;
+    -- but there is an IsValue instance for TopLevel t by itself (that
+    -- produces VTopLevel) so use of pureVal matches that and the
+    -- generic IsValue instance for a -> t.)
+    --
+    -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Options -> BuiltinContext -> Value

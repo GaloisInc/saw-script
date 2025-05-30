@@ -168,7 +168,7 @@ definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
 definePrim _name (TypedTerm tp _) =
   fail $ unlines
     [ "Expected term with Cryptol schema type, but got"
-    , show (MS.ppTypedTermType tp)
+    , show (ppTypedTermType tp)
     ]
 
 sbvUninterpreted :: String -> Term -> TopLevel Uninterp
@@ -724,7 +724,7 @@ term_type tt =
     TypedTermSchema sch -> pure sch
     tp -> fail $ unlines
             [ "Term does not have a Cryptol type"
-            , show (MS.ppTypedTermType tp)
+            , show (ppTypedTermType tp)
             ]
 
 goal_eval :: [String] -> ProofScript ()

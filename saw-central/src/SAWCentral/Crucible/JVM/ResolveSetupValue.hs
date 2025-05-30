@@ -107,7 +107,7 @@ instance Show JVMTypeOfError where
   show (JVMInvalidTypedTerm tp) =
     unlines
     [ "Expected typed term with Cryptol represnentable type, but got"
-    , show (MS.ppTypedTermType tp)
+    , show (ppTypedTermType tp)
     ]
 
 instance X.Exception JVMTypeOfError
@@ -207,7 +207,7 @@ resolveTypedTerm cc tm =
     tp -> fail $ unlines
             [ "resolveSetupVal: expected monomorphic term"
             , "but got a term of type"
-            , show (MS.ppTypedTermType tp)
+            , show (ppTypedTermType tp)
             ]
 
 resolveSAWPred ::
