@@ -686,7 +686,7 @@ span.spaces    { background: white }
 <span class="lineno">  667 </span>
 <span class="lineno">  668 </span>-- | Look up a definition by its identifier
 <span class="lineno">  669 </span>scFindDef :: SharedContext -&gt; Ident -&gt; IO (Maybe Def)
-<span class="lineno">  670 </span><span class="decl"><span class="istickedoff">scFindDef sc i = flip findDefInMap i &lt;$&gt; scGetModuleMap sc</span></span>
+<span class="lineno">  670 </span><span class="decl"><span class="istickedoff">scFindDef sc i = findDefInMap i &lt;$&gt; scGetModuleMap sc</span></span>
 <span class="lineno">  671 </span>
 <span class="lineno">  672 </span>-- | Look up a 'Def' by its identifier, throwing an error if it is not found
 <span class="lineno">  673 </span>scRequireDef :: SharedContext -&gt; Ident -&gt; IO Def
@@ -728,7 +728,7 @@ span.spaces    { background: white }
 <span class="lineno">  709 </span>
 <span class="lineno">  710 </span>-- | Look up a datatype by its identifier
 <span class="lineno">  711 </span>scFindDataType :: SharedContext -&gt; Ident -&gt; IO (Maybe DataType)
-<span class="lineno">  712 </span><span class="decl"><span class="istickedoff">scFindDataType sc i = flip findDataTypeInMap i &lt;$&gt; scGetModuleMap sc</span></span>
+<span class="lineno">  712 </span><span class="decl"><span class="istickedoff">scFindDataType sc i = findDataTypeInMap i &lt;$&gt; scGetModuleMap sc</span></span>
 <span class="lineno">  713 </span>
 <span class="lineno">  714 </span>-- | Look up a datatype by its identifier, throwing an error if it is not found
 <span class="lineno">  715 </span>scRequireDataType :: SharedContext -&gt; Ident -&gt; IO DataType
@@ -740,7 +740,7 @@ span.spaces    { background: white }
 <span class="lineno">  721 </span>
 <span class="lineno">  722 </span>-- | Look up a constructor by its identifier
 <span class="lineno">  723 </span>scFindCtor :: SharedContext -&gt; Ident -&gt; IO (Maybe Ctor)
-<span class="lineno">  724 </span><span class="decl"><span class="istickedoff">scFindCtor sc i = flip findCtorInMap i &lt;$&gt; scGetModuleMap sc</span></span>
+<span class="lineno">  724 </span><span class="decl"><span class="istickedoff">scFindCtor sc i = findCtorInMap i &lt;$&gt; scGetModuleMap sc</span></span>
 <span class="lineno">  725 </span>
 <span class="lineno">  726 </span>-- | Look up a constructor by its identifier, throwing an error if not found
 <span class="lineno">  727 </span>scRequireCtor :: SharedContext -&gt; Ident -&gt; IO Ctor

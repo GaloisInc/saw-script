@@ -285,13 +285,13 @@ span.spaces    { background: white }
 <span class="lineno">  266 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor :: Value l -&gt; Maybe (Ctor, [Thunk l])</span>
 <span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VCtorApp c _ps args) =</span>
-<span class="lineno">  269 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap (simModMap cfg) (primName c)</span>
+<span class="lineno">  269 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap (primName c) (simModMap cfg)</span>
 <span class="lineno">  270 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, args)</span>
 <span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat 0) =</span>
-<span class="lineno">  272 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap (simModMap cfg) preludeZeroIdent</span>
+<span class="lineno">  272 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeZeroIdent (simModMap cfg)</span>
 <span class="lineno">  273 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [])</span>
 <span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat n) =</span>
-<span class="lineno">  275 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap (simModMap cfg) preludeSuccIdent</span>
+<span class="lineno">  275 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeSuccIdent (simModMap cfg)</span>
 <span class="lineno">  276 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ ready (VNat (pred n)) ])</span>
 <span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor _ =</span>
 <span class="lineno">  278 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>

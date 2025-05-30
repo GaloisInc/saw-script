@@ -213,7 +213,7 @@ span.spaces    { background: white }
 <span class="lineno">  194 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; getModuleName</span>
 <span class="lineno">  195 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- liftTCM scGetModuleMap</span>
 <span class="lineno">  196 </span><span class="spaces">     </span><span class="istickedoff">let dt_ident = mkIdent mnm str</span>
-<span class="lineno">  197 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- case findDataTypeInMap mm dt_ident of</span>
+<span class="lineno">  197 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- case findDataTypeInMap dt_ident mm of</span>
 <span class="lineno">  198 </span><span class="spaces">       </span><span class="istickedoff">Just d -&gt; return d</span>
 <span class="lineno">  199 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType dt_ident</span></span>
 <span class="lineno">  200 </span><span class="spaces">     </span><span class="istickedoff">typed_args &lt;- mapM typeInferComplete args</span>
