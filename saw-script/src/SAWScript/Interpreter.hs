@@ -21,7 +21,8 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
--- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.Typechecker
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
+-- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
@@ -332,59 +333,77 @@ interpret :: SS.Expr -> TopLevel Value
 interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
-      SS.Bool _ b              -> return $ VBool b
-      SS.String _ s            -> return $ VString s
-      SS.Int _ z               -> return $ VInteger z
-      SS.Code str              -> do sc <- getSharedContext
-                                     cenv <- fmap rwCryptol getMergedEnv
-                                     --io $ putStrLn $ "Parsing code: " ++ show str
-                                     --showCryptolEnv' cenv
-                                     t <- io $ CEnv.parseTypedTerm sc cenv
-                                             $ locToInput str
-                                     return (toValue t)
-      SS.CType str             -> do cenv <- fmap rwCryptol getMergedEnv
-                                     s <- io $ CEnv.parseSchema cenv
-                                             $ locToInput str
-                                     return (toValue s)
-      SS.Array _ es            -> VArray <$> traverse interpret es
-      SS.Block _ stmts         -> interpretStmts stmts
-      SS.Tuple _ es            -> VTuple <$> traverse interpret es
-      SS.Record _ bs           -> VRecord <$> traverse interpret bs
-      SS.Index _ e1 e2         -> do a <- interpret e1
-                                     i <- interpret e2
-                                     return (indexValue a i)
-      SS.Lookup _ e n          -> do a <- interpret e
-                                     return (lookupValue a n)
-      SS.TLookup _ e i         -> do a <- interpret e
-                                     return (tupleLookupValue a i)
-      SS.Var x                 -> do rw <- getMergedEnv
-                                     case Map.lookup x (rwValueInfo rw) of
-                                       Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
-                                       Just (lc, _ty, v)
-                                         | Set.member lc (rwPrimsAvail rw) ->
-                                              return (withStackTraceFrame (show x) v)
-                                         | otherwise ->
-                                              fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
-      SS.Function _ pat e      -> do env <- getLocalEnv
-                                     let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-                                     return $ VLambda f
-      SS.Application _ e1 e2   -> do v1 <- interpret e1
-                                     v2 <- interpret e2
-                                     case v1 of
-                                       VLambda f -> f v2
-                                       _ -> fail $ "interpret Application: " ++ show v1
-      SS.Let _ dg e            -> do env' <- interpretDeclGroup dg
-                                     withLocalEnv env' (interpret e)
-      SS.TSig _ e _            -> interpret e
-      SS.IfThenElse _ e1 e2 e3 -> do v1 <- interpret e1
-                                     case v1 of
-                                       VBool b -> interpret (if b then e2 else e3)
-                                       _ -> fail $ "interpret IfThenElse: " ++ show v1
+      SS.Bool _ b ->
+          return $ VBool b
+      SS.String _ s ->
+          return $ VString s
+      SS.Int _ z ->
+          return $ VInteger z
+      SS.Code str -> do
+          sc <- getSharedContext
+          cenv <- fmap rwCryptol getMergedEnv
+          --io $ putStrLn $ "Parsing code: " ++ show str
+          --showCryptolEnv' cenv
+          t <- io $ CEnv.parseTypedTerm sc cenv
+                  $ locToInput str
+          return (toValue t)
+      SS.CType str -> do
+          cenv <- fmap rwCryptol getMergedEnv
+          s <- io $ CEnv.parseSchema cenv
+                  $ locToInput str
+          return (toValue s)
+      SS.Array _ es ->
+          VArray <$> traverse interpret es
+      SS.Block _ stmts ->
+          interpretStmts stmts
+      SS.Tuple _ es ->
+          VTuple <$> traverse interpret es
+      SS.Record _ bs ->
+          VRecord <$> traverse interpret bs
+      SS.Index _ e1 e2 -> do
+          a <- interpret e1
+          i <- interpret e2
+          return (indexValue a i)
+      SS.Lookup _ e n -> do
+          a <- interpret e
+          return (lookupValue a n)
+      SS.TLookup _ e i -> do
+          a <- interpret e
+          return (tupleLookupValue a i)
+      SS.Var x -> do
+          rw <- getMergedEnv
+          case Map.lookup x (rwValueInfo rw) of
+            Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
+            Just (lc, _ty, v)
+              | Set.member lc (rwPrimsAvail rw) ->
+                   return (withStackTraceFrame (show x) v)
+              | otherwise ->
+                   fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
+      SS.Function _ pat e -> do
+          env <- getLocalEnv
+          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+          return $ VLambda f
+      SS.Application _ e1 e2 -> do
+          v1 <- interpret e1
+          v2 <- interpret e2
+          case v1 of
+            VLambda f -> f v2
+            _ -> fail $ "interpret Application: " ++ show v1
+      SS.Let _ dg e -> do
+          env' <- interpretDeclGroup dg
+          withLocalEnv env' (interpret e)
+      SS.TSig _ e _ ->
+          interpret e
+      SS.IfThenElse _ e1 e2 e3 -> do
+          v1 <- interpret e1
+          case v1 of
+            VBool b -> interpret (if b then e2 else e3)
+            _ -> fail $ "interpret IfThenElse: " ++ show v1
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
-  v <- interpret expr
-  return (bindPatternLocal pat mt v env)
+    v <- interpret expr
+    return (bindPatternLocal pat mt v env)
 
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
@@ -395,33 +414,35 @@ interpretFunction env expr =
       _ -> error "interpretFunction: not a function"
 
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
-interpretDeclGroup (SS.NonRecursive d) =
-    do env <- getLocalEnv
-       interpretDecl env d
-interpretDeclGroup (SS.Recursive ds) =
-    do env <- getLocalEnv
-       let addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
-           env' = foldr addDecl env ds
-       return env'
+interpretDeclGroup (SS.NonRecursive d) = do
+    env <- getLocalEnv
+    interpretDecl env d
+interpretDeclGroup (SS.Recursive ds) = do
+    env <- getLocalEnv
+    let addDecl (SS.Decl _ pat mty e) =
+            bindPatternLocal pat mty (interpretFunction env' e)
+        env' = foldr addDecl env ds
+    return env'
 
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
-      [] -> fail "empty block"
+      [] ->
+          fail "empty block"
       [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
-             savepos <- pushPosition pos
-             result <- interpret e
-             popPosition savepos
-             return result
-      SS.StmtBind pos pat e : ss ->
-          do env <- getLocalEnv
-             savepos <- pushPosition pos
-             v1 <- interpret e
-             popPosition savepos
-             let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
-             bindValue pos v1 (VLambda f)
+          savepos <- pushPosition pos
+          result <- interpret e
+          popPosition savepos
+          return result
+      SS.StmtBind pos pat e : ss -> do
+          env <- getLocalEnv
+          savepos <- pushPosition pos
+          v1 <- interpret e
+          popPosition savepos
+          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
+          bindValue pos v1 (VLambda f)
       SS.StmtLet pos bs : ss ->
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
@@ -429,21 +450,21 @@ interpretStmts stmts =
           -- ignore. Therefore, don't take the trouble to compute the
           -- correct position (the bounding box on the statements ss).
           interpret (SS.Let pos bs (SS.Block pos ss))
-      SS.StmtCode _ s : ss ->
-          do sc <- getSharedContext
-             rw <- getMergedEnv
+      SS.StmtCode _ s : ss -> do
+          sc <- getSharedContext
+          rw <- getMergedEnv
 
-             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
-             -- FIXME: Local bindings get saved into the global cryptol environment here.
-             -- We should change parseDecls to return only the new bindings instead.
-             putTopLevelRW $ rw{rwCryptol = ce'}
-             interpretStmts ss
+          ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
+          -- FIXME: Local bindings get saved into the global cryptol environment here.
+          -- We should change parseDecls to return only the new bindings instead.
+          putTopLevelRW $ rw{rwCryptol = ce'}
+          interpretStmts ss
       SS.StmtImport _ _ : _ ->
-          do fail "block import unimplemented"
-      SS.StmtTypedef _ name ty : ss ->
-          do env <- getLocalEnv
-             let env' = LocalTypedef (getVal name) ty : env
-             withLocalEnv env' (interpretStmts ss)
+          fail "block import unimplemented"
+      SS.StmtTypedef _ name ty : ss -> do
+          env <- getLocalEnv
+          let env' = LocalTypedef (getVal name) ty : env
+          withLocalEnv env' (interpretStmts ss)
 
 processStmtBind ::
   InteractiveMonad m =>
@@ -565,23 +586,26 @@ interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
   bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
-    interp =
-      do  opts <- getOptions
-          stmts <- io $ SAWScript.Import.loadFile opts file
-          io $ setCurrentDirectory (takeDirectory file)
-          mapM_ stmtWithPrint stmts
-          when runMain interpretMain
-          writeVerificationSummary
+    interp = do
+      opts <- getOptions
+      stmts <- io $ SAWScript.Import.loadFile opts file
+      io $ setCurrentDirectory (takeDirectory file)
+      mapM_ stmtWithPrint stmts
+      when runMain interpretMain
+      writeVerificationSummary
 
-    stmtWithPrint s = do let withPos str = unlines $
-                                           ("[output] at " ++ show (SS.getPos s) ++ ": ") :
-                                             map (\l -> "\t"  ++ l) (lines str)
-                         showLoc <- printShowPos <$> getOptions
-                         if showLoc
-                           then withOptions (\o -> o { printOutFn = \lvl str ->
-                                                          printOutFn o lvl (withPos str) })
-                                  (interpretStmt False s)
-                           else interpretStmt False s
+    stmtWithPrint s = do
+      let withPos str =
+            unlines $ ("[output] at " ++ show (SS.getPos s) ++ ": ") :
+                      map (\l -> "\t"  ++ l) (lines str)
+      showLoc <- printShowPos <$> getOptions
+      if showLoc then
+        let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
+            withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
+        in                                              
+        withOptions withPrint (interpretStmt False s)
+      else
+        interpretStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -596,7 +620,9 @@ interpretMain = do
       -- experimental or deprecated, so this isn't possible. If we allow
       -- users to deprecate their own functions in the future, change
       -- this message to an actual error that says something snarky :-)
-      panic "Interpreter" ["Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"]
+      panic "Interpreter" [
+          "Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"
+      ]
 
 buildTopLevelEnv :: AIGProxy
                  -> Options
