@@ -158,6 +158,40 @@ isPolymorphic ty0 = case ty0 of
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
 
+-- Get the type of an AST element. For now, only patterns because that's
+-- what we're using.
+--
+-- Assumes we have been through the typechecker and the types are filled in.
+--
+-- XXX: this should be a typeclass function with instances for all the AST
+-- types.
+---
+-- XXX: also it should be moved to ASTUtil once we have such a place.
+getType :: SS.Pattern -> SS.Type
+getType pat = case pat of
+    SS.PWild _pos ~(Just t) -> t
+    SS.PVar _pos _x ~(Just t) -> t
+    SS.PTuple tuplepos pats ->
+        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+
+-- Convert some text (wrapped in a position with Located) to
+-- an InputText for cryptol-saw-core.
+locToInput :: Located Text -> CEnv.InputText
+locToInput l = CEnv.InputText { CEnv.inpText = getVal l
+                              , CEnv.inpFile = file
+                              , CEnv.inpLine = ln
+                              , CEnv.inpCol  = col + 2 -- for dropped }}
+                              }
+  where
+  (file, ln, col) = extract $ locatedPos l
+  extract pos = case pos of
+      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FileAndFunctionPos f _ -> (f, 1, 1)
+      SS.PosInferred _ pos' -> extract pos'
+      SS.PosInternal s -> (s,1,1)
+      SS.PosREPL       -> ("<interactive>", 1, 1)
+      SS.Unknown       -> ("Unknown", 1, 1)
 
 -- Environment -----------------------------------------------------------------
 
@@ -243,6 +277,30 @@ bindPatternEnv pat ms v env =
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
+------------------------------------------------------------
+-- InteractiveMonad
+
+-- Monad class to allow the interpreter to run in either the TopLevel
+-- or ProofScript monads.
+
+class (Monad m, MonadFail m) => InteractiveMonad m where
+  liftTopLevel :: TopLevel a -> m a
+  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
+  actionFromValue :: FromValue a => Value -> m a
+  getMonadContext :: m SS.Context
+
+instance InteractiveMonad TopLevel where
+  liftTopLevel m = m
+  withTopLevel f m = f m
+  actionFromValue = fromValue
+  getMonadContext = return SS.TopLevel
+
+instance InteractiveMonad ProofScript where
+  liftTopLevel m = scriptTopLevel m
+  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
+  actionFromValue = fromValue
+  getMonadContext = return SS.ProofScript
+
 -- Typechecker ----------------------------------------------------------------
 
 -- Process a typechecker result.
@@ -316,23 +374,6 @@ interpret expr =
                                        VBool b -> interpret (if b then e2 else e3)
                                        _ -> fail $ "interpret IfThenElse: " ++ show v1
 
-locToInput :: Located Text -> CEnv.InputText
-locToInput l = CEnv.InputText { CEnv.inpText = getVal l
-                              , CEnv.inpFile = file
-                              , CEnv.inpLine = ln
-                              , CEnv.inpCol  = col + 2 -- for dropped }}
-                              }
-  where
-  (file, ln, col) = extract $ locatedPos l
-  extract pos = case pos of
-      SS.Range f sl sc _ _ -> (f,sl, sc)
-      SS.FileOnlyPos f -> (f, 1, 1)
-      SS.FileAndFunctionPos f _ -> (f, 1, 1)
-      SS.PosInferred _ pos' -> extract pos'
-      SS.PosInternal s -> (s,1,1)
-      SS.PosREPL       -> ("<interactive>", 1, 1)
-      SS.Unknown       -> ("Unknown", 1, 1)
-
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
   v <- interpret expr
@@ -397,26 +438,6 @@ interpretStmts stmts =
              let env' = LocalTypedef (getVal name) ty : env
              withLocalEnv env' (interpretStmts ss)
 
-stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts =
-  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
-
--- Get the type of an AST element. For now, only patterns because that's
--- what we're using.
---
--- Assumes we have been through the typechecker and the types are filled in.
---
--- XXX: this should be a typeclass function with instances for all the AST
--- types.
----
--- XXX: also it should be moved to ASTUtil once we have such a place.
-getType :: SS.Pattern -> SS.Type
-getType pat = case pat of
-    SS.PWild _pos ~(Just t) -> t
-    SS.PVar _pos _x ~(Just t) -> t
-    SS.PTuple tuplepos pats ->
-        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
-
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
@@ -475,25 +496,6 @@ processStmtBind printBinds pat expr = do -- mx mt
    do rw' <- getTopLevelRW
       putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
-
-class (Monad m, MonadFail m) => InteractiveMonad m where
-  liftTopLevel :: TopLevel a -> m a
-  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
-  actionFromValue :: FromValue a => Value -> m a
-  getMonadContext :: m SS.Context
-
-instance InteractiveMonad TopLevel where
-  liftTopLevel m = m
-  withTopLevel f m = f m
-  actionFromValue = fromValue
-  getMonadContext = return SS.TopLevel
-
-instance InteractiveMonad ProofScript where
-  liftTopLevel m = scriptTopLevel m
-  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
-  actionFromValue = fromValue
-  getMonadContext = return SS.ProofScript
-
 -- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
 interpretStmt :: InteractiveMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
@@ -546,6 +548,11 @@ interpretStmt printBinds stmt = do
     SS.StmtTypedef _ name ty ->
       liftTopLevel $ do
          putTopLevelRW $ addTypedef (getVal name) ty rw
+
+-- Hook for AutoMatch
+stmtInterpreter :: StmtInterpreter
+stmtInterpreter ro rw stmts =
+  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
