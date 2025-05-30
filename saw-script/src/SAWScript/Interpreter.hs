@@ -125,7 +125,8 @@ import SAWScript.AutoMatch
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
 
--- Support ---------------------------------------------------------------------
+------------------------------------------------------------
+-- Support
 
 -- This is used to reject top-level execution of polymorphic
 -- expressions. Assumes we aren't inside an uninstantiated forall
@@ -165,7 +166,7 @@ isPolymorphic ty0 = case ty0 of
 --
 -- XXX: this should be a typeclass function with instances for all the AST
 -- types.
----
+--
 -- XXX: also it should be moved to ASTUtil once we have such a place.
 getType :: SS.Pattern -> SS.Type
 getType pat = case pat of
@@ -193,7 +194,8 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
 
--- Environment -----------------------------------------------------------------
+------------------------------------------------------------
+-- Environment updates
 
 -- The second argument (the schema, aka type) is Nothing in most
 -- cases, but for Decls is taken from the Decl. This will always be
@@ -277,6 +279,7 @@ bindPatternEnv pat ms v env =
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
+
 ------------------------------------------------------------
 -- InteractiveMonad
 
@@ -301,7 +304,9 @@ instance InteractiveMonad ProofScript where
   actionFromValue = fromValue
   getMonadContext = return SS.ProofScript
 
--- Typechecker ----------------------------------------------------------------
+
+------------------------------------------------------------
+-- Typechecker
 
 -- Process a typechecker result.
 -- Wraps the typechecker in the stuff needed to print its warnings and errors.
@@ -319,7 +324,9 @@ processTypeCheck (errs_or_output, warns) =
     mapM_ issueWarning warns
     either failTypecheck return errs_or_output
 
--- Interpretation of SAWScript -------------------------------------------------
+
+------------------------------------------------------------
+-- Interpreter core
 
 interpret :: SS.Expr -> TopLevel Value
 interpret expr =
@@ -702,7 +709,9 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
             `X.catch` (handleException opts)
   return ()
 
--- Primitives ------------------------------------------------------------------
+
+------------------------------------------------------------
+-- Primitives
 
 add_primitives :: PrimitiveLifecycle -> BuiltinContext -> Options -> TopLevel ()
 add_primitives lc _bic _opts = do
@@ -2872,7 +2881,8 @@ primitives = Map.fromList
     , "primitive type nm in module mod to tp"
     ]
 
-  -- Java stuff
+    ----------------------------------------
+    -- Java stuff
 
   , prim "java_bool"           "JavaType"
     (pureVal JavaBoolean)
@@ -2945,6 +2955,9 @@ primitives = Map.fromList
     [ "Legacy alternative name for `jvm_extract`."
     ]
 
+    ----------------------------------------
+    -- LLVM stuff
+
   , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
     (funVal2 llvm_sizeof)
     Current
@@ -3002,6 +3015,9 @@ primitives = Map.fromList
     (pureVal llvm_load_module)
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
+
+    ----------------------------------------
+    -- LLVM skeletons
 
   , prim "module_skeleton" "LLVMModule -> TopLevel ModuleSkeleton"
     (pureVal module_skeleton)
@@ -3107,6 +3123,9 @@ primitives = Map.fromList
     , "Output is written to the path passed as the first argument."
     , "The third argument controls whether skeleton builtins are emitted."
     ]
+
+    ----------------------------------------
+    -- Some misc commands
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -3281,7 +3300,7 @@ primitives = Map.fromList
     [ "Pretty-print a control-flow graph."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/LLVM interface
 
   , prim "llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
@@ -4116,7 +4135,7 @@ primitives = Map.fromList
     , "implementation with respect to its Cryptol implementation."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/JVM commands
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
@@ -4338,7 +4357,7 @@ primitives = Map.fromList
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/MIR commands
 
   , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
@@ -4757,7 +4776,8 @@ primitives = Map.fromList
     Experimental
     [ "The type of MIR pointer-sized unsigned integers." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Yosys commands
 
   , prim "yosys_import"  "String -> TopLevel Term"
     (pureVal yosys_import)
@@ -4822,7 +4842,8 @@ primitives = Map.fromList
     , "The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Mr. Solver commands
 
   , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
@@ -4874,7 +4895,8 @@ primitives = Map.fromList
     , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
     , " given terms, with the given variables generalized with a Pi type." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Heapster commands
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
@@ -5256,7 +5278,8 @@ primitives = Map.fromList
     [ "Dump environment info to a JSON file for IDE integration."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- A few more misc commands
 
   , prim "sharpSAT"  "Term -> TopLevel Integer"
     (pureVal sharpSAT)
