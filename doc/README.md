@@ -18,7 +18,7 @@ interested in modifying the documentation _content_.
 ### Prerequisites
 
 The only _strict_ requirement to build the documentation locally is a relatively
-recent Python (>=3.9, to be safe - we aren't prioritizing making this work on
+recent Python (>=3.10, to be safe - we aren't prioritizing making this work on
 every Python under the sun), and `make`.
 
 This is enough to generate the HTML versions of documentation, which is what is
