@@ -40,30 +40,26 @@ module SAWCore.Module
   , ResolvedName(..)
   , resolvedNameIdent
   , moduleName
-  , moduleImports
-  , moduleImportNames
   , emptyModule
   , resolveName
+  , resolveNameInMap
   , findDataType
   , insImport
-  , insDataType
   , beginDataType
   , completeDataType
-  , moduleDataTypes
-  , moduleCtors
   , findCtor
   , moduleDefs
   , findDef
-  , insDef
-  , insInjectCode
   , moduleDecls
-  , modulePrimitives
-  , moduleAxioms
-  , moduleActualDefs
     -- * Module Maps
   , ModuleMap
+  , emptyModuleMap
+  , moduleIsLoaded
+  , loadModule
+  , findModule
   , findCtorInMap
   , findDataTypeInMap
+  , findDefInMap
   , allModuleDefs
   , allModuleDecls
   , allModulePrimitives
@@ -71,19 +67,22 @@ module SAWCore.Module
   , allModuleActualDefs
   , allModuleDataTypes
   , allModuleCtors
-    -- * Pretty-printing
-  , ppModule
+  , insDefInMap
+  , insInjectCodeInMap
+  , insImportInMap
   ) where
 
+import Control.Monad (foldM)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
 import Data.Foldable (foldl', foldr')
 import Data.Hashable
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HMap
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -91,11 +90,8 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts)
-
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty
 import SAWCore.Term.CtxTerm
 
 
@@ -114,6 +110,7 @@ instance Hashable DefQualifier -- automatically derived
 data Def =
   Def
   { defIdent :: Ident
+  , defVarIndex :: VarIndex
   , defQualifier :: DefQualifier
   , defType :: Term
   , defBody :: Maybe Term
@@ -275,6 +272,14 @@ resolvedNameIdent (ResolvedCtor ctor) = ctorName ctor
 resolvedNameIdent (ResolvedDataType dt) = dtName dt
 resolvedNameIdent (ResolvedDef d) = defIdent d
 
+-- | Get the 'VarIndex' for a 'ResolvedName'.
+resolvedNameVarIndex :: ResolvedName -> VarIndex
+resolvedNameVarIndex r =
+  case r of
+    ResolvedCtor ctor -> ctorVarIndex ctor
+    ResolvedDataType dt -> dtVarIndex dt
+    ResolvedDef def -> defVarIndex def
+
 -- | Modules define namespaces of datatypes, constructors, and definitions,
 -- i.e., mappings from 'Text' names to these objects. A module is allowed to
 -- map a 'Text' name to an object defined in a different module. Modules also
@@ -282,19 +287,13 @@ resolvedNameIdent (ResolvedDef d) = defIdent d
 -- build them.
 data Module = Module {
           moduleName    :: !ModuleName
-        , moduleImports :: !(Map ModuleName Module)
         , moduleResolveMap :: !(Map Text ResolvedName)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
--- | Get the names of all modules imported by the given one
-moduleImportNames :: Module -> [ModuleName]
-moduleImportNames m = Map.keys (moduleImports m)
-
 emptyModule :: ModuleName -> Module
 emptyModule nm =
   Module { moduleName = nm
-         , moduleImports = Map.empty
          , moduleResolveMap = Map.empty
          , moduleRDecls = []
          }
@@ -305,20 +304,26 @@ emptyModule nm =
 resolveName :: Module -> Text -> Maybe ResolvedName
 resolveName m str = Map.lookup str (moduleResolveMap m)
 
+asResolvedCtor :: ResolvedName -> Maybe Ctor
+asResolvedCtor = \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
+
+asResolvedDataType :: ResolvedName -> Maybe DataType
+asResolvedDataType = \case { ResolvedDataType d -> Just d; _ -> Nothing }
+
+asResolvedDef :: ResolvedName -> Maybe Def
+asResolvedDef = \case { ResolvedDef d -> Just d; _ -> Nothing }
+
 -- | Resolve a 'Text' name to a 'Ctor'
 findCtor :: Module -> Text -> Maybe Ctor
-findCtor m str =
-  resolveName m str >>= \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
+findCtor m str = resolveName m str >>= asResolvedCtor
 
 -- | Resolve a 'Text' name to a 'DataType'
 findDataType :: Module -> Text -> Maybe DataType
-findDataType m str =
-  resolveName m str >>= \case { ResolvedDataType d -> Just d; _ -> Nothing }
+findDataType m str = resolveName m str >>= asResolvedDataType
 
 -- | Resolve a 'Text' name to a 'Def'
 findDef :: Module -> Text -> Maybe Def
-findDef m str =
-  resolveName m str >>= \case { ResolvedDef d -> Just d; _ -> Nothing }
+findDef m str = resolveName m str >>= asResolvedDef
 
 
 -- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'Text'
@@ -342,36 +347,31 @@ insImport :: (ResolvedName -> Bool) -> Module -> Module -> Module
 insImport name_p i m =
   (foldl' insResolvedName m $ Map.elems $
    Map.filter name_p (moduleResolveMap i))
-  { moduleImports = Map.insert (moduleName i) i (moduleImports m) }
 
--- | Insert a 'DataType' declaration, along with its 'Ctor's, into a module
-insDataType :: Module -> DataType -> Module
-insDataType m dt =
-  foldl' insResolvedName (m { moduleRDecls = TypeDecl dt : moduleRDecls m}) $
-  (ResolvedDataType dt : map ResolvedCtor (dtCtors dt))
+-- | Insert an \"incomplete\" datatype, used as part of building up a
+-- 'DataType' to typecheck its constructors. This incomplete datatype
+-- must have no constructors, and it will not be added to the
+-- declaration list until it is completed by 'completeDataType'.
+-- Return 'Left' in the case of a name clash, i.e., an existing
+-- binding for the same 'Ident' name.
+beginDataType :: DataType -> ModuleMap -> Either Ident ModuleMap
+beginDataType dt =
+  insResolvedNameInMap (ResolvedDataType dt')
+  where dt' = dt { dtCtors = [] }
 
--- | Insert an "incomplete" datatype, used as part of building up a 'DataType'
--- to typecheck its constructors. This incomplete datatype must have no
--- constructors, and it will not be added to the 'moduleRDecls' list until it is
--- completed by 'completeDataType'.
-beginDataType :: Module -> DataType -> Module
-beginDataType m dt =
-   if null (dtCtors dt) then
-     insResolvedName m (ResolvedDataType dt)
-   else
-     panic "insTempDataType" ["attempt to insert a non-empty temporary datatype"]
-
--- | Complete a datatype, by adding its constructors
-completeDataType :: Module -> Ident -> [Ctor] -> Module
-completeDataType m (identBaseName -> str) ctors =
-  case resolveName m str of
+-- | Complete a datatype, by adding its constructors. Return 'Left' if
+-- there is a name clash with any constructor name.
+completeDataType :: Ident -> [Ctor] -> ModuleMap -> Either Ident ModuleMap
+completeDataType ident ctors mm0 =
+  let str = identBaseName ident in
+  case resolveNameInMap mm0 ident of
     Just (ResolvedDataType dt)
       | null (dtCtors dt) ->
-        let dt' = dt {dtCtors = ctors} in
-        flip (foldl' insResolvedName) (map ResolvedCtor ctors) $
-        m { moduleResolveMap =
-              Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
-              moduleRDecls = TypeDecl dt' : moduleRDecls m }
+        do let dt' = dt {dtCtors = ctors}
+           let r = ResolvedDataType dt'
+           let mm1 = insDeclInMap (identModule ident) (TypeDecl dt') mm0
+           let mm2 = mm1 { mmIndexMap = IntMap.insert (dtVarIndex dt) r (mmIndexMap mm1) }
+           foldM (flip insResolvedNameInMap) mm2 (map ResolvedCtor ctors)
     Just (ResolvedDataType _) ->
       panic "completeDataType" ["datatype already completed: " <> str]
     Just _ ->
@@ -380,35 +380,11 @@ completeDataType m (identBaseName -> str) ctors =
       panic "completeDataType" ["datatype not found: " <> str]
 
 
--- | Insert an "injectCode" declaration
-insInjectCode :: Module -> Text -> Text -> Module
-insInjectCode m ns txt =
-  m{ moduleRDecls = InjectCodeDecl ns txt : moduleRDecls m }
-
--- | Insert a definition into a module
-insDef :: Module -> Def -> Module
-insDef m d =
-  insResolvedName
-  (m { moduleRDecls = DefDecl d : moduleRDecls m })
-  (ResolvedDef d)
-
 -- | Get the resolved names that are local to a module
 localResolvedNames :: Module -> [ResolvedName]
 localResolvedNames m =
   filter ((== moduleName m) . identModule . resolvedNameIdent)
   (Map.elems $ moduleResolveMap m)
-
--- | Get all data types defined in a module
-moduleDataTypes :: Module -> [DataType]
-moduleDataTypes =
-  foldr' (\case { ResolvedDataType dt -> (dt :); _ -> id } ) [] .
-  localResolvedNames
-
--- | Get all constructors defined in a module
-moduleCtors :: Module -> [Ctor]
-moduleCtors =
-  foldr' (\case { ResolvedCtor ctor -> (ctor :); _ -> id } ) [] .
-  localResolvedNames
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]
@@ -421,53 +397,78 @@ moduleDefs =
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls
 
--- | Get all local declarations in a module that are marked as primitives
-modulePrimitives :: Module -> [Def]
-modulePrimitives m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == PrimQualifier
-    ]
-
--- | Get all local declarations in a module that are marked as axioms
-moduleAxioms :: Module -> [Def]
-moduleAxioms m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == AxiomQualifier
-    ]
-
--- | Get all local declarations in a module that are not marked as primitives or
--- axioms
-moduleActualDefs :: Module -> [Def]
-moduleActualDefs m =
-    [ def
-    | DefDecl def <- moduleDecls m
-    , defQualifier def == NoQualifier
-    ]
-
 -- | The type of mappings from module names to modules
-type ModuleMap = HashMap ModuleName Module
+data ModuleMap =
+  ModuleMap
+  { mmIdentMap :: !(Map Ident VarIndex)
+  , mmIndexMap :: !(IntMap ResolvedName) -- keyed by VarIndex
+  , mmRDecls :: !(Map ModuleName [ModuleDecl])
+  }
+  -- NOTE: If mmIdentMap contains a key "M.foo", this simply means
+  -- that the name name "foo" is in scope in the saw-core module "M".
+  -- It does NOT mean that "foo" is necessarily defined in module "M".
+  -- If "foo" was originally defined in module "N", then "N.foo" will
+  -- also be present in mmIdentMap, with the same VarIndex.
+
+emptyModuleMap :: ModuleMap
+emptyModuleMap =
+  ModuleMap
+  { mmIdentMap = Map.empty
+  , mmIndexMap = IntMap.empty
+  , mmRDecls = Map.empty
+  }
+
+-- | Test whether a 'ModuleName' is in a 'ModuleMap'.
+moduleIsLoaded :: ModuleName -> ModuleMap -> Bool
+moduleIsLoaded mn mm = Map.member mn (mmRDecls mm)
+
+loadModule :: Module -> ModuleMap -> ModuleMap
+loadModule m mm =
+  ModuleMap
+  { mmIdentMap = Map.union identMap (mmIdentMap mm)
+  , mmIndexMap = IntMap.union indexMap (mmIndexMap mm)
+  , mmRDecls = Map.insert (moduleName m) (moduleRDecls m) (mmRDecls mm)
+  }
+  where
+    identMap = Map.mapKeys (mkIdent (moduleName m)) (fmap resolvedNameVarIndex (moduleResolveMap m))
+    indexMap = IntMap.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
+
+findModule :: ModuleName -> ModuleMap -> Maybe Module
+findModule mnm mm =
+  do decls <- Map.lookup mnm (mmRDecls mm)
+     let rmap =
+           Map.mapMaybe (\vi -> IntMap.lookup vi (mmIndexMap mm)) $
+           Map.mapKeys identBaseName $
+           Map.filterWithKey (\i _ -> identModule i == mnm) $
+           mmIdentMap mm
+     Just $ Module { moduleName = mnm, moduleResolveMap = rmap, moduleRDecls = decls }
+
+resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
+resolveNameInMap mm i =
+  do vi <- Map.lookup i (mmIdentMap mm)
+     IntMap.lookup vi (mmIndexMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
-findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
-findCtorInMap m i =
-  HMap.lookup (identModule i) m >>= flip findCtor (identBaseName i)
+findCtorInMap :: Ident -> ModuleMap -> Maybe Ctor
+findCtorInMap i mm = resolveNameInMap mm i >>= asResolvedCtor
 
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
-findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
-findDataTypeInMap m i =
-  HMap.lookup (identModule i) m >>= flip findDataType (identBaseName i)
+findDataTypeInMap :: Ident -> ModuleMap -> Maybe DataType
+findDataTypeInMap i mm = resolveNameInMap mm i >>= asResolvedDataType
+
+-- | Resolve an 'Ident' to a 'Def' in a 'ModuleMap'.
+findDefInMap :: Ident -> ModuleMap -> Maybe Def
+findDefInMap i mm = resolveNameInMap mm i >>= asResolvedDef
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /
 -- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
-allModuleDefs modmap = concatMap moduleDefs (HMap.elems modmap)
+allModuleDefs mm = mapMaybe asResolvedDef (IntMap.elems (mmIndexMap mm))
 
 -- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
-allModuleDecls modmap = concatMap moduleDecls (HMap.elems modmap)
+allModuleDecls mm = concat (Map.elems (mmRDecls mm))
 
 -- | Get all local declarations from all modules in an entire module map that
 -- are marked as primitives
@@ -498,25 +499,50 @@ allModuleActualDefs modmap =
 
 -- | Get all datatypes in all modules in a module map
 allModuleDataTypes :: ModuleMap -> [DataType]
-allModuleDataTypes modmap = concatMap moduleDataTypes (HMap.elems modmap)
+allModuleDataTypes mm = mapMaybe asResolvedDataType (IntMap.elems (mmIndexMap mm))
 
 -- | Get all constructors in all modules in a module map
 allModuleCtors :: ModuleMap -> [Ctor]
-allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
+allModuleCtors mm = mapMaybe asResolvedCtor (IntMap.elems (mmIndexMap mm))
 
+-- | Insert a 'ResolvedName' into a 'ModuleMap', adding a mapping from
+-- the 'Ident' name of that resolved name to it. Return 'Left' in the
+-- case of a name clash, i.e., an existing binding for the same
+-- 'Ident' name.
+insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Ident ModuleMap
+insResolvedNameInMap r mm =
+  let ident = resolvedNameIdent r in
+  if Map.member ident (mmIdentMap mm)
+  then Left ident
+  else Right $ mm { mmIdentMap = Map.insert ident (resolvedNameVarIndex r) (mmIdentMap mm)
+                  , mmIndexMap = IntMap.insert (resolvedNameVarIndex r) r (mmIndexMap mm)
+                  }
 
--- | Pretty-print a 'Module'
---
---   This converts to the PPModule representation used by the actual module
---   printer in Pretty.hs.
-ppModule :: PPS.Opts -> Module -> PPS.Doc
-ppModule opts m =
-  ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
+insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
+insDeclInMap mname decl mm =
+  mm { mmRDecls = Map.alter (Just . (decl :) . fromMaybe []) mname (mmRDecls mm) }
+
+-- | Insert a definition into a 'ModuleMap'.
+insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
+insDefInMap d mm =
+  insResolvedNameInMap (ResolvedDef d) $
+  insDeclInMap (identModule (defIdent d)) (DefDecl d) mm
+
+-- | Insert an injectCode declaration into a 'ModuleMap'.
+insInjectCodeInMap :: ModuleName -> Text -> Text -> ModuleMap -> ModuleMap
+insInjectCodeInMap mname ns txt = insDeclInMap mname (InjectCodeDecl ns txt)
+
+-- | @insImportInMap p m1 m2@ adds all the names from module @m1@ into
+-- module @m2@ in the name table of the 'ModuleMap'. The predicate @p@
+-- determines which names to import.
+insImportInMap :: (Text -> Bool) -> ModuleName -> ModuleName -> ModuleMap -> ModuleMap
+insImportInMap p name1 name2 mm =
+  mm { mmIdentMap = Map.union identMap (mmIdentMap mm) }
   where
-    toDecl (TypeDecl (DataType {..})) =
-      PPTypeDecl dtName dtParams dtIndices dtSort
-      (map (\c -> (ctorName c, ctorType c)) dtCtors)
-    toDecl (DefDecl (Def {..})) =
-      PPDefDecl defIdent defType defBody
-    toDecl (InjectCodeDecl ns text) =
-      PPInjectCode ns text
+    identMap =
+      Map.fromList
+      [ (mkIdent name2 (identBaseName ident), vi)
+      | (ident, vi) <- Map.assocs (mmIdentMap mm)
+      , identModule ident == name1
+      , p (identBaseName ident)
+      ]

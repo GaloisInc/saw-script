@@ -2336,7 +2336,7 @@ genCodeForEnum sc env nt ctors =
 
   tl_rhs   <- addTypeAbstractions =<< scMakeListSort represType_eachCtor
   tl_type  <- scFunAll sc tyParamsKinds scListSort
-  scInsertDef sc preludeName tl_ident tl_type tl_rhs
+  scInsertDef sc tl_ident tl_type tl_rhs
 
   -------------------------------------------------------------
   -- Create the definition for the SAWCore sum (to which we map the
@@ -2352,7 +2352,7 @@ genCodeForEnum sc env nt ctors =
   sumTy_type <- scFunAll sc tyParamsKinds sort0
   sumTy_rhs  <- addTypeAbstractions =<< scEithersV tl_applied
 
-  scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
+  scInsertDef sc sumTy_ident sumTy_type sumTy_rhs
 
   -------------------------------------------------------------
   -- Create a `case` function specialized to the enum type.
@@ -2419,7 +2419,7 @@ genCodeForEnum sc env nt ctors =
         =<< sc_eithersV b
         =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
 
-  scInsertDef sc preludeName case_ident case_type case_rhs
+  scInsertDef sc case_ident case_type case_rhs
 
   assertSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
 

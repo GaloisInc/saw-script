@@ -52,12 +52,11 @@ import SAWCore.Module
   , ctorPrimName
   , dtPrimName
   , emptyModule
-  , findDataType
-  , resolveName
+  , findDataTypeInMap
+  , resolveNameInMap
   , DataType(..)
   , Def(..)
   , DefQualifier(..)
-  , Module
   , ResolvedName(..)
   )
 import SAWCore.Position
@@ -98,10 +97,6 @@ getModuleName =
        Nothing ->
          panic "getModuleName" ["Current module name not set during typechecking"]
 
--- | Look up the current module
-getModule :: TCM Module
-getModule = getModuleName >>= liftTCM scFindModule
-
 -- | Build a multi-arity application of 'SCTypedTerm's
 inferApplyAll :: SCTypedTerm -> [SCTypedTerm] -> TCM SCTypedTerm
 inferApplyAll t [] = return t
@@ -113,8 +108,10 @@ inferApplyAll t (arg:args) =
 inferResolveNameApp :: Text -> [SCTypedTerm] -> TCM SCTypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
-     m <- getModule
-     case (findIndex ((== n) . fst) ctx, resolveName m n) of
+     mnm <- getModuleName
+     mm <- liftTCM scGetModuleMap
+     let ident = mkIdent mnm n
+     case (findIndex ((== n) . fst) ctx, resolveNameInMap mm ident) of
        (Just i, _) ->
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
@@ -195,9 +192,9 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
        case maybe_mnm of
          Just mnm -> return mnm
          Nothing -> getModuleName
-     m <- liftTCM scFindModule mnm
+     mm <- liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
-     dt <- case findDataType m str of
+     dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType dt_ident
      typed_args <- mapM typeInferComplete args
@@ -366,7 +363,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
      let ident = mkIdent mnm nm
-     liftTCM scInsertDef mnm ident def_tp def_tm) >>
+     liftTCM scInsertDef ident def_tp def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
@@ -383,7 +380,7 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
       mnm <- getModuleName
       let ident = mkIdent mnm nm
       let def_tp = typedVal typed_tp
-      liftTCM scDeclarePrim mnm ident q def_tp) >>
+      liftTCM scDeclarePrim ident q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
@@ -476,7 +473,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
     do let imn = val $ Un.importModName imp
        i_exists <- scModuleIsLoaded sc imn
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
-       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . identName) imn mnm
+       scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm) []
   case decls_res of

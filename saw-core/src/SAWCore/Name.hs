@@ -63,7 +63,6 @@ import qualified Data.Set as Set
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           Data.Word
 import           GHC.Generics (Generic)
 import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
@@ -227,7 +226,7 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
 
 -- External Constants ----------------------------------------------------------
 
-type VarIndex = Word64
+type VarIndex = Int
 
 -- | An external constant with a name.
 -- Names are not necessarily unique, but the var index should be.

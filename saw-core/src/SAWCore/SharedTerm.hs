@@ -315,20 +315,22 @@ import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Module
-  ( insInjectCode
-  , beginDataType
+  ( beginDataType
   , completeDataType
-  , resolvedNameIdent
   , dtPrimName
   , ctorNumParams
   , ctorPrimName
-  , emptyModule
-  , findCtor
-  , findDataType
-  , findDef
+  , emptyModuleMap
+  , moduleIsLoaded
   , moduleName
-  , insDef
-  , insImport
+  , loadModule
+  , findCtorInMap
+  , findDataTypeInMap
+  , findDefInMap
+  , findModule
+  , insDefInMap
+  , insInjectCodeInMap
+  , insImportInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -443,12 +445,14 @@ scFreshVarIndex sc = atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 -- | Internal function to register a name with a caller-provided
 -- 'VarIndex'. Not exported.
 scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
-scRegisterNameWithIndex sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
-  where
-    f env =
-      case registerName i nmi env of
-        Left uri -> throw (DuplicateNameException uri)
-        Right env' -> env'
+scRegisterNameWithIndex sc i nmi =
+  do let f env =
+           case registerName i nmi env of
+             Left uri -> (env, Just (DuplicateNameException uri))
+             Right env' -> (env', Nothing)
+     e <- atomicModifyIORef' (scNamingEnv sc) f
+     maybe (pure ()) throwIO e
+
 
 -- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
 -- them together in the 'SAWNamingEnv' of the 'SharedContext'. Throws
@@ -592,56 +596,62 @@ scGetModuleMap sc = readIORef (scModuleMap sc)
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
 scModuleIsLoaded sc name =
-  HMap.member name <$> scGetModuleMap sc
+  moduleIsLoaded name <$> scGetModuleMap sc
 
 -- | Load a module into the current shared context, raising an error if a module
 -- of the same name is already loaded
 scLoadModule :: SharedContext -> Module -> IO ()
 scLoadModule sc m =
-  modifyIORef' (scModuleMap sc) $
-  HMap.insertWith (error $ "scLoadModule: module "
-                   ++ show (moduleName m) ++ " already loaded!")
-  (moduleName m) m
+  do loaded <- scModuleIsLoaded sc (moduleName m)
+     when loaded $ fail $ "scLoadModule: module "
+                   ++ show (moduleName m) ++ " already loaded!"
+     modifyIORef' (scModuleMap sc) (loadModule m)
 
 -- | Bring a subset of names from one module into scope in a second module.
 scImportModule ::
   SharedContext ->
-  (Ident -> Bool) {- ^ which names to import -} ->
+  (Text -> Bool) {- ^ which names to import -} ->
   ModuleName {- ^ from this module -} ->
   ModuleName {- ^ into this module -} ->
   IO ()
 scImportModule sc p mn1 mn2 =
-  do i_exists <- scModuleIsLoaded sc mn1
-     i <- if i_exists then scFindModule sc mn1 else pure (emptyModule mn1)
-     scModifyModule sc mn2 (insImport (p . resolvedNameIdent) i)
+  modifyIORef' (scModuleMap sc) (insImportInMap p mn1 mn2)
 
--- | Modify an already loaded module, raising an error if it is not loaded
-scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
-scModifyModule sc mnm f =
-  let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
-  modifyIORef' (scModuleMap sc) $
-  HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
+-- | Internal function to insert a definition into the 'ModuleMap' of
+-- the 'SharedContext'. Throws 'DuplicateNameException' if the name is
+-- already registered.
+scInsDefInMap :: SharedContext -> Def -> IO ()
+scInsDefInMap sc d =
+  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case insDefInMap d mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
 
 -- | Declare a SAW core primitive of the specified type.
-scDeclarePrim :: SharedContext -> ModuleName -> Ident -> DefQualifier -> Term -> IO ()
-scDeclarePrim sc mnm ident q def_tp =
+scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc ident q def_tp =
   do i <- scRegisterName sc (ModuleIdentifier ident)
      let pn = PrimName i ident def_tp
      t <- scFlatTermF sc (Primitive pn)
      scRegisterGlobal sc ident t
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
+     scInsDefInMap sc $
+                  Def { defIdent = ident,
+                        defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
                         defBody = Nothing }
 
 -- | Insert a definition into a SAW core module
-scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-scInsertDef sc mnm ident def_tp def_tm =
+scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
+scInsertDef sc ident def_tp def_tm =
   do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
      scRegisterGlobal sc ident t
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
+     mi <- scResolveNameByURI sc (moduleIdentToURI ident)
+     let i = fromMaybe (panic "scInsertDef" ["name not found"]) mi
+     scInsDefInMap sc $
+                  Def { defIdent = ident,
+                        defVarIndex = i,
                         defQualifier = NoQualifier,
                         defType = def_tp,
                         defBody = Just def_tm }
@@ -649,7 +659,7 @@ scInsertDef sc mnm ident def_tp def_tm =
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
 scFindModule sc name =
-  do maybe_mod <- HMap.lookup name <$> scGetModuleMap sc
+  do maybe_mod <- findModule name <$> scGetModuleMap sc
      case maybe_mod of
        Just m -> return m
        Nothing ->
@@ -657,8 +667,7 @@ scFindModule sc name =
 
 -- | Look up a definition by its identifier
 scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
-scFindDef sc i =
-  findDef <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindDef sc i = findDefInMap i <$> scGetModuleMap sc
 
 -- | Look up a 'Def' by its identifier, throwing an error if it is not found
 scRequireDef :: SharedContext -> Ident -> IO Def
@@ -670,7 +679,7 @@ scRequireDef sc i =
 
 -- | Insert an \"incomplete\" datatype, used as part of building up a
 -- 'DataType' to typecheck its constructors. The constructors must be
--- registered separately with @scCompleteDataType@.
+-- registered separately with 'scCompleteDataType'.
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
@@ -682,20 +691,25 @@ scBeginDataType sc dtName dtParams dtIndices dtSort =
   do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtName)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dt = DataType { dtCtors = [], .. }
-     let mnm = identModule dtName
-     scModifyModule sc mnm (\m -> beginDataType m dt)
+     e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case beginDataType dt mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
      pure $ PrimName dtVarIndex dtName dtType
 
--- | Complete a datatype, by adding its constructors. See also @scBeginDataType@.
+-- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
 scCompleteDataType sc dtName ctors =
-  do let mnm = identModule dtName
-     scModifyModule sc mnm (\m -> completeDataType m dtName ctors)
+  do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
+       case completeDataType dtName ctors mm of
+         Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
+         Right mm' -> (mm', Nothing)
+     maybe (pure ()) throwIO e
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
-scFindDataType sc i =
-  findDataType <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindDataType sc i = findDataTypeInMap i <$> scGetModuleMap sc
 
 -- | Look up a datatype by its identifier, throwing an error if it is not found
 scRequireDataType :: SharedContext -> Ident -> IO DataType
@@ -707,8 +721,7 @@ scRequireDataType sc i =
 
 -- | Look up a constructor by its identifier
 scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
-scFindCtor sc i =
-  findCtor <$> scFindModule sc (identModule i) <*> pure (identBaseName i)
+scFindCtor sc i = findCtorInMap i <$> scGetModuleMap sc
 
 -- | Look up a constructor by its identifier, throwing an error if not found
 scRequireCtor :: SharedContext -> Ident -> IO Ctor
@@ -729,7 +742,7 @@ scInjectCode ::
   Text {- ^ Code to inject -} ->
   IO ()
 scInjectCode sc mnm ns txt =
-  scModifyModule sc mnm $ \m -> insInjectCode m ns txt
+  modifyIORef' (scModuleMap sc) $ insInjectCodeInMap mnm ns txt
 
 -- SharedContext implementation.
 
@@ -2498,7 +2511,7 @@ mkSharedContext = do
   vr <- newIORef 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
-  mod_map_ref <- newIORef HMap.empty
+  mod_map_ref <- newIORef emptyModuleMap
   envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref

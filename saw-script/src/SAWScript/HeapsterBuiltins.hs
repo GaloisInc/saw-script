@@ -315,8 +315,7 @@ heapsterInsertDef henv trm_ident trm_tp trm =
   do debugPrettyTermWithPrefix henv verboseDebugLevel
        ("Inserting def " ++ show trm_ident ++ " =\n") trm
      sc <- getSharedContext
-     let mnm = heapsterEnvSAWModule henv
-     liftIO $ scInsertDef sc mnm trm_ident trm_tp trm
+     liftIO $ scInsertDef sc trm_ident trm_tp trm
 
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a definition
@@ -985,7 +984,7 @@ insPrimitive henv nm tp =
   do sc <- getSharedContext
      let mnm = heapsterEnvSAWModule henv
      let ident = mkSafeIdent mnm nm
-     liftIO $ scDeclarePrim sc mnm ident PrimQualifier tp
+     liftIO $ scDeclarePrim sc ident PrimQualifier tp
      return ident
 
 -- | Assume that the given named function has the supplied type and translates

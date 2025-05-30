@@ -25,8 +25,6 @@ module SAWCore.Term.Pretty
   , scPrettyTermInCtx
   , ppTermWithNames
   , showTermWithNames
-  , PPModule(..), PPDecl(..)
-  , ppPPModule
   , scTermCount
   , shouldMemoizeTerm
   , ppName
@@ -387,31 +385,6 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
   where
     lhs = if name == "_" then tp else parens (prettyTypeConstraint (pretty name) tp)
 
--- | Pretty-print a definition @d :: tp = body@
-ppDef :: PPS.Doc -> PPS.Doc -> Maybe PPS.Doc -> PPS.Doc
-ppDef d tp Nothing = prettyTypeConstraint d tp
-ppDef d tp (Just body) = prettyTypeConstraint d tp <+> equals <+> body
-
--- | Pretty-print a datatype declaration of the form
--- > data d (p1:tp1) .. (pN:tpN) : tp where {
--- >   c1 (x1_1:tp1_1)  .. (x1_N:tp1_N) : tp1
--- >   ...
--- > }
-ppDataType :: Ident -> (PPS.Doc, ((PPS.Doc, PPS.Doc), [PPS.Doc])) -> PPS.Doc
-ppDataType d (params, ((d_ctx,d_tp), ctors)) =
-  group $
-  vcat
-  [ vsep
-    [ (group . vsep)
-      [ "data" <+> ppIdent d <+> params <+> ":" <+>
-         (d_ctx <+> "->" <+> d_tp)
-      , "where" <+> lbrace
-      ]
-    , vcat (map (<> semi) ctors)
-    ]
-  , rbrace
-  ]
-
 
 --------------------------------------------------------------------------------
 -- * Pretty-Printing Terms
@@ -665,18 +638,6 @@ ppTermInBinder prec basename trm =
            else basename in
   withBoundVarM nm $ ppTermWithMemoTable prec False trm
 
--- | Run a pretty-printing computation inside a context that binds zero or more
--- variables, returning the result of the computation and also the
--- pretty-printing of the context. Note: we do not use any local memoization
--- tables for the inner computation; the justification is that this function is
--- only used for printing datatypes, which we assume are not very big.
-ppWithBoundCtx :: [(LocalName, Term)] -> PPM a -> PPM (PPS.Doc, a)
-ppWithBoundCtx [] m = (mempty ,) <$> m
-ppWithBoundCtx ((x,tp):ctx) m =
-  (\tp_d (x', (ctx_d, ret)) ->
-    (parens (prettyTypeConstraint (pretty x') tp_d) <+> ctx_d, ret))
-  <$> ppTerm' PrecTerm tp <*> withBoundVarM x (ppWithBoundCtx ctx m)
-
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
 ppTerm :: PPS.Opts -> Term -> PPS.Doc
@@ -739,43 +700,3 @@ ppTermContainerWithNames ppContainer opts ne trms =
                    trms
    in runPPM opts ne $ ppLets global_p occPairs []
         (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
-
---------------------------------------------------------------------------------
--- * Pretty-printers for Modules and Top-level Constructs
---------------------------------------------------------------------------------
-
--- | Datatype for representing modules in pretty-printer land. We do not want to
--- make the pretty-printer dependent on @SAWCore.Module@, so we instead
--- have that module translate to this representation.
-data PPModule = PPModule [ModuleName] [PPDecl]
-
-data PPDecl
-  = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
-  | PPDefDecl Ident Term (Maybe Term)
-  | PPInjectCode Text.Text Text.Text
-
--- | Pretty-print a 'PPModule'
-ppPPModule :: PPS.Opts -> PPModule -> PPS.Doc
-ppPPModule opts (PPModule importNames decls) =
-  vcat $ concat $ fmap (map (<> line)) $
-  [ map ppImport importNames
-  , map (runPPM opts emptySAWNamingEnv . ppDecl) decls
-  ]
-  where
-    ppImport nm = pretty $ "import " ++ show nm
-    ppDecl (PPTypeDecl dtName dtParams dtIndices dtSort dtCtors) =
-      ppDataType dtName <$> ppWithBoundCtx dtParams
-      ((,) <$>
-       ppWithBoundCtx dtIndices (return $ viaShow dtSort) <*>
-       mapM (\(ctorName,ctorType) ->
-              prettyTypeConstraint (ppIdent ctorName) <$>
-              ppTerm' PrecTerm ctorType)
-       dtCtors)
-    ppDecl (PPDefDecl defIdent defType defBody) =
-      ppDef (ppIdent defIdent) <$> ppTerm' PrecTerm defType <*>
-      case defBody of
-        Just body -> Just <$> ppTerm' PrecTerm body
-        Nothing -> return Nothing
-
-    ppDecl (PPInjectCode ns text) =
-      pure (pretty ("injectCode"::Text.Text) <+> viaShow ns <+> viaShow text)
