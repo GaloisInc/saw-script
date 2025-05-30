@@ -155,9 +155,7 @@ module SAWCore.SharedTerm
   , scTypeOf'
   , asSort
   , reducePi
-  , scTypeOfCtor
-  , scTypeOfDataType
-  , scTypeOfGlobal
+  , scTypeOfIdent
     -- ** Prelude operations
     -- *** Booleans
   , scNot
@@ -331,6 +329,8 @@ import SAWCore.Module
   , insDefInMap
   , insInjectCodeInMap
   , insImportInMap
+  , resolvedNameType
+  , resolveNameInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -1117,20 +1117,15 @@ reducePi sc t arg = do
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
--- | Compute the type of a global variable.
-scTypeOfGlobal :: SharedContext -> Ident -> IO Term
-scTypeOfGlobal sc ident =
-  defType <$> scRequireDef sc ident
 
--- | Compute the type of a datatype given its name as an 'Ident'.
-scTypeOfDataType :: SharedContext -> Ident -> IO Term
-scTypeOfDataType sc ident =
-  dtType <$> scRequireDataType sc ident
-
--- | Compute the type of a data constructor given its name as an 'Ident'.
-scTypeOfCtor :: SharedContext -> Ident -> IO Term
-scTypeOfCtor sc ident =
-  ctorType <$> scRequireCtor sc ident
+-- | Look up the type of a global constant, primitive, data type, or
+-- data constructor, given its name as an 'Ident'.
+scTypeOfIdent :: SharedContext -> Ident -> IO Term
+scTypeOfIdent sc ident =
+  do mm <- scGetModuleMap sc
+     case resolveNameInMap mm ident of
+       Just r -> pure (resolvedNameType r)
+       Nothing -> fail ("scTypeOfIdent: Identifier not found: " ++ show ident)
 
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.

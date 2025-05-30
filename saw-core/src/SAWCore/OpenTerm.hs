@@ -367,7 +367,7 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
   OpenTerm (do trm <- liftTCM scGlobalDef ident
-               tp <- liftTCM scTypeOfGlobal ident
+               tp <- liftTCM scTypeOfIdent ident
                return $ SCTypedTerm trm tp)
 
 -- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,

@@ -134,7 +134,7 @@ primNatTermFun sc =
 -- | A primitive that returns a global as a term
 primGlobal :: SharedContext -> Ident -> TmPrim
 primGlobal sc glob =
-  Prim $ do tp <- scTypeOfGlobal sc glob
+  Prim $ do tp <- scTypeOfIdent sc glob
             tp_tp <- scTypeOf sc tp >>= scWhnf sc
             s <- case asSort tp_tp of
               Just s -> return s
