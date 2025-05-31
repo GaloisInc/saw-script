@@ -283,10 +283,12 @@ primCellToMap sc c args = case c ^. cellType of
     ywidth' <- liftIO (SC.scNat sc ywidth)
     bool <- liftIO (SC.scBoolType sc)
     splitA <- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))
-    -- Select chunk from output
+    -- reverse to put index 0 on the left
     outputType <- liftIO (SC.scBitvector sc ywidth)
+    revA <- liftIO (SC.scGlobalApply sc "Prelude.reverse" [chunks, outputType, splitA])
+    -- Select chunk from output
     ixWidth <- liftIO (SC.scNat sc swidth)
-    elt <- liftIO (SC.scBvAt sc chunks outputType ixWidth splitA (cellTermTerm is))
+    elt <- liftIO (SC.scBvAt sc chunks outputType ixWidth revA (cellTermTerm is))
     output (CellTerm elt ywidth (connSigned "Y"))
   -- "$demux" -> _
   -- "$lut" -> _
