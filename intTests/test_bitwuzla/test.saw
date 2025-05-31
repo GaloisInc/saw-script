@@ -5,6 +5,6 @@ add_mul_lemma m n p =
   m * (n + p) == (m * n) + (m * p)
 }};
 
-prove bitwuzla               {{ add_mul_lemma }};
-prove sbv_bitwuzla           {{ add_mul_lemma }};
-prove (w4_unint_bitwuzla []) {{ add_mul_lemma }};
+prove_print bitwuzla               {{ add_mul_lemma }};
+prove_print sbv_bitwuzla           {{ add_mul_lemma }};
+prove_print (w4_unint_bitwuzla []) {{ add_mul_lemma }};

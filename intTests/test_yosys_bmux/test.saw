@@ -3,5 +3,4 @@ m <- yosys_import_sequential "PrimeSelector" "mux.json";
 f <- yosys_extract_sequential_raw m;
 b <- yosys_import_sequential "PrimeSelector" "bmux.json";
 g <- yosys_extract_sequential_raw b;
-r <- prove z3 {{ f === g }};
-print r;
+prove_print z3 {{ f === g }};
