@@ -13,17 +13,17 @@ let t5 = {{ [1 .. 10] : [10][32] }};
 write_core "c.out" c;
 c_in <- read_core "c.out";
 let thm_c = {{ c_in == c }};
-prove z3 thm_c;
+prove_print z3 thm_c;
 
 write_core "x.out" x;
 x_in <- read_core "x.out";
 let thm_x = {{ x_in == x }};
-prove z3 thm_x;
+prove_print z3 thm_x;
 
 write_core "t1.out" t1;
 t1_in<- read_core "t1.out";
 let thm_t1 = {{ t1_in == t1 }};
-prove z3 thm_t1;
+prove_print z3 thm_t1;
 
 // N.B. This test currently crashes SAW due to bug #780
 // write_core "t2.out" t2;
@@ -34,15 +34,15 @@ prove z3 thm_t1;
 write_core "t3.out" t3;
 t3_in <- read_core "t3.out";
 let thm_t3 = {{ \x -> t3_in x == t3 x }};
-prove z3 thm_t3;
+prove_print z3 thm_t3;
 
 // N.B. This test currently crashes SAW due to bug #780
 // write_core "t4.out" t4;
 // t4_in <- read_core "t4.out";
 // let thm_t4 = {{ t4_in == t4 }};
-// prove z3 thm_t4;
+// prove_print z3 thm_t4;
 
 write_core "t5.out" t5;
 t5_in <- read_core "t5.out";
 let thm_t5 = {{ t5_in == t5 }};
-prove z3 thm_t5;
+prove_print z3 thm_t5;

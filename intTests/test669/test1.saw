@@ -1,5 +1,5 @@
 let {{ f (x : Integer, y : Integer) = (x + 1, y + 1) }};
 let {{ g (a : Integer, b : Integer) (c, d) = (a < c) && (b < d) }};
 
-prove (quickcheck 100) {{ \x -> g x (f x) }};
-prove (quickcheck 100) {{ \(a, b) -> g (a, b) (a + 2, b + 2) }};
+prove_print (quickcheck 100) {{ \x -> g x (f x) }};
+prove_print (quickcheck 100) {{ \(a, b) -> g (a, b) (a + 2, b + 2) }};

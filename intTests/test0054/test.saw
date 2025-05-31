@@ -16,6 +16,6 @@ let thm1 = {{ \z w -> f1 z w == f2 z w}};
 let thm2 = {{ \z w -> f2 z w == f3 z w}};
 let thm3 = {{ t == f4 }};
 
-prove z3 thm1;
-prove z3 thm2;
-prove z3 thm3;
+prove_print z3 thm1;
+prove_print z3 thm2;
+prove_print z3 thm3;

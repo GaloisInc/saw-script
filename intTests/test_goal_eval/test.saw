@@ -7,14 +7,14 @@ enable_experimental;
 
 let prop = {{ \(xs:[4][8]) (ys:([8],[8])) -> sum xs == ys.0 * ys.1 }};
 
-prove
+prove_print
   do {
     goal_intro "z";
     assume_unsat;
   }
   prop;
 
-prove
+prove_print
   do {
     goal_eval;
     goal_intro "z";
