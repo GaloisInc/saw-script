@@ -226,6 +226,7 @@ library cryptol-saw-core
     modern-uri,
     mtl,
     prettyprinter >= 1.7.0,
+    pretty-show,
     sbv,
     template-haskell,
     text,
