@@ -210,7 +210,7 @@ bindPatternLocal pat ms v env =
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
--- See notes in bindPatternLocal above regading the schema argument.
+-- See notes in bindPatternLocal above regarding the schema argument.
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
@@ -2817,7 +2817,7 @@ primitives = Map.fromList
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
-    (pureVal CEnv.lookupCryptolModule)
+    (pureVal CEnv.extractDefFromCryptolModule)
     Current
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."
