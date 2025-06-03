@@ -1079,8 +1079,10 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              | (x, z) <- zip (V.toList xs'') zs ]
 
     -- match the underlying field of a repr(transparent) struct
-    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt [z])
-      | Just y <- Mir.reprTransparentFieldTy col adt ->
+    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs)
+      | Just i <- Mir.findReprTransparentField col adt
+      , Just y <- adt ^? Mir.adtvariants . ix 0 . Mir.vfields . ix i . Mir.fty
+      , Just z <- zs ^? ix i ->
         matchArg opts sc cc cs prepost md (MIRVal shp val) y z
 
     -- match the fields of a struct point-wise
