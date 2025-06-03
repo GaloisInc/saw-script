@@ -50,11 +50,24 @@ variable "SAW", pointing to the corresponding executable, and with appropriate
 Java classpaths included. It's a good idea to include a README in each test
 directory.
 
-Test script success or failure is typically determined by the SAW exit
-code. Note that the SAW `prove` command does *not* produce an error
-upon finding a counterexample; to abort with an error code when a
-proof fails, use `prove_print`. The SAW `exit` command is also useful.
-Use `fails` to write tests involving expected failure.
+Test script success or failure is determined by the exit code produced
+by `test.sh`. If the test script consists of a single call to SAW,
+then this is determined by SAW's exit code. Some SAW commands can
+cause SAW to quit with an error code as part of their normal behavior;
+these are useful for writing regression tests.
+
+* `exit <code>` quits immediately with the specified integer exit code
+  (0 for success, nonzero for failure).
+
+* `prove_print <prover> <property>` quits with an error code if the
+  prover fails to prove the property. NOTE: The similar `prove`
+  command does *not* produce an error code upon proof failure, but
+  instead produces a result value that can be inspected. If immediate
+  test failure is desired upon proof failure, use `prove_print`.
+
+* `fails <command>` succeeds and continues if the specified command
+  would otherwise cause SAW to quit with an error; if the command
+  succeeds, then `fails` raises an error.
 
 For tests that need binary artefacts (Java bytecode, LLVM bitcode) or
 things that might as well be (linked-mir.json from mir-json), include
