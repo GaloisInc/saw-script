@@ -329,8 +329,8 @@ processTypeCheck (errs_or_output, warns) =
 ------------------------------------------------------------
 -- Interpreter core
 
-interpret :: SS.Expr -> TopLevel Value
-interpret expr =
+interpretExpr :: SS.Expr -> TopLevel Value
+interpretExpr expr =
     let ?fileReader = BS.readFile in
     case expr of
       SS.Bool _ b ->
@@ -353,22 +353,22 @@ interpret expr =
                   $ locToInput str
           return (toValue s)
       SS.Array _ es ->
-          VArray <$> traverse interpret es
+          VArray <$> traverse interpretExpr es
       SS.Block _ stmts ->
           interpretStmts stmts
       SS.Tuple _ es ->
-          VTuple <$> traverse interpret es
+          VTuple <$> traverse interpretExpr es
       SS.Record _ bs ->
-          VRecord <$> traverse interpret bs
+          VRecord <$> traverse interpretExpr bs
       SS.Index _ e1 e2 -> do
-          a <- interpret e1
-          i <- interpret e2
+          a <- interpretExpr e1
+          i <- interpretExpr e2
           return (indexValue a i)
       SS.Lookup _ e n -> do
-          a <- interpret e
+          a <- interpretExpr e
           return (lookupValue a n)
       SS.TLookup _ e i -> do
-          a <- interpret e
+          a <- interpretExpr e
           return (tupleLookupValue a i)
       SS.Var x -> do
           rw <- getMergedEnv
@@ -381,37 +381,47 @@ interpret expr =
                    fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
       SS.Function _ pat e -> do
           env <- getLocalEnv
-          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
           return $ VLambda f
       SS.Application _ e1 e2 -> do
-          v1 <- interpret e1
-          v2 <- interpret e2
+          v1 <- interpretExpr e1
+          v2 <- interpretExpr e2
           case v1 of
             VLambda f -> f v2
             _ -> fail $ "interpret Application: " ++ show v1
       SS.Let _ dg e -> do
           env' <- interpretDeclGroup dg
-          withLocalEnv env' (interpret e)
+          withLocalEnv env' (interpretExpr e)
       SS.TSig _ e _ ->
-          interpret e
+          interpretExpr e
       SS.IfThenElse _ e1 e2 e3 -> do
-          v1 <- interpret e1
+          v1 <- interpretExpr e1
           case v1 of
-            VBool b -> interpret (if b then e2 else e3)
-            _ -> fail $ "interpret IfThenElse: " ++ show v1
+            VBool b ->
+              interpretExpr (if b then e2 else e3)
+            _ ->
+              panic "interpretExpr" [
+                  "Ill-typed value in if-expression (should be Bool)",
+                  "Value found: " <> Text.pack (show v1),
+                  "Generating expression: " <> PPS.pShowText e1
+              ]
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
-    v <- interpret expr
+    v <- interpretExpr expr
     return (bindPatternLocal pat mt v env)
 
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
       SS.Function _ pat e -> VLambda f
-        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
       SS.TSig _ e _ -> interpretFunction env e
-      _ -> error "interpretFunction: not a function"
+      _ ->
+        panic "interpretFunction" [
+            "Not a function",
+            "Expression found: " <> PPS.pShowText expr
+        ]
 
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
 interpretDeclGroup (SS.NonRecursive d) = do
@@ -433,13 +443,13 @@ interpretStmts stmts =
           fail "empty block"
       [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
           savepos <- pushPosition pos
-          result <- interpret e
+          result <- interpretExpr e
           popPosition savepos
           return result
       SS.StmtBind pos pat e : ss -> do
           env <- getLocalEnv
           savepos <- pushPosition pos
-          v1 <- interpret e
+          v1 <- interpretExpr e
           popPosition savepos
           let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
           bindValue pos v1 (VLambda f)
@@ -449,7 +459,7 @@ interpretStmts stmts =
           -- position there, so all we need is a placeholder for it to
           -- ignore. Therefore, don't take the trouble to compute the
           -- correct position (the bounding box on the statements ss).
-          interpret (SS.Let pos bs (SS.Block pos ss))
+          interpretExpr (SS.Let pos bs (SS.Block pos ss))
       SS.StmtCode _ s : ss -> do
           sc <- getSharedContext
           rw <- getMergedEnv
@@ -475,7 +485,7 @@ processStmtBind ::
 processStmtBind printBinds pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
-  val <- liftTopLevel $ interpret expr
+  val <- liftTopLevel $ interpretExpr expr
 
   -- Fetch the type from updated pattern, since the typechecker will
   -- have filled it in there.
