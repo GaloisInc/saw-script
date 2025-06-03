@@ -373,12 +373,19 @@ interpretExpr expr =
       SS.Var x -> do
           rw <- getMergedEnv
           case Map.lookup x (rwValueInfo rw) of
-            Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
+            Nothing ->
+                -- This should be rejected by the typechecker, so panic
+                panic "interpretExpr" [
+                    "Read of unknown variable " <> SS.getVal x
+                ]
             Just (lc, _ty, v)
               | Set.member lc (rwPrimsAvail rw) ->
                    return (withStackTraceFrame (show x) v)
               | otherwise ->
-                   fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
+                   -- This case is also rejected by the typechecker
+                   panic "interpretExpr" [
+                       "Read of inaccessible variable " <> SS.getVal x
+                   ]
       SS.Function _ pat e -> do
           env <- getLocalEnv
           let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
@@ -388,7 +395,12 @@ interpretExpr expr =
           v2 <- interpretExpr e2
           case v1 of
             VLambda f -> f v2
-            _ -> fail $ "interpret Application: " ++ show v1
+            _ ->
+                panic "interpretExpr" [
+                    "Called object is not a function",
+                    "Value found: " <> Text.pack (show v1),
+                    "Expression: " <> PPS.pShowText e1
+                ]
       SS.Let _ dg e -> do
           env' <- interpretDeclGroup dg
           withLocalEnv env' (interpretExpr e)
@@ -403,7 +415,7 @@ interpretExpr expr =
               panic "interpretExpr" [
                   "Ill-typed value in if-expression (should be Bool)",
                   "Value found: " <> Text.pack (show v1),
-                  "Generating expression: " <> PPS.pShowText e1
+                  "Expression: " <> PPS.pShowText e1
               ]
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
