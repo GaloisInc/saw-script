@@ -98,6 +98,10 @@ The most notable changes are:
 
 ## Deprecations
 
+* It was previously possible to declare monadic values of an
+  undocumented type `CryptolSetup t` but not do anything with them.
+  This name is no longer magic.
+
 * `llvm_struct` has been marked deprecated.
 It is the same as `llvm_alias` and you should use this instead.
 (If you were looking for a function to create a struct type from its

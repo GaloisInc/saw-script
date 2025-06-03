@@ -227,13 +227,11 @@ instance Positioned Decl where
 -- Type Level {{{
 
 data Context
-  = CryptolSetup
-  | JavaSetup
+  = JavaSetup
   | LLVMSetup
   | MIRSetup
   | ProofScript
   | TopLevel
-  | CrucibleSetup
   deriving (Eq, Ord, Show)
 
 -- The position information in a type should be thought of as its
@@ -477,13 +475,11 @@ instance PPS.PrettyPrec TyCon where
 
 instance PPS.PrettyPrec Context where
   prettyPrec _ c = case c of
-    CryptolSetup -> "CryptolSetup"
     JavaSetup    -> "JavaSetup"
     LLVMSetup    -> "LLVMSetup"
     MIRSetup     -> "MIRSetup"
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
-    CrucibleSetup-> "CrucibleSetup"
 
 instance PPS.PrettyPrec NamedType where
   prettyPrec par ty = case ty of
