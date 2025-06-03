@@ -95,7 +95,6 @@ moduleNamePieces (ModuleName x) = Text.splitOn "." x
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
-mkModuleName [] = panic "mkModuleName" ["Empty module name"]
 mkModuleName nms = ModuleName $ Text.intercalate "." nms
 
 preludeName :: ModuleName
