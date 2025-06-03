@@ -42,6 +42,12 @@ module SAWCore.Name
   , scFreshNameURI
   , PrimName(..)
   , primNameToExtCns
+    -- * Display Name Environments
+  , DisplayNameEnv(..)
+  , emptyDisplayNameEnv
+  , extendDisplayNameEnv
+  , resolveDisplayName
+  , bestDisplayName
     -- * Naming Environments
   , SAWNamingEnv(..)
   , emptySAWNamingEnv
@@ -54,6 +60,11 @@ module SAWCore.Name
 import           Numeric (showHex)
 import           Data.Char
 import           Data.Hashable
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import           Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
+import qualified Data.List as List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -284,6 +295,62 @@ scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct na
        , uriFragment = Just i'
        }
 
+
+-- Display Name Environments --------------------------------------------------------
+
+-- | A 'DisplayNameEnv' encodes the mappings between display names (type
+-- 'Text') and internal names (type 'VarIndex'). Multiple display
+-- names may be associated with each internal name; these are stored
+-- in priority order, with preferred display names first.
+data DisplayNameEnv =
+  DisplayNameEnv
+  { displayNames :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
+  , displayIndexes :: !(Map Text IntSet)
+  }
+-- Invariants: The 'displayNames' and 'displayIndexes' maps should be
+-- inverses of each other. That is, 'displayNames' maps @i@ to a list
+-- containing @x@ if and only if 'displayIndexes' maps @x@ to a set
+-- containing @i@.
+
+emptyDisplayNameEnv :: DisplayNameEnv
+emptyDisplayNameEnv = DisplayNameEnv mempty mempty
+
+-- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
+-- for a given 'VarIndex'. Display names should be provided in
+-- priority order, with preferred names first. If the 'VarIndex'
+-- already exists in the map, then add the new display names with
+-- higher priority while keeping the old ones.
+extendDisplayNameEnv :: VarIndex -> [Text] -> DisplayNameEnv -> DisplayNameEnv
+extendDisplayNameEnv i aliases env =
+  DisplayNameEnv
+  { displayNames = IntMap.insertWith List.union i aliases (displayNames env)
+  , displayIndexes = foldr insertAlias (displayIndexes env) aliases
+  }
+  where
+    insertAlias :: Text -> Map Text IntSet -> Map Text IntSet
+    insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m
+
+resolveDisplayName :: DisplayNameEnv -> Text -> [VarIndex]
+resolveDisplayName env x =
+  case Map.lookup x (displayIndexes env) of
+    Nothing -> []
+    Just s -> IntSet.elems s
+
+-- | Return the first display name for the given 'VarIndex' that is
+-- unambiguous in the naming environment. If there is no unambiguous
+-- alias, then return 'Nothing'.
+bestDisplayName :: DisplayNameEnv -> VarIndex -> Maybe Text
+bestDisplayName env i =
+  do aliases <- IntMap.lookup i (displayNames env)
+     go aliases
+  where
+    go [] = Nothing
+    go (x : xs) =
+      case Map.lookup x (displayIndexes env) of
+        Nothing -> go xs -- should never happen
+        Just vs
+          | IntSet.size vs == 1 -> Just x
+          | otherwise -> go xs
 
 -- Naming Environments ---------------------------------------------------------
 
