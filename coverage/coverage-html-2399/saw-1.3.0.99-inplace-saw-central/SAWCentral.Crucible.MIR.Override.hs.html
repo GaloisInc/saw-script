@@ -1097,7 +1097,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1078 </span><span class="spaces">             </span><span class="istickedoff">[ <span class="nottickedoff">matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z</span></span>
 <span class="lineno"> 1079 </span><span class="spaces">             </span><span class="istickedoff">| (x, z) &lt;- zip (V.toList xs'') <span class="nottickedoff">zs</span> ]</span>
 <span class="lineno"> 1080 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1081 </span><span class="spaces">    </span><span class="istickedoff">-- match the underlying field of a repr(transparent) struct</span>
+<span class="lineno"> 1081 </span><span class="spaces">    </span><span class="istickedoff">-- match the underlying, non-zero-sized field of a repr(transparent) struct</span>
 <span class="lineno"> 1082 </span><span class="spaces">    </span><span class="istickedoff">(MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs)</span>
 <span class="lineno"> 1083 </span><span class="spaces">      </span><span class="istickedoff">| Just i &lt;- Mir.findReprTransparentField <span class="nottickedoff">col</span> adt</span>
 <span class="lineno"> 1084 </span><span class="spaces">      </span><span class="istickedoff">, Just y &lt;- adt ^? Mir.adtvariants . ix 0 . Mir.vfields . ix i . Mir.fty</span>
