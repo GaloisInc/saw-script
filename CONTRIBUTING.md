@@ -32,6 +32,19 @@ available when working on SAW.
 A number of bits in corners use makefiles to rebuild or clean things.
 You will want to have GNU make (`make` or `gmake`) available.
 
+You will also want to put the `bin` dir that the SAW build generates
+on your `$PATH`, perhaps in general but at least while you're actively
+working on SAW.
+There is, for the time being at least, a reason for this beyond
+convenience: when you run the `intTests` test suite, it runs `saw`
+from the path.
+If there's no `saw` on your path, it fails confusingly.
+If there's some _other_ `saw` on your path, it'll run that one instead
+of the one you just built.
+This is issue
+[#1753](https://github.com/GaloisInc/saw-script/issues/1753);
+with luck it will get fixed soon.
+
 Currently the manual (and other buildable documentation) is built with
 Sphinx.
 All you need for this is a reasonably current Python 3 install.
