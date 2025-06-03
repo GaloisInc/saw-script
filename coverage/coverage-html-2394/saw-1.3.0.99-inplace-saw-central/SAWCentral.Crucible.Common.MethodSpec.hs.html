@@ -1,0 +1,547 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.Common.MethodSpec
+<span class="lineno">    3 </span>Description : Language-neutral method specifications
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : langston
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>This module uses GADTs &amp; type families to distinguish syntax-extension- (source
+<span class="lineno">    9 </span>language-) specific code. This technique is described in the paper \&quot;Trees That
+<span class="lineno">   10 </span>Grow\&quot;, and is prevalent across the Crucible codebase.
+<span class="lineno">   11 </span>-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>{-# LANGUAGE ConstraintKinds #-}
+<span class="lineno">   14 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">   15 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">   16 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">   17 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">   18 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   19 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">   20 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   21 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">   22 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   23 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   24 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   25 </span>{-# LANGUAGE TypeFamilyDependencies #-}
+<span class="lineno">   26 </span>{-# LANGUAGE UndecidableInstances #-}
+<span class="lineno">   27 </span>{-# OPTIONS_GHC -Wno-orphans #-}
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>module SAWCentral.Crucible.Common.MethodSpec
+<span class="lineno">   30 </span>  ( AllocIndex(..)
+<span class="lineno">   31 </span>  , ppAllocIndex
+<span class="lineno">   32 </span>  , nextAllocIndex
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>  , PrePost(..)
+<span class="lineno">   35 </span>  , stateCond
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>  , CrucibleContext
+<span class="lineno">   38 </span>  , AllocSpec
+<span class="lineno">   39 </span>  , TypeName
+<span class="lineno">   40 </span>  , ExtType
+<span class="lineno">   41 </span>  , PointsTo
+<span class="lineno">   42 </span>  , AllocGlobal
+<span class="lineno">   43 </span>  , ResolvedState
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>  , XSetupNull
+<span class="lineno">   46 </span>  , XSetupStruct
+<span class="lineno">   47 </span>  , XSetupTuple
+<span class="lineno">   48 </span>  , XSetupSlice
+<span class="lineno">   49 </span>  , XSetupArray
+<span class="lineno">   50 </span>  , XSetupElem
+<span class="lineno">   51 </span>  , XSetupField
+<span class="lineno">   52 </span>  , XSetupGlobal
+<span class="lineno">   53 </span>  , XSetupCast
+<span class="lineno">   54 </span>  , XSetupUnion
+<span class="lineno">   55 </span>  , XSetupGlobalInitializer
+<span class="lineno">   56 </span>  , XSetupMux
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>  , SetupValue(..)
+<span class="lineno">   59 </span>  , SetupValueHas
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>  , ppSetupValue
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>  , setupToTypedTerm
+<span class="lineno">   64 </span>  , setupToTerm
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>  , GhostValue
+<span class="lineno">   67 </span>  , GhostType
+<span class="lineno">   68 </span>  , GhostGlobal
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>  , ConditionMetadata(..)
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>  , SetupCondition(..)
+<span class="lineno">   73 </span>  , StateSpec(..)
+<span class="lineno">   74 </span>  , csAllocs
+<span class="lineno">   75 </span>  , csPointsTos
+<span class="lineno">   76 </span>  , csConditions
+<span class="lineno">   77 </span>  , csFreshVars
+<span class="lineno">   78 </span>  , csVarTypeNames
+<span class="lineno">   79 </span>  , initialStateSpec
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>  , MethodId
+<span class="lineno">   82 </span>  , Codebase
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>  , CrucibleMethodSpecIR(..)
+<span class="lineno">   85 </span>  , csMethod
+<span class="lineno">   86 </span>  , csArgs
+<span class="lineno">   87 </span>  , csRet
+<span class="lineno">   88 </span>  , csPreState
+<span class="lineno">   89 </span>  , csPostState
+<span class="lineno">   90 </span>  , csArgBindings
+<span class="lineno">   91 </span>  , csRetValue
+<span class="lineno">   92 </span>  , csGlobalAllocs
+<span class="lineno">   93 </span>  , csCodebase
+<span class="lineno">   94 </span>  , csLoc
+<span class="lineno">   95 </span>  , ProofMethod(..)
+<span class="lineno">   96 </span>  , SpecNonce
+<span class="lineno">   97 </span>  , VCStats(..)
+<span class="lineno">   98 </span>  , ProvedSpec(..)
+<span class="lineno">   99 </span>  , psSpecIdent
+<span class="lineno">  100 </span>  , psProofMethod
+<span class="lineno">  101 </span>  , psSpec
+<span class="lineno">  102 </span>  , psSolverStats
+<span class="lineno">  103 </span>  , psVCStats
+<span class="lineno">  104 </span>  , psSpecDeps
+<span class="lineno">  105 </span>  , psElapsedTime
+<span class="lineno">  106 </span>  , mkProvedSpec
+<span class="lineno">  107 </span>  , prettyPosition
+<span class="lineno">  108 </span>  , ppMethodSpec
+<span class="lineno">  109 </span>  , csAllocations
+<span class="lineno">  110 </span>  , csTypeNames
+<span class="lineno">  111 </span>  , makeCrucibleMethodSpecIR
+<span class="lineno">  112 </span>  ) where
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>import           Data.Kind (Type)
+<span class="lineno">  115 </span>import           Data.Map (Map)
+<span class="lineno">  116 </span>import qualified Data.Map as Map
+<span class="lineno">  117 </span>import           Data.Set (Set)
+<span class="lineno">  118 </span>import           Data.Time.Clock
+<span class="lineno">  119 </span>import           Data.Void (absurd)
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>import           Control.Monad (when)
+<span class="lineno">  122 </span>import           Control.Monad.Trans.Maybe
+<span class="lineno">  123 </span>import           Control.Monad.Trans (lift)
+<span class="lineno">  124 </span>import           Control.Lens
+<span class="lineno">  125 </span>import qualified Prettyprinter as PP
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>import           Data.Parameterized.Nonce
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>-- what4
+<span class="lineno">  130 </span>import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>import           Lang.Crucible.JVM (JVM)
+<span class="lineno">  133 </span>import qualified Lang.Crucible.Types as Crucible
+<span class="lineno">  134 </span>  (IntrinsicType, EmptyCtx)
+<span class="lineno">  135 </span>import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+<span class="lineno">  136 </span>import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+<span class="lineno">  137 </span>import           Mir.Intrinsics (MIR)
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
+<span class="lineno">  140 </span>import qualified Cryptol.Utils.PP as Cryptol
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>import           CryptolSAWCore.TypedTerm as SAWVerifier
+<span class="lineno">  143 </span>import           SAWCore.SharedTerm as SAWVerifier
+<span class="lineno">  144 </span>import           SAWCoreWhat4.ReturnTrip as SAWVerifier
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>import           SAWCentral.Crucible.Common (Sym, sawCoreState)
+<span class="lineno">  147 </span>import           SAWCentral.Crucible.Common.Setup.Value
+<span class="lineno">  148 </span>import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
+<span class="lineno">  149 </span>import           SAWCentral.Crucible.JVM.Setup.Value ()
+<span class="lineno">  150 </span>import           SAWCentral.Crucible.MIR.Setup.Value
+<span class="lineno">  151 </span>  (MirSetupEnum(..), MirSetupSlice(..))
+<span class="lineno">  152 </span>import           SAWCentral.Options
+<span class="lineno">  153 </span>import           SAWCentral.Prover.SolverStats
+<span class="lineno">  154 </span>import           SAWCentral.Utils (bullets)
+<span class="lineno">  155 </span>import           SAWCentral.Proof (TheoremNonce, TheoremSummary)
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>-- | Are we writing preconditions or postconditions?
+<span class="lineno">  158 </span>data PrePost
+<span class="lineno">  159 </span>  = PreState | PostState
+<span class="lineno">  160 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>stateCond :: PrePost -&gt; String
+<span class="lineno">  163 </span><span class="decl"><span class="istickedoff">stateCond PreState = &quot;precondition&quot;</span>
+<span class="lineno">  164 </span><span class="spaces"></span><span class="istickedoff">stateCond PostState = &quot;postcondition&quot;</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>--------------------------------------------------------------------------------
+<span class="lineno">  167 </span>-- ** SetupValue
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>-- | A singleton type that encodes the extensions used for each SAW backend.
+<span class="lineno">  170 </span>-- Matching on a value of type @'SAWExt' ext@ allows one to learn which backend
+<span class="lineno">  171 </span>-- is currently in use.
+<span class="lineno">  172 </span>data SAWExt :: Type -&gt; Type where
+<span class="lineno">  173 </span>  LLVMExt :: SAWExt (LLVM arch)
+<span class="lineno">  174 </span>  JVMExt  :: SAWExt JVM
+<span class="lineno">  175 </span>  MIRExt  :: SAWExt MIR
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>-- | This allows checking which SAW backend we are using at runtime.
+<span class="lineno">  178 </span>class IsExt ext where
+<span class="lineno">  179 </span>  sawExt :: SAWExt ext
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>instance IsExt (LLVM arch) where
+<span class="lineno">  182 </span>  <span class="decl"><span class="nottickedoff">sawExt = LLVMExt</span></span>
+<span class="lineno">  183 </span>instance IsExt JVM where
+<span class="lineno">  184 </span>  <span class="decl"><span class="nottickedoff">sawExt = JVMExt</span></span>
+<span class="lineno">  185 </span>instance IsExt MIR where
+<span class="lineno">  186 </span>  <span class="decl"><span class="nottickedoff">sawExt = MIRExt</span></span>
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- | Note that most 'SetupValue' concepts (like allocation indices)
+<span class="lineno">  189 </span>--   are implementation details and won't be familiar to users.
+<span class="lineno">  190 </span>--   Consider using 'resolveSetupValue' and printing the language-specific value
+<span class="lineno">  191 </span>--   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
+<span class="lineno">  192 </span>ppSetupValue :: forall ext ann. IsExt ext =&gt; SetupValue ext -&gt; PP.Doc ann
+<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">ppSetupValue setupval = case setupval of</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">SetupTerm tm   -&gt; ppTypedTerm tm</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">SetupVar i     -&gt; <span class="nottickedoff">ppAllocIndex i</span></span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">SetupNull _    -&gt; PP.pretty &quot;NULL&quot;</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">SetupStruct x vs -&gt;</span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  199 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, packed) -&gt;</span></span>
+<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructLLVM packed vs</span></span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  203 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, _defId) -&gt;</span></span>
+<span class="lineno">  204 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructDefault vs</span></span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">SetupEnum x -&gt;</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, empty) -&gt;</span></span>
+<span class="lineno">  208 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  209 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  210 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, enum_) -&gt;</span></span>
+<span class="lineno">  212 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupEnum enum_</span></span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">SetupTuple x vs -&gt;</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  215 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, empty) -&gt;</span></span>
+<span class="lineno">  216 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  217 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  219 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, ()) -&gt;</span></span>
+<span class="lineno">  220 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppSetupTuple vs</span></span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">SetupSlice x -&gt;</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  223 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, empty) -&gt;</span></span>
+<span class="lineno">  224 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  226 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  227 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, slice) -&gt;</span></span>
+<span class="lineno">  228 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice slice</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">SetupArray _ vs  -&gt; <span class="nottickedoff">PP.brackets (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">SetupElem _ v i  -&gt; <span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; ++ show i)</span></span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">SetupField _ v f -&gt; <span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; ++ f)</span></span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">SetupUnion _ v u -&gt; <span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot;.&quot; ++ u)</span></span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">SetupCast x v -&gt;</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  235 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, tp) -&gt;</span></span>
+<span class="lineno">  236 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.parens (ppSetupValue v) PP.&lt;&gt; PP.pretty (&quot; AS &quot; ++ show tp)</span></span>
+<span class="lineno">  237 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  238 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  239 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, empty) -&gt;</span></span>
+<span class="lineno">  240 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="istickedoff">SetupGlobal _ nm -&gt; <span class="nottickedoff">PP.pretty (&quot;global(&quot; ++ nm ++ &quot;)&quot;)</span></span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">SetupGlobalInitializer _ nm -&gt; <span class="nottickedoff">PP.pretty (&quot;global_initializer(&quot; ++ nm ++ &quot;)&quot;)</span></span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">SetupMux x c t f -&gt;</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case (ext, x) of</span></span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(LLVMExt, empty) -&gt;</span></span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  247 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(JVMExt, empty) -&gt;</span></span>
+<span class="lineno">  248 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">absurd empty</span></span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(MIRExt, ()) -&gt;</span></span>
+<span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;mux&quot; &lt;&gt;</span></span>
+<span class="lineno">  251 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.parens (ppTypedTerm c &lt;&gt; PP.comma PP.&lt;+&gt; ppSetupValue t &lt;&gt; PP.comma PP.&lt;+&gt; ppSetupValue f)</span></span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">ext :: SAWExt ext</span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ext = sawExt @ext</span></span>
+<span class="lineno">  255 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">commaList :: [PP.Doc ann] -&gt; PP.Doc ann</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">commaList []     = PP.emptyDoc</span></span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">commaList (x:xs) = x PP.&lt;&gt; PP.hcat (map (\y -&gt; PP.comma PP.&lt;+&gt; y) xs)</span></span>
+<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">ppSetupStructLLVM ::</span>
+<span class="lineno">  261 </span><span class="spaces">         </span><span class="istickedoff">Bool</span>
+<span class="lineno">  262 </span><span class="spaces">         </span><span class="istickedoff">-- ^ 'True' if this is an LLVM packed struct, 'False' otherwise.</span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff">-&gt; [SetupValue ext] -&gt; PP.Doc ann</span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructLLVM packed vs</span></span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">| packed    = PP.angles (ppSetupStructDefault vs)</span></span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">| otherwise = ppSetupStructDefault vs</span></span>
+<span class="lineno">  267 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">ppSetupStructDefault :: forall ext'. IsExt ext' =&gt; [SetupValue ext'] -&gt; PP.Doc ann</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  270 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">ppSetupTuple :: [SetupValue MIR] -&gt; PP.Doc ann</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))</span></span>
+<span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">ppMirSetupEnum :: MirSetupEnum -&gt; PP.Doc ann</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =</span></span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.pretty variantName PP.&lt;+&gt; ppSetupStructDefault fields</span></span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =</span></span>
+<span class="lineno">  278 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;&lt;symbolic enum&gt;&quot;</span></span>
+<span class="lineno">  279 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">ppMirSetupSlice :: MirSetupSlice -&gt; PP.Doc ann</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSliceRaw ref len) =</span></span>
+<span class="lineno">  282 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;SliceRaw&quot; &lt;&gt; ppSetupTuple [ref, len]</span></span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSlice _ arr) =</span></span>
+<span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppSetupValue arr &lt;&gt; PP.pretty &quot;[..]&quot;</span></span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ppMirSetupSlice (MirSetupSliceRange _ arr start end) =</span></span>
+<span class="lineno">  286 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ppSetupValue arr &lt;&gt; PP.pretty &quot;[&quot; &lt;&gt; PP.pretty start &lt;&gt;</span></span>
+<span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;..&quot; &lt;&gt; PP.pretty end &lt;&gt; PP.pretty &quot;]&quot;</span></span></span>
+<span class="lineno">  288 </span>
+<span class="lineno">  289 </span>setupToTypedTerm ::
+<span class="lineno">  290 </span>  Options {-^ Printing options -} -&gt;
+<span class="lineno">  291 </span>  SharedContext -&gt;
+<span class="lineno">  292 </span>  SetupValue ext -&gt;
+<span class="lineno">  293 </span>  MaybeT IO TypedTerm
+<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">setupToTypedTerm opts sc sv =</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">case sv of</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="nottickedoff">SetupTerm term -&gt; return term</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do t &lt;- setupToTerm opts sc sv</span>
+<span class="lineno">  298 </span><span class="spaces">            </span><span class="nottickedoff">lift $ mkTypedTerm sc t</span></span>
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>-- | Convert a setup value to a SAW-Core term. This is a partial
+<span class="lineno">  301 </span>-- function, as certain setup values ---SetupVar, SetupNull and
+<span class="lineno">  302 </span>-- SetupGlobal--- don't have semantics outside of the symbolic
+<span class="lineno">  303 </span>-- simulator.
+<span class="lineno">  304 </span>setupToTerm ::
+<span class="lineno">  305 </span>  Options -&gt;
+<span class="lineno">  306 </span>  SharedContext -&gt;
+<span class="lineno">  307 </span>  SetupValue ext -&gt;
+<span class="lineno">  308 </span>  MaybeT IO Term
+<span class="lineno">  309 </span><span class="decl"><span class="nottickedoff">setupToTerm opts sc =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="nottickedoff">\case</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="nottickedoff">SetupTerm term -&gt; return (ttTerm term)</span>
+<span class="lineno">  312 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="nottickedoff">SetupStruct _ fields -&gt;</span>
+<span class="lineno">  314 </span><span class="spaces">      </span><span class="nottickedoff">do ts &lt;- mapM (setupToTerm opts sc) fields</span>
+<span class="lineno">  315 </span><span class="spaces">         </span><span class="nottickedoff">lift $ scTuple sc ts</span>
+<span class="lineno">  316 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="nottickedoff">SetupArray _ elems@(_:_) -&gt;</span>
+<span class="lineno">  318 </span><span class="spaces">      </span><span class="nottickedoff">do ts@(t:_) &lt;- mapM (setupToTerm opts sc) elems</span>
+<span class="lineno">  319 </span><span class="spaces">         </span><span class="nottickedoff">typt &lt;- lift $ scTypeOf sc t</span>
+<span class="lineno">  320 </span><span class="spaces">         </span><span class="nottickedoff">vec &lt;- lift $ scVector sc typt ts</span>
+<span class="lineno">  321 </span><span class="spaces">         </span><span class="nottickedoff">typ &lt;- lift $ scTypeOf sc vec</span>
+<span class="lineno">  322 </span><span class="spaces">         </span><span class="nottickedoff">lift $ printOutLn opts Info $ show vec</span>
+<span class="lineno">  323 </span><span class="spaces">         </span><span class="nottickedoff">lift $ printOutLn opts Info $ show typ</span>
+<span class="lineno">  324 </span><span class="spaces">         </span><span class="nottickedoff">return vec</span>
+<span class="lineno">  325 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  326 </span><span class="spaces">    </span><span class="nottickedoff">SetupElem _ base ind -&gt;</span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="nottickedoff">case base of</span>
+<span class="lineno">  328 </span><span class="spaces">        </span><span class="nottickedoff">SetupArray _ elems@(e:_) -&gt;</span>
+<span class="lineno">  329 </span><span class="spaces">          </span><span class="nottickedoff">do let intToNat = fromInteger . toInteger</span>
+<span class="lineno">  330 </span><span class="spaces">             </span><span class="nottickedoff">art &lt;- setupToTerm opts sc base</span>
+<span class="lineno">  331 </span><span class="spaces">             </span><span class="nottickedoff">ixt &lt;- lift $ scNat sc $ intToNat ind</span>
+<span class="lineno">  332 </span><span class="spaces">             </span><span class="nottickedoff">lent &lt;- lift $ scNat sc $ intToNat $ length elems</span>
+<span class="lineno">  333 </span><span class="spaces">             </span><span class="nottickedoff">et &lt;- setupToTerm opts sc e</span>
+<span class="lineno">  334 </span><span class="spaces">             </span><span class="nottickedoff">typ &lt;- lift $ scTypeOf sc et</span>
+<span class="lineno">  335 </span><span class="spaces">             </span><span class="nottickedoff">lift $ scAt sc lent typ art ixt</span>
+<span class="lineno">  336 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  337 </span><span class="spaces">        </span><span class="nottickedoff">SetupStruct _ fs -&gt;</span>
+<span class="lineno">  338 </span><span class="spaces">          </span><span class="nottickedoff">do st &lt;- setupToTerm opts sc base</span>
+<span class="lineno">  339 </span><span class="spaces">             </span><span class="nottickedoff">lift $ scTupleSelector sc st ind (length fs)</span>
+<span class="lineno">  340 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  341 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; MaybeT $ return Nothing</span>
+<span class="lineno">  342 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="nottickedoff">-- SetupVar, SetupNull, SetupGlobal</span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; MaybeT $ return Nothing</span></span>
+<span class="lineno">  345 </span>
+<span class="lineno">  346 </span>--------------------------------------------------------------------------------
+<span class="lineno">  347 </span>-- ** Ghost state
+<span class="lineno">  348 </span>
+<span class="lineno">  349 </span>type GhostValue  = &quot;GhostValue&quot;
+<span class="lineno">  350 </span>type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
+<span class="lineno">  351 </span>type GhostGlobal = Crucible.GlobalVar GhostType
+<span class="lineno">  352 </span>
+<span class="lineno">  353 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Crucible.IntrinsicClass Sym GhostValue</span></span></span></span> where
+<span class="lineno">  354 </span>  type Intrinsic Sym GhostValue ctx = (Cryptol.Schema, Term)
+<span class="lineno">  355 </span>  <span class="decl"><span class="istickedoff">muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =</span>
+<span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">do when (thnSch /= elsSch) $ fail $ unlines $</span>
+<span class="lineno">  357 </span><span class="spaces">         </span><span class="istickedoff">[ &quot;Attempted to mux ghost variables of different types:&quot;</span>
+<span class="lineno">  358 </span><span class="spaces">         </span><span class="istickedoff">, show (Cryptol.pp thnSch)</span>
+<span class="lineno">  359 </span><span class="spaces">         </span><span class="istickedoff">, show (Cryptol.pp elsSch)</span>
+<span class="lineno">  360 </span><span class="spaces">         </span><span class="istickedoff">]</span>
+<span class="lineno">  361 </span><span class="spaces">       </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  362 </span><span class="spaces">       </span><span class="istickedoff">let sc  = saw_ctx st</span>
+<span class="lineno">  363 </span><span class="spaces">       </span><span class="istickedoff">prd' &lt;- toSC <span class="nottickedoff">sym</span> st prd</span>
+<span class="lineno">  364 </span><span class="spaces">       </span><span class="istickedoff">typ  &lt;- scTypeOf sc thn</span>
+<span class="lineno">  365 </span><span class="spaces">       </span><span class="istickedoff">res  &lt;- scIte sc typ prd' thn els</span>
+<span class="lineno">  366 </span><span class="spaces">       </span><span class="istickedoff">return (thnSch, res)</span></span>
+<span class="lineno">  367 </span>
+<span class="lineno">  368 </span>--------------------------------------------------------------------------------
+<span class="lineno">  369 </span>-- *** StateSpec
+<span class="lineno">  370 </span>
+<span class="lineno">  371 </span>data SetupCondition ext where
+<span class="lineno">  372 </span>  SetupCond_Equal    :: ConditionMetadata -&gt; SetupValue ext -&gt; SetupValue ext -&gt; SetupCondition ext
+<span class="lineno">  373 </span>  SetupCond_Pred     :: ConditionMetadata -&gt; TypedTerm -&gt; SetupCondition ext
+<span class="lineno">  374 </span>  SetupCond_Ghost    :: ConditionMetadata -&gt;
+<span class="lineno">  375 </span>                        GhostGlobal -&gt;
+<span class="lineno">  376 </span>                        TypedTerm -&gt;
+<span class="lineno">  377 </span>                        SetupCondition ext
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance SetupValueHas Show ext =&gt; Show (SetupCondition ext)</span></span></span></span></span></span>
+<span class="lineno">  380 </span>
+<span class="lineno">  381 </span>-- | Verification state (either pre- or post-) specification
+<span class="lineno">  382 </span>data StateSpec ext = StateSpec
+<span class="lineno">  383 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csAllocs</span></span></span>        :: Map AllocIndex (AllocSpec ext)
+<span class="lineno">  384 </span>    -- ^ allocated or declared pointers
+<span class="lineno">  385 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csPointsTos</span></span></span>     :: [PointsTo ext]
+<span class="lineno">  386 </span>    -- ^ points-to statements
+<span class="lineno">  387 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csConditions</span></span></span>    :: [SetupCondition ext]
+<span class="lineno">  388 </span>    -- ^ equality, propositions, and ghost-variable conditions
+<span class="lineno">  389 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csFreshVars</span></span></span>     :: [TypedExtCns]
+<span class="lineno">  390 </span>    -- ^ fresh variables created in this state
+<span class="lineno">  391 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csVarTypeNames</span></span></span>  :: !(Map AllocIndex (TypeName ext))
+<span class="lineno">  392 </span>    -- ^ names for types of variables, for diagnostics
+<span class="lineno">  393 </span>  }
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''StateSpec</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>initialStateSpec :: StateSpec ext
+<span class="lineno">  398 </span><span class="decl"><span class="istickedoff">initialStateSpec =  StateSpec</span>
+<span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">{ _csAllocs        = Map.empty</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">, _csPointsTos     = []</span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">, _csConditions    = []</span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="istickedoff">, _csFreshVars     = []</span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="istickedoff">, _csVarTypeNames  = Map.empty</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  405 </span>
+<span class="lineno">  406 </span>--------------------------------------------------------------------------------
+<span class="lineno">  407 </span>-- *** Method specs
+<span class="lineno">  408 </span>
+<span class="lineno">  409 </span>data CrucibleMethodSpecIR ext =
+<span class="lineno">  410 </span>  CrucibleMethodSpec
+<span class="lineno">  411 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csMethod</span></span></span>          :: MethodId ext
+<span class="lineno">  412 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csArgs</span></span></span>            :: [ExtType ext]
+<span class="lineno">  413 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csRet</span></span></span>             :: Maybe (ExtType ext)
+<span class="lineno">  414 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csPreState</span></span></span>        :: StateSpec ext -- ^ state before the function runs
+<span class="lineno">  415 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csPostState</span></span></span>       :: StateSpec ext -- ^ state after the function runs
+<span class="lineno">  416 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csArgBindings</span></span></span>     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
+<span class="lineno">  417 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csRetValue</span></span></span>        :: Maybe (SetupValue ext) -- ^ function return value
+<span class="lineno">  418 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csGlobalAllocs</span></span></span>    :: [AllocGlobal ext] -- ^ globals allocated
+<span class="lineno">  419 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csCodebase</span></span></span>        :: Codebase ext -- ^ the codebase this spec was verified against
+<span class="lineno">  420 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csLoc</span></span></span>             :: ProgramLoc -- ^ where in the SAWscript was this spec?
+<span class="lineno">  421 </span>  }
+<span class="lineno">  422 </span>
+<span class="lineno">  423 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''CrucibleMethodSpecIR</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  424 </span>
+<span class="lineno">  425 </span>data ProofMethod
+<span class="lineno">  426 </span>  = SpecAdmitted
+<span class="lineno">  427 </span>  | SpecProved
+<span class="lineno">  428 </span>
+<span class="lineno">  429 </span>type SpecNonce ext = Nonce GlobalNonceGenerator (ProvedSpec ext)
+<span class="lineno">  430 </span>
+<span class="lineno">  431 </span>-- | Data collected about discharged verification conditions (VCs).
+<span class="lineno">  432 </span>--   Verification conditions arise when proving function specifications
+<span class="lineno">  433 </span>--   due to, e.g., safety conditions, specification postconditions, and
+<span class="lineno">  434 </span>--   preconditions of called override functions.
+<span class="lineno">  435 </span>data VCStats =
+<span class="lineno">  436 </span>  VCStats
+<span class="lineno">  437 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcMetadata</span></span></span>    :: ConditionMetadata -- ^ Metadata describing why the VC arose
+<span class="lineno">  438 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcSolverStats</span></span></span> :: SolverStats       -- ^ Statistics about any solvers used when proving this VC
+<span class="lineno">  439 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcThmSummary</span></span></span>  :: TheoremSummary    -- ^ A summary of the proof status of this VC
+<span class="lineno">  440 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcIdent</span></span></span>       :: TheoremNonce      -- ^ A unique identifier for this VC
+<span class="lineno">  441 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcDeps</span></span></span>        :: Set TheoremNonce  -- ^ A collection of the theorems the proof of this VC relied on
+<span class="lineno">  442 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">vcElapsedTime</span></span></span> :: NominalDiffTime   -- ^ The time required to prove this VC
+<span class="lineno">  443 </span>  }
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>data ProvedSpec ext =
+<span class="lineno">  446 </span>  ProvedSpec
+<span class="lineno">  447 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psSpecIdent</span></span></span>   :: Nonce GlobalNonceGenerator (ProvedSpec ext)
+<span class="lineno">  448 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psProofMethod</span></span></span> :: ProofMethod
+<span class="lineno">  449 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psSpec</span></span></span>        :: CrucibleMethodSpecIR ext
+<span class="lineno">  450 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psSolverStats</span></span></span> :: SolverStats -- ^ statistics about the proof that produced this
+<span class="lineno">  451 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psVCStats</span></span></span>     :: [VCStats]
+<span class="lineno">  452 </span>       -- ^ Stats about the individual verification conditions produced
+<span class="lineno">  453 </span>       --   by the proof of this specification
+<span class="lineno">  454 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psSpecDeps</span></span></span>    :: Set (SpecNonce ext)
+<span class="lineno">  455 </span>                        -- ^ Other proved specifications this proof depends on
+<span class="lineno">  456 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_psElapsedTime</span></span></span> :: NominalDiffTime -- ^ The time elapsed during the proof of this specification
+<span class="lineno">  457 </span>  }
+<span class="lineno">  458 </span>
+<span class="lineno">  459 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''ProvedSpec</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  460 </span>
+<span class="lineno">  461 </span>mkProvedSpec ::
+<span class="lineno">  462 </span>  ProofMethod -&gt;
+<span class="lineno">  463 </span>  CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">  464 </span>  SolverStats -&gt;
+<span class="lineno">  465 </span>  [VCStats] -&gt;
+<span class="lineno">  466 </span>  Set (SpecNonce ext) -&gt;
+<span class="lineno">  467 </span>  NominalDiffTime -&gt;
+<span class="lineno">  468 </span>  IO (ProvedSpec ext)
+<span class="lineno">  469 </span><span class="decl"><span class="istickedoff">mkProvedSpec m mspec stats vcStats sps elapsed =</span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="istickedoff">do n &lt;- freshNonce globalNonceGenerator</span>
+<span class="lineno">  471 </span><span class="spaces">     </span><span class="istickedoff">let ps = ProvedSpec <span class="nottickedoff">n</span> <span class="nottickedoff">m</span> mspec <span class="nottickedoff">stats</span> <span class="nottickedoff">vcStats</span> <span class="nottickedoff">sps</span> <span class="nottickedoff">elapsed</span></span>
+<span class="lineno">  472 </span><span class="spaces">     </span><span class="istickedoff">return ps</span></span>
+<span class="lineno">  473 </span>
+<span class="lineno">  474 </span>-- TODO: remove when what4 switches to prettyprinter
+<span class="lineno">  475 </span>prettyPosition :: Position -&gt; PP.Doc ann
+<span class="lineno">  476 </span><span class="decl"><span class="istickedoff">prettyPosition = PP.viaShow</span></span>
+<span class="lineno">  477 </span>
+<span class="lineno">  478 </span>ppMethodSpec ::
+<span class="lineno">  479 </span>  ( PP.Pretty (MethodId ext)
+<span class="lineno">  480 </span>  , PP.Pretty (ExtType ext)
+<span class="lineno">  481 </span>  ) =&gt;
+<span class="lineno">  482 </span>  CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">  483 </span>  PP.Doc ann
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">ppMethodSpec methodSpec =</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">[ PP.pretty &quot;Name: &quot; &lt;&gt; PP.pretty (methodSpec ^. csMethod)</span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">, PP.pretty &quot;Location: &quot; &lt;&gt; prettyPosition (plSourceLoc (methodSpec ^. csLoc))</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">, PP.pretty &quot;Argument types: &quot;</span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">, bullets '-' (map PP.pretty (methodSpec ^. csArgs))</span>
+<span class="lineno">  490 </span><span class="spaces">  </span><span class="istickedoff">, PP.pretty &quot;Return type: &quot; &lt;&gt; case methodSpec ^. csRet of</span>
+<span class="lineno">  491 </span><span class="spaces">                                       </span><span class="istickedoff">Nothing  -&gt; PP.pretty &quot;&lt;void&gt;&quot;</span>
+<span class="lineno">  492 </span><span class="spaces">                                       </span><span class="istickedoff">Just ret -&gt; PP.pretty ret</span>
+<span class="lineno">  493 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>csAllocations :: CrucibleMethodSpecIR ext -&gt; Map AllocIndex (AllocSpec ext)
+<span class="lineno">  496 </span><span class="decl"><span class="istickedoff">csAllocations</span>
+<span class="lineno">  497 </span><span class="spaces">  </span><span class="istickedoff">= Map.unions</span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">. toListOf ((csPreState &lt;&gt; csPostState) . csAllocs)</span></span>
+<span class="lineno">  499 </span>
+<span class="lineno">  500 </span>csTypeNames :: CrucibleMethodSpecIR ext -&gt; Map AllocIndex (TypeName ext)
+<span class="lineno">  501 </span><span class="decl"><span class="istickedoff">csTypeNames</span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">= Map.unions</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">. toListOf ((csPreState &lt;&gt; csPostState) . csVarTypeNames)</span></span>
+<span class="lineno">  504 </span>
+<span class="lineno">  505 </span>makeCrucibleMethodSpecIR ::
+<span class="lineno">  506 </span>  MethodId ext -&gt;
+<span class="lineno">  507 </span>  [ExtType ext] -&gt;
+<span class="lineno">  508 </span>  Maybe (ExtType ext) -&gt;
+<span class="lineno">  509 </span>  ProgramLoc -&gt;
+<span class="lineno">  510 </span>  Codebase ext -&gt;
+<span class="lineno">  511 </span>  CrucibleMethodSpecIR ext
+<span class="lineno">  512 </span><span class="decl"><span class="istickedoff">makeCrucibleMethodSpecIR meth args ret loc code = do</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">CrucibleMethodSpec</span>
+<span class="lineno">  514 </span><span class="spaces">    </span><span class="istickedoff">{_csMethod          = meth</span>
+<span class="lineno">  515 </span><span class="spaces">    </span><span class="istickedoff">,_csArgs            = args</span>
+<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">,_csRet             = ret</span>
+<span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">,_csPreState        = initialStateSpec</span>
+<span class="lineno">  518 </span><span class="spaces">    </span><span class="istickedoff">,_csPostState       = initialStateSpec</span>
+<span class="lineno">  519 </span><span class="spaces">    </span><span class="istickedoff">,_csArgBindings     = <span class="nottickedoff">Map.empty</span></span>
+<span class="lineno">  520 </span><span class="spaces">    </span><span class="istickedoff">,_csRetValue        = Nothing</span>
+<span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">,_csGlobalAllocs    = []</span>
+<span class="lineno">  522 </span><span class="spaces">    </span><span class="istickedoff">,_csLoc             = loc</span>
+<span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">,_csCodebase        = code</span>
+<span class="lineno">  524 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+
+</pre>
+</body>
+</html>
