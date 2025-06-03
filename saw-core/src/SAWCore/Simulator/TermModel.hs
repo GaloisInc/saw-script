@@ -774,7 +774,7 @@ prims sc cfg =
                 ctm <- boolTerm sc c
                 xtm <- wordTerm sc x
                 amttm <- scNat sc (fromInteger amt) -- TODO, should probably be a Natural?
-                tm <- scGlobalApply sc "Prelude.shiftL" [n',a,ctm,xtm,amttm]
+                tm <- scGlobalApply sc "sawcore:Prelude.shiftL" [n',a,ctm,xtm,amttm]
                 pure (Left (n, tm))
 
   , Prims.bpBvShrInt = \c x amt ->
@@ -786,7 +786,7 @@ prims sc cfg =
                 ctm <- boolTerm sc c
                 xtm <- wordTerm sc x
                 amttm <- scNat sc (fromInteger amt) -- TODO, should probably be a Natural?
-                tm <- scGlobalApply sc "Prelude.shiftR" [n',a,ctm,xtm,amttm]
+                tm <- scGlobalApply sc "sawcore:Prelude.shiftR" [n',a,ctm,xtm,amttm]
                 pure (Left (n, tm))
 
   , Prims.bpBvShl = \c x amt ->
@@ -799,7 +799,7 @@ prims sc cfg =
                 xtm <- wordTerm sc x
                 let an = wordWidth amt
                 amttm <- scBvToNat sc an =<< wordTerm sc amt
-                tm <- scGlobalApply sc "Prelude.shiftL" [n',a,ctm,xtm,amttm]
+                tm <- scGlobalApply sc "sawcore:Prelude.shiftL" [n',a,ctm,xtm,amttm]
                 return (Left (n, tm))
 
   , Prims.bpBvShr = \c x amt ->
@@ -812,7 +812,7 @@ prims sc cfg =
                 xtm <- wordTerm sc x
                 let an = wordWidth amt
                 amttm <- scBvToNat sc an =<< wordTerm sc amt
-                tm <- scGlobalApply sc "Prelude.shiftR" [n',a,ctm,xtm,amttm]
+                tm <- scGlobalApply sc "sawcore:Prelude.shiftR" [n',a,ctm,xtm,amttm]
                 return (Left (n, tm))
 
   , Prims.bpBvRolInt = \x amt ->
@@ -822,7 +822,7 @@ prims sc cfg =
           do n' <- scNat sc n
              a  <- scBoolType sc
              amttm <- scNat sc (fromInteger amt) -- TODO Natural
-             tm <- scGlobalApply sc "Prelude.rotateL" [n',a,xtm,amttm]
+             tm <- scGlobalApply sc "sawcore:Prelude.rotateL" [n',a,xtm,amttm]
              return (Left (n,tm))
 
   , Prims.bpBvRorInt = \x amt ->
@@ -832,7 +832,7 @@ prims sc cfg =
           do n' <- scNat sc n
              a  <- scBoolType sc
              amttm <- scNat sc (fromInteger amt) -- TODO Natural
-             tm <- scGlobalApply sc "Prelude.rotateR" [n',a,xtm,amttm]
+             tm <- scGlobalApply sc "sawcore:Prelude.rotateR" [n',a,xtm,amttm]
              return (Left (n,tm))
 
   , Prims.bpBvRol = \x amt ->
@@ -845,7 +845,7 @@ prims sc cfg =
              xtm <- wordTerm sc x
              let an = wordWidth amt
              amttm <- scBvToNat sc an =<< wordTerm sc amt
-             tm <- scGlobalApply sc "Prelude.rotateL" [n',a,xtm,amttm]
+             tm <- scGlobalApply sc "sawcore:Prelude.rotateL" [n',a,xtm,amttm]
              return (Left (n,tm))
 
   , Prims.bpBvRor = \x amt ->
@@ -858,7 +858,7 @@ prims sc cfg =
              xtm <- wordTerm sc x
              let an = wordWidth amt
              amttm <- scBvToNat sc an =<< wordTerm sc amt
-             tm <- scGlobalApply sc "Prelude.rotateR" [n',a,xtm,amttm]
+             tm <- scGlobalApply sc "sawcore:Prelude.rotateR" [n',a,xtm,amttm]
              return (Left (n,tm))
 
     -- Bitvector misc
@@ -954,35 +954,35 @@ constMap sc cfg = Map.union (Map.fromList localPrims) (Prims.constMap pms)
 
   localPrims =
     -- Shifts
-    [ ("Prelude.bvShl" , bvShiftOp sc cfg id   scBvShl  (Prim.bvShl undefined))
-    , ("Prelude.bvShr" , bvShiftOp sc cfg id   scBvShr  (Prim.bvShr undefined))
-    , ("Prelude.bvSShr", bvShiftOp sc cfg succ scBvSShr (Prim.bvSShr undefined))
+    [ ("sawcore:Prelude.bvShl" , bvShiftOp sc cfg id   scBvShl  (Prim.bvShl undefined))
+    , ("sawcore:Prelude.bvShr" , bvShiftOp sc cfg id   scBvShr  (Prim.bvShr undefined))
+    , ("sawcore:Prelude.bvSShr", bvShiftOp sc cfg succ scBvSShr (Prim.bvSShr undefined))
 
     -- Integers
-    , ("Prelude.intToNat", intToNatOp sc)
-    , ("Prelude.bvToNat" , bvToNatOp sc)
-    , ("Prelude.natToInt", natToIntOp sc)
-    , ("Prelude.intToBv" , intToBvOp sc)
-    , ("Prelude.bvToInt" , bvToIntOp sc cfg)
-    , ("Prelude.sbvToInt", sbvToIntOp sc cfg)
+    , ("sawcore:Prelude.intToNat", intToNatOp sc)
+    , ("sawcore:Prelude.bvToNat" , bvToNatOp sc)
+    , ("sawcore:Prelude.natToInt", natToIntOp sc)
+    , ("sawcore:Prelude.intToBv" , intToBvOp sc)
+    , ("sawcore:Prelude.bvToInt" , bvToIntOp sc cfg)
+    , ("sawcore:Prelude.sbvToInt", sbvToIntOp sc cfg)
 
-    , ("Prelude.error"   , errorOp sc cfg)
+    , ("sawcore:Prelude.error"   , errorOp sc cfg)
 
     -- Integers mod n
-    , ("Prelude.toIntMod"  , toIntModOp sc)
-    , ("Prelude.fromIntMod", fromIntModOp sc)
-    , ("Prelude.intModEq"  , intModEqOp sc)
-    , ("Prelude.intModAdd" , intModAddOp sc)
-    , ("Prelude.intModSub" , intModSubOp sc)
-    , ("Prelude.intModMul" , intModMulOp sc)
-    , ("Prelude.intModNeg" , intModNegOp sc)
+    , ("sawcore:Prelude.toIntMod"  , toIntModOp sc)
+    , ("sawcore:Prelude.fromIntMod", fromIntModOp sc)
+    , ("sawcore:Prelude.intModEq"  , intModEqOp sc)
+    , ("sawcore:Prelude.intModAdd" , intModAddOp sc)
+    , ("sawcore:Prelude.intModSub" , intModSubOp sc)
+    , ("sawcore:Prelude.intModMul" , intModMulOp sc)
+    , ("sawcore:Prelude.intModNeg" , intModNegOp sc)
 
     -- Streams
-    , ("Prelude.MkStream", mkStreamOp sc cfg)
-    , ("Prelude.streamGet", streamGetOp)
+    , ("sawcore:Prelude.MkStream", mkStreamOp sc cfg)
+    , ("sawcore:Prelude.streamGet", streamGetOp)
 
     -- Miscellaneous
-    , ("Prelude.expByNat", Prims.expByNatOp pms)
+    , ("sawcore:Prelude.expByNat", Prims.expByNatOp pms)
     ]
 
 errorOp :: (?recordEC :: BoundECRecorder) => SharedContext -> Sim.SimulatorConfig TermModel -> TmPrim
@@ -991,7 +991,7 @@ errorOp sc cfg =
   Prims.stringFun $ \msg ->
   Prims.Prim $
     do ty' <- readBackTValue sc cfg tv
-       err  <- scGlobalDef sc "Prelude.error"
+       err  <- scGlobalDef sc "sawcore:Prelude.error"
        msg' <- scString sc msg
        tm   <- scApplyAll sc err [ty',msg']
        reflectTerm sc cfg tv tm

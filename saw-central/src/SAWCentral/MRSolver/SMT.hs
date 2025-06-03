@@ -150,8 +150,8 @@ mkReflProof :: SharedContext -> Bool -> IO TmValue
 mkReflProof sc b =
   do b_trm <- scBool sc b
      bool_tp <- scBoolType sc
-     refl_trm <- scCtorApp sc "Prelude.Refl" [bool_tp, b_trm]
-     eq_tp <- scDataTypeApp sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
+     refl_trm <- scCtorApp sc "sawcore:Prelude.Refl" [bool_tp, b_trm]
+     eq_tp <- scDataTypeApp sc "sawcore:Prelude.Eq" [bool_tp, b_trm, b_trm]
      return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm
 
 mkDummyProofValue :: Text -> IO (Thunk TermModel)
@@ -187,16 +187,16 @@ smtNormPrims sc cfg = Map.union $ Map.fromList
   [
     -- Override the usual behavior of @gen@, @genWithProof@, and @VoidEv@ so
     -- they are not evaluated or unfolded
-    ("Prelude.gen", primGlobal sc "Prelude.gen"),
-    ("Prelude.genWithProof", primGlobal sc "Prelude.genWithProof"),
-    ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv"),
-    ("SpecM.SpecM", primGlobal sc "SpecM.SpecM"),
+    ("sawcore:Prelude.gen", primGlobal sc "sawcore:Prelude.gen"),
+    ("sawcore:Prelude.genWithProof", primGlobal sc "sawcore:Prelude.genWithProof"),
+    ("sawcore:SpecM.VoidEv", primGlobal sc "sawcore:SpecM.VoidEv"),
+    ("sawcore:SpecM.SpecM", primGlobal sc "sawcore:SpecM.SpecM"),
 
     -- Normalize an application of @atwithDefault@ to a @gen@ term into an
     -- application of the body of the gen term to the index. Note that this
     -- implicitly assumes that the index is always in bounds, MR solver always
     -- checks that before it creates an indexing term.
-    ("Prelude.atWithDefault",
+    ("sawcore:Prelude.atWithDefault",
      PrimFun $ \_len -> tvalFun $ \a -> PrimFun $ \_errVal ->
       primGenVec sc cfg a $ \f -> primNatTermFun sc $ \ix ->
       Prim (do tm <- scApplyBeta sc f ix
@@ -206,7 +206,7 @@ smtNormPrims sc cfg = Map.union $ Map.fromList
 
     -- Normalize an application of @atWithProof@ to a @gen@ term by applying the
     -- function of the @gen@ to the index
-    ("Prelude.atWithProof",
+    ("sawcore:Prelude.atWithProof",
      PrimFun $ \_len -> tvalFun $ \a -> primGenVec sc cfg a $ \f ->
       primNatTermFun sc $ \ix -> PrimFun $ \_pf ->
       Prim (do tm <- scApplyBeta sc f ix
@@ -215,7 +215,7 @@ smtNormPrims sc cfg = Map.union $ Map.fromList
     ),
 
     -- Override iteWithProof so it unfolds to a normal ite with dummy proof objects
-    ("Prelude.iteWithProof", iteWithProofOp sc cfg)
+    ("sawcore:Prelude.iteWithProof", iteWithProofOp sc cfg)
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
@@ -340,12 +340,12 @@ asVecLen len = SymNatVecLen len
 -- | Recognize a @BVVec@, @Vec@, or @mseq (TCNum ...)@ vector with length
 -- represented as a 'VecLength'
 asVecTypeWithLen :: Recognizer Term (VecLength, Term)
-asVecTypeWithLen (asApplyAll -> (isGlobalDef "Prelude.BVVec" -> Just (),
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "sawcore:Prelude.BVVec" -> Just (),
                                  [asNat -> Just n, len, a]))
   | Just len' <- asUnsignedConcreteBv len = Just (ConstBVVecLen n len', a)
   | otherwise = Just (SymBVVecLen n len, a)
 asVecTypeWithLen (asVectorType -> Just (len, a)) = Just (asVecLen len, a)
-asVecTypeWithLen (asApplyAll -> (isGlobalDef "SpecM.mseq" -> Just (),
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "sawcore:SpecM.mseq" -> Just (),
                                  [_, asNum -> Just (Left len), a])) =
   Just (asVecLen len, a)
 asVecTypeWithLen _ = Nothing
@@ -374,8 +374,8 @@ mrVecLenIxType vlen = mrVecLenAsBVOrNatTerm vlen >>= \case
 mrVecLenIxBound :: VecLength -> Term -> MRM t Term
 mrVecLenIxBound vlen ix = mrVecLenAsBVOrNatTerm vlen >>= \case
   Left (n, len) -> liftSC1 scNat n >>= \n' ->
-                   liftSC2 scGlobalApply "Prelude.bvult" [n', ix, len]
-  Right len -> liftSC2 scGlobalApply "Prelude.ltNat" [ix, len]
+                   liftSC2 scGlobalApply "sawcore:Prelude.bvult" [n', ix, len]
+  Right len -> liftSC2 scGlobalApply "sawcore:Prelude.ltNat" [ix, len]
 
 -- | Test if two vector lengths are equal, and if so, generalize them to use the
 -- same index type as returned by 'mrVecLenIxType'
@@ -409,19 +409,19 @@ mrVecLenGen :: VecLength -> Term -> Term -> MRM t Term
 mrVecLenGen (ConstBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
      len_tm <- liftSC2 scBvLit n (fromIntegral len)
-     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len_tm, tp, f]
+     mrApplyGlobal "sawcore:Prelude.genBVVecNoPf" [n_tm, len_tm, tp, f]
 mrVecLenGen (ConstNatVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
      len_tm <- liftSC1 scNat len
      nat_tp <- liftSC0 scNatType
      f' <- mrLambdaLift1 ("ix", nat_tp) f $ \x f' ->
         liftSC2 scBvNat n_tm x >>= mrApply f'
-     mrApplyGlobal "Prelude.gen" [len_tm, tp, f']
+     mrApplyGlobal "sawcore:Prelude.gen" [len_tm, tp, f']
 mrVecLenGen (SymBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
-     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
+     mrApplyGlobal "sawcore:Prelude.genBVVecNoPf" [n_tm, len, tp, f]
 mrVecLenGen (SymNatVecLen len) tp f =
-  do mrApplyGlobal "Prelude.gen" [len, tp, f]
+  do mrApplyGlobal "sawcore:Prelude.gen" [len, tp, f]
 
 -- | Given a vector length, element type, vector of that length and type, and an
 -- index of type 'mrVecLenIxType', index into the vector
@@ -540,7 +540,7 @@ injReprComp r1 r2 =
 mrApplyRepr :: InjectiveRepr -> Term -> MRM t Term
 mrApplyRepr InjReprId t = return t
 mrApplyRepr (InjReprNum steps) t_top = foldM applyStep t_top steps where
-  applyStep t InjNatToNum = liftSC2 scCtorApp "Cryptol.TCNum" [t]
+  applyStep t InjNatToNum = liftSC2 scCtorApp "sawcore:Cryptol.TCNum" [t]
   applyStep t (InjBVToNat n) = liftSC2 scBvToNat n t
 mrApplyRepr (InjReprPair repr1 repr2) t =
   do t1 <- mrApplyRepr repr1 =<< doTermProj t TermProjLeft
@@ -815,7 +815,7 @@ asSimpleEq (asBoolType -> Just _) = Just $ scBoolEq
 asSimpleEq (asIntegerType -> Just _) = Just $ scIntEq
 asSimpleEq (asSymBitvectorType -> Just n) = Just $ flip scBvEq n
 asSimpleEq (asNumType -> Just ()) = Just $ \sc t1 t2 ->
-  scGlobalApply sc "Cryptol.tcEqual" [t1, t2]
+  scGlobalApply sc "sawcore:Cryptol.tcEqual" [t1, t2]
 asSimpleEq _ = Nothing
 
 -- | A 'Term' in an extended context of universal variables, which are listed

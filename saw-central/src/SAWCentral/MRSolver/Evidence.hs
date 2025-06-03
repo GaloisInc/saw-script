@@ -73,12 +73,12 @@ data RefinesS = RefinesS {
 -- @RefinesS [(a1,A1), ..., (an,An)] ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
 asRefinesS :: Recognizer Term RefinesS
 asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "SpecM.refinesS",
+                         (asGlobalDef -> Just "sawcore:SpecM.refinesS",
                           [ev, rtp1, rtp2,
-                           asApplyAll -> (asGlobalDef -> Just "SpecM.eqRR", _),
+                           asApplyAll -> (asGlobalDef -> Just "sawcore:SpecM.eqRR", _),
                            t1, t2]))) =
   Just $ RefinesS args ev rtp1 rtp2 t1 t2
-asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "SpecM.refinesS", _))) =
+asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "sawcore:SpecM.refinesS", _))) =
   error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation"
 asRefinesS _ = Nothing
 
@@ -117,7 +117,7 @@ data FunAssump t = FunAssump {
 -- or @RewriteFunAssump t2@ otherwise
 asFunAssump :: Maybe t -> Recognizer Term (FunAssump t)
 asFunAssump ann (asRefinesS -> Just (RefinesS args
-                                     (asGlobalDef -> Just "SpecM.VoidEv")
+                                     (asGlobalDef -> Just "sawcore:SpecM.VoidEv")
                                      _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))
                                      t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2)))) =
   let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2

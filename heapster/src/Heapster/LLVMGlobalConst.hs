@@ -55,7 +55,7 @@ bvLitOfIntOpenTerm n i =
 bvVecValueOpenTerm :: NatRepr w -> OpenTerm -> [OpenTerm] -> OpenTerm ->
                       OpenTerm
 bvVecValueOpenTerm w tp ts def_tm =
-  applyOpenTermMulti (globalOpenTerm "Prelude.genBVVecFromVec")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.genBVVecFromVec")
   [natOpenTerm (fromIntegral $ length ts), tp, arrayValueOpenTerm tp ts,
    def_tm, natOpenTerm (natValue w),
    bvLitOfIntOpenTerm (intValue w) (fromIntegral $ length ts)]
@@ -65,7 +65,7 @@ bvVecValueOpenTerm w tp ts def_tm =
 repeatBVVecOpenTerm :: NatRepr w -> OpenTerm -> OpenTerm -> OpenTerm ->
                        OpenTerm
 repeatBVVecOpenTerm w len tp t =
-  applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.repeatBVVec")
   [natOpenTerm (natValue w), len, tp, t]
 
 -- | The information needed to translate an LLVM global to Heapster

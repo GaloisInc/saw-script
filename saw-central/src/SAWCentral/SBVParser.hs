@@ -178,10 +178,10 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
              boolTy <- scBoolType sc
              scMkOp s1 boolTy s2 c arg1 arg2
       shiftop _ _ = fail "parseSBVExpr: wrong number of arguments for binop"
-      scBvShiftL n ty w c v amt = scGlobalApply sc "Prelude.bvShiftL" [n, ty, w, c, v, amt]
-      scBvShiftR n ty w c v amt = scGlobalApply sc "Prelude.bvShiftR" [n, ty, w, c, v, amt]
-      scBvRotateL n ty w _ v amt = scGlobalApply sc "Prelude.bvRotateL" [n, ty, w, v, amt]
-      scBvRotateR n ty w _ v amt = scGlobalApply sc "Prelude.bvRotateR" [n, ty, w, v, amt]
+      scBvShiftL n ty w c v amt = scGlobalApply sc "sawcore:Prelude.bvShiftL" [n, ty, w, c, v, amt]
+      scBvShiftR n ty w c v amt = scGlobalApply sc "sawcore:Prelude.bvShiftR" [n, ty, w, c, v, amt]
+      scBvRotateL n ty w _ v amt = scGlobalApply sc "sawcore:Prelude.bvRotateL" [n, ty, w, v, amt]
+      scBvRotateR n ty w _ v amt = scGlobalApply sc "sawcore:Prelude.bvRotateR" [n, ty, w, v, amt]
 
 ----------------------------------------------------------------------
 

@@ -481,7 +481,7 @@ asSeq :: Recognizer Term (Term, Term)
 asSeq t = do (f, args) <- asApplyAllRecognizer t
              fid <- asGlobalDef f
              case (fid, args) of
-               ("Cryptol.seq", [n, x]) -> return (n,x)
+               ("sawcore:Cryptol.seq", [n, x]) -> return (n,x)
                _ -> Fail.fail "not a seq"
 
 asApplyAllRecognizer :: Recognizer Term (Term, [Term])
@@ -679,19 +679,19 @@ translateTermUnshared t = do
       case f of
       (asGlobalDef -> Just i) ->
         case i of
-        "Prelude.natToInt" ->
+        "sawcore:Prelude.natToInt" ->
           case args of
           [n] -> translateTerm n >>= \case
             Coq.NatLit n' -> pure $ Coq.ZLit n'
-            _ -> translateIdentWithArgs "Prelude.natToInt" [n]
+            _ -> translateIdentWithArgs "sawcore:Prelude.natToInt" [n]
           _ -> badTerm
-        "Prelude.intNeg" ->
+        "sawcore:Prelude.intNeg" ->
           case args of
           [z] -> translateTerm z >>= \case
             Coq.ZLit z' -> pure $ Coq.ZLit (-z')
-            _ -> translateIdentWithArgs "Prelude.intNeg" [z]
+            _ -> translateIdentWithArgs "sawcore:Prelude.intNeg" [z]
           _ -> badTerm
-        "Prelude.ite" ->
+        "sawcore:Prelude.ite" ->
           case args of
           -- `rest` can be non-empty in examples like:
           -- (if b then f else g) arg1 arg2
@@ -703,7 +703,7 @@ translateTermUnshared t = do
           _ -> badTerm
 
         -- Refuse to translate any recursive value defined using Prelude.fix
-        "Prelude.fix" -> badTerm
+        "sawcore:Prelude.fix" -> badTerm
 
         _ -> translateIdentWithArgs i args
       _ -> Coq.App <$> translateTerm f <*> traverse translateTerm args
@@ -727,7 +727,7 @@ defaultTermForType typ = do
   case typ of
     (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
 
-    (isGlobalDef "Prelude.Nat" -> Just ()) -> return $ Coq.NatLit 0
+    (isGlobalDef "sawcore:Prelude.Nat" -> Just ()) -> return $ Coq.NatLit 0
 
     (asIntegerType -> Just ()) -> return $ Coq.ZLit 0
 

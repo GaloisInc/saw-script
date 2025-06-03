@@ -877,7 +877,7 @@ extendEnv sc x ty md v rw =
 typedTermOfString :: SharedContext -> String -> IO TypedTerm
 typedTermOfString sc str =
   do let schema = Cryptol.tMono (Cryptol.tString (length str))
-     bvNat <- scGlobalDef sc "Prelude.bvNat"
+     bvNat <- scGlobalDef sc "sawcore:Prelude.bvNat"
      bvNat8 <- scApply sc bvNat =<< scNat sc 8
      byteT <- scBitvector sc 8
      let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))

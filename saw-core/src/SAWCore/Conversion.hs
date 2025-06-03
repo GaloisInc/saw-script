@@ -307,15 +307,15 @@ asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 -- Prelude matchers
 
 asBoolType :: Matcher ()
-asBoolType = asGlobalDef "Prelude.Bool"
+asBoolType = asGlobalDef "sawcore:Prelude.Bool"
 
 asSuccLit :: Matcher Natural
-asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
+asSuccLit = asCtor "sawcore:Prelude.Succ" asAnyNatLit
 
 asBvNatLit :: Matcher Prim.BitVector
 asBvNatLit =
   (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
-    (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
+    (asGlobalDef "sawcore:Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
 
 checkedIntegerToNonNegInt :: Integer -> Maybe Int
 checkedIntegerToNonNegInt x
@@ -424,12 +424,12 @@ mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
 mkBool :: Bool -> TermBuilder Term
-mkBool True  = mkGlobalDef "Prelude.True"
-mkBool False = mkGlobalDef "Prelude.False"
+mkBool True  = mkGlobalDef "sawcore:Prelude.True"
+mkBool False = mkGlobalDef "sawcore:Prelude.False"
 
 mkBvNat :: Natural -> Integer -> TermBuilder Term
 mkBvNat n x = do
-  mkGlobalDef "Prelude.bvNat"
+  mkGlobalDef "sawcore:Prelude.bvNat"
     `mkApp` (mkNatLit n)
     `mkApp` (mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n))
 
@@ -544,12 +544,12 @@ recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) 
 eq_Tuple :: Conversion
 eq_Tuple = Conversion $ thenMatcher matcher action
   where
-    matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
+    matcher = asGlobalDef "sawcore:Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
     action (_ :*: ts :*: x :*: y) =
       Just (foldr mkAnd (mkBool True) (map mkEq (zip [1 ..] ts)))
       where
-        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkEq (i, t) = mkGlobalDef "Prelude.eq"
+        mkAnd t1 t2 = mkGlobalDef "sawcore:Prelude.and" `mkApp` t1 `mkApp` t2
+        mkEq (i, t) = mkGlobalDef "sawcore:Prelude.eq"
                       `mkApp` return t
                       `mkApp` mkTupleSelector i x
                       `mkApp` mkTupleSelector i y
@@ -558,13 +558,13 @@ eq_Tuple = Conversion $ thenMatcher matcher action
 eq_Record :: Conversion
 eq_Record = Conversion $ thenMatcher matcher action
   where
-    matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
+    matcher = asGlobalDef "sawcore:Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
     action (_ :*: tm :*: x :*: y) =
       Just (foldr mkAnd (mkBool True) (map mkEq (Map.assocs tm)))
       where
-        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
+        mkAnd t1 t2 = mkGlobalDef "sawcore:Prelude.and" `mkApp` t1 `mkApp` t2
         sel t i = mkTermF (FTermF (RecordProj t i))
-        mkEq (i, t) = mkGlobalDef "Prelude.eq"
+        mkEq (i, t) = mkGlobalDef "sawcore:Prelude.eq"
                       `mkApp` return t
                       `mkApp` sel x i
                       `mkApp` sel y i
@@ -579,132 +579,132 @@ natConversions = [ zero_NatLit, succ_NatLit, addNat_NatLit, subNat_NatLit
 zero_NatLit :: Conversion
 zero_NatLit =
     Conversion $
-    thenMatcher (asCtor "Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
+    thenMatcher (asCtor "sawcore:Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
 
 succ_NatLit :: Conversion
 succ_NatLit =
     Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
 addNat_NatLit :: Conversion
-addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Natural -> Natural -> Natural)
+addNat_NatLit = globalConv "sawcore:Prelude.addNat" ((+) :: Natural -> Natural -> Natural)
 
 subNat_NatLit :: Conversion
 subNat_NatLit = Conversion $
-  thenMatcher (asGlobalDef "Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
+  thenMatcher (asGlobalDef "sawcore:Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
 
 mulNat_NatLit :: Conversion
-mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Natural -> Natural -> Natural)
+mulNat_NatLit = globalConv "sawcore:Prelude.mulNat" ((*) :: Natural -> Natural -> Natural)
 
 expNat_NatLit :: Conversion
-expNat_NatLit = globalConv "Prelude.expNat" ((^) :: Natural -> Natural -> Natural)
+expNat_NatLit = globalConv "sawcore:Prelude.expNat" ((^) :: Natural -> Natural -> Natural)
 
 divNat_NatLit :: Conversion
 divNat_NatLit = Conversion $
-  thenMatcher (asGlobalDef "Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
+  thenMatcher (asGlobalDef "sawcore:Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)
 
 remNat_NatLit :: Conversion
 remNat_NatLit = Conversion $
-  thenMatcher (asGlobalDef "Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
+  thenMatcher (asGlobalDef "sawcore:Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
 
 equalNat_NatLit :: Conversion
-equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Natural -> Natural -> Bool)
+equalNat_NatLit = globalConv "sawcore:Prelude.equalNat" ((==) :: Natural -> Natural -> Bool)
 
 -- | Conversions for operations on vector literals
 vecConversions :: [Conversion]
 vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]
 
 at_VecLit :: Conversion
-at_VecLit = globalConv "Prelude.at"
+at_VecLit = globalConv "sawcore:Prelude.at"
     (Prim.at :: Int -> Term -> Prim.Vec Term Term -> Int -> Term)
 
 atWithDefault_VecLit :: Conversion
-atWithDefault_VecLit = globalConv "Prelude.atWithDefault"
+atWithDefault_VecLit = globalConv "sawcore:Prelude.atWithDefault"
     (Prim.atWithDefault :: Int -> Term -> Term -> Prim.Vec Term Term -> Int -> Term)
 
 append_VecLit :: Conversion
-append_VecLit = globalConv "Prelude.append"
+append_VecLit = globalConv "sawcore:Prelude.append"
     (Prim.append :: Int -> Int -> Term -> Prim.Vec Term Term -> Prim.Vec Term Term -> Prim.Vec Term Term)
 
 
 -- | Conversions for operations on bitvector literals
 bvConversions :: [Conversion]
 bvConversions =
-    [ globalConv "Prelude.bvToNat" Prim.bvToNat
+    [ globalConv "sawcore:Prelude.bvToNat" Prim.bvToNat
     , append_bvNat
     , bvAdd_bvNat
-    , globalConv "Prelude.bvAddWithCarry" Prim.bvAddWithCarry
+    , globalConv "sawcore:Prelude.bvAddWithCarry" Prim.bvAddWithCarry
     , bvSub_bvNat
-    , globalConv "Prelude.bvNeg"  Prim.bvNeg
-    , globalConv "Prelude.bvMul"  Prim.bvMul
-    , globalConv "Prelude.bvUDiv" Prim.bvUDiv
-    , globalConv "Prelude.bvURem" Prim.bvURem
-    , globalConv "Prelude.bvSDiv" Prim.bvSDiv
-    , globalConv "Prelude.bvSRem" Prim.bvSRem
-    , globalConv "Prelude.bvShl"  Prim.bvShl
-    , globalConv "Prelude.bvShr"  Prim.bvShr
-    , globalConv "Prelude.bvSShr" Prim.bvSShr
-    , globalConv "Prelude.bvNot"  Prim.bvNot
-    , globalConv "Prelude.bvAnd"  Prim.bvAnd
-    , globalConv "Prelude.bvOr"   Prim.bvOr
-    , globalConv "Prelude.bvXor"  Prim.bvXor
-    , globalConv "Prelude.bvEq"   Prim.bvEq
+    , globalConv "sawcore:Prelude.bvNeg"  Prim.bvNeg
+    , globalConv "sawcore:Prelude.bvMul"  Prim.bvMul
+    , globalConv "sawcore:Prelude.bvUDiv" Prim.bvUDiv
+    , globalConv "sawcore:Prelude.bvURem" Prim.bvURem
+    , globalConv "sawcore:Prelude.bvSDiv" Prim.bvSDiv
+    , globalConv "sawcore:Prelude.bvSRem" Prim.bvSRem
+    , globalConv "sawcore:Prelude.bvShl"  Prim.bvShl
+    , globalConv "sawcore:Prelude.bvShr"  Prim.bvShr
+    , globalConv "sawcore:Prelude.bvSShr" Prim.bvSShr
+    , globalConv "sawcore:Prelude.bvNot"  Prim.bvNot
+    , globalConv "sawcore:Prelude.bvAnd"  Prim.bvAnd
+    , globalConv "sawcore:Prelude.bvOr"   Prim.bvOr
+    , globalConv "sawcore:Prelude.bvXor"  Prim.bvXor
+    , globalConv "sawcore:Prelude.bvEq"   Prim.bvEq
 
     , bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat
     , bvsgt_bvNat, bvsge_bvNat, bvsle_bvNat, bvslt_bvNat
 
-    , globalConv "Prelude.bvTrunc" Prim.bvTrunc
-    , globalConv "Prelude.bvUExt"  Prim.bvUExt
-    , globalConv "Prelude.bvSExt"  Prim.bvSExt
+    , globalConv "sawcore:Prelude.bvTrunc" Prim.bvTrunc
+    , globalConv "sawcore:Prelude.bvUExt"  Prim.bvUExt
+    , globalConv "sawcore:Prelude.bvSExt"  Prim.bvSExt
 
     , at_bvNat, atWithDefault_bvNat, slice_bvNat
     , take_bvNat, drop_bvNat
     ]
 
 append_bvNat :: Conversion
-append_bvNat = globalConv "Prelude.append" Prim.append_bv
+append_bvNat = globalConv "sawcore:Prelude.append" Prim.append_bv
 
 bvAdd_bvNat :: Conversion
-bvAdd_bvNat = globalConv "Prelude.bvAdd" Prim.bvAdd
+bvAdd_bvNat = globalConv "sawcore:Prelude.bvAdd" Prim.bvAdd
 
 bvSub_bvNat :: Conversion
-bvSub_bvNat = globalConv "Prelude.bvSub" Prim.bvSub
+bvSub_bvNat = globalConv "sawcore:Prelude.bvSub" Prim.bvSub
 
 bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Conversion
-bvugt_bvNat = globalConv "Prelude.bvugt" Prim.bvugt
-bvuge_bvNat = globalConv "Prelude.bvuge" Prim.bvuge
-bvult_bvNat = globalConv "Prelude.bvult" Prim.bvult
-bvule_bvNat = globalConv "Prelude.bvule" Prim.bvule
+bvugt_bvNat = globalConv "sawcore:Prelude.bvugt" Prim.bvugt
+bvuge_bvNat = globalConv "sawcore:Prelude.bvuge" Prim.bvuge
+bvult_bvNat = globalConv "sawcore:Prelude.bvult" Prim.bvult
+bvule_bvNat = globalConv "sawcore:Prelude.bvule" Prim.bvule
 
 bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Conversion
-bvsgt_bvNat = globalConv "Prelude.bvsgt" Prim.bvsgt
-bvsge_bvNat = globalConv "Prelude.bvsge" Prim.bvsge
-bvslt_bvNat = globalConv "Prelude.bvslt" Prim.bvslt
-bvsle_bvNat = globalConv "Prelude.bvsle" Prim.bvsle
+bvsgt_bvNat = globalConv "sawcore:Prelude.bvsgt" Prim.bvsgt
+bvsge_bvNat = globalConv "sawcore:Prelude.bvsge" Prim.bvsge
+bvslt_bvNat = globalConv "sawcore:Prelude.bvslt" Prim.bvslt
+bvsle_bvNat = globalConv "sawcore:Prelude.bvsle" Prim.bvsle
 
 at_bvNat :: Conversion
-at_bvNat = globalConv "Prelude.at" Prim.at_bv
+at_bvNat = globalConv "sawcore:Prelude.at" Prim.at_bv
 
 atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
     if fromIntegral i < width x then mkBool (Prim.at_bv n a x i) else return d) <$>
-  (asGlobalDef "Prelude.atWithDefault" <:>
+  (asGlobalDef "sawcore:Prelude.atWithDefault" <:>
    defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
 
 take_bvNat :: Conversion
-take_bvNat = globalConv "Prelude.take" Prim.take_bv
+take_bvNat = globalConv "sawcore:Prelude.take" Prim.take_bv
 
 drop_bvNat :: Conversion
-drop_bvNat = globalConv "Prelude.drop" Prim.drop_bv
+drop_bvNat = globalConv "sawcore:Prelude.drop" Prim.drop_bv
 
 slice_bvNat :: Conversion
-slice_bvNat = globalConv "Prelude.slice" Prim.slice_bv
+slice_bvNat = globalConv "sawcore:Prelude.slice" Prim.slice_bv
 
 mixfix_snd :: (a :*: b) -> b
 mixfix_snd (_ :*: y) = y
@@ -712,23 +712,23 @@ mixfix_snd (_ :*: y) = y
 remove_coerce :: Conversion
 remove_coerce = Conversion $
   return . mixfix_snd <$>
-    (asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
+    (asGlobalDef "sawcore:Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
 
 remove_unsafeCoerce :: Conversion
 remove_unsafeCoerce = Conversion $
   return . mixfix_snd <$>
-    (asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
+    (asGlobalDef "sawcore:Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
 
 remove_ident_coerce :: Conversion
 remove_ident_coerce = Conversion $ thenMatcher pat action
-  where pat = asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny
+  where pat = asGlobalDef "sawcore:Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: _prf :*: x)
           | alphaEquiv t f = return (return x)
           | otherwise = Nothing
 
 remove_ident_unsafeCoerce :: Conversion
 remove_ident_unsafeCoerce = Conversion $ thenMatcher pat action
-  where pat = asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny
+  where pat = asGlobalDef "sawcore:Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: x)
           | alphaEquiv t f = return (return x)
           | otherwise = Nothing

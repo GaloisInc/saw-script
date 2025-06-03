@@ -1331,7 +1331,7 @@ proveByBVInduction script t =
 
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
-            toNat  <- io $ scGlobalDef sc "Prelude.bvToNat"
+            toNat  <- io $ scGlobalDef sc "sawcore:Prelude.bvToNat"
 
             -- The result type of the theorem.
             --
@@ -1356,7 +1356,7 @@ proveByBVInduction script t =
                    tbody <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
                    tsz_shft   <- incVars sc 0 (length pis) tsz
 
-                   bvult <- scGlobalDef sc "Prelude.bvult"
+                   bvult <- scGlobalDef sc "sawcore:Prelude.bvult"
                    islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, tsz, tsz_shft]
 
                    tinner <- scPi sc "_" islt =<< incVars sc 0 1 tbody
@@ -1374,7 +1374,7 @@ proveByBVInduction script t =
                    t1     <- scApplyAllBeta sc (ttTerm t) vars
                    tsz    <- scTupleSelector sc t1 1 2 -- left element
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
-                   teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
+                   teq    <- scDataTypeApp sc "sawcore:Prelude.IsLeNat" [tsz', indVar]
                    tbody  <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- right element
                    t2     <- scPi sc "_" teq =<< incVars sc 0 1 tbody
                    t3     <- scPiList sc pis t2
@@ -1403,7 +1403,7 @@ proveByBVInduction script t =
                    hindEC <- scFreshEC sc "Hind" =<<
                                 do var0 <- scLocalVar sc 0
                                    var1 <- scLocalVar sc 1
-                                   lt   <- scGlobalApply sc "Prelude.IsLtNat" [var0, nVar]
+                                   lt   <- scGlobalApply sc "sawcore:Prelude.IsLtNat" [var0, nVar]
                                    scPi sc "m" natty =<< scPi sc "_" lt =<< scApplyBeta sc indMotive var1
                    hindVar <- scExtCns sc hindEC
                    varECs <- mapM (uncurry (scFreshEC sc)) pis
@@ -1420,19 +1420,19 @@ proveByBVInduction script t =
                                  scTupleSelector sc t1 1 2 -- left element
                    natinnersz <- scApplyAll sc toNat [wt, innersz]
 
-                   succinnersz <- scCtorApp sc "Prelude.Succ" [natinnersz]
+                   succinnersz <- scCtorApp sc "sawcore:Prelude.Succ" [natinnersz]
 
                    bvltEC  <- scFreshEC sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
                    bvltVar <- scExtCns sc bvltEC
 
                    leEC    <- scFreshEC sc "Hle" =<<
-                                 scDataTypeApp sc "Prelude.IsLeNat" [natoutersz, nVar]
+                                 scDataTypeApp sc "sawcore:Prelude.IsLeNat" [natoutersz, nVar]
                    leVar   <- scExtCns sc leEC
 
-                   refl_inner <- scCtorApp sc "Prelude.IsLeNat_base" [natinnersz]
+                   refl_inner <- scCtorApp sc "sawcore:Prelude.IsLeNat_base" [natinnersz]
 
-                   prf     <- do hyx <- scGlobalApply sc "Prelude.bvultToIsLtNat" [wt,innersz,outersz,bvltVar]
-                                 scGlobalApply sc "Prelude.IsLeNat_transitive" [succinnersz, natoutersz, nVar, hyx, leVar]
+                   prf     <- do hyx <- scGlobalApply sc "sawcore:Prelude.bvultToIsLtNat" [wt,innersz,outersz,bvltVar]
+                                 scGlobalApply sc "sawcore:Prelude.IsLeNat_transitive" [succinnersz, natoutersz, nVar, hyx, leVar]
                    inner   <- do body <- scApplyAll sc hindVar ([natinnersz,prf]++innerVars++[refl_inner])
                                  scAbstractExts sc (innerVarECs ++ [bvltEC]) body
 
@@ -1451,9 +1451,9 @@ proveByBVInduction script t =
                    t1     <- scApplyAllBeta sc (ttTerm t) vars
                    tsz    <- scTupleSelector sc t1 1 2 -- left element
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
-                   trefl  <- scCtorApp sc "Prelude.IsLeNat_base" [tsz']
+                   trefl  <- scCtorApp sc "sawcore:Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
-                   ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
+                   ind    <- scGlobalApply sc "sawcore:Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
                    ind'   <- scLambdaList sc pis ind
                    ind''  <- scLambda sc "Hind" thmHyp ind'
 
@@ -2035,8 +2035,8 @@ size_to_term s =
                   C.Forall [] [] t ->
                     case C.evalType mempty t of
                       Left (C.Nat x) | x >= 0 ->
-                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
-                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                        scCtorApp sc "sawcore:Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scCtorApp sc "sawcore:Cryptol.TCInf" []
                       _ -> fail "size_to_term: not a numeric type"
                   _ -> fail "size_to_term: unsupported polymorphic type"
 
@@ -2157,13 +2157,13 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
   where
     prims :: [(String, Ident, Text)]
     prims =
-      [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
-      , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
-      , ("sext" , "Cryptol.ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
-      , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("slt"  , "Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sle"  , "Cryptol.ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      [ ("trunc", "sawcore:Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
+      , ("uext" , "sawcore:Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
+      , ("sext" , "sawcore:Cryptol.ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
+      , ("sgt"  , "sawcore:Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sge"  , "sawcore:Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("slt"  , "sawcore:Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sle"  , "sawcore:Cryptol.ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
       ]
       -- TODO: sext, sdiv, srem, sshr
 
@@ -2338,8 +2338,8 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
     ConclFocus (Prover.asRefinesS . unProp ->
                 Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2)) _ ->
-      do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
-         tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
+      do tp1 <- liftIO $ scGlobalApply sc "sawcore:SpecM.SpecM" [ev, rtp1]
+         tp2 <- liftIO $ scGlobalApply sc "sawcore:SpecM.SpecM" [ev, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1
              tt2 = TypedTerm (TypedTermOther tp2) t2
          (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2

@@ -18,11 +18,20 @@ Various kinds of names.
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWCore.Name
-  ( -- * Module names
-    ModuleName, mkModuleName
+  ( -- * Module schemes
+    ModuleScheme
+  , mkModuleScheme
+  , moduleSchemeText
+  , sawcoreScheme
+  , freshScheme
+    -- * Module names
+  , ModuleName, mkModuleName
+  , mkModuleNameWithScheme
+  , moduleNameScheme
   , preludeName
   , moduleNameText
   , moduleNamePieces
+  , freshModuleName
    -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent, mkSafeIdent
   , parseIdent
@@ -75,30 +84,64 @@ import           Instances.TH.Lift () -- for instance TH.Lift Text
 import SAWCore.Panic (panic)
 
 
+-- Module Name Schemes ---------------------------------------------------------
+
+-- | A 'ModuleScheme' identifies a class of module names.
+newtype ModuleScheme = ModuleScheme Text
+  deriving (Eq, Ord, Generic, TH.Lift)
+
+instance Hashable ModuleScheme -- automatically derived
+
+instance Show ModuleScheme where
+  show (ModuleScheme s) = Text.unpack s
+
+mkModuleScheme :: Text -> ModuleScheme
+mkModuleScheme s = ModuleScheme s
+
+moduleSchemeText :: ModuleScheme -> Text
+moduleSchemeText (ModuleScheme s) = s
+
+-- | The scheme of names that come from parsed @.sawcore@ modules.
+sawcoreScheme :: ModuleScheme
+sawcoreScheme = mkModuleScheme "sawcore"
+
+-- | The scheme of names of fresh variables.
+freshScheme :: ModuleScheme
+freshScheme = mkModuleScheme "fresh"
+
+
 -- Module Names ----------------------------------------------------------------
 
-newtype ModuleName = ModuleName Text
+data ModuleName = ModuleName !ModuleScheme !Text
   deriving (Eq, Ord, Generic, TH.Lift)
 
 instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
-  show (ModuleName s) = Text.unpack s
+  show = Text.unpack . moduleNameText
 
+moduleNameScheme :: ModuleName -> ModuleScheme
+moduleNameScheme (ModuleName s _) = s
 
 moduleNameText :: ModuleName -> Text
-moduleNameText (ModuleName x) = x
+moduleNameText (ModuleName s x) = moduleSchemeText s <> ":" <> x
 
 moduleNamePieces :: ModuleName -> [Text]
-moduleNamePieces (ModuleName x) = Text.splitOn "." x
+moduleNamePieces (ModuleName _ x) = Text.splitOn "." x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
-mkModuleName nms = ModuleName $ Text.intercalate "." nms
+mkModuleName = mkModuleNameWithScheme sawcoreScheme
+
+mkModuleNameWithScheme :: ModuleScheme -> [Text] -> ModuleName
+mkModuleNameWithScheme s nms = ModuleName s $ Text.intercalate "." nms
 
 preludeName :: ModuleName
-preludeName = mkModuleName ["Prelude"]
+preludeName = ModuleName sawcoreScheme "Prelude"
+
+freshModuleName :: ModuleName
+freshModuleName = ModuleName freshScheme ""
 
 
 -- Identifiers -----------------------------------------------------------------
@@ -155,10 +198,12 @@ mkSafeIdent mnm nm =
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
 parseIdent s0 =
-    case reverse (breakEach s0) of
-      (_:[]) -> panic "parseIdent" ["Empty module name"]
-      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
-      _ -> panic "parseIdent" ["Bad identifier " <> Text.pack s0]
+  case break (== ':') s0 of
+    (_, []) -> panic "parseIdent" ["Bad identifier " <> Text.pack s0]
+    (scheme, _ : s1) ->
+      case reverse (breakEach s1) of
+        (nm : rMod) -> mkIdent (mkModuleNameWithScheme (mkModuleScheme (Text.pack scheme)) (reverse rMod)) nm
+        [] -> panic "parseIdent" ["impossible"]
   where breakEach s =
           case break (=='.') s of
             (h, []) -> [Text.pack h]
@@ -173,7 +218,7 @@ isIdent [] = False
 
 -- | Returns true if character can appear in identifier.
 isIdChar :: Char -> Bool
-isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == '.')
+isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == '.') || (c == ':')
 
 
 --------------------------------------------------------------------------------

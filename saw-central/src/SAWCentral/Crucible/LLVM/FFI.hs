@@ -172,7 +172,7 @@ buildTypeEnv :: Ctx => [TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
   case asCtorParams argTerm of
-    Just (primName -> "Cryptol.TCNum", [], [asNat -> Just n]) ->
+    Just (primName -> "sawcore:Cryptol.TCNum", [], [asNat -> Just n]) ->
       bindTypeVar (TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
     _ ->
@@ -192,11 +192,11 @@ mkSizeArg tyArgTerm = do
                       (Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))
   -}
   openToSetupTerm $
-    applyGlobalOpenTerm "Cryptol.ecNumber"
+    applyGlobalOpenTerm "sawcore:Cryptol.ecNumber"
       [ closedOpenTerm tyArgTerm
       , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
-      , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
-          [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
+      , applyGlobalOpenTerm "sawcore:Cryptol.PLiteralSeqBool"
+          [ctorOpenTerm "sawcore:Cryptol.TCNum" [sizeBitSize]]
       ]
   where
   sizeBitSize = natOpenTerm $
@@ -368,7 +368,7 @@ boolTypeInfo =
           , ffiToCry = \x {- : Vec 8 Bool -} -> -- : Bool
               {- x != zero
               => bvNonzero 8 x -}
-              applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8, x]
+              applyGlobalOpenTerm "sawcore:Prelude.bvNonzero" [natOpenTerm 8, x]
           , ffiToLLVM = Nothing
           }
     }
@@ -392,7 +392,7 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
               , ffiToCry = \x {- : Vec llvmSize Bool -} -> -- : Vec n Bool
                   {- drop (llvmSize - n) x
                   => Prelude.bvTrunc (llvmSize - n) n x -}
-                  applyGlobalOpenTerm "Prelude.bvTrunc"
+                  applyGlobalOpenTerm "sawcore:Prelude.bvTrunc"
                     [natOpenTerm (llvmSize - n), natOpenTerm n, x]
               , ffiToLLVM = Nothing
               }
@@ -408,8 +408,8 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
     FFIFloat _ _ ffiFloatSize ->
       let (ffiLLVMType, ffiLLVMCoreType) =
             case ffiFloatSize of
-              FFIFloat32 -> (llvm_float, globalOpenTerm "Prelude.Float")
-              FFIFloat64 -> (llvm_double, globalOpenTerm "Prelude.Double")
+              FFIFloat32 -> (llvm_float, globalOpenTerm "sawcore:Prelude.Float")
+              FFIFloat64 -> (llvm_double, globalOpenTerm "sawcore:Prelude.Double")
       in  FFITypeInfo
             { ffiConv = Nothing
             , .. }
@@ -427,15 +427,15 @@ precondBVZeroPrefix totalLen zeroLen x = do
         => Prelude.bvEq zeroLen
                         (take Bool zeroLen (totalLen - zeroLen) x)
                         (bvNat zeroLen 0) -}
-        applyGlobalOpenTerm "Prelude.bvEq"
+        applyGlobalOpenTerm "sawcore:Prelude.bvEq"
           [ zeroLenTerm
-          , applyGlobalOpenTerm "Prelude.take"
+          , applyGlobalOpenTerm "sawcore:Prelude.take"
               [ boolTypeOpenTerm
               , zeroLenTerm
               , natOpenTerm (totalLen - zeroLen)
               , x
               ]
-          , applyGlobalOpenTerm "Prelude.bvNat"
+          , applyGlobalOpenTerm "sawcore:Prelude.bvNat"
               [zeroLenTerm, natOpenTerm 0]
           ]
   llvm_precond =<< lio (openToTypedTerm precond)
@@ -495,7 +495,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                       {- arr @ i
                       => Prelude.at len ffiLLVMCoreType arr i -}
                       ffiPrecond $
-                        applyGlobalOpenTerm "Prelude.at"
+                        applyGlobalOpenTerm "sawcore:Prelude.at"
                           [totalLenTerm, ffiLLVMCoreType, arr, natOpenTerm i]
               , ffiToCry = \llvmArr {- : Vec totalLen ffiLLVMCoreType -} ->
                   let flatCryArr =
@@ -507,7 +507,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                            (\x -> ffiToCry x)
                                            totalLen
                                            llvmArr -}
-                            applyGlobalOpenTerm "Prelude.map"
+                            applyGlobalOpenTerm "sawcore:Prelude.map"
                               [ ffiLLVMCoreType
                               , ffiCryType
                               , lambdaOpenTerm "x" ffiLLVMCoreType ffiToCry
@@ -521,7 +521,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                 (split (x * y) z ffiCryType flatCryArr) -}
                       foldr
                         (\(cumulLen, dimLen, arrElemType) arr ->
-                          applyGlobalOpenTerm "Prelude.split"
+                          applyGlobalOpenTerm "sawcore:Prelude.split"
                             [cumulLen, dimLen, arrElemType, arr])
                         flatCryArr
                         cumul
@@ -534,7 +534,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                  (join x y (Vec z ffiCryType) cryArr) -}
                         foldr
                           (\(cumulLen, dimLen, arrElemType) arr ->
-                            applyGlobalOpenTerm "Prelude.join"
+                            applyGlobalOpenTerm "sawcore:Prelude.join"
                               [cumulLen, dimLen, arrElemType, arr])
                           cryArr
                           (reverse cumul)
@@ -544,7 +544,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                      (\x -> toLLVM x)
                                      totalLen
                                      flatCryArr -}
-                      applyGlobalOpenTerm "Prelude.map"
+                      applyGlobalOpenTerm "sawcore:Prelude.map"
                         [ basicCryType
                         , ffiLLVMCoreType
                         , lambdaOpenTerm "x" basicCryType toLLVM

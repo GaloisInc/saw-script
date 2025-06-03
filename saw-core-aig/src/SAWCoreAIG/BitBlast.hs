@@ -271,28 +271,28 @@ beConstMap be =
   Map.union (Prims.constMap (prims be)) $
   Map.fromList
   -- Shifts
-  [ ("Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
-  , ("Prelude.bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
-  , ("Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
+  [ ("sawcore:Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
+  , ("sawcore:Prelude.bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
+  , ("sawcore:Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
-  , ("Prelude.intToBv" , intToBvOp be)
-  , ("Prelude.bvToInt" , bvToIntOp be)
-  , ("Prelude.sbvToInt", sbvToIntOp be)
+  , ("sawcore:Prelude.intToNat", Prims.intToNatOp)
+  , ("sawcore:Prelude.natToInt", Prims.natToIntOp)
+  , ("sawcore:Prelude.intToBv" , intToBvOp be)
+  , ("sawcore:Prelude.bvToInt" , bvToIntOp be)
+  , ("sawcore:Prelude.sbvToInt", sbvToIntOp be)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp be)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("sawcore:Prelude.toIntMod"  , toIntModOp)
+  , ("sawcore:Prelude.fromIntMod", fromIntModOp)
+  , ("sawcore:Prelude.intModEq"  , intModEqOp be)
+  , ("sawcore:Prelude.intModAdd" , intModBinOp (+))
+  , ("sawcore:Prelude.intModSub" , intModBinOp (-))
+  , ("sawcore:Prelude.intModMul" , intModBinOp (*))
+  , ("sawcore:Prelude.intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp be)
+  , ("sawcore:Prelude.MkStream", mkStreamOp)
+  , ("sawcore:Prelude.streamGet", streamGetOp be)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp (prims be))
+  , ("sawcore:Prelude.expByNat", Prims.expByNatOp (prims be))
   ]
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -313,7 +313,7 @@ muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, 
 
 muxBExtra :: AIG.IsAIG l g => g s ->
   TValue (BitBlast (l s)) -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra be (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
+muxBExtra be (VDataType (primName -> "sawcore:Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupBStream (VExtra x) i
                   yi <- lookupBStream (VExtra y) i
                   muxBVal be tp c xi yi

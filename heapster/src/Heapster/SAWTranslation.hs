@@ -685,14 +685,14 @@ eitherTypeTrans tp_l tp_r =
 -- 'transTupleTerm' of the input
 leftTrans :: TypeTrans trL -> TypeTrans trR -> OpenTerm -> OpenTerm
 leftTrans tp_l tp_r t =
-  ctorOpenTerm "Prelude.Left" [typeTransTupleType tp_l,
+  ctorOpenTerm "sawcore:Prelude.Left" [typeTransTupleType tp_l,
                                typeTransTupleType tp_r, t]
 
 -- | Apply the @Right@ constructor of the @Either@ type in SAW to the
 -- 'transTupleTerm' of the input
 rightTrans :: TypeTrans trL -> TypeTrans trR -> OpenTerm -> OpenTerm
 rightTrans tp_l tp_r t =
-  ctorOpenTerm "Prelude.Right" [typeTransTupleType tp_l,
+  ctorOpenTerm "sawcore:Prelude.Right" [typeTransTupleType tp_l,
                                 typeTransTupleType tp_r, t]
 
 -- | Eliminate a SAW @Either@ type
@@ -703,7 +703,7 @@ eitherElimTransM :: TypeTrans trL -> TypeTrans trR ->
 eitherElimTransM tp_l tp_r tp_ret fl fr eith =
   do fl_trans <- lambdaTupleTransM "x_left" tp_l fl
      fr_trans <- lambdaTupleTransM "x_right" tp_r fr
-     return $ applyGlobalOpenTerm "Prelude.either"
+     return $ applyGlobalOpenTerm "sawcore:Prelude.either"
        [ typeTransTupleType tp_l, typeTransTupleType tp_r,
          typeTransTupleType tp_ret, fl_trans, fr_trans, eith ]
 
@@ -718,13 +718,13 @@ eithersElimTransM tps tp_ret fs eith =
   foldr (\(tp,f) restM ->
           do f_trans <- lambdaTupleTransM "x_eith_elim" tp f
              rest <- restM
-             return (ctorOpenTerm "Prelude.FunsTo_Cons"
+             return (ctorOpenTerm "sawcore:Prelude.FunsTo_Cons"
                      [typeTransTupleType tp_ret,
                       typeTransTupleType tp, f_trans, rest]))
-  (return $ ctorOpenTerm "Prelude.FunsTo_Nil" [typeTransTupleType tp_ret])
+  (return $ ctorOpenTerm "sawcore:Prelude.FunsTo_Nil" [typeTransTupleType tp_ret])
   (zip tps fs)
   >>= \elims_trans ->
-  return (applyGlobalOpenTerm "Prelude.eithers"
+  return (applyGlobalOpenTerm "sawcore:Prelude.eithers"
           [typeTransTupleType tp_ret, elims_trans, eith])
 
 
@@ -985,9 +985,9 @@ translateType :: (?ev :: EventType) => TypeRepr a ->
                  (TypeTrans (ExprTrans a), [OpenTerm])
 translateType UnitRepr = (mkTypeTrans0 ETrans_Unit, [])
 translateType BoolRepr =
-  (mkTermType1 (globalOpenTerm "Prelude.Bool"), [boolKindDesc])
+  (mkTermType1 (globalOpenTerm "sawcore:Prelude.Bool"), [boolKindDesc])
 translateType NatRepr =
-  (mkTermType1 (dataTypeOpenTerm "Prelude.Nat" []), [natKindDesc])
+  (mkTermType1 (dataTypeOpenTerm "sawcore:Prelude.Nat" []), [natKindDesc])
 translateType (BVRepr w) =
   withKnownNat w
   (mkTermType1 (bitvectorTypeOpenTerm (natOpenTerm $ natValue w)),
@@ -1015,7 +1015,7 @@ translateType (LLVMShapeRepr _) =
    [tpKindDesc])
 
 translateType tp@(FloatRepr _) =
-  (mkTermType1Repr tp $ dataTypeOpenTerm "Prelude.Float" [],
+  (mkTermType1Repr tp $ dataTypeOpenTerm "sawcore:Prelude.Float" [],
    panic "translateType" ["Type descriptions of floats not yet supported"])
 
 translateType (StringRepr UnicodeRepr) =
@@ -1271,34 +1271,34 @@ bvBVOpenTerm w bv = bvLitOpenTerm (BV.asBitsBE w bv)
 
 bvNatOpenTerm :: Natural -> Natural -> OpenTerm
 bvNatOpenTerm w n =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvNat")
   [natOpenTerm w, natOpenTerm (n `mod` 2 ^ w)]
 
 bvAddOpenTerm :: Natural -> OpenTerm -> OpenTerm -> OpenTerm
 bvAddOpenTerm n x y =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvAdd")
   [natOpenTerm n, x, y]
 
 bvMulOpenTerm :: Natural -> OpenTerm -> OpenTerm -> OpenTerm
 bvMulOpenTerm n x y =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvMul")
   [natOpenTerm n, x, y]
 
 bvSplitOpenTerm :: EndianForm -> OpenTerm -> OpenTerm -> OpenTerm ->
                    (OpenTerm, OpenTerm)
 bvSplitOpenTerm BigEndian sz1 sz2 e =
-  (applyGlobalOpenTerm "Prelude.take" [boolTypeOpenTerm, sz1, sz2, e],
-   applyGlobalOpenTerm "Prelude.drop" [boolTypeOpenTerm, sz1, sz2, e])
+  (applyGlobalOpenTerm "sawcore:Prelude.take" [boolTypeOpenTerm, sz1, sz2, e],
+   applyGlobalOpenTerm "sawcore:Prelude.drop" [boolTypeOpenTerm, sz1, sz2, e])
 bvSplitOpenTerm LittleEndian sz1 sz2 e =
-  (applyGlobalOpenTerm "Prelude.drop" [boolTypeOpenTerm, sz2, sz1, e],
-   applyGlobalOpenTerm "Prelude.take" [boolTypeOpenTerm, sz2, sz1, e])
+  (applyGlobalOpenTerm "sawcore:Prelude.drop" [boolTypeOpenTerm, sz2, sz1, e],
+   applyGlobalOpenTerm "sawcore:Prelude.take" [boolTypeOpenTerm, sz2, sz1, e])
 
 bvConcatOpenTerm :: EndianForm -> OpenTerm -> OpenTerm ->
                     OpenTerm -> OpenTerm -> OpenTerm
 bvConcatOpenTerm BigEndian sz1 sz2 e1 e2 =
-  applyGlobalOpenTerm "Prelude.append" [sz1, sz2, boolTypeOpenTerm, e1, e2]
+  applyGlobalOpenTerm "sawcore:Prelude.append" [sz1, sz2, boolTypeOpenTerm, e1, e2]
 bvConcatOpenTerm LittleEndian sz1 sz2 e1 e2 =
-  applyGlobalOpenTerm "Prelude.append" [sz2, sz1, boolTypeOpenTerm, e2, e1]
+  applyGlobalOpenTerm "sawcore:Prelude.append" [sz2, sz1, boolTypeOpenTerm, e2, e1]
 
 -- | Translate a variable to a 'Member' proof, raising an error if the variable
 -- is unbound
@@ -1336,9 +1336,9 @@ instance TransInfo info =>
     [nuMP| PExpr_Var x |] -> translate x
     [nuMP| PExpr_Unit |] -> return ETrans_Unit
     [nuMP| PExpr_Bool True |] ->
-      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.True"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "sawcore:Prelude.True"
     [nuMP| PExpr_Bool False |] ->
-      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.False"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "sawcore:Prelude.False"
     [nuMP| PExpr_Nat i |] ->
       return $ ETrans_Term knownRepr $ natOpenTerm $ mbLift i
     [nuMP| PExpr_String str |] ->
@@ -1451,7 +1451,7 @@ instance TransInfo info =>
          return $ ETrans_Shape $ Just (d, tp)
     [nuMP| PExpr_FalseShape |] ->
       return $
-      ETrans_Shape $ Just (voidTpDesc, dataTypeOpenTerm "Prelude.Void" [])
+      ETrans_Shape $ Just (voidTpDesc, dataTypeOpenTerm "sawcore:Prelude.Void" [])
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Perm <$> descTransM (translateDescs p) <*> (typeTransTypes <$>
@@ -2269,7 +2269,7 @@ getLLVMArrayTransCell arr_trans mb_cell cell_tm (BVPropTrans _ in_rng_pf:_) =
   offsetLLVMAtomicPermTrans (mbMap2 llvmArrayCellToOffset
                              (llvmArrayTransPerm arr_trans) mb_cell) $
   typeTransF (tupleTypeTrans (llvmArrayTransHeadCell arr_trans))
-  [applyGlobalOpenTerm "Prelude.atBVVec"
+  [applyGlobalOpenTerm "sawcore:Prelude.atBVVec"
    [natOpenTerm w, llvmArrayTransLen arr_trans,
     llvmArrayTransCellType arr_trans, llvmArrayTransTerm arr_trans,
     cell_tm, in_rng_pf]]
@@ -2287,7 +2287,7 @@ setLLVMArrayTransCell arr_trans cell_ix_tm cell_value =
   let w = fromInteger $ natVal arr_trans in
   arr_trans {
     llvmArrayTransTerm =
-        applyGlobalOpenTerm "Prelude.updBVVec"
+        applyGlobalOpenTerm "sawcore:Prelude.updBVVec"
         [natOpenTerm w, llvmArrayTransLen arr_trans,
          llvmArrayTransCellType arr_trans, llvmArrayTransTerm arr_trans,
          cell_ix_tm, transTupleTerm cell_value] }
@@ -2315,7 +2315,7 @@ getLLVMArrayTransSlice arr_trans sub_arr_tp rng_trans prop_transs =
       BVPropTrans _ p1_tm = p1_trans
       BVPropTrans _ p2_tm = p2_trans in
   typeTransF sub_arr_tp
-  [applyGlobalOpenTerm "Prelude.sliceBVVec"
+  [applyGlobalOpenTerm "sawcore:Prelude.sliceBVVec"
    [natOpenTerm w, len_tm, elem_tp, off_tm, len'_tm, p1_tm, p2_tm, v_tm]]
 
 -- | Write a slice (= a sub-array) of the translation of an LLVM array
@@ -2333,7 +2333,7 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
       sub_arr_tm = llvmArrayTransTerm sub_arr_trans in
   arr_trans
   { llvmArrayTransTerm =
-      applyGlobalOpenTerm "Prelude.updSliceBVVec"
+      applyGlobalOpenTerm "sawcore:Prelude.updSliceBVVec"
       [natOpenTerm w, len_tm, elem_tp, arr_tm, off_tm, len'_tm, sub_arr_tm] }
 
 
@@ -2741,9 +2741,9 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
          t1 <- translate1 e1
          t2 <- translate1 e2
          return $ mkBVPropTrans prop $
-           dataTypeOpenTerm "Prelude.Eq"
-           [applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-            [natOpenTerm w, globalOpenTerm "Prelude.Bool"],
+           dataTypeOpenTerm "sawcore:Prelude.Eq"
+           [applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.Vec")
+            [natOpenTerm w, globalOpenTerm "sawcore:Prelude.Bool"],
             t1, t2]
 
     [nuMP| BVProp_Neq _ _ |] ->
@@ -2757,9 +2757,9 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
          t1 <- translate1 e1
          t2 <- translate1 e2
          return $ mkBVPropTrans prop $
-           dataTypeOpenTerm "Prelude.Eq"
-           [globalOpenTerm "Prelude.Bool",
-            applyOpenTermMulti (globalOpenTerm "Prelude.bvult")
+           dataTypeOpenTerm "sawcore:Prelude.Eq"
+           [globalOpenTerm "sawcore:Prelude.Bool",
+            applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvult")
             [natOpenTerm w, t1, t2], trueOpenTerm]
 
     [nuMP| BVProp_ULeq e1 e2 |] ->
@@ -2767,9 +2767,9 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
          t1 <- translate1 e1
          t2 <- translate1 e2
          return $ mkBVPropTrans prop $
-           dataTypeOpenTerm "Prelude.Eq"
-           [globalOpenTerm "Prelude.Bool",
-            applyOpenTermMulti (globalOpenTerm "Prelude.bvule")
+           dataTypeOpenTerm "sawcore:Prelude.Eq"
+           [globalOpenTerm "sawcore:Prelude.Bool",
+            applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvule")
             [natOpenTerm w, t1, t2], trueOpenTerm]
 
     [nuMP| BVProp_ULeq_Diff e1 e2 e3 |] ->
@@ -2778,11 +2778,11 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
          t2 <- translate1 e2
          t3 <- translate1 e3
          return $ mkBVPropTrans prop $
-           dataTypeOpenTerm "Prelude.Eq"
-           [globalOpenTerm "Prelude.Bool",
-            applyOpenTermMulti (globalOpenTerm "Prelude.bvule")
+           dataTypeOpenTerm "sawcore:Prelude.Eq"
+           [globalOpenTerm "sawcore:Prelude.Bool",
+            applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvule")
             [natOpenTerm w, t1,
-             applyOpenTermMulti (globalOpenTerm "Prelude.bvSub")
+             applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.bvSub")
               [natOpenTerm w, t2, t3]],
             trueOpenTerm]
 
@@ -2830,7 +2830,7 @@ instance TransInfo info =>
       do (_, tps) <- unETransPerm <$> translate x
          return $ mkPermTypeTrans1 p (tupleTypeOpenTerm' tps)
     [nuMP| ValPerm_False |] ->
-      return $ mkPermTypeTrans1 p $ globalOpenTerm "Prelude.FalseProp"
+      return $ mkPermTypeTrans1 p $ globalOpenTerm "sawcore:Prelude.FalseProp"
 
 -- Translate a permission to type descriptions for the types returned by the
 -- Translate instance above
@@ -4144,7 +4144,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          fmap distPermsHeadPerm $ mbSimplImplOut mb_simpl
        (_ :>: ptrans1 :>: ptrans2) <- itiPermStack <$> ask
        let arr_out_comp_tm =
-             applyGlobalOpenTerm "SpecM.appendCastBVVecS"
+             applyGlobalOpenTerm "sawcore:SpecM.appendCastBVVecS"
              [evTypeTerm ev, w_term, len1_tm, len2_tm, len3_tm,
               elem_tp, transTerm1 ptrans1, transTerm1 ptrans2]
        bindTransM arr_out_comp_tm tp_trans "appended_array" $ \ptrans_arr' ->
@@ -4167,15 +4167,15 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_LLVMArrayEmpty x mb_ap |] ->
     do (w_tm, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
        -- First we build a term of type Vec 0 elem_tp using EmptyVec
-       let vec_tm = applyGlobalOpenTerm "Prelude.EmptyVec" [elem_tp]
+       let vec_tm = applyGlobalOpenTerm "sawcore:Prelude.EmptyVec" [elem_tp]
        -- Next, we build a computation that casts it to BVVec w 0x0 elem_tp
        let w = fromIntegral $ natVal2 mb_ap
        let bvZero_nat_tm =
-             applyGlobalOpenTerm "Prelude.bvToNat"
+             applyGlobalOpenTerm "sawcore:Prelude.bvToNat"
              [w_tm, bvLitOpenTerm (replicate w False)]
        ev <- infoEvType <$> ask
        let vec_cast_m =
-             applyGlobalOpenTerm "SpecM.castVecS"
+             applyGlobalOpenTerm "sawcore:SpecM.castVecS"
              [evTypeTerm ev, elem_tp, natOpenTerm 0, bvZero_nat_tm, vec_tm]
        bindTransM vec_cast_m ap_tp_trans "empty_vec" $ \ptrans_arr ->
          withPermStackM (:>: translateVar x)
@@ -4188,7 +4188,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        withPermStackTopTermsM (:>: translateVar x)
          (\ts (pctx :>: ptrans_block) ->
            let arr_term =
-                 applyGlobalOpenTerm "Prelude.repeatBVVec"
+                 applyGlobalOpenTerm "sawcore:Prelude.repeatBVVec"
                  [w_tm, len_tm, elem_tp, termsExpect1 ts] in
            pctx :>:
            PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]] :>:
@@ -4209,10 +4209,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                  -- what we need is a BVVec of length [0,0,...,1]; the two are
                  -- provably equal but not convertible in SAW core
                  {-
-                 applyOpenTermMulti (globalOpenTerm "Prelude.singletonBVVec")
+                 applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.singletonBVVec")
                  [w_tm, elem_tp, ts]
                  -}
-                 applyGlobalOpenTerm "Prelude.repeatBVVec"
+                 applyGlobalOpenTerm "sawcore:Prelude.repeatBVVec"
                  [w_tm, len_tm, elem_tp, tupleOpenTerm' ts] in
            pctx :>:
            PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
@@ -4304,7 +4304,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        ptrans_arr <- getTopPermM
        ev <- infoEvType <$> ask
        let arr_out_comp_tm =
-             applyGlobalOpenTerm "SpecM.mapBVVecS"
+             applyGlobalOpenTerm "sawcore:SpecM.mapBVVecS"
              [evTypeTerm ev, elem_tp, typeTransType1 cell_out_trans, impl_tm,
               w_term, len_term, transTerm1 ptrans_arr]
        -- Now use bindS to bind the result of arr_out_comp_tm in the remaining
@@ -4539,7 +4539,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        withPermStackM id
          (\(pctx :>: _) ->
            let arr_term =
-                 applyGlobalOpenTerm "Prelude.repeatBVVec"
+                 applyGlobalOpenTerm "sawcore:Prelude.repeatBVVec"
                  [w_term, len_term, unitTypeOpenTerm, unitOpenTerm] in
            pctx :>: typeTransF ttrans [arr_term])
          m
@@ -4590,7 +4590,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
          ev <- infoEvType <$> ask
          unfolded_ptrans <- getTopPermM
-         let folded_m = applyGlobalOpenTerm "SpecM.foldTpElem"
+         let folded_m = applyGlobalOpenTerm "sawcore:SpecM.foldTpElem"
                [evTypeTerm ev, d, transTupleTerm unfolded_ptrans]
          bindTransM folded_m ttrans "ind_val" $ \ptrans ->
            withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans) m
@@ -4619,7 +4619,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          withPermStackTopTermsM id
            (\ts (pctx :>: _) ->
              pctx :>:
-             typeTransF ttrans [applyGlobalOpenTerm "SpecM.unfoldTpElem"
+             typeTransF ttrans [applyGlobalOpenTerm "sawcore:SpecM.unfoldTpElem"
                                 [evTypeTerm ev, d, tupleOpenTerm' ts]])
            m
 
@@ -4762,7 +4762,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        d <- substNamedIndTpDesc d_id args_ctx mb_args
        ev <- infoEvType <$> ask
        unfolded_ptrans <- getTopPermM
-       let folded_m = applyGlobalOpenTerm "SpecM.foldTpElem"
+       let folded_m = applyGlobalOpenTerm "sawcore:SpecM.foldTpElem"
              [evTypeTerm ev, d, transTupleTerm unfolded_ptrans]
        bindTransM folded_m ttrans "ind_val" $ \ptrans ->
          withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans) m
@@ -4776,7 +4776,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
            pctx :>:
-           typeTransF ttrans [applyGlobalOpenTerm "SpecM.unfoldTpElem"
+           typeTransF ttrans [applyGlobalOpenTerm "sawcore:SpecM.unfoldTpElem"
                               [evTypeTerm ev, d, tupleOpenTerm' ts]])
          m
 
@@ -4979,7 +4979,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do mb_false <- nuMultiTransM $ const ValPerm_False
        () <- assertTopPermM "Impl1_ElimFalse" mb_x mb_false
        top_ptrans <- getTopPermM
-       applyGlobalTransM "Prelude.efq" [compReturnTypeM,
+       applyGlobalTransM "sawcore:Prelude.efq" [compReturnTypeM,
                                         return (transTerm1 top_ptrans)]
 
   -- A SimplImpl is translated using translateSimplImpl
@@ -5067,7 +5067,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        e_tm <- translate1 mb_e
        sz1_tm <- translate mb_sz1
        sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
-       let sz2m1_tm = applyGlobalOpenTerm "Prelude.subNat" [sz2_tm, sz1_tm]
+       let sz2m1_tm = applyGlobalOpenTerm "sawcore:Prelude.subNat" [sz2_tm, sz1_tm]
        let (e1_tm,e2_tm) =
              bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
        inExtTransM (ETrans_Term knownRepr e1_tm) $
@@ -5096,7 +5096,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        e_tm <- translate1 mb_e
        sz1_tm <- translate mb_sz1
        sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
-       let sz2m1_tm = applyGlobalOpenTerm "Prelude.subNat" [sz2_tm, sz1_tm]
+       let sz2m1_tm = applyGlobalOpenTerm "sawcore:Prelude.subNat" [sz2_tm, sz1_tm]
        let (e1_tm,_) =
              bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
        inExtTransM (ETrans_Term knownRepr e1_tm) $
@@ -5160,7 +5160,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
       translatePermImplUnary mb_impls $ \m ->
       do bv_tp <- typeTransType1 <$> translateClosed (mbExprType e1)
          e1_trans <- translate1 e1
-         let pf = ctorOpenTerm "Prelude.Refl" [bv_tp, e1_trans]
+         let pf = ctorOpenTerm "sawcore:Prelude.Refl" [bv_tp, e1_trans]
          withPermStackM (:>: translateVar x)
            (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop pf)])
            m
@@ -5182,7 +5182,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.ifBvEqWithProof"
+       applyGlobalTransM "sawcore:Prelude.ifBvEqWithProof"
          [ return ret_tp_m
          , return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
@@ -5205,9 +5205,9 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
     return $ PImplTerm $ \k ->
     let w = natVal2 prop in
-    applyGlobalTransM "Prelude.ite"
+    applyGlobalTransM "sawcore:Prelude.ite"
     [ compReturnTypeM
-    , applyGlobalTransM "Prelude.bvEq"
+    , applyGlobalTransM "sawcore:Prelude.bvEq"
       [ return (natOpenTerm w), translate1 e1, translate1 e2 ]
     , (\ret_tp ->
         implFailAltContTerm ret_tp (mbLift prop_str) k) <$> returnTypeM
@@ -5225,7 +5225,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          t1 <- translate1 e1
          t2 <- translate1 e2
          let pf_tm =
-               applyGlobalOpenTerm "Prelude.unsafeAssertBVULt"
+               applyGlobalOpenTerm "sawcore:Prelude.unsafeAssertBVULt"
                [natOpenTerm w, t1, t2]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
@@ -5239,9 +5239,9 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.ifWithProof"
+       applyGlobalTransM "sawcore:Prelude.ifWithProof"
          [ return ret_tp_m
-         , applyGlobalTransM "Prelude.bvult"
+         , applyGlobalTransM "sawcore:Prelude.bvult"
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2 ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ult_pf" prop_tp_trans
@@ -5260,7 +5260,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          t1 <- translate1 e1
          t2 <- translate1 e2
          let pf_tm =
-               applyGlobalOpenTerm "Prelude.unsafeAssertBVULe"
+               applyGlobalOpenTerm "sawcore:Prelude.unsafeAssertBVULe"
                [natOpenTerm w, t1, t2]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
@@ -5274,9 +5274,9 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.ifWithProof"
+       applyGlobalTransM "sawcore:Prelude.ifWithProof"
          [ return ret_tp_m
-         , applyGlobalTransM "Prelude.bvule"
+         , applyGlobalTransM "sawcore:Prelude.bvule"
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2 ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_pf" prop_tp_trans
@@ -5296,9 +5296,9 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          t2 <- translate1 e2
          t3 <- translate1 e3
          let pf_tm =
-               applyGlobalOpenTerm "Prelude.unsafeAssertBVULe"
+               applyGlobalOpenTerm "sawcore:Prelude.unsafeAssertBVULe"
                [natOpenTerm w, t1,
-                applyGlobalOpenTerm "Prelude.bvSub" [natOpenTerm w, t2, t3]]
+                applyGlobalOpenTerm "sawcore:Prelude.bvSub" [natOpenTerm w, t2, t3]]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (popPImplTerm trans k)
@@ -5311,11 +5311,11 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.ifWithProof"
+       applyGlobalTransM "sawcore:Prelude.ifWithProof"
          [ return ret_tp_m
-         , applyGlobalTransM "Prelude.bvule"
+         , applyGlobalTransM "sawcore:Prelude.bvule"
            [ return (natOpenTerm $ natVal2 prop), translate1 e1
-           , applyGlobalTransM "Prelude.bvSub"
+           , applyGlobalTransM "sawcore:Prelude.bvSub"
              [return (natOpenTerm $ natVal2 prop), translate1 e2, translate1 e3]
            ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
@@ -5444,39 +5444,39 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
   translate mb_e = case mbMatch mb_e of
     [nuMP| BaseIsEq BaseBoolRepr e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.boolEq")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.boolEq")
       [translateRWV e1, translateRWV e2]
   --  [nuMP| BaseIsEq BaseNatRepr e1 e2 |] ->
   --    ETrans_Term <$>
-  --    applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
+  --    applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.equalNat")
   --    [translateRWV e1, translateRWV e2]
     [nuMP| BaseIsEq (BaseBVRepr w) e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvEq")
       [translate w, translateRWV e1, translateRWV e2]
 
     [nuMP| EmptyApp |] -> return ETrans_Unit
 
     -- Booleans
     [nuMP| BoolLit True |] ->
-      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.True"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "sawcore:Prelude.True"
     [nuMP| BoolLit False |] ->
-      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.False"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "sawcore:Prelude.False"
     [nuMP| Not e |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.not")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.not")
       [translateRWV e]
     [nuMP| And e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.and")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.and")
       [translateRWV e1, translateRWV e2]
     [nuMP| Or e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.or")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.or")
       [translateRWV e1, translateRWV e2]
     [nuMP| BoolXor e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.xor")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.xor")
       [translateRWV e1, translateRWV e2]
 
     -- Natural numbers
@@ -5484,32 +5484,32 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
       return $ ETrans_Term knownRepr $ natOpenTerm $ mbLift n
     [nuMP| NatLt e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.ltNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.ltNat")
       [translateRWV e1, translateRWV e2]
     -- [nuMP| NatLe _ _ |] ->
     [nuMP| NatEq e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.equalNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatAdd e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.addNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.addNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatSub e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.subNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.subNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMul e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.mulNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.mulNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatDiv e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.divNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.divNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMod e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.modNat")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.modNat")
       [translateRWV e1, translateRWV e2]
 
     -- Function handles: the expression part of a function handle has no
@@ -5527,126 +5527,126 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
       bvBVOpenTerm (mbLift w) $ mbLift mb_bv
     [nuMP| BVConcat w1 w2 e1 e2 |] ->
       ETrans_Term (BVRepr $ addNat (mbLift w1) (mbLift w2)) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.join")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.join")
       [translate w1, translate w2, translateRWV e1, translateRWV e2]
     [nuMP| BVTrunc w1 w2 e |] ->
       ETrans_Term (BVRepr $ mbLift w1) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvTrunc")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvTrunc")
       [return (natOpenTerm (natValue (mbLift w2) - natValue (mbLift w1))),
        translate w1,
        translateRWV e]
     [nuMP| BVZext w1 w2 e |] ->
       ETrans_Term (BVRepr $ mbLift w1) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvUExt")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvUExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        translate w2, translateRWV e]
     [nuMP| BVSext w1 w2 e |] ->
       ETrans_Term (BVRepr $ mbLift w1) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSExt")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        -- NOTE: bvSExt adds 1 to the 2nd arg
        return (natOpenTerm (natValue (mbLift w2) - 1)),
        translateRWV e]
     [nuMP| BVNot w e |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvNot")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvNot")
       [translate w, translateRWV e]
     [nuMP| BVAnd w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvAnd")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvAnd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVOr w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvOr")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvOr")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVXor w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvXor")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvXor")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVNeg w e |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvNeg")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvNeg")
       [translate w, translateRWV e]
     [nuMP| BVAdd w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvAdd")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvAdd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSub w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSub")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSub")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVMul w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvMul")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvMul")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUdiv w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvUDiv")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvUDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSdiv w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSDiv")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUrem w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvURem")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvURem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSrem w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSRem")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSRem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUle w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvule")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvule")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUlt w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvult")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvult")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSle w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvsle")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvsle")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSlt w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvslt")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvslt")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVCarry w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvCarry")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvCarry")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSCarry w e1 e2 |] ->
       -- NOTE: bvSCarry adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSCarry")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSCarry")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVSBorrow w e1 e2 |] ->
       -- NOTE: bvSBorrow adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
       ETrans_Term knownRepr <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSBorrow")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSBorrow")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVShl w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvShiftL")
-      [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
-       return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvShiftL")
+      [translate w, return (globalOpenTerm "sawcore:Prelude.Bool"), translate w,
+       return (globalOpenTerm "sawcore:Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVLshr w e1 e2 |] ->
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvShiftR")
-      [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
-       return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvShiftR")
+      [translate w, return (globalOpenTerm "sawcore:Prelude.Bool"), translate w,
+       return (globalOpenTerm "sawcore:Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVAshr w e1 e2 |] ->
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
       ETrans_Term (BVRepr $ mbLift w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSShiftR")
-      [return w_minus_1, return (globalOpenTerm "Prelude.Bool"), translate w,
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvSShiftR")
+      [return w_minus_1, return (globalOpenTerm "sawcore:Prelude.Bool"), translate w,
        translateRWV e1, translateRWV e2]
     [nuMP| BoolToBV mb_w e |] ->
       let w = mbLift mb_w in
       ETrans_Term (BVRepr w) <$>
-      applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+      applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.ite")
       [bitvectorTransM (translate mb_w),
        translateRWV e,
        return (bvBVOpenTerm w (BV.one w)),
@@ -5654,8 +5654,8 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
     [nuMP| BVNonzero mb_w e |] ->
       let w = mbLift mb_w in
       ETrans_Term knownRepr <$>
-      applyTransM (return $ globalOpenTerm "Prelude.not")
-      (applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
+      applyTransM (return $ globalOpenTerm "sawcore:Prelude.not")
+      (applyMultiTransM (return $ globalOpenTerm "sawcore:Prelude.bvEq")
        [translate mb_w, translateRWV e,
         return (bvBVOpenTerm w (BV.zero w))])
 
@@ -5863,7 +5863,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
 
   -- FIXME HERE: figure out why these asserts always translate to ite True
   [nuMP| TypedAssert e _ |] ->
-    applyGlobalTransM "Prelude.ite"
+    applyGlobalTransM "sawcore:Prelude.ite"
     [compReturnTypeM, translate1 e, m,
      mkErrorComp ("Failed Assert at " ++
                   renderDoc (ppShortFileName (plSourceLoc loc)))]
@@ -6012,7 +6012,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
                    [| \stmt -> nu $ \ret ->
                      distPermsHeadPerm $ typedLLVMStmtOut stmt ret |])
          mb_stmt
-       let t = applyGlobalTermLike "Prelude.boolToEither" [b]
+       let t = applyGlobalTermLike "sawcore:Prelude.boolToEither" [b]
        withPermStackM (:>: Member_Base) (:>: typeTransF tptrans [t]) m
 
 
@@ -6050,7 +6050,7 @@ instance PermCheckExtC ext exprExt =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedJump impl_tgt |] -> translate impl_tgt
     [nuMP| TypedBr reg impl_tgt1 impl_tgt2 |] ->
-      applyGlobalTransM "Prelude.ite"
+      applyGlobalTransM "sawcore:Prelude.ite"
       [compReturnTypeM, translate1 reg,
        translate impl_tgt1, translate impl_tgt2]
     [nuMP| TypedReturn impl_ret |] -> translate impl_ret
@@ -6599,9 +6599,9 @@ translateDescTypeFun :: SharedContext -> PermEnv -> CruCtx ctx ->
 translateDescTypeFun sc env ctx d =
   let ?ev = permEnvEventType env in
   let klist = listOpenTerm (dataTypeOpenTerm
-                            "SpecM.KindDesc" []) (snd $ translateCruCtx ctx) in
+                            "sawcore:SpecM.KindDesc" []) (snd $ translateCruCtx ctx) in
   completeNormOpenTerm sc $
-  applyGlobalOpenTerm "SpecM.pureTpElemTypeFun" [evTypeTerm ?ev, klist, d]
+  applyGlobalOpenTerm "sawcore:SpecM.pureTpElemTypeFun" [evTypeTerm ?ev, klist, d]
 
 -- | Translate a context of arguments plus a type description @T@ that describes
 -- the body of an inductive type over those arguments -- meaning that it uses
@@ -6619,6 +6619,6 @@ translateIndTypeFun sc env ctx d =
   lambdaExprCtx ctx $
   do args_tms <- transTerms <$> infoCtx <$> ask
      let ks = snd $ translateCruCtx ctx
-     return $ applyGlobalOpenTerm "SpecM.tpElemEnv"
+     return $ applyGlobalOpenTerm "sawcore:SpecM.tpElemEnv"
        [evTypeTerm (permEnvEventType env), tpEnvOpenTerm (zip ks args_tms),
-        ctorOpenTerm "SpecM.IsData" [], indTpDesc d]
+        ctorOpenTerm "sawcore:SpecM.IsData" [], indTpDesc d]

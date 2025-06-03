@@ -177,20 +177,20 @@ asConstantNat t =
          i <- R.asGlobalDef f
          case xs of
            [x, y]
-             | i == "Prelude.addNat" -> (+) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.mulNat" -> (*) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.expNat" -> (^) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.subNat" ->
+             | i == "sawcore:Prelude.addNat" -> (+) <$> asConstantNat x <*> asConstantNat y
+             | i == "sawcore:Prelude.mulNat" -> (*) <$> asConstantNat x <*> asConstantNat y
+             | i == "sawcore:Prelude.expNat" -> (^) <$> asConstantNat x <*> asConstantNat y
+             | i == "sawcore:Prelude.subNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (x' >= y')
                     return (x' - y')
-             | i == "Prelude.divNat" ->
+             | i == "sawcore:Prelude.divNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (y' > 0)
                     return (x' `div` y')
-             | i == "Prelude.remNat" ->
+             | i == "sawcore:Prelude.remNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (y' > 0)
@@ -911,7 +911,7 @@ hoistIfs sc t = do
 
    let app x y = join (scTermF sc <$> (pure App <*> x <*> y))
    itePat <-
-          (scGlobalDef sc "Prelude.ite")
+          (scGlobalDef sc "sawcore:Prelude.ite")
           `app`
           (scLocalVar sc 0)
           `app`
@@ -922,28 +922,28 @@ hoistIfs sc t = do
           (scLocalVar sc 3)
 
    rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
-              [ "Prelude.ite_true"
-              , "Prelude.ite_false"
-              , "Prelude.ite_not"
-              , "Prelude.ite_nest1"
-              , "Prelude.ite_nest2"
-              , "Prelude.ite_eq"
-              , "Prelude.ite_bit_false_1"
-              , "Prelude.ite_bit_true_1"
-              , "Prelude.ite_bit"
-              , "Prelude.not_not"
-              , "Prelude.and_True1"
-              , "Prelude.and_False1"
-              , "Prelude.and_True2"
-              , "Prelude.and_False2"
-              , "Prelude.and_idem"
-              , "Prelude.or_True1"
-              , "Prelude.or_False1"
-              , "Prelude.or_True2"
-              , "Prelude.or_False2"
-              , "Prelude.or_idem"
-              , "Prelude.not_or"
-              , "Prelude.not_and"
+              [ "sawcore:Prelude.ite_true"
+              , "sawcore:Prelude.ite_false"
+              , "sawcore:Prelude.ite_not"
+              , "sawcore:Prelude.ite_nest1"
+              , "sawcore:Prelude.ite_nest2"
+              , "sawcore:Prelude.ite_eq"
+              , "sawcore:Prelude.ite_bit_false_1"
+              , "sawcore:Prelude.ite_bit_true_1"
+              , "sawcore:Prelude.ite_bit"
+              , "sawcore:Prelude.not_not"
+              , "sawcore:Prelude.and_True1"
+              , "sawcore:Prelude.and_False1"
+              , "sawcore:Prelude.and_True2"
+              , "sawcore:Prelude.and_False2"
+              , "sawcore:Prelude.and_idem"
+              , "sawcore:Prelude.or_True1"
+              , "sawcore:Prelude.or_False1"
+              , "sawcore:Prelude.or_True2"
+              , "sawcore:Prelude.or_False2"
+              , "sawcore:Prelude.or_idem"
+              , "sawcore:Prelude.not_or"
+              , "sawcore:Prelude.not_and"
               ]
    let ss :: Simpset () = addRules rules emptySimpset
 
@@ -968,7 +968,7 @@ splitCond sc ss c t = do
 
    (_,then_branch) <- replaceTerm sc ss (c, trueTerm) t
    (_,else_branch) <- replaceTerm sc ss (c, falseTerm) t
-   scGlobalApply sc "Prelude.ite" [ty, c, then_branch, else_branch]
+   scGlobalApply sc "sawcore:Prelude.ite" [ty, c, then_branch, else_branch]
 
 
 type HoistIfs s = (Term, [(Term, Set (ExtCns Term))])
@@ -1004,7 +1004,7 @@ doHoistIfs sc ss hoistCache itePat = go
                (then_branch',conds1) <- go then_branch
                (else_branch',conds2) <- go else_branch
 
-               t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
+               t' <- scGlobalApply sc "sawcore:Prelude.ite" [branch_tp, cond, then_branch', else_branch']
                let ecs = getAllExtSet cond
                return (t', (cond, ecs) : conds1 ++ conds2)
 
