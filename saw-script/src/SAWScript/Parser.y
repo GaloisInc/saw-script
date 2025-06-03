@@ -260,8 +260,7 @@ BaseType :: { Type }
  | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
 
 Context :: { Type }
- : 'CryptolSetup'                       { tContext (getPos $1) CryptolSetup   }
- | 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
+ : 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
  | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup      }
  | 'MIRSetup'                           { tContext (getPos $1) MIRSetup       }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
