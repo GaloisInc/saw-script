@@ -255,7 +255,7 @@ themselves symbolic:
 
 This is a rather tedious process, however, as we had to repeatedly use
 `mir_fresh_var` to create a fresh, symbolic value for each field. Moreover,
-because `mit_fresh_var` does not work for structs, we had to recursively apply
+because `mir_fresh_var` does not work for structs, we had to recursively apply
 this process in order to create a fresh `Foo` value. It works, but it takes a
 lot of typing to accomplish.
 
