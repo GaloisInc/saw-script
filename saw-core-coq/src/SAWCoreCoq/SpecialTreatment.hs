@@ -175,23 +175,17 @@ skip = IdentSpecialTreatment
 -- | The Coq built-in @Datatypes@ module
 datatypesModule :: ModuleName
 datatypesModule =
-  -- NOTE: SAW core convention is most specific module name component first, so
-  -- this is really Coq.Init.Datatypes
-  mkModuleName ["Datatypes", "Init", "Coq"]
+  mkModuleName ["Coq", "Init", "Datatypes"]
 
 -- | The Coq built-in @Logic@ module
 logicModule :: ModuleName
 logicModule =
-  -- NOTE: SAW core convention is most specific module name component first, so
-  -- this is really Coq.Init.Logic
-  mkModuleName ["Logic", "Init", "Coq"]
+  mkModuleName ["Coq", "Init", "Logic"]
 
 -- | The Coq built-in @String@ module.
 stringModule :: ModuleName
 stringModule =
-  -- NOTE: SAW core convention is most specific module name component first, so
-  -- this is really Coq.Strings.String
-  mkModuleName ["String", "Strings", "Coq"]
+  mkModuleName ["Coq", "Strings", "String"]
 
 -- | The @SAWCoreScaffolding@ module
 sawDefinitionsModule :: ModuleName

@@ -96,7 +96,7 @@ moduleNamePieces (ModuleName x) = Text.splitOn "." x
 -- module name given first.
 mkModuleName :: [Text] -> ModuleName
 mkModuleName [] = panic "mkModuleName" ["Empty module name"]
-mkModuleName nms = ModuleName $ Text.intercalate "." (reverse nms)
+mkModuleName nms = ModuleName $ Text.intercalate "." nms
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
