@@ -395,7 +395,7 @@ themselves symbolic:</p>
 </div>
 <p>This is a rather tedious process, however, as we had to repeatedly use
 <code class="docutils literal notranslate"><span class="pre">mir_fresh_var</span></code> to create a fresh, symbolic value for each field. Moreover,
-because <code class="docutils literal notranslate"><span class="pre">mit_fresh_var</span></code> does not work for structs, we had to recursively apply
+because <code class="docutils literal notranslate"><span class="pre">mir_fresh_var</span></code> does not work for structs, we had to recursively apply
 this process in order to create a fresh <code class="docutils literal notranslate"><span class="pre">Foo</span></code> value. It works, but it takes a
 lot of typing to accomplish.</p>
 <p>To make this process less tedious, SAW offers a <code class="docutils literal notranslate"><span class="pre">mir_fresh_expanded_value</span></code>

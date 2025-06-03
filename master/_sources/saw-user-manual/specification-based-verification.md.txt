@@ -327,7 +327,7 @@ The following MIR types correspond to Cryptol types:
 - `mir_i32` and `mir_u32`: Corresponds to the Cryptol `[32]` type.
 - `mir_i64` and `mir_u64`: Corresponds to the Cryptol `[64]` type.
 - `mir_i128` and `mir_u128`: Corresponds to the Cryptol `[128]` type.
-- `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[32]` type.
+- `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[64]` type.
 - `mir_tuple [<ty_1>, ..., <ty_n>]`: Corresponds to the Cryptol tuple
   `(<cty_1>, ..., <cty_n>)`, where `<cty_i>` is the Cryptol type corresponding
   to `<ty_i>` for each `i` ranging from `1` to `n`.
@@ -1158,7 +1158,7 @@ let my_len_spec = do {
 
   mir_execute_func [mir_str_slice_value s];
 
-  mir_return (mir_term {{ 5 : [32] }});
+  mir_return (mir_term {{ 5 : [64] }});
 };
 :::
 
