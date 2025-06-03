@@ -96,6 +96,9 @@ The most notable changes are:
 ￼ predicates of non-Bit type due to evaluation failures, while MIR and JVM
 ￼ backends accepted them, leading to backend-specific errors.
 
+* The `mir_isize` and `mir_usize` types now correspond to the Cryptol type
+  `[64]` instead of `[32]`.
+
 ## Deprecations
 
 * It was previously possible to declare monadic values of an
