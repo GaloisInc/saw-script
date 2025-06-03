@@ -10,4 +10,4 @@ cryptol_mult x = x * 0x85EBCA77
 
 m <- llvm_load_module "test.bc";
 llvm_mult <- llvm_extract m "mult";
-prove abc {{ \x -> llvm_mult x == cryptol_mult x }};
+prove_print abc {{ \x -> llvm_mult x == cryptol_mult x }};

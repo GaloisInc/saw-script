@@ -50,6 +50,12 @@ variable "SAW", pointing to the corresponding executable, and with appropriate
 Java classpaths included. It's a good idea to include a README in each test
 directory.
 
+Test script success or failure is typically determined by the SAW exit
+code. Note that the SAW `prove` command does *not* produce an error
+upon finding a counterexample; to abort with an error code when a
+proof fails, use `prove_print`. The SAW `exit` command is also useful.
+Use `fails` to write tests involving expected failure.
+
 For tests that need binary artefacts (Java bytecode, LLVM bitcode) or
 things that might as well be (linked-mir.json from mir-json), include
 the corresponding source and a (gmake) Makefile that builds the

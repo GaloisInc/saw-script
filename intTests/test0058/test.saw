@@ -37,8 +37,8 @@ print l2'; // [..] ... List of Cryptol terms representing "the", "and", "for", "
 // eval_list and list_term should be inverses
 let l1'' = list_term l1';
 let thm1 = {{ l1 == l1'' }};
-prove z3 thm1;
+prove_print z3 thm1;
 
 let l2'' = list_term l2';
 let thm2 = {{ l2 == l2'' }};
-prove z3 thm2;
+prove_print z3 thm2;

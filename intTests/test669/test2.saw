@@ -5,5 +5,5 @@ let {{
    g (a : t) (b : t) = (a.x < b.x) && (a.y < b.y)
 }};
 
-prove (quickcheck 100) {{ \x -> g x (f x) }};
+prove_print (quickcheck 100) {{ \x -> g x (f x) }};
 

@@ -21,7 +21,7 @@ lemmas <- for
   ]
   (prove_print assume_unsat);
 
-// Use those axioms to prove a nonmtrivial equality
+// Use those axioms to prove a nontrivial equality
 thm <- prove_print
   (do {
     unfolding ["term1","term2"];

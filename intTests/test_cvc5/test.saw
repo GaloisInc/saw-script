@@ -6,4 +6,4 @@ add_mul_lemma m n p q =
   (m * n + p < m * q)
 }};
 
-prove (w4_unint_cvc5 []) {{ add_mul_lemma }};
+prove_print (w4_unint_cvc5 []) {{ add_mul_lemma }};

@@ -11,7 +11,7 @@ let prop = {{ \c x y -> f (if c then g x else g y) == if c then x else y }};
 
 l1 <- prove_print assume_unsat {{ \x -> f (g x) == x }};
 
-prove
+prove_print
   (do {
     hoist_ifs_in_goal;
     simplify (addsimps [l1] empty_ss);
