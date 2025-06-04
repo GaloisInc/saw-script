@@ -575,7 +575,7 @@ getMergedEnv =
      rw <- getTopLevelRW
      liftIO $ mergeLocalEnv sc env rw
 
--- Variant getMergedEnv that takes an explicit local part
+-- Variant of getMergedEnv that takes an explicit local part
 -- (this avoids trying to use it with withLocalEnv, which doesn't work)
 getMergedEnv' :: LocalEnv -> TopLevel TopLevelRW
 getMergedEnv' env = do
