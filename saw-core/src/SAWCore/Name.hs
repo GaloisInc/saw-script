@@ -359,7 +359,7 @@ bestDisplayName env i =
     go [] = Nothing
     go (x : xs) =
       case Map.lookup x (displayIndexes env) of
-        Nothing -> go xs -- should never happen
+        Nothing -> panic "bestDisplayName" ["Invariant violated: Missing key " <> x]
         Just vs
           | IntSet.size vs == 1 -> Just x
           | otherwise -> go xs
