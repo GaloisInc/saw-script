@@ -93,7 +93,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
-import SAWCore.Name hiding (resolveName)
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
