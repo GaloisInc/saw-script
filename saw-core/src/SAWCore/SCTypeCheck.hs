@@ -70,8 +70,10 @@ import SAWCore.Module
   , ctorNumParams
   , ctorPrimName
   , dtPrimName
+  , lookupVarIndexInMap
   , Ctor(..)
   , DataType(..)
+  , ResolvedName(..)
   )
 import SAWCore.Recognizer
 import SAWCore.Rewriter
@@ -516,7 +518,11 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
     -- and then apply the cached Pi type of dt to params and args
-    do dt <- liftTCM scRequireDataType (primName d)
+    do mm <- liftTCM scGetModuleMap
+       dt <-
+         case lookupVarIndexInMap (primVarIndex d) mm of
+           Just (ResolvedDataType dt) -> pure dt
+           _ -> throwTCError $ NoSuchDataType (primName d)
        let err = BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
        unless (length params == length (dtParams dt) &&
                length args == length (dtIndices dt))
@@ -528,7 +534,11 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
     -- then apply the cached Pi type of ctor to params and args
-    do ctor <- liftTCM scRequireCtor (primName c)
+    do mm <- liftTCM scGetModuleMap
+       ctor <-
+         case lookupVarIndexInMap (primVarIndex c) mm of
+           Just (ResolvedCtor ctor) -> pure ctor
+           _ -> throwTCError $ NoSuchCtor (primName c)
        let err = BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
        unless (length params == ctorNumParams ctor &&
                length args == ctorNumArgs ctor)
@@ -655,7 +665,11 @@ inferRecursorType ::
   SCTypedTerm   {- ^ type of the elimination motive -} ->
   TCM Sort
 inferRecursorType d params motive motiveTy =
-  do dt <- liftTCM scRequireDataType (primName d)
+  do mm <- liftTCM scGetModuleMap
+     dt <-
+       case lookupVarIndexInMap (primVarIndex d) mm of
+         Just (ResolvedDataType dt) -> pure dt
+         _ -> throwTCError $ NoSuchDataType (primName d)
 
      let mk_err str =
            MalformedRecursor

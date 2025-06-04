@@ -93,8 +93,8 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import SAWCore.Module (ModuleMap, ctorPrimName)
-import SAWCore.Name (toShortName, identBaseName)
+import SAWCore.Module (ModuleMap, ResolvedName(..), ctorPrimName, lookupVarIndexInMap)
+import SAWCore.Name (toShortName, identBaseName, identText)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -1779,7 +1779,11 @@ mkArgTerm sc ty val =
          return (ArgTermRecord (zip tags xs))
 
     (_, VCtorApp i ps vv) ->
-      do ctor <- scRequireCtor sc (primName i)
+      do mm <- scGetModuleMap sc
+         ctor <-
+           case lookupVarIndexInMap (primVarIndex i) mm of
+             Just (ResolvedCtor ctor) -> pure ctor
+             _ -> panic "mkArgTerm" ["Constructor not found: " <> identText (primName i)]
          ps' <- traverse (termOfSValue sc <=< force) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
          x   <- scCtorAppParams sc (ctorPrimName ctor) ps' vv'

@@ -82,10 +82,13 @@ import SAWCore.Cache
 import SAWCore.Conversion
 import SAWCore.Module
   ( ctorPrimName
+  , lookupVarIndexInMap
   , Ctor(..)
   , DataType(..)
   , Def(..)
+  , ResolvedName(..)
   )
+import SAWCore.Panic (panic)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -489,7 +492,12 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   let ss = addRule (mkRewriteRule ctxt rhs lhs shallow Nothing) emptySimpset
                   (_,rhs') <- rewriteSharedTerm sc (ss :: Simpset ()) rhs3
                   return (mkRewriteRule ctxt' lhs' rhs' shallow ann)
-         dt <- scRequireDataType sc (primName (recursorDataType crec))
+         let d = recursorDataType crec
+         mm <- scGetModuleMap sc
+         dt <-
+           case lookupVarIndexInMap (primVarIndex d) mm of
+             Just (ResolvedDataType dt) -> pure dt
+             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> identText (primName d)]
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing
