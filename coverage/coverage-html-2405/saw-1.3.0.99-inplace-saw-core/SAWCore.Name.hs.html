@@ -378,7 +378,7 @@ span.spaces    { background: white }
 <span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">go [] = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  360 </span><span class="spaces">    </span><span class="istickedoff">go (x : xs) =</span>
 <span class="lineno">  361 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
-<span class="lineno">  362 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">go xs</span> -- should never happen</span>
+<span class="lineno">  362 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;bestDisplayName&quot; [&quot;Invariant violated: Missing key &quot; &lt;&gt; x]</span></span>
 <span class="lineno">  363 </span><span class="spaces">        </span><span class="istickedoff">Just vs</span>
 <span class="lineno">  364 </span><span class="spaces">          </span><span class="istickedoff">| IntSet.size vs == 1 -&gt; Just x</span>
 <span class="lineno">  365 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; go xs</span></span>
