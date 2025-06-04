@@ -255,7 +255,7 @@ import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
-import SAWCore.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
+import SAWCore.Name (toShortName, DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -454,7 +454,7 @@ showRefnset opts ss =
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
       SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
 
-showsPrecValue :: PPS.Opts -> SAWNamingEnv -> Int -> Value -> ShowS
+showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
     VBool True -> showString "true"
@@ -520,7 +520,7 @@ showsPrecValue opts nenv p v =
     VMIRSetupValue x -> shows x
 
 instance Show Value where
-    showsPrec p v = showsPrecValue PPS.defaultOpts emptySAWNamingEnv p v
+    showsPrec p v = showsPrecValue PPS.defaultOpts emptyDisplayNameEnv p v
 
 evaluateTerm:: SharedContext -> Term -> IO Concrete.CValue
 evaluateTerm sc t =

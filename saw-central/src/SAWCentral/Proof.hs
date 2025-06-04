@@ -157,7 +157,7 @@ import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
 import SAWCore.Module (ModuleMap)
-import SAWCore.Name (SAWNamingEnv)
+import SAWCore.Name (DisplayNameEnv)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
@@ -524,11 +524,11 @@ normalizeProp sc modmap opaqueSet (Prop tm) =
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.
-prettyProp :: PPS.Opts -> SAWNamingEnv -> Prop -> String
+prettyProp :: PPS.Opts -> DisplayNameEnv -> Prop -> String
 prettyProp opts nenv p = PPS.render opts (ppProp opts nenv p)
 
 -- | Pretty print the given proposition as a @PPS.Doc@.
-ppProp :: PPS.Opts -> SAWNamingEnv -> Prop -> PPS.Doc
+ppProp :: PPS.Opts -> DisplayNameEnv -> Prop -> PPS.Doc
 ppProp opts nenv (Prop tm) = ppTermWithNames opts nenv tm
 
 -- TODO, I'd like to add metadata here
@@ -696,11 +696,11 @@ sequentToProp sc sqt =
         Prop <$> scFun sc (unProp h) (unProp g')
 
 -- | Pretty print the given proposition as a string.
-prettySequent :: PPS.Opts -> SAWNamingEnv -> Sequent -> String
+prettySequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> String
 prettySequent opts nenv sqt = PPS.render opts (ppSequent opts nenv sqt)
 
 -- | Pretty print the given proposition as a @PPS.Doc@.
-ppSequent :: PPS.Opts -> SAWNamingEnv -> Sequent -> PPS.Doc
+ppSequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> PPS.Doc
 ppSequent opts nenv sqt =
   ppTermContainerWithNames
     (ppRawSequent sqt)
@@ -1574,7 +1574,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            Right p' -> checkApply nenv mkSqt (Prop p') es
 
     check ::
-      SAWNamingEnv ->
+      DisplayNameEnv ->
       Evidence ->
       Sequent ->
       IO (Set TheoremNonce, TheoremSummary)

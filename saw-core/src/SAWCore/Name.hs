@@ -57,6 +57,7 @@ module SAWCore.Name
   , resolveURI
   , resolveName
   , bestAlias
+  , toDisplayNameEnv
   ) where
 
 import           Numeric (showHex)
@@ -440,3 +441,11 @@ bestAlias env nmi = go (nameAliases nmi)
         Just vs
           | Set.size vs == 1 -> Right x
           | otherwise -> go xs
+
+-- | Convert from a 'SAWNamingEnv' to a 'DisplayNameEnv'.
+toDisplayNameEnv :: SAWNamingEnv -> DisplayNameEnv
+toDisplayNameEnv env =
+  DisplayNameEnv
+  { displayNames = IntMap.fromList [ (vi, nameAliases nmi) | (vi, nmi) <- Map.assocs (resolvedNames env) ]
+  , displayIndexes = fmap (IntSet.fromList . Set.toList) (aliasNames env)
+  }

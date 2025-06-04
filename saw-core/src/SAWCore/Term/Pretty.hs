@@ -176,7 +176,7 @@ data PPState =
     -- | The current naming for the local variables
     ppNaming :: VarNaming,
     -- | The top-level naming environment
-    ppNamingEnv :: SAWNamingEnv,
+    ppNamingEnv :: DisplayNameEnv,
     -- | A source of freshness for memoization variables
     ppMemoFresh :: Int,
     -- | Memoization table for the global, closed terms, mapping term indices to
@@ -190,7 +190,7 @@ data PPState =
     ppNoInlineIdx :: Set TermIndex
   }
 
-emptyPPState :: PPS.Opts -> SAWNamingEnv -> PPState
+emptyPPState :: PPS.Opts -> DisplayNameEnv -> PPState
 emptyPPState opts ne =
   PPState { ppOpts = opts,
             ppDepth = 0,
@@ -209,7 +209,7 @@ newtype PPM a = PPM (Reader PPState a)
               deriving (Functor, Applicative, Monad)
 
 -- | Run a pretty-printing computation in a top-level, empty context
-runPPM :: PPS.Opts -> SAWNamingEnv -> PPM a -> a
+runPPM :: PPS.Opts -> DisplayNameEnv -> PPM a -> a
 runPPM opts ne (PPM m) = runReader m $ emptyPPState opts ne
 
 instance MonadReader PPState PPM where
@@ -394,7 +394,7 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppBestName (ModuleIdentifier (primName ec))
+    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppPrimName ec
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -405,7 +405,7 @@ ppFlatTermF prec tf =
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         nm <- ppBestName (ModuleIdentifier (primName d))
+         nm <- ppPrimName d
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
              (params_pp ++ [motive_pp])
@@ -414,9 +414,9 @@ ppFlatTermF prec tf =
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
-         nm <- ppBestName (ModuleIdentifier (primName d))
+         nm <- ppPrimName d
          f_pps <- forM ctorOrder $ \ec ->
-                    do cnm <- ppBestName (ModuleIdentifier (primName ec))
+                    do cnm <- ppPrimName ec
                        case Map.lookup (primVarIndex ec) fs_pp of
                          Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
                          Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
@@ -431,11 +431,11 @@ ppFlatTermF prec tf =
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
     CtorApp c params args ->
-      do cnm <- ppBestName (ModuleIdentifier (primName c))
+      do cnm <- ppPrimName c
          ppAppList prec (annotate PPS.CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     DataTypeApp dt params args ->
-      do dnm <- ppBestName (ModuleIdentifier (primName dt))
+      do dnm <- ppPrimName dt
          ppAppList prec (annotate PPS.DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     RecordType alist ->
@@ -454,7 +454,7 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
-    ExtCns cns -> annotate PPS.ExtCnsStyle <$> ppBestName (ecName cns)
+    ExtCns cns -> annotate PPS.ExtCnsStyle <$> ppExtCns cns
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
 ppBitsToHex :: [Bool] -> String
@@ -470,14 +470,24 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
--- | Pretty-print a name, using the best unambiguous alias from the
--- naming environment.
-ppBestName :: NameInfo -> PPM PPS.Doc
-ppBestName ni =
+
+-- | Pretty-print a 'PrimName', using the best unambiguous alias from
+-- the naming environment.
+ppPrimName :: PrimName e -> PPM PPS.Doc
+ppPrimName pn =
   do ne <- asks ppNamingEnv
-     case bestAlias ne ni of
-       Left _ -> pure $ ppName ni
-       Right alias -> pure $ pretty alias
+     case bestDisplayName ne (primVarIndex pn) of
+       Just alias -> pure $ pretty alias
+       Nothing -> pure $ ppIdent (primName pn)
+
+-- | Pretty-print an 'ExtCns', using the best unambiguous alias from
+-- the naming environment.
+ppExtCns :: ExtCns e -> PPM PPS.Doc
+ppExtCns ec =
+  do ne <- asks ppNamingEnv
+     case bestDisplayName ne (ecVarIndex ec) of
+       Just alias -> pure $ pretty alias
+       Nothing -> pure $ ppName (ecName ec)
 
 ppName :: NameInfo -> PPS.Doc
 ppName (ModuleIdentifier i) = ppIdent i
@@ -496,7 +506,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = annotate PPS.LocalVarStyle <$> pretty <$> varLookupM x
-ppTermF _ (Constant ec _) = annotate PPS.ConstantStyle <$> ppBestName (ecName ec)
+ppTermF _ (Constant ec _) = annotate PPS.ConstantStyle <$> ppExtCns ec
 
 
 -- | Internal function to recursively pretty-print a term
@@ -641,13 +651,13 @@ ppTermInBinder prec basename trm =
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
 ppTerm :: PPS.Opts -> Term -> PPS.Doc
-ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
+ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context
 ppTermInCtx :: PPS.Opts -> [LocalName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
-  runPPM opts emptySAWNamingEnv $
+  runPPM opts emptyDisplayNameEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm True trm
 
@@ -661,7 +671,7 @@ scPrettyTerm opts t =
 scPrettyTermInCtx :: PPS.Opts -> [LocalName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
-  runPPM opts emptySAWNamingEnv $
+  runPPM opts emptyDisplayNameEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm False trm
 
@@ -677,11 +687,11 @@ showTerm t = scPrettyTerm PPS.defaultOpts t
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
-ppTermWithNames :: PPS.Opts -> SAWNamingEnv -> Term -> PPS.Doc
+ppTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
 ppTermWithNames opts ne trm =
   runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm
 
-showTermWithNames :: PPS.Opts -> SAWNamingEnv -> Term -> String
+showTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> String
 showTermWithNames opts ne trm =
   PPS.render opts $ ppTermWithNames opts ne trm
 
@@ -689,7 +699,7 @@ showTermWithNames opts ne trm =
 ppTermContainerWithNames ::
   (Traversable m) =>
   (m PPS.Doc -> PPS.Doc) ->
-  PPS.Opts -> SAWNamingEnv -> m Term -> PPS.Doc
+  PPS.Opts -> DisplayNameEnv -> m Term -> PPS.Doc
 ppTermContainerWithNames ppContainer opts ne trms =
   let min_occs = PPS.ppMinSharing opts
       global_p = True

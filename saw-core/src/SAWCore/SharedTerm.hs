@@ -498,7 +498,7 @@ scResolveName sc nm =
 scShowTerm :: SharedContext -> PPS.Opts -> Term -> IO String
 scShowTerm sc opts t =
   do env <- readIORef (scNamingEnv sc)
-     pure (showTermWithNames opts env t)
+     pure (showTermWithNames opts (toDisplayNameEnv env) t)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
@@ -586,8 +586,8 @@ scCtorApp sc c_id args =
      scCtorAppParams sc (ctorPrimName ctor) params args'
 
 -- | Get the current naming environment
-scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
-scGetNamingEnv sc = readIORef (scNamingEnv sc)
+scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
+scGetNamingEnv sc = toDisplayNameEnv <$> readIORef (scNamingEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
