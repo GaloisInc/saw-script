@@ -45,8 +45,6 @@ module SAWCore.SharedTerm
   , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
-  , scResolveUnambiguous
-  , scFindBestName
   , scShowTerm
   , DuplicateNameException(..)
     -- * SharedContext interface for building shared terms
@@ -468,22 +466,6 @@ scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
 scLookupNameInfo sc i = do
   env <- readIORef $ scNamingEnv sc
   pure . Map.lookup i $ resolvedNames env
-
-scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
-scResolveUnambiguous sc nm =
-  scResolveName sc nm >>= \case
-     []  -> fail ("Could not resolve name: " ++ show nm)
-     [x] -> pure x
-     xs  ->
-       do nms <- mapM (scFindBestName sc . snd) xs
-          fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
-
-scFindBestName :: SharedContext -> NameInfo -> IO Text
-scFindBestName sc nmi =
-  do env <- readIORef (scNamingEnv sc)
-     case bestAlias env nmi of
-       Left uri -> pure (render uri)
-       Right nm -> pure nm
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
