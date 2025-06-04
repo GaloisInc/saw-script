@@ -520,7 +520,8 @@ interpretStmt printBinds stmt = do
     SS.StmtLet _pos dg ->
       liftTopLevel $ do
          env <- interpretDeclGroup dg
-         withLocalEnv env getMergedEnv >>= putTopLevelRW
+         rw' <- getMergedEnv' env
+         putTopLevelRW rw'
 
     SS.StmtCode _ lstr ->
       liftTopLevel $ do

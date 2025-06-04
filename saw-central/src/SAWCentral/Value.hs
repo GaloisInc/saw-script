@@ -68,7 +68,7 @@ module SAWCentral.Value (
     -- used by SAWScript.REPL.Monad, and by getMergedEnv
     mergeLocalEnv,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, and by getCryptolEnv
-    getMergedEnv,
+    getMergedEnv, getMergedEnv',
     -- used by SAWCentral.Crucible.LLVM.FFI
     getCryptolEnv,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
@@ -565,12 +565,23 @@ mergeLocalEnv sc env rw = foldrM addBinding rw env
   where addBinding (LocalLet x ty md v) = extendEnv sc x ty md v
         addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
+-- XXX: it is not sane to both be in the TopLevel monad and return a TopLevelRW
+-- (especially since the one returned is specifically not the same as the one
+-- in the monad state)
 getMergedEnv :: TopLevel TopLevelRW
 getMergedEnv =
   do sc <- getSharedContext
      env <- getLocalEnv
      rw <- getTopLevelRW
      liftIO $ mergeLocalEnv sc env rw
+
+-- Variant getMergedEnv that takes an explicit local part
+-- (this avoids trying to use it with withLocalEnv, which doesn't work)
+getMergedEnv' :: LocalEnv -> TopLevel TopLevelRW
+getMergedEnv' env = do
+    sc <- getSharedContext
+    rw <- getTopLevelRW
+    liftIO $ mergeLocalEnv sc env rw
 
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
 getCryptolEnv = do
