@@ -472,10 +472,10 @@ scResolveNameByURI sc uri =
   do env <- readIORef (scNamingEnv sc)
      pure $! resolveURI env uri
 
-scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
+scResolveName :: SharedContext -> Text -> IO [VarIndex]
 scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
-     pure (resolveName env nm)
+     pure (map fst (resolveName env nm))
 
 scShowTerm :: SharedContext -> PPS.Opts -> Term -> IO String
 scShowTerm sc opts t =

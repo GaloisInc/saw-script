@@ -1196,7 +1196,6 @@ heapsterFunTrans henv fn_name =
        fmap (fromJust . defBody) $
        liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
      bodies <-
-       fmap (fmap fst) $
        liftIO $ scResolveName sc $ T.pack $ fn_name ++ "__bodies"
      liftIO $ scUnfoldConstants sc bodies fun_term >>=
               sawLetMinimize sc >>= betaNormalize sc

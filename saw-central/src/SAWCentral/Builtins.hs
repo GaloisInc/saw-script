@@ -565,7 +565,7 @@ resolveNames nms =
 resolveName :: SharedContext -> String -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
-     scnms <- fmap fst <$> io (scResolveName sc tnm)
+     scnms <- io (scResolveName sc tnm)
      let ?fileReader = StrictBS.readFile
      res <- io $ CEnv.resolveIdentifier cenv tnm
      case res of
