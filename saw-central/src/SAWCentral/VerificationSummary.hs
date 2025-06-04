@@ -35,7 +35,7 @@ import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWCentral.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWCore.Name (SAWNamingEnv)
+import SAWCore.Name (DisplayNameEnv)
 import What4.ProgramLoc (ProgramLoc(..))
 import What4.FunctionName
 
@@ -145,7 +145,7 @@ jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
     thmvals = thmToJSON <$> thms
 
-prettyVerificationSummary :: PPS.Opts -> SAWNamingEnv -> VerificationSummary -> String
+prettyVerificationSummary :: PPS.Opts -> DisplayNameEnv -> VerificationSummary -> String
 prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =
   show $ vsep
   [ prettyJVMSpecs jspecs

@@ -42,11 +42,8 @@ module SAWCore.SharedTerm
   , alphaEquiv
   , alistAllFields
   , scRegisterName
-  , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
-  , scResolveUnambiguous
-  , scFindBestName
   , scShowTerm
   , DuplicateNameException(..)
     -- * SharedContext interface for building shared terms
@@ -394,7 +391,8 @@ insertTFM tf x tfm =
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
-  , scNamingEnv      :: IORef SAWNamingEnv
+  , scDisplayNameEnv :: IORef DisplayNameEnv
+  , scURIEnv         :: IORef (Map URI VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   }
@@ -402,25 +400,29 @@ data SharedContext = SharedContext
 data SharedContextCheckpoint =
   SCC
   { sccModuleMap :: ModuleMap
-  , sccNamingEnv :: SAWNamingEnv
+  , sccNamingEnv :: DisplayNameEnv
+  , sccURIEnv    :: Map URI VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
 checkpointSharedContext sc =
   do mmap <- readIORef (scModuleMap sc)
-     nenv <- readIORef (scNamingEnv sc)
+     nenv <- readIORef (scDisplayNameEnv sc)
+     uenv <- readIORef (scURIEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
+            , sccURIEnv = uenv
             , sccGlobalEnv = genv
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
 restoreSharedContext scc sc =
   do writeIORef (scModuleMap sc) (sccModuleMap scc)
-     writeIORef (scNamingEnv sc) (sccNamingEnv scc)
+     writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
+     writeIORef (scURIEnv sc) (sccURIEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      return sc
 
@@ -446,58 +448,36 @@ scFreshVarIndex sc = atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 -- 'VarIndex'. Not exported.
 scRegisterNameWithIndex :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterNameWithIndex sc i nmi =
-  do let f env =
-           case registerName i nmi env of
-             Left uri -> (env, Just (DuplicateNameException uri))
-             Right env' -> (env', Nothing)
-     e <- atomicModifyIORef' (scNamingEnv sc) f
-     maybe (pure ()) throwIO e
+  do uris <- readIORef (scURIEnv sc)
+     let uri = nameURI nmi
+     when (Map.member uri uris) $ throwIO (DuplicateNameException uri)
+     writeIORef (scURIEnv sc) (Map.insert uri i uris)
+     modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
 
 
 -- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
--- them together in the 'SAWNamingEnv' of the 'SharedContext'. Throws
--- 'DuplicateNameException' if the URI in the 'NameInfo' is already
--- registered.
+-- them together in the naming environment of the 'SharedContext'.
+-- Throws 'DuplicateNameException' if the URI in the 'NameInfo' is
+-- already registered.
 scRegisterName :: SharedContext -> NameInfo -> IO VarIndex
 scRegisterName sc nmi =
   do i <- scFreshVarIndex sc
      scRegisterNameWithIndex sc i nmi
      pure i
 
-scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
-scLookupNameInfo sc i = do
-  env <- readIORef $ scNamingEnv sc
-  pure . Map.lookup i $ resolvedNames env
-
-scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
-scResolveUnambiguous sc nm =
-  scResolveName sc nm >>= \case
-     []  -> fail ("Could not resolve name: " ++ show nm)
-     [x] -> pure x
-     xs  ->
-       do nms <- mapM (scFindBestName sc . snd) xs
-          fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
-
-scFindBestName :: SharedContext -> NameInfo -> IO Text
-scFindBestName sc nmi =
-  do env <- readIORef (scNamingEnv sc)
-     case bestAlias env nmi of
-       Left uri -> pure (render uri)
-       Right nm -> pure nm
-
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
-  do env <- readIORef (scNamingEnv sc)
-     pure $! resolveURI env uri
+  do env <- readIORef (scURIEnv sc)
+     pure $! Map.lookup uri env
 
-scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
+scResolveName :: SharedContext -> Text -> IO [VarIndex]
 scResolveName sc nm =
-  do env <- readIORef (scNamingEnv sc)
-     pure (resolveName env nm)
+  do env <- readIORef (scDisplayNameEnv sc)
+     pure (resolveDisplayName env nm)
 
 scShowTerm :: SharedContext -> PPS.Opts -> Term -> IO String
 scShowTerm sc opts t =
-  do env <- readIORef (scNamingEnv sc)
+  do env <- readIORef (scDisplayNameEnv sc)
      pure (showTermWithNames opts env t)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
@@ -586,8 +566,8 @@ scCtorApp sc c_id args =
      scCtorAppParams sc (ctorPrimName ctor) params args'
 
 -- | Get the current naming environment
-scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
-scGetNamingEnv sc = readIORef (scNamingEnv sc)
+scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
+scGetNamingEnv sc = readIORef (scDisplayNameEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
@@ -2507,12 +2487,14 @@ mkSharedContext = do
   cr <- newMVar emptyAppCache
   gr <- newIORef HMap.empty
   mod_map_ref <- newIORef emptyModuleMap
-  envRef <- newIORef emptySAWNamingEnv
+  dr <- newIORef emptyDisplayNameEnv
+  ur <- newIORef Map.empty
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
            , scNextVarIndex = vr
-           , scNamingEnv = envRef
+           , scDisplayNameEnv = dr
+           , scURIEnv = ur
            , scGlobalEnv = gr
            }
 

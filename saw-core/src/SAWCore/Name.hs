@@ -42,24 +42,28 @@ module SAWCore.Name
   , scFreshNameURI
   , PrimName(..)
   , primNameToExtCns
-    -- * Naming Environments
-  , SAWNamingEnv(..)
-  , emptySAWNamingEnv
-  , registerName
-  , resolveURI
-  , resolveName
-  , bestAlias
+    -- * Display Name Environments
+  , DisplayNameEnv(..)
+  , emptyDisplayNameEnv
+  , extendDisplayNameEnv
+  , filterDisplayNameEnv
+  , mergeDisplayNameEnv
+  , resolveDisplayName
+  , bestDisplayName
   ) where
 
 import           Numeric (showHex)
 import           Data.Char
 import           Data.Hashable
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import           Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
+import qualified Data.List as List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe
-import           Data.Set (Set)
-import qualified Data.Set as Set
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
@@ -285,70 +289,77 @@ scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct na
        }
 
 
--- Naming Environments ---------------------------------------------------------
+-- Display Name Environments --------------------------------------------------------
 
-data SAWNamingEnv = SAWNamingEnv
-  { resolvedNames :: !(Map VarIndex NameInfo)
-  , absoluteNames :: !(Map URI VarIndex)
-  , aliasNames    :: !(Map Text (Set VarIndex))
+-- | A 'DisplayNameEnv' encodes the mappings between display names (type
+-- 'Text') and internal names (type 'VarIndex'). Multiple display
+-- names may be associated with each internal name; these are stored
+-- in priority order, with preferred display names first.
+data DisplayNameEnv =
+  DisplayNameEnv
+  { displayNames :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
+  , displayIndexes :: !(Map Text IntSet)
   }
--- Invariants: The 'resolvedNames' and 'absoluteNames' maps should be
--- inverses of each other. That is, 'resolvedNames' maps @i@ to @n@ if
--- and only if 'absoluteNames' maps @nameURI n@ to @i@. Also, every
--- 'VarIndex' appearing in 'aliasNames' must be present as a key in
--- 'resolvedNames'.
+-- Invariants: The 'displayNames' and 'displayIndexes' maps should be
+-- inverses of each other. That is, 'displayNames' maps @i@ to a list
+-- containing @x@ if and only if 'displayIndexes' maps @x@ to a set
+-- containing @i@.
 
-emptySAWNamingEnv :: SAWNamingEnv
-emptySAWNamingEnv = SAWNamingEnv mempty mempty mempty
+emptyDisplayNameEnv :: DisplayNameEnv
+emptyDisplayNameEnv = DisplayNameEnv mempty mempty
 
--- | Add a new name entry in a 'SAWNamingEnv'. Returns 'Left' if
--- there is already an entry under the same URI.
-registerName :: VarIndex -> NameInfo -> SAWNamingEnv -> Either URI SAWNamingEnv
-registerName i nmi env =
-  case Map.lookup uri (absoluteNames env) of
-    Just _ -> Left uri
-    Nothing ->
-      Right $
-      SAWNamingEnv
-      { resolvedNames = Map.insert i nmi (resolvedNames env)
-      , absoluteNames = Map.insert uri i (absoluteNames env)
-      , aliasNames    = foldr insertAlias (aliasNames env) aliases
-      }
+-- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
+-- for a given 'VarIndex'. Display names should be provided in
+-- priority order, with preferred names first. If the 'VarIndex'
+-- already exists in the map, then add the new display names with
+-- higher priority while keeping the old ones.
+extendDisplayNameEnv :: VarIndex -> [Text] -> DisplayNameEnv -> DisplayNameEnv
+extendDisplayNameEnv i aliases env =
+  DisplayNameEnv
+  { displayNames = IntMap.insertWith List.union i aliases (displayNames env)
+  , displayIndexes = foldr insertAlias (displayIndexes env) aliases
+  }
   where
-    uri = nameURI nmi
-    aliases = render uri : nameAliases nmi
+    insertAlias :: Text -> Map Text IntSet -> Map Text IntSet
+    insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m
 
-    insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
-    insertAlias x m = Map.insertWith Set.union x (Set.singleton i) m
+-- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
+filterDisplayNameEnv :: (Text -> Bool) -> DisplayNameEnv -> DisplayNameEnv
+filterDisplayNameEnv p env =
+  DisplayNameEnv
+  { displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env
+  , displayIndexes = Map.filterWithKey (\k _ -> p k) $ displayIndexes env
+  }
 
-resolveURI :: SAWNamingEnv -> URI -> Maybe VarIndex
-resolveURI env uri = Map.lookup uri (absoluteNames env)
+-- | Merge two 'DisplayNameEnv's, giving higher priority to display
+-- names from the first argument.
+mergeDisplayNameEnv :: DisplayNameEnv -> DisplayNameEnv -> DisplayNameEnv
+mergeDisplayNameEnv env1 env2 =
+  DisplayNameEnv
+  { displayNames = IntMap.unionWith List.union (displayNames env1) (displayNames env2)
+  , displayIndexes = Map.unionWith IntSet.union (displayIndexes env1) (displayIndexes env2)
+  }
 
-resolveName :: SAWNamingEnv -> Text -> [(VarIndex, NameInfo)]
-resolveName env nm =
-  case Map.lookup nm (aliasNames env) of
+-- | Look up a 'Text' display name in an environment, returning the
+-- list of indexes it could resolve to.
+resolveDisplayName :: DisplayNameEnv -> Text -> [VarIndex]
+resolveDisplayName env x =
+  case Map.lookup x (displayIndexes env) of
     Nothing -> []
-    Just vs -> [ (v, findName v (resolvedNames env)) | v <- Set.toList vs ]
-  where
-    findName v m =
-      case Map.lookup v m of
-        Just nmi -> nmi
-        Nothing ->
-            panic "resolveName" [
-                "Unbound VarIndex when resolving name: " <> nm,
-                "Index: " <> Text.pack (show v)
-            ]
+    Just s -> IntSet.elems s
 
--- | Return the first alias (according to 'nameAliases') that is
+-- | Return the first display name for the given 'VarIndex' that is
 -- unambiguous in the naming environment. If there is no unambiguous
--- alias, then return the URI.
-bestAlias :: SAWNamingEnv -> NameInfo -> Either URI Text
-bestAlias env nmi = go (nameAliases nmi)
+-- alias, then return 'Nothing'.
+bestDisplayName :: DisplayNameEnv -> VarIndex -> Maybe Text
+bestDisplayName env i =
+  do aliases <- IntMap.lookup i (displayNames env)
+     go aliases
   where
-    go [] = Left (nameURI nmi)
+    go [] = Nothing
     go (x : xs) =
-      case Map.lookup x (aliasNames env) of
-        Nothing -> go xs
+      case Map.lookup x (displayIndexes env) of
+        Nothing -> panic "bestDisplayName" ["Invariant violated: Missing key " <> x]
         Just vs
-          | Set.size vs == 1 -> Right x
+          | IntSet.size vs == 1 -> Just x
           | otherwise -> go xs

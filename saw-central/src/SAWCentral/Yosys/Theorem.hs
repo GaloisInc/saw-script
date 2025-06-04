@@ -119,11 +119,11 @@ buildTheorem sc ymod newmod precond body = do
     _ -> throw YosysErrorInvalidOverrideTarget
   inpTy <- liftIO $ CSC.importType sc CSC.emptyEnv cinpTy
   outTy <- liftIO $ CSC.importType sc CSC.emptyEnv coutTy
-  idx <- case SC.ttTerm ymod of
-    (R.asConstant -> Just (SC.EC idx _ _, _)) -> pure idx
+  nmi <- case SC.ttTerm ymod of
+    (R.asConstant -> Just (SC.EC _ nmi _, _)) -> pure nmi
     _ -> throw YosysErrorInvalidOverrideTarget
-  uri <- liftIO (SC.scLookupNameInfo sc idx) >>= \case
-    Just (SC.ImportedName uri _) -> pure uri
+  uri <- case nmi of
+    SC.ImportedName uri _ -> pure uri
     _ -> throw YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremURI = uri
