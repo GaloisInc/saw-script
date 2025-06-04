@@ -1,0 +1,15 @@
+Tests for the dynamic scope bug, as described in #1646.
+
+(These tests were added in #2403, in response to #2401.)
+
+We don't endorse the behavior captured here, and the expectation is
+that eventually we'll implement some kind of alternative means of
+doing the same thing and remove the current behavior. In the meantime,
+these tests prevent accidentally fixing it.
+
+The basic behavior is that rebinding a variable causes past references
+to it (in functions) to see the new value, even though in principle
+they should have closed over the old value. This only applies to
+bindings at the syntactic top level. Bindings within functions, or
+even top-level bindings within a do-block, behave normally.
+

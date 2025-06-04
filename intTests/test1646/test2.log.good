@@ -1,0 +1,6 @@
+ Loading file "test2.saw"
+ x=a
+ fromValue String
+CallStack (from HasCallStack):
+  error, called at saw-central/src/SAWCentral/Value.hs:1247:19 in saw-1.3.0.99-inplace-saw-central:SAWCentral.Value
+FAILED

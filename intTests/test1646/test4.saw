@@ -1,0 +1,13 @@
+// The second f call will print x=a.
+
+let g () = do {
+   let x = "a";
+
+   let f () = print (str_concat "x=" x);
+   f ();
+
+   let x = "b";
+   f ();
+};
+
+g ();
