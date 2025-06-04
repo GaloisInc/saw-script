@@ -42,7 +42,6 @@ module SAWCore.SharedTerm
   , alphaEquiv
   , alistAllFields
   , scRegisterName
-  , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
   , scShowTerm
@@ -461,11 +460,6 @@ scRegisterName sc nmi =
   do i <- scFreshVarIndex sc
      scRegisterNameWithIndex sc i nmi
      pure i
-
-scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
-scLookupNameInfo sc i = do
-  env <- readIORef $ scNamingEnv sc
-  pure . Map.lookup i $ resolvedNames env
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
