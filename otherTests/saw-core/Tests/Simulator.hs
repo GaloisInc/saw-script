@@ -54,11 +54,11 @@ normalizeSharedTermTests = [
 
   -- Succ 2 ~> 3
   ("Succ_nat",
-   \sc -> scCtorApp sc "Prelude.Succ" . (:[]) =<< scNat sc 2,
+   \sc -> scCtorApp sc "sawcore:Prelude.Succ" . (:[]) =<< scNat sc 2,
    \sc -> scNat sc 3),
   -- Succ (bvToNat 8 2) ~> bvToNat 9 (bvNat 9 3) 
   ("Succ_bvToNat",
-   \sc -> scCtorApp sc "Prelude.Succ" . (:[]) =<<
+   \sc -> scCtorApp sc "sawcore:Prelude.Succ" . (:[]) =<<
             scBvToNat sc 8 =<< scBvLit sc 8 2,
    \sc -> scBvToNat sc 9 =<< scBvConst sc 9 3),
 
@@ -129,11 +129,11 @@ normalizeSharedTermTests = [
 
   -- widthNat 5 ~> 3
   ("widthNat_nat",
-   \sc -> scGlobalApply sc "Prelude.widthNat" . (:[]) =<< scNat sc 5,
+   \sc -> scGlobalApply sc "sawcore:Prelude.widthNat" . (:[]) =<< scNat sc 5,
    \sc -> scNat sc 3),
   -- widthNat (bvToNat 8 5) ~> 8
   ("widthNat_bvToNat",
-   \sc -> scGlobalApply sc "Prelude.widthNat" . (:[]) =<<
+   \sc -> scGlobalApply sc "sawcore:Prelude.widthNat" . (:[]) =<<
             scBvToNat sc 8 =<< scBvLit sc 8 5,
    \sc -> scNat sc 8),
 

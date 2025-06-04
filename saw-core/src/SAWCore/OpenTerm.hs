@@ -37,9 +37,9 @@ of 'OpenTerm' operations, 'applyOpenTerm' applies one 'OpenTerm' to another,
 
 can be built with the 'OpenTerm' expression
 
-> let bool = globalOpenTerm "Prelude.Bool" in
+> let bool = globalOpenTerm "sawcore:Prelude.Bool" in
 > lambdaOpenTerm "f" (arrowOpenTerm bool bool) $ \f ->
-> lambdaOpenTerm "x" (globalOpenTerm "Prelude.Bool") $ \x ->
+> lambdaOpenTerm "x" (globalOpenTerm "sawcore:Prelude.Bool") $ \x ->
 > applyOpenTerm f x
 
 Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'closedOpenTerm'
@@ -230,24 +230,24 @@ stringLitOpenTerm = flatOpenTerm . StringLit
 
 -- | Return the SAW core type @String@ of strings.
 stringTypeOpenTerm :: OpenTerm
-stringTypeOpenTerm = globalOpenTerm "Prelude.String"
+stringTypeOpenTerm = globalOpenTerm "sawcore:Prelude.String"
 
 -- | The 'True' value as a SAW core term
 trueOpenTerm :: OpenTerm
-trueOpenTerm = globalOpenTerm "Prelude.True"
+trueOpenTerm = globalOpenTerm "sawcore:Prelude.True"
 
 -- | The 'False' value as a SAW core term
 falseOpenTerm :: OpenTerm
-falseOpenTerm = globalOpenTerm "Prelude.False"
+falseOpenTerm = globalOpenTerm "sawcore:Prelude.False"
 
 -- | Convert a 'Bool' to a SAW core term
 boolOpenTerm :: Bool -> OpenTerm
-boolOpenTerm True = globalOpenTerm "Prelude.True"
-boolOpenTerm False = globalOpenTerm "Prelude.False"
+boolOpenTerm True = globalOpenTerm "sawcore:Prelude.True"
+boolOpenTerm False = globalOpenTerm "sawcore:Prelude.False"
 
 -- | The 'Bool' type as a SAW core term
 boolTypeOpenTerm :: OpenTerm
-boolTypeOpenTerm = globalOpenTerm "Prelude.Bool"
+boolTypeOpenTerm = globalOpenTerm "sawcore:Prelude.Bool"
 
 -- | Build an 'OpenTerm' for an array literal
 arrayValueOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
@@ -261,12 +261,12 @@ bvLitOpenTerm bits =
 
 -- | Create a SAW core term for a vector type
 vectorTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-vectorTypeOpenTerm n a = applyGlobalOpenTerm "Prelude.Vec" [n,a]
+vectorTypeOpenTerm n a = applyGlobalOpenTerm "sawcore:Prelude.Vec" [n,a]
 
 -- | Create a SAW core term for the type of a bitvector
 bvTypeOpenTerm :: Integral a => a -> OpenTerm
 bvTypeOpenTerm n =
-  applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.Vec")
   [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
 
 -- | Build an 'OpenTerm' for a pair
@@ -501,41 +501,41 @@ letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
 sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
                   (OpenTerm -> OpenTerm) -> OpenTerm
 sawLetOpenTerm x tp tp_ret rhs body_f =
-  applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
+  applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
 
 -- | Build a bitvector type with the given length
 bitvectorTypeOpenTerm :: OpenTerm -> OpenTerm
 bitvectorTypeOpenTerm w =
-  applyGlobalOpenTerm "Prelude.Vec" [w, globalOpenTerm "Prelude.Bool"]
+  applyGlobalOpenTerm "sawcore:Prelude.Vec" [w, globalOpenTerm "sawcore:Prelude.Bool"]
 
 -- | Build the SAW core type @BVVec n len d@
 bvVecTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
 bvVecTypeOpenTerm w_term len_term elem_tp =
-  applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp]
+  applyGlobalOpenTerm "sawcore:Prelude.BVVec" [w_term, len_term, elem_tp]
 
 -- | Build a SAW core term for a list with the given element type
 listOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
 listOpenTerm tp elems =
-  foldr (\x l -> ctorOpenTerm "Prelude.Cons" [tp, x, l])
-  (ctorOpenTerm "Prelude.Nil" [tp]) elems
+  foldr (\x l -> ctorOpenTerm "sawcore:Prelude.Cons" [tp, x, l])
+  (ctorOpenTerm "sawcore:Prelude.Nil" [tp]) elems
 
 -- | Build an 'OpenTerm' of type @List1 tp@ from 'OpenTerm's of type @tp@
 list1OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
 list1OpenTerm tp xs =
-  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
-  (ctorOpenTerm "Prelude.Nil1" [tp])
+  foldr (\hd tl -> ctorOpenTerm "sawcore:Prelude.Cons1" [tp, hd, tl])
+  (ctorOpenTerm "sawcore:Prelude.Nil1" [tp])
   xs
 
 -- | Build the type @Either a b@ from types @a@ and @b@
 eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
+eitherTypeOpenTerm a b = dataTypeOpenTerm "sawcore:Prelude.Either" [a,b]
 
 -- | Build the type @Sigma a (\ (x:a) -> b)@ from variable name @x@, type @a@,
 -- and type-level function @b@
 sigmaTypeOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 sigmaTypeOpenTerm x tp f =
-  dataTypeOpenTerm "Prelude.Sigma" [tp, lambdaOpenTerm x tp f]
+  dataTypeOpenTerm "sawcore:Prelude.Sigma" [tp, lambdaOpenTerm x tp f]
 
 -- | Build the type @Sigma a1 (\ (x1:a1) -> Sigma a2 (\ (x2:a2) -> ...))@
 sigmaTypeOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
@@ -550,7 +550,7 @@ sigmaTypeOpenTermMulti x (tp:tps) f =
 sigmaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) ->
                  OpenTerm -> OpenTerm -> OpenTerm
 sigmaOpenTerm x tp tp_f trm_l trm_r =
-  ctorOpenTerm "Prelude.exists" [tp, lambdaOpenTerm x tp tp_f, trm_l, trm_r]
+  ctorOpenTerm "sawcore:Prelude.exists" [tp, lambdaOpenTerm x tp tp_f, trm_l, trm_r]
 
 -- | Build the right-nested dependent pair @(x1, (x2, ...(xn, y)))@ whose type
 -- is given by 'sigmaTypeOpenTermMulti'
@@ -575,8 +575,8 @@ sigmaElimOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
 sigmaElimOpenTermMulti _ [] _ t f_elim = f_elim [t]
 sigmaElimOpenTermMulti x (tp:tps) tp_f sig f_elim =
   let b_fun = lambdaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:)))
-      proj1 = applyGlobalOpenTerm "Prelude.Sigma_proj1" [tp, b_fun, sig]
-      proj2 = applyGlobalOpenTerm "Prelude.Sigma_proj2" [tp, b_fun, sig] in
+      proj1 = applyGlobalOpenTerm "sawcore:Prelude.Sigma_proj1" [tp, b_fun, sig]
+      proj2 = applyGlobalOpenTerm "sawcore:Prelude.Sigma_proj2" [tp, b_fun, sig] in
   sigmaElimOpenTermMulti x tps (tp_f . (proj1:)) proj2 (f_elim . (proj1:))
 
 
@@ -588,73 +588,73 @@ newtype EventType = EventType { evTypeTerm :: OpenTerm }
 
 -- | The default event type uses the @Void@ type for events
 defaultSpecMEventType :: EventType
-defaultSpecMEventType = EventType $ globalOpenTerm "SpecM.VoidEv"
+defaultSpecMEventType = EventType $ globalOpenTerm "sawcore:SpecM.VoidEv"
 
 -- | The kind description for the unit type
 unitKindDesc :: OpenTerm
-unitKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [ctorOpenTerm
-                                               "SpecM.Kind_unit" []]
+unitKindDesc = ctorOpenTerm "sawcore:SpecM.Kind_Expr" [ctorOpenTerm
+                                               "sawcore:SpecM.Kind_unit" []]
 
 -- | The @ExprKind@ for the bitvector type with width @w@
 bvExprKind :: Natural -> OpenTerm
-bvExprKind w = ctorOpenTerm "SpecM.Kind_bv" [natOpenTerm w]
+bvExprKind w = ctorOpenTerm "sawcore:SpecM.Kind_bv" [natOpenTerm w]
 
 -- | The type @TpDesc@ of type descriptions
 tpDescTypeOpenTerm :: OpenTerm
-tpDescTypeOpenTerm = dataTypeOpenTerm "SpecM.TpDesc" []
+tpDescTypeOpenTerm = dataTypeOpenTerm "sawcore:SpecM.TpDesc" []
 
 -- | Convert a kind description to a type description with the @Tp_Kind@
 -- constructor
 kindToTpDesc :: OpenTerm -> OpenTerm
-kindToTpDesc d = ctorOpenTerm "SpecM.Tp_Kind" [d]
+kindToTpDesc d = ctorOpenTerm "sawcore:SpecM.Tp_Kind" [d]
 
 -- | The type description for the unit type
 unitTpDesc :: OpenTerm
-unitTpDesc = ctorOpenTerm "SpecM.Tp_Kind" [unitKindDesc]
+unitTpDesc = ctorOpenTerm "sawcore:SpecM.Tp_Kind" [unitKindDesc]
 
 -- | The expression kind for the Boolean type
 boolExprKind :: OpenTerm
-boolExprKind = ctorOpenTerm "SpecM.Kind_bool" []
+boolExprKind = ctorOpenTerm "sawcore:SpecM.Kind_bool" []
 
 -- | The kind description for the Boolean type
 boolKindDesc :: OpenTerm
-boolKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [boolExprKind]
+boolKindDesc = ctorOpenTerm "sawcore:SpecM.Kind_Expr" [boolExprKind]
 
 -- | The type description for the Boolean type
 boolTpDesc :: OpenTerm
-boolTpDesc = ctorOpenTerm "SpecM.Tp_Kind" [boolKindDesc]
+boolTpDesc = ctorOpenTerm "sawcore:SpecM.Tp_Kind" [boolKindDesc]
 
 -- | The expression kind for the @Nat@ type
 natExprKind :: OpenTerm
-natExprKind = ctorOpenTerm "SpecM.Kind_nat" []
+natExprKind = ctorOpenTerm "sawcore:SpecM.Kind_nat" []
 
 -- | The expression kind for the @Num@ type
 numExprKind :: OpenTerm
-numExprKind = ctorOpenTerm "SpecM.Kind_num" []
+numExprKind = ctorOpenTerm "sawcore:SpecM.Kind_num" []
 
 -- | The kind description for the @Nat@ type
 natKindDesc :: OpenTerm
-natKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [natExprKind]
+natKindDesc = ctorOpenTerm "sawcore:SpecM.Kind_Expr" [natExprKind]
 
 -- | The kind description for the @Num@ type
 numKindDesc :: OpenTerm
-numKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [numExprKind]
+numKindDesc = ctorOpenTerm "sawcore:SpecM.Kind_Expr" [numExprKind]
 
 -- | The kind description for the type @bitvector w@
 bvKindDesc :: Natural -> OpenTerm
-bvKindDesc w = ctorOpenTerm "SpecM.Kind_Expr" [bvExprKind w]
+bvKindDesc w = ctorOpenTerm "sawcore:SpecM.Kind_Expr" [bvExprKind w]
 
 -- | The type description for thhe type @bitvector w@
 bvTpDesc :: Natural -> OpenTerm
-bvTpDesc w = applyGlobalOpenTerm "SpecM.Tp_bitvector" [natOpenTerm w]
+bvTpDesc w = applyGlobalOpenTerm "sawcore:SpecM.Tp_bitvector" [natOpenTerm w]
 
 -- | The kind description for the type of type descriptions
 tpKindDesc :: OpenTerm
-tpKindDesc = ctorOpenTerm "SpecM.Kind_Tp" []
+tpKindDesc = ctorOpenTerm "sawcore:SpecM.Kind_Tp" []
 
 -- | Build a pair type description from two type descriptions
 pairTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-pairTpDesc d1 d2 = ctorOpenTerm "SpecM.Tp_Pair" [d1,d2]
+pairTpDesc d1 d2 = ctorOpenTerm "sawcore:SpecM.Tp_Pair" [d1,d2]
 
 -- | Build a tuple type description from a list of type descriptions
 tupleTpDesc :: [OpenTerm] -> OpenTerm
@@ -664,19 +664,19 @@ tupleTpDesc (d : ds) = pairTpDesc d (tupleTpDesc ds)
 
 -- | Build a sum type description from two type descriptions
 sumTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-sumTpDesc d1 d2 = ctorOpenTerm "SpecM.Tp_Sum" [d1,d2]
+sumTpDesc d1 d2 = ctorOpenTerm "sawcore:SpecM.Tp_Sum" [d1,d2]
 
 -- | Build a type description for the type @BVVec n len d@ from a SAW core term
 -- @n@ of type @Nat@, a type expression @len@ for the length, and a type
 -- description @d@ for the element type
 bvVecTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
 bvVecTpDesc w_term len_term elem_d =
-  applyGlobalOpenTerm "SpecM.Tp_BVVec" [w_term, len_term, elem_d]
+  applyGlobalOpenTerm "sawcore:SpecM.Tp_BVVec" [w_term, len_term, elem_d]
 
 -- | Build a type expression of type @TpExpr EK@ of kind description @EK@ from a
 -- type-level value of type @exprKindElem EK@
 constTpExpr :: OpenTerm -> OpenTerm -> OpenTerm
-constTpExpr k_d v = ctorOpenTerm "SpecM.TpExpr_Const" [k_d, v]
+constTpExpr k_d v = ctorOpenTerm "sawcore:SpecM.TpExpr_Const" [k_d, v]
 
 -- | Build a type description expression from a bitvector value of a given width
 bvConstTpExpr :: Natural -> OpenTerm -> OpenTerm
@@ -687,7 +687,7 @@ bvConstTpExpr w bv = constTpExpr (bvExprKind w) bv
 binOpTpExpr :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm ->
                OpenTerm -> OpenTerm -> OpenTerm
 binOpTpExpr op k1 k2 k3 e1 e2 =
-  ctorOpenTerm "SpecM.TpExpr_BinOp" [k1, k2, k3, op, e1, e2]
+  ctorOpenTerm "sawcore:SpecM.TpExpr_BinOp" [k1, k2, k3, op, e1, e2]
 
 -- | Build a type expression for the bitvector sum of a list of type
 -- expressions, all of the given width
@@ -695,22 +695,22 @@ bvSumTpExprs :: Natural -> [OpenTerm] -> OpenTerm
 bvSumTpExprs w [] = bvConstTpExpr w (natOpenTerm 0)
 bvSumTpExprs _ [bv] = bv
 bvSumTpExprs w (bv:bvs) =
-  ctorOpenTerm "SpecM.TpExpr_BinOp"
+  ctorOpenTerm "sawcore:SpecM.TpExpr_BinOp"
   [bvExprKind w, bvExprKind w, bvExprKind w,
-   ctorOpenTerm "SpecM.BinOp_AddBV" [natOpenTerm w], bv, bvSumTpExprs w bvs]
+   ctorOpenTerm "sawcore:SpecM.BinOp_AddBV" [natOpenTerm w], bv, bvSumTpExprs w bvs]
 
 -- | Build a type expression for the bitvector product of two type expressions
 bvMulTpExpr :: Natural -> OpenTerm -> OpenTerm -> OpenTerm
 bvMulTpExpr w bv1 bv2 =
-  ctorOpenTerm "SpecM.TpExpr_BinOp"
+  ctorOpenTerm "sawcore:SpecM.TpExpr_BinOp"
   [bvExprKind w, bvExprKind w, bvExprKind w,
-   ctorOpenTerm "SpecM.BinOp_MulBV" [natOpenTerm w], bv1, bv2]
+   ctorOpenTerm "sawcore:SpecM.BinOp_MulBV" [natOpenTerm w], bv1, bv2]
 
 -- | Build a type description for a sigma type from a kind description for the
 -- first element and a type description with an additional free variable for the
 -- second
 sigmaTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-sigmaTpDesc k d = ctorOpenTerm "SpecM.Tp_Sigma" [k,d]
+sigmaTpDesc k d = ctorOpenTerm "sawcore:SpecM.Tp_Sigma" [k,d]
 
 -- | Build a type description for 0 or more nested sigma types over a list of
 -- kind descriptions
@@ -720,11 +720,11 @@ sigmaTpDescMulti (k:ks) d = sigmaTpDesc k $ sigmaTpDescMulti ks d
 
 -- | Build a type description for a sequence
 seqTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-seqTpDesc n d = ctorOpenTerm "SpecM.Tp_Seq" [n, d]
+seqTpDesc n d = ctorOpenTerm "sawcore:SpecM.Tp_Seq" [n, d]
 
 -- | Build an arrow type description for left- and right-hand type descriptions
 arrowTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-arrowTpDesc d_in d_out = ctorOpenTerm "SpecM.Tp_Arr" [d_in, d_out]
+arrowTpDesc d_in d_out = ctorOpenTerm "sawcore:SpecM.Tp_Arr" [d_in, d_out]
 
 -- | Build a multi-arity nested arrow type description
 arrowTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
@@ -732,7 +732,7 @@ arrowTpDescMulti ds_in d_out = foldr arrowTpDesc d_out ds_in
 
 -- | Build a monadic type description, i.e., a nullary monadic function
 mTpDesc :: OpenTerm -> OpenTerm
-mTpDesc d = ctorOpenTerm "SpecM.Tp_M" [d]
+mTpDesc d = ctorOpenTerm "sawcore:SpecM.Tp_M" [d]
 
 -- | Build the type description @Tp_Arr d1 (... (Tp_Arr dn (Tp_M d_ret)))@ for a
 -- monadic function that takes in the types described by @d1@ through @dn@ and
@@ -742,7 +742,7 @@ funTpDesc ds_in d_ret = arrowTpDescMulti ds_in (mTpDesc d_ret)
 
 -- | Build the type description for a pi-abstraction over a kind description
 piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-piTpDesc kd tpd = ctorOpenTerm "SpecM.Tp_Pi" [kd, tpd]
+piTpDesc kd tpd = ctorOpenTerm "sawcore:SpecM.Tp_Pi" [kd, tpd]
 
 -- | Build the type description for a multi-arity pi-abstraction over a sequence
 -- of kind descriptions, i.e., SAW core terms of type @KindDesc@
@@ -751,33 +751,33 @@ piTpDescMulti ks tp = foldr piTpDesc tp ks
 
 -- | The type description for the @Void@ type
 voidTpDesc :: OpenTerm
-voidTpDesc = ctorOpenTerm "SpecM.Tp_Void" []
+voidTpDesc = ctorOpenTerm "sawcore:SpecM.Tp_Void" []
 
 -- | Build a type description for a free deBruijn index
 varTpDesc :: Natural -> OpenTerm
-varTpDesc ix = ctorOpenTerm "SpecM.Tp_Var" [natOpenTerm ix]
+varTpDesc ix = ctorOpenTerm "sawcore:SpecM.Tp_Var" [natOpenTerm ix]
 
 -- | Build a type-level expression with a given @ExprKind@ for a free variable
 varTpExpr :: OpenTerm -> Natural -> OpenTerm
-varTpExpr ek ix = ctorOpenTerm "SpecM.TpExpr_Var" [ek, natOpenTerm ix]
+varTpExpr ek ix = ctorOpenTerm "sawcore:SpecM.TpExpr_Var" [ek, natOpenTerm ix]
 
 -- | Build a kind expression of a given kind from a deBruijn index
 varKindExpr :: OpenTerm -> Natural -> OpenTerm
-varKindExpr d ix = applyGlobalOpenTerm "SpecM.varKindExpr" [d,natOpenTerm ix]
+varKindExpr d ix = applyGlobalOpenTerm "sawcore:SpecM.varKindExpr" [d,natOpenTerm ix]
 
 -- | Build a kind expression of a given kind from an element of that kind
 constKindExpr :: OpenTerm -> OpenTerm -> OpenTerm
-constKindExpr d e = applyGlobalOpenTerm "SpecM.constKindExpr" [d,e]
+constKindExpr d e = applyGlobalOpenTerm "sawcore:SpecM.constKindExpr" [d,e]
 
 -- | Build the type description @Tp_Ind T@ that represents a recursively-defined
 -- inductive type that unfolds to @[Tp_Ind T/x]T@
 indTpDesc :: OpenTerm -> OpenTerm
-indTpDesc d = ctorOpenTerm "SpecM.Tp_Ind" [d]
+indTpDesc d = ctorOpenTerm "sawcore:SpecM.Tp_Ind" [d]
 
 -- | Build the type description @Tp_Subst T K e@ that represents an explicit
 -- substitution of expression @e@ of kind @K@ into type description @T@
 substTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
-substTpDesc d k_d e = applyGlobalOpenTerm "SpecM.Tp_Subst" [d,k_d,e]
+substTpDesc d k_d e = applyGlobalOpenTerm "sawcore:SpecM.Tp_Subst" [d,k_d,e]
 
 -- | Build the type description that performs 0 or more explicit substitutions
 substTpDescMulti :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm
@@ -806,14 +806,14 @@ substIndIdTpDescMulti i = substTpDescMulti (indTpDesc (globalOpenTerm i))
 -- | Map from type description @T@ to the type @T@ describes
 tpElemTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
 tpElemTypeOpenTerm ev d =
-  applyGlobalOpenTerm "SpecM.tpElem" [evTypeTerm ev, d]
+  applyGlobalOpenTerm "sawcore:SpecM.tpElem" [evTypeTerm ev, d]
 
 -- | Apply the @tpSubst@ combinator to substitute a type-level environment
 -- (built by applying 'tpEnvOpenTerm' to the supplied list) at the supplied
 -- natural number lifting level to a type description
 substEnvTpDesc :: Natural -> [(OpenTerm,OpenTerm)] -> OpenTerm -> OpenTerm
 substEnvTpDesc n ks_elems d =
-  applyGlobalOpenTerm "SpecM.tpSubst" [natOpenTerm n,
+  applyGlobalOpenTerm "sawcore:SpecM.tpSubst" [natOpenTerm n,
                                        tpEnvOpenTerm ks_elems, d]
 
 -- | Build a SAW core term for a type-level environment, i.e., a term of type
@@ -821,29 +821,29 @@ substEnvTpDesc n ks_elems d =
 -- descriptions
 tpEnvOpenTerm :: [(OpenTerm,OpenTerm)] -> OpenTerm
 tpEnvOpenTerm =
-  foldr (\(k,v) env -> applyGlobalOpenTerm "SpecM.envConsElem" [k,v,env])
-  (ctorOpenTerm "Prelude.Nil" [globalOpenTerm "SpecM.TpEnvElem"])
+  foldr (\(k,v) env -> applyGlobalOpenTerm "sawcore:SpecM.envConsElem" [k,v,env])
+  (ctorOpenTerm "sawcore:Prelude.Nil" [globalOpenTerm "sawcore:SpecM.TpEnvElem"])
 
 -- | Build the computation type @SpecM E A@
 specMTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
 specMTypeOpenTerm ev tp =
-  applyGlobalOpenTerm "SpecM.SpecM" [evTypeTerm ev, tp]
+  applyGlobalOpenTerm "sawcore:SpecM.SpecM" [evTypeTerm ev, tp]
 
 -- | Build a @SpecM@ computation that returns a value
 retSOpenTerm :: EventType -> OpenTerm -> OpenTerm -> OpenTerm
 retSOpenTerm ev tp x =
-  applyGlobalOpenTerm "SpecM.retS" [evTypeTerm ev, tp, x]
+  applyGlobalOpenTerm "sawcore:SpecM.retS" [evTypeTerm ev, tp, x]
 
 -- | Build a @SpecM@ computation using a bind
 bindSOpenTerm :: EventType -> OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm ->
                  OpenTerm
 bindSOpenTerm ev a b m f =
-  applyGlobalOpenTerm "SpecM.bindS" [evTypeTerm ev, a, b, m, f]
+  applyGlobalOpenTerm "sawcore:SpecM.bindS" [evTypeTerm ev, a, b, m, f]
 
 -- | Build a @SpecM@ error computation with the given error message
 errorSOpenTerm :: EventType -> OpenTerm -> String -> OpenTerm
 errorSOpenTerm ev ret_tp msg =
-  applyGlobalOpenTerm "SpecM.errorS"
+  applyGlobalOpenTerm "sawcore:SpecM.errorS"
   [evTypeTerm ev, ret_tp, stringLitOpenTerm (Text.pack msg)]
 
 -- | Build a @SpecM@ computation that uses @LetRecS@ to bind multiple
@@ -851,14 +851,14 @@ errorSOpenTerm ev ret_tp msg =
 letRecSOpenTerm :: EventType -> [OpenTerm] -> OpenTerm -> OpenTerm ->
                    OpenTerm -> OpenTerm
 letRecSOpenTerm ev ds ret_tp bodies body =
-  applyGlobalOpenTerm "SpecM.LetRecS"
+  applyGlobalOpenTerm "sawcore:SpecM.LetRecS"
   [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds, ret_tp, bodies, body]
 
 -- | Build the type @MultiFixBodies E Ts@ from an event type and a list of type
 -- descriptions for @Ts@
 multiFixBodiesOpenTerm :: EventType -> [OpenTerm] -> OpenTerm
 multiFixBodiesOpenTerm ev ds =
-  applyGlobalOpenTerm "SpecM.MultiFixBodies"
+  applyGlobalOpenTerm "sawcore:SpecM.MultiFixBodies"
   [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds]
 
 
@@ -1041,24 +1041,24 @@ stringLitTermLike = flatTermLike . StringLit
 
 -- | Return the SAW core type @String@ of strings.
 stringTypeTermLike :: OpenTermLike t => t
-stringTypeTermLike = globalTermLike "Prelude.String"
+stringTypeTermLike = globalTermLike "sawcore:Prelude.String"
 
 -- | The 'True' value as a SAW core term
 trueTermLike :: OpenTermLike t => t
-trueTermLike = globalTermLike "Prelude.True"
+trueTermLike = globalTermLike "sawcore:Prelude.True"
 
 -- | The 'False' value as a SAW core term
 falseTermLike :: OpenTermLike t => t
-falseTermLike = globalTermLike "Prelude.False"
+falseTermLike = globalTermLike "sawcore:Prelude.False"
 
 -- | Convert a 'Bool' to a SAW core term
 boolTermLike :: OpenTermLike t => Bool -> t
-boolTermLike True = globalTermLike "Prelude.True"
-boolTermLike False = globalTermLike "Prelude.False"
+boolTermLike True = globalTermLike "sawcore:Prelude.True"
+boolTermLike False = globalTermLike "sawcore:Prelude.False"
 
 -- | The 'Bool' type as a SAW core term
 boolTypeTermLike :: OpenTermLike t => t
-boolTypeTermLike = globalTermLike "Prelude.Bool"
+boolTypeTermLike = globalTermLike "sawcore:Prelude.Bool"
 
 -- | Build an term for an array literal
 arrayValueTermLike :: OpenTermLike t => t -> [t] -> t
@@ -1072,12 +1072,12 @@ bvLitTermLike bits =
 
 -- | Create a SAW core term for a vector type
 vectorTypeTermLike :: OpenTermLike t => t -> t -> t
-vectorTypeTermLike n a = applyGlobalTermLike "Prelude.Vec" [n,a]
+vectorTypeTermLike n a = applyGlobalTermLike "sawcore:Prelude.Vec" [n,a]
 
 -- | Create a SAW core term for the type of a bitvector
 bvTypeTermLike :: OpenTermLike t => Integral n => n -> t
 bvTypeTermLike n =
-  applyTermLikeMulti (globalTermLike "Prelude.Vec")
+  applyTermLikeMulti (globalTermLike "sawcore:Prelude.Vec")
   [natTermLike (fromIntegral n), boolTypeTermLike]
 
 -- | Build a term for a pair
@@ -1118,7 +1118,7 @@ letTermLike x tp rhs body_f = applyTermLike (lambdaTermLike x tp body_f) rhs
 -- is equivalent to the term @sawLet tp tp_ret rhs (\ (x : tp) -> body_f)@
 sawLetTermLike :: OpenTermLike t => LocalName -> t -> t -> t -> (t -> t) -> t
 sawLetTermLike x tp tp_ret rhs body_f =
-  applyTermLikeMulti (globalTermLike "Prelude.sawLet")
+  applyTermLikeMulti (globalTermLike "sawcore:Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaTermLike x tp body_f]
 
 
@@ -1188,7 +1188,7 @@ sawLetMinimize sc t_top =
 
   slMinTermF :: TermF Term -> SLMinM Term
   slMinTermF tf@(App (asApplyAll ->
-                      (isGlobalDef "Prelude.sawLet" -> Just _, [_a, _b, rhs]))
+                      (isGlobalDef "sawcore:Prelude.sawLet" -> Just _, [_a, _b, rhs]))
                  (asLambda -> Just (_, _, body))) =
     do (body', (unconsVarOccs ->
                 (x_cnt, body_occs))) <- listenDrop $ slMinTerm body

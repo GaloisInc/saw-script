@@ -349,12 +349,12 @@ scPreterm sc p =
       do boolty <- SC.scBoolType sc
          j' <- SC.scNat sc j
          k' <- SC.scNat sc k
-         SC.scGlobalApply sc "Prelude.take" [boolty, j', k', t]
+         SC.scGlobalApply sc "sawcore:Prelude.take" [boolty, j', k', t]
     PretermSlice i j 0 t ->
       do boolty <- SC.scBoolType sc
          i' <- SC.scNat sc i
          j' <- SC.scNat sc j
-         SC.scGlobalApply sc "Prelude.drop" [boolty, i', j', t]
+         SC.scGlobalApply sc "sawcore:Prelude.drop" [boolty, i', j', t]
     PretermSlice i 1 k t ->
       do boolty <- SC.scBoolType sc
          n' <- SC.scNat sc (i + 1 + k)

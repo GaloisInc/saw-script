@@ -246,29 +246,29 @@ constMap :: Map Ident RPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
-  [ ("Prelude.bvShl" , bvShiftOp (Prims.vShiftL RME.false))
-  , ("Prelude.bvShr" , bvShiftOp (Prims.vShiftR RME.false))
-  , ("Prelude.bvSShr", bvShiftOp vSignedShiftR)
+  [ ("sawcore:Prelude.bvShl" , bvShiftOp (Prims.vShiftL RME.false))
+  , ("sawcore:Prelude.bvShr" , bvShiftOp (Prims.vShiftR RME.false))
+  , ("sawcore:Prelude.bvSShr", bvShiftOp vSignedShiftR)
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("sawcore:Prelude.intToNat", Prims.intToNatOp)
+  , ("sawcore:Prelude.natToInt", Prims.natToIntOp)
+  , ("sawcore:Prelude.intToBv" , intToBvOp)
+  , ("sawcore:Prelude.bvToInt" , bvToIntOp)
+  , ("sawcore:Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("sawcore:Prelude.toIntMod"  , toIntModOp)
+  , ("sawcore:Prelude.fromIntMod", fromIntModOp)
+  , ("sawcore:Prelude.intModEq"  , intModEqOp)
+  , ("sawcore:Prelude.intModAdd" , intModBinOp (+))
+  , ("sawcore:Prelude.intModSub" , intModBinOp (-))
+  , ("sawcore:Prelude.intModMul" , intModBinOp (*))
+  , ("sawcore:Prelude.intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("sawcore:Prelude.MkStream", mkStreamOp)
+  , ("sawcore:Prelude.streamGet", streamGetOp)
 
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("sawcore:Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
@@ -296,7 +296,7 @@ muxInt b x y =
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
 muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
-muxExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
+muxExtra (VDataType (primName -> "sawcore:Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
   AStream (muxRValue tp b <$> xs <*> ys)
 muxExtra tp _ _ _ = panic "muxExtra" ["Type mismatch: " <> Text.pack (show tp)]
 

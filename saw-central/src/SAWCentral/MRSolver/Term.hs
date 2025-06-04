@@ -251,7 +251,7 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
 
 -- | Match a type as being of the form @SpecM E a@ for some @E@ and @a@
 asSpecM :: Term -> Maybe (EvTerm, Term)
-asSpecM (asApplyAll -> (isGlobalDef "SpecM.SpecM" -> Just (), [ev, tp])) =
+asSpecM (asApplyAll -> (isGlobalDef "sawcore:SpecM.SpecM" -> Just (), [ev, tp])) =
   return (EvTerm ev, tp)
 asSpecM _ = fail "not a SpecM type, or event type is not closed!"
 
@@ -275,32 +275,32 @@ asBvToNatKnownW _ = Nothing
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
 asEither (asCtor -> Just (c, [_, _, x]))
-  | primName c == "Prelude.Left"  = return $ Left x
-  | primName c == "Prelude.Right" = return $ Right x
+  | primName c == "sawcore:Prelude.Left"  = return $ Left x
+  | primName c == "sawcore:Prelude.Right" = return $ Right x
 asEither _ = Nothing
 
 -- | Recognize the @Num@ type
 asNumType :: Recognizer Term ()
-asNumType (asDataType -> Just (primName -> "Cryptol.Num", _)) = Just ()
+asNumType (asDataType -> Just (primName -> "sawcore:Cryptol.Num", _)) = Just ()
 asNumType _ = Nothing
 
 -- | Recognize a term as a @TCNum n@ or @TCInf@
 asNum :: Recognizer Term (Either Term ())
 asNum (asCtor -> Just (c, [n]))
-  | primName c == "Cryptol.TCNum"  = return $ Left n
+  | primName c == "sawcore:Cryptol.TCNum"  = return $ Left n
 asNum (asCtor -> Just (c, []))
-  | primName c == "Cryptol.TCInf"  = return $ Right ()
+  | primName c == "sawcore:Cryptol.TCInf"  = return $ Right ()
 asNum _ = Nothing
 
 -- | Recognize a term as being of the form @isFinite n@
 asIsFinite :: Recognizer Term Term
-asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
+asIsFinite (asApp -> Just (isGlobalDef "sawcore:CryptolM.isFinite" -> Just (), n)) =
   Just n
 asIsFinite _ = Nothing
 
 -- | Recognize a term as being of the form @IsLtNat m n@
 asIsLtNat :: Recognizer Term (Term, Term)
-asIsLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
+asIsLtNat (asApplyAll -> (isGlobalDef "sawcore:Prelude.IsLtNat" -> Just (), [m, n])) =
   Just (m, n)
 asIsLtNat _ = Nothing
 

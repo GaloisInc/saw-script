@@ -169,9 +169,9 @@ asNestedPairs _ = Nothing
 -- | Recognize a term of the form @Cons _ x1 (Cons _ x2 (... (Nil _)))@
 asList :: Recognizer Term [Term]
 asList (asCtor -> Just (nm, [_]))
-  | primName nm == "Prelude.Nil" = return []
+  | primName nm == "sawcore:Prelude.Nil" = return []
 asList (asCtor -> Just (nm, [_, hd, tl]))
-  | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
+  | primName nm == "sawcore:Prelude.Cons" = (hd:) <$> asList tl
 asList _ = Nothing
 
 -- | Apply a SAW core term of type @MultiFixBodies@ to a list of monadic
@@ -248,16 +248,16 @@ normComp (CompTerm t) =
   case asApplyAll t of
     (f@(asLambda -> Just _), args@(_:_)) ->
       mrApplyAll f args >>= normCompTerm
-    (isGlobalDef "SpecM.retS" -> Just (), [_, _, x]) ->
+    (isGlobalDef "sawcore:SpecM.retS" -> Just (), [_, _, x]) ->
       return $ RetS x
-    (isGlobalDef "SpecM.bindS" -> Just (), [ev, _, _, m, f]) ->
+    (isGlobalDef "sawcore:SpecM.bindS" -> Just (), [ev, _, _, m, f]) ->
       do norm <- normCompTerm m
          normBind norm (CompFunTerm (EvTerm ev) f)
-    (isGlobalDef "SpecM.errorS" -> Just (), [_, _, str]) ->
+    (isGlobalDef "sawcore:SpecM.errorS" -> Just (), [_, _, str]) ->
       return (ErrorS str)
-    (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
+    (isGlobalDef "sawcore:Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
-    (isGlobalDef "Prelude.iteWithProof" -> Just (), [_, cond, then_f, else_f]) ->
+    (isGlobalDef "sawcore:Prelude.iteWithProof" -> Just (), [_, cond, then_f, else_f]) ->
       do bool_tp <- liftSC0 scBoolType
          then_tm <-
            (liftSC1 scBool >=> mrEqProp bool_tp cond >=> mrDummyProof >=>
@@ -266,38 +266,38 @@ normComp (CompTerm t) =
            (liftSC1 scBool >=> mrEqProp bool_tp cond >=> mrDummyProof >=>
             liftSC2 scApply else_f) False
          return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
-    (isGlobalDef "Prelude.either" -> Just (),
+    (isGlobalDef "sawcore:Prelude.either" -> Just (),
      [ltp, rtp, (asSpecM -> Just (ev, _)), f, g, eith]) ->
       return $ Eithers [(Type ltp, CompFunTerm ev f),
                         (Type rtp, CompFunTerm ev g)] eith
-    (isGlobalDef "Prelude.eithers" -> Just (),
+    (isGlobalDef "sawcore:Prelude.eithers" -> Just (),
      [_, (matchEitherElims -> Just elims), eith]) ->
       return $ Eithers elims eith
-    (isGlobalDef "Prelude.maybe" -> Just (),
+    (isGlobalDef "sawcore:Prelude.maybe" -> Just (),
      [tp, (asSpecM -> Just (ev, _)), m, f, mayb]) ->
       do tp' <- case asApplyAll tp of
                   -- Always unfold: is_bvult, is_bvule
                   (tpf@(asGlobalDef -> Just ident), args)
-                    | ident `elem` ["Prelude.is_bvult", "Prelude.is_bvule"]
+                    | ident `elem` ["sawcore:Prelude.is_bvult", "sawcore:Prelude.is_bvule"]
                     , Just (_, Just body) <- asConstant tpf ->
                       mrApplyAll body args
                   _ -> return tp
          return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm ev f) mayb
-    (isGlobalDef "SpecM.orS" -> Just (), [_, _, m1, m2]) ->
+    (isGlobalDef "sawcore:SpecM.orS" -> Just (), [_, _, m1, m2]) ->
       return $ OrS (CompTerm m1) (CompTerm m2)
-    (isGlobalDef "SpecM.assertBoolS" -> Just (), [ev, cond]) ->
+    (isGlobalDef "sawcore:SpecM.assertBoolS" -> Just (), [ev, cond]) ->
       do unit_tp <- mrUnitType
          return $ AssertBoolBind cond (CompFunReturn (EvTerm ev) unit_tp)
-    (isGlobalDef "SpecM.assumeBoolS" -> Just (), [ev, cond]) ->
+    (isGlobalDef "sawcore:SpecM.assumeBoolS" -> Just (), [ev, cond]) ->
       do unit_tp <- mrUnitType
          return $ AssumeBoolBind cond (CompFunReturn (EvTerm ev) unit_tp)
-    (isGlobalDef "SpecM.existsS" -> Just (), [ev, tp]) ->
+    (isGlobalDef "sawcore:SpecM.existsS" -> Just (), [ev, tp]) ->
       do unit_tp <- mrUnitType
          return $ ExistsBind (Type tp) (CompFunReturn (EvTerm ev) unit_tp)
-    (isGlobalDef "SpecM.forallS" -> Just (), [ev, tp]) ->
+    (isGlobalDef "sawcore:SpecM.forallS" -> Just (), [ev, tp]) ->
       do unit_tp <- mrUnitType
          return $ ForallBind (Type tp) (CompFunReturn (EvTerm ev) unit_tp)
-    (isGlobalDef "SpecM.FixS" -> Just (), _ev:_tp_d:body:args) ->
+    (isGlobalDef "sawcore:SpecM.FixS" -> Just (), _ev:_tp_d:body:args) ->
       do
         -- Bind a fresh function var for the new recursive function, getting the
         -- type of the new function as the input type of body, which should have
@@ -319,7 +319,7 @@ normComp (CompTerm t) =
         {-
 FIXME HERE NOW: match a tuple projection of a MultiFixS
 
-    (isGlobalDef "SpecM.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
+    (isGlobalDef "sawcore:SpecM.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
       do
         -- Bind fresh function vars for the new recursive functions
         fun_vars <- mrFreshCallVars ev tp_ds defs
@@ -330,12 +330,12 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
         FunBind var all_args <$> mkCompFunReturn <$>
           mrFunOutType var all_args -}
 
-    (isGlobalDef "SpecM.LetRecS" -> Just (), [ev,tp_ds,_,defs,body]) ->
+    (isGlobalDef "sawcore:SpecM.LetRecS" -> Just (), [ev,tp_ds,_,defs,body]) ->
       do
         -- First compute the types of the recursive functions being bound by
         -- mapping @tpElem@ to the type descriptions, and bind functions of
         -- those types
-        tpElem_fun <- mrGlobalTerm "SpecM.tpElem"
+        tpElem_fun <- mrGlobalTerm "sawcore:SpecM.tpElem"
         fun_tps <- case asList tp_ds of
           Just ds -> mapM (\d -> mrApplyAll tpElem_fun [ev, d]) ds
           Nothing -> throwMRFailure (MalformedTpDescList tp_ds)
@@ -349,17 +349,17 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
         normCompTerm body_app
 
     -- Treat forNatLtThenS like FixS with a body of forNatLtThenSBody
-    (isGlobalDef "SpecM.forNatLtThenS" -> Just (), [ev,st,ret,n,f,k,s0]) ->
+    (isGlobalDef "sawcore:SpecM.forNatLtThenS" -> Just (), [ev,st,ret,n,f,k,s0]) ->
       do
         -- Bind a fresh function with type Nat -> st -> SpecM E ret
-        type_f <- mrGlobalTermUnfold "SpecM.forNatLtThenSBodyType"
+        type_f <- mrGlobalTermUnfold "sawcore:SpecM.forNatLtThenSBodyType"
         fun_tp <- mrApplyAll type_f [ev,st,ret]
 
         -- Build the function for applying forNatLtThenSBody to its arguments to
         -- define the body of the recursive definition, including the invariant
         -- argument that is bound to the current assumptions
         invar <- mrAssumptions
-        body_fun_tm <- mrGlobalTermUnfold "SpecM.forNatLtThenSBody"
+        body_fun_tm <- mrGlobalTermUnfold "sawcore:SpecM.forNatLtThenSBody"
         let body_f rec_fun =
               mrApplyAll body_fun_tm [ev,st,ret,n,f,k,invar,rec_fun]
 
@@ -378,20 +378,20 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
-    (asGlobalDef -> Just "CryptolM.vecMapM", [_a, _b, (asBvToNat -> Just (_w, _n)),
+    (asGlobalDef -> Just "sawcore:CryptolM.vecMapM", [_a, _b, (asBvToNat -> Just (_w, _n)),
                                               _f, _xs]) ->
       error "FIXME HERE NOW: need SpecM version of vecMapM"
       {-
       do invar <- mrAssumptions
-         liftSC2 scGlobalApply "CryptolM.bvVecMapInvarM"
+         liftSC2 scGlobalApply "sawcore:CryptolM.bvVecMapInvarM"
                                [a, b, w, n, f, xs, invar] >>= normCompTerm
       -}
 
     -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecAtM`
-    (asGlobalDef -> Just "CryptolM.atM", [ev, (asBvToNat -> Just (w, n)),
+    (asGlobalDef -> Just "sawcore:CryptolM.atM", [ev, (asBvToNat -> Just (w, n)),
                                           a, xs, i_nat]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
+      do body <- mrGlobalDefBody "sawcore:CryptolM.bvVecAtM"
          liftSC1 scWhnf i_nat >>= mrBvNatInRange w >>= \case
            Just i -> mrApplyAll body [ev, w, n, a, xs, i]
                        >>= normCompTerm
@@ -400,12 +400,12 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.atM", [ev, n_tm@(asNat -> Just n),
+    (asGlobalDef -> Just "sawcore:CryptolM.atM", [ev, n_tm@(asNat -> Just n),
                                           a@(asBoolType -> Nothing), xs,
                                           (asBvToNat ->
                                              Just (w_tm@(asNat -> Just w),
                                                    i))]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
+      do body <- mrGlobalDefBody "sawcore:CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
@@ -414,9 +414,9 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev, (asBvToNat -> Just (w, n)),
+    (asGlobalDef -> Just "sawcore:CryptolM.updateM", [ev, (asBvToNat -> Just (w, n)),
                                               a, xs, i_nat, x]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+      do body <- mrGlobalDefBody "sawcore:CryptolM.bvVecUpdateM"
          liftSC1 scWhnf i_nat >>= mrBvNatInRange w >>= \case
            Just i -> mrApplyAll body [ev, w, n, a, xs, i, x]
                        >>= normCompTerm
@@ -425,12 +425,12 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev, n_tm@(asNat -> Just n),
+    (asGlobalDef -> Just "sawcore:CryptolM.updateM", [ev, n_tm@(asNat -> Just n),
                                               a@(asBoolType -> Nothing), xs,
                                               (asBvToNat ->
                                                  Just (w_tm@(asNat -> Just w),
                                                        i)), x]) ->
-      do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
+      do body <- mrGlobalDefBody "sawcore:CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (updateM)" w_tm n'
@@ -443,10 +443,10 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     -- forNatLtThenSBody, vecMapM, vecMapBindM, seqMapM
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem`
-        ["Prelude.sawLet", "Prelude.ifWithProof", "Prelude.iteWithProof",
-         "Cryptol.Num_rec", "SpecM.invariantHint",
-         "SpecM.assumingS", "SpecM.assertingS", "SpecM.forNatLtThenSBody",
-         "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM"]
+        ["sawcore:Prelude.sawLet", "sawcore:Prelude.ifWithProof", "sawcore:Prelude.iteWithProof",
+         "sawcore:Cryptol.Num_rec", "sawcore:SpecM.invariantHint",
+         "sawcore:SpecM.assumingS", "sawcore:SpecM.assertingS", "sawcore:SpecM.forNatLtThenSBody",
+         "sawcore:CryptolM.vecMapM", "sawcore:CryptolM.vecMapBindM", "sawcore:CryptolM.seqMapM"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
@@ -500,16 +500,16 @@ normBind (ForallBind tp f) k = return $ ForallBind tp (compFunComp f k)
 normBind (FunBind f args k1) k2
   -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
   {-
-  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
+  | GlobalName (globalDefString -> "sawcore:CryptolM.bvVecMapInvarM") [] <- f
   , (a:b:args_rest) <- args =
-    do f' <- mrGlobalDef "CryptolM.bvVecMapInvarBindM"
+    do f' <- mrGlobalDef "sawcore:CryptolM.bvVecMapInvarBindM"
        cont <- compFunToTerm (compFunComp k1 k2)
        c <- compFunReturnType k2
        return $ FunBind f' ((a:b:c:args_rest) ++ [cont])
                            (CompFunReturn (Type c))
   -- Turn `bvVecMapInvarBindM ... k1 >>= k2` into
   -- `bvVecMapInvarBindM ... (composeM ... k1 k2)`
-  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarBindM") [] <- f
+  | GlobalName (globalDefString -> "sawcore:CryptolM.bvVecMapInvarBindM") [] <- f
   , (args_pre, [cont]) <- splitAt 8 args =
     do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
        c <- compFunReturnType k2
@@ -554,12 +554,12 @@ compFunToTerm (CompFunComp f g) =
          let nm = maybe "ret_val" id (compFunVarName f) in
          mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
            do app <- mrApplyAll f'' [arg]
-              liftSC2 scGlobalApply "SpecM.bindS" [unEvTerm ev,
+              liftSC2 scGlobalApply "sawcore:SpecM.bindS" [unEvTerm ev,
                                                    b', c', app, g'']
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
 compFunToTerm (CompFunReturn ev (Type a)) =
   mrLambdaLift1 ("ret_val", a) a $ \ret_val a' ->
-    liftSC2 scGlobalApply "SpecM.retS" [unEvTerm ev, a', ret_val]
+    liftSC2 scGlobalApply "sawcore:SpecM.retS" [unEvTerm ev, a', ret_val]
 
 {-
 -- | Convert a 'Comp' into a 'Term'
@@ -567,14 +567,14 @@ compToTerm :: Comp -> MRM t Term
 compToTerm (CompTerm t) = return t
 compToTerm (CompReturn t) =
    do tp <- mrTypeOf t
-      liftSC2 scGlobalApply "SpecM.retS" [tp, t]
+      liftSC2 scGlobalApply "sawcore:SpecM.retS" [tp, t]
 compToTerm (CompBind m (CompFunReturn _)) = compToTerm m
 compToTerm (CompBind m f) =
   do m' <- compToTerm m
      f' <- compFunToTerm f
      mrTypeOf f' >>= \case
        (asPi -> Just (_, a, asSpecM -> Just b)) ->
-         liftSC2 scGlobalApply "SpecM.bindS" [a, b, m', f']
+         liftSC2 scGlobalApply "sawcore:SpecM.bindS" [a, b, m', f']
        _ -> error "compToTerm: type not of the form: a -> SpecM b"
 -}
 
@@ -593,8 +593,8 @@ mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
 -- | Match a term as a static list of eliminators for an Eithers type
 matchEitherElims :: Term -> Maybe [EitherElim]
 matchEitherElims (asCtor ->
-                  Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
-matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
+                  Just (primName -> "sawcore:Prelude.FunsTo_Nil", [_])) = Just []
+matchEitherElims (asCtor -> Just (primName -> "sawcore:Prelude.FunsTo_Cons",
                                   [asSpecM -> Just (ev, _), tp, f, rest])) =
   ((Type tp, CompFunTerm ev f):) <$>
   matchEitherElims rest
@@ -604,12 +604,12 @@ matchEitherElims _ = Nothing
 elimsEithersType :: [EitherElim] -> MRM t Type
 elimsEithersType elims =
   Type <$>
-  (do f <- mrGlobalTerm "Prelude.Eithers"
+  (do f <- mrGlobalTerm "sawcore:Prelude.Eithers"
       tps <-
         foldr
         (\(Type tp,_) restM ->
-          restM >>= \rest -> mrCtorApp "Prelude.LS_Cons" [tp,rest])
-        (mrCtorApp "Prelude.LS_Nil" [])
+          restM >>= \rest -> mrCtorApp "sawcore:Prelude.LS_Cons" [tp,rest])
+        (mrCtorApp "sawcore:Prelude.LS_Nil" [])
         elims
       mrApply f tps)
 
@@ -807,7 +807,7 @@ newtype AssumpFun t = AssumpFun { appAssumpFun ::
 asBoolProp :: Term -> Maybe (MRM t Term)
 asBoolProp (asEq -> Just (asSimpleEq -> Just eqf, e1, e2)) =
   Just $ liftSC2 eqf e1 e2
-asBoolProp (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [n,m])) =
+asBoolProp (asApplyAll -> (isGlobalDef "sawcore:Prelude.IsLtNat" -> Just (), [n,m])) =
   Just $ liftSC2 scLtNat n m
 asBoolProp _ = Nothing
 
@@ -1439,8 +1439,8 @@ refinementTermH t1 t2 =
          do tp1''' <- mrSubstEVars tp1''
             tp2''' <- mrSubstEVars tp2''
             void $ mrRelTerm Nothing tp1''' x1' tp2''' x2
-     rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
-     ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
+     rr <- liftSC2 scGlobalApply "sawcore:SpecM.eqRR" [tp1]
+     ref_tm <- liftSC2 scGlobalApply "sawcore:SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
      liftSC2 scPiList uvars ref_tm
 

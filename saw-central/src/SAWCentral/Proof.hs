@@ -245,7 +245,7 @@ propToRewriteRule sc (Prop tm) = ruleOfProp sc tm
 --   and "(EqTrue (not b), EqTrue y)"
 splitIte :: SharedContext -> Prop -> IO (Maybe ((Prop, Prop), (Prop, Prop)))
 splitIte sc (Prop p) =
-  case (isGlobalDef "Prelude.ite" <@> return <@> return <@> return <@> return) =<< asEqTrue p of
+  case (isGlobalDef "sawcore:Prelude.ite" <@> return <@> return <@> return <@> return) =<< asEqTrue p of
      Nothing -> pure Nothing
      Just (_ :*: _tp :*: b :*: x :*: y) -> -- tp must be "Bool"
        do nb  <- scNot sc b
@@ -259,7 +259,7 @@ splitIte sc (Prop p) =
 splitConj :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitConj sc (Prop p) =
   do let (vars, body) = asPiList p
-     case (isGlobalDef "Prelude.and" <@> return <@> return) =<< asEqTrue body of
+     case (isGlobalDef "sawcore:Prelude.and" <@> return <@> return) =<< asEqTrue body of
        Nothing -> pure Nothing
        Just (_ :*: p1 :*: p2) ->
          do t1 <- scPiList sc vars =<< scEqTrue sc p1
@@ -270,7 +270,7 @@ splitConj sc (Prop p) =
 splitDisj :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitDisj sc (Prop p) =
   do let (vars, body) = asPiList p
-     case (isGlobalDef "Prelude.or" <@> return <@> return) =<< asEqTrue body of
+     case (isGlobalDef "sawcore:Prelude.or" <@> return <@> return) =<< asEqTrue body of
        Nothing -> pure Nothing
        Just (_ :*: p1 :*: p2) ->
          do t1 <- scPiList sc vars =<< scEqTrue sc p1
@@ -280,19 +280,19 @@ splitDisj sc (Prop p) =
 -- | Attempt to split an implication into a hypothesis and a conclusion
 splitImpl :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitImpl sc (Prop p)
-  | Just ( _ :*: h :*: c) <- (isGlobalDef "Prelude.implies" <@> return <@> return) =<< asEqTrue p
+  | Just ( _ :*: h :*: c) <- (isGlobalDef "sawcore:Prelude.implies" <@> return <@> return) =<< asEqTrue p
   = do h' <- scEqTrue sc h
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
 
   -- or (not h) c == implies h c
-  | Just ( _ :*: (_ :*: h) :*: c) <- (isGlobalDef "Prelude.or" <@> (isGlobalDef "Prelude.not" <@> return) <@> return) =<< asEqTrue p
+  | Just ( _ :*: (_ :*: h) :*: c) <- (isGlobalDef "sawcore:Prelude.or" <@> (isGlobalDef "sawcore:Prelude.not" <@> return) <@> return) =<< asEqTrue p
   = do h' <- scEqTrue sc h
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
 
   -- or c (not h) == implies h c
-  | Just ( _ :*: c :*: (_ :*: h)) <- (isGlobalDef "Prelude.or" <@> return <@> (isGlobalDef "Prelude.not" <@> return)) =<< asEqTrue p
+  | Just ( _ :*: c :*: (_ :*: h)) <- (isGlobalDef "sawcore:Prelude.or" <@> return <@> (isGlobalDef "sawcore:Prelude.not" <@> return)) =<< asEqTrue p
   = do h' <- scEqTrue sc h
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
@@ -510,7 +510,7 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
     loop (asEq -> Just (tp, x, _y)) =
       -- NB, we don't check if x is convertable to y here, as that will
       -- be done later in @tacticTrivial@ during the type-checking step
-      lift $ scCtorApp sc "Prelude.Refl" [tp, x]
+      lift $ scCtorApp sc "sawcore:Prelude.Refl" [tp, x]
 
     loop _ = throwError $ unlines
                [ "The trivial tactic can only prove quantified equalities, but"
@@ -1499,10 +1499,10 @@ normalizeHypBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
 normalizeHypBool sc b =
   do body <- scWhnf sc b
      case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
+       _ | Just (_ :*: p1) <- (isGlobalDef "sawcore:Prelude.not" <@> return) body
          -> Just <$> normalizeConclBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
+         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "sawcore:Prelude.and" <@> return <@> return) body
          -> Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
 
          | otherwise
@@ -1519,10 +1519,10 @@ normalizeConclBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
 normalizeConclBool sc b =
   do body <- scWhnf sc b
      case () of
-       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
+       _ | Just (_ :*: p1) <- (isGlobalDef "sawcore:Prelude.not" <@> return) body
          -> Just <$> normalizeHypBoolCommit sc p1
 
-         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
+         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "sawcore:Prelude.or" <@> return <@> return) body
          -> Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
 
          | otherwise

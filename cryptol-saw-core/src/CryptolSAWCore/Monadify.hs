@@ -258,7 +258,7 @@ type MKNum = 'MKNum
 
 -- | The @Num@ type as a SAW core term
 numTypeOpenTerm :: OpenTerm
-numTypeOpenTerm = dataTypeOpenTerm "Cryptol.Num" []
+numTypeOpenTerm = dataTypeOpenTerm "sawcore:Cryptol.Num" []
 
 -- | Representing type-level kinds at the data level
 data KindRepr (k :: MonKind) where
@@ -345,14 +345,14 @@ isBaseType _ = True
 -- | Convert a SAW core 'Term' to a monadification kind, if possible
 monadifyKind :: Term -> Maybe SomeKindRepr
 monadifyKind (asDataType -> Just (num, []))
-  | primName num == "Cryptol.Num" = Just $ SomeKindRepr MKNumRepr
+  | primName num == "sawcore:Cryptol.Num" = Just $ SomeKindRepr MKNumRepr
 monadifyKind (asSort -> Just s) | s == mkSort 0 = Just $ SomeKindRepr MKTypeRepr
 monadifyKind _ = Nothing
 
 -- | Convert a numeric binary operation to a SAW core binary function on @Num@
 numBinOpOp :: NumBinOp -> OpenTerm
-numBinOpOp NBinOp_Add = globalOpenTerm "Cryptol.tcAdd"
-numBinOpOp NBinOp_Mul = globalOpenTerm "Cryptol.tcMul"
+numBinOpOp NBinOp_Add = globalOpenTerm "sawcore:Cryptol.tcAdd"
+numBinOpOp NBinOp_Mul = globalOpenTerm "sawcore:Cryptol.tcMul"
 
 -- | Convert a numeric type expression to a SAW core @Num@ term; it is an error
 -- if it contains a deBruijn level
@@ -372,7 +372,7 @@ toArgType (MTyForall x k body) =
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "SpecM.mseq")
+  applyOpenTermMulti (globalOpenTerm "sawcore:SpecM.mseq")
   [evTypeTerm ?specMEvType, numExprVal n, toArgType t]
 toArgType MTyUnit = unitTypeOpenTerm
 toArgType MTyBool = boolTypeOpenTerm
@@ -380,7 +380,7 @@ toArgType (MTyBV n) = bitvectorTypeOpenTerm $ natOpenTerm n
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTySum mtp1 mtp2) =
-  dataTypeOpenTerm "Prelude.Either" [toArgType mtp1, toArgType mtp2]
+  dataTypeOpenTerm "sawcore:Prelude.Either" [toArgType mtp1, toArgType mtp2]
 toArgType (MTyIndesc t) = t
 toArgType (MTyVarLvl _) = panic "toArgType" ["Unexpected deBruijn index"]
 
@@ -408,8 +408,8 @@ toKindDesc MKNumRepr = numKindDesc
 
 -- | Convert a numeric binary operation to a SAW core term of type @TpExprBinOp@
 numBinOpExpr :: NumBinOp -> OpenTerm
-numBinOpExpr NBinOp_Add = ctorOpenTerm "SpecM.BinOp_AddNum" []
-numBinOpExpr NBinOp_Mul = ctorOpenTerm "SpecM.BinOp_MulNum" []
+numBinOpExpr NBinOp_Add = ctorOpenTerm "sawcore:SpecM.BinOp_AddNum" []
+numBinOpExpr NBinOp_Mul = ctorOpenTerm "sawcore:SpecM.BinOp_MulNum" []
 
 -- | Convert a numeric type expression to a type-level expression, i.e., a SAW
 -- core term of type @TpExpr Kind_num@, assuming the supplied number of bound
@@ -465,22 +465,22 @@ toTpDesc = toTpDescH 0 False
 -- FIXME: this is no longer needed, as it is now the identity
 typeclassMonMap :: [(Ident,Ident)]
 typeclassMonMap =
-  [("Cryptol.PEq", "Cryptol.PEq"),
-   ("Cryptol.PCmp", "Cryptol.PCmp"),
-   ("Cryptol.PSignedCmp", "Cryptol.PSignedCmp"),
-   ("Cryptol.PZero", "Cryptol.PZero"),
-   ("Cryptol.PLogic", "Cryptol.PLogic"),
-   ("Cryptol.PRing", "Cryptol.PRing"),
-   ("Cryptol.PIntegral", "Cryptol.PIntegral"),
-   ("Cryptol.PLiteral", "Cryptol.PLiteral")]
+  [("sawcore:Cryptol.PEq", "sawcore:Cryptol.PEq"),
+   ("sawcore:Cryptol.PCmp", "sawcore:Cryptol.PCmp"),
+   ("sawcore:Cryptol.PSignedCmp", "sawcore:Cryptol.PSignedCmp"),
+   ("sawcore:Cryptol.PZero", "sawcore:Cryptol.PZero"),
+   ("sawcore:Cryptol.PLogic", "sawcore:Cryptol.PLogic"),
+   ("sawcore:Cryptol.PRing", "sawcore:Cryptol.PRing"),
+   ("sawcore:Cryptol.PIntegral", "sawcore:Cryptol.PIntegral"),
+   ("sawcore:Cryptol.PLiteral", "sawcore:Cryptol.PLiteral")]
 
 -- | The mapping for monadifying type-level binary @Num@ operations
 numBinOpMonMap :: [(Ident,NumBinOp)]
 numBinOpMonMap =
-  [("Cryptol.tcAdd", NBinOp_Add), ("Cryptol.tcMul", NBinOp_Mul)
+  [("sawcore:Cryptol.tcAdd", NBinOp_Add), ("sawcore:Cryptol.tcMul", NBinOp_Mul)
    -- FIXME: handle the others:
-   -- "Cryptol.tcSub", "Cryptol.tcDiv", "Cryptol.tcMod", "Cryptol.tcExp",
-   -- "Cryptol.tcMin", "Cryptol.tcMax"
+   -- "sawcore:Cryptol.tcSub", "sawcore:Cryptol.tcDiv", "sawcore:Cryptol.tcMod", "sawcore:Cryptol.tcExp",
+   -- "sawcore:Cryptol.tcMin", "sawcore:Cryptol.tcMax"
   ]
 
 -- | A context of local variables used for monadifying types, which includes the
@@ -550,10 +550,10 @@ monadifyType ctx (asRecordType -> Just tps) =
 -}
 {- FIXME: do we ever need this?
 monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
-  | primName eq_pn == "Prelude.Eq" =
+  | primName eq_pn == "sawcore:Prelude.Eq" =
   , isJust (monadifyKind k_trm) =
     -- NOTE: technically this is a Prop and not a sort 0, but it doesn't matter
-    MTyIndesc $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
+    MTyIndesc $ dataTypeOpenTerm "sawcore:Prelude.Eq" [monadifyTypeArgType ctx tp1,
                                                monadifyTypeArgType ctx tp2]
 -}
 monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
@@ -565,21 +565,21 @@ monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
 monadifyTpExpr _ (asBitvectorType -> Just w) =
   SomeTpExpr MKTypeRepr $ MTyBV w
 monadifyTpExpr ctx (asVectorType -> Just (asNat -> Just n, a)) =
-  let nM = NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
+  let nM = NExpr_Const $ ctorOpenTerm "sawcore:Cryptol.TCNum" [natOpenTerm n]
    in SomeTpExpr MKTypeRepr $ MTySeq nM (monadifyType ctx a)
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
-  | seq_id == "Cryptol.seq" =
+  | seq_id == "sawcore:Cryptol.seq" =
     SomeTpExpr MKTypeRepr $ MTySeq (monadifyNum ctx n) (monadifyType ctx a)
 monadifyTpExpr ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
   | Just f_trans <- lookup f typeclassMonMap =
     SomeTpExpr MKTypeRepr $ MTyIndesc $
     applyOpenTerm (globalOpenTerm f_trans) $ monadifyTypeArgType ctx arg
 monadifyTpExpr _ (asGlobalDef -> Just bool_id)
-  | bool_id == "Prelude.Bool" = 
+  | bool_id == "sawcore:Prelude.Bool" = 
     SomeTpExpr MKTypeRepr $ MTyBool
 monadifyTpExpr _ (asGlobalDef -> Just integer_id)
-  | integer_id == "Prelude.Integer" =
-    SomeTpExpr MKTypeRepr $ MTyIndesc $ globalOpenTerm "Prelude.Integer"
+  | integer_id == "sawcore:Prelude.Integer" =
+    SomeTpExpr MKTypeRepr $ MTyIndesc $ globalOpenTerm "sawcore:Prelude.Integer"
 {-
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
@@ -592,11 +592,11 @@ monadifyType ctx (asApplyAll -> (f, args))
 
 -- Num cases
 monadifyTpExpr _ (asCtor -> Just (pn, []))
-  | primName pn == "Cryptol.TCInf"
-  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
+  | primName pn == "sawcore:Cryptol.TCInf"
+  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "sawcore:Cryptol.TCInf" []
 monadifyTpExpr _ (asCtor -> Just (pn, [asNat -> Just n]))
-  | primName pn == "Cryptol.TCNum"
-  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
+  | primName pn == "sawcore:Cryptol.TCNum"
+  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "sawcore:Cryptol.TCNum" [natOpenTerm n]
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
   | Just op <- monadifyNumBinOp f
   = SomeTpExpr MKNumRepr $ NExpr_BinOp op (monadifyNum ctx arg1) (monadifyNum ctx arg2)
@@ -1066,8 +1066,8 @@ assertIsFinite e =
   let n = numExprVal e in
   argifyMonTerm (CompMonTerm
                  (MTyIndesc (applyOpenTerm
-                             (globalOpenTerm "CryptolM.isFinite") n))
-                 (applyGlobalOpenTerm "CryptolM.assertFiniteS"
+                             (globalOpenTerm "sawcore:CryptolM.isFinite") n))
+                 (applyGlobalOpenTerm "sawcore:CryptolM.assertFiniteS"
                   [evTypeTerm ?specMEvType, n]))
 
 
@@ -1168,7 +1168,7 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
                                               Just (ArrayValue _ trms)) =
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
-       applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
+       applyOpenTermMulti (globalOpenTerm "sawcore:CryptolM.seqToMseq")
        [evTypeTerm ?specMEvType, numExprVal n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
@@ -1285,14 +1285,14 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   let numFunType =
         MTyForall "n" MKNumRepr $ \n -> MTyForall "m" MKNumRepr $ \m ->
         MTyIndesc $
-        dataTypeOpenTerm "Prelude.Eq"
-        [dataTypeOpenTerm "Cryptol.Num" [],
+        dataTypeOpenTerm "sawcore:Prelude.Eq"
+        [dataTypeOpenTerm "sawcore:Cryptol.Num" [],
          numExprVal n, numExprVal m] in
   case ts of
     [(asDataType -> Just (num, []))]
-      | primName num == "Cryptol.Num" ->
+      | primName num == "sawcore:Cryptol.Num" ->
         return $ ArgMonTerm $
-        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqS" True
+        mkGlobalArgMonTerm numFunType "sawcore:CryptolM.numAssertEqS" True
     _ ->
       fail "Monadification failed: unsafeAssert applied to non-Num type"
 
@@ -1311,11 +1311,11 @@ iteMacro = MonMacro 4 $ \_ args -> usingEvType $
      case (mtrm1, mtrm2) of
        (ArgMonTerm atrm1, ArgMonTerm atrm2) ->
          return $ fromArgTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.ite")
+         applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.ite")
          [toArgType mtp, toArgTerm atrm_cond, toArgTerm atrm1, toArgTerm atrm2]
        _ ->
          return $ fromCompTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.ite")
+         applyOpenTermMulti (globalOpenTerm "sawcore:Prelude.ite")
          [toCompType mtp, toArgTerm atrm_cond,
           toCompTerm mtrm1, toCompTerm mtrm2]
 
@@ -1331,7 +1331,7 @@ eitherMacro = MonMacro 3 $ \_ args ->
      mtp_a <- monadifyTypeM tp_a
      mtp_b <- monadifyTypeM tp_b
      mtp_c <- monadifyTypeM tp_c
-     let eith_app = applyGlobalOpenTerm "Prelude.either" [toArgType mtp_a,
+     let eith_app = applyGlobalOpenTerm "sawcore:Prelude.either" [toArgType mtp_a,
                                                           toArgType mtp_b,
                                                           toCompType mtp_c]
      return $ fromCompTerm (MTyArrow (MTyArrow mtp_a mtp_c)
@@ -1350,7 +1350,7 @@ uncurryMacro = MonMacro 3 $ \_ args ->
      mtp_a <- monadifyTypeM tp_a
      mtp_b <- monadifyTypeM tp_b
      mtp_c <- monadifyTypeM tp_c
-     let unc_app = applyGlobalOpenTerm "Prelude.uncurry" [toArgType mtp_a,
+     let unc_app = applyGlobalOpenTerm "sawcore:Prelude.uncurry" [toArgType mtp_a,
                                                           toArgType mtp_b,
                                                           toCompType mtp_c]
      return $ fromCompTerm (MTyArrow (MTyArrow mtp_a (MTyArrow mtp_b mtp_c))
@@ -1369,7 +1369,7 @@ invariantHintMacro = MonMacro 3 $ \_ args -> usingEvType $
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      return $ fromCompTerm mtp $
-       applyOpenTermMulti (globalOpenTerm "SpecM.invariantHint")
+       applyOpenTermMulti (globalOpenTerm "sawcore:SpecM.invariantHint")
        [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | The macro for @asserting@ or @assuming@, which converts @asserting@ to
@@ -1387,8 +1387,8 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      ev <- askEvType
-     let ident = if doAsserting then "SpecM.assertingS"
-                                else "SpecM.assumingS"
+     let ident = if doAsserting then "sawcore:SpecM.assertingS"
+                                else "sawcore:SpecM.assumingS"
      return $ fromCompTerm mtp $
        applyOpenTermMulti (globalOpenTerm ident)
        [evTypeTerm ev, toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
@@ -1443,7 +1443,7 @@ fixMacro = MonMacro 2 $ \_ args -> case args of
        usingEvType $ do
          amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
          return $ fromCompTerm mtp $
-           applyOpenTermMulti (globalOpenTerm "SpecM.FixS")
+           applyOpenTermMulti (globalOpenTerm "sawcore:SpecM.FixS")
            [evTypeTerm ev, toTpDesc mtp, toCompTerm amtrm_f]
   [(asRecordType -> Just _), _] ->
     fail "Monadification failed: cannot yet handle mutual recursion"
@@ -1500,98 +1500,98 @@ defaultMonTable =
   Map.fromList
   [
     -- Prelude functions
-    mmCustom "Prelude.unsafeAssert" unsafeAssertMacro
-  , mmCustom "Prelude.ite" iteMacro
-  , mmCustom "Prelude.fix" fixMacro
-  , mmCustom "Prelude.either" eitherMacro
-  , mmCustom "Prelude.uncurry" uncurryMacro
-  , mmCustom "SpecM.invariantHint" invariantHintMacro
-  , mmCustom "SpecM.asserting" (assertingOrAssumingMacro True)
-  , mmCustom "SpecM.assuming" (assertingOrAssumingMacro False)
+    mmCustom "sawcore:Prelude.unsafeAssert" unsafeAssertMacro
+  , mmCustom "sawcore:Prelude.ite" iteMacro
+  , mmCustom "sawcore:Prelude.fix" fixMacro
+  , mmCustom "sawcore:Prelude.either" eitherMacro
+  , mmCustom "sawcore:Prelude.uncurry" uncurryMacro
+  , mmCustom "sawcore:SpecM.invariantHint" invariantHintMacro
+  , mmCustom "sawcore:SpecM.asserting" (assertingOrAssumingMacro True)
+  , mmCustom "sawcore:SpecM.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
-  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM" True
-  , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1" True
-  , mmArg "Cryptol.eListSel" "CryptolM.eListSelM" True
+  , mmArg "sawcore:Cryptol.seqMap" "sawcore:CryptolM.seqMapM" True
+  , mmSemiPure "sawcore:Cryptol.seq_cong1" "sawcore:CryptolM.mseq_cong1" True
+  , mmArg "sawcore:Cryptol.eListSel" "sawcore:CryptolM.eListSelM" True
 
     -- List comprehensions
-  , mmArg "Cryptol.from" "CryptolM.fromM" True
-  , mmArg "Cryptol.mlet" "CryptolM.mletM" True
-  , mmArg "Cryptol.seqZip" "CryptolM.seqZipM" True
-  , mmSemiPure "Cryptol.seqZipSame" "CryptolM.seqZipSameM" True
+  , mmArg "sawcore:Cryptol.from" "sawcore:CryptolM.fromM" True
+  , mmArg "sawcore:Cryptol.mlet" "sawcore:CryptolM.mletM" True
+  , mmArg "sawcore:Cryptol.seqZip" "sawcore:CryptolM.seqZipM" True
+  , mmSemiPure "sawcore:Cryptol.seqZipSame" "sawcore:CryptolM.seqZipSameM" True
 
     -- PEq constraints
-  , mmSemiPureFin 0 1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PEqSeq" "sawcore:CryptolM.PEqMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PEqSeqBool" "sawcore:CryptolM.PEqMSeqBool" True
 
     -- PCmp constraints
-  , mmSemiPureFin 0 1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PCmpSeq" "sawcore:CryptolM.PCmpMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PCmpSeqBool" "sawcore:CryptolM.PCmpMSeqBool" True
 
     -- PSignedCmp constraints
-  , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PSignedCmpSeq" "sawcore:CryptolM.PSignedCmpMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PSignedCmpSeqBool" "sawcore:CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPure "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PZeroSeqBool" "CryptolM.PZeroMSeqBool" True
+  , mmSemiPure "sawcore:Cryptol.PZeroSeq" "sawcore:CryptolM.PZeroMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PZeroSeqBool" "sawcore:CryptolM.PZeroMSeqBool" True
 
     -- PLogic constraints
-  , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
+  , mmSemiPure "sawcore:Cryptol.PLogicSeq" "sawcore:CryptolM.PLogicMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PLogicSeqBool" "sawcore:CryptolM.PLogicMSeqBool" True
 
     -- PRing constraints
-  , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq" True
-  , mmSemiPureFin 0 1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
+  , mmSemiPure "sawcore:Cryptol.PRingSeq" "sawcore:CryptolM.PRingMSeq" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PRingSeqBool" "sawcore:CryptolM.PRingMSeqBool" True
 
     -- PIntegral constraints
-  , mmSemiPureFin 0 1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PIntegeralSeqBool" "sawcore:CryptolM.PIntegeralMSeqBool" True
 
     -- PLiteral constraints
-  , mmSemiPureFin 0 1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.PLiteralSeqBool" "sawcore:CryptolM.PLiteralSeqBoolM" True
 
     -- The Cryptol Literal primitives
-  , mmSelf "Cryptol.ecNumber"
-  , mmSelf "Cryptol.ecFromZ"
+  , mmSelf "sawcore:Cryptol.ecNumber"
+  , mmSelf "sawcore:Cryptol.ecFromZ"
 
     -- The Ring primitives
-  , mmSelf "Cryptol.ecPlus"
-  , mmSelf "Cryptol.ecMinus"
-  , mmSelf "Cryptol.ecMul"
-  , mmSelf "Cryptol.ecNeg"
-  , mmSelf "Cryptol.ecToInteger"
+  , mmSelf "sawcore:Cryptol.ecPlus"
+  , mmSelf "sawcore:Cryptol.ecMinus"
+  , mmSelf "sawcore:Cryptol.ecMul"
+  , mmSelf "sawcore:Cryptol.ecNeg"
+  , mmSelf "sawcore:Cryptol.ecToInteger"
 
     -- The comparison primitives
-  , mmSelf "Cryptol.ecEq"
-  , mmSelf "Cryptol.ecNotEq"
-  , mmSelf "Cryptol.ecLt"
-  , mmSelf "Cryptol.ecLtEq"
-  , mmSelf "Cryptol.ecGt"
-  , mmSelf "Cryptol.ecGtEq"
+  , mmSelf "sawcore:Cryptol.ecEq"
+  , mmSelf "sawcore:Cryptol.ecNotEq"
+  , mmSelf "sawcore:Cryptol.ecLt"
+  , mmSelf "sawcore:Cryptol.ecLtEq"
+  , mmSelf "sawcore:Cryptol.ecGt"
+  , mmSelf "sawcore:Cryptol.ecGtEq"
 
     -- Sequences
-  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM" True
-  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM" True
-  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecCat" "CryptolM.ecCatM" True
-  , mmArg "Cryptol.ecTake" "CryptolM.ecTakeM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
-  , mmSemiPureFin 1 1 "Cryptol.ecJoin" "CryptolM.ecJoinM" True
-  , mmSemiPureFin 1 1 "Cryptol.ecSplit" "CryptolM.ecSplitM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
-  , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM" True
-  , mmArg "Cryptol.ecAt" "CryptolM.ecAtM" True
-  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM" True
-  , mmArgFin 0 1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM" True
-  , mmSemiPureFin 0 2 "Cryptol.ecFromTo" "CryptolM.ecFromToM" True
-  , mmSemiPureFin 0 1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
-  , mmSemiPureFin 4 1 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM" True
-  , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM" True
-  , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM" True
-  , mmArg "Cryptol.ecError" "CryptolM.ecErrorM" True
+  , mmSemiPure "sawcore:Cryptol.ecShiftL" "sawcore:CryptolM.ecShiftLM" True
+  , mmSemiPure "sawcore:Cryptol.ecShiftR" "sawcore:CryptolM.ecShiftRM" True
+  , mmSemiPure "sawcore:Cryptol.ecSShiftR" "sawcore:CryptolM.ecSShiftRM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecRotL" "sawcore:CryptolM.ecRotLM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecRotR" "sawcore:CryptolM.ecRotRM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecCat" "sawcore:CryptolM.ecCatM" True
+  , mmArg "sawcore:Cryptol.ecTake" "sawcore:CryptolM.ecTakeM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecDrop" "sawcore:CryptolM.ecDropM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecDrop" "sawcore:CryptolM.ecDropM" True
+  , mmSemiPureFin 1 1 "sawcore:Cryptol.ecJoin" "sawcore:CryptolM.ecJoinM" True
+  , mmSemiPureFin 1 1 "sawcore:Cryptol.ecSplit" "sawcore:CryptolM.ecSplitM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecReverse" "sawcore:CryptolM.ecReverseM" True
+  , mmSemiPure "sawcore:Cryptol.ecTranspose" "sawcore:CryptolM.ecTransposeM" True
+  , mmArg "sawcore:Cryptol.ecAt" "sawcore:CryptolM.ecAtM" True
+  , mmArg "sawcore:Cryptol.ecUpdate" "sawcore:CryptolM.ecUpdateM" True
+  , mmArgFin 0 1 "sawcore:Cryptol.ecAtBack" "sawcore:CryptolM.ecAtBackM" True
+  , mmSemiPureFin 0 2 "sawcore:Cryptol.ecFromTo" "sawcore:CryptolM.ecFromToM" True
+  , mmSemiPureFin 0 1 "sawcore:Cryptol.ecFromToLessThan" "sawcore:CryptolM.ecFromToLessThanM" True
+  , mmSemiPureFin 4 1 "sawcore:Cryptol.ecFromThenTo" "sawcore:CryptolM.ecFromThenToM" True
+  , mmSemiPure "sawcore:Cryptol.ecInfFrom" "sawcore:CryptolM.ecInfFromM" True
+  , mmSemiPure "sawcore:Cryptol.ecInfFromThen" "sawcore:CryptolM.ecInfFromThenM" True
+  , mmArg "sawcore:Cryptol.ecError" "sawcore:CryptolM.ecErrorM" True
   ]
 
 
@@ -1602,7 +1602,7 @@ defaultMonTable =
 -- | Ensure that the @CryptolM@ module is loaded
 ensureCryptolMLoaded :: SharedContext -> IO ()
 ensureCryptolMLoaded sc =
-  scModuleIsLoaded sc (mkModuleName ["CryptolM"]) >>= \is_loaded ->
+  scModuleIsLoaded sc (mkModuleName ["sawcore:CryptolM"]) >>= \is_loaded ->
   if is_loaded then return () else
     scLoadSpecMModule sc >> scLoadCryptolMModule sc
 
@@ -1616,7 +1616,7 @@ monadifyCompleteArgType sc env tp poly_p =
   completeOpenTerm sc $
   if poly_p then
     -- Parameter polymorphism means pi-quantification over E
-    (piOpenTerm "E" (dataTypeOpenTerm "SpecM.EvType" []) $ \e ->
+    (piOpenTerm "E" (dataTypeOpenTerm "sawcore:SpecM.EvType" []) $ \e ->
       let ?specMEvType = EventType e in
       -- NOTE: even though E is a free variable here, it can not be free in tp,
       -- which is a closed term, so we do not list it in the MonadifyTypeCtx

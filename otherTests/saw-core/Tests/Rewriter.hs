@@ -33,7 +33,7 @@ prelude_bveq_sameL_test =
   testCase "prelude_bveq_sameL_test" $ do
     sc0 <- mkSharedContext
     scLoadPreludeModule sc0
-    let eqs = [ "Prelude.bveq_sameL" ]
+    let eqs = [ "sawcore:Prelude.bveq_sameL" ]
     ss <- scSimpset sc0 [] eqs []
     let sc = rewritingSharedContext sc0 ss
     natType <- scNatType sc0
@@ -43,14 +43,14 @@ prelude_bveq_sameL_test =
     x <- scFreshGlobal sc "x" bvType
     z <- scFreshGlobal sc "z" bvType
     let lhs =
-          mkGlobalDef "Prelude.bvEq"
+          mkGlobalDef "sawcore:Prelude.bvEq"
             `pureApp` n
             `pureApp` x
-            `mkApp` (mkGlobalDef "Prelude.bvAdd" `pureApp` n `pureApp` x `pureApp` z)
+            `mkApp` (mkGlobalDef "sawcore:Prelude.bvAdd" `pureApp` n `pureApp` x `pureApp` z)
     let rhs =
-          mkGlobalDef "Prelude.bvEq"
+          mkGlobalDef "sawcore:Prelude.bvEq"
             `pureApp` n
-            `mkApp` (mkGlobalDef "Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
+            `mkApp` (mkGlobalDef "sawcore:Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
             `pureApp` z
     lhs_term <- scMkTerm sc lhs
     rhs_term <- scMkTerm sc rhs

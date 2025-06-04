@@ -228,29 +228,29 @@ constMap =
   flip Map.union (Prims.constMap prims) $
   Map.fromList
   -- Shifts
-  [ ("Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
-  , ("Prelude.bvShr" , bvShiftOp (Prim.bvShr undefined))
-  , ("Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
+  [ ("sawcore:Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
+  , ("sawcore:Prelude.bvShr" , bvShiftOp (Prim.bvShr undefined))
+  , ("sawcore:Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("sawcore:Prelude.intToNat", Prims.intToNatOp)
+  , ("sawcore:Prelude.natToInt", Prims.natToIntOp)
+  , ("sawcore:Prelude.intToBv" , intToBvOp)
+  , ("sawcore:Prelude.bvToInt" , bvToIntOp)
+  , ("sawcore:Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("sawcore:Prelude.toIntMod"  , toIntModOp)
+  , ("sawcore:Prelude.fromIntMod", fromIntModOp)
+  , ("sawcore:Prelude.intModEq"  , intModEqOp)
+  , ("sawcore:Prelude.intModAdd" , intModBinOp (+))
+  , ("sawcore:Prelude.intModSub" , intModBinOp (-))
+  , ("sawcore:Prelude.intModMul" , intModBinOp (*))
+  , ("sawcore:Prelude.intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("sawcore:Prelude.MkStream", mkStreamOp)
+  , ("sawcore:Prelude.streamGet", streamGetOp)
   -- Miscellaneous
-  , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("sawcore:Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
+  , ("sawcore:Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
 ------------------------------------------------------------

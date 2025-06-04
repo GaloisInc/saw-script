@@ -718,7 +718,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
          toSC sym sawst variable
        inner_func <- case asConstant (ttTerm func) of
-         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
+         Just (_, Just (asApplyAll -> (isGlobalDef "sawcore:Prelude.fix" -> Just (), [_, inner_func]))) ->
            return inner_func
          _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc
@@ -799,7 +799,7 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
        explicit_parameters_tuple <- scTuple sc explicit_parameters
 
        inner_func <- case asConstant (ttTerm func) of
-         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
+         Just (_, Just (asApplyAll -> (isGlobalDef "sawcore:Prelude.fix" -> Just (), [_, inner_func]))) ->
            return inner_func
          _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc

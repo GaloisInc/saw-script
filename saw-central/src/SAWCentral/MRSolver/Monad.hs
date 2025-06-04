@@ -605,21 +605,21 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 mrErrorTerm :: Term -> T.Text -> MRM t Term
 mrErrorTerm a str =
   do err_str <- liftSC1 scString str
-     liftSC2 scGlobalApply "Prelude.error" [a, err_str]
+     liftSC2 scGlobalApply "sawcore:Prelude.error" [a, err_str]
 
 -- | Create a term representing an application of @Prelude.genBVVecFromVec@,
 -- where the default value argument is @Prelude.error@ of the given 'T.Text'
 mrGenBVVecFromVec :: Term -> Term -> Term -> T.Text -> Term -> Term -> MRM t Term
 mrGenBVVecFromVec m a v def_err_str n len =
   do err_tm <- mrErrorTerm a def_err_str
-     liftSC2 scGlobalApply "Prelude.genBVVecFromVec" [m, a, v, err_tm, n, len]
+     liftSC2 scGlobalApply "sawcore:Prelude.genBVVecFromVec" [m, a, v, err_tm, n, len]
 
 -- | Create a term representing an application of @Prelude.genFromBVVec@,
 -- where the default value argument is @Prelude.error@ of the given 'T.Text'
 mrGenFromBVVec :: Term -> Term -> Term -> Term -> T.Text -> Term -> MRM t Term
 mrGenFromBVVec n len a v def_err_str m =
   do err_tm <- mrErrorTerm a def_err_str
-     liftSC2 scGlobalApply "Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
+     liftSC2 scGlobalApply "sawcore:Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
 
 -- | Match a lambda of the form @(\i _ -> f i)@ as @f@
 asIndexWithProofFnTerm :: Recognizer Term (SharedContext -> IO Term)
@@ -636,10 +636,10 @@ asIndexWithProofFnTerm _ = Nothing
 
 -- | Match a term of the form @gen n a f@ or @genWithProof n a (\i _ -> f i)@
 asGenVecTerm :: Recognizer Term (Term, Term, SharedContext -> IO Term)
-asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.gen" -> Just _,
+asGenVecTerm (asApplyAll -> (isGlobalDef "sawcore:Prelude.gen" -> Just _,
                              [n, a, f]))
   = Just (n, a, const $ return f)
-asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.genWithProof" -> Just _,
+asGenVecTerm (asApplyAll -> (isGlobalDef "sawcore:Prelude.genWithProof" -> Just _,
                              [n, a, asIndexWithProofFnTerm -> Just m_f]))
   = Just (n, a, m_f)
 asGenVecTerm _ = Nothing
@@ -647,10 +647,10 @@ asGenVecTerm _ = Nothing
 -- | Match a term of the form @genBVVecNoPf n len a f@ or
 -- @genBVVec n len a (\i _ -> f i)@
 asGenBVVecTerm :: Recognizer Term (Term, Term, Term, SharedContext -> IO Term)
-asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVecNoPf" -> Just _,
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "sawcore:Prelude.genBVVecNoPf" -> Just _,
                                [n, len, a, f]))
   = Just (n, len, a, const $ return f)
-asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVec" -> Just _,
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "sawcore:Prelude.genBVVec" -> Just _,
                                [n, len, a, asIndexWithProofFnTerm -> Just m_f]))
   = Just (n, len, a, m_f)
 asGenBVVecTerm _ = Nothing
@@ -662,7 +662,7 @@ mrAtVec :: Term -> Term -> Term -> Term -> MRM t Term
 mrAtVec _ _ (asGenVecTerm -> Just (_, _, m_f)) ix =
   liftSC0 m_f >>= \f -> mrApply f ix
 mrAtVec len a v ix =
-  liftSC2 scGlobalApply "Prelude.at" [len, a, v, ix]
+  liftSC2 scGlobalApply "sawcore:Prelude.at" [len, a, v, ix]
 
 -- | Index into a vector using the @atBVVecNoPf@ accessor, taking in the same
 -- 'Term' arguments as that function, but simplify when the vector is a term
@@ -671,7 +671,7 @@ mrAtBVVec :: Term -> Term -> Term -> Term -> Term -> MRM t Term
 mrAtBVVec _ _ _ (asGenBVVecTerm -> Just (_, _, _, m_f)) ix =
   liftSC0 m_f >>= \f -> mrApply f ix
 mrAtBVVec n len a v ix =
-  liftSC2 scGlobalApply "Prelude.atBVVecNoPf" [n, len, a, v, ix]
+  liftSC2 scGlobalApply "sawcore:Prelude.atBVVecNoPf" [n, len, a, v, ix]
 
 
 ----------------------------------------------------------------------
@@ -762,7 +762,7 @@ mrBvType n =
 
 -- | Build the equality proposition @Eq a t1 t2@
 mrEqProp :: Term -> Term -> Term -> MRM t Term
-mrEqProp tp t1 t2 = liftSC2 scDataTypeApp "Prelude.Eq" [tp,t1,t2]
+mrEqProp tp t1 t2 = liftSC2 scDataTypeApp "sawcore:Prelude.Eq" [tp,t1,t2]
 
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
@@ -770,7 +770,7 @@ mrBvToNat :: Term -> Term -> MRM t Term
 mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+mrBvToNat n len = liftSC2 scGlobalApply "sawcore:Prelude.bvToNat" [n, len]
 
 -- | Given a bit-width 'Term' and a natural number 'Term', return a bitvector
 -- 'Term' of the given bit-width only if we can can do so without truncation
@@ -780,11 +780,11 @@ mrBvNatInRange (asNat -> Just w) (asUnsignedConcreteBvToNat -> Just v)
   | v < 2 ^ w = Just <$> liftSC2 scBvLit w (toInteger v)
 mrBvNatInRange w (asBvToNat -> Just (w', bv)) =
   mrBvCastInRange w w' bv
-mrBvNatInRange w (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat",
+mrBvNatInRange w (asApplyAll -> (asGlobalDef -> Just "sawcore:Prelude.intToNat",
                                  [i])) = case i of
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+  (asApplyAll -> (asGlobalDef -> Just "sawcore:Prelude.natToInt", [v])) ->
     mrBvNatInRange w v
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [w', bv])) ->
+  (asApplyAll -> (asGlobalDef -> Just "sawcore:Prelude.bvToInt", [w', bv])) ->
     mrBvCastInRange w w' bv
   _ -> return Nothing
 mrBvNatInRange _ _ = return Nothing
@@ -1356,16 +1356,16 @@ mrGetInvariantBody tm = case asApplyAll tm of
     do tm' <- mrApplyAll f args
        mrGetInvariantBody tm'
   -- go inside any top-level applications of of bindS ... (assertFiniteS ...)
-  (isGlobalDef "SpecM.bindS" -> Just (),
+  (isGlobalDef "sawcore:SpecM.bindS" -> Just (),
    [_, _, _,
-    (asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
-                    [_, (asCtor -> Just (primName -> "Cryptol.TCNum", _))])),
+    (asApplyAll -> (isGlobalDef "sawcore:CryptolM.assertFiniteS" -> Just (),
+                    [_, (asCtor -> Just (primName -> "sawcore:Cryptol.TCNum", _))])),
     k]) ->
-    do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
+    do pf <- liftSC1 scGlobalDef "sawcore:Prelude.TrueI"
        body <- mrApplyAll k [pf]
        mrGetInvariantBody body
   -- otherwise, return Just iff there is a top-level invariant hint
-  (isGlobalDef "SpecM.invariantHint" -> Just (),
+  (isGlobalDef "sawcore:SpecM.invariantHint" -> Just (),
    [_, phi, _]) -> return $ Just phi
   _ -> return Nothing
 

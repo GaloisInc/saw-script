@@ -606,8 +606,8 @@ buildTopLevelEnv proxy opts =
            cryptolDefs = filter defPred $ moduleDefs cryptol_mod
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
-                          [ "Cryptol.ecDemote"
-                          , "Cryptol.seq"
+                          [ "sawcore:Cryptol.ecDemote"
+                          , "sawcore:Cryptol.seq"
                           ]
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps

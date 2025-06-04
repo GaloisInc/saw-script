@@ -204,28 +204,28 @@ constMap =
   Map.fromList
   [
   -- Shifts
-    ("Prelude.bvShl" , bvShLOp)
-  , ("Prelude.bvShr" , bvShROp)
-  , ("Prelude.bvSShr", bvSShROp)
+    ("sawcore:Prelude.bvShl" , bvShLOp)
+  , ("sawcore:Prelude.bvShr" , bvShROp)
+  , ("sawcore:Prelude.bvSShr", bvSShROp)
   -- Integers
-  , ("Prelude.intToNat", intToNatOp)
-  , ("Prelude.natToInt", natToIntOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("sawcore:Prelude.intToNat", intToNatOp)
+  , ("sawcore:Prelude.natToInt", natToIntOp)
+  , ("sawcore:Prelude.intToBv" , intToBvOp)
+  , ("sawcore:Prelude.bvToInt" , bvToIntOp)
+  , ("sawcore:Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp svPlus)
-  , ("Prelude.intModSub" , intModBinOp svMinus)
-  , ("Prelude.intModMul" , intModBinOp svTimes)
-  , ("Prelude.intModNeg" , intModUnOp svUNeg)
+  , ("sawcore:Prelude.toIntMod"  , toIntModOp)
+  , ("sawcore:Prelude.fromIntMod", fromIntModOp)
+  , ("sawcore:Prelude.intModEq"  , intModEqOp)
+  , ("sawcore:Prelude.intModAdd" , intModBinOp svPlus)
+  , ("sawcore:Prelude.intModSub" , intModBinOp svMinus)
+  , ("sawcore:Prelude.intModMul" , intModBinOp svTimes)
+  , ("sawcore:Prelude.intModNeg" , intModUnOp svUNeg)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("sawcore:Prelude.MkStream", mkStreamOp)
+  , ("sawcore:Prelude.streamGet", streamGetOp)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("sawcore:Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
 ------------------------------------------------------------
@@ -595,7 +595,7 @@ muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
 muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
+muxSbvExtra (VDataType (primName -> "sawcore:Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
                   muxBVal tp c xi yi

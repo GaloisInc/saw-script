@@ -260,28 +260,28 @@ constMap sym =
   Map.fromList
   [
   -- Shifts
-    ("Prelude.bvShl" , bvShLOp sym)
-  , ("Prelude.bvShr" , bvShROp sym)
-  , ("Prelude.bvSShr", bvSShROp sym)
+    ("sawcore:Prelude.bvShl" , bvShLOp sym)
+  , ("sawcore:Prelude.bvShr" , bvShROp sym)
+  , ("sawcore:Prelude.bvSShr", bvSShROp sym)
   -- Integers
-  , ("Prelude.intToNat", intToNatOp sym)
-  , ("Prelude.natToInt", natToIntOp sym)
-  , ("Prelude.intToBv" , intToBvOp sym)
-  , ("Prelude.bvToInt" , bvToIntOp sym)
-  , ("Prelude.sbvToInt", sbvToIntOp sym)
+  , ("sawcore:Prelude.intToNat", intToNatOp sym)
+  , ("sawcore:Prelude.natToInt", natToIntOp sym)
+  , ("sawcore:Prelude.intToBv" , intToBvOp sym)
+  , ("sawcore:Prelude.bvToInt" , bvToIntOp sym)
+  , ("sawcore:Prelude.sbvToInt", sbvToIntOp sym)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp sym)
-  , ("Prelude.intModEq"  , intModEqOp sym)
-  , ("Prelude.intModAdd" , intModBinOp sym W.intAdd)
-  , ("Prelude.intModSub" , intModBinOp sym W.intSub)
-  , ("Prelude.intModMul" , intModBinOp sym W.intMul)
-  , ("Prelude.intModNeg" , intModUnOp sym W.intNeg)
+  , ("sawcore:Prelude.toIntMod"  , toIntModOp)
+  , ("sawcore:Prelude.fromIntMod", fromIntModOp sym)
+  , ("sawcore:Prelude.intModEq"  , intModEqOp sym)
+  , ("sawcore:Prelude.intModAdd" , intModBinOp sym W.intAdd)
+  , ("sawcore:Prelude.intModSub" , intModBinOp sym W.intSub)
+  , ("sawcore:Prelude.intModMul" , intModBinOp sym W.intMul)
+  , ("sawcore:Prelude.intModNeg" , intModUnOp sym W.intNeg)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp sym)
+  , ("sawcore:Prelude.MkStream", mkStreamOp)
+  , ("sawcore:Prelude.streamGet", streamGetOp sym)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp (prims sym))
+  , ("sawcore:Prelude.expByNat", Prims.expByNatOp (prims sym))
   ]
 
 -----------------------------------------------------------------------
@@ -568,7 +568,7 @@ muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
   sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType (primName -> "Prelude.Stream") [TValue tp] [] ) c x y =
+muxWhat4Extra sym (VDataType (primName -> "sawcore:Prelude.Stream") [TValue tp] [] ) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
                   muxBVal sym tp c xi yi

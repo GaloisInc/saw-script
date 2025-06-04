@@ -285,7 +285,7 @@ primCellToMap sc c args = case c ^. cellType of
     splitA <- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))
     -- reverse to put index 0 on the left
     outputType <- liftIO (SC.scBitvector sc ywidth)
-    revA <- liftIO (SC.scGlobalApply sc "Prelude.reverse" [chunks, outputType, splitA])
+    revA <- liftIO (SC.scGlobalApply sc "sawcore:Prelude.reverse" [chunks, outputType, splitA])
     -- Select chunk from output
     ixWidth <- liftIO (SC.scNat sc swidth)
     elt <- liftIO (SC.scBvAt sc chunks outputType ixWidth revA (cellTermTerm is))

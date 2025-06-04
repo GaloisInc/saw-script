@@ -5,8 +5,8 @@ import "monadify.cry";
 // load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";
 
 // Set the monadification of the Cryptol exists and forall functions
-set_monadification "SpecPrims::exists" "SpecM.existsS" true;
-set_monadification "SpecPrims::forall" "SpecM.forallS" true;
+set_monadification "SpecPrims::exists" "sawcore:SpecM.existsS" true;
+set_monadification "SpecPrims::forall" "sawcore:SpecM.forallS" true;
 
 let run_test name cry_term mon_term_expected =
   do { print (str_concat "Test: " name);
