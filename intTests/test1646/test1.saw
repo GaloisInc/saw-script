@@ -1,0 +1,9 @@
+// The second f call will print x=b.
+
+let x = "a";
+
+let f () = print (str_concat "x=" x);
+f ();
+
+let x = "b";
+f ();
