@@ -312,7 +312,7 @@ ioParseResult res = case res of
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
   where
-    nameEnv = mconcat $ fromMaybe [] $ traverse addImportToEnv (eImports env)
+    nameEnv = mconcat $ map addImportToEnv (eImports env)
       {-
       eImports : TODO!
       but note: type T.Import = T.ImportG C.ModName
@@ -324,25 +324,27 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
     --        - which is, wow, very complex.
     --        - and is there code there that does this?
 
-    -- FIXME: refactor out the Maybe! and cleanup.
+    addImportToEnv :: (ImportVisibility, T.ImportG C.ModName) -> MR.NamingEnv
+    addImportToEnv (vis, i) = MN.interpImportEnv i syms
 
-    addImportToEnv :: (ImportVisibility, T.ImportG C.ModName) -> Maybe MR.NamingEnv
-    addImportToEnv (vis, i) = do
+      where
       -- get the LoadedModule:
-      let nm = T.iModule i
-      lm <- case ME.lookupModule nm (eModuleEnv env) of
+      nm = T.iModule i
+      lm = case ME.lookupModule nm (eModuleEnv env) of
+              Just x  -> x
               Nothing -> panic "getNamingEnv"
-                           ["unknown module: " <> Text.pack (show nm)]
-              Just x  -> return x
+                           [ "unknown module: " <> Text.pack (show nm)
+                           , "(module in `eImports`, not in `eModuleEnv`)"
+                           ]
 
       -- NOTE:
-      let ifc = MI.ifNames (ME.lmInterface lm)
-                --
-          syms = MN.namingEnvFromNames $
-                 case vis of
-                   OnlyPublic       -> MI.ifsPublic ifc
-                   PublicAndPrivate -> MI.ifsDefines ifc
-      return $ MN.interpImportEnv i syms
+      ifc = MI.ifNames (ME.lmInterface lm)
+            --
+      syms = MN.namingEnvFromNames $
+             case vis of
+               OnlyPublic       -> MI.ifsPublic ifc
+               PublicAndPrivate -> MI.ifsDefines ifc
+
       -- BH: not sure anything like this exists in Cryptol REPL
       --  saw - a union of scopes/modules, not just one module.
       --  special name for top-level [interactive] module: then use
@@ -696,9 +698,9 @@ importModule sc env src as vis imps = do
   let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
                                      (ME.loadedNominalTypes modEnv)
 
-  oldCryEnv <- mkCryEnv env
-  newTermEnv <-
-    do cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
+  newTermEnv <- do
+       oldCryEnv <- mkCryEnv env
+       cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
                                                cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
