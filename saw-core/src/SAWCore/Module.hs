@@ -82,6 +82,7 @@ import Data.Foldable (foldl', foldr')
 import Data.Hashable
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.IntSet as IntSet
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe, fromMaybe)
@@ -92,6 +93,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
+import SAWCore.Name hiding (resolveName)
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
@@ -410,20 +412,15 @@ moduleDecls = reverse . moduleRDecls
 -- | The type of mappings from module names to modules
 data ModuleMap =
   ModuleMap
-  { mmIdentMap :: !(Map Ident VarIndex)
+  { mmNameEnv :: !(Map ModuleName DisplayNameEnv)
   , mmIndexMap :: !(IntMap ResolvedName) -- keyed by VarIndex
   , mmRDecls :: !(Map ModuleName [ModuleDecl])
   }
-  -- NOTE: If mmIdentMap contains a key "M.foo", this simply means
-  -- that the name name "foo" is in scope in the saw-core module "M".
-  -- It does NOT mean that "foo" is necessarily defined in module "M".
-  -- If "foo" was originally defined in module "N", then "N.foo" will
-  -- also be present in mmIdentMap, with the same VarIndex.
 
 emptyModuleMap :: ModuleMap
 emptyModuleMap =
   ModuleMap
-  { mmIdentMap = Map.empty
+  { mmNameEnv = Map.empty
   , mmIndexMap = IntMap.empty
   , mmRDecls = Map.empty
   }
@@ -435,22 +432,26 @@ moduleIsLoaded mn mm = Map.member mn (mmRDecls mm)
 loadModule :: Module -> ModuleMap -> ModuleMap
 loadModule m mm =
   ModuleMap
-  { mmIdentMap = Map.union identMap (mmIdentMap mm)
+  { mmNameEnv = Map.insert (moduleName m) env (mmNameEnv mm)
   , mmIndexMap = IntMap.union indexMap (mmIndexMap mm)
   , mmRDecls = Map.insert (moduleName m) (moduleRDecls m) (mmRDecls mm)
   }
   where
-    identMap = Map.mapKeys (mkIdent (moduleName m)) (fmap resolvedNameVarIndex (moduleResolveMap m))
+    env =
+      foldr' (\(x, r) -> extendDisplayNameEnv (resolvedNameVarIndex r) [x]) emptyDisplayNameEnv $
+      Map.assocs (moduleResolveMap m)
     indexMap = IntMap.fromList [ (resolvedNameVarIndex r, r) | r <- Map.elems (moduleResolveMap m) ]
 
 findModule :: ModuleName -> ModuleMap -> Maybe Module
 findModule mnm mm =
   do decls <- Map.lookup mnm (mmRDecls mm)
+     env <- Map.lookup mnm (mmNameEnv mm)
+     -- moduleResolveMap :: !(Map Text ResolvedName)
+     -- { displayNames :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
+     -- , displayIndexes :: !(Map Text IntSet)
      let rmap =
            Map.mapMaybe (\vi -> IntMap.lookup vi (mmIndexMap mm)) $
-           Map.mapKeys identBaseName $
-           Map.filterWithKey (\i _ -> identModule i == mnm) $
-           mmIdentMap mm
+           Map.fromList [ (x, i) | (x, s) <- Map.assocs (displayIndexes env), i <- IntSet.elems s ]
      Just $ Module { moduleName = mnm, moduleResolveMap = rmap, moduleRDecls = decls }
 
 lookupVarIndexInMap :: VarIndex -> ModuleMap -> Maybe ResolvedName
@@ -458,7 +459,11 @@ lookupVarIndexInMap vi mm = IntMap.lookup vi (mmIndexMap mm)
 
 resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
 resolveNameInMap mm i =
-  do vi <- Map.lookup i (mmIdentMap mm)
+  do env <- Map.lookup (identModule i) (mmNameEnv mm)
+     vi <-
+       case resolveDisplayName env (identBaseName i) of
+         [vi] -> Just vi
+         _ -> Nothing
      IntMap.lookup vi (mmIndexMap mm)
 
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
@@ -524,12 +529,18 @@ allModuleCtors mm = mapMaybe asResolvedCtor (IntMap.elems (mmIndexMap mm))
 -- 'Ident' name.
 insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Ident ModuleMap
 insResolvedNameInMap r mm =
-  let ident = resolvedNameIdent r in
-  if Map.member ident (mmIdentMap mm)
+  if Map.member base (displayIndexes env)
   then Left ident
-  else Right $ mm { mmIdentMap = Map.insert ident (resolvedNameVarIndex r) (mmIdentMap mm)
-                  , mmIndexMap = IntMap.insert (resolvedNameVarIndex r) r (mmIndexMap mm)
+  else Right $ mm { mmNameEnv = Map.insert mname env' (mmNameEnv mm)
+                  , mmIndexMap = IntMap.insert vi r (mmIndexMap mm)
                   }
+  where
+    vi = resolvedNameVarIndex r
+    ident = resolvedNameIdent r
+    mname = identModule ident
+    base = identBaseName ident
+    env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
+    env' = extendDisplayNameEnv vi [base] env
 
 insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
 insDeclInMap mname decl mm =
@@ -550,12 +561,8 @@ insInjectCodeInMap mname ns txt = insDeclInMap mname (InjectCodeDecl ns txt)
 -- determines which names to import.
 insImportInMap :: (Text -> Bool) -> ModuleName -> ModuleName -> ModuleMap -> ModuleMap
 insImportInMap p name1 name2 mm =
-  mm { mmIdentMap = Map.union identMap (mmIdentMap mm) }
+  mm { mmNameEnv = Map.insert name2 env2' (mmNameEnv mm) }
   where
-    identMap =
-      Map.fromList
-      [ (mkIdent name2 (identBaseName ident), vi)
-      | (ident, vi) <- Map.assocs (mmIdentMap mm)
-      , identModule ident == name1
-      , p (identBaseName ident)
-      ]
+    env1 = fromMaybe emptyDisplayNameEnv $ Map.lookup name1 (mmNameEnv mm)
+    env2 = fromMaybe emptyDisplayNameEnv $ Map.lookup name2 (mmNameEnv mm)
+    env2' = mergeDisplayNameEnv (filterDisplayNameEnv p env1) env2
