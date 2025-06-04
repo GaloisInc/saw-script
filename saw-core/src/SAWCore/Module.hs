@@ -446,9 +446,6 @@ findModule :: ModuleName -> ModuleMap -> Maybe Module
 findModule mnm mm =
   do decls <- Map.lookup mnm (mmRDecls mm)
      env <- Map.lookup mnm (mmNameEnv mm)
-     -- moduleResolveMap :: !(Map Text ResolvedName)
-     -- { displayNames :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
-     -- , displayIndexes :: !(Map Text IntSet)
      let rmap =
            Map.mapMaybe (\vi -> IntMap.lookup vi (mmIndexMap mm)) $
            Map.fromList [ (x, i) | (x, s) <- Map.assocs (displayIndexes env), i <- IntSet.elems s ]
