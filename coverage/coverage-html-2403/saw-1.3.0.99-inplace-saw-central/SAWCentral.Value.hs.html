@@ -594,7 +594,7 @@ span.spaces    { background: white }
 <span class="lineno">  575 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
 <span class="lineno">  576 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ mergeLocalEnv sc env rw</span></span>
 <span class="lineno">  577 </span>
-<span class="lineno">  578 </span>-- Variant getMergedEnv that takes an explicit local part
+<span class="lineno">  578 </span>-- Variant of getMergedEnv that takes an explicit local part
 <span class="lineno">  579 </span>-- (this avoids trying to use it with withLocalEnv, which doesn't work)
 <span class="lineno">  580 </span>getMergedEnv' :: LocalEnv -&gt; TopLevel TopLevelRW
 <span class="lineno">  581 </span><span class="decl"><span class="istickedoff">getMergedEnv' env = do</span>
