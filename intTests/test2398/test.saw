@@ -1,0 +1,16 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let thing = mir_find_adt m "test::Thing" [];
+
+let spec = do {
+    mir_execute_func [];
+    mir_return (mir_struct_value thing [
+        mir_tuple_value [],
+        mir_term {{ 1 : [32] }},
+        mir_term {{ [] : [0][8] }}
+    ]);
+};
+
+mir_verify m "test::get_thing" [] false spec z3;
