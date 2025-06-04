@@ -46,6 +46,8 @@ module SAWCore.Name
   , DisplayNameEnv(..)
   , emptyDisplayNameEnv
   , extendDisplayNameEnv
+  , filterDisplayNameEnv
+  , mergeDisplayNameEnv
   , resolveDisplayName
   , bestDisplayName
     -- * Naming Environments
@@ -330,6 +332,25 @@ extendDisplayNameEnv i aliases env =
     insertAlias :: Text -> Map Text IntSet -> Map Text IntSet
     insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m
 
+-- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
+filterDisplayNameEnv :: (Text -> Bool) -> DisplayNameEnv -> DisplayNameEnv
+filterDisplayNameEnv p env =
+  DisplayNameEnv
+  { displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env
+  , displayIndexes = Map.filterWithKey (\k _ -> p k) $ displayIndexes env
+  }
+
+-- | Merge two 'DisplayNameEnv's, giving higher priority to display
+-- names from the first argument.
+mergeDisplayNameEnv :: DisplayNameEnv -> DisplayNameEnv -> DisplayNameEnv
+mergeDisplayNameEnv env1 env2 =
+  DisplayNameEnv
+  { displayNames = IntMap.unionWith List.union (displayNames env1) (displayNames env2)
+  , displayIndexes = Map.unionWith IntSet.union (displayIndexes env1) (displayIndexes env2)
+  }
+
+-- | Look up a 'Text' display name in an environment, returning the
+-- list of indexes it could resolve to.
 resolveDisplayName :: DisplayNameEnv -> Text -> [VarIndex]
 resolveDisplayName env x =
   case Map.lookup x (displayIndexes env) of
