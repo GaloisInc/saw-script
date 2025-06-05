@@ -208,7 +208,7 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
-import Control.Monad.State (StateT(..), gets, modify)
+import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
@@ -278,7 +278,6 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
-import           Lang.Crucible.Utils.StateContT
 import           Lang.Crucible.LLVM.ArraySizeProfile
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
@@ -664,19 +663,19 @@ data TopLevelRW =
   }
 
 newtype TopLevel a =
-  TopLevel_ (ReaderT TopLevelRO (StateContT TopLevelRW (Value, TopLevelRW) IO) a)
+  TopLevel_ (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
  deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
-deriving instance MonadCont TopLevel
 
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
 runTopLevel :: IsValue a => TopLevel a -> TopLevelRO -> TopLevelRW -> IO (Value, TopLevelRW)
-runTopLevel (TopLevel_ m) ro rw =
-  runStateContT (runReaderT m ro) (\a s -> return (toValue a,s)) rw
+runTopLevel (TopLevel_ m) ro rw = do
+  (a, rw') <- runStateT (runReaderT m ro) rw
+  return (toValue a, rw')
 
 instance MonadIO TopLevel where
   liftIO = io
