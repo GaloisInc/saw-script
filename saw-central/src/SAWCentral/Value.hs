@@ -220,7 +220,6 @@ import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
 import Data.Parameterized.Some
 import Data.Typeable
-import GHC.Generics (Generic, Generic1)
 import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
@@ -369,7 +368,6 @@ data SAW_CFG where
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biBasicSS       :: SAWSimpset
                                      }
-  deriving Generic
 
 -- | All the context maintained by Heapster
 data HeapsterEnv = HeapsterEnv {
@@ -667,7 +665,7 @@ data TopLevelRW =
 
 newtype TopLevel a =
   TopLevel_ (ReaderT TopLevelRO (StateContT TopLevelRW (Value, TopLevelRW) IO) a)
- deriving (Applicative, Functor, Generic, Generic1, Monad, MonadThrow, MonadCatch)
+ deriving (Applicative, Functor, Monad, MonadThrow, MonadCatch)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
