@@ -55,8 +55,6 @@ module SAWCentral.Value (
     showsPrecValue,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     evaluateTypedTerm,
-    -- used by SAWCentral.Builtins
-    applyValue,
     -- used by SAWScript.Interpreter (and in LocalEnv)
     LocalBinding(..),
     -- used by SAWScript.Interpreter, and appears in TopLevelRO
@@ -520,10 +518,6 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
   fail $ unlines [ "Could not evaluate term with type"
                  , show (ppTypedTermType tp)
                  ]
-
-applyValue :: Value -> Value -> TopLevel Value
-applyValue (VLambda f) x = f x
-applyValue _ _ = throwTopLevel "applyValue"
 
 
 -- TopLevel Monad --------------------------------------------------------------

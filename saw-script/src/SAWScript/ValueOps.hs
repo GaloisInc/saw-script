@@ -163,6 +163,10 @@ proofScriptSubshell = VLambda $ \_ ->
      env <- getLocalEnv
      return (VProofScript (toValue <$> withLocalEnvProof env m))
 
+applyValue :: Value -> Value -> TopLevel Value
+applyValue (VLambda f) x = f x
+applyValue _ _ = throwTopLevel "applyValue"
+
 thenValue :: SS.Pos -> Value -> Value -> Value
 thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
 
