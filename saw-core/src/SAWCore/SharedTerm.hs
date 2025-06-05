@@ -319,6 +319,7 @@ import SAWCore.Module
   , moduleIsLoaded
   , moduleName
   , loadModule
+  , lookupVarIndexInMap
   , findCtorInMap
   , findDataTypeInMap
   , findDefInMap
@@ -334,6 +335,7 @@ import SAWCore.Module
   , Def(..)
   , Module
   , ModuleMap
+  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.Prelude.Constants
@@ -861,10 +863,14 @@ scRecursorElimTypes ::
   Term ->
   IO [(PrimName Term, Term)]
 scRecursorElimTypes sc d params p_ret =
-  do dt <- scRequireDataType sc (primName d)
-     forM (dtCtors dt) $ \ctor ->
-       do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-          return (ctorPrimName ctor, elim_type)
+  do mm <- scGetModuleMap sc
+     case lookupVarIndexInMap (primVarIndex d) mm of
+       Just (ResolvedDataType dt) ->
+         do forM (dtCtors dt) $ \ctor ->
+              do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
+                 return (ctorPrimName ctor, elim_type)
+       _ ->
+         panic "scRecursorElimTypes" ["Could not find datatype: " <> identText (primName d)]
 
 
 -- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
@@ -895,10 +901,14 @@ scReduceRecursor ::
   [Term] {- ^ constructor arguments -} ->
   IO Term
 scReduceRecursor sc r crec c args =
-   do ctor <- scRequireCtor sc (primName c)
-      -- The ctorIotaReduction field caches the result of iota reduction, which
-      -- we just substitute into to perform the reduction
-      ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
+  do mres <- lookupVarIndexInMap (primVarIndex c) <$> scGetModuleMap sc
+     case mres of
+       Just (ResolvedCtor ctor) ->
+         -- The ctorIotaReduction field caches the result of iota reduction, which
+         -- we just substitute into to perform the reduction
+         ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
+       _ ->
+         panic "scReduceRecursor" ["Could not find constructor: " <> identText (primName c)]
 
 -- | Reduce an application of a recursor to a concrete nat value.
 --   The given recursor value is assumed to be correctly-typed
