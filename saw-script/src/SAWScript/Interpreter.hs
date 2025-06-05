@@ -1235,17 +1235,6 @@ primitives = Map.fromList
     Current
     [ "Concatenate a list of strings together to yield a string." ]
 
-  , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
-    (\_ _ -> toplevelCallCC)
-    Experimental
-    [ "Call-with-current-continuation."
-    , ""
-    , "This is a highly experimental control operator that can be used"
-    , "to capture the surrounding top-level computation as a continuation."
-    , "The consequences of delaying and reentering the current continuation"
-    , "may be somewhat unpredictable, so use this operator with great caution."
-    ]
-
   , prim "checkpoint"          "TopLevel (() -> TopLevel ())"
     (pureVal checkpoint)
     Experimental
@@ -1270,12 +1259,11 @@ primitives = Map.fromList
     , "to exit the subshell and resume execution."
     , ""
     , "This command is especially useful in conjunction with the 'checkpoint'"
-    , "and 'callcc' commands, which allow state reset capabilities and the capturing"
-    , "of the calling context."
+    , "command, which allows returning to a prior state."
     , ""
     , "Note that, due to the way the SAW script interpreter works, changes made"
     , "to a script file in which the 'subshell' command directly appears will"
-    , "NOT affect subsequent execution following a 'checkpoint' or 'callcc' use."
+    , "NOT affect subsequent execution following a 'checkpoint' use."
     , "However, changes made in a file that executed via 'include' WILL affect"
     , "restarted executions, as the 'include' command will read and parse the"
     , "file from scratch."

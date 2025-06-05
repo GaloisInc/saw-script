@@ -21,8 +21,6 @@ module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     tupleLookupValue,
     -- used by SAWScript.Interpreter
-    toplevelCallCC,
-    -- used by SAWScript.Interpreter
     toplevelSubshell,
     -- used by SAWScript.Interpreter
     proofScriptSubshell,
@@ -61,7 +59,7 @@ module SAWScript.ValueOps (
 import Prelude hiding (fail)
 
 import Control.Monad.Catch (MonadThrow(..), try)
-import Control.Monad.State (gets, modify)
+import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask, local)
@@ -70,8 +68,6 @@ import Data.Text (Text, unpack)
 --import Data.Map ( Map )
 import qualified Data.Map as M
 --import Data.Set ( Set )
-
-import Lang.Crucible.Utils.StateContT (get, put, callCC)
 
 import SAWCore.SharedTerm
 
@@ -109,17 +105,6 @@ tupleLookupValue (VTuple vs) i
   | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
-
--- NB, the precise locations of VTopLevel constructors in this
---  operator are rather delicate, which is why we write it out
---  here explicitly.
-toplevelCallCC :: Value
-toplevelCallCC = VLambda body
-  where
-   body (VLambda m) =
-     callCC $ \(k :: Value -> TopLevel Value) ->
-           m (VLambda (\v -> return (VTopLevel (k ((VTopLevel (return v)))))))
-   body _ = error "toplevelCallCC : expected lambda"
 
 toplevelSubshell :: Value
 toplevelSubshell = VLambda $ \_ ->

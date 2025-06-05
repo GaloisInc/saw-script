@@ -101,6 +101,14 @@ The most notable changes are:
 
 ## Deprecations
 
+* The "highly experimental" SAWScript `callcc` builtin (an
+  implementation of call-with-current-continuation) has been removed.
+  Its behavior was, justifiably, described as "somewhat
+  unpredictable," and the implementation internals were highly
+  problematic.
+  Furthermore, the one known use ever was for something that should
+  have been done another way.
+
 * It was previously possible to declare monadic values of an
   undocumented type `CryptolSetup t` but not do anything with them.
   This name is no longer magic.
