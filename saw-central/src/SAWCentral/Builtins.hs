@@ -1770,15 +1770,6 @@ cexEvalFn sc args tm = do
   modmap <- scGetModuleMap sc
   return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
-toValueCase :: (SV.FromValue b) =>
-               (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
-            -> SV.Value
-toValueCase prim =
-  SV.VLambda $ \b -> return $
-  SV.VLambda $ \v1 -> return $
-  SV.VLambda $ \v2 ->
-  prim (SV.fromValue b) v1 v2
-
 caseProofResultPrim ::
   ProofResult ->
   SV.Value {- ^ valid case -} ->

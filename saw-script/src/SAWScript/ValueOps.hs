@@ -54,6 +54,8 @@ module SAWScript.ValueOps (
     withOptions,
     -- used in SAWScript.Interpreter
     withStackTraceFrame,
+    -- used in SAWScript.Interpreter
+    toValueCase,
  ) where
 
 import Prelude hiding (fail)
@@ -276,4 +278,11 @@ withStackTraceFrame str val =
     _ ->
       val
 
-
+toValueCase :: (FromValue b) =>
+               (b -> Value -> Value -> TopLevel Value)
+            -> Value
+toValueCase prim =
+  VLambda $ \b -> return $
+  VLambda $ \v1 -> return $
+  VLambda $ \v2 ->
+  prim (fromValue b) v1 v2
