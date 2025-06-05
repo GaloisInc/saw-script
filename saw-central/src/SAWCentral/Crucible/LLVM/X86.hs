@@ -665,7 +665,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       end <- io getCurrentTime
       let diff = diffUTCTime end start
       ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats mempty diff)
-      returnProof $ SomeLLVM ps
+      returnLLVMProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"
 

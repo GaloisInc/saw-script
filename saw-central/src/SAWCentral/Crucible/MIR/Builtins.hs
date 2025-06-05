@@ -710,7 +710,7 @@ mir_unsafe_assume_spec rm nm setup =
      ms <- (view Setup.csMethodSpec) <$>
              execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
-     returnProof ps
+     returnMIRProof ps
 
 mir_verify ::
   Mir.RustModule ->
@@ -792,7 +792,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
      end <- io getCurrentTime
      let diff = diffUTCTime end start
      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
-     returnProof ps
+     returnMIRProof ps
 
 -----
 -- MIR enums

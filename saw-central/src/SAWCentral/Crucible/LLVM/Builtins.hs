@@ -316,7 +316,7 @@ llvm_verify (Some lm) nm lemmas checkSat setup tactic =
           end <- io getCurrentTime
           let diff = diffUTCTime end start
           ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats vcs lemmaSet diff)
-          returnProof $ SomeLLVM ps
+          returnLLVMProof $ SomeLLVM ps
 
 llvm_refine_spec ::
   Some LLVMModule ->
@@ -334,7 +334,7 @@ llvm_refine_spec (Some lm) nm lemmas setup tactic =
           end <- io getCurrentTime
           let diff = diffUTCTime end start
           ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats deps lemmaSet diff)
-          returnProof $ SomeLLVM ps
+          returnLLVMProof $ SomeLLVM ps
 
 llvm_unsafe_assume_spec ::
   Some LLVMModule  ->
@@ -346,7 +346,7 @@ llvm_unsafe_assume_spec (Some lm) nm setup =
   do printOutLnTop Info $
        unwords ["Assume override", (method_spec ^. csName)]
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty 0)
-     returnProof $ SomeLLVM ps
+     returnLLVMProof $ SomeLLVM ps
 
 llvm_array_size_profile ::
   ProofScript () ->
@@ -510,7 +510,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           end <- io getCurrentTime
           let diff = diffUTCTime end start
           ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats vcs lemmaSet diff)
-          returnProof (SomeLLVM ps)
+          returnLLVMProof (SomeLLVM ps)
 
 setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
 setupValueAsExtCns =

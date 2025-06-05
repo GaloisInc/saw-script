@@ -279,7 +279,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      end <- io getCurrentTime
      let diff = diffUTCTime end start
      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
-     returnProof ps
+     returnJVMProof ps
 
 
 jvm_unsafe_assume_spec ::
@@ -298,7 +298,7 @@ jvm_unsafe_assume_spec cls nm setup =
      ms <- (view Setup.csMethodSpec) <$>
              execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
-     returnProof ps
+     returnJVMProof ps
 
 verifyObligations ::
   JVMCrucibleContext ->

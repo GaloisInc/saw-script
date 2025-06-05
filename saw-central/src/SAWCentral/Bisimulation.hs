@@ -147,7 +147,7 @@ proveAll script ts = do
     res <- runProofScript script prop goal Nothing "prove_bisim" True False
     case res of
       UnfinishedProof {} -> failProof res
-      ValidProof _ thm -> recordProof thm
+      ValidProof _ thm -> recordTheoremProof thm
       InvalidProof {} ->  failProof res
   where
     failProof :: ProofResult -> TopLevel ()

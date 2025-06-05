@@ -122,9 +122,7 @@ module SAWCentral.Value (
     --    SAWCentral.Builtins, SAWScript.Interpreter
     putTopLevelRW,
     -- used in various places in SAWCentral
-    returnProof,
-    -- used in various places in SAWCentral
-    recordProof,
+    recordTheoremProof, returnTheoremProof, returnLLVMProof, returnJVMProof, returnMIRProof,
     -- used in SAWCentral.Builtins, SAWScript.Interpreter
     onSolverCache,
     -- used by SAWCentral.Crucible.JVM.Builtins*
@@ -792,13 +790,27 @@ putTopLevelRW rw = put rw
 modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> TopLevel ()
 modifyTopLevelRW = modify
 
-returnProof :: IsValue v => v -> TopLevel v
-returnProof v = recordProof v >> return v
+-- FUTURE: maybe change these back to using IsValue when things are less tangly
 
-recordProof :: IsValue v => v -> TopLevel ()
+recordProof :: Value -> TopLevel ()
 recordProof v =
   do rw <- getTopLevelRW
-     putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+     putTopLevelRW rw { rwProofs = v : rwProofs rw }
+
+returnTheoremProof :: Theorem -> TopLevel Theorem
+returnTheoremProof thm = recordProof (VTheorem thm) >> return thm
+
+recordTheoremProof :: Theorem -> TopLevel ()
+recordTheoremProof thm = recordProof (VTheorem thm)
+
+returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -> TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+returnLLVMProof ms = recordProof (VLLVMCrucibleMethodSpec ms) >> return ms
+
+returnJVMProof :: CMS.ProvedSpec CJ.JVM -> TopLevel (CMS.ProvedSpec CJ.JVM)
+returnJVMProof ms = recordProof (VJVMMethodSpec ms) >> return ms
+
+returnMIRProof :: CMS.ProvedSpec MIR -> TopLevel (CMS.ProvedSpec MIR)
+returnMIRProof ms = recordProof (VMIRMethodSpec ms) >> return ms
 
 -- | Perform an operation on the 'SolverCache', returning a default value or
 -- failing (depending on the first element of the 'SolverCacheOp') if there

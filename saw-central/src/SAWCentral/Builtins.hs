@@ -1271,7 +1271,7 @@ provePrim script t = do
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
-    ValidProof _ thm -> SV.recordProof thm
+    ValidProof _ thm -> SV.recordTheoremProof thm
     _ -> return ()
   return res
 
@@ -1301,7 +1301,7 @@ proveHelper nm script t f = do
   case res of
     ValidProof _stats thm ->
       do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts t)
-         SV.returnProof thm
+         SV.returnTheoremProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
 
@@ -2102,7 +2102,7 @@ prove_core script input =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
      case res of
-       ValidProof _ thm -> SV.returnProof thm
+       ValidProof _ thm -> SV.returnTheoremProof thm
        InvalidProof _ _ pst -> failProof pst
        UnfinishedProof pst  -> failProof pst
 
@@ -2115,7 +2115,7 @@ core_axiom input =
      db <- SV.getTheoremDB
      (thm, db') <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.putTheoremDB db'
-     SV.returnProof thm
+     SV.returnTheoremProof thm
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
@@ -2125,7 +2125,7 @@ core_thm input =
      db <- SV.getTheoremDB
      (thm, db') <- io (proofByTerm sc db t pos "core_thm")
      SV.putTheoremDB db'
-     SV.returnProof thm
+     SV.returnTheoremProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
 specialize_theorem thm ts =
@@ -2135,7 +2135,7 @@ specialize_theorem thm ts =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      (thm', db') <- io (specializeTheorem sc what4PushMuxOps db pos "specialize_theorem" thm (map ttTerm ts))
      SV.putTheoremDB db'
-     SV.returnProof thm'
+     SV.returnTheoremProof thm'
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
