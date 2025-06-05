@@ -1770,42 +1770,6 @@ cexEvalFn sc args tm = do
   modmap <- scGetModuleMap sc
   return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
-caseProofResultPrim ::
-  ProofResult ->
-  SV.Value {- ^ valid case -} ->
-  SV.Value {- ^ invalid/unknown case -} ->
-  TopLevel SV.Value
-caseProofResultPrim pr vValid vInvalid = do
-  sc <- getSharedContext
-  case pr of
-    ValidProof _ thm ->
-      SV.applyValue vValid (SV.toValue thm)
-    InvalidProof _ pairs _pst -> do
-      let fov = FOVTuple (map snd pairs)
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vInvalid (SV.toValue tt)
-    UnfinishedProof _ -> do
-      tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
-      SV.applyValue vInvalid (SV.toValue tt)
-
-caseSatResultPrim ::
-  SV.SatResult ->
-  SV.Value {- ^ unsat case -} ->
-  SV.Value {- ^ sat/unknown case -} ->
-  TopLevel SV.Value
-caseSatResultPrim sr vUnsat vSat = do
-  sc <- getSharedContext
-  case sr of
-    SV.Unsat _ -> return vUnsat
-    SV.Sat _ pairs -> do
-      let fov = FOVTuple (map snd pairs)
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vSat (SV.toValue tt)
-    SV.SatUnknown -> do
-      let fov = FOVTuple []
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vSat (SV.toValue tt)
-
 envCmd :: TopLevel ()
 envCmd = do
   rw <- SV.getMergedEnv

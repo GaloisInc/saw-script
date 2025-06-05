@@ -5373,7 +5373,7 @@ primitives = Map.fromList
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
 
-    -- pureVal can be used for anything with a ToValue instance,
+    -- pureVal can be used for anything with an IsValue instance,
     -- including functions. However, functions in TopLevel need to use
     -- funVal* instead; the IsValue instances capture incorrectly and
     -- you get a function that returns a VTopLevel instead of executing

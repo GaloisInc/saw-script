@@ -101,12 +101,12 @@ import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value
-  ( AIGProxy(..), mergeLocalEnv, IsValue, Value
-  , ProofScript(..), showsProofResult, toValue
+  ( AIGProxy(..), mergeLocalEnv, Value
+  , ProofScript(..), showsProofResult,
   )
 
 import SAWScript.Interpreter (buildTopLevelEnv)
-import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
+import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint, IsValue, toValue)
 
 
 deriving instance Typeable AIG.Proxy
