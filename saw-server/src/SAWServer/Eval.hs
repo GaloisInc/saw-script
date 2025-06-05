@@ -75,7 +75,7 @@ instance Doc.DescribedMethod (EvalParams Bool cryptolExpr) (EvalResult Bool) whe
       Doc.Paragraph [Doc.Text "The boolean value of the expresssion."])
     ]
 
-eval :: (SV.FromValue a, SV.IsValue a) =>
+eval ::
   (TypedTerm -> SV.TopLevel a) -> EvalParams a Expression -> Argo.Command SAWState (EvalResult a)
 eval f params = do
   state <- Argo.getState

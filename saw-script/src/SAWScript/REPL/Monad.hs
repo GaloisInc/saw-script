@@ -316,14 +316,15 @@ exceptionProtect cmd =
       do io (putStrLn "" >> putStrLn s)
          void $ liftTopLevel (restoreCheckpoint chk)
 
+-- XXX: there's no longer any reason to bake Value into this
 liftTopLevel :: IsValue a => TopLevel a -> REPL Value
 liftTopLevel m =
   do ro  <- getTopLevelRO
      ref <- getEnvironmentRef
      io $ do rw <- readIORef ref
-             (v,rw') <- runTopLevel m ro rw
+             (a, rw') <- runTopLevel m ro rw
              writeIORef ref rw'
-             return v
+             return $ toValue a
 
 liftProofScript :: IsValue a => ProofScript a -> IORef ProofState -> REPL Value
 liftProofScript m ref =

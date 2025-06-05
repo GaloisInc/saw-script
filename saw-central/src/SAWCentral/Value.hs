@@ -672,10 +672,9 @@ deriving instance MonadState TopLevelRW TopLevel
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: IsValue a => TopLevel a -> TopLevelRO -> TopLevelRW -> IO (Value, TopLevelRW)
-runTopLevel (TopLevel_ m) ro rw = do
-  (a, rw') <- runStateT (runReaderT m ro) rw
-  return (toValue a, rw')
+runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
+runTopLevel (TopLevel_ m) ro rw =
+  runStateT (runReaderT m ro) rw
 
 instance MonadIO TopLevel where
   liftIO = io
