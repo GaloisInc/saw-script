@@ -54,9 +54,7 @@ import qualified SAWCore.SharedTerm as SAW
 -- there are some `Ty`s that have identical structure (such as TyRef vs.
 -- TyRawPtr) or similar enough structure that we'd rather write only one case
 -- (such as `u8` vs `i8` vs `i32`, all primitives/BaseTypes).  And we don't use
--- TypeRepr directly because it's lacking information in some cases (notably
--- `TyAdt`, which is always AnyRepr, concealing the actual field types of the
--- struct).
+-- TypeRepr directly because it's lacking information in some cases.
 --
 -- In each constructor, the first `M.Ty` is the overall MIR type (e.g., for
 -- ArrayShape, this is the TyArray type).  The overall `TypeRepr tp` isn't
@@ -66,7 +64,7 @@ data TypeShape (tp :: CrucibleType) where
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
     TupleShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     ArrayShape :: M.Ty -> M.Ty -> TypeShape tp -> TypeShape (MirVectorType tp)
-    StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape AnyType
+    StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
     -- a TypeShape.  None of our operations need to recurse inside pointers,
@@ -106,21 +104,18 @@ data TypeShape (tp :: CrucibleType) where
                -> TypeRepr tp
                -- ^ The Crucible representation of the element type.
                -> TypeShape MirSlice
-    -- | A shape for an enum type. Like 'StructShape', this is indexed by
-    -- 'AnyType', so code that matches on 'EnumShape' may need to further match
-    -- on the 'VariantShape's in order to bring additional type information into
-    -- scope.
+    -- | A shape for an enum type.
     EnumShape :: M.Ty
               -- ^ The overall enum type.
               -> [[M.Ty]]
               -- ^ The field types in each of the enum's variants.
-              -> Assignment VariantShape ctx
+              -> Assignment VariantShape variantsCtx
               -- ^ The shapes of the enum type's variants.
               -> M.Ty
               -- ^ The discriminant type.
               -> TypeShape discrTp
               -- ^ The shape of the discriminant type.
-              -> TypeShape AnyType
+              -> TypeShape (RustEnumType discrTp variantsCtx)
     -- | Note that 'FnPtrShape' contains only 'TypeRepr's for the argument and
     -- result types, not 'TypeShape's, as none of our operations need to recurse
     -- inside them.
@@ -303,8 +298,9 @@ shapeType = go
     go (PrimShape _ btpr) = baseToType btpr
     go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
-    go (StructShape _ _ _flds) = AnyRepr
-    go (EnumShape _ _ _ _ _variants) = AnyRepr
+    go (StructShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
+    go (EnumShape _ _ variantTys _ discrShp) =
+      RustEnumRepr (shapeType discrShp) (fmapFC variantShapeType variantTys)
     go (TransparentShape _ shp) = go shp
     go (RefShape _ _ _ _) = MirReferenceRepr
     go (SliceShape _ _ _ _) = MirSliceRepr

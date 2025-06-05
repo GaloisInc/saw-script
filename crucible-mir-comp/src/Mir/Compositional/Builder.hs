@@ -27,7 +27,6 @@ import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import Data.Parameterized.Nonce
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
-import Data.Parameterized.TraversableFC
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
@@ -704,20 +703,16 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
         return $ MS.SetupArray elemTy svs
-    go (StructShape tyAdt _ flds) (AnyValue tpr rvs)
-      | Just Refl <- testEquality tpr shpTpr =
-        case tyAdt of
-          M.TyAdt adtName _ _ -> do
-            mbAdt <- use $ msbCollection . M.adts . at adtName
-            case mbAdt of
-              Just adt -> MS.SetupStruct adt <$> goFields flds rvs
-              Nothing -> error $ "regToSetup: Could not find ADT named: "
-                              ++ show adtName
-          _ -> error $ "regToSetup: Found non-ADT type for struct: "
-                    ++ show (PP.pretty tyAdt)
-      | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
-        ", but got Any wrapping " ++ show tpr
-      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (StructShape tyAdt _ flds) rvs =
+      case tyAdt of
+        M.TyAdt adtName _ _ -> do
+          mbAdt <- use $ msbCollection . M.adts . at adtName
+          case mbAdt of
+            Just adt -> MS.SetupStruct adt <$> goFields flds rvs
+            Nothing -> error $ "regToSetup: Could not find ADT named: "
+                            ++ show adtName
+        _ -> error $ "regToSetup: Found non-ADT type for struct: "
+                  ++ show (PP.pretty tyAdt)
     go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' _ tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref

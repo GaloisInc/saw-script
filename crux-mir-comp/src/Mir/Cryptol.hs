@@ -325,11 +325,7 @@ munge sym shp0 rv0 = do
                     W4.justPartExpr sym <$> go shp rv
                 return $ MirVector_PartialVector pv'
             MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
-        go (StructShape _ _ flds) (AnyValue tpr rvs)
-            | StructRepr ctx <- tpr
-            , Just Refl <- testEquality (fmapFC fieldShapeType flds) ctx =
-                AnyValue tpr <$> goFields flds rvs
-            | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tpr
+        go (StructShape _ _ flds) rvs = goFields flds rvs
         go (TransparentShape _ shp) rv = go shp rv
         go (EnumShape _ _ _ _ _) _ =
             error "Enums not currently supported in overrides"

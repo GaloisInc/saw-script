@@ -12,7 +12,6 @@ import Control.Monad (forM_)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
-import Data.Parameterized.TraversableFC
 import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
@@ -23,7 +22,6 @@ import What4.ProgramLoc
 
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
-import Lang.Crucible.Types
 
 import SAWCentral.Crucible.MIR.TypeShape
 
@@ -56,11 +54,8 @@ clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
     go (TupleShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
-    go (StructShape _ _ flds) (AnyValue tpr rvs)
-      | Just Refl <- testEquality tpr shpTpr = AnyValue tpr <$> Ctx.zipWithM goField flds rvs
-      | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
-        ", but got Any wrapping " ++ show tpr
-      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (StructShape _ _ flds) rvs =
+        Ctx.zipWithM goField flds rvs
     go (TransparentShape _ shp) rv = go shp rv
     go (EnumShape _ _ _ _ _) _rv =
       error "Enums not currently supported in overrides"
@@ -108,11 +103,8 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         clobberSymbolic sym loc nameStr shp rv
     go (TupleShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
-    go (StructShape _ _ flds) (AnyValue tpr rvs)
-      | Just Refl <- testEquality tpr shpTpr = AnyValue tpr <$> Ctx.zipWithM goField flds rvs
-      | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
-        ", but got Any wrapping " ++ show tpr
-      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (StructShape _ _ flds) rvs =
+        Ctx.zipWithM goField flds rvs
     go (TransparentShape _ shp) rv = go shp rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.

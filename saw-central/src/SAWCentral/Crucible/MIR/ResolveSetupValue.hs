@@ -77,11 +77,11 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 import Lang.Crucible.Backend (IsSymInterface)
 import Lang.Crucible.Simulator
-  ( AnyValue(..), GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
+  ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
   , VariantBranch(..), injectVariant
   )
 import Lang.Crucible.Simulator.RegMap (muxRegForType)
-import Lang.Crucible.Types (AnyType, MaybeType, TypeRepr(..))
+import Lang.Crucible.Types (MaybeType, TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
@@ -140,25 +140,15 @@ ppMIRVal sym (MIRVal shp val) =
                       ppMIRVal sym (MIRVal shp' v')) vec
         Mir.MirVector_Array arr ->
           W4.printSymExpr arr
-    StructShape _ _ fldShp
-      |  AnyValue (StructRepr fldTpr) fldVals <- val
-      ,  Just Refl <- W4.testEquality (FC.fmapFC fieldShapeType fldShp) fldTpr
-      -> PP.braces $ prettyAdtOrTuple fldShp fldVals
-
-      | otherwise
-      -> error "Malformed MIRVal struct"
+    StructShape _ _ fldShp ->
+      PP.braces $ prettyAdtOrTuple fldShp val
     EnumShape _ _ variantShps _ _
-      |  AnyValue (Mir.RustEnumRepr _ variantCtx)
-                  (Ctx.Empty Ctx.:> RV _ Ctx.:> RV variants) <- val
-      ,  Just Refl <- W4.testEquality (FC.fmapFC variantShapeType variantShps) variantCtx
+      |  Ctx.Empty Ctx.:> RV _ Ctx.:> RV variants <- val
       -> case firstConcreteVariant variantShps variants of
            Just (Some (Functor.Pair fldShps fldVals)) ->
              PP.braces $ prettyAdtOrTuple fldShps fldVals
            Nothing ->
              "<symbolic enum>"
-
-      |  otherwise
-      -> error "Malformed MIRVal enum"
     TransparentShape _ shp' ->
       ppMIRVal sym $ MIRVal shp' val
     RefShape _ _ _ _  ->
@@ -449,8 +439,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           Some (Functor.Pair fldShpAssn valAssn) <-
             pure $ variantFieldsToAssns sym flds'
           let structShp = StructShape (mirAdtToTy adt) actualFldTys fldShpAssn
-          let structTpr = StructRepr (FC.fmapFC fieldShapeType fldShpAssn)
-          pure $ MIRVal structShp (AnyValue structTpr valAssn)
+          pure $ MIRVal structShp valAssn
         Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
           panic "resolveSetupVal" [
               "Expected struct type, received enum: " <> Text.pack (show nm)
@@ -490,13 +479,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
               -- Construct an EnumShape and RustEnumRepr. This requires
               -- processing /all/ variants, not just the particular variant that
               -- we are building.
-              (enumShp, Some expectedVariantShps) <- pure $
-                enumShapes adt discrTp discrShp variants
+              SomeEnumShape expectedVariantShps enumShp <- pure $
+                someEnumShape adt discrTp discrShp variants
               let variantTprs =
                     FC.fmapFC variantShapeType expectedVariantShps
-              let enumTpr = Mir.RustEnumRepr
-                              discrTpr
-                              variantTprs
 
               -- Construct the VariantShape of the particular variant that we
               -- are building.
@@ -524,7 +510,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     Ctx.empty
                       Ctx.:> RV discrVal
                       Ctx.:> RV (injectVariant sym variantTprs variantIdx actualValAssn)
-              pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
+              pure $ MIRVal enumShp enumVal
             Mir.Adt nm Mir.Struct _ _ _ _ _ ->
               panic "resolveSetupVal" [
                   "Expected enum type, received struct: " <> Text.pack (show nm)
@@ -551,7 +537,6 @@ resolveSetupVal mcc env tyenv nameEnv val =
               -- integral type.
               MIRVal discrShp discrVal <- resolveSetupVal mcc env tyenv nameEnv discr
               IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
-              let discrTpr = shapeType discrShp
 
               -- Resolve the field values in each possible variant and check
               -- that they have the expected types.
@@ -582,14 +567,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
               let (actualVariantShps, branchAssn) =
                     Ctx.unzip variantBranchAssn
 
-              -- Construct an EnumShape and RustEnumRepr.
-              (enumShp, Some expectedVariantShps) <- pure $
-                enumShapes adt discrTp discrShp variants
-              let variantTprs =
-                    FC.fmapFC variantShapeType expectedVariantShps
-              let enumTpr = Mir.RustEnumRepr
-                              discrTpr
-                              variantTprs
+              -- Construct an EnumShape.
+              SomeEnumShape expectedVariantShps enumShp <- pure $
+                someEnumShape adt discrTp discrShp variants
 
               -- Check that the actual variant types match the expected types.
               Refl <-
@@ -607,7 +587,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     Ctx.empty
                       Ctx.:> RV discrVal
                       Ctx.:> RV branchAssn
-              pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
+              pure $ MIRVal enumShp enumVal
             Mir.Adt nm Mir.Struct _ _ _ _ _ ->
               panic "resolveSetupVal" [
                   "Expected enum type, received struct: " <> Text.pack (show nm)
@@ -748,15 +728,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
         expectedFlds
         actualFldTys
 
-    -- Construct the 'TypeShape' for an enum, along with the 'VariantShape's for
-    -- the enum's variants.
-    enumShapes ::
+    -- Construct the shape for an enum, returning it as a 'SomeEnumShape' value.
+    someEnumShape ::
       Mir.Adt {- The enum type -} ->
       Mir.Ty {- The discriminant's MIR type -} ->
-      TypeShape discrShp {- The discriminant's TypeShape -} ->
+      TypeShape discrTp {- The discriminant's TypeShape -} ->
       [Mir.Variant] {- The enum's variants -} ->
-      (TypeShape AnyType, Some (Ctx.Assignment VariantShape))
-    enumShapes adt discrTp discrShp variants
+      SomeEnumShape discrTp
+    someEnumShape adt discrTp discrShp variants
       | let variantTys =
               map (\v -> v ^.. Mir.vfields . each . Mir.fty) variants
       , Some variantShps <-
@@ -777,7 +756,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
               EnumShape
                 (mirAdtToTy adt) variantTys
                 variantShps discrTp discrShp
-      = (enumShp, Some variantShps)
+      = SomeEnumShape variantShps enumShp
 
     -- Resolve parts of a slice that are shared in common between
     -- 'MirSetupSlice' and 'MirSetupSliceRange'.
@@ -828,6 +807,15 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 then Some $ Functor.Pair (ReqField shp) (RV v)
                 else Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
               flds
+
+-- | An intermediate data structure that is only used by
+-- 'someEnumShape'. This existentially closes over the @variantsCtx@ type
+-- parameter.
+data SomeEnumShape discrTp where
+  SomeEnumShape ::
+    Ctx.Assignment VariantShape variantsCtx ->
+    TypeShape (Mir.RustEnumType discrTp variantsCtx) ->
+    SomeEnumShape discrTp
 
 -- | An intermediate data structure that is only used by
 -- 'resolveSetupSliceFromArrayRef'.
@@ -1070,30 +1058,14 @@ equalValsPred cc mv1 mv2 =
       goFldAssn fldShp fldAssn1 fldAssn2
     goTy (ArrayShape _ _ shp) vec1 vec2 =
       goVec shp vec1 vec2
-    goTy (StructShape _ _ fldShp) any1 any2 =
-      case (any1, any2) of
-        (AnyValue (StructRepr fldCtx1) fldAssn1,
-         AnyValue (StructRepr fldCtx2) fldAssn2) -> do
-          Refl <- testEquality fldCtx1 fldCtx2
-          Refl <- testEquality (FC.fmapFC fieldShapeType fldShp) fldCtx1
-          goFldAssn fldShp fldAssn1 fldAssn2
-        (_, _) ->
-          pure $ W4.falsePred sym
-    goTy (EnumShape _ _ variantShp _ discrShp) any1 any2 =
-      case (any1, any2) of
-        (AnyValue (Mir.RustEnumRepr discrTpr1 variantCtx1)
-                  (Ctx.Empty Ctx.:> RV discr1 Ctx.:> RV variant1),
-         AnyValue (Mir.RustEnumRepr discrTpr2 variantCtx2)
-                  (Ctx.Empty Ctx.:> RV discr2 Ctx.:> RV variant2)) -> do
-           Refl <- testEquality discrTpr1 discrTpr2
-           Refl <- testEquality (shapeType discrShp) discrTpr1
-           Refl <- testEquality variantCtx1 variantCtx2
-           Refl <- testEquality (FC.fmapFC variantShapeType variantShp) variantCtx1
-           discrPred <- goTy discrShp discr1 discr2
-           variantPred <- goVariantAssn variantShp variant1 variant2
-           liftIO $ W4.andPred sym discrPred variantPred
-        (_, _) ->
-          pure $ W4.falsePred sym
+    goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
+      goFldAssn fldShp fldAssn1 fldAssn2
+    goTy (EnumShape _ _ variantShp _ discrShp)
+         (Ctx.Empty Ctx.:> RV discr1 Ctx.:> RV variant1)
+         (Ctx.Empty Ctx.:> RV discr2 Ctx.:> RV variant2) = do
+      discrPred <- goTy discrShp discr1 discr2
+      variantPred <- goVariantAssn variantShp variant1 variant2
+      liftIO $ W4.andPred sym discrPred variantPred
     goTy (TransparentShape _ shp) v1 v2 =
       goTy shp v1 v2
     goTy (RefShape _ _ _ _) ref1 ref2 =
