@@ -191,7 +191,7 @@ AtomTerm :: { UTerm } :
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
   | Ident                                       { Name $1 }
-  | IdentRec                                    { Recursor Nothing $1 }
+  | IdentRec                                    { Recursor $1 }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
   | Sort nat                                   { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
