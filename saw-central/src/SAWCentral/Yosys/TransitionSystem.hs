@@ -75,7 +75,8 @@ data SequentialFields ctx = SequentialFields
   }
 makeLenses ''SequentialFields
 
--- | Convert a mapping from names to widths into a typed mapping from those names to What4 bitvectors of those widths.
+-- | Convert a mapping from names to widths into a typed mapping from
+-- those names to What4 bitvectors of those widths.
 sequentialReprs ::
   forall m.
   MonadIO m =>
@@ -103,9 +104,12 @@ sequentialReprs fs = do
         pure $ Some $ Ctx.extend rest field
       _ -> throw $ YosysErrorInvalidStateFieldWidth nm
 
--- | Given information about field names and types alongside an appropriately-typed What4 struct value,
--- explode that struct into a mapping from field names to fresh typed SAWCore constants and SAWCore What4 simulator values.
--- (This is used to unpack a What4 struct into a representation that is more convenient to manipulate in SAWCore.)
+-- | Given information about field names and types alongside an
+-- appropriately-typed What4 struct value, explode that struct into a
+-- mapping from field names to fresh typed SAWCore constants and
+-- SAWCore What4 simulator values. (This is used to unpack a What4
+-- struct into a representation that is more convenient to manipulate
+-- in SAWCore.)
 ecBindingsOfFields ::
   MonadIO m =>
   W4.B.ExprBuilder n st fs ->
@@ -128,7 +132,8 @@ ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs
     _ -> throw $ YosysErrorTransitionSystemMissingField nm
   pure (baseName, (ec, val))
 
--- | Given a sequential circuit and a query, construct and write to disk a Sally transition system encoding that query.
+-- | Given a sequential circuit and a query, construct and write to
+-- disk a Sally transition system encoding that query.
 queryModelChecker ::
   MonadIO m =>
   W4.B.ExprBuilder n st fs ->

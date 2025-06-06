@@ -42,6 +42,7 @@ data Direction
   | DirectionOutput
   | DirectionInout
   deriving (Show, Eq, Ord)
+
 instance Aeson.FromJSON Direction where
   parseJSON (Aeson.String "input") = pure DirectionInput
   parseJSON (Aeson.String "output") = pure DirectionOutput
@@ -56,6 +57,7 @@ data Bitrep
   | BitrepZ -- ^ Undefined bit Z
   | Bitrep Integer -- ^ The signal bit with the given index
   deriving (Show, Eq, Ord)
+
 instance Aeson.FromJSON Bitrep where
   parseJSON (Aeson.String "0") = pure BitrepZero
   parseJSON (Aeson.String "1") = pure BitrepOne
@@ -71,7 +73,9 @@ data Port = Port
   , _portOffset :: Integer -- currently unused
   , _portUpto :: Bool -- currently unused
   } deriving (Show, Eq, Ord)
+
 makeLenses ''Port
+
 instance Aeson.FromJSON Port where
   parseJSON = Aeson.withObject "port" $ \o -> do
     _portDirection <- o Aeson..: "direction"
@@ -183,6 +187,7 @@ data CellType
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
+
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
@@ -199,11 +204,12 @@ instance Aeson.FromJSON CellType where
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
-            -- XXX We should probably log a warning when generating CellTypeUnsupportedPrimitive, 
-            -- we can't do that here however.    
+            -- XXX We should probably log a warning when generating CellTypeUnsupportedPrimitive,
+            -- we can't do that here however.
             Nothing -> pure $ CellTypeUnsupportedPrimitive s
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
+
 instance Show CellType where
   show ct = Text.unpack $
     case ct of
@@ -233,7 +239,9 @@ data Cell bs = Cell
   , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
   , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection
   } deriving (Show, Eq, Ord, Functor)
+
 makeLenses ''Cell
+
 instance Aeson.FromJSON (Cell [Bitrep]) where
   parseJSON = Aeson.withObject "cell" $ \o -> do
     _cellHideName <- o Aeson..:? "hide_name" >>= \case
@@ -265,7 +273,9 @@ data YosysIR = YosysIR
   { _yosysCreator :: Text
   , _yosysModules :: Map Text Module
   } deriving (Show, Eq, Ord)
+
 makeLenses ''YosysIR
+
 instance Aeson.FromJSON YosysIR where
   parseJSON = Aeson.withObject "yosys" $ \o -> do
     _yosysCreator <- o Aeson..: "creator"
