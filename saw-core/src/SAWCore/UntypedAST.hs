@@ -69,7 +69,7 @@ data UTerm
   | App UTerm UTerm
   | Lambda Pos UTermCtx UTerm
   | Pi Pos UTermCtx UTerm
-  | Recursor (Maybe ModuleName) (PosPair Text)
+  | Recursor (PosPair Text)
   | UnitValue Pos
   | UnitType Pos
     -- | New-style records
@@ -119,7 +119,7 @@ instance Positioned UTerm where
       Lambda p _ _         -> p
       App x _              -> pos x
       Pi p _ _             -> p
-      Recursor _ i         -> pos i
+      Recursor i           -> pos i
       UnitValue p          -> p
       UnitType p           -> p
       RecordValue p _      -> p

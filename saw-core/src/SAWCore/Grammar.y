@@ -191,11 +191,10 @@ AtomTerm :: { UTerm } :
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
   | Ident                                       { Name $1 }
-  | IdentRec                                    { Recursor Nothing $1 }
+  | IdentRec                                    { Recursor $1 }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
   | Sort nat                                   { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
-  | AtomTerm '.' IdentRec                       {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat                            {% parseTupleSelector $1 (fmap tokNat $3) }
   | '(' sepBy(Term, ',') ')'                    { mkTupleValue (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'                { mkTupleType (pos $1) $3 }
@@ -346,19 +345,6 @@ mkTupleProj t 1 = return $ PairLeft t
 mkTupleProj t 2 = return $ PairRight t
 mkTupleProj t _ =
   do addParseError (pos t) "Projections must be either .(1) or .(2)"
-     return (badTerm (pos t))
-
--- | Parse a term as a dotted list of strings
-parseModuleName :: UTerm -> Maybe [Text]
-parseModuleName (RecordProj t fname) = (++ [fname]) <$> parseModuleName t
-parseModuleName _ = Nothing
-
--- | Parse a qualified recursor @M1.M2...Mn.d#rec@
-parseRecursorProj :: UTerm -> PosPair Text -> Parser UTerm
-parseRecursorProj (parseModuleName -> Just mnm) i =
-  return $ Recursor (Just $ mkModuleName mnm) i
-parseRecursorProj t _ =
-  do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
 
 parseTupleSelector :: UTerm -> PosPair Natural -> Parser UTerm
