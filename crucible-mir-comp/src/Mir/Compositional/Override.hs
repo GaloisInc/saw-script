@@ -28,7 +28,6 @@ import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
-import Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -401,11 +400,7 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
-    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct _ svs)
-      | Just Refl <- testEquality tpr shpTpr = goFields flds rvs svs
-      | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
-        ", but got Any wrapping " ++ show tpr
-      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
     go (TransparentShape _ shp) rv sv = go shp rv sv
     go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
         goRef refTy pointeeTy mutbl tpr ref alloc 0
@@ -534,7 +529,7 @@ setupToReg sym sc termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs
     go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
-        AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
+        goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of

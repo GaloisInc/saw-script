@@ -320,14 +320,6 @@ cmpPathConcretely _ Mir.Empty_RefPath Mir.Empty_RefPath = PC.EQF
 cmpPathConcretely _ Mir.Empty_RefPath _ = PC.LTF
 cmpPathConcretely _ _ Mir.Empty_RefPath = PC.GTF
 
--- Any_RefPath
-cmpPathConcretely sym (Mir.Any_RefPath tpr1 p1) (Mir.Any_RefPath tpr2 p2) =
-  PC.compareF tpr1 tpr2 <<>>
-  cmpPathConcretely sym p1 p2 <<>>
-  PC.EQF
-cmpPathConcretely _ (Mir.Any_RefPath _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.Any_RefPath _ _) = PC.GTF
-
 -- Field_RefPath
 cmpPathConcretely sym (Mir.Field_RefPath ctx1 p1 idx1) (Mir.Field_RefPath ctx2 p2 idx2) =
   PC.compareF ctx1 ctx2 <<>>
@@ -1086,12 +1078,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
         matchArg opts sc cc cs prepost md (MIRVal shp val) y z
 
     -- match the fields of a struct point-wise
-    (MIRVal (StructShape _ _ xsFldShps) (Crucible.AnyValue tpr@(Crucible.StructRepr _) xs),
-     Mir.TyAdt _ _ _,
-     MS.SetupStruct adt zs)
-      | let xsTpr = Crucible.StructRepr (FC.fmapFC fieldShapeType xsFldShps)
-      , Just Refl <- W4.testEquality tpr xsTpr -> do
-          let variants = adt ^. Mir.adtvariants
+    (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs) ->
+       do let variants = adt ^. Mir.adtvariants
           variant <-
             case variants of
               [variant] ->
@@ -1108,15 +1096,11 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     -- In order to match an enum value, we first check to see if the expected
     -- value is a specific enum variant or a symbolic enum...
     (MIRVal (EnumShape _ _ variantShps _ discrShp)
-            (Crucible.AnyValue
-              (Mir.RustEnumRepr discrTpr variantCtx)
-              (Ctx.Empty
-                Ctx.:> Crucible.RV actualDiscr
-                Ctx.:> Crucible.RV variantAssn)),
+            (Ctx.Empty
+              Ctx.:> Crucible.RV actualDiscr
+              Ctx.:> Crucible.RV variantAssn),
      _,
-     MS.SetupEnum enum_)
-      | Just Refl <- W4.testEquality (shapeType discrShp) discrTpr
-      , Just Refl <- W4.testEquality (FC.fmapFC variantShapeType variantShps) variantCtx ->
+     MS.SetupEnum enum_) ->
         case enum_ of
           -- ...if the expected value is a specific enum variant, then we must:
           --
