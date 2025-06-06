@@ -254,18 +254,40 @@ instance Aeson.FromJSON (Cell [Bitrep]) where
     _cellConnections <- o Aeson..: "connections"
     pure Cell{..}
 
+-- | A description of a named internal signal within a module.
+data Netname =
+  Netname
+  { _netnameHideName :: Bool
+  , _netnameBits :: [Bitrep]
+  , _netnameAttributes :: Aeson.Value -- currently unused
+  } deriving (Show, Eq, Ord)
+
+makeLenses ''Netname
+
+instance Aeson.FromJSON Netname where
+  parseJSON =
+    Aeson.withObject "netname" $ \o ->
+    do _netnameHideName <- (/= (0::Int)) <$> o Aeson..: "hide_name"
+       _netnameBits <- o Aeson..: "bits"
+       _netnameAttributes <- o Aeson..: "attributes"
+       pure Netname{..}
+
 -- | A single HDL module.
 data Module = Module
   { _moduleAttributes :: Aeson.Value -- currently unused
   , _modulePorts :: Map Text Port
   , _moduleCells :: Map Text (Cell [Bitrep])
+  , _moduleNetnames :: Map Text Netname
   } deriving (Show, Eq, Ord)
+
 makeLenses ''Module
+
 instance Aeson.FromJSON Module where
   parseJSON = Aeson.withObject "module" $ \o -> do
     _moduleAttributes <- o Aeson..: "attributes"
     _modulePorts <- o Aeson..: "ports"
     _moduleCells <- o Aeson..: "cells"
+    _moduleNetnames <- o Aeson..: "netnames"
     pure Module{..}
 
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
