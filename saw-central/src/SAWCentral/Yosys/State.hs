@@ -90,12 +90,10 @@ convertModuleInline sc m = do
         [ (n ^. netnameBits, t)
         | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
 
-  let bestName t c
-        | not (c ^. cellHideName) = t
-        | otherwise =
-          fromMaybe (cellIdentifier t) $
-          do bs <- Map.lookup "Q" (c ^. cellConnections)
-             Map.lookup bs netnames
+  let bestName t c =
+        fromMaybe (cellIdentifier t) $
+        do bs <- Map.lookup "Q" (c ^. cellConnections)
+           Map.lookup bs netnames
 
   -- construct SAWCore and Cryptol types
   let dffs =
