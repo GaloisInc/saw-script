@@ -203,8 +203,9 @@ cryptolRecordSelect sc fields r nm =
       ]
   where ord = fmap fst . C.canonicalFields . C.recordFromFields $ Map.assocs fields
 
--- | Produce a SAWCore tuple index corresponding to a lookup in a Cryptol record.
--- The record fields are inferred from the Cryptol type attached to the `TypedTerm`.
+-- | Produce a SAWCore tuple index corresponding to a lookup in a
+-- Cryptol record. The record fields are inferred from the Cryptol
+-- type attached to the `TypedTerm`.
 cryptolRecordSelectTyped ::
   MonadIO m =>
   SC.SharedContext ->
@@ -230,8 +231,9 @@ cryptolRecordSelectTyped sc r nm = do
   t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
--- | Construct a SAWCore expression asserting equality between each field of two records.
--- Both records should be tuples corresponding to the specified Cryptol record type.
+-- | Construct a SAWCore expression asserting equality between each
+-- field of two records. Both records should be tuples corresponding
+-- to the specified Cryptol record type.
 eqBvRecords ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->
@@ -267,13 +269,14 @@ eqBvRecords sc cty a b = do
       ]
     (e:es) -> foldM (\x y -> liftIO $ SC.scAnd sc x y) e es
 
--- | Encode the given string such that is a valid Cryptol identifier. 
--- Since Yosys cell names often look like "\42", this makes it much easier to manipulate state records,
--- which are keyed by cell name.
+-- | Encode the given string such that is a valid Cryptol identifier.
+-- Since Yosys cell names often look like "\42", this makes it much
+-- easier to manipulate state records, which are keyed by cell name.
 cellIdentifier :: Text -> Text
 cellIdentifier = Text.pack . zEncodeString . Text.unpack
 
--- | Build a SAWCore type corresponding to the Cryptol record type with the given field types
+-- | Build a SAWCore type corresponding to the Cryptol record type
+-- with the given field types.
 fieldsToType ::
   MonadIO m =>
   SC.SharedContext ->
@@ -288,8 +291,9 @@ fieldsToCryptolType ::
   m C.Type
 fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
 
--- | Given a bit pattern ([b]) and a term, construct a map associating that output pattern with
--- the term, and each bit of that pattern with the corresponding bit of the term.
+-- | Given a bit pattern ([b]) and a term, construct a map associating
+-- that output pattern with the term, and each bit of that pattern
+-- with the corresponding bit of the term.
 deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] Preterm)
 deriveTermsByIndices _sc rep t = do
   let len = length rep
@@ -315,8 +319,8 @@ widthPreterm p =
     PretermSlice _ j _ _ -> j
     PretermBvNat n _ -> n
 
--- | Rewrite the concatenation of two @Preterm@ expressions into a
--- single @Preterm@, if possible.
+-- | Rewrite the concatenation of two 'Preterm' expressions into a
+-- single 'Preterm', if possible.
 fusePreterm :: Preterm -> Preterm -> Maybe Preterm
 fusePreterm (PretermSlice a b c t) (PretermSlice i j k t')
   | t == t' && a + b == i && c == j + k =
@@ -325,7 +329,7 @@ fusePreterm (PretermBvNat m x) (PretermBvNat n y) =
   Just (PretermBvNat (m + n) (x * 2^n + y))
 fusePreterm _ _ = Nothing
 
--- | Concatenate a @Preterm@ expression onto a list of @Preterm@s,
+-- | Concatenate a 'Preterm' expression onto a list of 'Preterm's,
 -- fusing expressions if possible.
 consPreterm :: Preterm -> [Preterm] -> [Preterm]
 consPreterm x [] = [x]
@@ -334,12 +338,12 @@ consPreterm x (y : ys) =
     Nothing -> x : y : ys
     Just xy -> xy : ys
 
--- | Rewrite a sequence of @Preterm@ expressions, combining adjacent
+-- | Rewrite a sequence of 'Preterm' expressions, combining adjacent
 -- expressions wherever possible.
 fusePreterms :: [Preterm] -> [Preterm]
 fusePreterms = foldr consPreterm []
 
--- | Build a @SC.Term@ from a @Preterm@.
+-- | Build a 'SC.Term' from a 'Preterm'.
 scPreterm :: SC.SharedContext -> Preterm -> IO SC.Term
 scPreterm sc p =
   case p of
@@ -371,7 +375,7 @@ scPreterm sc p =
          x' <- SC.scNat sc x
          SC.scBvNat sc i' x'
 
--- | Build a @SC.Term@ from a concatenated sequence of @Preterm@s.
+-- | Build a 'SC.Term' from a concatenated sequence of 'Preterm's.
 scPreterms :: SC.SharedContext -> [Preterm] -> IO SC.Term
 scPreterms sc preterms = snd <$> go preterms
   where
