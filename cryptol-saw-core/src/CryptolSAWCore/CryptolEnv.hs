@@ -568,8 +568,11 @@ loadCryptolModule sc primOpts env path = do
 
   -- FIXME: refactor to show the [lack of] dependencies better:
 
-  let tm'   = -- Map.filterWithKey (\k _ -> Set.member k names) $
-              --  - this should fix (better fix is ...) submodules when loaded.
+  let tm'   = Map.filterWithKey (\k _ -> Set.member k names) $
+              --  - FIXME:
+              --    - fixing/removing above
+              --      - partially fixes (better fix is ...) loading submodules.
+              --      - but doesn't fix submodules when importing!
               --  - FIXME:MT:undo
               --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
               --      - BUT, isn't this still not correct?
