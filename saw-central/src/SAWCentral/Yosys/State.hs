@@ -25,8 +25,8 @@ import Control.Exception (throw)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
 
@@ -41,17 +41,6 @@ import SAWCentral.Panic (panic)
 import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Netgraph
-
--- | Find all of the flip-flop cells in a network graph.
-findDffs ::
-  Netgraph ->
-  Map Text (Cell [Bitrep])
-findDffs ng =
-  Map.fromList
-  . filter (\(_, c) -> c ^. cellType `elem` [CellTypeDff, CellTypeFf])
-  . fmap (\v -> let (n, nm, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
-  . Graph.vertices
-  $ ng ^. netgraphGraph
 
 -- | A SAWCore translation of an HDL module alongside some type
 -- information that is useful to keep around.
@@ -96,8 +85,22 @@ convertModuleInline ::
 convertModuleInline sc m = do
   let ng = moduleNetgraph m
 
+  let netnames =
+        Map.fromList
+        [ (n ^. netnameBits, t)
+        | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
+
+  let bestName t c
+        | not (c ^. cellHideName) = t
+        | otherwise =
+          fromMaybe (cellIdentifier t) $
+          do bs <- Map.lookup "Q" (c ^. cellConnections)
+             Map.lookup bs netnames
+
   -- construct SAWCore and Cryptol types
-  let dffs = findDffs ng
+  let dffs =
+        Map.fromList
+        [ (bestName t c, c) | (t, c) <- Map.assocs (m ^. moduleCells), cellIsRegister c ]
 
   stateWidths <- forM dffs $ \c ->
     case Map.lookup "Q" $ c ^. cellConnections of
