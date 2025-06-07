@@ -68,8 +68,7 @@ moduleNetgraph m =
 
     cellDeps :: Cell [Bitrep] -> [Text]
     cellDeps c
-      | c ^. cellType == CellTypeDff = []
-      | c ^. cellType == CellTypeFf = []
+      | cellIsRegister c = []
       | otherwise =
         Set.toAscList $ Set.fromList $
         Maybe.mapMaybe (flip Map.lookup sources) $

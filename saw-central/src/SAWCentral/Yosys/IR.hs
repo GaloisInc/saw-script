@@ -347,3 +347,11 @@ cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
     out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+
+-- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
+cellIsRegister :: Cell bs -> Bool
+cellIsRegister c =
+  case c ^. cellType of
+    CellTypeDff -> True
+    CellTypeFf -> True
+    _ -> False
