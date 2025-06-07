@@ -307,7 +307,7 @@ ioParseResult res = case res of
 
 
 -- Rename ----------------------------------------------------------------------
---  FIXME: why "Rename"?  I see we pass the result of this to 'MB.rename'
+--  FIXME: why ^ "Rename"?  I see we pass the result of this to 'MB.rename'
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
@@ -337,9 +337,7 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
                            , "(module in `eImports`, not in `eModuleEnv`)"
                            ]
 
-      -- NOTE:
       ifc = MI.ifNames (ME.lmInterface lm)
-            --
       syms = MN.namingEnvFromNames $
              case vis of
                OnlyPublic       -> MI.ifsPublic ifc
@@ -350,8 +348,11 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
       --  special name for top-level [interactive] module: then use
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
-getAllIfaceDecls me = mconcat (map (both . ME.lmInterface) (ME.getLoadedModules (ME.meLoadedModules me)))
-  where both = MI.ifDefines
+getAllIfaceDecls me =
+  mconcat
+    (map (MI.ifDefines . ME.lmInterface)
+         (ME.getLoadedModules (ME.meLoadedModules me)))
+
 
 -- Typecheck -------------------------------------------------------------------
 
@@ -371,7 +372,7 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
--- FIXME: HORRIBLE name.
+-- FIXME: Very poor name due to the multiple "cryptol environments" around.
 --   We must somehow distinguish (in type names, but in var names, and in func names):
 --     - CryptolEnv and C.Env
 
@@ -511,6 +512,8 @@ loadCryptolModule sc primOpts env path = do
     writeFile (path ++ ".ast-ld1") (ppShow m)
     writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
     writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
+     -- NOTE: these three are all identical and look good ^.
+     -- NOTE: "d2" is different as it is Qual, all else is UnQual.
 
   -- NOTE: at this point (all above) completely in cryptol-land!
 
@@ -538,14 +541,17 @@ loadCryptolModule sc primOpts env path = do
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   let names1 = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
-        -- This excludes both submodules and what they contain.
+        -- FIXME:
+        --   This excludes both submodules and what they contain.
         -- mExports :: MEx.ExportSpec MN.Name
-
       namesP = MI.ifsPublic (TIface.genIfaceNames m)
         -- This includes submodules, but does not contain names of defns inside them.
+  {-
       namesN = MI.ifsNested (TIface.genIfaceNames m)
         -- lists the submodules, but not the defs inside them
+  -}
       names = namesP
+        -- names includes submodules (vs. names1)
 
   -- TODO:MT:HIA:
   --   - you need to get the submodules 'expanded' into names!
@@ -556,15 +562,17 @@ loadCryptolModule sc primOpts env path = do
   --         -- special D2
   --
   when debug $ do
-    putStrLn $ ppShow $ ppListX "newTermEnv="        (Map.keys newTermEnv)
-    putStrLn $ ppShow $ ppListX "[exported] names1=" (Set.toList names1)
-    putStrLn $ ppShow $ ppListX "[exported] names =" (Set.toList names )
-    putStrLn $ ppShow $ ppListX "[exported] namesN=" (Set.toList namesN )
-    -- names includes submodules (vs. names1)
+    print $ ppListX "newTermEnv="        (Map.keys newTermEnv)
+    print $ ppListX "[exported] names1=" (Set.toList names1)
+    ppIfaceNames (TIface.genIfaceNames m)
+
+  -- FIXME: refactor to show the [lack of] dependencies better:
 
   let tm'   = -- Map.filterWithKey (\k _ -> Set.member k names) $
               --  - this should fix (better fix is ...) submodules when loaded.
-              --  - FIXME: no, doesn't fix
+              --  - FIXME:MT:undo
+              --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
+              --      - BUT, isn't this still not correct?
               Map.intersectionWith
                 (\t x -> TypedTerm (TypedTermSchema t) x)
                 types
@@ -586,6 +594,15 @@ loadCryptolModule sc primOpts env path = do
               (T.mTySyns m)
 
   return (CryptolModule sm' tm', env')
+
+ppIfaceNames :: Show n => MI.IfaceNames n -> IO ()
+ppIfaceNames x =
+  do
+  putStrLn $ "IFaceNames " ++ show (MI.ifsName x)
+  putStrLn $ ppShow $ ppListX " ifsNested =" (Set.toList (MI.ifsNested x))
+  putStrLn $ ppShow $ ppListX " ifsDefines=" (Set.toList (MI.ifsDefines x))
+  putStrLn $ ppShow $ ppListX " ifsPublic =" (Set.toList (MI.ifsPublic  x))
+  putStrLn $ " "
 
 ppListX :: PP a => String -> [a] -> Doc
 ppListX s xs = text s <+> ppList (map pp xs)
@@ -646,7 +663,9 @@ extractDefFromCryptolModule (CryptolModule _ tm) name =
                -- FIXME: UGH we have lost name of the original cryptol module.
     Just t  -> return t
 
-    -- FIXME: bug:
+    -- FIXME: bug: see ... (we can't access things in submodules)
+    -- FIXME: this is quite ad hoc, somehow invoke parse for name or something??
+
 
 --------------------------------------------------------------------------------
 
@@ -707,7 +726,7 @@ importModule sc env src as vis imps = do
 
   when debug $ do
     putStrLn $ ppShow $ ppListX "newTermEnv="        (Map.keys newTermEnv)
-
+     -- OK: has D::D2::d2
   return $
     updateFFITypes m
       env { eImports   = (vis, P.Import { T.iModule= T.mName m
@@ -827,12 +846,17 @@ parseTypedTerm sc env input = do
     let nameEnv = getNamingEnv env
     let debug = True
     when debug $ do
-      MM.io $ putStrLn $ unwords ["parseTypedTerm..."]
-      MM.io $ print $ ppListX "namingEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
+      MM.io $ putStrLn $ unwords ["\nLOG: parseTypedTerm...:"]
+      MM.io $ print $ ppListX "  nameEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
+        -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
+        -- FIXME: NOTE: if load:   has D::D2::d2
+        -- but in both cases, we get Value not in scope in next line:
 
     re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
 
+      -- FIXME: NOTE: this ^ where we get Value not in scope.
     when debug $ MM.io $ putStrLn "point 1"
+
     -- Infer types
     let ifDecls = getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc re)
