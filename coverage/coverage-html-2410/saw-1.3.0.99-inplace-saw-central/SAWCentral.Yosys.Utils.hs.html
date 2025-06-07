@@ -292,7 +292,7 @@ span.spaces    { background: white }
 <span class="lineno">  273 </span>-- Since Yosys cell names often look like &quot;\42&quot;, this makes it much
 <span class="lineno">  274 </span>-- easier to manipulate state records, which are keyed by cell name.
 <span class="lineno">  275 </span>cellIdentifier :: Text -&gt; Text
-<span class="lineno">  276 </span><span class="decl"><span class="istickedoff">cellIdentifier = Text.pack . zEncodeString . Text.unpack</span></span>
+<span class="lineno">  276 </span><span class="decl"><span class="nottickedoff">cellIdentifier = Text.pack . zEncodeString . Text.unpack</span></span>
 <span class="lineno">  277 </span>
 <span class="lineno">  278 </span>-- | Build a SAWCore type corresponding to the Cryptol record type
 <span class="lineno">  279 </span>-- with the given field types.
