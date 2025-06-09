@@ -33,7 +33,7 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20250326"
+  SOLVER_PKG_VERSION: "snapshot-20250606"
 
 jobs:
   config:
@@ -101,7 +101,7 @@ jobs:
           # so we only build one particular GHC version to test them on. We
           # include both an x86-64 macOS runner (macos-13) as well as an AArch64
           # macOS runner (macos-14).
-          - os: windows-2019
+          - os: windows-2022
             ghc: 9.4.8
             haddock: false
             run-tests: true
@@ -593,7 +593,7 @@ jobs:
             os: macos-14
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration-tests
-            os: windows-2019
+            os: windows-2022
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
@@ -601,7 +601,7 @@ jobs:
             os: macos-14
             continue-on-error: false
           - suite: integration-tests
-            os: windows-2019
+            os: windows-2022
             continue-on-error: false
     steps:
       - uses: actions/checkout@v4
