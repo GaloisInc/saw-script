@@ -534,9 +534,8 @@ mkMemoLocal cfg memoClosed t env = go mempty t
                               go memo' t2
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
-        LocalVar _      -> return memo
-        Constant _ Nothing -> return memo -- TODO? is this right?
-        Constant _ (Just t1) -> go memo t1
+        LocalVar _      -> pure memo
+        Constant{}      -> pure memo
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
