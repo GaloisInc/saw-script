@@ -114,6 +114,9 @@ import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- pkg: pretty-show
 import Text.Show.Pretty -- FIXME: debugging
 
+debug :: Bool
+debug = True
+
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
   { inpText :: Text   -- ^ Parse this
@@ -494,9 +497,8 @@ loadCryptolModule sc primOpts env path = do
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
 
   -- FIXME[MT]:debugging:
-  let debug = True
   when debug $ do
-    putStrLn $ unwords [ "loadCryptolModule ("
+    putStrLn $ unwords [ "LOG: loadCryptolModule ("
                        , show path
                        , ")"
                        ]
@@ -644,10 +646,10 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     -- select out those typed terms that have Cryptol schemas
     tm' = Map.mapMaybe f tm
     f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
-    f _ = Nothing
+    f _                                 = Nothing
 
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-      -- FIXME: suspicious.
+      -- FIXME: MT:suspicious. (we need to do any C.NSModule?)
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
     -- FIXME: something wrong here, we lose ability to access sub-module names!!
@@ -656,14 +658,18 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 extractDefFromCryptolModule :: CryptolModule -> String -> IO TypedTerm
 extractDefFromCryptolModule (CryptolModule _ tm) name =
   case Map.lookup (packIdent name) (Map.mapKeys MN.nameIdent tm) of
-    Nothing -> fail $ "Binding not found:" ++ name
-                    ++ unlines ["", "extractDefFromCryptolModule"
-                               , show (packIdent name)
-                               , show (ppListX "tm names:"
-                                         (map MN.nameIdent $ Map.keys tm))
-                               ]
-               -- See bindCryptolModule, I'm not seeing dups disappearing!
-               -- FIXME: UGH we have lost name of the original cryptol module.
+    Nothing -> do
+               when debug $
+                  putStrLn $
+                    unlines ["LOG: extractDefFromCryptolModule:"
+                            , " " ++ show (packIdent name)
+                            , " " ++ show (ppListX "tm names:"
+                                            (map MN.nameIdent $ Map.keys tm))
+                            ]
+
+               fail $ "Binding not found: " ++ name
+               -- See bindCryptolModule, I'm not seeing dups disappearing! [huh?]
+               -- FIXME: unfortunate we have lost the name of the cryptol module.
     Just t  -> return t
 
     -- FIXME: bug: see ... (we can't access things in submodules)
@@ -694,10 +700,8 @@ importModule sc env src as vis imps = do
             fail "Expected a module but found an interface."
   checkNotParameterized m
 
-  -- FIXME[MT]:debugging:
-  let debug = True
   when debug $ do
-    putStrLn $ unwords [ "importModule ("
+    putStrLn $ unwords [ "LOG: importModule ("
                        , show src
                        , ",", show vis
                        , ")"
@@ -804,9 +808,8 @@ resolveIdentifier ::
   CryptolEnv -> Text -> IO (Maybe T.Name)
 resolveIdentifier env nm =
   do
-  let debug = True
   when debug $ do
-    putStrLn $ unwords [ "resolveIdentifier .. ", show nm]
+    putStrLn $ unwords [ "LOG: resolveIdentifier .. ", show nm]
     print $ ppListX "namingEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
   case splitOn (pack "::") nm of
     []  -> pure Nothing
@@ -837,6 +840,8 @@ parseTypedTerm ::
 parseTypedTerm sc env input = do
   let modEnv = eModuleEnv env
 
+  when debug $ do
+    putStrLn $ unwords ["\nLOG: parseTypedTerm...:"]
   -- Parse
   pexpr <- ioParseExpr input
 
@@ -847,9 +852,7 @@ parseTypedTerm sc env input = do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
-    let debug = True
     when debug $ do
-      MM.io $ putStrLn $ unwords ["\nLOG: parseTypedTerm...:"]
       MM.io $ print $ ppListX "  nameEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
         -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
         -- FIXME: NOTE: if load:   has D::D2::d2
@@ -886,6 +889,8 @@ parseDecls sc env input = do
   let modEnv = eModuleEnv env
   let ifaceDecls = getAllIfaceDecls modEnv
 
+  when debug $
+    putStrLn $ unwords ["\nLOG: parseDecls...:"]
   -- Parse
   (decls :: [P.Decl P.PName]) <- ioParseDecls input
 
@@ -940,6 +945,8 @@ parseSchema ::
 parseSchema env input = do
   let modEnv = eModuleEnv env
 
+  when debug $
+    putStrLn $ unwords ["\nLOG: parseSchema...:"]
   -- Parse
   pschema <- ioParseSchema input
 
