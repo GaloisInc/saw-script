@@ -400,8 +400,7 @@ getNamingEnvLog env =
                   PublicAndPrivate -> MI.ifsDefines ifc
 
         submodNames :: Set.Set MN.Name
-        submodNames = Set.empty -- FOR NOW.
-          -- Later: genSubmoduleExports (ME.lmModule lm)
+        submodNames = genSubmoduleExports (ME.lmModule lm)
           -- FIXME: TODO: add =case vis of ...=
 
         nameEnv0 :: MR.NamingEnv
@@ -415,6 +414,23 @@ getNamingEnvLog env =
         --   BH: not sure anything like this exists in Cryptol REPL
         --   saw - a union of scopes/modules, not just one module.
         --   idea: special name for top-level [interactive] module: then use that.
+
+-- | Generate all the names in a module that are inside submodules.
+--    TODO: ... that are public.
+-- compare to Cryptol.TypeCheck.Interface.genModDefines
+--   FIXME: this belongs rather in src/Cryptol/TypeCheck/Interface.hs?
+
+genSubmoduleExports :: T.ModuleG name -> Set.Set MN.Name
+genSubmoduleExports m = nestedInSet (T.mNested m)
+  where
+  nestedInSet = Set.unions . map inNested . Set.toList
+  inNested x  = case Map.lookup x (T.mSubmodules m) of
+                  Just y  -> MI.ifsDefines iface
+                               `Set.union` nestedInSet (MI.ifsNested iface)
+                             where
+                               iface = T.smIface y
+                  Nothing -> Set.empty -- must be signature or a functor
+
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me =
