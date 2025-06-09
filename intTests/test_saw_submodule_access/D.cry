@@ -1,0 +1,10 @@
+module D where
+import B
+import C
+
+d00 = 2000 + b + c
+d01 = 5 + D2::d2
+
+submodule D2 where
+  d2 = d00 + 10000
+  

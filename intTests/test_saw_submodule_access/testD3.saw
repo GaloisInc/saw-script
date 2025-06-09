@@ -1,0 +1,2 @@
+import "D.cry";
+print (eval_int {{D2::d2}});  // should succeed.
