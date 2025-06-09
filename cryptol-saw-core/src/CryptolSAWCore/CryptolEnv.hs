@@ -350,6 +350,72 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
       --  saw - a union of scopes/modules, not just one module.
       --  special name for top-level [interactive] module: then use
 
+getNamingEnvLog :: CryptolEnv -> IO MR.NamingEnv
+getNamingEnvLog env =
+  do
+  nameEnv <- mconcat <$> mapM namingEnvFromImport (eImports env)
+  return $ eExtraNames env `MR.shadowing` nameEnv
+
+  where
+    namingEnvFromImport :: (ImportVisibility, T.ImportG C.ModName) -> IO MR.NamingEnv
+    namingEnvFromImport (vis, imprt) =
+      do
+      when debug $ do
+        putStrLn $ unwords ["\nLOG: addImportToEnv",show vis, show imprt]
+        putStr "ifc= "; ppIfaceNames ifc
+          -- no D::D2::d2 but do I really expect this?
+        print $ ppListX "nameEnv0 names: " (Set.toList (MN.namingEnvNames nameEnv0))
+          -- FIXME: ?
+        print $ ppListX "nameEnv1 names: " (Set.toList (MN.namingEnvNames nameEnv1))
+          -- FIXME: Aha, has D::D2 but not D::D2::d2
+        -- print $ ppListX "lmNamingEnv: "
+        --        (Set.toList (MN.namingEnvNames (ME.lmNamingEnv lm)))
+        --   -- appears to be whats in scope in the module, thus, not useful.
+        print $ ppListX "subModNames: "
+               (Set.toList submodNames)
+          -- appears to be whats in scope in the module, thus, not useful.
+        putStrLn ""
+      return nameEnv1
+
+      -- FIXME: UGH/HUH: no module (ModuleG ) accessible (?) scope, rather
+      where
+        -- get the LoadedModule:
+        nm = T.iModule imprt
+        lm = case ME.lookupModule nm (eModuleEnv env) of
+                Just x  -> x
+                Nothing -> panic "getNamingEnvLog"
+                             [ "unknown module: " <> Text.pack (show nm)
+                             , "(module in `eImports`, not in `eModuleEnv`)"
+                             ]
+
+        ifc :: MI.IfaceNames C.ModName
+        ifc = MI.ifNames (ME.lmInterface lm)
+
+
+        -- | names - include all nested Submodule names
+        -- HIA/FIXME
+        names :: Set.Set MN.Name
+        names = case vis of
+                  OnlyPublic       -> MI.ifsPublic ifc
+                  PublicAndPrivate -> MI.ifsDefines ifc
+
+        submodNames :: Set.Set MN.Name
+        submodNames = Set.empty -- FOR NOW.
+          -- Later: genSubmoduleExports (ME.lmModule lm)
+          -- FIXME: TODO: add =case vis of ...=
+
+        nameEnv0 :: MR.NamingEnv
+        nameEnv0 = MN.namingEnvFromNames (names `Set.union` submodNames)
+
+        -- adjust for qualified, hiding (and in-scope?) (FIXME: poor name)
+        nameEnv1 = MN.interpImportEnv imprt nameEnv0
+           -- TODO: check into?
+
+        -- FIXME: mtg notes to Refile:
+        --   BH: not sure anything like this exists in Cryptol REPL
+        --   saw - a union of scopes/modules, not just one module.
+        --   idea: special name for top-level [interactive] module: then use that.
+
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me =
   mconcat
@@ -575,6 +641,9 @@ loadCryptolModule sc primOpts env path = do
               --    - fixing/removing above
               --      - partially fixes (better fix is ...) loading submodules.
               --      - but doesn't fix submodules when importing!
+              --  - NOTE removing this filter when loading D, causes
+              --      the def "D::D2:d2" to now be available as "d2"!?  Seems odd!
+
               --  - FIXME:MT:undo
               --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
               --      - BUT, isn't this still not correct?
@@ -851,7 +920,8 @@ parseTypedTerm sc env input = do
     npe <- MM.interactive (MB.noPat pexpr)
 
     -- Resolve names
-    let nameEnv = getNamingEnv env
+    -- let nameEnv = getNamingEnv env       -- FIXME:MT:restore
+    nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
     when debug $ do
       MM.io $ print $ ppListX "  nameEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
         -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
@@ -859,7 +929,6 @@ parseTypedTerm sc env input = do
         -- but in both cases, we get Value not in scope in next line:
 
     re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
-
       -- FIXME: NOTE: this ^ where we get Value not in scope.
     when debug $ MM.io $ putStrLn "point 1"
 
