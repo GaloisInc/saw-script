@@ -1271,7 +1271,7 @@ provePrim script t = do
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
-    ValidProof _ thm -> SV.recordProof thm
+    ValidProof _ thm -> SV.recordTheoremProof thm
     _ -> return ()
   return res
 
@@ -1301,7 +1301,7 @@ proveHelper nm script t f = do
   case res of
     ValidProof _stats thm ->
       do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts t)
-         SV.returnProof thm
+         SV.returnTheoremProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
 
@@ -1770,51 +1770,6 @@ cexEvalFn sc args tm = do
   modmap <- scGetModuleMap sc
   return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
-toValueCase :: (SV.FromValue b) =>
-               (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
-            -> SV.Value
-toValueCase prim =
-  SV.VLambda $ \b -> return $
-  SV.VLambda $ \v1 -> return $
-  SV.VLambda $ \v2 ->
-  prim (SV.fromValue b) v1 v2
-
-caseProofResultPrim ::
-  ProofResult ->
-  SV.Value {- ^ valid case -} ->
-  SV.Value {- ^ invalid/unknown case -} ->
-  TopLevel SV.Value
-caseProofResultPrim pr vValid vInvalid = do
-  sc <- getSharedContext
-  case pr of
-    ValidProof _ thm ->
-      SV.applyValue vValid (SV.toValue thm)
-    InvalidProof _ pairs _pst -> do
-      let fov = FOVTuple (map snd pairs)
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vInvalid (SV.toValue tt)
-    UnfinishedProof _ -> do
-      tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
-      SV.applyValue vInvalid (SV.toValue tt)
-
-caseSatResultPrim ::
-  SV.SatResult ->
-  SV.Value {- ^ unsat case -} ->
-  SV.Value {- ^ sat/unknown case -} ->
-  TopLevel SV.Value
-caseSatResultPrim sr vUnsat vSat = do
-  sc <- getSharedContext
-  case sr of
-    SV.Unsat _ -> return vUnsat
-    SV.Sat _ pairs -> do
-      let fov = FOVTuple (map snd pairs)
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vSat (SV.toValue tt)
-    SV.SatUnknown -> do
-      let fov = FOVTuple []
-      tt <- io $ typedTermOfFirstOrderValue sc fov
-      SV.applyValue vSat (SV.toValue tt)
-
 envCmd :: TopLevel ()
 envCmd = do
   rw <- SV.getMergedEnv
@@ -2111,7 +2066,7 @@ prove_core script input =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
      case res of
-       ValidProof _ thm -> SV.returnProof thm
+       ValidProof _ thm -> SV.returnTheoremProof thm
        InvalidProof _ _ pst -> failProof pst
        UnfinishedProof pst  -> failProof pst
 
@@ -2124,7 +2079,7 @@ core_axiom input =
      db <- SV.getTheoremDB
      (thm, db') <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.putTheoremDB db'
-     SV.returnProof thm
+     SV.returnTheoremProof thm
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
@@ -2134,7 +2089,7 @@ core_thm input =
      db <- SV.getTheoremDB
      (thm, db') <- io (proofByTerm sc db t pos "core_thm")
      SV.putTheoremDB db'
-     SV.returnProof thm
+     SV.returnTheoremProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
 specialize_theorem thm ts =
@@ -2144,7 +2099,7 @@ specialize_theorem thm ts =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      (thm', db') <- io (specializeTheorem sc what4PushMuxOps db pos "specialize_theorem" thm (map ttTerm ts))
      SV.putTheoremDB db'
-     SV.returnProof thm'
+     SV.returnTheoremProof thm'
 
 get_opt :: Int -> TopLevel String
 get_opt n = do

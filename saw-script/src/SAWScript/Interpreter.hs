@@ -21,7 +21,8 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
--- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.Typechecker
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
+-- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
@@ -125,7 +126,8 @@ import SAWScript.AutoMatch
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
 
--- Support ---------------------------------------------------------------------
+------------------------------------------------------------
+-- Support
 
 -- This is used to reject top-level execution of polymorphic
 -- expressions. Assumes we aren't inside an uninstantiated forall
@@ -158,8 +160,43 @@ isPolymorphic ty0 = case ty0 of
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
 
+-- Get the type of an AST element. For now, only patterns because that's
+-- what we're using.
+--
+-- Assumes we have been through the typechecker and the types are filled in.
+--
+-- XXX: this should be a typeclass function with instances for all the AST
+-- types.
+--
+-- XXX: also it should be moved to ASTUtil once we have such a place.
+getType :: SS.Pattern -> SS.Type
+getType pat = case pat of
+    SS.PWild _pos ~(Just t) -> t
+    SS.PVar _pos _x ~(Just t) -> t
+    SS.PTuple tuplepos pats ->
+        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
 
--- Environment -----------------------------------------------------------------
+-- Convert some text (wrapped in a position with Located) to
+-- an InputText for cryptol-saw-core.
+locToInput :: Located Text -> CEnv.InputText
+locToInput l = CEnv.InputText { CEnv.inpText = getVal l
+                              , CEnv.inpFile = file
+                              , CEnv.inpLine = ln
+                              , CEnv.inpCol  = col + 2 -- for dropped }}
+                              }
+  where
+  (file, ln, col) = extract $ locatedPos l
+  extract pos = case pos of
+      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FileAndFunctionPos f _ -> (f, 1, 1)
+      SS.PosInferred _ pos' -> extract pos'
+      SS.PosInternal s -> (s,1,1)
+      SS.PosREPL       -> ("<interactive>", 1, 1)
+      SS.Unknown       -> ("Unknown", 1, 1)
+
+------------------------------------------------------------
+-- Environment updates
 
 -- The second argument (the schema, aka type) is Nothing in most
 -- cases, but for Decls is taken from the Decl. This will always be
@@ -243,7 +280,34 @@ bindPatternEnv pat ms v env =
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
--- Typechecker ----------------------------------------------------------------
+
+------------------------------------------------------------
+-- InteractiveMonad
+
+-- Monad class to allow the interpreter to run in either the TopLevel
+-- or ProofScript monads.
+
+class (Monad m, MonadFail m) => InteractiveMonad m where
+  liftTopLevel :: TopLevel a -> m a
+  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
+  actionFromValue :: FromValue a => Value -> m a
+  getMonadContext :: m SS.Context
+
+instance InteractiveMonad TopLevel where
+  liftTopLevel m = m
+  withTopLevel f m = f m
+  actionFromValue = fromValue
+  getMonadContext = return SS.TopLevel
+
+instance InteractiveMonad ProofScript where
+  liftTopLevel m = scriptTopLevel m
+  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
+  actionFromValue = fromValue
+  getMonadContext = return SS.ProofScript
+
+
+------------------------------------------------------------
+-- Typechecker
 
 -- Process a typechecker result.
 -- Wraps the typechecker in the stuff needed to print its warnings and errors.
@@ -261,161 +325,168 @@ processTypeCheck (errs_or_output, warns) =
     mapM_ issueWarning warns
     either failTypecheck return errs_or_output
 
--- Interpretation of SAWScript -------------------------------------------------
 
-interpret :: SS.Expr -> TopLevel Value
-interpret expr =
+------------------------------------------------------------
+-- Interpreter core
+
+interpretExpr :: SS.Expr -> TopLevel Value
+interpretExpr expr =
     let ?fileReader = BS.readFile in
     case expr of
-      SS.Bool _ b              -> return $ VBool b
-      SS.String _ s            -> return $ VString s
-      SS.Int _ z               -> return $ VInteger z
-      SS.Code str              -> do sc <- getSharedContext
-                                     cenv <- fmap rwCryptol getMergedEnv
-                                     --io $ putStrLn $ "Parsing code: " ++ show str
-                                     --showCryptolEnv' cenv
-                                     t <- io $ CEnv.parseTypedTerm sc cenv
-                                             $ locToInput str
-                                     return (toValue t)
-      SS.CType str             -> do cenv <- fmap rwCryptol getMergedEnv
-                                     s <- io $ CEnv.parseSchema cenv
-                                             $ locToInput str
-                                     return (toValue s)
-      SS.Array _ es            -> VArray <$> traverse interpret es
-      SS.Block _ stmts         -> interpretStmts stmts
-      SS.Tuple _ es            -> VTuple <$> traverse interpret es
-      SS.Record _ bs           -> VRecord <$> traverse interpret bs
-      SS.Index _ e1 e2         -> do a <- interpret e1
-                                     i <- interpret e2
-                                     return (indexValue a i)
-      SS.Lookup _ e n          -> do a <- interpret e
-                                     return (lookupValue a n)
-      SS.TLookup _ e i         -> do a <- interpret e
-                                     return (tupleLookupValue a i)
-      SS.Var x                 -> do rw <- getMergedEnv
-                                     case Map.lookup x (rwValueInfo rw) of
-                                       Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
-                                       Just (lc, _ty, v)
-                                         | Set.member lc (rwPrimsAvail rw) ->
-                                              return (withStackTraceFrame (show x) v)
-                                         | otherwise ->
-                                              fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
-      SS.Function _ pat e      -> do env <- getLocalEnv
-                                     let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-                                     return $ VLambda f
-      SS.Application _ e1 e2   -> do v1 <- interpret e1
-                                     v2 <- interpret e2
-                                     case v1 of
-                                       VLambda f -> f v2
-                                       _ -> fail $ "interpret Application: " ++ show v1
-      SS.Let _ dg e            -> do env' <- interpretDeclGroup dg
-                                     withLocalEnv env' (interpret e)
-      SS.TSig _ e _            -> interpret e
-      SS.IfThenElse _ e1 e2 e3 -> do v1 <- interpret e1
-                                     case v1 of
-                                       VBool b -> interpret (if b then e2 else e3)
-                                       _ -> fail $ "interpret IfThenElse: " ++ show v1
-
-locToInput :: Located Text -> CEnv.InputText
-locToInput l = CEnv.InputText { CEnv.inpText = getVal l
-                              , CEnv.inpFile = file
-                              , CEnv.inpLine = ln
-                              , CEnv.inpCol  = col + 2 -- for dropped }}
-                              }
-  where
-  (file, ln, col) = extract $ locatedPos l
-  extract pos = case pos of
-      SS.Range f sl sc _ _ -> (f,sl, sc)
-      SS.FileOnlyPos f -> (f, 1, 1)
-      SS.FileAndFunctionPos f _ -> (f, 1, 1)
-      SS.PosInferred _ pos' -> extract pos'
-      SS.PosInternal s -> (s,1,1)
-      SS.PosREPL       -> ("<interactive>", 1, 1)
-      SS.Unknown       -> ("Unknown", 1, 1)
+      SS.Bool _ b ->
+          return $ VBool b
+      SS.String _ s ->
+          return $ VString s
+      SS.Int _ z ->
+          return $ VInteger z
+      SS.Code str -> do
+          sc <- getSharedContext
+          cenv <- fmap rwCryptol getMergedEnv
+          --io $ putStrLn $ "Parsing code: " ++ show str
+          --showCryptolEnv' cenv
+          t <- io $ CEnv.parseTypedTerm sc cenv
+                  $ locToInput str
+          return (toValue t)
+      SS.CType str -> do
+          cenv <- fmap rwCryptol getMergedEnv
+          s <- io $ CEnv.parseSchema cenv
+                  $ locToInput str
+          return (toValue s)
+      SS.Array _ es ->
+          VArray <$> traverse interpretExpr es
+      SS.Block _ stmts ->
+          interpretStmts stmts
+      SS.Tuple _ es ->
+          VTuple <$> traverse interpretExpr es
+      SS.Record _ bs ->
+          VRecord <$> traverse interpretExpr bs
+      SS.Index _ e1 e2 -> do
+          a <- interpretExpr e1
+          i <- interpretExpr e2
+          return (indexValue a i)
+      SS.Lookup _ e n -> do
+          a <- interpretExpr e
+          return (lookupValue a n)
+      SS.TLookup _ e i -> do
+          a <- interpretExpr e
+          return (tupleLookupValue a i)
+      SS.Var x -> do
+          rw <- getMergedEnv
+          case Map.lookup x (rwValueInfo rw) of
+            Nothing ->
+                -- This should be rejected by the typechecker, so panic
+                panic "interpretExpr" [
+                    "Read of unknown variable " <> SS.getVal x
+                ]
+            Just (lc, _ty, v)
+              | Set.member lc (rwPrimsAvail rw) ->
+                   return (withStackTraceFrame (show x) v)
+              | otherwise ->
+                   -- This case is also rejected by the typechecker
+                   panic "interpretExpr" [
+                       "Read of inaccessible variable " <> SS.getVal x
+                   ]
+      SS.Function _ pat e -> do
+          env <- getLocalEnv
+          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
+          return $ VLambda f
+      SS.Application _ e1 e2 -> do
+          v1 <- interpretExpr e1
+          v2 <- interpretExpr e2
+          case v1 of
+            VLambda f -> f v2
+            _ ->
+                panic "interpretExpr" [
+                    "Called object is not a function",
+                    "Value found: " <> Text.pack (show v1),
+                    "Expression: " <> PPS.pShowText e1
+                ]
+      SS.Let _ dg e -> do
+          env' <- interpretDeclGroup dg
+          withLocalEnv env' (interpretExpr e)
+      SS.TSig _ e _ ->
+          interpretExpr e
+      SS.IfThenElse _ e1 e2 e3 -> do
+          v1 <- interpretExpr e1
+          case v1 of
+            VBool b ->
+              interpretExpr (if b then e2 else e3)
+            _ ->
+              panic "interpretExpr" [
+                  "Ill-typed value in if-expression (should be Bool)",
+                  "Value found: " <> Text.pack (show v1),
+                  "Expression: " <> PPS.pShowText e1
+              ]
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
-  v <- interpret expr
-  return (bindPatternLocal pat mt v env)
+    v <- interpretExpr expr
+    return (bindPatternLocal pat mt v env)
 
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
       SS.Function _ pat e -> VLambda f
-        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
       SS.TSig _ e _ -> interpretFunction env e
-      _ -> error "interpretFunction: not a function"
+      _ ->
+        panic "interpretFunction" [
+            "Not a function",
+            "Expression found: " <> PPS.pShowText expr
+        ]
 
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
-interpretDeclGroup (SS.NonRecursive d) =
-    do env <- getLocalEnv
-       interpretDecl env d
-interpretDeclGroup (SS.Recursive ds) =
-    do env <- getLocalEnv
-       let addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
-           env' = foldr addDecl env ds
-       return env'
+interpretDeclGroup (SS.NonRecursive d) = do
+    env <- getLocalEnv
+    interpretDecl env d
+interpretDeclGroup (SS.Recursive ds) = do
+    env <- getLocalEnv
+    let addDecl (SS.Decl _ pat mty e) =
+            bindPatternLocal pat mty (interpretFunction env' e)
+        env' = foldr addDecl env ds
+    return env'
 
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
-      [] -> fail "empty block"
+      [] ->
+          fail "empty block"
       [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
-             savepos <- pushPosition pos
-             result <- interpret e
-             popPosition savepos
-             return result
-      SS.StmtBind pos pat e : ss ->
-          do env <- getLocalEnv
-             savepos <- pushPosition pos
-             v1 <- interpret e
-             popPosition savepos
-             let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
-             bindValue pos v1 (VLambda f)
+          savepos <- pushPosition pos
+          result <- interpretExpr e
+          popPosition savepos
+          return result
+      SS.StmtBind pos pat e : ss -> do
+          env <- getLocalEnv
+          savepos <- pushPosition pos
+          v1 <- interpretExpr e
+          popPosition savepos
+          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
+          bindValue pos v1 (VLambda f)
       SS.StmtLet pos bs : ss ->
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
           -- position there, so all we need is a placeholder for it to
           -- ignore. Therefore, don't take the trouble to compute the
           -- correct position (the bounding box on the statements ss).
-          interpret (SS.Let pos bs (SS.Block pos ss))
-      SS.StmtCode _ s : ss ->
-          do sc <- getSharedContext
-             rw <- getMergedEnv
+          interpretExpr (SS.Let pos bs (SS.Block pos ss))
+      SS.StmtCode _ s : ss -> do
+          sc <- getSharedContext
+          rw <- getMergedEnv
 
-             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
-             -- FIXME: Local bindings get saved into the global cryptol environment here.
-             -- We should change parseDecls to return only the new bindings instead.
-             putTopLevelRW $ rw{rwCryptol = ce'}
-             interpretStmts ss
+          ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
+          -- FIXME: Local bindings get saved into the global cryptol environment here.
+          -- We should change parseDecls to return only the new bindings instead.
+          putTopLevelRW $ rw{rwCryptol = ce'}
+          interpretStmts ss
       SS.StmtImport _ _ : _ ->
-          do fail "block import unimplemented"
-      SS.StmtTypedef _ name ty : ss ->
-          do env <- getLocalEnv
-             let env' = LocalTypedef (getVal name) ty : env
-             withLocalEnv env' (interpretStmts ss)
-
-stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts =
-  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
-
--- Get the type of an AST element. For now, only patterns because that's
--- what we're using.
---
--- Assumes we have been through the typechecker and the types are filled in.
---
--- XXX: this should be a typeclass function with instances for all the AST
--- types.
----
--- XXX: also it should be moved to ASTUtil once we have such a place.
-getType :: SS.Pattern -> SS.Type
-getType pat = case pat of
-    SS.PWild _pos ~(Just t) -> t
-    SS.PVar _pos _x ~(Just t) -> t
-    SS.PTuple tuplepos pats ->
-        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+          fail "block import unimplemented"
+      SS.StmtTypedef _ name ty : ss -> do
+          env <- getLocalEnv
+          let env' = LocalTypedef (getVal name) ty : env
+          withLocalEnv env' (interpretStmts ss)
 
 processStmtBind ::
   InteractiveMonad m =>
@@ -426,7 +497,7 @@ processStmtBind ::
 processStmtBind printBinds pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
-  val <- liftTopLevel $ interpret expr
+  val <- liftTopLevel $ interpretExpr expr
 
   -- Fetch the type from updated pattern, since the typechecker will
   -- have filled it in there.
@@ -474,25 +545,6 @@ processStmtBind printBinds pat expr = do -- mx mt
   liftTopLevel $
    do rw' <- getTopLevelRW
       putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
-
-
-class (Monad m, MonadFail m) => InteractiveMonad m where
-  liftTopLevel :: TopLevel a -> m a
-  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
-  actionFromValue :: FromValue a => Value -> m a
-  getMonadContext :: m SS.Context
-
-instance InteractiveMonad TopLevel where
-  liftTopLevel m = m
-  withTopLevel f m = f m
-  actionFromValue = fromValue
-  getMonadContext = return SS.TopLevel
-
-instance InteractiveMonad ProofScript where
-  liftTopLevel m = scriptTopLevel m
-  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
-  actionFromValue = fromValue
-  getMonadContext = return SS.ProofScript
 
 -- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
 interpretStmt :: InteractiveMonad m =>
@@ -547,27 +599,35 @@ interpretStmt printBinds stmt = do
       liftTopLevel $ do
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
+-- Hook for AutoMatch
+stmtInterpreter :: StmtInterpreter
+stmtInterpreter ro rw stmts =
+  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
+
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
   bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
-    interp =
-      do  opts <- getOptions
-          stmts <- io $ SAWScript.Import.loadFile opts file
-          io $ setCurrentDirectory (takeDirectory file)
-          mapM_ stmtWithPrint stmts
-          when runMain interpretMain
-          writeVerificationSummary
+    interp = do
+      opts <- getOptions
+      stmts <- io $ SAWScript.Import.loadFile opts file
+      io $ setCurrentDirectory (takeDirectory file)
+      mapM_ stmtWithPrint stmts
+      when runMain interpretMain
+      writeVerificationSummary
 
-    stmtWithPrint s = do let withPos str = unlines $
-                                           ("[output] at " ++ show (SS.getPos s) ++ ": ") :
-                                             map (\l -> "\t"  ++ l) (lines str)
-                         showLoc <- printShowPos <$> getOptions
-                         if showLoc
-                           then withOptions (\o -> o { printOutFn = \lvl str ->
-                                                          printOutFn o lvl (withPos str) })
-                                  (interpretStmt False s)
-                           else interpretStmt False s
+    stmtWithPrint s = do
+      let withPos str =
+            unlines $ ("[output] at " ++ show (SS.getPos s) ++ ": ") :
+                      map (\l -> "\t"  ++ l) (lines str)
+      showLoc <- printShowPos <$> getOptions
+      if showLoc then
+        let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
+            withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
+        in                                              
+        withOptions withPrint (interpretStmt False s)
+      else
+        interpretStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -582,7 +642,9 @@ interpretMain = do
       -- experimental or deprecated, so this isn't possible. If we allow
       -- users to deprecate their own functions in the future, change
       -- this message to an actual error that says something snarky :-)
-      panic "Interpreter" ["Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"]
+      panic "Interpreter" [
+          "Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"
+      ]
 
 buildTopLevelEnv :: AIGProxy
                  -> Options
@@ -695,7 +757,9 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
             `X.catch` (handleException opts)
   return ()
 
--- Primitives ------------------------------------------------------------------
+
+------------------------------------------------------------
+-- Primitives
 
 add_primitives :: PrimitiveLifecycle -> BuiltinContext -> Options -> TopLevel ()
 add_primitives lc _bic _opts = do
@@ -1171,17 +1235,6 @@ primitives = Map.fromList
     Current
     [ "Concatenate a list of strings together to yield a string." ]
 
-  , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
-    (\_ _ -> toplevelCallCC)
-    Experimental
-    [ "Call-with-current-continuation."
-    , ""
-    , "This is a highly experimental control operator that can be used"
-    , "to capture the surrounding top-level computation as a continuation."
-    , "The consequences of delaying and reentering the current continuation"
-    , "may be somewhat unpredictable, so use this operator with great caution."
-    ]
-
   , prim "checkpoint"          "TopLevel (() -> TopLevel ())"
     (pureVal checkpoint)
     Experimental
@@ -1206,12 +1259,11 @@ primitives = Map.fromList
     , "to exit the subshell and resume execution."
     , ""
     , "This command is especially useful in conjunction with the 'checkpoint'"
-    , "and 'callcc' commands, which allow state reset capabilities and the capturing"
-    , "of the calling context."
+    , "command, which allows returning to a prior state."
     , ""
     , "Note that, due to the way the SAW script interpreter works, changes made"
     , "to a script file in which the 'subshell' command directly appears will"
-    , "NOT affect subsequent execution following a 'checkpoint' or 'callcc' use."
+    , "NOT affect subsequent execution following a 'checkpoint' use."
     , "However, changes made in a file that executed via 'include' WILL affect"
     , "restarted executions, as the 'include' command will read and parse the"
     , "file from scratch."
@@ -2865,7 +2917,8 @@ primitives = Map.fromList
     , "primitive type nm in module mod to tp"
     ]
 
-  -- Java stuff
+    ----------------------------------------
+    -- Java stuff
 
   , prim "java_bool"           "JavaType"
     (pureVal JavaBoolean)
@@ -2938,6 +2991,9 @@ primitives = Map.fromList
     [ "Legacy alternative name for `jvm_extract`."
     ]
 
+    ----------------------------------------
+    -- LLVM stuff
+
   , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
     (funVal2 llvm_sizeof)
     Current
@@ -2995,6 +3051,9 @@ primitives = Map.fromList
     (pureVal llvm_load_module)
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
+
+    ----------------------------------------
+    -- LLVM skeletons
 
   , prim "module_skeleton" "LLVMModule -> TopLevel ModuleSkeleton"
     (pureVal module_skeleton)
@@ -3100,6 +3159,9 @@ primitives = Map.fromList
     , "Output is written to the path passed as the first argument."
     , "The third argument controls whether skeleton builtins are emitted."
     ]
+
+    ----------------------------------------
+    -- Some misc commands
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -3274,7 +3336,7 @@ primitives = Map.fromList
     [ "Pretty-print a control-flow graph."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/LLVM interface
 
   , prim "llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
@@ -4109,7 +4171,7 @@ primitives = Map.fromList
     , "implementation with respect to its Cryptol implementation."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/JVM commands
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
@@ -4331,7 +4393,7 @@ primitives = Map.fromList
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
     -- Crucible/MIR commands
 
   , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
@@ -4750,7 +4812,8 @@ primitives = Map.fromList
     Experimental
     [ "The type of MIR pointer-sized unsigned integers." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Yosys commands
 
   , prim "yosys_import"  "String -> TopLevel Term"
     (pureVal yosys_import)
@@ -4815,7 +4878,8 @@ primitives = Map.fromList
     , "The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Mr. Solver commands
 
   , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
@@ -4867,7 +4931,8 @@ primitives = Map.fromList
     , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
     , " given terms, with the given variables generalized with a Pi type." ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- Heapster commands
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
@@ -5249,7 +5314,8 @@ primitives = Map.fromList
     [ "Dump environment info to a JSON file for IDE integration."
     ]
 
-    ---------------------------------------------------------------------
+    ----------------------------------------
+    -- A few more misc commands
 
   , prim "sharpSAT"  "Term -> TopLevel Integer"
     (pureVal sharpSAT)
@@ -5307,7 +5373,7 @@ primitives = Map.fromList
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
 
-    -- pureVal can be used for anything with a ToValue instance,
+    -- pureVal can be used for anything with an IsValue instance,
     -- including functions. However, functions in TopLevel need to use
     -- funVal* instead; the IsValue instances capture incorrectly and
     -- you get a function that returns a VTopLevel instead of executing
