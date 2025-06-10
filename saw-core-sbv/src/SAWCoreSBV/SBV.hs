@@ -176,8 +176,8 @@ prims =
   , Prims.bpIntAdd = pure2 svPlus
   , Prims.bpIntSub = pure2 svMinus
   , Prims.bpIntMul = pure2 svTimes
-  , Prims.bpIntDiv = pure2 svQuot
-  , Prims.bpIntMod = pure2 svRem
+  , Prims.bpIntDiv = pure2 svIntDiv
+  , Prims.bpIntMod = pure2 svIntMod
   , Prims.bpIntNeg = pure1 svUNeg
   , Prims.bpIntAbs = pure1 svAbs
   , Prims.bpIntEq  = pure2 svEqual
@@ -587,6 +587,24 @@ sLg2 x = go 0
     lit n = literalSWord (intSizeOf x) n
     go i | i < intSizeOf x = svIte (svLessEq x (lit (2^i))) (lit (toInteger i)) (go (i + 1))
          | otherwise       = lit (toInteger i)
+
+-- NB: SBV's division operation provides SMT-LIB's Euclidean division, which
+-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
+-- do some work to get the desired semantics.
+svIntDiv :: SVal -> SVal -> SVal
+svIntDiv a b = svSymbolicMerge KUnbounded True p (svQuot a b) (svQuot (svUNeg a) (svUNeg b))
+  where
+    z = svInteger KUnbounded 0
+    p = svLessThan z b
+
+-- NB: SBV's division operation provides SMT-LIB's Euclidean division, which
+-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
+-- do some work to get the desired semantics.
+svIntMod :: SVal -> SVal -> SVal
+svIntMod a b = svSymbolicMerge KUnbounded True p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))
+  where
+    z = svInteger KUnbounded 0
+    p = svLessThan z b
 
 ------------------------------------------------------------
 -- Ite ops

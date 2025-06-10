@@ -1,0 +1,2 @@
+p : Integer -> Integer -> Bit
+property p x y = y != 0 ==> x / (-y) == (-x) / y
