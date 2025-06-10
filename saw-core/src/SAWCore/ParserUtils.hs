@@ -29,6 +29,7 @@ import Control.Applicative
 import Control.Monad (forM_)
 import Control.Monad.State (StateT, execStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
+import Data.List (intercalate)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TL
@@ -40,7 +41,7 @@ import Language.Haskell.TH.Syntax (qAddDependentFile)
 import System.Directory
 import qualified Language.Haskell.TH.Syntax as TH (lift)
 
-import SAWCore.Name (ModuleName)
+import SAWCore.Name (ModuleName, moduleNamePieces)
 import qualified SAWCore.UntypedAST as Un
 import qualified SAWCore.Grammar as Un
 import SAWCore.SharedTerm
@@ -139,7 +140,8 @@ declareTermApplyFun nm n tf =
 declareTypedNameFun :: Q Exp -> ModuleName -> Text -> Bool -> Un.UTerm ->
                        DecWriter ()
 declareTypedNameFun sc_fun mnm nm apply_p tp =
-  let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ Text.unpack nm in
+  let mnm_s = intercalate "_" $ map Text.unpack $ moduleNamePieces mnm in
+  let th_nm = (if apply_p then "scApply" else "sc") ++ mnm_s ++ "_" ++ Text.unpack nm in
   declareTermApplyFun th_nm (length $ fst $ Un.asPiList tp) $ \sc ts ->
   [| $(sc_fun) $(varE sc)
    (mkIdent mnm (Text.pack $(stringE (Text.unpack nm))))
