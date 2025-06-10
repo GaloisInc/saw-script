@@ -776,6 +776,8 @@ modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> TopLevel ()
 modifyTopLevelRW = modify
 
 -- FUTURE: maybe change these back to using IsValue when things are less tangly
+--
+-- Note that the "return" variants record the proof as well as just returning it.
 
 recordProof :: Value -> TopLevel ()
 recordProof v =
