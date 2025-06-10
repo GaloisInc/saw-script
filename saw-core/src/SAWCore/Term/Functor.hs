@@ -384,9 +384,9 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e) !(Maybe e)
-      -- ^ An abstract constant packaged with its type and definition.
-      -- The body and type should be closed terms.
+    | Constant !(ExtCns e)
+      -- ^ A global constant identified by its name and type.
+      -- The type is always a closed term.
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
 instance (e ~ Term) => Eq (TermF e) where
@@ -405,14 +405,14 @@ instance (e ~ Term) => Ord (TermF e) where
     (Lambda {}, _) -> LT
 
     (Pi {}, LocalVar _) -> LT
-    (Pi {}, Constant _ _) -> LT
+    (Pi {}, Constant _) -> LT
     (Pi _ ll lr, Pi _ rl rr) -> compare (ll, lr) (rl, rr)
     (Pi {}, _) -> GT
-    (LocalVar _, Constant _ _) -> LT
+    (LocalVar _, Constant _) -> LT
     (LocalVar l, LocalVar r) -> compare l r
     (LocalVar _, _) -> GT
-    (Constant ll lr, Constant rl rr) -> compare (ll, lr) (rl, rr)
-    (Constant _ _, _) -> GT
+    (Constant l, Constant r) -> compare l r
+    (Constant _, _) -> GT
 
 -- See the commentary on 'Hashable Term' for an explanation of this instance
 -- and a note on uniqueness.
@@ -422,7 +422,7 @@ instance (e ~ Term, Hashable e) => Hashable (TermF e) where
   hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
-  hashWithSalt salt (Constant ec d) = salt `hashWithSalt` ec `hashWithSalt` d
+  hashWithSalt salt (Constant ec) = salt `hashWithSalt` ec
 -- NB: we may someday wish to improve this instance, for a couple reasons.
 --
 -- 1. Improve the default, XOR-based hashing scheme to improve collision
@@ -546,10 +546,7 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 b1) (Constant x2 b2) = ecVarIndex x1 == ecVarIndex x2 && case (b1, b2) of
-      (Just t1, Just t2) -> term t1 t2
-      (Nothing, Nothing) -> True
-      _ -> False
+    termf (Constant x1) (Constant x2) = ecVarIndex x1 == ecVarIndex x2
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
@@ -570,7 +567,7 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (toShortName (ecName ec))
+      Constant ec               -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (Primitive pn)     -> Net.Atom (identBaseName (primName pn))
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))

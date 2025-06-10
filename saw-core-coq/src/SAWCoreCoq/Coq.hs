@@ -65,26 +65,27 @@ Import VectorNotations.
 |]
 
 translateTermAsDeclImports ::
-  TranslationConfiguration -> Coq.Ident -> Term -> Term ->
+  TranslationConfiguration -> ModuleMap -> Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateTermAsDeclImports configuration name t tp = do
+translateTermAsDeclImports configuration mm name t tp = do
   doc <-
     TermTranslation.translateDefDoc
       configuration
       Nothing
+      mm
       [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 
 -- | Translate a SAW core module to a Coq module
-translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
-translateSAWModule configuration m =
+translateSAWModule :: TranslationConfiguration -> ModuleMap -> Module -> Doc ann
+translateSAWModule configuration mm m =
   let name = show $ translateModuleName (moduleName m)
   in
   vcat $ []
   ++ [ text $ "Module " ++ name ++ "."
      , ""
      ]
-  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) decl
+  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) mm decl
      | decl <- moduleDecls m ]
   ++ [ text $ "End " ++ name ++ "."
      , ""

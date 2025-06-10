@@ -56,9 +56,11 @@ import SAWCore.Module
   , allModulePrimitives
   , defNameInfo
   , findCtorInMap
+  , lookupVarIndexInMap
   , Ctor(..)
   , Def(..)
   , ModuleMap
+  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.SharedTerm
@@ -155,7 +157,10 @@ evalTermF cfg lam recEval tf env =
                                   return $ TValue $ VPiType nm v body
 
     LocalVar i              -> force (fst (env !! i))
-    Constant ec t           -> do ec' <- traverse evalType ec
+    Constant ec             -> do ec' <- traverse evalType ec
+                                  let t = case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
+                                            Just (ResolvedDef d) -> defBody d
+                                            _ -> Nothing
                                   fromMaybe
                                     (simNeutral cfg env (NeutralConstant ec))
                                     (simConstant cfg tf ec' <|> (recEval <$> t))

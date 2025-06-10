@@ -411,12 +411,20 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
-    (unwrapTermF -> Constant _ (Just body)) -> ruleOfProp sc body ann
+    (unwrapTermF -> Constant ec) ->
+      do mres <- lookupVarIndexInMap (ecVarIndex ec) <$> scGetModuleMap sc
+         case mres of
+           Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
+           _ -> pure Nothing
     (R.asEq -> Just (_, x, y)) -> eqRule x y
     (R.asEqTrue -> Just body) -> ruleOfProp sc body ann
-    (R.asApplyAll -> (R.asConstant -> Just (_, Just body), args)) ->
-      do  app <- scApplyAllBeta sc body args
-          ruleOfProp sc app ann
+    (R.asApplyAll -> (R.asConstant -> Just ec, args)) ->
+      do mres <- lookupVarIndexInMap (ecVarIndex ec) <$> scGetModuleMap sc
+         case mres of
+           Just (ResolvedDef (defBody -> Just body)) ->
+             do app <- scApplyAllBeta sc body args
+                ruleOfProp sc app ann
+           _ -> pure Nothing
     _ -> pure Nothing
 
   where

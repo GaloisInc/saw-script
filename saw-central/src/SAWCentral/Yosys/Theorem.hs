@@ -120,7 +120,7 @@ buildTheorem sc ymod newmod precond body = do
   inpTy <- liftIO $ CSC.importType sc CSC.emptyEnv cinpTy
   outTy <- liftIO $ CSC.importType sc CSC.emptyEnv coutTy
   nmi <- case SC.ttTerm ymod of
-    (R.asConstant -> Just (SC.EC _ nmi _, _)) -> pure nmi
+    (R.asConstant -> Just (SC.EC _ nmi _)) -> pure nmi
     _ -> throw YosysErrorInvalidOverrideTarget
   uri <- case nmi of
     SC.ImportedName uri _ -> pure uri
@@ -158,12 +158,12 @@ applyOverride sc thm t = do
   let
     go :: SC.Term -> IO SC.Term
     go s@(SC.Unshared tf) = case tf of
-      SC.Constant (SC.EC idx _ _) _
+      SC.Constant (SC.EC idx _ _)
         | idx == tidx -> theoremReplacement sc thm
         | otherwise -> pure s
       _ -> SC.Unshared <$> traverse go tf
     go s@SC.STApp { SC.stAppIndex = aidx, SC.stAppTermF = tf } = SC.useCache cache aidx $ case tf of
-      SC.Constant (SC.EC idx _ _) _
+      SC.Constant (SC.EC idx _ _)
         | idx == tidx -> theoremReplacement sc thm
         | otherwise -> pure s
       _ -> SC.scTermF sc =<< traverse go tf

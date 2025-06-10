@@ -144,13 +144,13 @@ emptyRefnset = HashMap.empty
 -- | Given a 'FunName' and a 'Refnset', return the 'FunAssump' which has
 -- the given 'FunName' as its LHS function, if possible
 lookupFunAssump :: FunName -> Refnset t -> Maybe (FunAssump t)
-lookupFunAssump (GlobalName (GlobalDef _ ix _ _ _) projs) refSet =
+lookupFunAssump (GlobalName (GlobalDef _ ix _ _) projs) refSet =
     HashMap.lookup ix refSet >>= Map.lookup projs
 lookupFunAssump _ _ = Nothing
 
 -- | Add a 'FunAssump' to a 'Refnset'
 addFunAssump :: FunAssump t -> Refnset t -> Refnset t
-addFunAssump fa@(fassumpFun -> GlobalName (GlobalDef _ ix _ _ _) projs) =
+addFunAssump fa@(fassumpFun -> GlobalName (GlobalDef _ ix _ _) projs) =
     HashMap.insertWith (\_ -> Map.insert projs fa) ix
                        (Map.singleton projs fa)
 addFunAssump _ = error "Cannot insert a non-global name into a Refnset"

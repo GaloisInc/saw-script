@@ -134,7 +134,7 @@ asGlobalDef :: Recognizer Term Ident
 asGlobalDef t =
   case unwrapTermF t of
     FTermF (Primitive pn) -> Just (primName pn)
-    Constant ec _ -> asModuleIdentifier ec
+    Constant ec -> asModuleIdentifier ec
     _ -> Nothing
 
 isGlobalDef :: Ident -> Recognizer Term ()
@@ -362,8 +362,8 @@ asLocalVar :: Recognizer Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = Nothing
 
-asConstant :: Recognizer Term (ExtCns Term, Maybe Term)
-asConstant (unwrapTermF -> Constant ec mt) = return (ec, mt)
+asConstant :: Recognizer Term (ExtCns Term)
+asConstant (unwrapTermF -> Constant ec) = pure ec
 asConstant _ = Nothing
 
 asExtCns :: Recognizer Term (ExtCns Term)

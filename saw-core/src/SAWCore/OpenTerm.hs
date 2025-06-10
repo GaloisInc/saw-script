@@ -1216,7 +1216,7 @@ sawLetMinimize sc t_top =
        liftIO $ scTermF sc (Pi x tp' body')
   slMinTermF' tf@(LocalVar i) =
     tell (varOccs1 i) >> liftIO (scTermF sc tf)
-  slMinTermF' tf@(Constant _ _) = liftIO (scTermF sc tf)
+  slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)
 
   slMinFTermF :: FlatTermF Term -> SLMinM Term
   slMinFTermF ftf@(ExtCns _) = liftIO $ scFlatTermF sc ftf

@@ -52,6 +52,7 @@ import qualified Data.BitVector.Sized                          as BV
 import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
+import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
@@ -93,8 +94,11 @@ data TranslationReader = TranslationReader
   , _nextSharedName :: Coq.Ident
     -- ^ The next available name to be used for a let-bound shared
     -- sub-expression
+
+  , _sawModuleMap :: ModuleMap
+    -- ^ The environment of SAW global definitions
   }
-  deriving (Show)
+  -- deriving (Show)
 
 makeLenses ''TranslationReader
 
@@ -252,18 +256,20 @@ getNamesOfAllDeclarations = view allDeclarations <$> get
 runTermTranslationMonad ::
   TranslationConfiguration ->
   Maybe ModuleName ->
+  ModuleMap ->
   [String] ->
   [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
-runTermTranslationMonad configuration mname globalDecls localEnv =
+runTermTranslationMonad configuration mname mm globalDecls localEnv =
   runTranslationMonad configuration
   (TranslationReader {
       _currentModule = mname
       , _localEnvironment = localEnv
       , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
       , _sharedNames        = IntMap.empty
-      , _nextSharedName     = "var__0" })
+      , _nextSharedName     = "var__0"
+      , _sawModuleMap       = mm })
   (TranslationState { _globalDeclarations = globalDecls
                     , _topLevelDeclarations  = []
                     })
@@ -314,16 +320,16 @@ translateIdentWithArgs i args = do
 translateIdent :: TermTranslationMonad m => Ident -> m Coq.Term
 translateIdent i = translateIdentWithArgs i []
 
--- | Translate a constant with optional body to a Coq term. If the constant is
--- named with an 'Ident', then it already has a top-level translation from
--- translating the SAW core module containing that 'Ident'. If the constant is
--- an 'ImportedName', however, then it might not have a Coq definition already,
--- so add a definition of it to the top-level translation state.
-translateConstant :: TermTranslationMonad m => ExtCns Term -> Maybe Term ->
-                     m Coq.Term
-translateConstant ec _
+-- | Translate a constant to a Coq term. If the constant is named with
+-- an 'Ident', then it already has a top-level translation from
+-- translating the SAW core module containing that 'Ident'. If the
+-- constant is an 'ImportedName', however, then it might not have a
+-- Coq definition already, so add a definition of it to the top-level
+-- translation state.
+translateConstant :: TermTranslationMonad m => ExtCns Term -> m Coq.Term
+translateConstant ec
   | ModuleIdentifier ident <- ecName ec = translateIdent ident
-translateConstant ec maybe_body =
+translateConstant ec =
   do -- First, apply the constant renaming to get the name for this constant
      configuration <- asks translationConfiguration
      -- TODO short name seems wrong
@@ -339,6 +345,11 @@ translateConstant ec maybe_body =
            elem renamed (constantSkips configuration)
 
      -- Add the definition if we aren't skipping it
+     mm <- asks (view sawModuleMap . otherConfiguration)
+     let maybe_body =
+           case lookupVarIndexInMap (ecVarIndex ec) mm of
+             Just (ResolvedDef d) -> defBody d
+             _ -> Nothing
      case maybe_body of
        _ | skip_def -> return ()
        Just body ->
@@ -444,7 +455,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    ExtCns ec -> translateConstant ec Nothing
+    ExtCns ec -> translateConstant ec
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
@@ -498,7 +509,8 @@ withTopTranslationState m =
               _localEnvironment  = [],
               _unavailableIdents = reservedIdents,
               _sharedNames       = IntMap.empty,
-              _nextSharedName    = "var__0" }) m
+              _nextSharedName    = "var__0" ,
+              _sawModuleMap      = view sawModuleMap r }) m
 
 -- | Generate a Coq @Definition@ with a given name, body, and type, using the
 -- lambda-bound variable names for the variables if they are available
@@ -713,7 +725,7 @@ translateTermUnshared t = do
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
     -- Constants
-    Constant n maybe_body -> translateConstant n maybe_body
+    Constant n -> translateConstant n
 
   where
     badTerm          = Except.throwError $ BadTerm t
@@ -757,14 +769,15 @@ defaultTermForType typ = do
 translateTermToDocWith ::
   TranslationConfiguration ->
   Maybe ModuleName ->
+  ModuleMap ->
   [String] -> -- ^ globals that have already been translated
   [String] -> -- ^ string names of local variables in scope
   (Coq.Term -> Coq.Term -> Doc ann) ->
   Term -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateTermToDocWith configuration r globalDecls localEnv f t tp_trm = do
+translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do
   ((term, tp), state) <-
-    runTermTranslationMonad configuration r globalDecls localEnv
+    runTermTranslationMonad configuration r mm globalDecls localEnv
     ((,) <$> translateTermLet t <*> translateTermLet tp_trm)
   let decls = view topLevelDeclarations state
   return $
@@ -779,9 +792,10 @@ translateTermToDocWith configuration r globalDecls localEnv f t tp_trm = do
 translateDefDoc ::
   TranslationConfiguration ->
   Maybe ModuleName ->
+  ModuleMap ->
   [String] ->
   Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateDefDoc configuration r globalDecls name =
-  translateTermToDocWith configuration r globalDecls [name]
+translateDefDoc configuration r mm globalDecls name =
+  translateTermToDocWith configuration r mm globalDecls [name]
   (\ t tp -> Coq.ppDecl $ mkDefinition name t tp)

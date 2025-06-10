@@ -72,6 +72,7 @@ import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
 import           CryptolSAWCore.CryptolEnv
+import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.OpenTerm
 import           SAWCore.Prelude
 import           SAWCore.Recognizer
@@ -142,8 +143,13 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let ?ctx = FFISetupCtx {..}
   cryEnv <- lll getCryptolEnv
   case asConstant funTerm of
-    Just (ec, funDef)
+    Just ec
       | Just FFIFunType {..} <- Map.lookup (Term.ecName ec) (eFFITypes cryEnv) -> do
+        mm <- lio $ scGetModuleMap sc
+        let funDef =
+              case lookupVarIndexInMap (ecVarIndex ec) mm of
+                Just (ResolvedDef d) -> defBody d
+                _ -> Nothing
         when (isNothing funDef) do
           throwFFISetup
             "Cannot verify foreign function with no Cryptol implementation"
