@@ -156,7 +156,7 @@ span.spaces    { background: white }
 <span class="lineno">  137 </span>  IsSymInterface sym =&gt;
 <span class="lineno">  138 </span>  sym -&gt; String -&gt; Maybe FilePath -&gt;
 <span class="lineno">  139 </span>  IO (IO (), [GenericExecutionFeature sym])
-<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">setupProfiling _ _ Nothing = return (return (), [])</span>
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">setupProfiling _ _ Nothing = return (return <span class="nottickedoff">()</span>, [])</span>
 <span class="lineno">  141 </span><span class="spaces"></span><span class="istickedoff">setupProfiling sym profSource (Just dir) =</span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">do tbl &lt;- newProfilingTable</span>
 <span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff"></span>

@@ -494,7 +494,7 @@ span.spaces    { background: white }
 <span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
 <span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
 <span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ unlines $ prettyTCError err</span></span>
-<span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return ()</span></span>
+<span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  479 </span>
 <span class="lineno">  480 </span>
 <span class="lineno">  481 </span>--

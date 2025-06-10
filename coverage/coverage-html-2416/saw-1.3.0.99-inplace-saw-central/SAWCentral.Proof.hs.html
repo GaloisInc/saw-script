@@ -939,10 +939,10 @@ span.spaces    { background: white }
 <span class="lineno">  920 </span>  }
 <span class="lineno">  921 </span>
 <span class="lineno">  922 </span>emptyTheoremDB :: TheoremDB
-<span class="lineno">  923 </span><span class="decl"><span class="istickedoff">emptyTheoremDB = TheoremDB <span class="nottickedoff">mempty</span></span></span>
+<span class="lineno">  923 </span><span class="decl"><span class="nottickedoff">emptyTheoremDB = TheoremDB mempty</span></span>
 <span class="lineno">  924 </span>
 <span class="lineno">  925 </span>recordTheorem :: TheoremDB -&gt; Theorem -&gt; TheoremDB
-<span class="lineno">  926 </span><span class="decl"><span class="istickedoff">recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB <span class="nottickedoff">(Map.insert n thm (theoremMap db))</span></span></span>
+<span class="lineno">  926 </span><span class="decl"><span class="nottickedoff">recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))</span></span>
 <span class="lineno">  927 </span>
 <span class="lineno">  928 </span>-- | Given a set of root values, find all the theorems in this database
 <span class="lineno">  929 </span>--   that are transitively used in the proofs of those theorems.
@@ -1293,8 +1293,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1274 </span><span class="spaces">          </span><span class="istickedoff">, _thmElapsedTime = <span class="nottickedoff">0</span></span>
 <span class="lineno"> 1275 </span><span class="spaces">          </span><span class="istickedoff">, _thmSummary     = <span class="nottickedoff">AdmittedTheorem msg</span></span>
 <span class="lineno"> 1276 </span><span class="spaces">          </span><span class="istickedoff">}</span>
-<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="istickedoff">let db' = recordTheorem <span class="nottickedoff">db</span> thm</span>
-<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="istickedoff">pure (thm, db')</span></span>
+<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">db' = recordTheorem db thm</span></span>
+<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="istickedoff">pure (thm, <span class="nottickedoff">db'</span>)</span></span>
 <span class="lineno"> 1279 </span>
 <span class="lineno"> 1280 </span>-- | Construct a theorem that an external solver has proved.
 <span class="lineno"> 1281 </span>solverTheorem ::
@@ -1872,10 +1872,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1853 </span><span class="spaces">                   </span><span class="istickedoff">, _thmElapsedTime = <span class="nottickedoff">diffUTCTime end start</span></span>
 <span class="lineno"> 1854 </span><span class="spaces">                   </span><span class="istickedoff">, _thmSummary = <span class="nottickedoff">sy</span></span>
 <span class="lineno"> 1855 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 1856 </span><span class="spaces">         </span><span class="istickedoff">let db' = if recordThm then recordTheorem <span class="nottickedoff">db</span> theorem else db</span>
-<span class="lineno"> 1857 </span><span class="spaces">         </span><span class="istickedoff">pure (ValidProof <span class="nottickedoff">stats</span> theorem, db')</span>
+<span class="lineno"> 1856 </span><span class="spaces">         </span><span class="istickedoff">let <span class="nottickedoff">db' = if recordThm then recordTheorem db theorem else db</span></span>
+<span class="lineno"> 1857 </span><span class="spaces">         </span><span class="istickedoff">pure (ValidProof <span class="nottickedoff">stats</span> theorem, <span class="nottickedoff">db'</span>)</span>
 <span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff">_ : _ -&gt;</span>
-<span class="lineno"> 1859 </span><span class="spaces">         </span><span class="istickedoff">pure (UnfinishedProof ps, db)</span></span>
+<span class="lineno"> 1859 </span><span class="spaces">         </span><span class="istickedoff">pure (UnfinishedProof ps, <span class="nottickedoff">db</span>)</span></span>
 <span class="lineno"> 1860 </span>
 <span class="lineno"> 1861 </span>-- | A type describing counterexamples.
 <span class="lineno"> 1862 </span>type CEX = [(ExtCns Term, FirstOrderValue)]

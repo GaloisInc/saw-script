@@ -684,7 +684,7 @@ span.spaces    { background: white }
 <span class="lineno">  665 </span><span class="spaces">      </span><span class="istickedoff">end &lt;- io getCurrentTime</span>
 <span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff">let <span class="nottickedoff">diff = diffUTCTime end start</span></span>
 <span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecProved</span> methodSpec <span class="nottickedoff">stats</span> <span class="nottickedoff">vcstats</span> <span class="nottickedoff">mempty</span> <span class="nottickedoff">diff</span>)</span>
-<span class="lineno">  668 </span><span class="spaces">      </span><span class="istickedoff">returnProof $ SomeLLVM ps</span>
+<span class="lineno">  668 </span><span class="spaces">      </span><span class="istickedoff">returnLLVMProof $ SomeLLVM ps</span>
 <span class="lineno">  669 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  670 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">fail &quot;LLVM module must be 64-bit&quot;</span></span></span>
 <span class="lineno">  671 </span>
@@ -1620,11 +1620,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- runProofScript tactic g proofgoal <span class="nottickedoff">(Just ploc)</span></span>
 <span class="lineno"> 1602 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(Text.unwords</span></span>
 <span class="lineno"> 1603 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;X86 verification condition&quot;, Text.pack (show n), Text.pack msg])</span></span>
-<span class="lineno"> 1604 </span><span class="spaces">             </span><span class="istickedoff">False -- do not record this theorem in the database</span>
+<span class="lineno"> 1604 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">False</span> -- do not record this theorem in the database</span>
 <span class="lineno"> 1605 </span><span class="spaces">             </span><span class="istickedoff">False -- TODO! useSequentGoals</span>
 <span class="lineno"> 1606 </span><span class="spaces">    </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1607 </span><span class="spaces">      </span><span class="istickedoff">ValidProof stats thm -&gt;</span>
-<span class="lineno"> 1608 </span><span class="spaces">        </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, <span class="nottickedoff">MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm)</span>)</span>
+<span class="lineno"> 1608 </span><span class="spaces">        </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
 <span class="lineno"> 1609 </span><span class="spaces">      </span><span class="istickedoff">UnfinishedProof pst -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1610 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span></span>
 <span class="lineno"> 1611 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info (show (psStats pst))</span></span>

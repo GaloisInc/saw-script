@@ -120,12 +120,12 @@ span.spaces    { background: white }
 <span class="lineno">  101 </span>import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 <span class="lineno">  102 </span>import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 <span class="lineno">  103 </span>import SAWCentral.Value
-<span class="lineno">  104 </span>  ( AIGProxy(..), mergeLocalEnv, IsValue, Value
-<span class="lineno">  105 </span>  , ProofScript(..), showsProofResult, toValue
+<span class="lineno">  104 </span>  ( AIGProxy(..), mergeLocalEnv, Value
+<span class="lineno">  105 </span>  , ProofScript(..), showsProofResult,
 <span class="lineno">  106 </span>  )
 <span class="lineno">  107 </span>
 <span class="lineno">  108 </span>import SAWScript.Interpreter (buildTopLevelEnv)
-<span class="lineno">  109 </span>import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
+<span class="lineno">  109 </span>import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint, IsValue, toValue)
 <span class="lineno">  110 </span>
 <span class="lineno">  111 </span>
 <span class="lineno">  112 </span>deriving instance Typeable AIG.Proxy
@@ -335,201 +335,202 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span><span class="spaces">      </span><span class="istickedoff">do io (putStrLn &quot;&quot; &gt;&gt; putStrLn s)</span>
 <span class="lineno">  317 </span><span class="spaces">         </span><span class="istickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span></span>
 <span class="lineno">  318 </span>
-<span class="lineno">  319 </span>liftTopLevel :: IsValue a =&gt; TopLevel a -&gt; REPL Value
-<span class="lineno">  320 </span><span class="decl"><span class="istickedoff">liftTopLevel m =</span>
-<span class="lineno">  321 </span><span class="spaces">  </span><span class="istickedoff">do ro  &lt;- getTopLevelRO</span>
-<span class="lineno">  322 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- getEnvironmentRef</span>
-<span class="lineno">  323 </span><span class="spaces">     </span><span class="istickedoff">io $ do rw &lt;- readIORef ref</span>
-<span class="lineno">  324 </span><span class="spaces">             </span><span class="istickedoff">(v,rw') &lt;- runTopLevel m ro rw</span>
-<span class="lineno">  325 </span><span class="spaces">             </span><span class="istickedoff">writeIORef ref rw'</span>
-<span class="lineno">  326 </span><span class="spaces">             </span><span class="istickedoff">return <span class="nottickedoff">v</span></span></span>
-<span class="lineno">  327 </span>
-<span class="lineno">  328 </span>liftProofScript :: IsValue a =&gt; ProofScript a -&gt; IORef ProofState -&gt; REPL Value
-<span class="lineno">  329 </span><span class="decl"><span class="nottickedoff">liftProofScript m ref =</span>
-<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">liftTopLevel $</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">do st &lt;- liftIO $ readIORef ref</span>
-<span class="lineno">  332 </span><span class="spaces">     </span><span class="nottickedoff">(res, st') &lt;- runStateT (runExceptT (unProofScript m)) st</span>
-<span class="lineno">  333 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ writeIORef ref st'</span>
-<span class="lineno">  334 </span><span class="spaces">     </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  335 </span><span class="spaces">       </span><span class="nottickedoff">Left (stats, cex) -&gt;</span>
-<span class="lineno">  336 </span><span class="spaces">         </span><span class="nottickedoff">do ppOpts &lt;- rwPPOpts &lt;$&gt; get</span>
-<span class="lineno">  337 </span><span class="spaces">            </span><span class="nottickedoff">fail (showsProofResult ppOpts (InvalidProof stats cex st') &quot;&quot;)</span>
-<span class="lineno">  338 </span><span class="spaces">       </span><span class="nottickedoff">Right x -&gt; return (toValue x)</span></span>
-<span class="lineno">  339 </span>
-<span class="lineno">  340 </span>-- Primitives ------------------------------------------------------------------
-<span class="lineno">  341 </span>
-<span class="lineno">  342 </span>io :: IO a -&gt; REPL a
-<span class="lineno">  343 </span><span class="decl"><span class="istickedoff">io m = REPL (\ _ -&gt; m)</span></span>
-<span class="lineno">  344 </span>
-<span class="lineno">  345 </span>getRefs :: REPL Refs
-<span class="lineno">  346 </span><span class="decl"><span class="istickedoff">getRefs = REPL pure</span></span>
-<span class="lineno">  347 </span>
-<span class="lineno">  348 </span>readRef :: (Refs -&gt; IORef a) -&gt; REPL a
-<span class="lineno">  349 </span><span class="decl"><span class="istickedoff">readRef r = REPL (\refs -&gt; readIORef (r refs))</span></span>
-<span class="lineno">  350 </span>
-<span class="lineno">  351 </span>modifyRef :: (Refs -&gt; IORef a) -&gt; (a -&gt; a) -&gt; REPL ()
-<span class="lineno">  352 </span><span class="decl"><span class="nottickedoff">modifyRef r f = REPL (\refs -&gt; modifyIORef (r refs) f)</span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>-- | Construct the prompt for the current environment.
-<span class="lineno">  355 </span>getPrompt :: REPL String
-<span class="lineno">  356 </span><span class="decl"><span class="istickedoff">getPrompt =</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">do batch &lt;- REPL (return . eIsBatch)</span>
-<span class="lineno">  358 </span><span class="spaces">     </span><span class="istickedoff">if batch then return &quot;&quot;</span>
-<span class="lineno">  359 </span><span class="spaces">     </span><span class="istickedoff">else</span>
-<span class="lineno">  360 </span><span class="spaces">       </span><span class="istickedoff">getProofStateRef &gt;&gt;= \case</span>
-<span class="lineno">  361 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; return &quot;sawscript&gt; &quot;</span>
-<span class="lineno">  362 </span><span class="spaces">         </span><span class="istickedoff">Just psr -&gt;</span>
-<span class="lineno">  363 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do ps &lt;- io (readIORef psr)</span></span>
-<span class="lineno">  364 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">return (&quot;proof (&quot;++show (length (psGoals ps))++&quot;)&gt; &quot;)</span></span></span>
-<span class="lineno">  365 </span>
-<span class="lineno">  366 </span>shouldContinue :: REPL Bool
-<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">shouldContinue = readRef eContinue</span></span>
-<span class="lineno">  368 </span>
-<span class="lineno">  369 </span>stop :: REPL ()
-<span class="lineno">  370 </span><span class="decl"><span class="nottickedoff">stop = modifyRef eContinue (const False)</span></span>
-<span class="lineno">  371 </span>
-<span class="lineno">  372 </span>unlessBatch :: REPL () -&gt; REPL ()
-<span class="lineno">  373 </span><span class="decl"><span class="nottickedoff">unlessBatch body =</span>
-<span class="lineno">  374 </span><span class="spaces">  </span><span class="nottickedoff">do batch &lt;- REPL (return . eIsBatch)</span>
-<span class="lineno">  375 </span><span class="spaces">     </span><span class="nottickedoff">unless batch body</span></span>
-<span class="lineno">  376 </span>
-<span class="lineno">  377 </span>setREPLTitle :: REPL ()
-<span class="lineno">  378 </span><span class="decl"><span class="nottickedoff">setREPLTitle =</span>
-<span class="lineno">  379 </span><span class="spaces">  </span><span class="nottickedoff">unlessBatch $</span>
-<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">do refs &lt;- getRefs</span>
-<span class="lineno">  381 </span><span class="spaces">     </span><span class="nottickedoff">io (setTitle (mkTitle refs))</span></span>
-<span class="lineno">  382 </span>
-<span class="lineno">  383 </span>getVars :: REPL (Map.Map T.Name M.IfaceDecl)
-<span class="lineno">  384 </span><span class="decl"><span class="nottickedoff">getVars  = do</span>
-<span class="lineno">  385 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
-<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">let vars1 = M.ifDecls decls</span>
-<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">extras &lt;- getExtraTypes</span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="nottickedoff">let vars2 = Map.mapWithKey (\q s -&gt; M.IfaceDecl { M.ifDeclName = q</span>
-<span class="lineno">  390 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclSig = s</span>
-<span class="lineno">  391 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclIsPrim = False</span>
-<span class="lineno">  392 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclPragmas = []</span>
-<span class="lineno">  393 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclInfix = False</span>
-<span class="lineno">  394 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclFixity = Nothing</span>
-<span class="lineno">  395 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclDoc = Nothing</span>
-<span class="lineno">  396 </span><span class="spaces">                                                  </span><span class="nottickedoff">}) extras</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">return (Map.union vars1 vars2)</span></span>
-<span class="lineno">  398 </span>
-<span class="lineno">  399 </span>getTSyns :: REPL (Map.Map T.Name T.TySyn)
-<span class="lineno">  400 </span><span class="decl"><span class="nottickedoff">getTSyns  = do</span>
-<span class="lineno">  401 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
-<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
-<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">return (M.ifTySyns decls)</span></span>
-<span class="lineno">  404 </span>
-<span class="lineno">  405 </span>getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
-<span class="lineno">  406 </span><span class="decl"><span class="nottickedoff">getNominalTypes = do</span>
-<span class="lineno">  407 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
-<span class="lineno">  408 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
-<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">return (M.ifNominalTypes decls)</span></span>
-<span class="lineno">  410 </span>
-<span class="lineno">  411 </span>-- | Get visible variable names.
-<span class="lineno">  412 </span>getExprNames :: REPL [String]
-<span class="lineno">  413 </span><span class="decl"><span class="nottickedoff">getExprNames =</span>
-<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
-<span class="lineno">  415 </span><span class="spaces">     </span><span class="nottickedoff">return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))</span></span>
-<span class="lineno">  416 </span>
-<span class="lineno">  417 </span>-- | Get visible type signature names.
-<span class="lineno">  418 </span>getTypeNames :: REPL [String]
-<span class="lineno">  419 </span><span class="decl"><span class="nottickedoff">getTypeNames  =</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
-<span class="lineno">  421 </span><span class="spaces">     </span><span class="nottickedoff">return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))</span></span>
-<span class="lineno">  422 </span>
-<span class="lineno">  423 </span>getPropertyNames :: REPL [String]
-<span class="lineno">  424 </span><span class="decl"><span class="nottickedoff">getPropertyNames =</span>
-<span class="lineno">  425 </span><span class="spaces">  </span><span class="nottickedoff">do xs &lt;- getVars</span>
-<span class="lineno">  426 </span><span class="spaces">     </span><span class="nottickedoff">return [ getName x | (x,d) &lt;- Map.toList xs,</span>
-<span class="lineno">  427 </span><span class="spaces">                </span><span class="nottickedoff">T.PragmaProperty `elem` M.ifDeclPragmas d ]</span></span>
-<span class="lineno">  428 </span>
-<span class="lineno">  429 </span>getName :: T.Name -&gt; String
-<span class="lineno">  430 </span><span class="decl"><span class="nottickedoff">getName  = show . pp</span></span>
-<span class="lineno">  431 </span>
-<span class="lineno">  432 </span>getTermEnv :: REPL (Map T.Name Term)
-<span class="lineno">  433 </span><span class="decl"><span class="nottickedoff">getTermEnv = fmap eTermEnv getCryptolEnv</span></span>
-<span class="lineno">  434 </span>
-<span class="lineno">  435 </span>modifyTermEnv :: (Map T.Name Term -&gt; Map T.Name Term) -&gt; REPL ()
-<span class="lineno">  436 </span><span class="decl"><span class="nottickedoff">modifyTermEnv f = modifyCryptolEnv $ \ce -&gt; ce { eTermEnv = f (eTermEnv ce) }</span></span>
-<span class="lineno">  437 </span>
-<span class="lineno">  438 </span>setTermEnv :: Map T.Name Term -&gt; REPL ()
-<span class="lineno">  439 </span><span class="decl"><span class="nottickedoff">setTermEnv x = modifyTermEnv (const x)</span></span>
-<span class="lineno">  440 </span>
-<span class="lineno">  441 </span>getExtraTypes :: REPL (Map T.Name T.Schema)
-<span class="lineno">  442 </span><span class="decl"><span class="nottickedoff">getExtraTypes = fmap eExtraTypes getCryptolEnv</span></span>
-<span class="lineno">  443 </span>
-<span class="lineno">  444 </span>modifyExtraTypes :: (Map T.Name T.Schema -&gt; Map T.Name T.Schema) -&gt; REPL ()
-<span class="lineno">  445 </span><span class="decl"><span class="nottickedoff">modifyExtraTypes f = modifyCryptolEnv $ \ce -&gt; ce { eExtraTypes = f (eExtraTypes ce) }</span></span>
-<span class="lineno">  446 </span>
-<span class="lineno">  447 </span>setExtraTypes :: Map T.Name T.Schema -&gt; REPL ()
-<span class="lineno">  448 </span><span class="decl"><span class="nottickedoff">setExtraTypes x = modifyExtraTypes (const x)</span></span>
-<span class="lineno">  449 </span>
-<span class="lineno">  450 </span>getExtraNames :: REPL NamingEnv
-<span class="lineno">  451 </span><span class="decl"><span class="nottickedoff">getExtraNames = fmap eExtraNames getCryptolEnv</span></span>
-<span class="lineno">  452 </span>
-<span class="lineno">  453 </span>modifyExtraNames :: (NamingEnv -&gt; NamingEnv) -&gt; REPL ()
-<span class="lineno">  454 </span><span class="decl"><span class="nottickedoff">modifyExtraNames f = modifyCryptolEnv $ \ce -&gt; ce { eExtraNames = f (eExtraNames ce) }</span></span>
-<span class="lineno">  455 </span>
-<span class="lineno">  456 </span>setExtraNames :: NamingEnv -&gt; REPL ()
-<span class="lineno">  457 </span><span class="decl"><span class="nottickedoff">setExtraNames x = modifyExtraNames (const x)</span></span>
-<span class="lineno">  458 </span>
-<span class="lineno">  459 </span>getModuleEnv :: REPL M.ModuleEnv
-<span class="lineno">  460 </span><span class="decl"><span class="nottickedoff">getModuleEnv  = eModuleEnv `fmap` getCryptolEnv</span></span>
-<span class="lineno">  461 </span>
-<span class="lineno">  462 </span>setModuleEnv :: M.ModuleEnv -&gt; REPL ()
-<span class="lineno">  463 </span><span class="decl"><span class="nottickedoff">setModuleEnv me = modifyCryptolEnv (\ce -&gt; ce { eModuleEnv = me })</span></span>
-<span class="lineno">  464 </span>
-<span class="lineno">  465 </span>getCryptolEnv :: REPL CryptolEnv
-<span class="lineno">  466 </span><span class="decl"><span class="nottickedoff">getCryptolEnv = rwCryptol `fmap` getEnvironment</span></span>
-<span class="lineno">  467 </span>
-<span class="lineno">  468 </span>modifyCryptolEnv :: (CryptolEnv -&gt; CryptolEnv) -&gt; REPL ()
-<span class="lineno">  469 </span><span class="decl"><span class="nottickedoff">modifyCryptolEnv f = modifyEnvironment (\rw -&gt; rw { rwCryptol = f (rwCryptol rw) })</span></span>
-<span class="lineno">  470 </span>
-<span class="lineno">  471 </span>setCryptolEnv :: CryptolEnv -&gt; REPL ()
-<span class="lineno">  472 </span><span class="decl"><span class="nottickedoff">setCryptolEnv x = modifyCryptolEnv (const x)</span></span>
-<span class="lineno">  473 </span>
-<span class="lineno">  474 </span>getSharedContext :: REPL SharedContext
-<span class="lineno">  475 </span><span class="decl"><span class="nottickedoff">getSharedContext = rwSharedContext &lt;$&gt; getEnvironment</span></span>
-<span class="lineno">  476 </span>
-<span class="lineno">  477 </span>getTopLevelRO :: REPL TopLevelRO
-<span class="lineno">  478 </span><span class="decl"><span class="istickedoff">getTopLevelRO = REPL (return . eTopLevelRO)</span></span>
-<span class="lineno">  479 </span>
-<span class="lineno">  480 </span>getEnvironmentRef :: REPL (IORef TopLevelRW)
-<span class="lineno">  481 </span><span class="decl"><span class="istickedoff">getEnvironmentRef = environment &lt;$&gt; getRefs</span></span>
-<span class="lineno">  482 </span>
-<span class="lineno">  483 </span>getProofStateRef :: REPL (Maybe (IORef ProofState))
-<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">getProofStateRef = proofState &lt;$&gt; getRefs</span></span>
-<span class="lineno">  485 </span>
-<span class="lineno">  486 </span>getEnvironment :: REPL TopLevelRW
-<span class="lineno">  487 </span><span class="decl"><span class="istickedoff">getEnvironment = readRef environment</span></span>
-<span class="lineno">  488 </span>
-<span class="lineno">  489 </span>getValueEnvironment :: REPL TopLevelRW
-<span class="lineno">  490 </span><span class="decl"><span class="istickedoff">getValueEnvironment =</span>
-<span class="lineno">  491 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getEnvironment</span>
-<span class="lineno">  492 </span><span class="spaces">     </span><span class="istickedoff">io (mergeLocalEnv <span class="nottickedoff">(rwSharedContext rw)</span> (rwLocalEnv rw) rw)</span></span>
-<span class="lineno">  493 </span>
-<span class="lineno">  494 </span>putEnvironment :: TopLevelRW -&gt; REPL ()
-<span class="lineno">  495 </span><span class="decl"><span class="nottickedoff">putEnvironment = modifyEnvironment . const</span></span>
-<span class="lineno">  496 </span>
-<span class="lineno">  497 </span>modifyEnvironment :: (TopLevelRW -&gt; TopLevelRW) -&gt; REPL ()
-<span class="lineno">  498 </span><span class="decl"><span class="nottickedoff">modifyEnvironment = modifyRef environment</span></span>
-<span class="lineno">  499 </span>
-<span class="lineno">  500 </span>-- | Get visible variable names for Haskeline completion.
-<span class="lineno">  501 </span>getSAWScriptNames :: REPL [String]
-<span class="lineno">  502 </span><span class="decl"><span class="nottickedoff">getSAWScriptNames = do</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- getEnvironment</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys (rwValueInfo env)</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">return (map (Text.unpack . getVal) rnames)</span></span>
-<span class="lineno">  506 </span>
-<span class="lineno">  507 </span>-- User Environment Interaction ------------------------------------------------
-<span class="lineno">  508 </span>
-<span class="lineno">  509 </span>data EnvVal
-<span class="lineno">  510 </span>  = EnvString String
-<span class="lineno">  511 </span>  | EnvNum    !Int
-<span class="lineno">  512 </span>  | EnvBool   Bool
-<span class="lineno">  513 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  319 </span>-- XXX: there's no longer any reason to bake Value into this
+<span class="lineno">  320 </span>liftTopLevel :: IsValue a =&gt; TopLevel a -&gt; REPL Value
+<span class="lineno">  321 </span><span class="decl"><span class="istickedoff">liftTopLevel m =</span>
+<span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">do ro  &lt;- getTopLevelRO</span>
+<span class="lineno">  323 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- getEnvironmentRef</span>
+<span class="lineno">  324 </span><span class="spaces">     </span><span class="istickedoff">io $ do rw &lt;- readIORef ref</span>
+<span class="lineno">  325 </span><span class="spaces">             </span><span class="istickedoff">(a, rw') &lt;- runTopLevel m ro rw</span>
+<span class="lineno">  326 </span><span class="spaces">             </span><span class="istickedoff">writeIORef ref rw'</span>
+<span class="lineno">  327 </span><span class="spaces">             </span><span class="istickedoff">return $ <span class="nottickedoff">toValue a</span></span></span>
+<span class="lineno">  328 </span>
+<span class="lineno">  329 </span>liftProofScript :: IsValue a =&gt; ProofScript a -&gt; IORef ProofState -&gt; REPL Value
+<span class="lineno">  330 </span><span class="decl"><span class="nottickedoff">liftProofScript m ref =</span>
+<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">liftTopLevel $</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">do st &lt;- liftIO $ readIORef ref</span>
+<span class="lineno">  333 </span><span class="spaces">     </span><span class="nottickedoff">(res, st') &lt;- runStateT (runExceptT (unProofScript m)) st</span>
+<span class="lineno">  334 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ writeIORef ref st'</span>
+<span class="lineno">  335 </span><span class="spaces">     </span><span class="nottickedoff">case res of</span>
+<span class="lineno">  336 </span><span class="spaces">       </span><span class="nottickedoff">Left (stats, cex) -&gt;</span>
+<span class="lineno">  337 </span><span class="spaces">         </span><span class="nottickedoff">do ppOpts &lt;- rwPPOpts &lt;$&gt; get</span>
+<span class="lineno">  338 </span><span class="spaces">            </span><span class="nottickedoff">fail (showsProofResult ppOpts (InvalidProof stats cex st') &quot;&quot;)</span>
+<span class="lineno">  339 </span><span class="spaces">       </span><span class="nottickedoff">Right x -&gt; return (toValue x)</span></span>
+<span class="lineno">  340 </span>
+<span class="lineno">  341 </span>-- Primitives ------------------------------------------------------------------
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span>io :: IO a -&gt; REPL a
+<span class="lineno">  344 </span><span class="decl"><span class="istickedoff">io m = REPL (\ _ -&gt; m)</span></span>
+<span class="lineno">  345 </span>
+<span class="lineno">  346 </span>getRefs :: REPL Refs
+<span class="lineno">  347 </span><span class="decl"><span class="istickedoff">getRefs = REPL pure</span></span>
+<span class="lineno">  348 </span>
+<span class="lineno">  349 </span>readRef :: (Refs -&gt; IORef a) -&gt; REPL a
+<span class="lineno">  350 </span><span class="decl"><span class="istickedoff">readRef r = REPL (\refs -&gt; readIORef (r refs))</span></span>
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>modifyRef :: (Refs -&gt; IORef a) -&gt; (a -&gt; a) -&gt; REPL ()
+<span class="lineno">  353 </span><span class="decl"><span class="nottickedoff">modifyRef r f = REPL (\refs -&gt; modifyIORef (r refs) f)</span></span>
+<span class="lineno">  354 </span>
+<span class="lineno">  355 </span>-- | Construct the prompt for the current environment.
+<span class="lineno">  356 </span>getPrompt :: REPL String
+<span class="lineno">  357 </span><span class="decl"><span class="istickedoff">getPrompt =</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">do batch &lt;- REPL (return . eIsBatch)</span>
+<span class="lineno">  359 </span><span class="spaces">     </span><span class="istickedoff">if batch then return &quot;&quot;</span>
+<span class="lineno">  360 </span><span class="spaces">     </span><span class="istickedoff">else</span>
+<span class="lineno">  361 </span><span class="spaces">       </span><span class="istickedoff">getProofStateRef &gt;&gt;= \case</span>
+<span class="lineno">  362 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; return &quot;sawscript&gt; &quot;</span>
+<span class="lineno">  363 </span><span class="spaces">         </span><span class="istickedoff">Just psr -&gt;</span>
+<span class="lineno">  364 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do ps &lt;- io (readIORef psr)</span></span>
+<span class="lineno">  365 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">return (&quot;proof (&quot;++show (length (psGoals ps))++&quot;)&gt; &quot;)</span></span></span>
+<span class="lineno">  366 </span>
+<span class="lineno">  367 </span>shouldContinue :: REPL Bool
+<span class="lineno">  368 </span><span class="decl"><span class="istickedoff">shouldContinue = readRef eContinue</span></span>
+<span class="lineno">  369 </span>
+<span class="lineno">  370 </span>stop :: REPL ()
+<span class="lineno">  371 </span><span class="decl"><span class="nottickedoff">stop = modifyRef eContinue (const False)</span></span>
+<span class="lineno">  372 </span>
+<span class="lineno">  373 </span>unlessBatch :: REPL () -&gt; REPL ()
+<span class="lineno">  374 </span><span class="decl"><span class="nottickedoff">unlessBatch body =</span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="nottickedoff">do batch &lt;- REPL (return . eIsBatch)</span>
+<span class="lineno">  376 </span><span class="spaces">     </span><span class="nottickedoff">unless batch body</span></span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>setREPLTitle :: REPL ()
+<span class="lineno">  379 </span><span class="decl"><span class="nottickedoff">setREPLTitle =</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">unlessBatch $</span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="nottickedoff">do refs &lt;- getRefs</span>
+<span class="lineno">  382 </span><span class="spaces">     </span><span class="nottickedoff">io (setTitle (mkTitle refs))</span></span>
+<span class="lineno">  383 </span>
+<span class="lineno">  384 </span>getVars :: REPL (Map.Map T.Name M.IfaceDecl)
+<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">getVars  = do</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">let vars1 = M.ifDecls decls</span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="nottickedoff">extras &lt;- getExtraTypes</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="nottickedoff">let vars2 = Map.mapWithKey (\q s -&gt; M.IfaceDecl { M.ifDeclName = q</span>
+<span class="lineno">  391 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclSig = s</span>
+<span class="lineno">  392 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclIsPrim = False</span>
+<span class="lineno">  393 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclPragmas = []</span>
+<span class="lineno">  394 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclInfix = False</span>
+<span class="lineno">  395 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclFixity = Nothing</span>
+<span class="lineno">  396 </span><span class="spaces">                                                  </span><span class="nottickedoff">, M.ifDeclDoc = Nothing</span>
+<span class="lineno">  397 </span><span class="spaces">                                                  </span><span class="nottickedoff">}) extras</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">return (Map.union vars1 vars2)</span></span>
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>getTSyns :: REPL (Map.Map T.Name T.TySyn)
+<span class="lineno">  401 </span><span class="decl"><span class="nottickedoff">getTSyns  = do</span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">return (M.ifTySyns decls)</span></span>
+<span class="lineno">  405 </span>
+<span class="lineno">  406 </span>getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+<span class="lineno">  407 </span><span class="decl"><span class="nottickedoff">getNominalTypes = do</span>
+<span class="lineno">  408 </span><span class="spaces">  </span><span class="nottickedoff">me &lt;- getModuleEnv</span>
+<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">let decls = getAllIfaceDecls me</span>
+<span class="lineno">  410 </span><span class="spaces">  </span><span class="nottickedoff">return (M.ifNominalTypes decls)</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>-- | Get visible variable names.
+<span class="lineno">  413 </span>getExprNames :: REPL [String]
+<span class="lineno">  414 </span><span class="decl"><span class="nottickedoff">getExprNames =</span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
+<span class="lineno">  416 </span><span class="spaces">     </span><span class="nottickedoff">return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))</span></span>
+<span class="lineno">  417 </span>
+<span class="lineno">  418 </span>-- | Get visible type signature names.
+<span class="lineno">  419 </span>getTypeNames :: REPL [String]
+<span class="lineno">  420 </span><span class="decl"><span class="nottickedoff">getTypeNames  =</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="nottickedoff">do fNames &lt;- fmap getNamingEnv getCryptolEnv</span>
+<span class="lineno">  422 </span><span class="spaces">     </span><span class="nottickedoff">return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))</span></span>
+<span class="lineno">  423 </span>
+<span class="lineno">  424 </span>getPropertyNames :: REPL [String]
+<span class="lineno">  425 </span><span class="decl"><span class="nottickedoff">getPropertyNames =</span>
+<span class="lineno">  426 </span><span class="spaces">  </span><span class="nottickedoff">do xs &lt;- getVars</span>
+<span class="lineno">  427 </span><span class="spaces">     </span><span class="nottickedoff">return [ getName x | (x,d) &lt;- Map.toList xs,</span>
+<span class="lineno">  428 </span><span class="spaces">                </span><span class="nottickedoff">T.PragmaProperty `elem` M.ifDeclPragmas d ]</span></span>
+<span class="lineno">  429 </span>
+<span class="lineno">  430 </span>getName :: T.Name -&gt; String
+<span class="lineno">  431 </span><span class="decl"><span class="nottickedoff">getName  = show . pp</span></span>
+<span class="lineno">  432 </span>
+<span class="lineno">  433 </span>getTermEnv :: REPL (Map T.Name Term)
+<span class="lineno">  434 </span><span class="decl"><span class="nottickedoff">getTermEnv = fmap eTermEnv getCryptolEnv</span></span>
+<span class="lineno">  435 </span>
+<span class="lineno">  436 </span>modifyTermEnv :: (Map T.Name Term -&gt; Map T.Name Term) -&gt; REPL ()
+<span class="lineno">  437 </span><span class="decl"><span class="nottickedoff">modifyTermEnv f = modifyCryptolEnv $ \ce -&gt; ce { eTermEnv = f (eTermEnv ce) }</span></span>
+<span class="lineno">  438 </span>
+<span class="lineno">  439 </span>setTermEnv :: Map T.Name Term -&gt; REPL ()
+<span class="lineno">  440 </span><span class="decl"><span class="nottickedoff">setTermEnv x = modifyTermEnv (const x)</span></span>
+<span class="lineno">  441 </span>
+<span class="lineno">  442 </span>getExtraTypes :: REPL (Map T.Name T.Schema)
+<span class="lineno">  443 </span><span class="decl"><span class="nottickedoff">getExtraTypes = fmap eExtraTypes getCryptolEnv</span></span>
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>modifyExtraTypes :: (Map T.Name T.Schema -&gt; Map T.Name T.Schema) -&gt; REPL ()
+<span class="lineno">  446 </span><span class="decl"><span class="nottickedoff">modifyExtraTypes f = modifyCryptolEnv $ \ce -&gt; ce { eExtraTypes = f (eExtraTypes ce) }</span></span>
+<span class="lineno">  447 </span>
+<span class="lineno">  448 </span>setExtraTypes :: Map T.Name T.Schema -&gt; REPL ()
+<span class="lineno">  449 </span><span class="decl"><span class="nottickedoff">setExtraTypes x = modifyExtraTypes (const x)</span></span>
+<span class="lineno">  450 </span>
+<span class="lineno">  451 </span>getExtraNames :: REPL NamingEnv
+<span class="lineno">  452 </span><span class="decl"><span class="nottickedoff">getExtraNames = fmap eExtraNames getCryptolEnv</span></span>
+<span class="lineno">  453 </span>
+<span class="lineno">  454 </span>modifyExtraNames :: (NamingEnv -&gt; NamingEnv) -&gt; REPL ()
+<span class="lineno">  455 </span><span class="decl"><span class="nottickedoff">modifyExtraNames f = modifyCryptolEnv $ \ce -&gt; ce { eExtraNames = f (eExtraNames ce) }</span></span>
+<span class="lineno">  456 </span>
+<span class="lineno">  457 </span>setExtraNames :: NamingEnv -&gt; REPL ()
+<span class="lineno">  458 </span><span class="decl"><span class="nottickedoff">setExtraNames x = modifyExtraNames (const x)</span></span>
+<span class="lineno">  459 </span>
+<span class="lineno">  460 </span>getModuleEnv :: REPL M.ModuleEnv
+<span class="lineno">  461 </span><span class="decl"><span class="nottickedoff">getModuleEnv  = eModuleEnv `fmap` getCryptolEnv</span></span>
+<span class="lineno">  462 </span>
+<span class="lineno">  463 </span>setModuleEnv :: M.ModuleEnv -&gt; REPL ()
+<span class="lineno">  464 </span><span class="decl"><span class="nottickedoff">setModuleEnv me = modifyCryptolEnv (\ce -&gt; ce { eModuleEnv = me })</span></span>
+<span class="lineno">  465 </span>
+<span class="lineno">  466 </span>getCryptolEnv :: REPL CryptolEnv
+<span class="lineno">  467 </span><span class="decl"><span class="nottickedoff">getCryptolEnv = rwCryptol `fmap` getEnvironment</span></span>
+<span class="lineno">  468 </span>
+<span class="lineno">  469 </span>modifyCryptolEnv :: (CryptolEnv -&gt; CryptolEnv) -&gt; REPL ()
+<span class="lineno">  470 </span><span class="decl"><span class="nottickedoff">modifyCryptolEnv f = modifyEnvironment (\rw -&gt; rw { rwCryptol = f (rwCryptol rw) })</span></span>
+<span class="lineno">  471 </span>
+<span class="lineno">  472 </span>setCryptolEnv :: CryptolEnv -&gt; REPL ()
+<span class="lineno">  473 </span><span class="decl"><span class="nottickedoff">setCryptolEnv x = modifyCryptolEnv (const x)</span></span>
+<span class="lineno">  474 </span>
+<span class="lineno">  475 </span>getSharedContext :: REPL SharedContext
+<span class="lineno">  476 </span><span class="decl"><span class="nottickedoff">getSharedContext = rwSharedContext &lt;$&gt; getEnvironment</span></span>
+<span class="lineno">  477 </span>
+<span class="lineno">  478 </span>getTopLevelRO :: REPL TopLevelRO
+<span class="lineno">  479 </span><span class="decl"><span class="istickedoff">getTopLevelRO = REPL (return . eTopLevelRO)</span></span>
+<span class="lineno">  480 </span>
+<span class="lineno">  481 </span>getEnvironmentRef :: REPL (IORef TopLevelRW)
+<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">getEnvironmentRef = environment &lt;$&gt; getRefs</span></span>
+<span class="lineno">  483 </span>
+<span class="lineno">  484 </span>getProofStateRef :: REPL (Maybe (IORef ProofState))
+<span class="lineno">  485 </span><span class="decl"><span class="istickedoff">getProofStateRef = proofState &lt;$&gt; getRefs</span></span>
+<span class="lineno">  486 </span>
+<span class="lineno">  487 </span>getEnvironment :: REPL TopLevelRW
+<span class="lineno">  488 </span><span class="decl"><span class="istickedoff">getEnvironment = readRef environment</span></span>
+<span class="lineno">  489 </span>
+<span class="lineno">  490 </span>getValueEnvironment :: REPL TopLevelRW
+<span class="lineno">  491 </span><span class="decl"><span class="istickedoff">getValueEnvironment =</span>
+<span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getEnvironment</span>
+<span class="lineno">  493 </span><span class="spaces">     </span><span class="istickedoff">io (mergeLocalEnv <span class="nottickedoff">(rwSharedContext rw)</span> (rwLocalEnv rw) rw)</span></span>
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>putEnvironment :: TopLevelRW -&gt; REPL ()
+<span class="lineno">  496 </span><span class="decl"><span class="nottickedoff">putEnvironment = modifyEnvironment . const</span></span>
+<span class="lineno">  497 </span>
+<span class="lineno">  498 </span>modifyEnvironment :: (TopLevelRW -&gt; TopLevelRW) -&gt; REPL ()
+<span class="lineno">  499 </span><span class="decl"><span class="nottickedoff">modifyEnvironment = modifyRef environment</span></span>
+<span class="lineno">  500 </span>
+<span class="lineno">  501 </span>-- | Get visible variable names for Haskeline completion.
+<span class="lineno">  502 </span>getSAWScriptNames :: REPL [String]
+<span class="lineno">  503 </span><span class="decl"><span class="nottickedoff">getSAWScriptNames = do</span>
+<span class="lineno">  504 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- getEnvironment</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="nottickedoff">let rnames = Map.keys (rwValueInfo env)</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">return (map (Text.unpack . getVal) rnames)</span></span>
+<span class="lineno">  507 </span>
+<span class="lineno">  508 </span>-- User Environment Interaction ------------------------------------------------
+<span class="lineno">  509 </span>
+<span class="lineno">  510 </span>data EnvVal
+<span class="lineno">  511 </span>  = EnvString String
+<span class="lineno">  512 </span>  | EnvNum    !Int
+<span class="lineno">  513 </span>  | EnvBool   Bool
+<span class="lineno">  514 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 
 </pre>
 </body>

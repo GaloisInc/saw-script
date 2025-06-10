@@ -280,7 +280,7 @@ span.spaces    { background: white }
 <span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
 <span class="lineno">  262 </span><span class="spaces">     </span><span class="istickedoff">AIGProxy proxy &lt;- getProxy</span>
 <span class="lineno">  263 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ \g l _vars -&gt; AIG.writeCNF g l f</span>
-<span class="lineno">  264 </span><span class="spaces">     </span><span class="istickedoff">return ()</span></span>
+<span class="lineno">  264 </span><span class="spaces">     </span><span class="istickedoff">return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  265 </span>
 <span class="lineno">  266 </span>write_cnf :: FilePath -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  267 </span><span class="decl"><span class="istickedoff">write_cnf f (TypedTerm schema t) = do</span>

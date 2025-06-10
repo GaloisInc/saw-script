@@ -2685,7 +2685,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2666 </span>buildFunction :: [Pattern] -&gt; Expr -&gt; Expr
 <span class="lineno"> 2667 </span><span class="decl"><span class="istickedoff">buildFunction args e =</span>
 <span class="lineno"> 2668 </span><span class="spaces">  </span><span class="istickedoff">let once :: Pattern -&gt; Expr -&gt; Expr</span>
-<span class="lineno"> 2669 </span><span class="spaces">      </span><span class="istickedoff">once pat e = Function (maxSpan' pat e) pat e</span>
+<span class="lineno"> 2669 </span><span class="spaces">      </span><span class="istickedoff">once pat e = Function <span class="nottickedoff">(maxSpan' pat e)</span> pat e</span>
 <span class="lineno"> 2670 </span><span class="spaces">  </span><span class="istickedoff">in</span>
 <span class="lineno"> 2671 </span><span class="spaces">  </span><span class="istickedoff">foldr once e args</span></span>
 <span class="lineno"> 2672 </span>

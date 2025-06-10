@@ -196,7 +196,7 @@ span.spaces    { background: white }
 <span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntSub = <span class="nottickedoff">pure2 svMinus</span></span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMul = <span class="nottickedoff">pure2 svTimes</span></span>
 <span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntDiv = pure2 svIntDiv</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = <span class="nottickedoff">pure2 svIntMod</span></span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = pure2 svIntMod</span>
 <span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = pure1 svUNeg</span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 svAbs</span></span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = pure2 svEqual</span>
@@ -316,7 +316,7 @@ span.spaces    { background: white }
 <span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">vBool l = VBool l</span></span>
 <span class="lineno">  298 </span>
 <span class="lineno">  299 </span>vInteger :: SInteger -&gt; SValue
-<span class="lineno">  300 </span><span class="decl"><span class="istickedoff">vInteger x = VInt x</span></span>
+<span class="lineno">  300 </span><span class="decl"><span class="nottickedoff">vInteger x = VInt x</span></span>
 <span class="lineno">  301 </span>
 <span class="lineno">  302 </span>------------------------------------------------------------
 <span class="lineno">  303 </span>-- Function constructors
@@ -611,7 +611,7 @@ span.spaces    { background: white }
 <span class="lineno">  592 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
 <span class="lineno">  593 </span>-- do some work to get the desired semantics.
 <span class="lineno">  594 </span>svIntDiv :: SVal -&gt; SVal -&gt; SVal
-<span class="lineno">  595 </span><span class="decl"><span class="istickedoff">svIntDiv a b = svSymbolicMerge KUnbounded True p (svQuot a b) (svQuot (svUNeg a) (svUNeg b))</span>
+<span class="lineno">  595 </span><span class="decl"><span class="istickedoff">svIntDiv a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svQuot a b) (svQuot (svUNeg a) (svUNeg b))</span>
 <span class="lineno">  596 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  597 </span><span class="spaces">    </span><span class="istickedoff">z = svInteger KUnbounded 0</span>
 <span class="lineno">  598 </span><span class="spaces">    </span><span class="istickedoff">p = svLessThan z b</span></span>
@@ -620,10 +620,10 @@ span.spaces    { background: white }
 <span class="lineno">  601 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
 <span class="lineno">  602 </span>-- do some work to get the desired semantics.
 <span class="lineno">  603 </span>svIntMod :: SVal -&gt; SVal -&gt; SVal
-<span class="lineno">  604 </span><span class="decl"><span class="nottickedoff">svIntMod a b = svSymbolicMerge KUnbounded True p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))</span>
-<span class="lineno">  605 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  606 </span><span class="spaces">    </span><span class="nottickedoff">z = svInteger KUnbounded 0</span>
-<span class="lineno">  607 </span><span class="spaces">    </span><span class="nottickedoff">p = svLessThan z b</span></span>
+<span class="lineno">  604 </span><span class="decl"><span class="istickedoff">svIntMod a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))</span>
+<span class="lineno">  605 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">z = svInteger KUnbounded 0</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">p = svLessThan z b</span></span>
 <span class="lineno">  608 </span>
 <span class="lineno">  609 </span>------------------------------------------------------------
 <span class="lineno">  610 </span>-- Ite ops
@@ -787,7 +787,7 @@ span.spaces    { background: white }
 <span class="lineno">  768 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt;</span>
 <span class="lineno">  769 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (BoolLabel s, vBool &lt;$&gt; existsSBool s)</span></span>
 <span class="lineno">  770 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt;</span>
-<span class="lineno">  771 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">IntegerLabel s</span>, vInteger &lt;$&gt; existsSInteger s)</span>
+<span class="lineno">  771 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, vInteger &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  772 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>
 <span class="lineno">  773 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, VIntMod n &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  774 </span><span class="spaces">    </span><span class="istickedoff">FOTVec 0 FOTBit -&gt;</span>

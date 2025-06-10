@@ -94,7 +94,7 @@ span.spaces    { background: white }
 <span class="lineno">   75 </span><span class="spaces">                  </span><span class="istickedoff">, goalTags = <span class="nottickedoff">mempty</span></span>
 <span class="lineno">   76 </span><span class="spaces">                  </span><span class="istickedoff">})</span>
 <span class="lineno">   77 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- runProofScript tactic goal' pgl <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">   78 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;vacuousness check&quot;</span> False False</span>
+<span class="lineno">   78 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;vacuousness check&quot;</span> <span class="nottickedoff">False</span> False</span>
 <span class="lineno">   79 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
 <span class="lineno">   80 </span><span class="spaces">       </span><span class="istickedoff">ValidProof _ _     -&gt; return True</span>
 <span class="lineno">   81 </span><span class="spaces">       </span><span class="istickedoff">InvalidProof _ _ _ -&gt; return False</span>

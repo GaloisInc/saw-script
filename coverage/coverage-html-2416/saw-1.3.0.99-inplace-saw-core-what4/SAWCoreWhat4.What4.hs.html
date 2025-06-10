@@ -349,7 +349,7 @@ span.spaces    { background: white }
 <span class="lineno">  330 </span>  Maybe (SValue sym)
 <span class="lineno">  331 </span><span class="decl"><span class="istickedoff">symExprToValue tp expr = case tp of</span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">BaseBoolRepr -&gt; <span class="nottickedoff">Just $ VBool expr</span></span>
-<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">BaseIntegerRepr -&gt; Just $ VInt expr</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">Just $ VInt expr</span></span>
 <span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">(BaseBVRepr w) -&gt; Just $ withKnownNat <span class="nottickedoff">w</span> $ VWord $ DBV expr</span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">(BaseArrayRepr (Ctx.Empty Ctx.:&gt; _) _) -&gt; <span class="nottickedoff">Just $ VArray $ SArray expr</span></span>
 <span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
@@ -508,17 +508,17 @@ span.spaces    { background: white }
 <span class="lineno">  489 </span><span class="decl"><span class="istickedoff">intDiv sym x y = do</span>
 <span class="lineno">  490 </span><span class="spaces">  </span><span class="istickedoff">neg &lt;- W.intLt sym y =&lt;&lt; W.intLit sym 0</span>
 <span class="lineno">  491 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
-<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; <span class="nottickedoff">W.intDiv sym x y</span></span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intDiv sym x y</span>
 <span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  494 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
-<span class="lineno">  495 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
-<span class="lineno">  496 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intDiv sym xneg yneg</span></span>
+<span class="lineno">  494 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
+<span class="lineno">  495 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
+<span class="lineno">  496 </span><span class="spaces">          </span><span class="istickedoff">W.intDiv sym xneg yneg</span>
 <span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  498 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
-<span class="lineno">  499 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
-<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff">zneg &lt;- W.intDiv sym xneg yneg</span>
-<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff">z    &lt;- W.intDiv sym x y</span>
-<span class="lineno">  502 </span><span class="spaces">          </span><span class="istickedoff">W.intIte sym neg zneg z</span></span>
+<span class="lineno">  498 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
+<span class="lineno">  499 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
+<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">zneg &lt;- W.intDiv sym xneg yneg</span></span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">z    &lt;- W.intDiv sym x y</span></span>
+<span class="lineno">  502 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intIte sym neg zneg z</span></span></span>
 <span class="lineno">  503 </span>
 <span class="lineno">  504 </span>-- NB: What4's division operation provides SMT-LIB's Euclidean division, which
 <span class="lineno">  505 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
@@ -534,9 +534,9 @@ span.spaces    { background: white }
 <span class="lineno">  515 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred neg of</span>
 <span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; W.intMod sym x y</span>
 <span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt;</span>
-<span class="lineno">  518 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
-<span class="lineno">  519 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>
-<span class="lineno">  520 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span></span>
+<span class="lineno">  518 </span><span class="spaces">       </span><span class="istickedoff">do xneg &lt;- W.intNeg sym x</span>
+<span class="lineno">  519 </span><span class="spaces">          </span><span class="istickedoff">yneg &lt;- W.intNeg sym y</span>
+<span class="lineno">  520 </span><span class="spaces">          </span><span class="istickedoff">W.intNeg sym =&lt;&lt; W.intMod sym xneg yneg</span>
 <span class="lineno">  521 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  522 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do xneg &lt;- W.intNeg sym x</span></span>
 <span class="lineno">  523 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">yneg &lt;- W.intNeg sym y</span></span>

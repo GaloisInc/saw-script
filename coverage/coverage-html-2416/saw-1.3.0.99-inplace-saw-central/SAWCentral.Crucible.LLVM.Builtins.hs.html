@@ -335,7 +335,7 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span><span class="spaces">          </span><span class="istickedoff">end &lt;- io getCurrentTime</span>
 <span class="lineno">  317 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">diff = diffUTCTime end start</span></span>
 <span class="lineno">  318 </span><span class="spaces">          </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecProved</span> method_spec <span class="nottickedoff">stats</span> <span class="nottickedoff">vcs</span> <span class="nottickedoff">lemmaSet</span> <span class="nottickedoff">diff</span>)</span>
-<span class="lineno">  319 </span><span class="spaces">          </span><span class="istickedoff">returnProof $ SomeLLVM ps</span></span>
+<span class="lineno">  319 </span><span class="spaces">          </span><span class="istickedoff">returnLLVMProof $ SomeLLVM ps</span></span>
 <span class="lineno">  320 </span>
 <span class="lineno">  321 </span>llvm_refine_spec ::
 <span class="lineno">  322 </span>  Some LLVMModule -&gt;
@@ -353,7 +353,7 @@ span.spaces    { background: white }
 <span class="lineno">  334 </span><span class="spaces">          </span><span class="istickedoff">end &lt;- io getCurrentTime</span>
 <span class="lineno">  335 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">diff = diffUTCTime end start</span></span>
 <span class="lineno">  336 </span><span class="spaces">          </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecProved</span> <span class="nottickedoff">method_spec</span> <span class="nottickedoff">stats</span> <span class="nottickedoff">deps</span> <span class="nottickedoff">lemmaSet</span> <span class="nottickedoff">diff</span>)</span>
-<span class="lineno">  337 </span><span class="spaces">          </span><span class="istickedoff">returnProof $ SomeLLVM <span class="nottickedoff">ps</span></span></span>
+<span class="lineno">  337 </span><span class="spaces">          </span><span class="istickedoff">returnLLVMProof $ <span class="nottickedoff">SomeLLVM ps</span></span></span>
 <span class="lineno">  338 </span>
 <span class="lineno">  339 </span>llvm_unsafe_assume_spec ::
 <span class="lineno">  340 </span>  Some LLVMModule  -&gt;
@@ -365,7 +365,7 @@ span.spaces    { background: white }
 <span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">do printOutLnTop Info $</span>
 <span class="lineno">  347 </span><span class="spaces">       </span><span class="istickedoff">unwords [&quot;Assume override&quot;, (method_spec ^. csName)]</span>
 <span class="lineno">  348 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecAdmitted</span> method_spec <span class="nottickedoff">mempty</span> <span class="nottickedoff">mempty</span> <span class="nottickedoff">mempty</span> <span class="nottickedoff">0</span>)</span>
-<span class="lineno">  349 </span><span class="spaces">     </span><span class="istickedoff">returnProof $ SomeLLVM ps</span></span>
+<span class="lineno">  349 </span><span class="spaces">     </span><span class="istickedoff">returnLLVMProof $ SomeLLVM ps</span></span>
 <span class="lineno">  350 </span>
 <span class="lineno">  351 </span>llvm_array_size_profile ::
 <span class="lineno">  352 </span>  ProofScript () -&gt;
@@ -529,7 +529,7 @@ span.spaces    { background: white }
 <span class="lineno">  510 </span><span class="spaces">          </span><span class="istickedoff">end &lt;- io getCurrentTime</span>
 <span class="lineno">  511 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">diff = diffUTCTime end start</span></span>
 <span class="lineno">  512 </span><span class="spaces">          </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecProved</span> extracted_method_spec <span class="nottickedoff">stats</span> <span class="nottickedoff">vcs</span> <span class="nottickedoff">lemmaSet</span> <span class="nottickedoff">diff</span>)</span>
-<span class="lineno">  513 </span><span class="spaces">          </span><span class="istickedoff">returnProof (SomeLLVM ps)</span></span>
+<span class="lineno">  513 </span><span class="spaces">          </span><span class="istickedoff">returnLLVMProof (SomeLLVM ps)</span></span>
 <span class="lineno">  514 </span>
 <span class="lineno">  515 </span>setupValueAsExtCns :: SetupValue (LLVM arch) -&gt; Maybe (ExtCns Term)
 <span class="lineno">  516 </span><span class="decl"><span class="istickedoff">setupValueAsExtCns =</span>
@@ -780,7 +780,7 @@ span.spaces    { background: white }
 <span class="lineno">  761 </span><span class="spaces">     </span><span class="istickedoff">frameIdent &lt;- io $ Crucible.pushAssumptionFrame bak</span>
 <span class="lineno">  762 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  763 </span><span class="spaces">     </span><span class="istickedoff">-- run the symbolic execution</span>
-<span class="lineno">  764 </span><span class="spaces">     </span><span class="istickedoff">top_loc &lt;- toW4Loc &quot;llvm_refine_spec&quot; &lt;$&gt; getPosition</span>
+<span class="lineno">  764 </span><span class="spaces">     </span><span class="istickedoff">top_loc &lt;- <span class="nottickedoff">toW4Loc &quot;llvm_refine_spec&quot;</span> &lt;$&gt; getPosition</span>
 <span class="lineno">  765 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  766 </span><span class="spaces">     </span><span class="istickedoff">(ret, globals3) &lt;-</span>
 <span class="lineno">  767 </span><span class="spaces">       </span><span class="istickedoff">io $ refineSimulate opts cc pfs methodSpec args assumes <span class="nottickedoff">top_loc</span> relevantLemmas' globals2 <span class="nottickedoff">mdMap</span></span>
@@ -847,11 +847,11 @@ span.spaces    { background: white }
 <span class="lineno">  828 </span><span class="spaces">          </span><span class="istickedoff">res &lt;- runProofScript tactic goal' proofgoal <span class="nottickedoff">(Just ploc)</span></span>
 <span class="lineno">  829 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(Text.unwords</span></span>
 <span class="lineno">  830 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[&quot;LLVM verification condition&quot;, Text.pack (show n), Text.pack goalname])</span></span>
-<span class="lineno">  831 </span><span class="spaces">                    </span><span class="istickedoff">False -- do not record this theorem in the database</span>
+<span class="lineno">  831 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">False</span> -- do not record this theorem in the database</span>
 <span class="lineno">  832 </span><span class="spaces">                    </span><span class="istickedoff">useSequentGoals</span>
 <span class="lineno">  833 </span><span class="spaces">          </span><span class="istickedoff">case res of</span>
 <span class="lineno">  834 </span><span class="spaces">            </span><span class="istickedoff">ValidProof stats thm -&gt;</span>
-<span class="lineno">  835 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, <span class="nottickedoff">MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm)</span>)</span>
+<span class="lineno">  835 </span><span class="spaces">              </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
 <span class="lineno">  836 </span><span class="spaces">            </span><span class="istickedoff">UnfinishedProof pst -&gt;</span>
 <span class="lineno">  837 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, nm, msg]</span></span>
 <span class="lineno">  838 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Proof failed &quot; ++ show (length (psGoals pst)) ++ &quot; goals remaining.&quot;</span></span>
@@ -943,7 +943,7 @@ span.spaces    { background: white }
 <span class="lineno">  924 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, &quot;Expected: &quot; ++ show retTy</span></span>
 <span class="lineno">  925 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, &quot;but given value of type: &quot; ++ show retTy'</span></span>
 <span class="lineno">  926 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  927 </span><span class="spaces">    </span><span class="istickedoff">(Nothing, _) -&gt; return ()</span></span>
+<span class="lineno">  927 </span><span class="spaces">    </span><span class="istickedoff">(Nothing, _) -&gt; return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  928 </span>
 <span class="lineno">  929 </span>-- | Evaluate the precondition part of a Crucible method spec:
 <span class="lineno">  930 </span>--

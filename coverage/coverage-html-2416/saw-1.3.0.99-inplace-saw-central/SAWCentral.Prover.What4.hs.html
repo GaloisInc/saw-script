@@ -167,7 +167,7 @@ span.spaces    { background: white }
 <span class="lineno">  148 </span>  TopLevel (Maybe CEX, String)
 <span class="lineno">  149 </span><span class="decl"><span class="istickedoff">proveWhat4_z3_using tactic hashConsing satq = do</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets <span class="nottickedoff">rwWhat4PushMuxOps</span></span>
 <span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">io $ do</span>
 <span class="lineno">  153 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing <span class="nottickedoff">what4PushMuxOps</span></span>
 <span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">proveWhat4_solver z3Adapter sym sc satq $</span>

@@ -729,7 +729,7 @@ span.spaces    { background: white }
 <span class="lineno">  710 </span><span class="spaces">     </span><span class="istickedoff">ms &lt;- (view Setup.csMethodSpec) &lt;$&gt;</span>
 <span class="lineno">  711 </span><span class="spaces">             </span><span class="istickedoff">execStateT (runReaderT (runMIRSetupM setup) <span class="nottickedoff">Setup.makeCrucibleSetupRO</span>) st0</span>
 <span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecAdmitted</span> ms <span class="nottickedoff">mempty</span> <span class="nottickedoff">mempty</span> <span class="nottickedoff">mempty</span> <span class="nottickedoff">0</span>)</span>
-<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">returnProof ps</span></span>
+<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">returnMIRProof ps</span></span>
 <span class="lineno">  714 </span>
 <span class="lineno">  715 </span>mir_verify ::
 <span class="lineno">  716 </span>  Mir.RustModule -&gt;
@@ -744,7 +744,7 @@ span.spaces    { background: white }
 <span class="lineno">  725 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getOptions</span>
 <span class="lineno">  726 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  727 </span><span class="spaces">     </span><span class="istickedoff">-- set up the metadata map for tracking proof obligation metadata</span>
-<span class="lineno">  728 </span><span class="spaces">     </span><span class="istickedoff">mdMap &lt;- io $ newIORef mempty</span>
+<span class="lineno">  728 </span><span class="spaces">     </span><span class="istickedoff">mdMap &lt;- io $ newIORef <span class="nottickedoff">mempty</span></span>
 <span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  730 </span><span class="spaces">     </span><span class="istickedoff">cc &lt;- setupCrucibleContext rm</span>
 <span class="lineno">  731 </span><span class="spaces">     </span><span class="istickedoff">SomeOnlineBackend bak &lt;- pure (cc^.mccBackend)</span>
@@ -790,7 +790,7 @@ span.spaces    { background: white }
 <span class="lineno">  771 </span><span class="spaces">     </span><span class="istickedoff">-- run the symbolic execution</span>
 <span class="lineno">  772 </span><span class="spaces">     </span><span class="istickedoff">printOutLnTop Info $</span>
 <span class="lineno">  773 </span><span class="spaces">       </span><span class="istickedoff">unwords [&quot;Simulating&quot;, show (methodSpec ^. MS.csMethod), &quot;...&quot;]</span>
-<span class="lineno">  774 </span><span class="spaces">     </span><span class="istickedoff">top_loc &lt;- SS.toW4Loc &quot;mir_verify&quot; &lt;$&gt; getPosition</span>
+<span class="lineno">  774 </span><span class="spaces">     </span><span class="istickedoff">top_loc &lt;- <span class="nottickedoff">SS.toW4Loc &quot;mir_verify&quot;</span> &lt;$&gt; getPosition</span>
 <span class="lineno">  775 </span><span class="spaces">     </span><span class="istickedoff">(ret, globals2) &lt;-</span>
 <span class="lineno">  776 </span><span class="spaces">       </span><span class="istickedoff">io $ verifySimulate opts cc pfs methodSpec args assumes <span class="nottickedoff">top_loc</span> lemmas globals1 <span class="nottickedoff">checkSat</span> <span class="nottickedoff">mdMap</span></span>
 <span class="lineno">  777 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -811,7 +811,7 @@ span.spaces    { background: white }
 <span class="lineno">  792 </span><span class="spaces">     </span><span class="istickedoff">end &lt;- io getCurrentTime</span>
 <span class="lineno">  793 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">diff = diffUTCTime end start</span></span>
 <span class="lineno">  794 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (MS.mkProvedSpec <span class="nottickedoff">MS.SpecProved</span> methodSpec <span class="nottickedoff">stats</span> <span class="nottickedoff">vcstats</span> <span class="nottickedoff">lemmaSet</span> <span class="nottickedoff">diff</span>)</span>
-<span class="lineno">  795 </span><span class="spaces">     </span><span class="istickedoff">returnProof ps</span></span>
+<span class="lineno">  795 </span><span class="spaces">     </span><span class="istickedoff">returnMIRProof ps</span></span>
 <span class="lineno">  796 </span>
 <span class="lineno">  797 </span>-----
 <span class="lineno">  798 </span>-- MIR enums
@@ -1129,11 +1129,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1110 </span><span class="spaces">       </span><span class="istickedoff">res &lt;- runProofScript tactic goal' proofgoal <span class="nottickedoff">(Just ploc)</span></span>
 <span class="lineno"> 1111 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">(Text.unwords</span></span>
 <span class="lineno"> 1112 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">[&quot;MIR verification condition:&quot;, Text.pack (show n), Text.pack goalname])</span></span>
-<span class="lineno"> 1113 </span><span class="spaces">                </span><span class="istickedoff">False -- do not record in the theorem database</span>
+<span class="lineno"> 1113 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">False</span> -- do not record in the theorem database</span>
 <span class="lineno"> 1114 </span><span class="spaces">                </span><span class="istickedoff">False -- TODO, useSequentGoals...</span>
 <span class="lineno"> 1115 </span><span class="spaces">       </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1116 </span><span class="spaces">         </span><span class="istickedoff">ValidProof stats thm -&gt;</span>
-<span class="lineno"> 1117 </span><span class="spaces">           </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, <span class="nottickedoff">MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm)</span>)</span>
+<span class="lineno"> 1117 </span><span class="spaces">           </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
 <span class="lineno"> 1118 </span><span class="spaces">         </span><span class="istickedoff">InvalidProof stats vals _pst -&gt; do</span>
 <span class="lineno"> 1119 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, nm, msg]</span>
 <span class="lineno"> 1120 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
@@ -1192,7 +1192,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1173 </span><span class="spaces">             </span><span class="istickedoff">Right (_, st) -&gt; return st</span>
 <span class="lineno"> 1174 </span><span class="spaces">     </span><span class="istickedoff">io $ forM_ (view osAsserts st) $ \(md, Crucible.LabeledPred p r) -&gt;</span>
 <span class="lineno"> 1175 </span><span class="spaces">       </span><span class="istickedoff">do (ann,p') &lt;- W4.annotateTerm sym p</span>
-<span class="lineno"> 1176 </span><span class="spaces">          </span><span class="istickedoff">modifyIORef mdMap (Map.insert ann <span class="nottickedoff">md</span>)</span>
+<span class="lineno"> 1176 </span><span class="spaces">          </span><span class="istickedoff">modifyIORef mdMap <span class="nottickedoff">(Map.insert ann md)</span></span>
 <span class="lineno"> 1177 </span><span class="spaces">          </span><span class="istickedoff">Crucible.addAssertion bak (Crucible.LabeledPred p' r)</span>
 <span class="lineno"> 1178 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1179 </span><span class="spaces">     </span><span class="istickedoff">finalMdMap &lt;- io $ readIORef mdMap</span>
@@ -1526,7 +1526,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1507 </span><span class="spaces">     </span><span class="istickedoff">io $ do let cfg = W4.getConfiguration sym</span>
 <span class="lineno"> 1508 </span><span class="spaces">             </span><span class="istickedoff">verbSetting &lt;- W4.getOptionSetting W4.verbosity cfg</span>
 <span class="lineno"> 1509 </span><span class="spaces">             </span><span class="istickedoff">_ &lt;- W4.setOpt verbSetting $ toInteger $ simVerbose opts</span>
-<span class="lineno"> 1510 </span><span class="spaces">             </span><span class="istickedoff">return ()</span>
+<span class="lineno"> 1510 </span><span class="spaces">             </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
 <span class="lineno"> 1511 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1512 </span><span class="spaces">     </span><span class="istickedoff">-- TODO! there's a lot of options setup we need to replicate</span>
 <span class="lineno"> 1513 </span><span class="spaces">     </span><span class="istickedoff">--  from SAWCentral.Crucible.LLVM.Builtins</span>
