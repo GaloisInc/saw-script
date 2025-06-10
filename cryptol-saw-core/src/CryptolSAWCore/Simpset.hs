@@ -24,7 +24,10 @@ mkCryptolSimpset sc =
      scSimpset sc (cryptolDefs m) [] []
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
-    excluded d = defIdent d `elem` excludedNames
+    excluded d =
+      case defNameInfo d of
+        ModuleIdentifier ident -> ident `elem` excludedNames
+        _ -> True
 
 cryptolModuleName :: ModuleName
 cryptolModuleName = mkModuleName ["Cryptol"]

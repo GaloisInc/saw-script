@@ -193,6 +193,12 @@ data NameInfo
 
  deriving (Eq,Ord,Show)
 
+instance Hashable NameInfo where
+  hashWithSalt x nmi =
+    case nmi of
+      ModuleIdentifier ident -> hashWithSalt x ident
+      ImportedName uri _ -> hashWithSalt x uri
+
 nameURI :: NameInfo -> URI
 nameURI =
   \case

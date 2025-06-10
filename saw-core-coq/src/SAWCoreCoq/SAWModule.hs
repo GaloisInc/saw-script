@@ -26,6 +26,7 @@ module SAWCoreCoq.SAWModule where
 
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          (asks)
+import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter                                 (Doc, pretty)
 
@@ -129,22 +130,26 @@ _mapped :: Ident -> Ident -> Coq.Decl
 _mapped sawIdent newIdent =
   Coq.Comment $ show sawIdent ++ " is mapped to " ++ show newIdent
 
+skipped' :: NameInfo -> Coq.Decl
+skipped' nmi =
+  Coq.Comment $ show (toAbsoluteName nmi) ++ " was skipped"
+
 skipped :: Ident -> Coq.Decl
 skipped sawIdent =
   Coq.Comment $ show sawIdent ++ " was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
-  specialTreatment <- findSpecialTreatment defIdent
+  specialTreatment <- findSpecialTreatment' defNameInfo
   translateAccordingly (atDefSite specialTreatment)
 
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ identName defIdent
+    translateAccordingly  DefPreserve           = translateNamed $ Text.unpack (toShortName defNameInfo)
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
     translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str
-    translateAccordingly  DefSkip               = return $ skipped defIdent
+    translateAccordingly  DefSkip               = return $ skipped' defNameInfo
 
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = liftTermTranslationMonad (go defQualifier defBody)

@@ -618,7 +618,7 @@ scDeclarePrim sc ident q def_tp =
      t <- scFlatTermF sc (Primitive pn)
      scRegisterGlobal sc ident t
      scInsDefInMap sc $
-                  Def { defIdent = ident,
+                  Def { defNameInfo = ModuleIdentifier ident,
                         defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
@@ -632,7 +632,7 @@ scInsertDef sc ident def_tp def_tm =
      mi <- scResolveNameByURI sc (moduleIdentToURI ident)
      let i = fromMaybe (panic "scInsertDef" ["name not found"]) mi
      scInsDefInMap sc $
-                  Def { defIdent = ident,
+                  Def { defNameInfo = ModuleIdentifier ident,
                         defVarIndex = i,
                         defQualifier = NoQualifier,
                         defType = def_tp,
@@ -1456,9 +1456,8 @@ scApplyAllBeta sc = foldlM (scApplyBeta sc)
 scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
--- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc d = scGlobalDef sc (defIdent d)
+scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType) defBody)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.

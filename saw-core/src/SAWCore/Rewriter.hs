@@ -533,12 +533,14 @@ scExpandRewriteRules sc rs =
 -- | Create a rewrite rule for a definition that expands the definition, if it
 -- has a body to expand to, otherwise return the empty list
 scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule a]
-scDefRewriteRules _ (Def { defBody = Nothing }) = return []
-scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
-  do lhs <- scGlobalDef sc ident
-     rhs <- scSharedTerm sc body
-     scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False Nothing]
-
+scDefRewriteRules sc d =
+  case defBody d of
+    Just body ->
+      do lhs <- scDefTerm sc d
+         rhs <- scSharedTerm sc body
+         scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False Nothing]
+    Nothing ->
+      pure []
 
 -- | A "shallow" rule is one where further
 --   rewrites are not applied to the result

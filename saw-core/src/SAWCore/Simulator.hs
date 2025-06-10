@@ -40,7 +40,7 @@ import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -54,9 +54,10 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( allModuleActualDefs
   , allModulePrimitives
-  , defIdent
+  , defNameInfo
   , findCtorInMap
   , Ctor(..)
+  , Def(..)
   , ModuleMap
   )
 import SAWCore.Name
@@ -409,12 +410,18 @@ checkPrimitives modmap prims = do
         _overrideMsg = unwords $
             ("WARNING overridden definitions:" : (map show overridePrims))
 
-        primSet = Set.fromList $ map defIdent $ allModulePrimitives modmap
-        defSet  = Set.fromList $ map defIdent $ allModuleActualDefs modmap
+        primSet = Set.fromList $ mapMaybe defIdent $ allModulePrimitives modmap
+        defSet  = Set.fromList $ mapMaybe defIdent $ allModuleActualDefs modmap
         implementedPrims = Map.keysSet prims
 
         unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
+
+defIdent :: Def -> Maybe Ident
+defIdent d =
+  case defNameInfo d of
+    ModuleIdentifier ident -> Just ident
+    _ -> Nothing
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:

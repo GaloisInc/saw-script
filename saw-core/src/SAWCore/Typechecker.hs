@@ -55,7 +55,6 @@ import SAWCore.Module
   , findDataTypeInMap
   , resolveNameInMap
   , DataType(..)
-  , Def(..)
   , DefQualifier(..)
   , ResolvedName(..)
   )
@@ -128,7 +127,7 @@ inferResolveNameApp n args =
             -- of indices
             typeInferComplete (DataTypeApp d params ixs)
        (_, Just (ResolvedDef d)) ->
-         do t <- liftTCM scGlobalDef (defIdent d)
+         do t <- liftTCM scDefTerm d
             f <- SCTypedTerm t <$> liftTCM scTypeOf t
             inferApplyAll f args
        (Nothing, Nothing) ->

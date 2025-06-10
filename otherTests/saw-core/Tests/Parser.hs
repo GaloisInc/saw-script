@@ -16,12 +16,12 @@ import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 
 
-namedMsg :: Ident -> String -> String
-namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
+namedMsg :: NameInfo -> String -> String
+namedMsg sym msg = "In " ++ show (toAbsoluteName sym) ++ ": " ++ msg
 
 checkDef :: Def -> Assertion
 checkDef d = do
-  let sym = defIdent d
+  let sym = defNameInfo d
   let tp = defType d
   assertBool (namedMsg sym "Type is not ground.") (termIsClosed tp)
   case defBody d of
