@@ -795,236 +795,238 @@ span.spaces    { background: white }
 <span class="lineno">  776 </span><span class="decl"><span class="istickedoff">modifyTopLevelRW = modify</span></span>
 <span class="lineno">  777 </span>
 <span class="lineno">  778 </span>-- FUTURE: maybe change these back to using IsValue when things are less tangly
-<span class="lineno">  779 </span>
-<span class="lineno">  780 </span>recordProof :: Value -&gt; TopLevel ()
-<span class="lineno">  781 </span><span class="decl"><span class="istickedoff">recordProof v =</span>
-<span class="lineno">  782 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno">  783 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwProofs = <span class="nottickedoff">v : rwProofs rw</span> }</span></span>
-<span class="lineno">  784 </span>
-<span class="lineno">  785 </span>returnTheoremProof :: Theorem -&gt; TopLevel Theorem
-<span class="lineno">  786 </span><span class="decl"><span class="istickedoff">returnTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span> &gt;&gt; return thm</span></span>
-<span class="lineno">  787 </span>
-<span class="lineno">  788 </span>recordTheoremProof :: Theorem -&gt; TopLevel ()
-<span class="lineno">  789 </span><span class="decl"><span class="istickedoff">recordTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span></span></span>
-<span class="lineno">  790 </span>
-<span class="lineno">  791 </span>returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -&gt; TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
-<span class="lineno">  792 </span><span class="decl"><span class="istickedoff">returnLLVMProof ms = recordProof <span class="nottickedoff">(VLLVMCrucibleMethodSpec ms)</span> &gt;&gt; return ms</span></span>
-<span class="lineno">  793 </span>
-<span class="lineno">  794 </span>returnJVMProof :: CMS.ProvedSpec CJ.JVM -&gt; TopLevel (CMS.ProvedSpec CJ.JVM)
-<span class="lineno">  795 </span><span class="decl"><span class="istickedoff">returnJVMProof ms = recordProof <span class="nottickedoff">(VJVMMethodSpec ms)</span> &gt;&gt; return ms</span></span>
-<span class="lineno">  796 </span>
-<span class="lineno">  797 </span>returnMIRProof :: CMS.ProvedSpec MIR -&gt; TopLevel (CMS.ProvedSpec MIR)
-<span class="lineno">  798 </span><span class="decl"><span class="istickedoff">returnMIRProof ms = recordProof <span class="nottickedoff">(VMIRMethodSpec ms)</span> &gt;&gt; return ms</span></span>
-<span class="lineno">  799 </span>
-<span class="lineno">  800 </span>-- | Perform an operation on the 'SolverCache', returning a default value or
-<span class="lineno">  801 </span>-- failing (depending on the first element of the 'SolverCacheOp') if there
-<span class="lineno">  802 </span>-- is no enabled 'SolverCache'
-<span class="lineno">  803 </span>onSolverCache :: SolverCacheOp a -&gt; TopLevel a
-<span class="lineno">  804 </span><span class="decl"><span class="istickedoff">onSolverCache cacheOp =</span>
-<span class="lineno">  805 </span><span class="spaces">  </span><span class="istickedoff">do opts &lt;- getOptions</span>
-<span class="lineno">  806 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno">  807 </span><span class="spaces">     </span><span class="istickedoff">case rwSolverCache rw of</span>
-<span class="lineno">  808 </span><span class="spaces">       </span><span class="istickedoff">Just cache -&gt; do (a, cache') &lt;- io $ solverCacheOp cacheOp opts cache</span>
-<span class="lineno">  809 </span><span class="spaces">                        </span><span class="istickedoff">putTopLevelRW rw { rwSolverCache = Just cache' }</span>
-<span class="lineno">  810 </span><span class="spaces">                        </span><span class="istickedoff">return a</span>
-<span class="lineno">  811 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case solverCacheOpDefault cacheOp of</span></span>
-<span class="lineno">  812 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just a -&gt; return a</span></span>
-<span class="lineno">  813 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; fail &quot;Solver result cache not enabled!&quot;</span></span></span>
-<span class="lineno">  814 </span>
-<span class="lineno">  815 </span>-- | Access the current state of Java Class translation
-<span class="lineno">  816 </span>getJVMTrans :: TopLevel CJ.JVMContext
-<span class="lineno">  817 </span><span class="decl"><span class="istickedoff">getJVMTrans = gets rwJVMTrans</span></span>
-<span class="lineno">  818 </span>
-<span class="lineno">  819 </span>-- | Access the current state of Java Class translation
-<span class="lineno">  820 </span>putJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
-<span class="lineno">  821 </span><span class="decl"><span class="istickedoff">putJVMTrans jc =</span>
-<span class="lineno">  822 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno">  823 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwJVMTrans = jc }</span></span>
-<span class="lineno">  824 </span>
-<span class="lineno">  825 </span>-- | Add a newly translated class to the translation
-<span class="lineno">  826 </span>addJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
-<span class="lineno">  827 </span><span class="decl"><span class="nottickedoff">addJVMTrans trans = do</span>
-<span class="lineno">  828 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno">  829 </span><span class="spaces">  </span><span class="nottickedoff">let jvmt = rwJVMTrans rw</span>
-<span class="lineno">  830 </span><span class="spaces">  </span><span class="nottickedoff">putTopLevelRW ( rw { rwJVMTrans = trans &lt;&gt; jvmt })</span></span>
-<span class="lineno">  831 </span>
-<span class="lineno">  832 </span>maybeInsert :: Ord k =&gt; k -&gt; Maybe a -&gt; Map k a -&gt; Map k a
-<span class="lineno">  833 </span><span class="decl"><span class="nottickedoff">maybeInsert _ Nothing m = m</span>
-<span class="lineno">  834 </span><span class="spaces"></span><span class="nottickedoff">maybeInsert k (Just x) m = M.insert k x m</span></span>
-<span class="lineno">  835 </span>
-<span class="lineno">  836 </span>extendEnv ::
-<span class="lineno">  837 </span>  SharedContext -&gt;
-<span class="lineno">  838 </span>  SS.LName -&gt; SS.Schema -&gt; Maybe String -&gt; Value -&gt; TopLevelRW -&gt; IO TopLevelRW
-<span class="lineno">  839 </span><span class="decl"><span class="istickedoff">extendEnv sc x ty md v rw =</span>
-<span class="lineno">  840 </span><span class="spaces">  </span><span class="istickedoff">do ce' &lt;-</span>
-<span class="lineno">  841 </span><span class="spaces">       </span><span class="istickedoff">case v of</span>
-<span class="lineno">  842 </span><span class="spaces">         </span><span class="istickedoff">VTerm t -&gt;</span>
-<span class="lineno">  843 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, t) ce</span>
-<span class="lineno">  844 </span><span class="spaces">         </span><span class="istickedoff">VType s -&gt;</span>
-<span class="lineno">  845 </span><span class="spaces">           </span><span class="istickedoff">pure $ <span class="nottickedoff">CEnv.bindType (ident, s) ce</span></span>
-<span class="lineno">  846 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
-<span class="lineno">  847 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
-<span class="lineno">  848 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
-<span class="lineno">  849 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">pure $ CEnv.bindCryptolModule (modname, m) ce</span></span>
-<span class="lineno">  850 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
-<span class="lineno">  851 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfString sc (unpack s)</span>
-<span class="lineno">  852 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
-<span class="lineno">  853 </span><span class="spaces">         </span><span class="istickedoff">VBool b -&gt;</span>
-<span class="lineno">  854 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfBool sc b</span>
-<span class="lineno">  855 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
-<span class="lineno">  856 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  857 </span><span class="spaces">           </span><span class="istickedoff">pure ce</span>
-<span class="lineno">  858 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
-<span class="lineno">  859 </span><span class="spaces">      </span><span class="istickedoff">rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)</span>
-<span class="lineno">  860 </span><span class="spaces">         </span><span class="istickedoff">, rwDocs    = <span class="nottickedoff">maybeInsert (SS.getVal name) md (rwDocs rw)</span></span>
-<span class="lineno">  861 </span><span class="spaces">         </span><span class="istickedoff">, rwCryptol = ce'</span>
-<span class="lineno">  862 </span><span class="spaces">         </span><span class="istickedoff">}</span>
-<span class="lineno">  863 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  864 </span><span class="spaces">    </span><span class="istickedoff">name = x</span>
-<span class="lineno">  865 </span><span class="spaces">    </span><span class="istickedoff">-- XXX why is this using getOrig?</span>
-<span class="lineno">  866 </span><span class="spaces">    </span><span class="istickedoff">ident = T.mkIdent (SS.getOrig x)</span>
-<span class="lineno">  867 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">modname = T.packModName [SS.getOrig x]</span></span>
-<span class="lineno">  868 </span><span class="spaces">    </span><span class="istickedoff">ce = rwCryptol rw</span></span>
-<span class="lineno">  869 </span>
-<span class="lineno">  870 </span>typedTermOfString :: SharedContext -&gt; String -&gt; IO TypedTerm
-<span class="lineno">  871 </span><span class="decl"><span class="istickedoff">typedTermOfString sc str =</span>
-<span class="lineno">  872 </span><span class="spaces">  </span><span class="istickedoff">do let <span class="nottickedoff">schema = Cryptol.tMono (Cryptol.tString (length str))</span></span>
-<span class="lineno">  873 </span><span class="spaces">     </span><span class="istickedoff">bvNat &lt;- scGlobalDef sc &quot;Prelude.bvNat&quot;</span>
-<span class="lineno">  874 </span><span class="spaces">     </span><span class="istickedoff">bvNat8 &lt;- scApply sc bvNat =&lt;&lt; scNat sc 8</span>
-<span class="lineno">  875 </span><span class="spaces">     </span><span class="istickedoff">byteT &lt;- scBitvector sc 8</span>
-<span class="lineno">  876 </span><span class="spaces">     </span><span class="istickedoff">let scChar c = scApply sc bvNat8 =&lt;&lt; scNat sc (fromIntegral (fromEnum c))</span>
-<span class="lineno">  877 </span><span class="spaces">     </span><span class="istickedoff">ts &lt;- traverse scChar str</span>
-<span class="lineno">  878 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scVector sc byteT ts</span>
-<span class="lineno">  879 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema <span class="nottickedoff">schema</span>) <span class="nottickedoff">trm</span>)</span></span>
-<span class="lineno">  880 </span>
-<span class="lineno">  881 </span>typedTermOfBool :: SharedContext -&gt; Bool -&gt; IO TypedTerm
-<span class="lineno">  882 </span><span class="decl"><span class="istickedoff">typedTermOfBool sc b =</span>
-<span class="lineno">  883 </span><span class="spaces">  </span><span class="istickedoff">do let schema = Cryptol.tMono Cryptol.tBit</span>
-<span class="lineno">  884 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scBool sc b</span>
-<span class="lineno">  885 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema schema) trm)</span></span>
-<span class="lineno">  886 </span>
-<span class="lineno">  887 </span>
-<span class="lineno">  888 </span>-- Other SAWScript Monads ------------------------------------------------------
+<span class="lineno">  779 </span>--
+<span class="lineno">  780 </span>-- Note that the &quot;return&quot; variants record the proof as well as just returning it.
+<span class="lineno">  781 </span>
+<span class="lineno">  782 </span>recordProof :: Value -&gt; TopLevel ()
+<span class="lineno">  783 </span><span class="decl"><span class="istickedoff">recordProof v =</span>
+<span class="lineno">  784 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno">  785 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwProofs = <span class="nottickedoff">v : rwProofs rw</span> }</span></span>
+<span class="lineno">  786 </span>
+<span class="lineno">  787 </span>returnTheoremProof :: Theorem -&gt; TopLevel Theorem
+<span class="lineno">  788 </span><span class="decl"><span class="istickedoff">returnTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span> &gt;&gt; return thm</span></span>
+<span class="lineno">  789 </span>
+<span class="lineno">  790 </span>recordTheoremProof :: Theorem -&gt; TopLevel ()
+<span class="lineno">  791 </span><span class="decl"><span class="istickedoff">recordTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span></span></span>
+<span class="lineno">  792 </span>
+<span class="lineno">  793 </span>returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -&gt; TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+<span class="lineno">  794 </span><span class="decl"><span class="istickedoff">returnLLVMProof ms = recordProof <span class="nottickedoff">(VLLVMCrucibleMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno">  795 </span>
+<span class="lineno">  796 </span>returnJVMProof :: CMS.ProvedSpec CJ.JVM -&gt; TopLevel (CMS.ProvedSpec CJ.JVM)
+<span class="lineno">  797 </span><span class="decl"><span class="istickedoff">returnJVMProof ms = recordProof <span class="nottickedoff">(VJVMMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno">  798 </span>
+<span class="lineno">  799 </span>returnMIRProof :: CMS.ProvedSpec MIR -&gt; TopLevel (CMS.ProvedSpec MIR)
+<span class="lineno">  800 </span><span class="decl"><span class="istickedoff">returnMIRProof ms = recordProof <span class="nottickedoff">(VMIRMethodSpec ms)</span> &gt;&gt; return ms</span></span>
+<span class="lineno">  801 </span>
+<span class="lineno">  802 </span>-- | Perform an operation on the 'SolverCache', returning a default value or
+<span class="lineno">  803 </span>-- failing (depending on the first element of the 'SolverCacheOp') if there
+<span class="lineno">  804 </span>-- is no enabled 'SolverCache'
+<span class="lineno">  805 </span>onSolverCache :: SolverCacheOp a -&gt; TopLevel a
+<span class="lineno">  806 </span><span class="decl"><span class="istickedoff">onSolverCache cacheOp =</span>
+<span class="lineno">  807 </span><span class="spaces">  </span><span class="istickedoff">do opts &lt;- getOptions</span>
+<span class="lineno">  808 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  809 </span><span class="spaces">     </span><span class="istickedoff">case rwSolverCache rw of</span>
+<span class="lineno">  810 </span><span class="spaces">       </span><span class="istickedoff">Just cache -&gt; do (a, cache') &lt;- io $ solverCacheOp cacheOp opts cache</span>
+<span class="lineno">  811 </span><span class="spaces">                        </span><span class="istickedoff">putTopLevelRW rw { rwSolverCache = Just cache' }</span>
+<span class="lineno">  812 </span><span class="spaces">                        </span><span class="istickedoff">return a</span>
+<span class="lineno">  813 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case solverCacheOpDefault cacheOp of</span></span>
+<span class="lineno">  814 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just a -&gt; return a</span></span>
+<span class="lineno">  815 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; fail &quot;Solver result cache not enabled!&quot;</span></span></span>
+<span class="lineno">  816 </span>
+<span class="lineno">  817 </span>-- | Access the current state of Java Class translation
+<span class="lineno">  818 </span>getJVMTrans :: TopLevel CJ.JVMContext
+<span class="lineno">  819 </span><span class="decl"><span class="istickedoff">getJVMTrans = gets rwJVMTrans</span></span>
+<span class="lineno">  820 </span>
+<span class="lineno">  821 </span>-- | Access the current state of Java Class translation
+<span class="lineno">  822 </span>putJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
+<span class="lineno">  823 </span><span class="decl"><span class="istickedoff">putJVMTrans jc =</span>
+<span class="lineno">  824 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno">  825 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwJVMTrans = jc }</span></span>
+<span class="lineno">  826 </span>
+<span class="lineno">  827 </span>-- | Add a newly translated class to the translation
+<span class="lineno">  828 </span>addJVMTrans :: CJ.JVMContext -&gt; TopLevel ()
+<span class="lineno">  829 </span><span class="decl"><span class="nottickedoff">addJVMTrans trans = do</span>
+<span class="lineno">  830 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  831 </span><span class="spaces">  </span><span class="nottickedoff">let jvmt = rwJVMTrans rw</span>
+<span class="lineno">  832 </span><span class="spaces">  </span><span class="nottickedoff">putTopLevelRW ( rw { rwJVMTrans = trans &lt;&gt; jvmt })</span></span>
+<span class="lineno">  833 </span>
+<span class="lineno">  834 </span>maybeInsert :: Ord k =&gt; k -&gt; Maybe a -&gt; Map k a -&gt; Map k a
+<span class="lineno">  835 </span><span class="decl"><span class="nottickedoff">maybeInsert _ Nothing m = m</span>
+<span class="lineno">  836 </span><span class="spaces"></span><span class="nottickedoff">maybeInsert k (Just x) m = M.insert k x m</span></span>
+<span class="lineno">  837 </span>
+<span class="lineno">  838 </span>extendEnv ::
+<span class="lineno">  839 </span>  SharedContext -&gt;
+<span class="lineno">  840 </span>  SS.LName -&gt; SS.Schema -&gt; Maybe String -&gt; Value -&gt; TopLevelRW -&gt; IO TopLevelRW
+<span class="lineno">  841 </span><span class="decl"><span class="istickedoff">extendEnv sc x ty md v rw =</span>
+<span class="lineno">  842 </span><span class="spaces">  </span><span class="istickedoff">do ce' &lt;-</span>
+<span class="lineno">  843 </span><span class="spaces">       </span><span class="istickedoff">case v of</span>
+<span class="lineno">  844 </span><span class="spaces">         </span><span class="istickedoff">VTerm t -&gt;</span>
+<span class="lineno">  845 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, t) ce</span>
+<span class="lineno">  846 </span><span class="spaces">         </span><span class="istickedoff">VType s -&gt;</span>
+<span class="lineno">  847 </span><span class="spaces">           </span><span class="istickedoff">pure $ <span class="nottickedoff">CEnv.bindType (ident, s) ce</span></span>
+<span class="lineno">  848 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
+<span class="lineno">  849 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
+<span class="lineno">  850 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
+<span class="lineno">  851 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">pure $ CEnv.bindCryptolModule (modname, m) ce</span></span>
+<span class="lineno">  852 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
+<span class="lineno">  853 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfString sc (unpack s)</span>
+<span class="lineno">  854 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno">  855 </span><span class="spaces">         </span><span class="istickedoff">VBool b -&gt;</span>
+<span class="lineno">  856 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfBool sc b</span>
+<span class="lineno">  857 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno">  858 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  859 </span><span class="spaces">           </span><span class="istickedoff">pure ce</span>
+<span class="lineno">  860 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
+<span class="lineno">  861 </span><span class="spaces">      </span><span class="istickedoff">rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)</span>
+<span class="lineno">  862 </span><span class="spaces">         </span><span class="istickedoff">, rwDocs    = <span class="nottickedoff">maybeInsert (SS.getVal name) md (rwDocs rw)</span></span>
+<span class="lineno">  863 </span><span class="spaces">         </span><span class="istickedoff">, rwCryptol = ce'</span>
+<span class="lineno">  864 </span><span class="spaces">         </span><span class="istickedoff">}</span>
+<span class="lineno">  865 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  866 </span><span class="spaces">    </span><span class="istickedoff">name = x</span>
+<span class="lineno">  867 </span><span class="spaces">    </span><span class="istickedoff">-- XXX why is this using getOrig?</span>
+<span class="lineno">  868 </span><span class="spaces">    </span><span class="istickedoff">ident = T.mkIdent (SS.getOrig x)</span>
+<span class="lineno">  869 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">modname = T.packModName [SS.getOrig x]</span></span>
+<span class="lineno">  870 </span><span class="spaces">    </span><span class="istickedoff">ce = rwCryptol rw</span></span>
+<span class="lineno">  871 </span>
+<span class="lineno">  872 </span>typedTermOfString :: SharedContext -&gt; String -&gt; IO TypedTerm
+<span class="lineno">  873 </span><span class="decl"><span class="istickedoff">typedTermOfString sc str =</span>
+<span class="lineno">  874 </span><span class="spaces">  </span><span class="istickedoff">do let <span class="nottickedoff">schema = Cryptol.tMono (Cryptol.tString (length str))</span></span>
+<span class="lineno">  875 </span><span class="spaces">     </span><span class="istickedoff">bvNat &lt;- scGlobalDef sc &quot;Prelude.bvNat&quot;</span>
+<span class="lineno">  876 </span><span class="spaces">     </span><span class="istickedoff">bvNat8 &lt;- scApply sc bvNat =&lt;&lt; scNat sc 8</span>
+<span class="lineno">  877 </span><span class="spaces">     </span><span class="istickedoff">byteT &lt;- scBitvector sc 8</span>
+<span class="lineno">  878 </span><span class="spaces">     </span><span class="istickedoff">let scChar c = scApply sc bvNat8 =&lt;&lt; scNat sc (fromIntegral (fromEnum c))</span>
+<span class="lineno">  879 </span><span class="spaces">     </span><span class="istickedoff">ts &lt;- traverse scChar str</span>
+<span class="lineno">  880 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scVector sc byteT ts</span>
+<span class="lineno">  881 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema <span class="nottickedoff">schema</span>) <span class="nottickedoff">trm</span>)</span></span>
+<span class="lineno">  882 </span>
+<span class="lineno">  883 </span>typedTermOfBool :: SharedContext -&gt; Bool -&gt; IO TypedTerm
+<span class="lineno">  884 </span><span class="decl"><span class="istickedoff">typedTermOfBool sc b =</span>
+<span class="lineno">  885 </span><span class="spaces">  </span><span class="istickedoff">do let schema = Cryptol.tMono Cryptol.tBit</span>
+<span class="lineno">  886 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scBool sc b</span>
+<span class="lineno">  887 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema schema) trm)</span></span>
+<span class="lineno">  888 </span>
 <span class="lineno">  889 </span>
-<span class="lineno">  890 </span>type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
+<span class="lineno">  890 </span>-- Other SAWScript Monads ------------------------------------------------------
 <span class="lineno">  891 </span>
-<span class="lineno">  892 </span>-- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
-<span class="lineno">  893 </span>--   specifications should be polymorphic in the underlying architecture
-<span class="lineno">  894 </span>-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
-<span class="lineno">  895 </span>
-<span class="lineno">  896 </span>newtype LLVMCrucibleSetupM a =
-<span class="lineno">  897 </span>  LLVMCrucibleSetupM
-<span class="lineno">  898 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">runLLVMCrucibleSetupM</span></span></span> ::
-<span class="lineno">  899 </span>        forall arch.
-<span class="lineno">  900 </span>        (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
-<span class="lineno">  901 </span>        CrucibleSetup (CMSLLVM.LLVM arch) a
-<span class="lineno">  902 </span>    }
-<span class="lineno">  903 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>
-<span class="lineno">  904 </span>
-<span class="lineno">  905 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative LLVMCrucibleSetupM</span></span></span></span></span></span> where
-<span class="lineno">  906 </span>  <span class="decl"><span class="istickedoff">pure x = LLVMCrucibleSetupM (pure x)</span></span>
-<span class="lineno">  907 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM f &lt;*&gt; LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f &lt;*&gt; m)</span></span>
-<span class="lineno">  908 </span>
-<span class="lineno">  909 </span>instance <span class="decl"><span class="istickedoff">Monad LLVMCrucibleSetupM</span></span> where
-<span class="lineno">  910 </span>  <span class="decl"><span class="istickedoff">return = pure</span></span>
-<span class="lineno">  911 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM m &gt;&gt;= f =</span>
-<span class="lineno">  912 </span><span class="spaces">    </span><span class="istickedoff">LLVMCrucibleSetupM (m &gt;&gt;= \x -&gt; runLLVMCrucibleSetupM (f x))</span></span>
-<span class="lineno">  913 </span>
-<span class="lineno">  914 </span>throwCrucibleSetup :: ProgramLoc -&gt; String -&gt; CrucibleSetup ext a
-<span class="lineno">  915 </span><span class="decl"><span class="istickedoff">throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException <span class="nottickedoff">loc</span> msg</span></span>
-<span class="lineno">  916 </span>
-<span class="lineno">  917 </span>throwLLVM :: ProgramLoc -&gt; String -&gt; LLVMCrucibleSetupM a
-<span class="lineno">  918 </span><span class="decl"><span class="nottickedoff">throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg</span></span>
-<span class="lineno">  919 </span>
-<span class="lineno">  920 </span>throwLLVMFun :: Text -&gt; String -&gt; LLVMCrucibleSetupM a
-<span class="lineno">  921 </span><span class="decl"><span class="nottickedoff">throwLLVMFun nm msg = do</span>
-<span class="lineno">  922 </span><span class="spaces">  </span><span class="nottickedoff">loc &lt;- LLVMCrucibleSetupM $ getW4Position nm</span>
-<span class="lineno">  923 </span><span class="spaces">  </span><span class="nottickedoff">throwLLVM loc msg</span></span>
-<span class="lineno">  924 </span>
-<span class="lineno">  925 </span>-- | Get the current interpreter position and convert to a What4 position.
-<span class="lineno">  926 </span>getW4Position :: Text -&gt; CrucibleSetup arch ProgramLoc
-<span class="lineno">  927 </span><span class="decl"><span class="istickedoff">getW4Position s = do</span>
-<span class="lineno">  928 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift $ getPosition</span>
-<span class="lineno">  929 </span><span class="spaces">  </span><span class="istickedoff">return $ SS.toW4Loc s pos</span></span>
-<span class="lineno">  930 </span>
-<span class="lineno">  931 </span>--
+<span class="lineno">  892 </span>type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
+<span class="lineno">  893 </span>
+<span class="lineno">  894 </span>-- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
+<span class="lineno">  895 </span>--   specifications should be polymorphic in the underlying architecture
+<span class="lineno">  896 </span>-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
+<span class="lineno">  897 </span>
+<span class="lineno">  898 </span>newtype LLVMCrucibleSetupM a =
+<span class="lineno">  899 </span>  LLVMCrucibleSetupM
+<span class="lineno">  900 </span>    { <span class="istickedoff"><span class="decl"><span class="istickedoff">runLLVMCrucibleSetupM</span></span></span> ::
+<span class="lineno">  901 </span>        forall arch.
+<span class="lineno">  902 </span>        (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =&gt;
+<span class="lineno">  903 </span>        CrucibleSetup (CMSLLVM.LLVM arch) a
+<span class="lineno">  904 </span>    }
+<span class="lineno">  905 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>
+<span class="lineno">  906 </span>
+<span class="lineno">  907 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative LLVMCrucibleSetupM</span></span></span></span></span></span> where
+<span class="lineno">  908 </span>  <span class="decl"><span class="istickedoff">pure x = LLVMCrucibleSetupM (pure x)</span></span>
+<span class="lineno">  909 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM f &lt;*&gt; LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f &lt;*&gt; m)</span></span>
+<span class="lineno">  910 </span>
+<span class="lineno">  911 </span>instance <span class="decl"><span class="istickedoff">Monad LLVMCrucibleSetupM</span></span> where
+<span class="lineno">  912 </span>  <span class="decl"><span class="istickedoff">return = pure</span></span>
+<span class="lineno">  913 </span>  <span class="decl"><span class="istickedoff">LLVMCrucibleSetupM m &gt;&gt;= f =</span>
+<span class="lineno">  914 </span><span class="spaces">    </span><span class="istickedoff">LLVMCrucibleSetupM (m &gt;&gt;= \x -&gt; runLLVMCrucibleSetupM (f x))</span></span>
+<span class="lineno">  915 </span>
+<span class="lineno">  916 </span>throwCrucibleSetup :: ProgramLoc -&gt; String -&gt; CrucibleSetup ext a
+<span class="lineno">  917 </span><span class="decl"><span class="istickedoff">throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException <span class="nottickedoff">loc</span> msg</span></span>
+<span class="lineno">  918 </span>
+<span class="lineno">  919 </span>throwLLVM :: ProgramLoc -&gt; String -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  920 </span><span class="decl"><span class="nottickedoff">throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg</span></span>
+<span class="lineno">  921 </span>
+<span class="lineno">  922 </span>throwLLVMFun :: Text -&gt; String -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  923 </span><span class="decl"><span class="nottickedoff">throwLLVMFun nm msg = do</span>
+<span class="lineno">  924 </span><span class="spaces">  </span><span class="nottickedoff">loc &lt;- LLVMCrucibleSetupM $ getW4Position nm</span>
+<span class="lineno">  925 </span><span class="spaces">  </span><span class="nottickedoff">throwLLVM loc msg</span></span>
+<span class="lineno">  926 </span>
+<span class="lineno">  927 </span>-- | Get the current interpreter position and convert to a What4 position.
+<span class="lineno">  928 </span>getW4Position :: Text -&gt; CrucibleSetup arch ProgramLoc
+<span class="lineno">  929 </span><span class="decl"><span class="istickedoff">getW4Position s = do</span>
+<span class="lineno">  930 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift $ getPosition</span>
+<span class="lineno">  931 </span><span class="spaces">  </span><span class="istickedoff">return $ SS.toW4Loc s pos</span></span>
 <span class="lineno">  932 </span>
-<span class="lineno">  933 </span>type JVMSetup = CrucibleSetup CJ.JVM
+<span class="lineno">  933 </span>--
 <span class="lineno">  934 </span>
-<span class="lineno">  935 </span>newtype JVMSetupM a = JVMSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runJVMSetupM</span></span></span> :: JVMSetup a }
-<span class="lineno">  936 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>)
-<span class="lineno">  937 </span>
-<span class="lineno">  938 </span>--
+<span class="lineno">  935 </span>type JVMSetup = CrucibleSetup CJ.JVM
+<span class="lineno">  936 </span>
+<span class="lineno">  937 </span>newtype JVMSetupM a = JVMSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runJVMSetupM</span></span></span> :: JVMSetup a }
+<span class="lineno">  938 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>)
 <span class="lineno">  939 </span>
-<span class="lineno">  940 </span>type MIRSetup = CrucibleSetup MIR
+<span class="lineno">  940 </span>--
 <span class="lineno">  941 </span>
-<span class="lineno">  942 </span>newtype MIRSetupM a = MIRSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runMIRSetupM</span></span></span> :: MIRSetup a }
-<span class="lineno">  943 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>)
-<span class="lineno">  944 </span>
-<span class="lineno">  945 </span>--
-<span class="lineno">  946 </span>newtype ProofScript a = ProofScript { <span class="istickedoff"><span class="decl"><span class="istickedoff">unProofScript</span></span></span> :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
-<span class="lineno">  947 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
-<span class="lineno">  948 </span>
-<span class="lineno">  949 </span>-- TODO: remove the &quot;reason&quot; parameter and compute it from the
-<span class="lineno">  950 </span>--       initial proof goal instead
-<span class="lineno">  951 </span>runProofScript ::
-<span class="lineno">  952 </span>  ProofScript a -&gt;
-<span class="lineno">  953 </span>  Prop -&gt;
-<span class="lineno">  954 </span>  ProofGoal -&gt;
-<span class="lineno">  955 </span>  Maybe ProgramLoc -&gt;
-<span class="lineno">  956 </span>  Text -&gt;
-<span class="lineno">  957 </span>  Bool {- ^ record the theorem in the database? -} -&gt;
-<span class="lineno">  958 </span>  Bool {- ^ do we need to normalize the sequent goal? -} -&gt;
-<span class="lineno">  959 </span>  TopLevel ProofResult
-<span class="lineno">  960 </span><span class="decl"><span class="istickedoff">runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =</span>
-<span class="lineno">  961 </span><span class="spaces">  </span><span class="istickedoff">do pos &lt;- getPosition</span>
-<span class="lineno">  962 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (startProof gl <span class="nottickedoff">pos</span> <span class="nottickedoff">ploc</span> <span class="nottickedoff">rsn</span>)</span>
-<span class="lineno">  963 </span><span class="spaces">     </span><span class="istickedoff">(r,pstate) &lt;- runStateT (runExceptT m) ps</span>
-<span class="lineno">  964 </span><span class="spaces">     </span><span class="istickedoff">case r of</span>
-<span class="lineno">  965 </span><span class="spaces">       </span><span class="istickedoff">Left (stats,cex) -&gt; return (SAWCentral.Proof.InvalidProof stats cex pstate)</span>
-<span class="lineno">  966 </span><span class="spaces">       </span><span class="istickedoff">Right _ -&gt;</span>
-<span class="lineno">  967 </span><span class="spaces">         </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  968 </span><span class="spaces">            </span><span class="istickedoff">db &lt;- getTheoremDB</span>
-<span class="lineno">  969 </span><span class="spaces">            </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
-<span class="lineno">  970 </span><span class="spaces">            </span><span class="istickedoff">(thmResult, db') &lt;- io (finishProof sc <span class="nottickedoff">db</span> concl pstate <span class="nottickedoff">recordThm</span> useSequentGoals what4PushMuxOps)</span>
-<span class="lineno">  971 </span><span class="spaces">            </span><span class="istickedoff">putTheoremDB <span class="nottickedoff">db'</span></span>
-<span class="lineno">  972 </span><span class="spaces">            </span><span class="istickedoff">pure thmResult</span></span>
-<span class="lineno">  973 </span>
-<span class="lineno">  974 </span>
-<span class="lineno">  975 </span>scriptTopLevel :: TopLevel a -&gt; ProofScript a
-<span class="lineno">  976 </span><span class="decl"><span class="istickedoff">scriptTopLevel m = ProofScript (lift (lift m))</span></span>
-<span class="lineno">  977 </span>
-<span class="lineno">  978 </span>instance MonadIO ProofScript where
-<span class="lineno">  979 </span>  <span class="decl"><span class="nottickedoff">liftIO m = ProofScript (liftIO m)</span></span>
-<span class="lineno">  980 </span>
-<span class="lineno">  981 </span>instance MonadFail ProofScript where
-<span class="lineno">  982 </span>  <span class="decl"><span class="nottickedoff">fail msg = ProofScript (fail msg)</span></span>
-<span class="lineno">  983 </span>
-<span class="lineno">  984 </span>instance <span class="decl"><span class="nottickedoff">MonadState ProofState ProofScript</span></span> where
-<span class="lineno">  985 </span>  <span class="decl"><span class="istickedoff">get = ProofScript get</span></span>
-<span class="lineno">  986 </span>  <span class="decl"><span class="istickedoff">put x = ProofScript (put x)</span></span>
-<span class="lineno">  987 </span>
-<span class="lineno">  988 </span>instance MonadError (SolverStats, CEX) ProofScript where
-<span class="lineno">  989 </span>  <span class="decl"><span class="istickedoff">throwError cex = ProofScript (throwError cex)</span></span>
-<span class="lineno">  990 </span>  <span class="decl"><span class="nottickedoff">catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))</span></span>
-<span class="lineno">  991 </span>
-<span class="lineno">  992 </span>
-<span class="lineno">  993 </span>-- Error handling --------------------------------------------------------------
+<span class="lineno">  942 </span>type MIRSetup = CrucibleSetup MIR
+<span class="lineno">  943 </span>
+<span class="lineno">  944 </span>newtype MIRSetupM a = MIRSetupM { <span class="istickedoff"><span class="decl"><span class="istickedoff">runMIRSetupM</span></span></span> :: MIRSetup a }
+<span class="lineno">  945 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>)
+<span class="lineno">  946 </span>
+<span class="lineno">  947 </span>--
+<span class="lineno">  948 </span>newtype ProofScript a = ProofScript { <span class="istickedoff"><span class="decl"><span class="istickedoff">unProofScript</span></span></span> :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
+<span class="lineno">  949 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
+<span class="lineno">  950 </span>
+<span class="lineno">  951 </span>-- TODO: remove the &quot;reason&quot; parameter and compute it from the
+<span class="lineno">  952 </span>--       initial proof goal instead
+<span class="lineno">  953 </span>runProofScript ::
+<span class="lineno">  954 </span>  ProofScript a -&gt;
+<span class="lineno">  955 </span>  Prop -&gt;
+<span class="lineno">  956 </span>  ProofGoal -&gt;
+<span class="lineno">  957 </span>  Maybe ProgramLoc -&gt;
+<span class="lineno">  958 </span>  Text -&gt;
+<span class="lineno">  959 </span>  Bool {- ^ record the theorem in the database? -} -&gt;
+<span class="lineno">  960 </span>  Bool {- ^ do we need to normalize the sequent goal? -} -&gt;
+<span class="lineno">  961 </span>  TopLevel ProofResult
+<span class="lineno">  962 </span><span class="decl"><span class="istickedoff">runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =</span>
+<span class="lineno">  963 </span><span class="spaces">  </span><span class="istickedoff">do pos &lt;- getPosition</span>
+<span class="lineno">  964 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (startProof gl <span class="nottickedoff">pos</span> <span class="nottickedoff">ploc</span> <span class="nottickedoff">rsn</span>)</span>
+<span class="lineno">  965 </span><span class="spaces">     </span><span class="istickedoff">(r,pstate) &lt;- runStateT (runExceptT m) ps</span>
+<span class="lineno">  966 </span><span class="spaces">     </span><span class="istickedoff">case r of</span>
+<span class="lineno">  967 </span><span class="spaces">       </span><span class="istickedoff">Left (stats,cex) -&gt; return (SAWCentral.Proof.InvalidProof stats cex pstate)</span>
+<span class="lineno">  968 </span><span class="spaces">       </span><span class="istickedoff">Right _ -&gt;</span>
+<span class="lineno">  969 </span><span class="spaces">         </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  970 </span><span class="spaces">            </span><span class="istickedoff">db &lt;- getTheoremDB</span>
+<span class="lineno">  971 </span><span class="spaces">            </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
+<span class="lineno">  972 </span><span class="spaces">            </span><span class="istickedoff">(thmResult, db') &lt;- io (finishProof sc <span class="nottickedoff">db</span> concl pstate <span class="nottickedoff">recordThm</span> useSequentGoals what4PushMuxOps)</span>
+<span class="lineno">  973 </span><span class="spaces">            </span><span class="istickedoff">putTheoremDB <span class="nottickedoff">db'</span></span>
+<span class="lineno">  974 </span><span class="spaces">            </span><span class="istickedoff">pure thmResult</span></span>
+<span class="lineno">  975 </span>
+<span class="lineno">  976 </span>
+<span class="lineno">  977 </span>scriptTopLevel :: TopLevel a -&gt; ProofScript a
+<span class="lineno">  978 </span><span class="decl"><span class="istickedoff">scriptTopLevel m = ProofScript (lift (lift m))</span></span>
+<span class="lineno">  979 </span>
+<span class="lineno">  980 </span>instance MonadIO ProofScript where
+<span class="lineno">  981 </span>  <span class="decl"><span class="nottickedoff">liftIO m = ProofScript (liftIO m)</span></span>
+<span class="lineno">  982 </span>
+<span class="lineno">  983 </span>instance MonadFail ProofScript where
+<span class="lineno">  984 </span>  <span class="decl"><span class="nottickedoff">fail msg = ProofScript (fail msg)</span></span>
+<span class="lineno">  985 </span>
+<span class="lineno">  986 </span>instance <span class="decl"><span class="nottickedoff">MonadState ProofState ProofScript</span></span> where
+<span class="lineno">  987 </span>  <span class="decl"><span class="istickedoff">get = ProofScript get</span></span>
+<span class="lineno">  988 </span>  <span class="decl"><span class="istickedoff">put x = ProofScript (put x)</span></span>
+<span class="lineno">  989 </span>
+<span class="lineno">  990 </span>instance MonadError (SolverStats, CEX) ProofScript where
+<span class="lineno">  991 </span>  <span class="decl"><span class="istickedoff">throwError cex = ProofScript (throwError cex)</span></span>
+<span class="lineno">  992 </span>  <span class="decl"><span class="nottickedoff">catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))</span></span>
+<span class="lineno">  993 </span>
 <span class="lineno">  994 </span>
-<span class="lineno">  995 </span>underStateT :: (forall b. m b -&gt; m b) -&gt; StateT s m a -&gt; StateT s m a
-<span class="lineno">  996 </span><span class="decl"><span class="istickedoff">underStateT doUnder action = StateT $ \s -&gt; doUnder (runStateT action s)</span></span>
-<span class="lineno">  997 </span>
-<span class="lineno">  998 </span>underReaderT :: (forall b. m b -&gt; m b) -&gt; ReaderT s m a -&gt; ReaderT s m a
-<span class="lineno">  999 </span><span class="decl"><span class="istickedoff">underReaderT doUnder action = ReaderT $ \env -&gt; doUnder (runReaderT action env)</span></span>
-<span class="lineno"> 1000 </span>
-<span class="lineno"> 1001 </span>underExceptT :: (forall b. m b -&gt; m b) -&gt; ExceptT s m a -&gt; ExceptT s m a
-<span class="lineno"> 1002 </span><span class="decl"><span class="istickedoff">underExceptT doUnder action = ExceptT $ doUnder (runExceptT action)</span></span>
-<span class="lineno"> 1003 </span>
-<span class="lineno"> 1004 </span>
-<span class="lineno"> 1005 </span>data SkeletonState = SkeletonState
-<span class="lineno"> 1006 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_skelArgs</span></span></span> :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
-<span class="lineno"> 1007 </span>  }
-<span class="lineno"> 1008 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''SkeletonState</span></span></span>
+<span class="lineno">  995 </span>-- Error handling --------------------------------------------------------------
+<span class="lineno">  996 </span>
+<span class="lineno">  997 </span>underStateT :: (forall b. m b -&gt; m b) -&gt; StateT s m a -&gt; StateT s m a
+<span class="lineno">  998 </span><span class="decl"><span class="istickedoff">underStateT doUnder action = StateT $ \s -&gt; doUnder (runStateT action s)</span></span>
+<span class="lineno">  999 </span>
+<span class="lineno"> 1000 </span>underReaderT :: (forall b. m b -&gt; m b) -&gt; ReaderT s m a -&gt; ReaderT s m a
+<span class="lineno"> 1001 </span><span class="decl"><span class="istickedoff">underReaderT doUnder action = ReaderT $ \env -&gt; doUnder (runReaderT action env)</span></span>
+<span class="lineno"> 1002 </span>
+<span class="lineno"> 1003 </span>underExceptT :: (forall b. m b -&gt; m b) -&gt; ExceptT s m a -&gt; ExceptT s m a
+<span class="lineno"> 1004 </span><span class="decl"><span class="istickedoff">underExceptT doUnder action = ExceptT $ doUnder (runExceptT action)</span></span>
+<span class="lineno"> 1005 </span>
+<span class="lineno"> 1006 </span>
+<span class="lineno"> 1007 </span>data SkeletonState = SkeletonState
+<span class="lineno"> 1008 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_skelArgs</span></span></span> :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
+<span class="lineno"> 1009 </span>  }
+<span class="lineno"> 1010 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''SkeletonState</span></span></span>
 
 </pre>
 </body>
