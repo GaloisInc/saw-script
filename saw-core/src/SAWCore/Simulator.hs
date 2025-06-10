@@ -470,14 +470,27 @@ mkMemoClosed cfg t =
 
     go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
     go (Unshared tf) = freesTermF <$> traverse go tf
-    go (STApp{ stAppIndex = i, stAppTermF = tf }) = do
-      memo <- State.get
-      case IMap.lookup i memo of
-        Just (_, b) -> return b
-        Nothing -> do
-          b <- freesTermF <$> traverse go tf
-          State.modify (IMap.insert i (tf, b))
-          return b
+    go (STApp{ stAppIndex = i, stAppTermF = tf }) =
+      do memo <- State.get
+         case IMap.lookup i memo of
+           Just (_, b) -> pure b
+           Nothing ->
+             do -- if tf is a defined constant, traverse the definition body
+                case getBody tf of
+                  Just rhs -> go rhs >> pure ()
+                  Nothing -> pure ()
+                b <- freesTermF <$> traverse go tf
+                State.modify (IMap.insert i (tf, b))
+                pure b
+
+    getBody :: TermF t -> Maybe Term
+    getBody tf =
+      case tf of
+        Constant ec ->
+          case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
+            Just (ResolvedDef (defBody -> Just rhs)) -> Just rhs
+            _ -> Nothing
+        _ -> Nothing
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
