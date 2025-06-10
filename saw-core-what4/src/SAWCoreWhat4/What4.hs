@@ -235,8 +235,8 @@ prims sym =
   , Prims.bpIntAdd = W.intAdd sym
   , Prims.bpIntSub = W.intSub sym
   , Prims.bpIntMul = W.intMul sym
-  , Prims.bpIntDiv = W.intDiv sym
-  , Prims.bpIntMod = W.intMod sym
+  , Prims.bpIntDiv = intDiv sym
+  , Prims.bpIntMod = intMod sym
   , Prims.bpIntNeg = W.intNeg sym
   , Prims.bpIntEq  = W.intEq sym
   , Prims.bpIntLe  = W.intLe sym
@@ -476,6 +476,54 @@ intMax :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMax sym i1 i2 = do
   p <- W.intLt sym i1 i2
   W.intIte sym p i2 i1
+
+-- NB: What4's division operation provides SMT-LIB's Euclidean division, which
+-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
+-- do some work to get the desired semantics.
+intDiv ::
+  IsExprBuilder sym =>
+  sym ->
+  SymExpr sym BaseIntegerType ->
+  SymExpr sym BaseIntegerType ->
+  IO (SymExpr sym BaseIntegerType)
+intDiv sym x y = do
+  neg <- W.intLt sym y =<< W.intLit sym 0
+  case W.asConstantPred neg of
+    Just False -> W.intDiv sym x y
+    Just True  ->
+       do xneg <- W.intNeg sym x
+          yneg <- W.intNeg sym y
+          W.intDiv sym xneg yneg
+    Nothing ->
+       do xneg <- W.intNeg sym x
+          yneg <- W.intNeg sym y
+          zneg <- W.intDiv sym xneg yneg
+          z    <- W.intDiv sym x y
+          W.intIte sym neg zneg z
+
+-- NB: What4's division operation provides SMT-LIB's Euclidean division, which
+-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
+-- do some work to get the desired semantics.
+intMod ::
+  IsExprBuilder sym =>
+  sym ->
+  SymExpr sym BaseIntegerType ->
+  SymExpr sym BaseIntegerType ->
+  IO (SymExpr sym BaseIntegerType)
+intMod sym x y = do
+  neg <- W.intLt sym y =<< W.intLit sym 0
+  case W.asConstantPred neg of
+    Just False -> W.intMod sym x y
+    Just True  ->
+       do xneg <- W.intNeg sym x
+          yneg <- W.intNeg sym y
+          W.intNeg sym =<< W.intMod sym xneg yneg
+    Nothing ->
+       do xneg <- W.intNeg sym x
+          yneg <- W.intNeg sym y
+          z    <- W.intMod sym x y
+          zneg <- W.intNeg sym =<< W.intMod sym xneg yneg
+          W.intIte sym neg zneg z
 
 ------------------------------------------------------------
 -- Integers mod n

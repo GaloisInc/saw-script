@@ -99,6 +99,13 @@ The most notable changes are:
 * The `mir_isize` and `mir_usize` types now correspond to the Cryptol type
   `[64]` instead of `[32]`.
 
+* SAW's interpretation of signed integer division and modulus is now
+  self-consistent and matches Cryptol. Previously, what you got depended on how
+  and where the evaluation happened. Note however that the interpretation used
+  by Cryptol (which rounds towards negative infinity) is not the same as that
+  found in conventional CPUs and programming languages (which uses Euclidean
+  division).
+
 ## Deprecations
 
 * It was previously possible to declare monadic values of an

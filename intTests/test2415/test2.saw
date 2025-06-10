@@ -1,0 +1,16 @@
+let prove_print_sbv = prove_print z3;
+let prove_print_w4 = prove_print w4;
+
+let props =
+      [ {{ (  5  /   4)  ==  1 }}
+      , {{ ((-5) /   4)  == -2 }}
+      , {{ (  5  / (-4)) == -2 }}
+      , {{ ((-5) / (-4)) ==  1 }}
+
+      , {{ (  5  %   4)  ==  1 }}
+      , {{ ((-5) %   4)  ==  3 }}
+      , {{ (  5  % (-4)) == -3 }}
+      , {{ ((-5) % (-4)) == -1 }}
+      ];
+for props prove_print_sbv;
+for props prove_print_w4;

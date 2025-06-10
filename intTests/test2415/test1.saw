@@ -1,0 +1,4 @@
+import "Test.cry";
+
+prove_print z3 {{ p }};
+prove_print (w4_unint_z3 []) {{ p }};
