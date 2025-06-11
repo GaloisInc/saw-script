@@ -1,0 +1,80 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : CryptolSAWCore.Simpset
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2018
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module CryptolSAWCore.Simpset
+<span class="lineno">   13 </span>  ( mkCryptolSimpset
+<span class="lineno">   14 </span>  ) where
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>import SAWCore.Module (moduleDefs, Def(..))
+<span class="lineno">   17 </span>import SAWCore.Rewriter
+<span class="lineno">   18 </span>import SAWCore.SharedTerm
+<span class="lineno">   19 </span>import SAWCore.Term.Functor
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>mkCryptolSimpset :: SharedContext -&gt; IO (Simpset a)
+<span class="lineno">   22 </span><span class="decl"><span class="istickedoff">mkCryptolSimpset sc =</span>
+<span class="lineno">   23 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- scFindModule sc cryptolModuleName</span>
+<span class="lineno">   24 </span><span class="spaces">     </span><span class="istickedoff">scSimpset sc (cryptolDefs m) [] []</span>
+<span class="lineno">   25 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   26 </span><span class="spaces">    </span><span class="istickedoff">cryptolDefs m = filter (not . excluded) $ moduleDefs m</span>
+<span class="lineno">   27 </span><span class="spaces">    </span><span class="istickedoff">excluded d =</span>
+<span class="lineno">   28 </span><span class="spaces">      </span><span class="istickedoff">case defNameInfo d of</span>
+<span class="lineno">   29 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier ident -&gt; ident `elem` excludedNames</span>
+<span class="lineno">   30 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">True</span></span></span>
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>cryptolModuleName :: ModuleName
+<span class="lineno">   33 </span><span class="decl"><span class="istickedoff">cryptolModuleName = mkModuleName [&quot;Cryptol&quot;]</span></span>
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>excludedNames :: [Ident]
+<span class="lineno">   36 </span><span class="decl"><span class="istickedoff">excludedNames =</span>
+<span class="lineno">   37 </span><span class="spaces">  </span><span class="istickedoff">map (mkIdent cryptolModuleName)</span>
+<span class="lineno">   38 </span><span class="spaces">  </span><span class="istickedoff">[ &quot;fix&quot;</span>
+<span class="lineno">   39 </span><span class="spaces">  </span><span class="istickedoff">, &quot;pair_cong&quot;</span>
+<span class="lineno">   40 </span><span class="spaces">  </span><span class="istickedoff">, &quot;seq_cong&quot;</span>
+<span class="lineno">   41 </span><span class="spaces">  </span><span class="istickedoff">, &quot;pair_cong1&quot;</span>
+<span class="lineno">   42 </span><span class="spaces">  </span><span class="istickedoff">, &quot;pair_cong2&quot;</span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="istickedoff">, &quot;seq_cong1&quot;</span>
+<span class="lineno">   44 </span><span class="spaces">  </span><span class="istickedoff">, &quot;fun_cong&quot;</span>
+<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">, &quot;seq_TCNum&quot;</span>
+<span class="lineno">   46 </span><span class="spaces">  </span><span class="istickedoff">, &quot;seq_TCInf&quot;</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PLiteral&quot;</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PLogic&quot;</span>
+<span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PRing&quot;</span>
+<span class="lineno">   50 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PIntegral&quot;</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PField&quot;</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PRound&quot;</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PEq&quot;</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PCmp&quot;</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">, &quot;PSignedCmp&quot;</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">, &quot;ecEq&quot;</span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+
+</pre>
+</body>
+</html>
