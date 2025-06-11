@@ -394,7 +394,6 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppExtCns ec
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -560,7 +559,6 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (Primitive _)           -> []
             FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
             FTermF (CtorApp _ ps xs)       -> ps ++ xs
             FTermF (RecursorType _ ps m _) -> ps ++ [m]
@@ -575,7 +573,6 @@ scTermCountAux doBinders = go
 shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
-    FTermF Primitive{} -> False
     FTermF UnitValue -> False
     FTermF UnitType -> False
     FTermF (CtorApp _ [] []) -> False

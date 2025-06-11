@@ -187,12 +187,9 @@ sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
-    -- | A primitive or axiom without a definition.
-  = Primitive !(ExtCns e)
-
     -- Tuples are represented as nested pairs, grouped to the right,
     -- terminated with unit at the end.
-  | UnitValue
+  = UnitValue
   | UnitType
   | PairValue e e
   | PairType e e
@@ -322,7 +319,6 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go (Primitive ec1) (Primitive ec2) = Primitive <$> zipExtCns f ec1 ec2
     go UnitValue UnitValue = Just UnitValue
     go UnitType UnitType = Just UnitType
     go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
@@ -366,8 +362,7 @@ zipWithFlatTermF f = go
     go (ArrayValue tx vx) (ArrayValue ty vy)
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
-    go (ExtCns (EC xi xn xt)) (ExtCns (EC yi _ yt))
-      | xi == yi = Just (ExtCns (EC xi xn (f xt yt)))
+    go (ExtCns ec1) (ExtCns ec2) = ExtCns <$> zipExtCns f ec1 ec2
 
     go _ _ = Nothing
 
@@ -574,7 +569,6 @@ termToPat t =
     case unwrapTermF t of
       Constant ec               -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive ec)     -> Net.Atom (toShortName (ecName ec))
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
