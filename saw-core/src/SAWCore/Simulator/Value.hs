@@ -385,7 +385,7 @@ neutralToTerm = loop
   loop (NeutralRecursor r ixs x) =
     Unshared (FTermF (RecursorApp (loop r) ixs x))
   loop (NeutralConstant ec) =
-    Unshared (Constant ec Nothing)
+    Unshared (Constant ec)
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -408,7 +408,7 @@ neutralToSharedTerm sc = loop
     do tm <- loop nt
        scFlatTermF sc (RecursorApp r ixs tm)
   loop (NeutralConstant ec) =
-    do scTermF sc (Constant ec Nothing)
+    do scTermF sc (Constant ec)
 
 ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
 ppNeutral opts = ppTerm opts . neutralToTerm

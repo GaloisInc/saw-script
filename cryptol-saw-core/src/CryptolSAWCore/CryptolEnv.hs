@@ -473,7 +473,7 @@ updateFFITypes m env = env { eFFITypes = eFFITypes' }
     case Map.lookup nm (eTermEnv env) of
       Just tm ->
         case asConstant tm of
-          Just (ec, _) -> ecName ec
+          Just ec -> ecName ec
           Nothing ->
             panic "updateFFITypes" [
                 "SAWCore term of Cryptol name is not Constant",

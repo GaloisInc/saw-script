@@ -394,7 +394,7 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppPrimName ec
+    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppExtCns ec
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -506,7 +506,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = annotate PPS.LocalVarStyle <$> pretty <$> varLookupM x
-ppTermF _ (Constant ec _) = annotate PPS.ConstantStyle <$> ppExtCns ec
+ppTermF _ (Constant ec) = annotate PPS.ConstantStyle <$> ppExtCns ec
 
 
 -- | Internal function to recursively pretty-print a term

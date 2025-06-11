@@ -81,6 +81,7 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Foldable (foldl')
 import qualified Data.IntSet as IntSet
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import qualified Data.Text as Text
 
 import qualified Cryptol.TypeCheck.Type as C
@@ -425,15 +426,19 @@ buildOutputRelationTheorem bthms bc = do
   rhsState <- io $ scLocalVar sc 1        -- s2
   input <- io $ scLocalVar sc 2           -- in
 
+  -- LHS/RHS constants
+  let lhs = ttTerm (bisimTheoremLhs outerBt)
+  let rhs = ttTerm (bisimTheoremRhs outerBt)
+
   -- LHS/RHS inputs
   lhsTuple <- io $ scTuple sc [lhsState, input]  -- (s1, in)
   rhsTuple <- io $ scTuple sc [rhsState, input]  -- (s2, in)
 
   -- LHS/RHS outputs
   -- lhs (s1, in)
-  lhsOutput <- io $ scApply sc (ttTerm (bisimTheoremLhs outerBt)) lhsTuple
+  lhsOutput <- io $ scApply sc lhs lhsTuple
   -- rhs (s2, in)
-  rhsOutput <- io $ scApply sc (ttTerm (bisimTheoremRhs outerBt)) rhsTuple
+  rhsOutput <- io $ scApply sc rhs rhsTuple
 
   -- Initial relation result
   -- srel s1 s2
@@ -449,8 +454,13 @@ buildOutputRelationTheorem bthms bc = do
   -- srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))
   implication <- io $ scImplies sc initRelation relationRes
 
+  -- Unfold LHS/RHS constants to reveal opportunities for simplification
+  let vs = map ecVarIndex $ mapMaybe asConstant [lhs, rhs]
+  implication_unfolded <-
+    io $ scUnfoldConstants sc vs implication >>= betaNormalize sc
+
   -- Simplify Term with any theorems that apply
-  (implication', sideConditions) <- applyAllTheorems bthms bc implication
+  (implication', sideConditions) <- applyAllTheorems bthms bc implication_unfolded
 
   -- Function to prove
   -- forall s1 s2 in out1 out2.
@@ -750,7 +760,7 @@ replaceConstantTerm constant constantRetType term = do
 
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
-constantName (Constant e _) = return $ toShortName $ ecName e
+constantName (Constant e) = return $ toShortName $ ecName e
 constantName tf = do
   sc <- getSharedContext
   term <- io $ scTermF sc tf

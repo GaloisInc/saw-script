@@ -106,7 +106,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Control.Monad.Cont (Cont, cont, runCont)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), ReaderT(..))
@@ -120,6 +120,7 @@ import Data.Type.Equality
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
+import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
@@ -145,8 +146,7 @@ import GHC.Stack
 data GlobalDef = GlobalDef { globalDefName :: NameInfo,
                              globalDefIndex :: VarIndex,
                              globalDefType :: Term,
-                             globalDefTerm :: Term,
-                             globalDefBody :: Maybe Term }
+                             globalDefTerm :: Term }
 
 instance Eq GlobalDef where
   gd1 == gd2 = globalDefIndex gd1 == globalDefIndex gd2
@@ -169,13 +169,12 @@ globalDefOpenTerm = closedOpenTerm . globalDefTerm
 asTypedGlobalDef :: Recognizer Term GlobalDef
 asTypedGlobalDef t =
   case unwrapTermF t of
-    FTermF (Primitive pn) ->
-      Just $ GlobalDef (ModuleIdentifier $
-                        primName pn) (primVarIndex pn) (primType pn) t Nothing
-    Constant ec body ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t body
+    FTermF (Primitive ec) ->
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
+    Constant ec ->
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     FTermF (ExtCns ec) ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t Nothing
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     _ -> Nothing
 
 
@@ -1678,14 +1677,17 @@ monadifyTermInEnvH :: SharedContext -> Term -> Term ->
                       StateT MonadifyEnv IO Term
 monadifyTermInEnvH sc top_trm top_tp =
   do lift $ ensureCryptolMLoaded sc
-     let const_infos =
-           map snd $ Map.toAscList $ getConstantSet top_trm
-     forM_ const_infos $ \(nmi,tp,maybe_body) ->
-       get >>= \env ->
-       if isPreludeName nmi ||
-          Map.member nmi (monEnvMonTable env) then return () else
-         do mtrm <- monadifyNamedTermH sc nmi maybe_body tp
-            modify $ monEnvAdd nmi (monMacro0 mtrm)
+     mm <- lift $ scGetModuleMap sc
+     let const_infos = Map.toAscList $ getConstantSet top_trm
+     forM_ const_infos $ \(vi, (nmi, tp)) ->
+       do let maybe_body =
+                case lookupVarIndexInMap vi mm of
+                  Just (ResolvedDef d) -> defBody d
+                  _ -> Nothing
+          env <- get
+          unless (isPreludeName nmi || Map.member nmi (monEnvMonTable env)) $
+            do mtrm <- monadifyNamedTermH sc nmi maybe_body tp
+               modify $ monEnvAdd nmi (monMacro0 mtrm)
      env <- get
      lift $ monadifyCompleteTerm sc env top_trm top_tp
   where preludeModules = mkModuleName <$> [["Prelude"], ["Cryptol"]]

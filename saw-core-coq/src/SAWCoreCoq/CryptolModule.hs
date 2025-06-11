@@ -12,7 +12,7 @@ import           Cryptol.ModuleSystem.Name          (Name, nameIdent)
 import           Cryptol.Utils.Ident                (unpackIdent)
 import qualified Language.Coq.AST                   as Coq
 import           SAWCore.Term.Functor          (Term)
-import           SAWCore.SharedTerm            (SharedContext)
+import           SAWCore.SharedTerm            (SharedContext, scGetModuleMap)
 import           SAWCoreCoq.Monad
 import qualified SAWCoreCoq.Term  as TermTranslation
 import           CryptolSAWCore.TypedTerm
@@ -49,11 +49,13 @@ translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =
        forM (Map.assocs tm) $ \(nm, t) ->
        do tp <- ttTypeAsTerm sc env t
           return (nm, ttTerm t, tp)
+     mm <- scGetModuleMap sc
      return
        (reverse . view TermTranslation.topLevelDeclarations . snd <$>
         TermTranslation.runTermTranslationMonad
         configuration
         Nothing -- TODO: this should be Just no?
+        mm
         globalDecls
         []
         (translateTypedTermMap defs))

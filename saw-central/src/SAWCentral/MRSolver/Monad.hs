@@ -57,7 +57,7 @@ import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
 import SAWCore.SCTypeCheck
 import SAWCore.SharedTerm
-import SAWCore.Module (Def(..))
+import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 
@@ -1024,8 +1024,8 @@ mrGlobalDef ident = asTypedGlobalDef <$> liftSC1 scGlobalDef ident >>= \case
 
 -- | Get the body of a global definition, raising an 'error' if none is found
 mrGlobalDefBody :: Ident -> MRM t Term
-mrGlobalDefBody ident = asConstant <$> liftSC1 scGlobalDef ident >>= \case
-  Just (_, Just body) -> return body
+mrGlobalDefBody ident = liftSC1 scFindDef ident >>= \case
+  Just (defBody -> Just body) -> pure body
   _ -> error $ "mrGlobalDefBody: global has no definition: " ++ show ident
 
 -- | Get the body of a function @f@ if it has one
@@ -1034,10 +1034,12 @@ mrFunNameBody (CallSName var) =
   mrVarInfo var >>= \case
   Just (CallVarInfo body) -> return $ Just body
   _ -> error "mrFunBody: unknown letrec var"
-mrFunNameBody (GlobalName glob projs)
-  | Just body <- globalDefBody glob
-  = Just <$> foldM doTermProj body projs
-mrFunNameBody (GlobalName _ _) = return Nothing
+mrFunNameBody (GlobalName glob projs) =
+  do mm <- liftSC0 scGetModuleMap
+     case lookupVarIndexInMap (globalDefIndex glob) mm of
+       Just (ResolvedDef (defBody -> Just body)) ->
+         Just <$> foldM doTermProj body projs
+       _ -> pure Nothing
 mrFunNameBody (EVarFunName _) = return Nothing
 
 -- | Get the body of a function @f@ applied to some arguments, if possible

@@ -133,6 +133,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)
 
+import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
@@ -184,14 +185,24 @@ asList _ = Nothing
 -- @F1@ through @Fn@ to represent recursive calls and apply that term to
 -- function variables for @F1@ throughh @Fn@, returning @f1@ through @fn@.
 mrApplyMFixBodies :: Term -> [Term] -> MRM t [Term]
-mrApplyMFixBodies (asConstant -> Just (_, Just defs_tm)) fun_tms =
-  -- If defs is a constant, unfold it
-  mrApplyMFixBodies defs_tm fun_tms
 mrApplyMFixBodies defs_tm fun_tms =
-  do defs_app <- mrApplyAll defs_tm fun_tms
-     case asNestedPairs defs_app of
-       Just defs -> return defs
-       Nothing -> throwMRFailure (MalformedDefs defs_tm)
+  do mm <- liftSC0 scGetModuleMap
+     let mbody =
+           case asConstant defs_tm of
+             Nothing -> Nothing
+             Just ec ->
+               case lookupVarIndexInMap (ecVarIndex ec) mm of
+                 Just (ResolvedDef d) -> defBody d
+                 _ -> Nothing
+     case mbody of
+       Just body ->
+         -- If defs is a constant, unfold it
+         mrApplyMFixBodies body fun_tms
+       Nothing ->
+         do defs_app <- mrApplyAll defs_tm fun_tms
+            case asNestedPairs defs_app of
+              Just defs -> return defs
+              Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
 -- | Bind fresh function variables for a @LetRecS@ or @MultiFixS@ whose types
 -- are given in the supplied list (which should all be monadic function types)
@@ -279,8 +290,9 @@ normComp (CompTerm t) =
                   -- Always unfold: is_bvult, is_bvule
                   (tpf@(asGlobalDef -> Just ident), args)
                     | ident `elem` ["Prelude.is_bvult", "Prelude.is_bvule"]
-                    , Just (_, Just body) <- asConstant tpf ->
-                      mrApplyAll body args
+                    , Just ec <- asConstant tpf ->
+                      do body <- requireDefBody ident ec
+                         mrApplyAll body args
                   _ -> return tp
          return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm ev f) mayb
     (isGlobalDef "SpecM.orS" -> Just (), [_, _, m1, m2]) ->
@@ -447,8 +459,9 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
          "Cryptol.Num_rec", "SpecM.invariantHint",
          "SpecM.assumingS", "SpecM.assertingS", "SpecM.forNatLtThenSBody",
          "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM"]
-      , Just (_, Just body) <- asConstant f ->
-        mrApplyAll body args >>= normCompTerm
+      , Just ec <- asConstant f ->
+        do body <- requireDefBody ident ec
+           mrApplyAll body args >>= normCompTerm
 
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
@@ -478,6 +491,13 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     _ -> throwMRFailure (MalformedComp t)
 
+
+requireDefBody :: Ident -> ExtCns e -> MRM t Term
+requireDefBody ident ec =
+  do mm <- liftSC0 scGetModuleMap
+     case lookupVarIndexInMap (ecVarIndex ec) mm of
+       Just (ResolvedDef (defBody -> Just t)) -> pure t
+       _ -> panic "normComp" ["Missing definition for constant " <> identText ident]
 
 -- | Bind a computation in whnf with a function, and normalize
 normBind :: NormComp -> CompFun -> MRM t NormComp

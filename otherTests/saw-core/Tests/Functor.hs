@@ -187,7 +187,7 @@ instance TestIt Term where
         testOne depth' $ Pi lnBar t localvar
         testTwo depth' EQ (Lambda lnFoo t t) (Lambda lnBar t t)
         testTwo depth' EQ (Pi lnFoo t t) (Pi lnBar t t)
-        testTwo depth' GT (Constant ecFoo (Just t)) (Constant ecFoo Nothing)
+        testTwo depth' EQ (Constant ecFoo) (Constant ecFoo)
 
   testTwo depth comp t1 t2 = do
       -- check that they compare as expected

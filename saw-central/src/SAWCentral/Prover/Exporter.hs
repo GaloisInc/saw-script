@@ -486,8 +486,9 @@ writeCoqTerm name notations skips path t = do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   sc <- getSharedContext
+  mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Coq.translateTermAsDeclImports configuration name t tp of
+  case Coq.translateTermAsDeclImports configuration mm name t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       "" -> print doc
@@ -559,9 +560,10 @@ writeCoqSAWCorePrelude ::
 writeCoqSAWCorePrelude outputFile notations skips = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
+  mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
   let configuration = coqTranslationConfiguration notations skips
-  let doc = Coq.translateSAWModule configuration m
+  let doc = Coq.translateSAWModule configuration mm m
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
 
 writeCoqCryptolPrimitivesForSAWCore ::
@@ -579,6 +581,7 @@ writeCoqCryptolPrimitivesForSAWCore cryFile specMFile cryMFile notations skips =
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   m_spec <- scFindModule sc (Un.moduleName specMModule)
   m_mon <- scFindModule sc (Un.moduleName cryptolMModule)
+  mm <- scGetModuleMap sc
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
@@ -588,15 +591,15 @@ writeCoqCryptolPrimitivesForSAWCore cryFile specMFile cryMFile notations skips =
         withImportSpecM configuration
   let configuration_mon =
         withImportSpecMPrimitivesForSAWCore configuration
-  let doc = Coq.translateSAWModule configuration m
+  let doc = Coq.translateSAWModule configuration mm m
   writeFile cryFile (show . vcat $ [ Coq.preamble configuration
                                    , doc
                                    ])
-  let doc_spec = Coq.translateSAWModule configuration_spec m_spec
+  let doc_spec = Coq.translateSAWModule configuration_spec mm m_spec
   writeFile specMFile (show . vcat $ [ Coq.preamble configuration_spec
                                     , doc_spec
                                     ])
-  let doc_mon = Coq.translateSAWModule configuration_mon m_mon
+  let doc_mon = Coq.translateSAWModule configuration_mon mm m_mon
   writeFile cryMFile (show . vcat $ [ Coq.preamble configuration_mon
                                     , doc_mon
                                     ])

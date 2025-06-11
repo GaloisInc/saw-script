@@ -635,12 +635,7 @@ sbvSolveBasic sc addlPrims unintSet t = do
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
   let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
-  let primHandler pn msg env _tv =
-         fail $ unlines
-           [ "Could not evaluate primitive " ++ show (primName pn)
-           , "On argument " ++ show (length env)
-           , Text.unpack msg
-           ]
+  let primHandler = Sim.defaultPrimHandler
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler
   Sim.evalSharedTerm cfg t
 
@@ -728,12 +723,7 @@ sbvSATQuery sc addlPrims query =
                 | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
                 | otherwise                           = Nothing
           let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
-          let primHandler pn msg env _tv =
-                 fail $ unlines
-                   [ "Could not evaluate primitive " ++ show (primName pn)
-                   , "On argument " ++ show (length env)
-                   , Text.unpack msg
-                   ]
+          let primHandler = Sim.defaultPrimHandler
 
           cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler)
           bval <- liftIO (Sim.evalSharedTerm cfg t)

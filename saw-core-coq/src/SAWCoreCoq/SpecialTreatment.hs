@@ -87,6 +87,14 @@ translateModuleName :: ModuleName -> ModuleName
 translateModuleName mn =
   Map.findWithDefault mn mn moduleRenamingMap
 
+findSpecialTreatment' ::
+  TranslationConfigurationMonad r m =>
+  NameInfo -> m IdentSpecialTreatment
+findSpecialTreatment' nmi =
+  case nmi of
+    ModuleIdentifier ident -> findSpecialTreatment ident
+    ImportedName{} -> pure $ IdentSpecialTreatment DefPreserve UsePreserve
+
 findSpecialTreatment ::
   TranslationConfigurationMonad r m =>
   Ident -> m IdentSpecialTreatment

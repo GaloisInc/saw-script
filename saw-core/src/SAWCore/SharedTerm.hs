@@ -613,12 +613,13 @@ scInsDefInMap sc d =
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
-  do i <- scRegisterName sc (ModuleIdentifier ident)
-     let pn = PrimName i ident def_tp
-     t <- scFlatTermF sc (Primitive pn)
+  do let nmi = ModuleIdentifier ident
+     i <- scRegisterName sc nmi
+     let ec = EC i nmi def_tp
+     t <- scFlatTermF sc (Primitive ec)
      scRegisterGlobal sc ident t
      scInsDefInMap sc $
-                  Def { defIdent = ident,
+                  Def { defNameInfo = nmi,
                         defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
@@ -629,14 +630,6 @@ scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
 scInsertDef sc ident def_tp def_tm =
   do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
      scRegisterGlobal sc ident t
-     mi <- scResolveNameByURI sc (moduleIdentToURI ident)
-     let i = fromMaybe (panic "scInsertDef" ["name not found"]) mi
-     scInsDefInMap sc $
-                  Def { defIdent = ident,
-                        defVarIndex = i,
-                        defQualifier = NoQualifier,
-                        defType = def_tp,
-                        defBody = Just def_tm }
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
@@ -650,6 +643,14 @@ scFindModule sc name =
 -- | Look up a definition by its identifier
 scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
 scFindDef sc i = findDefInMap i <$> scGetModuleMap sc
+
+-- Internal function
+scFindDefBody :: SharedContext -> VarIndex -> IO (Maybe Term)
+scFindDefBody sc vi =
+  do mm <- scGetModuleMap sc
+     case lookupVarIndexInMap vi mm of
+       Just (ResolvedDef d) -> pure (defBody d)
+       _ -> pure Nothing
 
 -- | Look up a 'Def' by its identifier, throwing an error if it is not found
 scRequireDef :: SharedContext -> Ident -> IO Def
@@ -1015,7 +1016,10 @@ scWhnf sc t0 =
                                                                      args' <- mapM memo args
                                                                      t' <- scDataTypeAppParams sc d ps' args'
                                                                      foldM reapply t' xs
-    go xs                     (asConstant -> Just (_,Just body)) = go xs body
+    go xs                     t@(asConstant -> Just ec)         = do mbody <- scFindDefBody sc (ecVarIndex ec)
+                                                                     case mbody of
+                                                                       Just body -> go xs body
+                                                                       Nothing -> foldM reapply t xs
     go xs                     t                                 = foldM reapply t xs
 
     betaReduce :: (?cache :: Cache IO TermIndex Term) =>
@@ -1063,9 +1067,19 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
 
        goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
 
-       goF _c (Constant ecx _) (Constant ecy _) | ecVarIndex ecx == ecVarIndex ecy = pure True
-       goF c (Constant _ (Just x)) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
-       goF c x (Constant _ (Just y)) | unfoldConst = join (goF c <$> return x <*> whnf c y)
+       goF _c (Constant ecx) (Constant ecy) | ecVarIndex ecx == ecVarIndex ecy = pure True
+       goF c (Constant ecx) y
+           | unfoldConst =
+             do mx <- scFindDefBody sc (ecVarIndex ecx)
+                case mx of
+                  Just x -> join (goF c <$> whnf c x <*> return y)
+                  Nothing -> pure False
+       goF c x (Constant ecy)
+           | unfoldConst =
+             do my <- scFindDefBody sc (ecVarIndex ecy)
+                case my of
+                  Just y -> join (goF c <$> return x <*> whnf c y)
+                  Nothing -> pure False
 
        goF c (FTermF ftf1) (FTermF ftf2) =
                case zipWithFlatTermF (go c) ftf1 ftf2 of
@@ -1167,12 +1181,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant ec _ -> return (ecType ec)
+        Constant ec -> return (ecType ec)
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        Primitive ec -> return (primType ec)
+        Primitive ec -> return (ecType ec)
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
@@ -1456,9 +1470,11 @@ scApplyAllBeta sc = foldlM (scApplyBeta sc)
 scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
--- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc d = scGlobalDef sc (defIdent d)
+scDefTerm sc Def{..} =
+  case defBody of
+    Just _ -> scTermF sc (Constant (EC defVarIndex defNameInfo defType))
+    Nothing -> scFlatTermF sc (Primitive (EC defVarIndex defNameInfo defType))
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
@@ -1659,7 +1675,13 @@ scConstant sc name rhs ty =
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
      ec <- scFreshEC sc name ty'
-     t <- scTermF sc (Constant ec (Just rhs'))
+     scInsDefInMap sc $
+       Def { defNameInfo = ecName ec,
+             defVarIndex = ecVarIndex ec,
+             defQualifier = NoQualifier,
+             defType = ty',
+             defBody = Just rhs' }
+     t <- scTermF sc (Constant ec)
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1686,7 +1708,13 @@ scConstant' sc nmi rhs ty =
      ty' <- scFunAll sc (map ecType ecs) ty
      i <- scRegisterName sc nmi
      let ec = EC i nmi ty'
-     t <- scTermF sc (Constant ec (Just rhs'))
+     scInsDefInMap sc $
+       Def { defNameInfo = ecName ec,
+             defVarIndex = ecVarIndex ec,
+             defQualifier = NoQualifier,
+             defType = ty',
+             defBody = Just rhs' }
+     t <- scTermF sc (Constant ec)
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1702,7 +1730,7 @@ scOpaqueConstant ::
 scOpaqueConstant sc nmi ty =
   do i <- scRegisterName sc nmi
      let ec = EC i nmi ty
-     scTermF sc (Constant ec Nothing)
+     scTermF sc (Constant ec)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
@@ -2541,7 +2569,7 @@ getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
 
-getConstantSet :: Term -> Map VarIndex (NameInfo, Term, Maybe Term)
+getConstantSet :: Term -> Map VarIndex (NameInfo, Term)
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
   where
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
@@ -2551,7 +2579,7 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 
     termf acc@(idxs, names) tf =
       case tf of
-        Constant (EC vidx n ty) body -> (idxs, Map.insert vidx (n, ty, body) names)
+        Constant (EC vidx n ty) -> (idxs, Map.insert vidx (n, ty) names)
         _ -> foldl' go acc tf
 
 -- | Instantiate some of the external constants.
@@ -2736,17 +2764,24 @@ scUnfoldConstantSet :: SharedContext
                     -> IO Term
 scUnfoldConstantSet sc b names t0 = do
   cache <- newCache
+  mm <- scGetModuleMap sc
+  let getRhs v =
+        case lookupVarIndexInMap v mm of
+          Just (ResolvedDef d) -> defBody d
+          _ -> Nothing
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) (Just rhs)
-            | Set.member idx names == b -> go rhs
+          Constant (EC idx _ _)
+            | Set.member idx names == b
+            , Just rhs <- getRhs idx    -> go rhs
             | otherwise                 -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC ecidx _ _) (Just rhs)
-            | Set.member ecidx names == b -> go rhs
+          Constant (EC ecidx _ _)
+            | Set.member ecidx names == b
+            , Just rhs <- getRhs ecidx    -> go rhs
             | otherwise                   -> return t
           _ -> scTermF sc =<< traverse go tf
   go t0
@@ -2763,6 +2798,11 @@ scUnfoldOnceFixConstantSet :: SharedContext
                            -> IO Term
 scUnfoldOnceFixConstantSet sc b names t0 = do
   cache <- newCache
+  mm <- scGetModuleMap sc
+  let getRhs v =
+        case lookupVarIndexInMap v mm of
+          Just (ResolvedDef d) -> defBody d
+          _ -> Nothing
   let unfold t idx rhs
         | Set.member idx names == b
         , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs =
@@ -2772,11 +2812,11 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) (Just rhs) -> unfold t idx rhs
+          Constant (EC idx _ _) | Just rhs <- getRhs idx -> unfold t idx rhs
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC ecidx _ _) (Just rhs) -> unfold t ecidx rhs
+          Constant (EC ecidx _ _) | Just rhs <- getRhs ecidx -> unfold t ecidx rhs
           _ -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2788,22 +2828,28 @@ scUnfoldConstantSet' :: SharedContext
                     -> IO Term
 scUnfoldConstantSet' sc b names t0 = do
   tcache <- newCacheMap' Map.empty
+  mm <- scGetModuleMap sc
+  let getRhs v =
+        case lookupVarIndexInMap v mm of
+          Just (ResolvedDef d) -> defBody d
+          _ -> Nothing
   let go :: Term -> ChangeT IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) (Just rhs)
-            | Set.member idx names == b -> taint (go rhs)
+          Constant (EC idx _ _)
+            | Set.member idx names == b
+            , Just rhs <- getRhs idx    -> taint (go rhs)
             | otherwise                 -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
-          Constant (EC ecidx _ _) (Just rhs)
-            | Set.member ecidx names == b -> taint (go rhs)
+          Constant (EC ecidx _ _)
+            | Set.member ecidx names == b
+            , Just rhs <- getRhs ecidx    -> taint (go rhs)
             | otherwise                   -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
-
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer

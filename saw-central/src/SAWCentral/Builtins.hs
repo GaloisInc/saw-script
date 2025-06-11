@@ -543,7 +543,7 @@ printGoalConsts =
   execTactic $ tacticId $ \goal ->
   do let cs = sequentConstantSet (goalSequent goal)
      mapM_ (printOutLnTop Info) $
-       [ show nm | (_,(nm,_,_)) <- Map.toList cs ]
+       [ show nm | (_,(nm,_)) <- Map.toList cs ]
 
 printGoalSize :: ProofScript ()
 printGoalSize =

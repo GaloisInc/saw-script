@@ -31,6 +31,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified SAWCore.Prim as Prim
@@ -53,9 +54,9 @@ evalSharedTerm m addlPrims ecVals t =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
-    primHandler pn msg env _tv =
+    primHandler ec msg env _tv =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ show (primName pn)
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]

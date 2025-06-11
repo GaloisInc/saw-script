@@ -188,7 +188,7 @@ sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)
 --     zipWithFlatTermF!
 data FlatTermF e
     -- | A primitive or axiom without a definition.
-  = Primitive !(PrimName e)
+  = Primitive !(ExtCns e)
 
     -- Tuples are represented as nested pairs, grouped to the right,
     -- terminated with unit at the end.
@@ -295,6 +295,11 @@ zipPrimName f (PrimName v1 ident x) (PrimName v2 _ y)
   | v1 == v2 = Just (PrimName v1 ident (f x y))
   | otherwise = Nothing
 
+zipExtCns :: (x -> y -> z) -> ExtCns x -> ExtCns y -> Maybe (ExtCns z)
+zipExtCns f (EC v1 nmi x) (EC v2 _ y)
+  | v1 == v2 = Just (EC v1 nmi (f x y))
+  | otherwise = Nothing
+
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
 zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
   | Map.keysSet es1 == Map.keysSet es2
@@ -317,7 +322,7 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go (Primitive pn1) (Primitive pn2) = Primitive <$> zipPrimName f pn1 pn2
+    go (Primitive ec1) (Primitive ec2) = Primitive <$> zipExtCns f ec1 ec2
     go UnitValue UnitValue = Just UnitValue
     go UnitType UnitType = Just UnitType
     go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
@@ -384,9 +389,9 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e) !(Maybe e)
-      -- ^ An abstract constant packaged with its type and definition.
-      -- The body and type should be closed terms.
+    | Constant !(ExtCns e)
+      -- ^ A global constant identified by its name and type.
+      -- The type is always a closed term.
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
 instance (e ~ Term) => Eq (TermF e) where
@@ -405,14 +410,14 @@ instance (e ~ Term) => Ord (TermF e) where
     (Lambda {}, _) -> LT
 
     (Pi {}, LocalVar _) -> LT
-    (Pi {}, Constant _ _) -> LT
+    (Pi {}, Constant _) -> LT
     (Pi _ ll lr, Pi _ rl rr) -> compare (ll, lr) (rl, rr)
     (Pi {}, _) -> GT
-    (LocalVar _, Constant _ _) -> LT
+    (LocalVar _, Constant _) -> LT
     (LocalVar l, LocalVar r) -> compare l r
     (LocalVar _, _) -> GT
-    (Constant ll lr, Constant rl rr) -> compare (ll, lr) (rl, rr)
-    (Constant _ _, _) -> GT
+    (Constant l, Constant r) -> compare l r
+    (Constant _, _) -> GT
 
 -- See the commentary on 'Hashable Term' for an explanation of this instance
 -- and a note on uniqueness.
@@ -422,7 +427,7 @@ instance (e ~ Term, Hashable e) => Hashable (TermF e) where
   hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
-  hashWithSalt salt (Constant ec d) = salt `hashWithSalt` ec `hashWithSalt` d
+  hashWithSalt salt (Constant ec) = salt `hashWithSalt` ec
 -- NB: we may someday wish to improve this instance, for a couple reasons.
 --
 -- 1. Improve the default, XOR-based hashing scheme to improve collision
@@ -546,10 +551,7 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 b1) (Constant x2 b2) = ecVarIndex x1 == ecVarIndex x2 && case (b1, b2) of
-      (Just t1, Just t2) -> term t1 t2
-      (Nothing, Nothing) -> True
-      _ -> False
+    termf (Constant x1) (Constant x2) = ecVarIndex x1 == ecVarIndex x2
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
@@ -570,9 +572,9 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (toShortName (ecName ec))
+      Constant ec               -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive pn)     -> Net.Atom (identBaseName (primName pn))
+      FTermF (Primitive ec)     -> Net.Atom (toShortName (ecName ec))
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->

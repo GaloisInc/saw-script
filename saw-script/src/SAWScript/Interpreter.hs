@@ -666,7 +666,10 @@ buildTopLevelEnv proxy opts =
                       , remove_ident_unsafeCoerce
                       ]
            cryptolDefs = filter defPred $ moduleDefs cryptol_mod
-           defPred d = defIdent d `Set.member` includedDefs
+           defPred d =
+             case defNameInfo d of
+               ModuleIdentifier ident -> ident `Set.member` includedDefs
+               ImportedName{} -> False
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
                           , "Cryptol.seq"

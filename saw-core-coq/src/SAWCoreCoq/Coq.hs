@@ -22,6 +22,7 @@ module SAWCoreCoq.Coq (
   ) where
 
 import           Data.String.Interpolate                       (i)
+import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
 
@@ -64,26 +65,27 @@ Import VectorNotations.
 |]
 
 translateTermAsDeclImports ::
-  TranslationConfiguration -> Coq.Ident -> Term -> Term ->
+  TranslationConfiguration -> ModuleMap -> Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateTermAsDeclImports configuration name t tp = do
+translateTermAsDeclImports configuration mm name t tp = do
   doc <-
     TermTranslation.translateDefDoc
       configuration
       Nothing
+      mm
       [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 
 -- | Translate a SAW core module to a Coq module
-translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
-translateSAWModule configuration m =
+translateSAWModule :: TranslationConfiguration -> ModuleMap -> Module -> Doc ann
+translateSAWModule configuration mm m =
   let name = show $ translateModuleName (moduleName m)
   in
   vcat $ []
   ++ [ text $ "Module " ++ name ++ "."
      , ""
      ]
-  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) decl
+  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) mm decl
      | decl <- moduleDecls m ]
   ++ [ text $ "End " ++ name ++ "."
      , ""
@@ -105,5 +107,5 @@ translateCryptolModule sc env nm configuration globalDecls m = do
 -- | Extract out the 'String' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe String
 moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
-moduleDeclName (DefDecl  (Def      { defIdent })) = Just (identName defIdent)
+moduleDeclName (DefDecl  (Def      { defNameInfo })) = Just (Text.unpack (toShortName defNameInfo))
 moduleDeclName InjectCodeDecl{} = Nothing

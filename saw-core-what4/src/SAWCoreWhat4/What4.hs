@@ -890,12 +890,7 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
            | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
            | otherwise                           = Nothing
      let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
-     let primHandler pn msg env _tv =
-            fail $ unlines
-              [ "Could not evaluate primitive " ++ show (primName pn)
-              , "On argument " ++ show (length env)
-              , Text.unpack msg
-              ]
+     let primHandler = Sim.defaultPrimHandler
      cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler
      Sim.evalSharedTerm cfg t
 
@@ -1558,12 +1553,7 @@ w4EvalBasic sym st sc m addlPrims ref unintSet t =
            | Set.member (ecVarIndex ec) unintSet = Just (extcns tf ec)
            | otherwise                           = Nothing
      let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
-     let primHandler pn msg env _tv =
-            fail $ unlines
-              [ "Could not evaluate primitive " ++ show (primName pn)
-              , "On argument " ++ show (length env)
-              , Text.unpack msg
-              ]
+     let primHandler = Sim.defaultPrimHandler
      cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler
      Sim.evalSharedTerm cfg t
 
@@ -1591,12 +1581,7 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
      let uninterpreted _tf ec =
           if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))
      let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
-     let primHandler pn msg env _tv =
-            fail $ unlines
-              [ "Could not evaluate primitive " ++ show (primName pn)
-              , "On argument " ++ show (length env)
-              , Text.unpack msg
-              ]
+     let primHandler = Sim.defaultPrimHandler
      res <- X.try $ do
               cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler
               Sim.evalSharedTerm cfg t

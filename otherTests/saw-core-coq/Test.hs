@@ -68,9 +68,9 @@ aRecordType = do
   unitType <- scUnitType sc
   scRecordType sc [("natField", natType), ("unitField", unitType)]
 
-translate :: Monad m => Term -> Term -> m (Doc ann)
-translate term ty = do
-  let result = translateTermAsDeclImports configuration "MyDefinition" term ty
+translate :: Monad m => ModuleMap -> Term -> Term -> m (Doc ann)
+translate mm term ty = do
+  let result = translateTermAsDeclImports configuration mm "MyDefinition" term ty
   case result of
     Left  e -> error $ show e
     Right r -> return r
@@ -116,6 +116,7 @@ translateSAWCorePrelude = do
   sc <- mkSharedContext
   -- In order to get test data types, we load the Prelude
   tcInsertModule sc preludeModule
+  mm <- scGetModuleMap sc
   flip runReaderT sc $ do
 
     prelude <- getPreludeModule
@@ -125,7 +126,7 @@ translateSAWCorePrelude = do
       putStrLn "From CryptolToCoq Require Import SAWCoreScaffolding."
       putStrLn ""
 
-    let doc = translateSAWModule configuration prelude
+    let doc = translateSAWModule configuration mm prelude
 
     liftIO $ putStrLn $ show doc
 

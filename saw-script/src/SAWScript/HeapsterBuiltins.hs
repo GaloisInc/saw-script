@@ -330,7 +330,7 @@ parseAndInsDef henv nm term_tp term_string =
      typed_term <- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term
      liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp
      case typedVal typed_term of
-       STApp _ _ _ (Constant (EC _ (ModuleIdentifier term_ident) _) _) ->
+       STApp _ _ _ (Constant (EC _ (ModuleIdentifier term_ident) _)) ->
          return term_ident
        term -> do
          m <- liftIO $ scFindModule sc mnm
@@ -1215,13 +1215,14 @@ heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv ->
 heapster_export_coq _bic _opts henv filename =
   do let coq_trans_conf = coqTranslationConfiguration [] []
      sc <- getSharedContext
+     mm <- liftIO $ scGetModuleMap sc
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
      let coq_doc =
            vcat [preamble coq_trans_conf {
                    postPreamble =
                        "From CryptolToCoq Require Import " ++
                        "SAWCorePrelude SpecMPrimitivesForSAWCore SAWCoreBitvectors.\n" },
-                 translateSAWModule coq_trans_conf saw_mod]
+                 translateSAWModule coq_trans_conf mm saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
 -- | Set the Hepaster debug level

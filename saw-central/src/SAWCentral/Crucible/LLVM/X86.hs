@@ -71,6 +71,7 @@ import Data.Parameterized.Context hiding (view, zipWithM)
 
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
+import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name (toShortName)
 import SAWCore.Prelude
 import SAWCore.Recognizer
@@ -669,6 +670,20 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
   | otherwise = fail "LLVM module must be 64-bit"
 
+-- | Internal function to recognize constants defined as fixed points.
+scAsFixConstant :: SharedContext -> Term -> IO (Maybe Term)
+scAsFixConstant sc t =
+  do mm <- scGetModuleMap sc
+     case asConstant t of
+       Just ec ->
+         case lookupVarIndexInMap (ecVarIndex ec) mm of
+           Just (ResolvedDef (defBody -> Just body)) ->
+             case asApplyAll body of
+               (isGlobalDef "Prelude.fix" -> Just (), [_, f]) -> pure (Just f)
+               _ -> pure Nothing
+           _ -> pure Nothing
+       Nothing -> pure Nothing
+
 setupSimpleLoopFixpointFeature ::
   ( sym ~ W4.B.ExprBuilder n st fs
   , C.IsSymInterface sym
@@ -717,10 +732,11 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
 
        explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
          toSC sym sawst variable
-       inner_func <- case asConstant (ttTerm func) of
-         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
-           return inner_func
-         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+       maybe_fix_body <- scAsFixConstant sc (ttTerm func)
+       inner_func <-
+         case maybe_fix_body of
+           Just f -> pure f
+           Nothing -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
 
@@ -798,10 +814,11 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
          toSC sym sawst variable
        explicit_parameters_tuple <- scTuple sc explicit_parameters
 
-       inner_func <- case asConstant (ttTerm func) of
-         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
-           return inner_func
-         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+       maybe_fix_body <- scAsFixConstant sc (ttTerm func)
+       inner_func <-
+         case maybe_fix_body of
+           Just f -> pure f
+           Nothing -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
 

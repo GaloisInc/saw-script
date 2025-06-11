@@ -431,7 +431,7 @@ instance TypeInfer (TermF Term) where
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
        let a_tptrm = SCTypedTerm a (typedType a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
-  typeInfer (Constant ec _) =
+  typeInfer (Constant ec) =
     -- NOTE: this special case is to prevent us from re-type-checking the
     -- definition of each constant, as we assume it was type-checked when it was
     -- created
@@ -444,7 +444,7 @@ instance TypeInfer (TermF Term) where
 -- with special cases for primitives and constants to avoid re-type-checking
 -- their types as we are assuming they were type-checked when they were created
 instance TypeInfer (FlatTermF Term) where
-  typeInfer (Primitive pn) = return $ primType pn
+  typeInfer (Primitive ec) = pure $ ecType ec
   typeInfer (ExtCns ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
@@ -478,18 +478,9 @@ instance TypeInfer (TermF SCTypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant (EC _ n (SCTypedTerm req_tp req_tp_sort)) (Just (SCTypedTerm _ tp))) =
+  typeInfer (Constant (EC _ _ (SCTypedTerm req_tp req_tp_sort))) =
     do void (ensureSort req_tp_sort)
-       -- NOTE: we do the subtype check here, rather than call checkSubtype, so
-       -- that we can throw the custom BadConstType error on failure
-       ok <- isSubtype tp req_tp
-       if ok then return tp else
-         throwTCError $ BadConstType n tp req_tp
-
-  typeInfer (Constant (EC _ _ (SCTypedTerm req_tp req_tp_sort)) Nothing) =
-    -- Constant with no body, just return the EC type
-    do void (ensureSort req_tp_sort)
-       return req_tp
+       pure req_tp
 
   typeInferComplete tf =
     SCTypedTerm <$> liftTCM scTermF (fmap typedVal tf)
@@ -501,7 +492,7 @@ instance TypeInfer (TermF SCTypedTerm) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (Primitive ec) =
-    typeCheckWHNF $ typedVal $ primType ec
+    typeCheckWHNF $ typedVal $ ecType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =
