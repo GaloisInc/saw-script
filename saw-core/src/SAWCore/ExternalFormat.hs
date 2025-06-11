@@ -142,8 +142,8 @@ scWriteExternal t0 =
         FTermF ftf     ->
           case ftf of
             Primitive ec ->
-               do stashPrimName ec
-                  pure $ unwords ["Primitive", show (primVarIndex ec), show (primType ec)]
+               do stashName ec
+                  pure $ unwords ["Primitive", show (ecVarIndex ec), show (ecType ec)]
             UnitValue           -> pure $ unwords ["Unit"]
             UnitType            -> pure $ unwords ["UnitT"]
             PairValue x y       -> pure $ unwords ["Pair", show x, show y]
@@ -302,7 +302,7 @@ scReadExternal sc input =
         ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i,t]    -> Constant <$> readEC i t
         ["ConstantOpaque",i,t]  -> Constant <$> readEC i t
-        ["Primitive", i, t] -> FTermF <$> (Primitive <$> readPrimName i t)
+        ["Primitive", i, t] -> FTermF <$> (Primitive <$> readEC i t)
         ["Unit"]            -> pure $ FTermF UnitValue
         ["UnitT"]           -> pure $ FTermF UnitType
         ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)

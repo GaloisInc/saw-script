@@ -444,7 +444,7 @@ instance TypeInfer (TermF Term) where
 -- with special cases for primitives and constants to avoid re-type-checking
 -- their types as we are assuming they were type-checked when they were created
 instance TypeInfer (FlatTermF Term) where
-  typeInfer (Primitive pn) = return $ primType pn
+  typeInfer (Primitive ec) = pure $ ecType ec
   typeInfer (ExtCns ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
@@ -492,7 +492,7 @@ instance TypeInfer (TermF SCTypedTerm) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (Primitive ec) =
-    typeCheckWHNF $ typedVal $ primType ec
+    typeCheckWHNF $ typedVal $ ecType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =

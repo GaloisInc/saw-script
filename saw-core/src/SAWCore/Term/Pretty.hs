@@ -394,7 +394,7 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppPrimName ec
+    Primitive ec  -> annotate PPS.PrimitiveStyle <$> ppExtCns ec
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y

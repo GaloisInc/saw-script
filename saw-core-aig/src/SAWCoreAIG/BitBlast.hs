@@ -466,12 +466,7 @@ bitBlastBasic :: AIG.IsAIG l g
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims ecMap t = do
   let neutral _env nt = fail ("bitBlastBasic: could not evaluate neutral term: " ++ show nt)
-  let primHandler pn msg env _tv =
-         fail $ unlines
-           [ "Could not evaluate primitive " ++ show (primName pn)
-           , "On argument " ++ show (length env)
-           , Text.unpack msg
-           ]
+  let primHandler = Sim.defaultPrimHandler
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastExtCns ecMap)
          (const Nothing)

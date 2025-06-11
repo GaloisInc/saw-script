@@ -27,6 +27,7 @@ module SAWCore.Simulator
   , evalGlobal
   , evalGlobal'
   , checkPrimitives
+  , defaultPrimHandler
   ) where
 
 import Prelude hiding (mapM)
@@ -85,7 +86,7 @@ type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
 
 data SimulatorConfig l =
   SimulatorConfig
-  { simPrimitive :: PrimName (TValue l) -> MValue l
+  { simPrimitive :: ExtCns (TValue l) -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
   , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
   -- ^ Interpretation of 'ExtCns' terms.
@@ -166,11 +167,11 @@ evalTermF cfg lam recEval tf env =
                                     (simConstant cfg tf ec' <|> (recEval <$> t))
     FTermF ftf              ->
       case ftf of
-        Primitive pn ->
-          do pn' <- traverse evalType pn
-             case simConstant cfg tf (primNameToExtCns pn') of
+        Primitive ec ->
+          do ec' <- traverse evalType ec
+             case simConstant cfg tf ec' of
                Just m  -> m
-               Nothing -> simPrimitive cfg pn'
+               Nothing -> simPrimitive cfg ec'
 
         UnitValue           -> return VUnit
 
@@ -315,7 +316,7 @@ processRecArgs _ _ ty _ =
   (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
-  (PrimName (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
+  (ExtCns (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
@@ -324,7 +325,7 @@ processRecArgs _ _ ty _ =
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
-  (PrimName (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
+  (ExtCns (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap ->
@@ -332,7 +333,7 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               (ExtCns (TValue l) -> MValue l) ->
               (ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
               (Env l -> NeutralTerm -> MValue l) ->
-              (PrimName (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
+              (ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted neutral primHandler =
   evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral primHandler
@@ -344,7 +345,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler =
   (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
-  (PrimName (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
+  (ExtCns (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -353,7 +354,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler =
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
-  (PrimName (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
+  (ExtCns (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -369,7 +370,7 @@ evalGlobal' ::
   -- | Handler for neutral terms
   (Env l -> NeutralTerm -> MValue l) ->
   -- | Handler for stuck primitives
-  (PrimName (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
+  (ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns constant neutral primHandler =
   do checkPrimitives modmap prims
@@ -383,17 +384,21 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
           case ecName ec of
             ModuleIdentifier ident ->
               let pn = PrimName (ecVarIndex ec) ident (ecType ec)
-               in evalPrim (primHandler pn) pn <$> Map.lookup ident prims
+               in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
             _ -> Nothing
 
     ctors :: PrimName (TValue l) -> Maybe (MValue l)
-    ctors pn = evalPrim (primHandler pn) pn <$> Map.lookup (primName pn) prims
+    ctors pn = evalPrim (primHandler (primNameToExtCns pn)) pn <$> Map.lookup (primName pn) prims
 
-    primitive :: PrimName (TValue l) -> MValue l
-    primitive pn =
-      case Map.lookup (primName pn) prims of
-        Just v  -> evalPrim (primHandler pn) pn v
-        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText (primName pn)]
+    primitive :: ExtCns (TValue l) -> MValue l
+    primitive ec =
+      case ecName ec of
+        ImportedName {} ->
+          panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (ecName ec)]
+        ModuleIdentifier ident ->
+          case Map.lookup ident prims of
+            Just v  -> evalPrim (primHandler ec) (PrimName (ecVarIndex ec) ident (ecType ec)) v
+            Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
@@ -676,3 +681,14 @@ evalPrim fallback pn = loop [] (primType pn)
     loop _env _tp _p =
       panic "evalPrim" [
           "Type mismatch in primitive: " <>  identText (primName pn)]
+
+-- | A basic handler for stuck primitives.
+defaultPrimHandler ::
+  (VMonadLazy l, MonadFail (EvalM l)) =>
+  ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l
+defaultPrimHandler ec msg env _tv =
+  fail $ unlines
+  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
+  , "On argument " ++ show (length env)
+  , Text.unpack msg
+  ]

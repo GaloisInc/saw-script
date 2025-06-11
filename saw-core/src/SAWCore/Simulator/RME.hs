@@ -42,6 +42,7 @@ import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Simulator as Sim
@@ -68,9 +69,9 @@ evalSharedTerm m addlPrims t =
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
     neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
-    primHandler pn msg env _tv =
+    primHandler ec msg env _tv =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ show (primName pn)
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -406,9 +407,9 @@ bitBlastBasic :: ModuleMap
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
   let neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
-  let primHandler pn msg env _tv =
+  let primHandler ec msg env _tv =
          return $ Prim.userError $ unlines
-           [ "Could not evaluate primitive " ++ show (primName pn)
+           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]

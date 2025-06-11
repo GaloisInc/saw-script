@@ -613,12 +613,13 @@ scInsDefInMap sc d =
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
-  do i <- scRegisterName sc (ModuleIdentifier ident)
-     let pn = PrimName i ident def_tp
-     t <- scFlatTermF sc (Primitive pn)
+  do let nmi = ModuleIdentifier ident
+     i <- scRegisterName sc nmi
+     let ec = EC i nmi def_tp
+     t <- scFlatTermF sc (Primitive ec)
      scRegisterGlobal sc ident t
      scInsDefInMap sc $
-                  Def { defNameInfo = ModuleIdentifier ident,
+                  Def { defNameInfo = nmi,
                         defVarIndex = i,
                         defQualifier = q,
                         defType = def_tp,
@@ -1185,7 +1186,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        Primitive ec -> return (primType ec)
+        Primitive ec -> return (ecType ec)
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
