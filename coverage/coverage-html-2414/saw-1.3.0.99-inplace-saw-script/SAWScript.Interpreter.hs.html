@@ -688,7 +688,7 @@ span.spaces    { background: white }
 <span class="lineno">  669 </span><span class="spaces">           </span><span class="istickedoff">defPred d =</span>
 <span class="lineno">  670 </span><span class="spaces">             </span><span class="istickedoff">case defNameInfo d of</span>
 <span class="lineno">  671 </span><span class="spaces">               </span><span class="istickedoff">ModuleIdentifier ident -&gt; ident `Set.member` includedDefs</span>
-<span class="lineno">  672 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  672 </span><span class="spaces">               </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  673 </span><span class="spaces">           </span><span class="istickedoff">includedDefs = Set.fromList</span>
 <span class="lineno">  674 </span><span class="spaces">                          </span><span class="istickedoff">[ &quot;Cryptol.ecDemote&quot;</span>
 <span class="lineno">  675 </span><span class="spaces">                          </span><span class="istickedoff">, &quot;Cryptol.seq&quot;</span>

@@ -420,7 +420,7 @@ span.spaces    { background: white }
 <span class="lineno">  401 </span><span class="spaces">    </span><span class="istickedoff">isLocal r =</span>
 <span class="lineno">  402 </span><span class="spaces">      </span><span class="istickedoff">case resolvedNameInfo r of</span>
 <span class="lineno">  403 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier i -&gt; identModule i == moduleName m</span>
-<span class="lineno">  404 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">False</span></span></span>
+<span class="lineno">  404 </span><span class="spaces">        </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">False</span></span></span>
 <span class="lineno">  405 </span>
 <span class="lineno">  406 </span>-- | Get all definitions defined in a module
 <span class="lineno">  407 </span>moduleDefs :: Module -&gt; [Def]
@@ -568,7 +568,7 @@ span.spaces    { background: white }
 <span class="lineno">  549 </span><span class="spaces">        </span><span class="istickedoff">base = identBaseName ident</span>
 <span class="lineno">  550 </span><span class="spaces">        </span><span class="istickedoff">env = fromMaybe <span class="nottickedoff">emptyDisplayNameEnv</span> $ Map.lookup mname (mmNameEnv mm)</span>
 <span class="lineno">  551 </span><span class="spaces">        </span><span class="istickedoff">env' = extendDisplayNameEnv vi [base] env</span>
-<span class="lineno">  552 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Right mm'</span></span>
+<span class="lineno">  552 </span><span class="spaces">    </span><span class="istickedoff">ImportedName{} -&gt; Right mm'</span></span>
 <span class="lineno">  553 </span>
 <span class="lineno">  554 </span>insDeclInMap :: ModuleName -&gt; ModuleDecl -&gt; ModuleMap -&gt; ModuleMap
 <span class="lineno">  555 </span><span class="decl"><span class="istickedoff">insDeclInMap mname decl mm =</span>
@@ -581,7 +581,7 @@ span.spaces    { background: white }
 <span class="lineno">  562 </span><span class="spaces">  </span><span class="istickedoff">case defNameInfo d of</span>
 <span class="lineno">  563 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier i -&gt;</span>
 <span class="lineno">  564 </span><span class="spaces">      </span><span class="istickedoff">insDeclInMap (identModule i) <span class="nottickedoff">(DefDecl d)</span> mm</span>
-<span class="lineno">  565 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; mm</span></span>
+<span class="lineno">  565 </span><span class="spaces">    </span><span class="istickedoff">ImportedName{} -&gt; mm</span></span>
 <span class="lineno">  566 </span>
 <span class="lineno">  567 </span>-- | Insert an injectCode declaration into a 'ModuleMap'.
 <span class="lineno">  568 </span>insInjectCodeInMap :: ModuleName -&gt; Text -&gt; Text -&gt; ModuleMap -&gt; ModuleMap

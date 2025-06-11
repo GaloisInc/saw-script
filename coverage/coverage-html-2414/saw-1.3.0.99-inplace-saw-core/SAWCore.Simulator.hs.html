@@ -404,7 +404,7 @@ span.spaces    { background: white }
 <span class="lineno">  385 </span><span class="spaces">            </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
 <span class="lineno">  386 </span><span class="spaces">              </span><span class="istickedoff">let pn = PrimName (ecVarIndex ec) ident (ecType ec)</span>
 <span class="lineno">  387 </span><span class="spaces">               </span><span class="istickedoff">in evalPrim (primHandler ec) pn &lt;$&gt; Map.lookup ident prims</span>
-<span class="lineno">  388 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  388 </span><span class="spaces">            </span><span class="istickedoff">ImportedName{} -&gt; Nothing</span>
 <span class="lineno">  389 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  390 </span><span class="spaces">    </span><span class="istickedoff">ctors :: PrimName (TValue l) -&gt; Maybe (MValue l)</span>
 <span class="lineno">  391 </span><span class="spaces">    </span><span class="istickedoff">ctors pn = evalPrim <span class="nottickedoff">(primHandler (primNameToExtCns pn))</span> pn &lt;$&gt; Map.lookup (primName pn) prims</span>
@@ -450,7 +450,7 @@ span.spaces    { background: white }
 <span class="lineno">  431 </span><span class="decl"><span class="nottickedoff">defIdent d =</span>
 <span class="lineno">  432 </span><span class="spaces">  </span><span class="nottickedoff">case defNameInfo d of</span>
 <span class="lineno">  433 </span><span class="spaces">    </span><span class="nottickedoff">ModuleIdentifier ident -&gt; Just ident</span>
-<span class="lineno">  434 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  434 </span><span class="spaces">    </span><span class="nottickedoff">ImportedName{} -&gt; Nothing</span></span>
 <span class="lineno">  435 </span>
 <span class="lineno">  436 </span>----------------------------------------------------------------------
 <span class="lineno">  437 </span>-- The evaluation strategy for SharedTerms involves two memo tables:
@@ -513,7 +513,7 @@ span.spaces    { background: white }
 <span class="lineno">  494 </span><span class="spaces">        </span><span class="istickedoff">Constant ec -&gt;</span>
 <span class="lineno">  495 </span><span class="spaces">          </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of</span>
 <span class="lineno">  496 </span><span class="spaces">            </span><span class="istickedoff">Just (ResolvedDef (defBody -&gt; Just rhs)) -&gt; Just rhs</span>
-<span class="lineno">  497 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  497 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  499 </span>
 <span class="lineno">  500 </span>{-# SPECIALIZE evalClosedTermF ::

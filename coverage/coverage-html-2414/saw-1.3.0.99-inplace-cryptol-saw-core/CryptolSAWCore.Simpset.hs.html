@@ -46,7 +46,7 @@ span.spaces    { background: white }
 <span class="lineno">   27 </span><span class="spaces">    </span><span class="istickedoff">excluded d =</span>
 <span class="lineno">   28 </span><span class="spaces">      </span><span class="istickedoff">case defNameInfo d of</span>
 <span class="lineno">   29 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier ident -&gt; ident `elem` excludedNames</span>
-<span class="lineno">   30 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">True</span></span></span>
+<span class="lineno">   30 </span><span class="spaces">        </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">True</span></span></span>
 <span class="lineno">   31 </span>
 <span class="lineno">   32 </span>cryptolModuleName :: ModuleName
 <span class="lineno">   33 </span><span class="decl"><span class="istickedoff">cryptolModuleName = mkModuleName [&quot;Cryptol&quot;]</span></span>

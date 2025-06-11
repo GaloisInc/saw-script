@@ -112,7 +112,7 @@ span.spaces    { background: white }
 <span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">findSpecialTreatment' nmi =</span>
 <span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">case nmi of</span>
 <span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">ModuleIdentifier ident -&gt; findSpecialTreatment ident</span>
-<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; pure $ IdentSpecialTreatment DefPreserve UsePreserve</span></span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">ImportedName{} -&gt; pure $ IdentSpecialTreatment DefPreserve UsePreserve</span></span>
 <span class="lineno">   97 </span>
 <span class="lineno">   98 </span>findSpecialTreatment ::
 <span class="lineno">   99 </span>  TranslationConfigurationMonad r m =&gt;
