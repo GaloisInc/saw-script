@@ -1471,7 +1471,10 @@ scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType))
+scDefTerm sc Def{..} =
+  case defBody of
+    Just _ -> scTermF sc (Constant (EC defVarIndex defNameInfo defType))
+    Nothing -> scFlatTermF sc (Primitive (EC defVarIndex defNameInfo defType))
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
