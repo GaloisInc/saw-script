@@ -607,7 +607,7 @@ buildTopLevelEnv proxy opts =
            defPred d =
              case defNameInfo d of
                ModuleIdentifier ident -> ident `Set.member` includedDefs
-               _ -> False
+               ImportedName{} -> False
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
                           , "Cryptol.seq"

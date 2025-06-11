@@ -27,7 +27,7 @@ mkCryptolSimpset sc =
     excluded d =
       case defNameInfo d of
         ModuleIdentifier ident -> ident `elem` excludedNames
-        _ -> True
+        ImportedName{} -> True
 
 cryptolModuleName :: ModuleName
 cryptolModuleName = mkModuleName ["Cryptol"]

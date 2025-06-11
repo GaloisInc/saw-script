@@ -93,7 +93,7 @@ findSpecialTreatment' ::
 findSpecialTreatment' nmi =
   case nmi of
     ModuleIdentifier ident -> findSpecialTreatment ident
-    _ -> pure $ IdentSpecialTreatment DefPreserve UsePreserve
+    ImportedName{} -> pure $ IdentSpecialTreatment DefPreserve UsePreserve
 
 findSpecialTreatment ::
   TranslationConfigurationMonad r m =>

@@ -385,7 +385,7 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
             ModuleIdentifier ident ->
               let pn = PrimName (ecVarIndex ec) ident (ecType ec)
                in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
-            _ -> Nothing
+            ImportedName{} -> Nothing
 
     ctors :: PrimName (TValue l) -> Maybe (MValue l)
     ctors pn = evalPrim (primHandler (primNameToExtCns pn)) pn <$> Map.lookup (primName pn) prims
@@ -431,7 +431,7 @@ defIdent :: Def -> Maybe Ident
 defIdent d =
   case defNameInfo d of
     ModuleIdentifier ident -> Just ident
-    _ -> Nothing
+    ImportedName{} -> Nothing
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:

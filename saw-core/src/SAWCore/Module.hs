@@ -401,7 +401,7 @@ localResolvedNames m =
     isLocal r =
       case resolvedNameInfo r of
         ModuleIdentifier i -> identModule i == moduleName m
-        _ -> False
+        ImportedName{} -> False
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]
@@ -549,7 +549,7 @@ insResolvedNameInMap r mm =
         base = identBaseName ident
         env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
         env' = extendDisplayNameEnv vi [base] env
-    _ -> Right mm'
+    ImportedName{} -> Right mm'
 
 insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
 insDeclInMap mname decl mm =
@@ -562,7 +562,7 @@ insDefInMap d mm =
   case defNameInfo d of
     ModuleIdentifier i ->
       insDeclInMap (identModule i) (DefDecl d) mm
-    _ -> mm
+    ImportedName{} -> mm
 
 -- | Insert an injectCode declaration into a 'ModuleMap'.
 insInjectCodeInMap :: ModuleName -> Text -> Text -> ModuleMap -> ModuleMap
