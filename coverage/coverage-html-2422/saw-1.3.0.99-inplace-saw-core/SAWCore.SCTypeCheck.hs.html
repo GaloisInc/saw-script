@@ -1,0 +1,797 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE CPP #-}
+<span class="lineno">    2 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    4 </span>{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+<span class="lineno">    5 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    6 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">    7 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{- |
+<span class="lineno">   10 </span>Module      : SAWCore.SCTypeCheck
+<span class="lineno">   11 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">   12 </span>License     : BSD3
+<span class="lineno">   13 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">   14 </span>Stability   : experimental
+<span class="lineno">   15 </span>Portability : non-portable (language extensions)
+<span class="lineno">   16 </span>-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCore.SCTypeCheck
+<span class="lineno">   19 </span>  ( scTypeCheck
+<span class="lineno">   20 </span>  , scTypeCheckError
+<span class="lineno">   21 </span>  , scTypeCheckComplete
+<span class="lineno">   22 </span>  , scTypeCheckCompleteError
+<span class="lineno">   23 </span>  , scTypeCheckWHNF
+<span class="lineno">   24 </span>  , scConvertible
+<span class="lineno">   25 </span>  , scCheckSubtype
+<span class="lineno">   26 </span>  , TCError(..)
+<span class="lineno">   27 </span>  , prettyTCError
+<span class="lineno">   28 </span>  , throwTCError
+<span class="lineno">   29 </span>  , TCM
+<span class="lineno">   30 </span>  , runTCM
+<span class="lineno">   31 </span>  , askCtx
+<span class="lineno">   32 </span>  , askModName
+<span class="lineno">   33 </span>  , withVar
+<span class="lineno">   34 </span>  , withCtx
+<span class="lineno">   35 </span>  , atPos
+<span class="lineno">   36 </span>  , LiftTCM(..)
+<span class="lineno">   37 </span>  , SCTypedTerm(..)
+<span class="lineno">   38 </span>  , TypeInfer(..)
+<span class="lineno">   39 </span>  , typeCheckWHNF
+<span class="lineno">   40 </span>  , typeInferCompleteWHNF
+<span class="lineno">   41 </span>  , TypeInferCtx(..)
+<span class="lineno">   42 </span>  , typeInferCompleteInCtx
+<span class="lineno">   43 </span>  , checkSubtype
+<span class="lineno">   44 </span>  , ensureSort
+<span class="lineno">   45 </span>  , applyPiTyped
+<span class="lineno">   46 </span>  , compileRecursor
+<span class="lineno">   47 </span>  ) where
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>import Control.Applicative
+<span class="lineno">   50 </span>import Control.Monad (foldM, forM, forM_, mapM, unless, void)
+<span class="lineno">   51 </span>import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
+<span class="lineno">   52 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   53 </span>import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+<span class="lineno">   54 </span>import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>import Data.Map (Map)
+<span class="lineno">   57 </span>import qualified Data.Map as Map
+<span class="lineno">   58 </span>import Data.Text (Text)
+<span class="lineno">   59 </span>#if !MIN_VERSION_base(4,8,0)
+<span class="lineno">   60 </span>import Data.Traversable (Traversable(..))
+<span class="lineno">   61 </span>#endif
+<span class="lineno">   62 </span>import qualified Data.Vector as V
+<span class="lineno">   63 </span>import Prelude hiding (mapM, maximum)
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts)
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>import SAWCore.Conversion (natConversions)
+<span class="lineno">   68 </span>import SAWCore.Module
+<span class="lineno">   69 </span>  ( ctorNumArgs
+<span class="lineno">   70 </span>  , ctorNumParams
+<span class="lineno">   71 </span>  , ctorExtCns
+<span class="lineno">   72 </span>  , dtPrimName
+<span class="lineno">   73 </span>  , lookupVarIndexInMap
+<span class="lineno">   74 </span>  , Ctor(..)
+<span class="lineno">   75 </span>  , DataType(..)
+<span class="lineno">   76 </span>  , ResolvedName(..)
+<span class="lineno">   77 </span>  )
+<span class="lineno">   78 </span>import SAWCore.Recognizer
+<span class="lineno">   79 </span>import SAWCore.Rewriter
+<span class="lineno">   80 </span>import SAWCore.SharedTerm
+<span class="lineno">   81 </span>import SAWCore.Position
+<span class="lineno">   82 </span>import SAWCore.Term.Functor
+<span class="lineno">   83 </span>import SAWCore.Term.Pretty (scPrettyTermInCtx)
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- | The state for a type-checking computation = a memoization table
+<span class="lineno">   86 </span>type TCState = Map TermIndex Term
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>-- | The monad for type checking and inference, which:
+<span class="lineno">   89 </span>--
+<span class="lineno">   90 </span>-- * Maintains a 'SharedContext', the name of the current module, and a variable
+<span class="lineno">   91 </span>-- context, where the latter assigns types to the deBruijn indices in scope;
+<span class="lineno">   92 </span>--
+<span class="lineno">   93 </span>-- * Memoizes the most general type inferred for each expression; AND
+<span class="lineno">   94 </span>--
+<span class="lineno">   95 </span>-- * Can throw 'TCError's
+<span class="lineno">   96 </span>type TCM =
+<span class="lineno">   97 </span>  ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)])
+<span class="lineno">   98 </span>  (StateT TCState (ExceptT TCError IO))
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>-- | Run a type-checking computation in a given context, starting from the empty
+<span class="lineno">  101 </span>-- memoization table
+<span class="lineno">  102 </span>runTCM ::
+<span class="lineno">  103 </span>  TCM a -&gt; SharedContext -&gt; Maybe ModuleName -&gt; [(LocalName, Term)] -&gt;
+<span class="lineno">  104 </span>  IO (Either TCError a)
+<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">runTCM m sc mnm ctx =</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">runExceptT $ evalStateT (runReaderT m (sc, mnm, ctx)) Map.empty</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>-- | Read the current typing context
+<span class="lineno">  109 </span>askCtx :: TCM [(LocalName, Term)]
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">askCtx = (\(_,_,ctx) -&gt; ctx) &lt;$&gt; ask</span></span>
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>-- | Read the current module name
+<span class="lineno">  113 </span>askModName :: TCM (Maybe ModuleName)
+<span class="lineno">  114 </span><span class="decl"><span class="istickedoff">askModName = (\(_,mnm,_) -&gt; mnm) &lt;$&gt; ask</span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>-- | Run a type-checking computation in a typing context extended with a new
+<span class="lineno">  117 </span>-- variable with the given type. This throws away the memoization table while
+<span class="lineno">  118 </span>-- running the sub-computation, as memoization tables are tied to specific sets
+<span class="lineno">  119 </span>-- of bindings.
+<span class="lineno">  120 </span>--
+<span class="lineno">  121 </span>-- NOTE: the type given for the variable should be in WHNF, so that we do not
+<span class="lineno">  122 </span>-- have to normalize the types of variables each time we see them.
+<span class="lineno">  123 </span>withVar :: LocalName -&gt; Term -&gt; TCM a -&gt; TCM a
+<span class="lineno">  124 </span><span class="decl"><span class="istickedoff">withVar x tp m =</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">flip catchError <span class="nottickedoff">(throwError . ErrorCtx x tp)</span> $</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">do saved_table &lt;- get</span>
+<span class="lineno">  127 </span><span class="spaces">     </span><span class="istickedoff">put Map.empty</span>
+<span class="lineno">  128 </span><span class="spaces">     </span><span class="istickedoff">a &lt;- local (\(sc,mnm,ctx) -&gt; (sc, mnm, (x,tp):ctx)) m</span>
+<span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">put saved_table</span>
+<span class="lineno">  130 </span><span class="spaces">     </span><span class="istickedoff">return a</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>-- | Run a type-checking computation in a typing context extended by a list of
+<span class="lineno">  133 </span>-- variables and their types. See 'withVar'.
+<span class="lineno">  134 </span>withCtx :: [(LocalName, Term)] -&gt; TCM a -&gt; TCM a
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">withCtx = flip (foldr (\(x,tp) -&gt; withVar x tp))</span></span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>-- | Run a type-checking computation @m@ and tag any error it throws with the
+<span class="lineno">  138 </span>-- 'ErrorTerm' constructor
+<span class="lineno">  139 </span>withErrorTerm :: Term -&gt; TCM a -&gt; TCM a
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">withErrorTerm tm m = catchError m <span class="nottickedoff">(throwError . ErrorTerm tm)</span></span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>-- | Lift @withErrorTerm@ to `TermF Term`
+<span class="lineno">  143 </span>withErrorTermF :: TermF Term -&gt; TCM a -&gt; TCM a
+<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">withErrorTermF tm = withErrorTerm <span class="nottickedoff">(Unshared tm)</span></span></span>
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>-- | Lift @withErrorTerm@ to `TermF SCTypedTerm`
+<span class="lineno">  147 </span>withErrorSCTypedTermF :: TermF SCTypedTerm -&gt; TCM a -&gt; TCM a
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">withErrorSCTypedTermF tm = withErrorTermF <span class="nottickedoff">(fmap typedVal tm)</span></span></span>
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>-- | Run a type-checking computation @m@ and tag any error it throws with the
+<span class="lineno">  151 </span>-- given position, using the 'ErrorPos' constructor, unless that error is
+<span class="lineno">  152 </span>-- already tagged with a position
+<span class="lineno">  153 </span>atPos :: Pos -&gt; TCM a -&gt; TCM a
+<span class="lineno">  154 </span><span class="decl"><span class="istickedoff">atPos p m = catchError m <span class="nottickedoff">(throwError . ErrorPos p)</span></span></span>
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>-- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
+<span class="lineno">  157 </span>-- 'TCM' computations
+<span class="lineno">  158 </span>class LiftTCM a where
+<span class="lineno">  159 </span>  type TCMLifted a
+<span class="lineno">  160 </span>  liftTCM :: (SharedContext -&gt; a) -&gt; TCMLifted a
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>instance LiftTCM (IO a) where
+<span class="lineno">  163 </span>  type TCMLifted (IO a) = TCM a
+<span class="lineno">  164 </span>  <span class="decl"><span class="istickedoff">liftTCM f =</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">do sc &lt;- (\(sc,_,_) -&gt; sc) &lt;$&gt; ask</span>
+<span class="lineno">  166 </span><span class="spaces">       </span><span class="istickedoff">liftIO (f sc)</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>instance LiftTCM b =&gt; LiftTCM (a -&gt; b) where
+<span class="lineno">  169 </span>  type TCMLifted (a -&gt; b) = a -&gt; TCMLifted b
+<span class="lineno">  170 </span>  <span class="decl"><span class="istickedoff">liftTCM f a = liftTCM (\sc -&gt; f sc a)</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>-- | Errors that can occur during type-checking
+<span class="lineno">  173 </span>data TCError
+<span class="lineno">  174 </span>  = NotSort Term
+<span class="lineno">  175 </span>  | NotFuncTypeInApp SCTypedTerm SCTypedTerm
+<span class="lineno">  176 </span>  | NotTupleType Term
+<span class="lineno">  177 </span>  | BadTupleIndex Int Term
+<span class="lineno">  178 </span>  | NotStringLit Term
+<span class="lineno">  179 </span>  | NotRecordType SCTypedTerm
+<span class="lineno">  180 </span>  | BadRecordField FieldName Term
+<span class="lineno">  181 </span>  | DanglingVar Int
+<span class="lineno">  182 </span>  | UnboundName Text
+<span class="lineno">  183 </span>  | SubtypeFailure SCTypedTerm Term
+<span class="lineno">  184 </span>  | EmptyVectorLit
+<span class="lineno">  185 </span>  | NoSuchDataType Ident
+<span class="lineno">  186 </span>  | NoSuchCtor NameInfo
+<span class="lineno">  187 </span>  | NotFullyAppliedRec (PrimName Term)
+<span class="lineno">  188 </span>  | BadCtorParamsOrArgsLength (ExtCns Term) [Term] [Term]
+<span class="lineno">  189 </span>  | BadDataTypeParamsOrArgsLength (PrimName Term) [Term] [Term]
+<span class="lineno">  190 </span>  | BadRecursorApp Term [Term] Term
+<span class="lineno">  191 </span>  | BadConstType NameInfo Term Term
+<span class="lineno">  192 </span>  | MalformedRecursor Term String
+<span class="lineno">  193 </span>  | DeclError Text String
+<span class="lineno">  194 </span>  | ErrorPos Pos TCError
+<span class="lineno">  195 </span>  | ErrorCtx LocalName Term TCError
+<span class="lineno">  196 </span>  | ErrorTerm Term TCError
+<span class="lineno">  197 </span>  | ExpectedRecursor SCTypedTerm
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>-- | Throw a type-checking error
+<span class="lineno">  201 </span>throwTCError :: TCError -&gt; TCM a
+<span class="lineno">  202 </span><span class="decl"><span class="nottickedoff">throwTCError = throwError</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>type PPErrM = Reader ([LocalName], Maybe Pos)
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>-- | Pretty-print a type-checking error
+<span class="lineno">  207 </span>prettyTCError :: TCError -&gt; [String]
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">prettyTCError e = runReader (helper e) ([], Nothing) where</span>
+<span class="lineno">  209 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="nottickedoff">ppWithPos :: [PPErrM String] -&gt; PPErrM [String]</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">ppWithPos str_ms =</span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="nottickedoff">do strs &lt;- mapM id str_ms</span>
+<span class="lineno">  213 </span><span class="spaces">       </span><span class="nottickedoff">(_, maybe_p) &lt;- ask</span>
+<span class="lineno">  214 </span><span class="spaces">       </span><span class="nottickedoff">case maybe_p of</span>
+<span class="lineno">  215 </span><span class="spaces">         </span><span class="nottickedoff">Just p -&gt; return (ppPos p : strs)</span>
+<span class="lineno">  216 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; return strs</span>
+<span class="lineno">  217 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">helper :: TCError -&gt; PPErrM [String]</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotSort ty) = ppWithPos [ return &quot;Not a sort&quot; , ishow ty ]</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotFuncTypeInApp f arg) =</span>
+<span class="lineno">  221 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Function application with non-function type&quot;</span>
+<span class="lineno">  222 </span><span class="spaces">                </span><span class="nottickedoff">, return &quot;For term:&quot;</span>
+<span class="lineno">  223 </span><span class="spaces">                </span><span class="nottickedoff">, ishow (typedVal f)</span>
+<span class="lineno">  224 </span><span class="spaces">                </span><span class="nottickedoff">, return &quot;With type:&quot;</span>
+<span class="lineno">  225 </span><span class="spaces">                </span><span class="nottickedoff">, ishow (typedType f)</span>
+<span class="lineno">  226 </span><span class="spaces">                </span><span class="nottickedoff">, return &quot;To argument:&quot;</span>
+<span class="lineno">  227 </span><span class="spaces">                </span><span class="nottickedoff">, ishow (typedVal arg) ]</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotTupleType ty) =</span>
+<span class="lineno">  229 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Tuple field projection with non-tuple type&quot; ,</span>
+<span class="lineno">  230 </span><span class="spaces">                  </span><span class="nottickedoff">ishow ty ]</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadTupleIndex n ty) =</span>
+<span class="lineno">  232 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return (&quot;Bad tuple index (&quot; ++ show n ++ &quot;) for type&quot;)</span>
+<span class="lineno">  233 </span><span class="spaces">                </span><span class="nottickedoff">, ishow ty ]</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotStringLit trm) =</span>
+<span class="lineno">  235 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Record selector is not a string literal&quot;, ishow trm ]</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotRecordType (SCTypedTerm trm tp)) =</span>
+<span class="lineno">  237 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Record field projection with non-record type&quot;</span>
+<span class="lineno">  238 </span><span class="spaces">                </span><span class="nottickedoff">, ishow tp</span>
+<span class="lineno">  239 </span><span class="spaces">                </span><span class="nottickedoff">, return &quot;In term:&quot;</span>
+<span class="lineno">  240 </span><span class="spaces">                </span><span class="nottickedoff">, ishow trm ]</span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadRecordField n ty) =</span>
+<span class="lineno">  242 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return (&quot;Bad record field (&quot; ++ show n ++ &quot;) for type&quot;)</span>
+<span class="lineno">  243 </span><span class="spaces">                </span><span class="nottickedoff">, ishow ty ]</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadRecursorApp r ixs arg) =</span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Type mismatch in recursor application&quot;</span>
+<span class="lineno">  246 </span><span class="spaces">                </span><span class="nottickedoff">, ishow (Unshared $ FTermF $ RecursorApp r ixs arg)</span>
+<span class="lineno">  247 </span><span class="spaces">                </span><span class="nottickedoff">]</span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">helper (DanglingVar n) =</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return (&quot;Dangling bound variable index: &quot; ++ show n)]</span>
+<span class="lineno">  250 </span><span class="spaces">  </span><span class="nottickedoff">helper (UnboundName str) = ppWithPos [ return (&quot;Unbound name: &quot; ++ show str)]</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">helper (SubtypeFailure trm tp2) =</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Inferred type&quot;, ishow (typedType trm),</span>
+<span class="lineno">  253 </span><span class="spaces">                  </span><span class="nottickedoff">return &quot;Not a subtype of expected type&quot;, ishow tp2,</span>
+<span class="lineno">  254 </span><span class="spaces">                  </span><span class="nottickedoff">return &quot;For term&quot;, ishow (typedVal trm) ]</span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="nottickedoff">helper EmptyVectorLit = ppWithPos [ return &quot;Empty vector literal&quot;]</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="nottickedoff">helper (NoSuchDataType d) =</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="nottickedoff">ppWithPos [ return (&quot;No such data type: &quot; ++ show d)]</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="nottickedoff">helper (NoSuchCtor c) =</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="nottickedoff">ppWithPos [ return (&quot;No such constructor: &quot; ++ show c) ]</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">helper (NotFullyAppliedRec i) =</span>
+<span class="lineno">  261 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return (&quot;Recursor not fully applied: &quot; ++ show i) ]</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadCtorParamsOrArgsLength ec params args) =</span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos</span>
+<span class="lineno">  264 </span><span class="spaces">      </span><span class="nottickedoff">[ return (&quot;Wrong number of parameters or arguments to constructor: &quot;),</span>
+<span class="lineno">  265 </span><span class="spaces">        </span><span class="nottickedoff">ishow (Unshared $ FTermF $ CtorApp ec params args)</span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadDataTypeParamsOrArgsLength pn params args) =</span>
+<span class="lineno">  268 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos</span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="nottickedoff">[ return (&quot;Wrong number of parameters or arguments to datatype: &quot;),</span>
+<span class="lineno">  270 </span><span class="spaces">        </span><span class="nottickedoff">ishow (Unshared $ FTermF $ DataTypeApp pn params args)</span>
+<span class="lineno">  271 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">helper (BadConstType n rty ty) =</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">ppWithPos [ return (&quot;Type of constant &quot; ++ show n), ishow rty</span>
+<span class="lineno">  274 </span><span class="spaces">              </span><span class="nottickedoff">, return &quot;doesn't match declared type&quot;, ishow ty ]</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">helper (MalformedRecursor trm reason) =</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="nottickedoff">ppWithPos [ return &quot;Malformed recursor&quot;,</span>
+<span class="lineno">  277 </span><span class="spaces">                  </span><span class="nottickedoff">ishow trm, return reason ]</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">helper (DeclError nm reason) =</span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="nottickedoff">ppWithPos [ return (&quot;Malformed declaration for &quot; ++ show nm), return reason ]</span>
+<span class="lineno">  280 </span><span class="spaces">  </span><span class="nottickedoff">helper (ErrorPos p err) =</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="nottickedoff">local (\(ctx,_) -&gt; (ctx, Just p)) $ helper err</span>
+<span class="lineno">  282 </span><span class="spaces">  </span><span class="nottickedoff">helper (ErrorCtx x _ err) =</span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="nottickedoff">local (\(ctx,p) -&gt; (x:ctx, p)) $ helper err</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="nottickedoff">helper (ErrorTerm tm err) = do</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="nottickedoff">info &lt;- ppWithPos [ return (&quot;While typechecking term: &quot;)</span>
+<span class="lineno">  286 </span><span class="spaces">                      </span><span class="nottickedoff">, ishow tm ]</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="nottickedoff">cont &lt;- helper err</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="nottickedoff">return (info ++ cont)</span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="nottickedoff">helper (ExpectedRecursor ttm) =</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">ppWithPos [ return &quot;Expected recursor value&quot;, ishow (typedVal ttm), ishow (typedType ttm)]</span>
+<span class="lineno">  291 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">ishow :: Term -&gt; PPErrM String</span>
+<span class="lineno">  293 </span><span class="spaces">  </span><span class="nottickedoff">ishow tm =</span>
+<span class="lineno">  294 </span><span class="spaces">    </span><span class="nottickedoff">-- return $ show tm</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="nottickedoff">(\(ctx,_) -&gt; &quot;  &quot; ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) &lt;$&gt; ask</span></span>
+<span class="lineno">  296 </span>
+<span class="lineno">  297 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show TCError</span></span></span></span> where
+<span class="lineno">  298 </span>  <span class="decl"><span class="nottickedoff">show = unlines . prettyTCError</span></span>
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>-- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
+<span class="lineno">  301 </span>scTypeCheckError :: TypeInfer a =&gt; SharedContext -&gt; a -&gt; IO Term
+<span class="lineno">  302 </span><span class="decl"><span class="istickedoff">scTypeCheckError sc t0 =</span>
+<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">either <span class="nottickedoff">(fail . unlines . prettyTCError)</span> return =&lt;&lt; scTypeCheck sc <span class="nottickedoff">Nothing</span> t0</span></span>
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | Infer the type of a 'Term', ensuring in the process that the entire term is
+<span class="lineno">  306 </span>-- well-formed and that all internal type annotations are correct. Types are
+<span class="lineno">  307 </span>-- evaluated to WHNF as necessary, and the returned type is in WHNF.
+<span class="lineno">  308 </span>scTypeCheck :: TypeInfer a =&gt; SharedContext -&gt; Maybe ModuleName -&gt; a -&gt;
+<span class="lineno">  309 </span>               IO (Either TCError Term)
+<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">scTypeCheck sc mnm = scTypeCheckInCtx sc <span class="nottickedoff">mnm</span> []</span></span>
+<span class="lineno">  311 </span>
+<span class="lineno">  312 </span>-- | Like 'scTypeCheck', but type-check the term relative to a typing context,
+<span class="lineno">  313 </span>-- which assigns types to free variables in the term
+<span class="lineno">  314 </span>scTypeCheckInCtx ::
+<span class="lineno">  315 </span>  TypeInfer a =&gt; SharedContext -&gt; Maybe ModuleName -&gt;
+<span class="lineno">  316 </span>  [(LocalName, Term)] -&gt; a -&gt; IO (Either TCError Term)
+<span class="lineno">  317 </span><span class="decl"><span class="istickedoff">scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc <span class="nottickedoff">mnm</span> ctx</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | Infer the type of an @a@ and complete it to a term using
+<span class="lineno">  320 </span>-- 'scTypeCheckComplete', calling 'fail' on failure
+<span class="lineno">  321 </span>scTypeCheckCompleteError :: TypeInfer a =&gt; SharedContext -&gt;
+<span class="lineno">  322 </span>                            Maybe ModuleName -&gt; a -&gt; IO SCTypedTerm
+<span class="lineno">  323 </span><span class="decl"><span class="nottickedoff">scTypeCheckCompleteError sc mnm t0 =</span>
+<span class="lineno">  324 </span><span class="spaces">  </span><span class="nottickedoff">either (fail . unlines . prettyTCError) return =&lt;&lt;</span>
+<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">scTypeCheckComplete sc mnm t0</span></span>
+<span class="lineno">  326 </span>
+<span class="lineno">  327 </span>-- | Infer the type of an @a@ and complete it to a term, ensuring in the
+<span class="lineno">  328 </span>-- process that the entire term is well-formed and that all internal type
+<span class="lineno">  329 </span>-- annotations are correct. Types are evaluated to WHNF as necessary, and the
+<span class="lineno">  330 </span>-- returned type is in WHNF, though the returned term may not be.
+<span class="lineno">  331 </span>scTypeCheckComplete :: TypeInfer a =&gt; SharedContext -&gt; Maybe ModuleName -&gt;
+<span class="lineno">  332 </span>                       a -&gt; IO (Either TCError SCTypedTerm)
+<span class="lineno">  333 </span><span class="decl"><span class="nottickedoff">scTypeCheckComplete sc mnm = scTypeCheckCompleteInCtx sc mnm []</span></span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>-- | Like 'scTypeCheckComplete', but type-check the term relative to a typing
+<span class="lineno">  336 </span>-- context, which assigns types to free variables in the term
+<span class="lineno">  337 </span>scTypeCheckCompleteInCtx :: TypeInfer a =&gt; SharedContext -&gt;
+<span class="lineno">  338 </span>                            Maybe ModuleName -&gt; [(LocalName, Term)] -&gt; a -&gt;
+<span class="lineno">  339 </span>                            IO (Either TCError SCTypedTerm)
+<span class="lineno">  340 </span><span class="decl"><span class="nottickedoff">scTypeCheckCompleteInCtx sc mnm ctx t0 =</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="nottickedoff">runTCM (typeInferComplete t0) sc mnm ctx</span></span>
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span>-- | Check that one type is a subtype of another using 'checkSubtype', calling
+<span class="lineno">  344 </span>-- 'fail' on failure
+<span class="lineno">  345 </span>scCheckSubtype :: SharedContext -&gt; Maybe ModuleName -&gt;
+<span class="lineno">  346 </span>                  SCTypedTerm -&gt; Term -&gt; IO ()
+<span class="lineno">  347 </span><span class="decl"><span class="nottickedoff">scCheckSubtype sc mnm arg req_tp =</span>
+<span class="lineno">  348 </span><span class="spaces">  </span><span class="nottickedoff">either (fail . unlines . prettyTCError) return =&lt;&lt;</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">runTCM (checkSubtype arg req_tp) sc mnm []</span></span>
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>-- | A pair of a 'Term' and its type
+<span class="lineno">  352 </span>data SCTypedTerm = SCTypedTerm { <span class="istickedoff"><span class="decl"><span class="istickedoff">typedVal</span></span></span> :: Term, <span class="istickedoff"><span class="decl"><span class="istickedoff">typedType</span></span></span> :: Term }
+<span class="lineno">  353 </span>
+<span class="lineno">  354 </span>-- | The class of things that we can infer types of. The 'typeInfer' method
+<span class="lineno">  355 </span>-- returns the most general (with respect to subtyping) type of its input.
+<span class="lineno">  356 </span>class TypeInfer a where
+<span class="lineno">  357 </span>  -- | Infer the type of an @a@
+<span class="lineno">  358 </span>  typeInfer :: a -&gt; TCM Term
+<span class="lineno">  359 </span>  -- | Infer the type of an @a@ and complete it to a 'Term'
+<span class="lineno">  360 </span>  typeInferComplete :: a -&gt; TCM SCTypedTerm
+<span class="lineno">  361 </span>
+<span class="lineno">  362 </span>-- | Infer the type of an @a@ and complete it to a 'Term', and then evaluate the
+<span class="lineno">  363 </span>-- resulting term to WHNF
+<span class="lineno">  364 </span>typeInferCompleteWHNF :: TypeInfer a =&gt; a -&gt; TCM SCTypedTerm
+<span class="lineno">  365 </span><span class="decl"><span class="istickedoff">typeInferCompleteWHNF a =</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">do SCTypedTerm a_trm a_tp &lt;- typeInferComplete a</span>
+<span class="lineno">  367 </span><span class="spaces">     </span><span class="istickedoff">a_whnf &lt;- typeCheckWHNF a_trm</span>
+<span class="lineno">  368 </span><span class="spaces">     </span><span class="istickedoff">return $ SCTypedTerm a_whnf a_tp</span></span>
+<span class="lineno">  369 </span>
+<span class="lineno">  370 </span>
+<span class="lineno">  371 </span>-- | Perform type inference on a context, i.e., a list of variable names and
+<span class="lineno">  372 </span>-- their associated types. The type @var@ gives the type of variable names,
+<span class="lineno">  373 </span>-- while @a@ is the type of types. This will give us 'Term's for each type, as
+<span class="lineno">  374 </span>-- well as their 'Sort's, since the type of any type is a 'Sort'.
+<span class="lineno">  375 </span>class TypeInferCtx var a where
+<span class="lineno">  376 </span>  typeInferCompleteCtx :: [(var,a)] -&gt; TCM [(LocalName, Term, Sort)]
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>instance TypeInfer a =&gt; TypeInferCtx LocalName a where
+<span class="lineno">  379 </span>  <span class="decl"><span class="istickedoff">typeInferCompleteCtx [] = return []</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">typeInferCompleteCtx ((x,tp):ctx) =</span>
+<span class="lineno">  381 </span><span class="spaces">    </span><span class="istickedoff">do typed_tp &lt;- typeInferComplete tp</span>
+<span class="lineno">  382 </span><span class="spaces">       </span><span class="istickedoff">s &lt;- ensureSort (typedType typed_tp)</span>
+<span class="lineno">  383 </span><span class="spaces">       </span><span class="istickedoff">((x,typedVal typed_tp,s):) &lt;$&gt;</span>
+<span class="lineno">  384 </span><span class="spaces">         </span><span class="istickedoff">withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)</span></span>
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>-- | Perform type inference on a context via 'typeInferCompleteCtx', and then
+<span class="lineno">  387 </span>-- run a computation in that context via 'withCtx', also passing in that context
+<span class="lineno">  388 </span>-- to the computation
+<span class="lineno">  389 </span>typeInferCompleteInCtx ::
+<span class="lineno">  390 </span>  TypeInferCtx var tp =&gt; [(var, tp)] -&gt;
+<span class="lineno">  391 </span>  ([(LocalName, Term, Sort)] -&gt; TCM a) -&gt; TCM a
+<span class="lineno">  392 </span><span class="decl"><span class="istickedoff">typeInferCompleteInCtx ctx f =</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">do typed_ctx &lt;- typeInferCompleteCtx ctx</span>
+<span class="lineno">  394 </span><span class="spaces">     </span><span class="istickedoff">withCtx (map (\(x,tp,_) -&gt; (x,tp)) typed_ctx) (f typed_ctx)</span></span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>-- Type inference for Term dispatches to type inference on TermF Term, but uses
+<span class="lineno">  398 </span>-- memoization to avoid repeated work
+<span class="lineno">  399 </span>instance TypeInfer Term where
+<span class="lineno">  400 </span>  <span class="decl"><span class="istickedoff">typeInfer t@(Unshared tf) = <span class="nottickedoff">withErrorTerm t $ typeInfer tf</span></span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">typeInfer t@(STApp{ stAppIndex = i, stAppTermF = tf}) =</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">do table &lt;- get</span>
+<span class="lineno">  403 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup i table of</span>
+<span class="lineno">  404 </span><span class="spaces">         </span><span class="istickedoff">Just x  -&gt; return x</span>
+<span class="lineno">  405 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  406 </span><span class="spaces">           </span><span class="istickedoff">do x  &lt;- withErrorTerm <span class="nottickedoff">t</span> $ typeInfer tf</span>
+<span class="lineno">  407 </span><span class="spaces">              </span><span class="istickedoff">x' &lt;- typeCheckWHNF x</span>
+<span class="lineno">  408 </span><span class="spaces">              </span><span class="istickedoff">modify (Map.insert i x')</span>
+<span class="lineno">  409 </span><span class="spaces">              </span><span class="istickedoff">return x'</span></span>
+<span class="lineno">  410 </span>  <span class="decl"><span class="istickedoff">typeInferComplete trm = SCTypedTerm trm &lt;$&gt; withErrorTerm <span class="nottickedoff">trm</span> (typeInfer trm)</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>-- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
+<span class="lineno">  413 </span>-- calling inference on all the sub-components and extending the context inside
+<span class="lineno">  414 </span>-- of the binding forms
+<span class="lineno">  415 </span>instance TypeInfer (TermF Term) where
+<span class="lineno">  416 </span>  <span class="decl"><span class="istickedoff">typeInfer (FTermF ftf) =</span>
+<span class="lineno">  417 </span><span class="spaces">    </span><span class="istickedoff">-- Dispatch to the TypeInfer instance for FlatTermF Term, which does some</span>
+<span class="lineno">  418 </span><span class="spaces">    </span><span class="istickedoff">-- special-case handling itself</span>
+<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">typeInfer ftf</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Lambda x a rhs) =</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">do a_whnf &lt;- typeInferCompleteWHNF a</span>
+<span class="lineno">  422 </span><span class="spaces">       </span><span class="istickedoff">-- NOTE: before adding a type to the context, we want to be sure it is in</span>
+<span class="lineno">  423 </span><span class="spaces">       </span><span class="istickedoff">-- WHNF, so we don't have to normalize each time we look up a var type,</span>
+<span class="lineno">  424 </span><span class="spaces">       </span><span class="istickedoff">-- but we want to leave the non-normalized value of a in the returned</span>
+<span class="lineno">  425 </span><span class="spaces">       </span><span class="istickedoff">-- term, so we create a_tptrm with the type of a_whnf but the value of a</span>
+<span class="lineno">  426 </span><span class="spaces">       </span><span class="istickedoff">rhs_tptrm &lt;- withVar <span class="nottickedoff">x</span> (typedVal a_whnf) $ typeInferComplete rhs</span>
+<span class="lineno">  427 </span><span class="spaces">       </span><span class="istickedoff">let a_tptrm = SCTypedTerm a (typedType a_whnf)</span>
+<span class="lineno">  428 </span><span class="spaces">       </span><span class="istickedoff">typeInfer (Lambda x a_tptrm rhs_tptrm)</span>
+<span class="lineno">  429 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Pi x a rhs) =</span>
+<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">do a_whnf &lt;- typeInferCompleteWHNF a</span>
+<span class="lineno">  431 </span><span class="spaces">       </span><span class="istickedoff">-- NOTE: before adding a type to the context, we want to be sure it is in</span>
+<span class="lineno">  432 </span><span class="spaces">       </span><span class="istickedoff">-- WHNF, so we don't have to normalize each time we look up a var type,</span>
+<span class="lineno">  433 </span><span class="spaces">       </span><span class="istickedoff">-- but we want to leave the non-normalized value of a in the returned</span>
+<span class="lineno">  434 </span><span class="spaces">       </span><span class="istickedoff">-- term, so we create a_typed with the type of a_whnf but the value of a</span>
+<span class="lineno">  435 </span><span class="spaces">       </span><span class="istickedoff">rhs_tptrm &lt;- withVar <span class="nottickedoff">x</span> (typedVal a_whnf) $ typeInferComplete rhs</span>
+<span class="lineno">  436 </span><span class="spaces">       </span><span class="istickedoff">let a_tptrm = SCTypedTerm <span class="nottickedoff">a</span> (typedType a_whnf)</span>
+<span class="lineno">  437 </span><span class="spaces">       </span><span class="istickedoff">typeInfer (Pi x a_tptrm rhs_tptrm)</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Constant ec) =</span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">-- NOTE: this special case is to prevent us from re-type-checking the</span>
+<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">-- definition of each constant, as we assume it was type-checked when it was</span>
+<span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">-- created</span>
+<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">return $ ecType ec</span>
+<span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">typeInfer t = typeInfer =&lt;&lt; mapM typeInferComplete t</span></span>
+<span class="lineno">  444 </span>  <span class="decl"><span class="istickedoff">typeInferComplete tf =</span>
+<span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">SCTypedTerm &lt;$&gt; liftTCM scTermF tf &lt;*&gt; withErrorTermF <span class="nottickedoff">tf</span> (typeInfer tf)</span></span>
+<span class="lineno">  446 </span>
+<span class="lineno">  447 </span>-- Type inference for FlatTermF Term dispatches to that for FlatTermF SCTypedTerm,
+<span class="lineno">  448 </span>-- with special cases for primitives and constants to avoid re-type-checking
+<span class="lineno">  449 </span>-- their types as we are assuming they were type-checked when they were created
+<span class="lineno">  450 </span>instance TypeInfer (FlatTermF Term) where
+<span class="lineno">  451 </span>  <span class="decl"><span class="istickedoff">typeInfer (ExtCns ec) = return $ ecType ec</span>
+<span class="lineno">  452 </span><span class="spaces">  </span><span class="istickedoff">typeInfer t = typeInfer =&lt;&lt; mapM typeInferComplete t</span></span>
+<span class="lineno">  453 </span>  <span class="decl"><span class="nottickedoff">typeInferComplete ftf =</span>
+<span class="lineno">  454 </span><span class="spaces">    </span><span class="nottickedoff">SCTypedTerm &lt;$&gt; liftTCM scFlatTermF ftf</span>
+<span class="lineno">  455 </span><span class="spaces">              </span><span class="nottickedoff">&lt;*&gt; withErrorTermF (FTermF ftf) (typeInfer ftf)</span></span>
+<span class="lineno">  456 </span>
+<span class="lineno">  457 </span>
+<span class="lineno">  458 </span>-- Type inference for TermF SCTypedTerm is the main workhorse. Intuitively, this
+<span class="lineno">  459 </span>-- represents the case where each immediate subterm of a term is labeled with
+<span class="lineno">  460 </span>-- its (most general) type.
+<span class="lineno">  461 </span>instance TypeInfer (TermF SCTypedTerm) where
+<span class="lineno">  462 </span>  <span class="decl"><span class="istickedoff">typeInfer (FTermF ftf) = <span class="nottickedoff">typeInfer ftf</span></span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (App x@(SCTypedTerm _ x_tp) y) =</span>
+<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">applyPiTyped <span class="nottickedoff">(NotFuncTypeInApp x y)</span> x_tp y</span>
+<span class="lineno">  465 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Lambda x (SCTypedTerm a a_tp) (SCTypedTerm _ b)) =</span>
+<span class="lineno">  466 </span><span class="spaces">    </span><span class="istickedoff">void (ensureSort a_tp) &gt;&gt; liftTCM scTermF (Pi x a b)</span>
+<span class="lineno">  467 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Pi _ (SCTypedTerm _ a_tp) (SCTypedTerm _ b_tp)) =</span>
+<span class="lineno">  468 </span><span class="spaces">    </span><span class="istickedoff">do s1 &lt;- ensureSort a_tp</span>
+<span class="lineno">  469 </span><span class="spaces">       </span><span class="istickedoff">s2 &lt;- ensureSort b_tp</span>
+<span class="lineno">  470 </span><span class="spaces">       </span><span class="istickedoff">-- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop</span>
+<span class="lineno">  471 </span><span class="spaces">       </span><span class="istickedoff">-- when b is a Prop (this is a forall proposition), otherwise it is a</span>
+<span class="lineno">  472 </span><span class="spaces">       </span><span class="istickedoff">-- (Type (max (sortOf a) (sortOf b)))</span>
+<span class="lineno">  473 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scSort $ if s2 == propSort then propSort else max s1 s2</span>
+<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (LocalVar i) =</span>
+<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">do ctx &lt;- askCtx</span>
+<span class="lineno">  476 </span><span class="spaces">       </span><span class="istickedoff">if <span class="tickonlytrue">i &lt; length ctx</span> then</span>
+<span class="lineno">  477 </span><span class="spaces">         </span><span class="istickedoff">-- The ith type in the current variable typing context is well-typed</span>
+<span class="lineno">  478 </span><span class="spaces">         </span><span class="istickedoff">-- relative to the suffix of the context after it, so we have to lift it</span>
+<span class="lineno">  479 </span><span class="spaces">         </span><span class="istickedoff">-- (i.e., call incVars) to make it well-typed relative to all of ctx</span>
+<span class="lineno">  480 </span><span class="spaces">         </span><span class="istickedoff">liftTCM incVars 0 (i+1) (snd (ctx !! i))</span>
+<span class="lineno">  481 </span><span class="spaces">         </span><span class="istickedoff">else</span>
+<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">error (&quot;Context = &quot; ++ show ctx)</span></span>
+<span class="lineno">  483 </span><span class="spaces">         </span><span class="istickedoff">-- throwTCError (DanglingVar (i - length ctx))</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Constant (EC _ _ (SCTypedTerm req_tp req_tp_sort))) =</span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do void (ensureSort req_tp_sort)</span></span>
+<span class="lineno">  486 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure req_tp</span></span></span>
+<span class="lineno">  487 </span>
+<span class="lineno">  488 </span>  <span class="decl"><span class="istickedoff">typeInferComplete tf =</span>
+<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">SCTypedTerm &lt;$&gt; liftTCM scTermF (fmap typedVal tf)</span>
+<span class="lineno">  490 </span><span class="spaces">              </span><span class="istickedoff">&lt;*&gt; withErrorSCTypedTermF <span class="nottickedoff">tf</span> (typeInfer tf)</span></span>
+<span class="lineno">  491 </span>
+<span class="lineno">  492 </span>
+<span class="lineno">  493 </span>-- Type inference for FlatTermF SCTypedTerm is the main workhorse for flat
+<span class="lineno">  494 </span>-- terms. Intuitively, this represents the case where each immediate subterm of
+<span class="lineno">  495 </span>-- a term has already been labeled with its (most general) type.
+<span class="lineno">  496 </span>instance TypeInfer (FlatTermF SCTypedTerm) where
+<span class="lineno">  497 </span>  <span class="decl"><span class="istickedoff">typeInfer UnitValue = liftTCM scUnitType</span>
+<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">typeInfer UnitType = liftTCM scSort (mkSort 0)</span>
+<span class="lineno">  499 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (PairValue (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =</span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">liftTCM scPairType tx ty</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (PairType (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =</span>
+<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">do sx &lt;- ensureSort tx</span>
+<span class="lineno">  503 </span><span class="spaces">       </span><span class="istickedoff">sy &lt;- ensureSort ty</span>
+<span class="lineno">  504 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scSort (max sx sy)</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (PairLeft (SCTypedTerm _ tp)) =</span>
+<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">ensurePairType tp &gt;&gt;= \(t1,_) -&gt; return t1</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (PairRight (SCTypedTerm _ tp)) =</span>
+<span class="lineno">  508 </span><span class="spaces">    </span><span class="istickedoff">ensurePairType tp &gt;&gt;= \(_,t2) -&gt; return t2</span>
+<span class="lineno">  509 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (DataTypeApp d params args) =</span>
+<span class="lineno">  511 </span><span class="spaces">    </span><span class="istickedoff">-- Look up the DataType structure, check the length of the params and args,</span>
+<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">-- and then apply the cached Pi type of dt to params and args</span>
+<span class="lineno">  513 </span><span class="spaces">    </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
+<span class="lineno">  514 </span><span class="spaces">       </span><span class="istickedoff">dt &lt;-</span>
+<span class="lineno">  515 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (primVarIndex d) mm of</span>
+<span class="lineno">  516 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
+<span class="lineno">  517 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (primName d)</span></span>
+<span class="lineno">  518 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">err = BadDataTypeParamsOrArgsLength (fmap typedVal d) (map typedVal params) (map typedVal args)</span></span>
+<span class="lineno">  519 </span><span class="spaces">       </span><span class="istickedoff">unless (length params == length (dtParams dt) &amp;&amp;</span>
+<span class="lineno">  520 </span><span class="spaces">               </span><span class="istickedoff">length args == length (dtIndices dt))</span>
+<span class="lineno">  521 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(throwTCError err)</span></span>
+<span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  523 </span><span class="spaces">       </span><span class="istickedoff">-- NOTE: we assume dtType is already well-typed and in WHNF</span>
+<span class="lineno">  524 </span><span class="spaces">       </span><span class="istickedoff">foldM (applyPiTyped <span class="nottickedoff">err</span>) (dtType dt) (params ++ args)</span>
+<span class="lineno">  525 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (CtorApp c params args) =</span>
+<span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">-- Look up the Ctor structure, check the length of the params and args, and</span>
+<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">-- then apply the cached Pi type of ctor to params and args</span>
+<span class="lineno">  529 </span><span class="spaces">    </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
+<span class="lineno">  530 </span><span class="spaces">       </span><span class="istickedoff">ctor &lt;-</span>
+<span class="lineno">  531 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex c) mm of</span>
+<span class="lineno">  532 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt; pure ctor</span>
+<span class="lineno">  533 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchCtor (ecName c)</span></span>
+<span class="lineno">  534 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">err = BadCtorParamsOrArgsLength (fmap typedVal c) (map typedVal params) (map typedVal args)</span></span>
+<span class="lineno">  535 </span><span class="spaces">       </span><span class="istickedoff">unless (length params == ctorNumParams ctor &amp;&amp;</span>
+<span class="lineno">  536 </span><span class="spaces">               </span><span class="istickedoff">length args == ctorNumArgs ctor)</span>
+<span class="lineno">  537 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(throwTCError err)</span></span>
+<span class="lineno">  538 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  539 </span><span class="spaces">       </span><span class="istickedoff">-- NOTE: we assume ctorType is already well-typed and in WHNF</span>
+<span class="lineno">  540 </span><span class="spaces">       </span><span class="istickedoff">foldM (applyPiTyped <span class="nottickedoff">err</span>) (ctorType ctor) (params ++ args)</span>
+<span class="lineno">  541 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  542 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (RecursorType d ps motive mty) =</span>
+<span class="lineno">  543 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do s &lt;- inferRecursorType d ps motive mty</span></span>
+<span class="lineno">  544 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">liftTCM scSort s</span></span>
+<span class="lineno">  545 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  546 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Recursor rec) =</span>
+<span class="lineno">  547 </span><span class="spaces">    </span><span class="istickedoff">inferRecursor rec</span>
+<span class="lineno">  548 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (RecursorApp r ixs arg) =</span>
+<span class="lineno">  550 </span><span class="spaces">    </span><span class="istickedoff">inferRecursorApp r ixs arg</span>
+<span class="lineno">  551 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (RecordType elems) =</span>
+<span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">-- NOTE: record types are always predicative, i.e., non-Propositional, so we</span>
+<span class="lineno">  554 </span><span class="spaces">    </span><span class="istickedoff">-- ensure below that we return at least sort 0</span>
+<span class="lineno">  555 </span><span class="spaces">    </span><span class="istickedoff">do sorts &lt;- mapM (ensureSort . typedType . snd) elems</span>
+<span class="lineno">  556 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scSort (maxSort $ mkSort 0 : sorts)</span>
+<span class="lineno">  557 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (RecordValue elems) =</span>
+<span class="lineno">  558 </span><span class="spaces">    </span><span class="istickedoff">liftTCM scFlatTermF $ RecordType $</span>
+<span class="lineno">  559 </span><span class="spaces">    </span><span class="istickedoff">map (\(f,SCTypedTerm _ tp) -&gt; (f,tp)) elems</span>
+<span class="lineno">  560 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (RecordProj t@(SCTypedTerm _ t_tp) fld) =</span>
+<span class="lineno">  561 </span><span class="spaces">    </span><span class="istickedoff">ensureRecordType <span class="nottickedoff">(NotRecordType t)</span> t_tp &gt;&gt;= \case</span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">(Map.lookup fld -&gt; Just tp) -&gt; return tp</span>
+<span class="lineno">  563 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ BadRecordField fld t_tp</span></span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Sort s _) = liftTCM scSort (sortOf s)</span>
+<span class="lineno">  565 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (NatLit _) = liftTCM scNatType</span>
+<span class="lineno">  566 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (ArrayValue (SCTypedTerm tp tp_tp) vs) =</span>
+<span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">do n &lt;- liftTCM scNat (fromIntegral (V.length vs))</span>
+<span class="lineno">  568 </span><span class="spaces">       </span><span class="istickedoff">_ &lt;- ensureSort tp_tp -- TODO: do we care about the level?</span>
+<span class="lineno">  569 </span><span class="spaces">       </span><span class="istickedoff">tp' &lt;- typeCheckWHNF tp</span>
+<span class="lineno">  570 </span><span class="spaces">       </span><span class="istickedoff">forM_ vs $ \v_elem -&gt; checkSubtype v_elem tp'</span>
+<span class="lineno">  571 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scVecType n tp'</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (StringLit{}) = liftTCM scStringType</span>
+<span class="lineno">  573 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (ExtCns ec) =</span>
+<span class="lineno">  574 </span><span class="spaces">    </span><span class="istickedoff">-- FIXME: should we check that the type of ecType is a sort?</span>
+<span class="lineno">  575 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">typeCheckWHNF $ typedVal $ ecType ec</span></span></span>
+<span class="lineno">  576 </span>
+<span class="lineno">  577 </span>  <span class="decl"><span class="istickedoff">typeInferComplete ftf =</span>
+<span class="lineno">  578 </span><span class="spaces">    </span><span class="istickedoff">SCTypedTerm &lt;$&gt; liftTCM scFlatTermF (fmap typedVal ftf)</span>
+<span class="lineno">  579 </span><span class="spaces">              </span><span class="istickedoff">&lt;*&gt; withErrorSCTypedTermF <span class="nottickedoff">(FTermF ftf)</span> (typeInfer ftf)</span></span>
+<span class="lineno">  580 </span>
+<span class="lineno">  581 </span>-- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
+<span class="lineno">  582 </span>-- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
+<span class="lineno">  583 </span>-- @[arg/x]b@. This substitution could create redexes, so we call the
+<span class="lineno">  584 </span>-- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
+<span class="lineno">  585 </span>applyPiTyped :: TCError -&gt; Term -&gt; SCTypedTerm -&gt; TCM Term
+<span class="lineno">  586 </span><span class="decl"><span class="istickedoff">applyPiTyped err fun_tp arg =</span>
+<span class="lineno">  587 </span><span class="spaces">  </span><span class="istickedoff">ensurePiType <span class="nottickedoff">err</span> fun_tp &gt;&gt;= \(_,arg_tp,ret_tp) -&gt;</span>
+<span class="lineno">  588 </span><span class="spaces">  </span><span class="istickedoff">do checkSubtype arg arg_tp</span>
+<span class="lineno">  589 </span><span class="spaces">     </span><span class="istickedoff">liftTCM instantiateVar 0 (typedVal arg) ret_tp &gt;&gt;= typeCheckWHNF</span></span>
+<span class="lineno">  590 </span>
+<span class="lineno">  591 </span>-- | Ensure that a 'Term' matches a recognizer function, normalizing if
+<span class="lineno">  592 </span>-- necessary; otherwise throw the supplied 'TCError'
+<span class="lineno">  593 </span>ensureRecognizer :: Recognizer Term a -&gt; TCError -&gt; Term -&gt; TCM a
+<span class="lineno">  594 </span><span class="decl"><span class="istickedoff">ensureRecognizer f _ (f -&gt; Just a) = return a</span>
+<span class="lineno">  595 </span><span class="spaces"></span><span class="istickedoff">ensureRecognizer f err trm =</span>
+<span class="lineno">  596 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">typeCheckWHNF trm &gt;&gt;= \case</span></span>
+<span class="lineno">  597 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">(f -&gt; Just a) -&gt; return a</span></span>
+<span class="lineno">  598 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; throwTCError err</span></span></span>
+<span class="lineno">  599 </span>
+<span class="lineno">  600 </span>-- | Ensure a 'Term' is a sort, normalizing if necessary, and return that sort
+<span class="lineno">  601 </span>ensureSort :: Term -&gt; TCM Sort
+<span class="lineno">  602 </span><span class="decl"><span class="istickedoff">ensureSort tp = ensureRecognizer asSort <span class="nottickedoff">(NotSort tp)</span> tp</span></span>
+<span class="lineno">  603 </span>
+<span class="lineno">  604 </span>-- | Ensure a 'Term' is a pair type, normalizing if necessary, and return the
+<span class="lineno">  605 </span>-- two components of that pair type
+<span class="lineno">  606 </span>ensurePairType :: Term -&gt; TCM (Term, Term)
+<span class="lineno">  607 </span><span class="decl"><span class="istickedoff">ensurePairType tp = ensureRecognizer asPairType <span class="nottickedoff">(NotTupleType tp)</span> tp</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>-- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
+<span class="lineno">  610 </span>-- components of that record type
+<span class="lineno">  611 </span>ensureRecordType :: TCError -&gt; Term -&gt; TCM (Map FieldName Term)
+<span class="lineno">  612 </span><span class="decl"><span class="istickedoff">ensureRecordType err tp = ensureRecognizer asRecordType <span class="nottickedoff">err</span> tp</span></span>
+<span class="lineno">  613 </span>
+<span class="lineno">  614 </span>-- | Ensure a 'Term' is a pi type, normalizing if necessary. Return the
+<span class="lineno">  615 </span>-- components of that pi type on success; otherwise throw the supplied error.
+<span class="lineno">  616 </span>ensurePiType :: TCError -&gt; Term -&gt; TCM (LocalName, Term, Term)
+<span class="lineno">  617 </span><span class="decl"><span class="istickedoff">ensurePiType err tp = ensureRecognizer asPi <span class="nottickedoff">err</span> tp</span></span>
+<span class="lineno">  618 </span>
+<span class="lineno">  619 </span>-- | Reduce a type to WHNF (using 'scWhnf'), also adding in some conversions for
+<span class="lineno">  620 </span>-- operations on Nat literals that are useful in type-checking
+<span class="lineno">  621 </span>typeCheckWHNF :: Term -&gt; TCM Term
+<span class="lineno">  622 </span><span class="decl"><span class="istickedoff">typeCheckWHNF = liftTCM scTypeCheckWHNF</span></span>
+<span class="lineno">  623 </span>
+<span class="lineno">  624 </span>-- | The 'IO' version of 'typeCheckWHNF'
+<span class="lineno">  625 </span>scTypeCheckWHNF :: SharedContext -&gt; Term -&gt; IO Term
+<span class="lineno">  626 </span><span class="decl"><span class="istickedoff">scTypeCheckWHNF sc t =</span>
+<span class="lineno">  627 </span><span class="spaces">  </span><span class="istickedoff">do (_, t') &lt;- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t</span>
+<span class="lineno">  628 </span><span class="spaces">     </span><span class="istickedoff">scWhnf sc t'</span></span>
+<span class="lineno">  629 </span>
+<span class="lineno">  630 </span>-- | Check that one type is a subtype of another, assuming both arguments are
+<span class="lineno">  631 </span>-- types, i.e., that both have type Sort s for some s, and that they are both
+<span class="lineno">  632 </span>-- already in WHNF
+<span class="lineno">  633 </span>checkSubtype :: SCTypedTerm -&gt; Term -&gt; TCM ()
+<span class="lineno">  634 </span><span class="decl"><span class="istickedoff">checkSubtype arg req_tp =</span>
+<span class="lineno">  635 </span><span class="spaces">  </span><span class="istickedoff">do ok &lt;- isSubtype (typedType arg) req_tp</span>
+<span class="lineno">  636 </span><span class="spaces">     </span><span class="istickedoff">if <span class="tickonlytrue">ok</span> then return <span class="nottickedoff">()</span> else <span class="nottickedoff">throwTCError $ SubtypeFailure arg req_tp</span></span></span>
+<span class="lineno">  637 </span>
+<span class="lineno">  638 </span>-- | Check if one type is a subtype of another, assuming both arguments are
+<span class="lineno">  639 </span>-- types, i.e., that both have type Sort s for some s, and that they are both
+<span class="lineno">  640 </span>-- already in WHNF
+<span class="lineno">  641 </span>isSubtype :: Term -&gt; Term -&gt; TCM Bool
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">isSubtype (unwrapTermF -&gt; Pi x1 a1 b1) (unwrapTermF -&gt; Pi _ a2 b2) =</span>
+<span class="lineno">  643 </span><span class="spaces">    </span><span class="istickedoff">(&amp;&amp;) &lt;$&gt; areConvertible a1 a2 &lt;*&gt; withVar <span class="nottickedoff">x1</span> <span class="nottickedoff">a1</span> (isSubtype b1 b2)</span>
+<span class="lineno">  644 </span><span class="spaces"></span><span class="istickedoff">isSubtype (asSort -&gt; Just s1) (asSort -&gt; Just s2) | <span class="tickonlytrue">s1 &lt;= s2</span> = return True</span>
+<span class="lineno">  645 </span><span class="spaces"></span><span class="istickedoff">isSubtype t1' t2' = areConvertible t1' t2'</span></span>
+<span class="lineno">  646 </span>
+<span class="lineno">  647 </span>-- | Check if two terms are &quot;convertible for type-checking&quot;, meaning that they
+<span class="lineno">  648 </span>-- are convertible up to 'natConversions'
+<span class="lineno">  649 </span>areConvertible :: Term -&gt; Term -&gt; TCM Bool
+<span class="lineno">  650 </span><span class="decl"><span class="istickedoff">areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF <span class="nottickedoff">True</span> t1 t2</span></span>
+<span class="lineno">  651 </span>
+<span class="lineno">  652 </span>
+<span class="lineno">  653 </span>inferRecursorType ::
+<span class="lineno">  654 </span>  PrimName SCTypedTerm {- ^ data type name -} -&gt;
+<span class="lineno">  655 </span>  [SCTypedTerm] {- ^ data type parameters -} -&gt;
+<span class="lineno">  656 </span>  SCTypedTerm   {- ^ elimination motive -} -&gt;
+<span class="lineno">  657 </span>  SCTypedTerm   {- ^ type of the elimination motive -} -&gt;
+<span class="lineno">  658 </span>  TCM Sort
+<span class="lineno">  659 </span><span class="decl"><span class="istickedoff">inferRecursorType d params motive motiveTy =</span>
+<span class="lineno">  660 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
+<span class="lineno">  661 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;-</span>
+<span class="lineno">  662 </span><span class="spaces">       </span><span class="istickedoff">case lookupVarIndexInMap (primVarIndex d) mm of</span>
+<span class="lineno">  663 </span><span class="spaces">         </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
+<span class="lineno">  664 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (primName d)</span></span>
+<span class="lineno">  665 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  666 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">mk_err str =</span></span>
+<span class="lineno">  667 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">MalformedRecursor</span></span>
+<span class="lineno">  668 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">(Unshared $ fmap typedVal $ FTermF $</span></span>
+<span class="lineno">  669 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Recursor (CompiledRecursor d params motive motiveTy mempty []))</span></span>
+<span class="lineno">  670 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">str</span></span>
+<span class="lineno">  671 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  672 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the params have the correct types by making sure</span>
+<span class="lineno">  673 </span><span class="spaces">     </span><span class="istickedoff">-- they correspond to the input types of dt</span>
+<span class="lineno">  674 </span><span class="spaces">     </span><span class="istickedoff">unless (length params == length (dtParams dt)) $</span>
+<span class="lineno">  675 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ mk_err &quot;Incorrect number of parameters&quot;</span></span>
+<span class="lineno">  676 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- foldM (applyPiTyped <span class="nottickedoff">(mk_err &quot;Incorrect data type signature&quot;)</span>)</span>
+<span class="lineno">  677 </span><span class="spaces">                </span><span class="istickedoff">(dtType dt) params</span>
+<span class="lineno">  678 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  679 </span><span class="spaces">     </span><span class="istickedoff">-- Get the type of p_ret and make sure that it is of the form</span>
+<span class="lineno">  680 </span><span class="spaces">     </span><span class="istickedoff">--</span>
+<span class="lineno">  681 </span><span class="spaces">     </span><span class="istickedoff">-- (ix1::Ix1) -&gt; .. -&gt; (ixn::Ixn) -&gt; d params ixs -&gt; s</span>
+<span class="lineno">  682 </span><span class="spaces">     </span><span class="istickedoff">--</span>
+<span class="lineno">  683 </span><span class="spaces">     </span><span class="istickedoff">-- for some allowed sort s, where the Ix are the indices of of dt</span>
+<span class="lineno">  684 </span><span class="spaces">     </span><span class="istickedoff">motive_srt &lt;-</span>
+<span class="lineno">  685 </span><span class="spaces">       </span><span class="istickedoff">case asPiList (typedType motive) of</span>
+<span class="lineno">  686 </span><span class="spaces">         </span><span class="istickedoff">(_, (asSort -&gt; Just s)) -&gt; return s</span>
+<span class="lineno">  687 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ mk_err &quot;Motive function should return a sort&quot;</span></span>
+<span class="lineno">  688 </span><span class="spaces">     </span><span class="istickedoff">motive_req &lt;-</span>
+<span class="lineno">  689 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt</span>
+<span class="lineno">  690 </span><span class="spaces">     </span><span class="istickedoff">-- Technically this is an equality test, not a subtype test, but we</span>
+<span class="lineno">  691 </span><span class="spaces">     </span><span class="istickedoff">-- use the precise sort used in the motive, so they are the same, and</span>
+<span class="lineno">  692 </span><span class="spaces">     </span><span class="istickedoff">-- checkSubtype is handy...</span>
+<span class="lineno">  693 </span><span class="spaces">     </span><span class="istickedoff">checkSubtype motive motive_req</span>
+<span class="lineno">  694 </span><span class="spaces">     </span><span class="istickedoff">unless (allowedElimSort dt motive_srt)  $</span>
+<span class="lineno">  695 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ mk_err &quot;Disallowed propositional elimination&quot;</span></span>
+<span class="lineno">  696 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  697 </span><span class="spaces">     </span><span class="istickedoff">return <span class="nottickedoff">motive_srt</span></span></span>
+<span class="lineno">  698 </span>
+<span class="lineno">  699 </span>
+<span class="lineno">  700 </span>compileRecursor ::
+<span class="lineno">  701 </span>  DataType -&gt;
+<span class="lineno">  702 </span>  [SCTypedTerm] {- ^ datatype parameters -} -&gt;
+<span class="lineno">  703 </span>  SCTypedTerm   {- ^ elimination motive -} -&gt;
+<span class="lineno">  704 </span>  [SCTypedTerm] {- ^ constructor eliminators -} -&gt;
+<span class="lineno">  705 </span>  TCM (CompiledRecursor SCTypedTerm)
+<span class="lineno">  706 </span><span class="decl"><span class="istickedoff">compileRecursor dt params motive cs_fs =</span>
+<span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">do motiveTy &lt;- typeInferComplete (typedType motive)</span>
+<span class="lineno">  708 </span><span class="spaces">     </span><span class="istickedoff">cs_fs' &lt;- forM cs_fs (\e -&gt; do ety &lt;- typeInferComplete (typedType e)</span>
+<span class="lineno">  709 </span><span class="spaces">                                    </span><span class="istickedoff">pure (e,ety))</span>
+<span class="lineno">  710 </span><span class="spaces">     </span><span class="istickedoff">d &lt;- traverse typeInferComplete (dtPrimName dt)</span>
+<span class="lineno">  711 </span><span class="spaces">     </span><span class="istickedoff">let ctorVarIxs = map ctorVarIndex (dtCtors dt)</span>
+<span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">ctorOrder &lt;- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))</span>
+<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">let elims = Map.fromList (zip ctorVarIxs cs_fs')</span>
+<span class="lineno">  714 </span><span class="spaces">     </span><span class="istickedoff">let rec = CompiledRecursor d params motive motiveTy elims ctorOrder</span>
+<span class="lineno">  715 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">mk_err str =</span></span>
+<span class="lineno">  716 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">MalformedRecursor</span></span>
+<span class="lineno">  717 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(Unshared $ fmap typedVal $ FTermF $ Recursor rec)</span></span>
+<span class="lineno">  718 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">str</span></span>
+<span class="lineno">  719 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  720 </span><span class="spaces">     </span><span class="istickedoff">unless (length cs_fs == length (dtCtors dt)) $</span>
+<span class="lineno">  721 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ mk_err &quot;Extra constructors&quot;</span></span>
+<span class="lineno">  722 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  723 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the parameters and motive are correct for the given datatype</span>
+<span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">_s &lt;- inferRecursorType d params motive <span class="nottickedoff">motiveTy</span></span>
+<span class="lineno">  725 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  726 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the elimination functions each have the right types, and</span>
+<span class="lineno">  727 </span><span class="spaces">     </span><span class="istickedoff">-- that we have exactly one for each constructor of dt</span>
+<span class="lineno">  728 </span><span class="spaces">     </span><span class="istickedoff">elims_tps &lt;-</span>
+<span class="lineno">  729 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scRecursorElimTypes (fmap <span class="nottickedoff">typedVal</span> d) (map typedVal params) (typedVal motive)</span>
+<span class="lineno">  730 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  731 </span><span class="spaces">     </span><span class="istickedoff">forM_ elims_tps $ \(c,req_tp) -&gt;</span>
+<span class="lineno">  732 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup (ecVarIndex c) elims of</span>
+<span class="lineno">  733 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  734 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ mk_err (&quot;Missing constructor: &quot; ++ show c)</span></span>
+<span class="lineno">  735 </span><span class="spaces">         </span><span class="istickedoff">Just (f,_fty) -&gt; checkSubtype f req_tp</span>
+<span class="lineno">  736 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  737 </span><span class="spaces">     </span><span class="istickedoff">return rec</span></span>
+<span class="lineno">  738 </span>
+<span class="lineno">  739 </span>
+<span class="lineno">  740 </span>inferRecursor ::
+<span class="lineno">  741 </span>  CompiledRecursor SCTypedTerm -&gt;
+<span class="lineno">  742 </span>  TCM Term
+<span class="lineno">  743 </span><span class="decl"><span class="istickedoff">inferRecursor rec =</span>
+<span class="lineno">  744 </span><span class="spaces">  </span><span class="istickedoff">do let d      = recursorDataType rec</span>
+<span class="lineno">  745 </span><span class="spaces">     </span><span class="istickedoff">let params = recursorParams rec</span>
+<span class="lineno">  746 </span><span class="spaces">     </span><span class="istickedoff">let motive = recursorMotive rec</span>
+<span class="lineno">  747 </span><span class="spaces">     </span><span class="istickedoff">let motiveTy = recursorMotiveTy rec</span>
+<span class="lineno">  748 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  749 </span><span class="spaces">     </span><span class="istickedoff">-- return the type of this recursor</span>
+<span class="lineno">  750 </span><span class="spaces">     </span><span class="istickedoff">liftTCM scFlatTermF $ fmap typedVal $</span>
+<span class="lineno">  751 </span><span class="spaces">       </span><span class="istickedoff">RecursorType d params motive motiveTy</span></span>
+<span class="lineno">  752 </span>
+<span class="lineno">  753 </span>-- | Infer the type of a recursor application
+<span class="lineno">  754 </span>inferRecursorApp ::
+<span class="lineno">  755 </span>  SCTypedTerm   {- ^ recursor term -} -&gt;
+<span class="lineno">  756 </span>  [SCTypedTerm] {- ^ data type indices -} -&gt;
+<span class="lineno">  757 </span>  SCTypedTerm   {- ^ recursor argument -} -&gt;
+<span class="lineno">  758 </span>  TCM Term
+<span class="lineno">  759 </span><span class="decl"><span class="istickedoff">inferRecursorApp r ixs arg =</span>
+<span class="lineno">  760 </span><span class="spaces">  </span><span class="istickedoff">do recty &lt;- typeCheckWHNF (typedType r)</span>
+<span class="lineno">  761 </span><span class="spaces">     </span><span class="istickedoff">case asRecursorType recty of</span>
+<span class="lineno">  762 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError (ExpectedRecursor r)</span></span>
+<span class="lineno">  763 </span><span class="spaces">       </span><span class="istickedoff">Just (_d, _ps, motive, motiveTy) -&gt; do</span>
+<span class="lineno">  764 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  765 </span><span class="spaces">         </span><span class="istickedoff">-- Apply the indices to the type of the motive</span>
+<span class="lineno">  766 </span><span class="spaces">         </span><span class="istickedoff">-- to check the types of the `ixs` and `arg`, and</span>
+<span class="lineno">  767 </span><span class="spaces">         </span><span class="istickedoff">-- ensure that the result is fully applied</span>
+<span class="lineno">  768 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  769 </span><span class="spaces">         </span><span class="istickedoff">let <span class="nottickedoff">err = BadRecursorApp (typedVal r) (fmap typedVal ixs) (typedVal arg)</span></span>
+<span class="lineno">  770 </span><span class="spaces">         </span><span class="istickedoff">_s &lt;- ensureSort =&lt;&lt; foldM (applyPiTyped <span class="nottickedoff">err</span>) motiveTy (ixs ++ [arg])</span>
+<span class="lineno">  771 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  772 </span><span class="spaces">         </span><span class="istickedoff">-- return the type (p_ret ixs arg)</span>
+<span class="lineno">  773 </span><span class="spaces">         </span><span class="istickedoff">liftTCM scTypeCheckWHNF =&lt;&lt;</span>
+<span class="lineno">  774 </span><span class="spaces">           </span><span class="istickedoff">liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))</span></span>
+
+</pre>
+</body>
+</html>
