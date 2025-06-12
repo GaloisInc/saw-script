@@ -48,8 +48,8 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( ctorNumParams
-  , ctorPrimName
+  ( ctorExtCns
+  , ctorNumParams
   , dtPrimName
   , emptyModule
   , findDataTypeInMap
@@ -116,7 +116,7 @@ inferResolveNameApp n args =
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
          do let (params, ctor_args) = splitAt (ctorNumParams ctor) args
-            c <- traverse typeInferComplete (ctorPrimName ctor)
+            c <- traverse typeInferComplete (ctorExtCns ctor)
             -- NOTE: typeInferComplete will check that we have the correct number
             -- of arguments
             typeInferComplete (CtorApp c params ctor_args)

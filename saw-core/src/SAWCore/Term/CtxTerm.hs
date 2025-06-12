@@ -543,7 +543,7 @@ ctxAsDataTypeApp _ _ _ _ = Nothing
 -- | Build an application of a constructor as a 'CtxTerm'
 ctxCtorAppM :: MonadTerm m =>
   DataIdent d ->
-  PrimName Term ->
+  ExtCns Term ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTermsCtx ctx args) ->
   m (CtxTerm ctx d)
@@ -831,7 +831,7 @@ ctxCtorElimType :: MonadTerm m =>
   Proxy (Typ ret) ->
   Proxy (Typ a) ->
   DataIdent d ->
-  PrimName Term ->
+  ExtCns Term ->
   CtorArgStruct d params ixs ->
   m (CtxTerm (CtxInv params ::>(Arrows ixs (d -> Typ a))) (Typ ret))
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
@@ -930,7 +930,7 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
 mkCtorElimTypeFun :: MonadTerm m =>
   PrimName Term {- ^ data type -} ->
-  PrimName Term {- ^ constructor type -} ->
+  ExtCns Term {- ^ constructor type -} ->
   CtorArgStruct d params ixs ->
   m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =

@@ -68,7 +68,7 @@ import SAWCore.Conversion (natConversions)
 import SAWCore.Module
   ( ctorNumArgs
   , ctorNumParams
-  , ctorPrimName
+  , ctorExtCns
   , dtPrimName
   , lookupVarIndexInMap
   , Ctor(..)
@@ -183,9 +183,10 @@ data TCError
   | SubtypeFailure SCTypedTerm Term
   | EmptyVectorLit
   | NoSuchDataType Ident
-  | NoSuchCtor Ident
+  | NoSuchCtor NameInfo
   | NotFullyAppliedRec (PrimName Term)
-  | BadParamsOrArgsLength Bool (PrimName Term) [Term] [Term]
+  | BadCtorParamsOrArgsLength (ExtCns Term) [Term] [Term]
+  | BadDataTypeParamsOrArgsLength (PrimName Term) [Term] [Term]
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
@@ -258,12 +259,15 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constructor: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadParamsOrArgsLength is_dt ident params args) =
+  helper (BadCtorParamsOrArgsLength ec params args) =
       ppWithPos
-      [ return ("Wrong number of parameters or arguments to "
-                ++ (if is_dt then "datatype" else "constructor") ++ ": "),
-        ishow (Unshared $ FTermF $
-               (if is_dt then DataTypeApp else CtorApp) ident params args)
+      [ return ("Wrong number of parameters or arguments to constructor: "),
+        ishow (Unshared $ FTermF $ CtorApp ec params args)
+      ]
+  helper (BadDataTypeParamsOrArgsLength pn params args) =
+      ppWithPos
+      [ return ("Wrong number of parameters or arguments to datatype: "),
+        ishow (Unshared $ FTermF $ DataTypeApp pn params args)
       ]
   helper (BadConstType n rty ty) =
     ppWithPos [ return ("Type of constant " ++ show n), ishow rty
@@ -511,7 +515,7 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
          case lookupVarIndexInMap (primVarIndex d) mm of
            Just (ResolvedDataType dt) -> pure dt
            _ -> throwTCError $ NoSuchDataType (primName d)
-       let err = BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
+       let err = BadDataTypeParamsOrArgsLength (fmap typedVal d) (map typedVal params) (map typedVal args)
        unless (length params == length (dtParams dt) &&
                length args == length (dtIndices dt))
               (throwTCError err)
@@ -524,10 +528,10 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
     -- then apply the cached Pi type of ctor to params and args
     do mm <- liftTCM scGetModuleMap
        ctor <-
-         case lookupVarIndexInMap (primVarIndex c) mm of
+         case lookupVarIndexInMap (ecVarIndex c) mm of
            Just (ResolvedCtor ctor) -> pure ctor
-           _ -> throwTCError $ NoSuchCtor (primName c)
-       let err = BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
+           _ -> throwTCError $ NoSuchCtor (ecName c)
+       let err = BadCtorParamsOrArgsLength (fmap typedVal c) (map typedVal params) (map typedVal args)
        unless (length params == ctorNumParams ctor &&
                length args == ctorNumArgs ctor)
               (throwTCError err)
@@ -705,7 +709,7 @@ compileRecursor dt params motive cs_fs =
                                     pure (e,ety))
      d <- traverse typeInferComplete (dtPrimName dt)
      let ctorVarIxs = map ctorVarIndex (dtCtors dt)
-     ctorOrder <- traverse (traverse typeInferComplete) (map ctorPrimName (dtCtors dt))
+     ctorOrder <- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
      let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
      let mk_err str =
@@ -725,7 +729,7 @@ compileRecursor dt params motive cs_fs =
        liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)
 
      forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup (primVarIndex c) elims of
+       case Map.lookup (ecVarIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp

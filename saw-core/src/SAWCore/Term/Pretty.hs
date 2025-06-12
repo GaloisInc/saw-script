@@ -415,8 +415,8 @@ ppFlatTermF prec tf =
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
          nm <- ppPrimName d
          f_pps <- forM ctorOrder $ \ec ->
-                    do cnm <- ppPrimName ec
-                       case Map.lookup (primVarIndex ec) fs_pp of
+                    do cnm <- ppExtCns ec
+                       case Map.lookup (ecVarIndex ec) fs_pp of
                          Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
                          Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
          return $
@@ -430,7 +430,7 @@ ppFlatTermF prec tf =
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
     CtorApp c params args ->
-      do cnm <- ppPrimName c
+      do cnm <- ppExtCns c
          ppAppList prec (annotate PPS.CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     DataTypeApp dt params args ->

@@ -202,7 +202,7 @@ data FlatTermF e
     -- | An application of a constructor to its arguments, i.e., an element of
     -- an inductively-defined type; the parameters (of the inductive type to
     -- which this constructor belongs) and indices are kept separate
-  | CtorApp !(PrimName e) ![e] ![e]
+  | CtorApp !(ExtCns e) ![e] ![e]
 
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
@@ -263,7 +263,7 @@ data CompiledRecursor e =
   , recursorMotive    :: e
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
-  , recursorCtorOrder :: [PrimName e]
+  , recursorCtorOrder :: [ExtCns e]
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -301,7 +301,7 @@ zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (Co
 zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
   | Map.keysSet es1 == Map.keysSet es2
   = do d <- zipPrimName f d1 d2
-       ord <- sequence (zipWith (zipPrimName f) ord1 ord2)
+       ord <- sequence (zipWith (zipExtCns f) ord1 ord2)
        pure $ CompiledRecursor
               d
               (zipWith f ps1 ps2)
@@ -327,7 +327,7 @@ zipWithFlatTermF f = go
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
     go (CtorApp cx psx lx) (CtorApp cy psy ly) =
-      do c <- zipPrimName f cx cy
+      do c <- zipExtCns f cx cy
          Just $ CtorApp c (zipWith f psx psy) (zipWith f lx ly)
     go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly) =
       do d <- zipPrimName f dx dy
@@ -574,7 +574,7 @@ termToPat t =
       FTermF (DataTypeApp c ps ts) ->
         foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (toShortName (ecName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

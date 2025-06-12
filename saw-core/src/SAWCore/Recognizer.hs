@@ -248,11 +248,11 @@ asRecordSelector t = do
 
 -- | Test whether a term is an application of a constructor, and, if so, return
 -- the constructor, its parameters, and its arguments
-asCtorParams :: Recognizer Term (PrimName Term, [Term], [Term])
+asCtorParams :: Recognizer Term (ExtCns Term, [Term], [Term])
 asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 
 -- | A version of 'asCtorParams' that combines the parameters and normal args
-asCtor :: Recognizer Term (PrimName Term, [Term])
+asCtor :: Recognizer Term (ExtCns Term, [Term])
 asCtor t = do CtorApp c ps args <- asFTermF t; return (c,ps ++ args)
 
 -- | A version of 'asDataType' that returns the parameters separately
@@ -282,9 +282,9 @@ isDataType i p t = do
 asNat :: Recognizer Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = return i
 asNat (asCtor -> Just (c, []))
-  | primName c == preludeZeroIdent = return 0
+  | ecName c == ModuleIdentifier preludeZeroIdent = return 0
 asNat (asCtor -> Just (c, [asNat -> Just i]))
-  | primName c == preludeSuccIdent = return (i+1)
+  | ecName c == ModuleIdentifier preludeSuccIdent = return (i+1)
 asNat _ = Nothing
 
 -- | Recognize an application of @bvNat@

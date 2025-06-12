@@ -93,8 +93,8 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import SAWCore.Module (ModuleMap, ResolvedName(..), ctorPrimName, lookupVarIndexInMap)
-import SAWCore.Name (toShortName, identBaseName, identText)
+import SAWCore.Module (ModuleMap, ResolvedName(..), ctorExtCns, lookupVarIndexInMap)
+import SAWCore.Name (toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -1065,7 +1065,7 @@ applyUnintApp sym app0 v =
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (ecName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1814,12 +1814,12 @@ mkArgTerm sc ty val =
     (_, VCtorApp i ps vv) ->
       do mm <- scGetModuleMap sc
          ctor <-
-           case lookupVarIndexInMap (primVarIndex i) mm of
+           case lookupVarIndexInMap (ecVarIndex i) mm of
              Just (ResolvedCtor ctor) -> pure ctor
-             _ -> panic "mkArgTerm" ["Constructor not found: " <> identText (primName i)]
+             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (ecName i)]
          ps' <- traverse (termOfSValue sc <=< force) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
-         x   <- scCtorAppParams sc (ctorPrimName ctor) ps' vv'
+         x   <- scCtorAppParams sc (ctorExtCns ctor) ps' vv'
          return (ArgTermConst x)
 
     (_, TValue tval) ->

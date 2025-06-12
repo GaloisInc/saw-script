@@ -60,7 +60,7 @@ import qualified Text.LLVM.AST                        as LLVM
 import           Cryptol.Eval.Type
 import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
-import           Cryptol.TypeCheck.Type
+import qualified Cryptol.TypeCheck.Type               as Cry
 import           Cryptol.Utils.Ident                  as Cry
 import           Cryptol.Utils.PP                     (pretty)
 import           Cryptol.Utils.RecordMap
@@ -174,12 +174,12 @@ throwFFISetup msg =
 
 -- | Given a list of type parameters and their actual values as terms, create a
 -- type environment binding them.
-buildTypeEnv :: Ctx => [TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
+buildTypeEnv :: Ctx => [Cry.TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
   case asCtorParams argTerm of
-    Just (primName -> "Cryptol.TCNum", [], [asNat -> Just n]) ->
-      bindTypeVar (TVBound param) (Left (Nat (toInteger n))) <$>
+    Just (ecName -> ModuleIdentifier "Cryptol.TCNum", [], [asNat -> Just n]) ->
+      bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
     _ ->
       throwFFISetup $
@@ -447,7 +447,7 @@ precondBVZeroPrefix totalLen zeroLen x = do
   llvm_precond =<< lio (openToTypedTerm precond)
 
 -- | Type info for the 'FFIArray' type.
-arrayTypeInfo :: Ctx => TypeEnv -> [Type] -> FFIBasicType ->
+arrayTypeInfo :: Ctx => TypeEnv -> [Cry.Type] -> FFIBasicType ->
   LLVMCrucibleSetupM FFITypeInfo
 arrayTypeInfo tenv lenTypes ffiBasicType = do
   let lens :: Integral a => [a]

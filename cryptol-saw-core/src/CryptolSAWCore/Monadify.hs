@@ -106,6 +106,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Text as Text
 import Control.Monad (forM_, unless)
 import Control.Monad.Cont (Cont, cont, runCont)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -588,11 +589,11 @@ monadifyType ctx (asApplyAll -> (f, args))
 -}
 
 -- Num cases
-monadifyTpExpr _ (asCtor -> Just (pn, []))
-  | primName pn == "Cryptol.TCInf"
+monadifyTpExpr _ (asCtor -> Just (ec, []))
+  | ecName ec == ModuleIdentifier "Cryptol.TCInf"
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
-monadifyTpExpr _ (asCtor -> Just (pn, [asNat -> Just n]))
-  | primName pn == "Cryptol.TCNum"
+monadifyTpExpr _ (asCtor -> Just (ec, [asNat -> Just n]))
+  | ecName ec == ModuleIdentifier "Cryptol.TCNum"
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
   | Just op <- monadifyNumBinOp f
@@ -831,15 +832,21 @@ mkSemiPureGlobalDefTerm glob params_p =
    then applyOpenTermMulti (globalDefOpenTerm glob) [evTypeTerm ?specMEvType]
    else globalDefOpenTerm glob)
 
--- | Build a 'MonTerm' from a constructor with the given 'PrimName'
-mkCtorArgMonTerm :: HasSpecMEvType => PrimName Term -> ArgMonTerm
-mkCtorArgMonTerm pn
-  | not (isFirstOrderType (primType pn)) =
-    failArgMonTerm (monadifyType [] $ primType pn)
+-- | Build a 'MonTerm' from a constructor with the given 'ExtCns'
+mkCtorArgMonTerm :: HasSpecMEvType => ExtCns Term -> ArgMonTerm
+mkCtorArgMonTerm ec
+  | not (isFirstOrderType (ecType ec)) =
+    failArgMonTerm (monadifyType [] $ ecType ec)
     ("monadification failed: cannot handle constructor "
-     ++ show (primName pn) ++ " with higher-order type")
-mkCtorArgMonTerm pn =
-  fromSemiPureTermFun (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
+     ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with higher-order type")
+mkCtorArgMonTerm ec =
+  case ecName ec of
+    ModuleIdentifier ident ->
+      fromSemiPureTermFun (monadifyType [] $ ecType ec) (ctorOpenTerm ident)
+    ImportedName{} ->
+      failArgMonTerm (monadifyType [] $ ecType ec)
+      ("monadification failed: cannot handle constructor "
+       ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with non-ident name")
 
 
 ----------------------------------------------------------------------
@@ -1191,8 +1198,8 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asTupleValue -> Just []) =
   return $ ArgMonTerm $ fromSemiPureTerm MTyUnit unitOpenTerm
-monadifyTerm' _ (asCtor -> Just (pn, args)) =
-  monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
+monadifyTerm' _ (asCtor -> Just (ec, args)) =
+  monadifyApply (ArgMonTerm $ mkCtorArgMonTerm ec) args
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
   (Map.lookup (globalDefName glob) <$> monStMonTable <$> ask) >>= \case
   Just macro ->

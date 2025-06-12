@@ -94,7 +94,7 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
-  , simCtorApp :: PrimName (TValue l) -> Maybe (MValue l)
+  , simCtorApp :: ExtCns (TValue l) -> Maybe (MValue l)
   -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
@@ -281,8 +281,9 @@ evalTermF cfg lam recEval tf env =
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _ps args) =
-       do ctor <- findCtorInMap (primName c) (simModMap cfg)
-          Just (ctor, args)
+      case lookupVarIndexInMap (ecVarIndex c) (simModMap cfg) of
+        Just (ResolvedCtor ctor) -> Just (ctor, args)
+        _ -> Nothing
     evalConstructor (VNat 0) =
        do ctor <- findCtorInMap preludeZeroIdent (simModMap cfg)
           Just (ctor, [])
@@ -395,8 +396,13 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
                in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
             ImportedName{} -> Nothing
 
-    ctors :: PrimName (TValue l) -> Maybe (MValue l)
-    ctors pn = evalPrim (primHandler (primNameToExtCns pn)) pn <$> Map.lookup (primName pn) prims
+    ctors :: ExtCns (TValue l) -> Maybe (MValue l)
+    ctors ec =
+      case ecName ec of
+        ModuleIdentifier ident ->
+          let pn = PrimName (ecVarIndex ec) ident (ecType ec)
+          in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
+        ImportedName{} -> Nothing
 
     primitive :: ExtCns (TValue l) -> MValue l
     primitive ec =

@@ -27,9 +27,9 @@ module SAWCore.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
+  , ctorExtCns
   , ctorNumParams
   , ctorNumArgs
-  , ctorPrimName
   , DataType(..)
   , dtNumParams
   , dtNumIndices
@@ -130,7 +130,7 @@ instance Hashable Def -- automatically derived
 data Ctor =
   forall d params ixs.
   Ctor
-  { ctorName :: !Ident
+  { ctorNameInfo :: !NameInfo
     -- ^ The name of this constructor
   , ctorVarIndex :: !VarIndex
     -- ^ Unique var index for this constructor
@@ -189,20 +189,20 @@ ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
 
 -- | Compute the ExtCns that uniquely references a constructor
-ctorPrimName :: Ctor -> PrimName Term
-ctorPrimName ctor = PrimName (ctorVarIndex ctor) (ctorName ctor) (ctorType ctor)
+ctorExtCns :: Ctor -> ExtCns Term
+ctorExtCns ctor = EC (ctorVarIndex ctor) (ctorNameInfo ctor) (ctorType ctor)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
 instance Eq Ctor where
-  (==) = lift2 ctorName (==)
+  (==) = lift2 ctorExtCns (==)
 
 instance Ord Ctor where
-  compare = lift2 ctorName compare
+  compare = lift2 ctorExtCns compare
 
 instance Show Ctor where
-  show = show . ctorName
+  show = show . toAbsoluteName . ctorNameInfo
 
 
 -- Datatypes -------------------------------------------------------------------
@@ -272,7 +272,7 @@ data ResolvedName
 
 -- | Get the 'NameInfo' for a 'ResolvedName'
 resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo (ResolvedCtor ctor) = ModuleIdentifier (ctorName ctor)
+resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor
 resolvedNameInfo (ResolvedDataType dt) = ModuleIdentifier (dtName dt)
 resolvedNameInfo (ResolvedDef d) = defNameInfo d
 

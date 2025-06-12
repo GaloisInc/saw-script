@@ -170,9 +170,9 @@ asNestedPairs _ = Nothing
 -- | Recognize a term of the form @Cons _ x1 (Cons _ x2 (... (Nil _)))@
 asList :: Recognizer Term [Term]
 asList (asCtor -> Just (nm, [_]))
-  | primName nm == "Prelude.Nil" = return []
+  | ecName nm == ModuleIdentifier "Prelude.Nil" = return []
 asList (asCtor -> Just (nm, [_, hd, tl]))
-  | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
+  | ecName nm == ModuleIdentifier "Prelude.Cons" = (hd:) <$> asList tl
 asList _ = Nothing
 
 -- | Apply a SAW core term of type @MultiFixBodies@ to a list of monadic
@@ -613,8 +613,8 @@ mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
 -- | Match a term as a static list of eliminators for an Eithers type
 matchEitherElims :: Term -> Maybe [EitherElim]
 matchEitherElims (asCtor ->
-                  Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
-matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
+                  Just (ecName -> ModuleIdentifier "Prelude.FunsTo_Nil", [_])) = Just []
+matchEitherElims (asCtor -> Just (ecName -> ModuleIdentifier "Prelude.FunsTo_Cons",
                                   [asSpecM -> Just (ev, _), tp, f, rest])) =
   ((Type tp, CompFunTerm ev f):) <$>
   matchEitherElims rest

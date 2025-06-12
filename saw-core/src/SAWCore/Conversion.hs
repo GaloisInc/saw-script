@@ -266,7 +266,7 @@ asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
           CtorApp c params l <- R.asFTermF t
-          guard (o == primName c)
+          guard (ModuleIdentifier o == ecName c)
           return (params ++ l)
 
 -- | Match a datatype.
@@ -401,7 +401,7 @@ mkTupleSelector i t
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = panic "mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
 
-mkCtor :: PrimName Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
+mkCtor :: ExtCns Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
   do params <- sequence paramsB
      args <- sequence argsB

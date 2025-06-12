@@ -124,8 +124,8 @@ import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
-  ( ctorNumParams
-  , ctorPrimName
+  ( ctorExtCns
+  , ctorNumParams
   , dtNumParams
   , dtPrimName
   , Ctor(..)
@@ -347,9 +347,9 @@ ctorOpenTerm c all_args = OpenTerm $ do
   maybe_ctor <- liftTCM scFindCtor c
   ctor <- case maybe_ctor of
             Just ctor -> pure ctor
-            Nothing -> throwTCError $ NoSuchCtor c
+            Nothing -> throwTCError $ NoSuchCtor (ModuleIdentifier c)
   (params, args) <- splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
-  c' <- traverse typeInferComplete (ctorPrimName ctor)
+  c' <- traverse typeInferComplete (ctorExtCns ctor)
   typeInferComplete $ CtorApp c' params args
 
 -- | Build an 'OpenTerm' for a datatype applied to its arguments

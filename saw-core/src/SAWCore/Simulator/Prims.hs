@@ -77,8 +77,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWCore.Name (ExtCns(..), Ident, NameInfo(..))
 import SAWCore.Panic (panic)
-import SAWCore.Term.Functor (Ident, primType, primName)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
 import qualified SAWCore.Prim as Prim
@@ -119,8 +119,8 @@ boolFun = PrimFilterFun "expected Bool" r
 natFun :: VMonad l => (Natural -> Prim l) -> Prim l
 natFun = PrimFilterFun "expected Nat" r
   where r (VNat n) = pure n
-        r (VCtorApp (primName -> "Prelude.Zero") [] [])  = pure 0
-        r (VCtorApp (primName -> "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
+        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Zero") [] [])  = pure 0
+        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
 
 -- | A primitive that requires an integer argument
@@ -550,8 +550,8 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (primName -> "Prelude.Zero") [] []) = pure (Right 0)
-        r v@(VCtorApp (primName -> "Prelude.Succ") [] [x]) =
+        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Zero") [] []) = pure (Right 0)
+        r v@(VCtorApp (ecName -> ModuleIdentifier "Prelude.Succ") [] [x]) =
           lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
@@ -1353,7 +1353,7 @@ muxValue bp tp0 b = value tp0
          VRecordValue <$> traverse build fs
 
     value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)
-      | i == j = VCtorApp i ps <$> ctorArgs (primType i) ps xv yv
+      | i == j = VCtorApp i ps <$> ctorArgs (ecType i) ps xv yv
       | otherwise = unsupportedPrimitive "muxValue"
           ("cannot mux different data constructors " <> show i <> " " <> show j)
 

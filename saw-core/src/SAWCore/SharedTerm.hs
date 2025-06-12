@@ -314,7 +314,7 @@ import SAWCore.Module
   , completeDataType
   , dtPrimName
   , ctorNumParams
-  , ctorPrimName
+  , ctorExtCns
   , emptyModuleMap
   , moduleIsLoaded
   , moduleName
@@ -552,7 +552,7 @@ scDataTypeApp sc d_id args =
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scCtorAppParams :: SharedContext
-                -> PrimName Term  -- ^ The constructor name
+                -> ExtCns Term  -- ^ The constructor name
                 -> [Term] -- ^ The parameters
                 -> [Term] -- ^ The arguments
                 -> IO Term
@@ -565,7 +565,7 @@ scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
 scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
-     scCtorAppParams sc (ctorPrimName ctor) params args'
+     scCtorAppParams sc (ctorExtCns ctor) params args'
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -807,7 +807,7 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- scShCtxM sc $ ctxCtorType d arg_struct
-    let cec = PrimName varidx c tp
+    let cec = EC varidx (ModuleIdentifier c) tp
     elim_tp_fun <- scShCtxM sc $ mkCtorElimTypeFun d cec arg_struct
 
     -- Step 2: build free variables for rec, elim and the
@@ -838,7 +838,7 @@ scBuildCtor sc d c arg_struct =
 
     -- Finally, return the required Ctor record
     return $ Ctor
-      { ctorName = c
+      { ctorNameInfo = ModuleIdentifier c
       , ctorVarIndex = varidx
       , ctorArgStruct = arg_struct
       , ctorDataType = d
@@ -862,14 +862,14 @@ scRecursorElimTypes ::
   PrimName Term ->
   [Term] ->
   Term ->
-  IO [(PrimName Term, Term)]
+  IO [(ExtCns Term, Term)]
 scRecursorElimTypes sc d params p_ret =
   do mm <- scGetModuleMap sc
      case lookupVarIndexInMap (primVarIndex d) mm of
        Just (ResolvedDataType dt) ->
          do forM (dtCtors dt) $ \ctor ->
               do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-                 return (ctorPrimName ctor, elim_type)
+                 return (ctorExtCns ctor, elim_type)
        _ ->
          panic "scRecursorElimTypes" ["Could not find datatype: " <> identText (primName d)]
 
@@ -898,18 +898,18 @@ scReduceRecursor ::
   SharedContext ->
   Term {- ^ recusor term -} ->
   CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
-  PrimName Term {- ^ constructor name -} ->
+  ExtCns Term {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
 scReduceRecursor sc r crec c args =
-  do mres <- lookupVarIndexInMap (primVarIndex c) <$> scGetModuleMap sc
+  do mres <- lookupVarIndexInMap (ecVarIndex c) <$> scGetModuleMap sc
      case mres of
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
          ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
        _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> identText (primName c)]
+         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (ecName c)]
 
 -- | Reduce an application of a recursor to a concrete nat value.
 --   The given recursor value is assumed to be correctly-typed
@@ -950,9 +950,9 @@ convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
 convertsToNat t = helper t where
   helper (asFTermF -> Just (NatLit k)) = return k
   helper (asCtor -> Just (z, []))
-    | primName z == preludeZeroIdent = return 0
+    | ecName z == ModuleIdentifier preludeZeroIdent = return 0
   helper (asCtor -> Just (s, [t']))
-    | primName s == preludeSuccIdent = (1+) <$> helper t'
+    | ecName s == ModuleIdentifier preludeSuccIdent = (1+) <$> helper t'
   helper _ = Nothing
 
 
@@ -1207,7 +1207,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
         CtorApp c params args -> do
-          lift $ foldM (reducePi sc) (primType c) (params ++ args)
+          lift $ foldM (reducePi sc) (ecType c) (params ++ args)
         DataTypeApp dt params args -> do
           lift $ foldM (reducePi sc) (primType dt) (params ++ args)
         RecursorType _d _ps _motive motive_ty -> do
@@ -1477,7 +1477,9 @@ scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType)
 
 -- | Deprecated. Use scCtorApp instead.
 scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
-scApplyCtor sc c args = scCtorApp sc (ctorName c) args
+scApplyCtor sc ctor args =
+  let (params, args') = splitAt (ctorNumParams ctor) args
+  in scCtorAppParams sc (ctorExtCns ctor) params args'
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term

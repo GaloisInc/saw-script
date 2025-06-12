@@ -424,7 +424,7 @@ readBackValue sc cfg = loop
 
     loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
       do cnm' <- traverse (readBackTValue sc cfg) cnm
-         (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (primType cnm) (ps++vs)
+         (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (ecType cnm) (ps++vs)
          scCtorAppParams sc cnm' ps' vs'
 
     loop (VRecordType fs) (VRecordValue vs) =

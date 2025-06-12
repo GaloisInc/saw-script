@@ -275,8 +275,8 @@ asBvToNatKnownW _ = Nothing
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
 asEither (asCtor -> Just (c, [_, _, x]))
-  | primName c == "Prelude.Left"  = return $ Left x
-  | primName c == "Prelude.Right" = return $ Right x
+  | ecName c == ModuleIdentifier "Prelude.Left"  = return $ Left x
+  | ecName c == ModuleIdentifier "Prelude.Right" = return $ Right x
 asEither _ = Nothing
 
 -- | Recognize the @Num@ type
@@ -287,9 +287,9 @@ asNumType _ = Nothing
 -- | Recognize a term as a @TCNum n@ or @TCInf@
 asNum :: Recognizer Term (Either Term ())
 asNum (asCtor -> Just (c, [n]))
-  | primName c == "Cryptol.TCNum"  = return $ Left n
+  | ecName c == ModuleIdentifier "Cryptol.TCNum"  = return $ Left n
 asNum (asCtor -> Just (c, []))
-  | primName c == "Cryptol.TCInf"  = return $ Right ()
+  | ecName c == ModuleIdentifier "Cryptol.TCInf"  = return $ Right ()
 asNum _ = Nothing
 
 -- | Recognize a term as being of the form @isFinite n@

@@ -400,7 +400,10 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
-    CtorApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
+    CtorApp n is as ->
+      case ecName n of
+        ModuleIdentifier ident -> translateIdentWithArgs ident (is ++ as)
+        ImportedName{} -> Coq.App <$> translateConstant n <*> traverse translateTerm (is ++ as)
 
     RecursorType _d _params motive motiveTy ->
       -- type of the motive looks like
@@ -425,7 +428,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
 
-         let fnd c = case Map.lookup (primVarIndex c) eliminators of
+         let fnd c = case Map.lookup (ecVarIndex c) eliminators of
                        Just (e,_ety) -> translateTerm e
                        Nothing -> errorTermM
                           ("Recursor eliminator missing eliminator for constructor " ++ show c)

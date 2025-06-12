@@ -81,7 +81,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import SAWCore.Cache
 import SAWCore.Conversion
 import SAWCore.Module
-  ( ctorPrimName
+  ( ctorExtCns
   , lookupVarIndexInMap
   , Ctor(..)
   , DataType(..)
@@ -173,8 +173,8 @@ first_order_match pat term = match pat term Map.empty
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case R.asCtor t of
-    Just (i, [])  | primName i == preludeZeroIdent -> Just 0
-    Just (i, [x]) | primName i == preludeSuccIdent -> (+ 1) <$> asConstantNat x
+    Just (i, [])  | ecName i == ModuleIdentifier preludeZeroIdent -> Just 0
+    Just (i, [x]) | ecName i == ModuleIdentifier preludeSuccIdent -> (+ 1) <$> asConstantNat x
     _ ->
       do let (f, xs) = R.asApplyAll t
          i <- R.asGlobalDef f
@@ -297,7 +297,7 @@ scMatch sc pat term =
           case (unwrapTermF x, unwrapTermF y) of
             (_, FTermF (NatLit n))
               | Just (c, [x']) <- R.asCtor x
-              , primName c == preludeSuccIdent && n > 0 ->
+              , ecName c == ModuleIdentifier preludeSuccIdent && n > 0 ->
                 do y' <- lift $ scNat sc (n-1)
                    match depth env x' y' s
             -- check that neither x nor y contains bound variables less than `depth`
@@ -475,7 +475,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
                   params2 <- traverse (incVars sc 0 nargs) params1
                   args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
-                  c <- scCtorAppParams sc (ctorPrimName ctor) params2 args
+                  c <- scCtorAppParams sc (ctorExtCns ctor) params2 args
                   -- Build the list of types of the new context.
                   let ctxt' = ctxt1 ++ argTs ++ ctxt2
                   -- Define function to adjust indices on a term from
@@ -493,7 +493,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc rec' crec' (ctorPrimName ctor) args'
+                  rhs1 <- scReduceRecursor sc rec' crec' (ctorExtCns ctor) args'
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
@@ -627,7 +627,7 @@ asRecordRedex t =
 --
 -- Note that this function does not recognize applications of
 -- recursors to concrete Nat values; see @asNatIotaRedex@.
-asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, PrimName Term, [Term])
+asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, ExtCns Term, [Term])
 asIotaRedex t =
   do (rec, crec, _, arg) <- R.asRecursorApp t
      (c, _, args) <- R.asCtorParams arg

@@ -148,8 +148,8 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
             CtorApp i ps es     ->
-              do stashPrimName i
-                 pure $ unwords ("Ctor" : show (primVarIndex i) : show (primType i) :
+              do stashName i
+                 pure $ unwords ("Ctor" : show (ecVarIndex i) : show (ecType i) :
                                  map show ps ++ argsep : map show es)
             DataTypeApp i ps es ->
               do stashPrimName i
@@ -164,13 +164,13 @@ scWriteExternal t0 =
                       [argsep, show motive, show motive_ty])
             Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder) ->
               do stashPrimName d
-                 mapM_ stashPrimName ctorOrder
+                 mapM_ stashName ctorOrder
                  pure $ unwords
                       (["Recursor" , show (primVarIndex d), show (primType d)] ++
                        map show ps ++
                        [ argsep, show motive, show motive_ty
                        , show (Map.toList cs_fs)
-                       , show (map (\ec -> (primVarIndex ec, primType ec)) ctorOrder)
+                       , show (map (\ec -> (ecVarIndex ec, ecType ec)) ctorOrder)
                        ])
             RecursorApp r ixs e -> pure $
               unwords (["RecursorApp", show r] ++
@@ -245,10 +245,10 @@ scReadExternal sc input =
                        pure (c, (e',ty')))
          pure (Map.fromList elims)
 
-    readCtorList :: String -> ReadM [PrimName Term]
+    readCtorList :: String -> ReadM [ExtCns Term]
     readCtorList str =
       do (ls :: [(VarIndex,Int)]) <- readM str
-         forM ls (\(vi,i) -> readPrimName' vi =<< getTerm i)
+         forM ls (\(vi,i) -> readEC' vi =<< getTerm i)
 
     readPrimName' :: VarIndex -> Term -> ReadM (PrimName Term)
     readPrimName' vi t' =
@@ -306,7 +306,7 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
         ("Ctor" : i : t : (separateArgs -> Just (ps, es))) ->
-          FTermF <$> (CtorApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
+          FTermF <$> (CtorApp <$> readEC i t <*> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : t : (separateArgs -> Just (ps, es))) ->
           FTermF <$> (DataTypeApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
 
