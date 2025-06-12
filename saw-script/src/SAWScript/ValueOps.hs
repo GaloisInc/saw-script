@@ -61,7 +61,7 @@ module SAWScript.ValueOps (
     caseProofResultPrim,
     -- used in SAWScript.Interpreter
     caseSatResultPrim,
-    -- used by SAWScript.REPL.Monad, SAWScript.Interpreter
+    -- used by SAWScript.Interpreter
     IsValue(..),
     -- used by SAWScript.Interpreter
     FromValue(..),
