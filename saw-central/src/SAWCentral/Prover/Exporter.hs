@@ -116,25 +116,25 @@ import qualified What4.SWord as W4Sim
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
-  String ->
+  FilePath ->
   Sequent ->
   TopLevel SolverStats
 proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
      satq <- io $ sequentToSATQuery sc unintSet goal
      _ <- exporter path satq
-     let stats = solverStats ("offline: "++ path) (sequentSharedSize goal)
+     let stats = solverStats ("offline: " <> Text.pack path) (sequentSharedSize goal)
      return stats
 
 
 proveWithPropExporter ::
   (FilePath -> Prop -> TopLevel a) ->
-  String ->
+  FilePath ->
   Prop ->
   TopLevel SolverStats
 proveWithPropExporter exporter path goal =
   do _ <- exporter path goal
-     let stats = solverStats ("offline: "++ path) (propSize goal)
+     let stats = solverStats ("offline: " <> Text.pack path) (propSize goal)
      return stats
 
 --------------------------------------------------------------------------------

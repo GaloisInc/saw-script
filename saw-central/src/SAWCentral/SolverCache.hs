@@ -317,14 +317,14 @@ mkSolverCacheKey sc vs opts satq = do
 -- Solver Cache Values ---------------------------------------------------------
 
 -- | The value type for 'SolverCache': solver version information, the timestamp
--- of when the entry was last used, a 'String' representing the solver used, and
+-- of when the entry was last used, a 'Text' representing the solver used, and
 -- an optional list of counterexamples, represented as pairs of indexes into the
 -- list of 'satVariables' of an associated 'SATQuery'
 data SolverCacheValue =
   SolverCacheValue
   { solverCacheValueVersions   :: SolverBackendVersions
   , solverCacheValueOptions    :: [SolverBackendOption]
-  , solverCacheValueSolverName :: String
+  , solverCacheValueSolverName :: Text
   , solverCacheValueCEXs       :: Maybe [(Int, FirstOrderValue)]
   , solverCacheValueLastUsed   :: UTCTime
   } deriving Eq
@@ -360,7 +360,7 @@ instance Serialise SolverCacheValue where
 -- | Convert the result of a solver call on the given 'SATQuery' to a
 -- 'SolverCacheValue'
 toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
-                      SATQuery -> (Maybe CEX, String) ->
+                      SATQuery -> (Maybe CEX, Text) ->
                       IO (Maybe SolverCacheValue)
 toSolverCacheValue vs opts satq (cexs, solver_name) = do
   getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` ecs) cexs of
@@ -373,7 +373,7 @@ toSolverCacheValue vs opts satq (cexs, solver_name) = do
 
 -- | Convert a 'SolverCacheValue' to something which has the same form as the
 -- result of a solver call on the given 'SATQuery'
-fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, String)
+fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, Text)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
   (firstsMaybe (ecs !!) cexs, solver_name)
   where ecs = M.keys $ satVariables satq

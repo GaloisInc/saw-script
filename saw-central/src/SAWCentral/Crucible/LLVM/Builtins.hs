@@ -2772,7 +2772,7 @@ llvm_ghost_value ghost val = LLVMCrucibleSetupM $
 
 llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [Text]
 llvm_spec_solvers (SomeLLVM ps) =
-  map Text.pack $ Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps
+  Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps
 
 llvm_spec_size :: SomeLLVM MS.ProvedSpec -> Integer
 llvm_spec_size (SomeLLVM mir) =

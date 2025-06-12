@@ -16,6 +16,7 @@ module SAWCentral.VerificationSummary
   ) where
 
 import Control.Lens ((^.))
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -50,17 +51,17 @@ data VerificationSummary =
   , vsTheorems :: [Theorem]
   }
 
-vsVerifSolvers :: VerificationSummary -> Set.Set String
+vsVerifSolvers :: VerificationSummary -> Set.Set Text
 vsVerifSolvers vs =
   Set.unions $
   map (\ms -> solverStatsSolvers (ms ^. psSolverStats)) (vsJVMMethodSpecs vs) ++
   map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. psSolverStats)) (vsLLVMMethodSpecs vs)
 
-vsTheoremSolvers :: VerificationSummary -> Set.Set String
+vsTheoremSolvers :: VerificationSummary -> Set.Set Text
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
   where getSolvers thm = solverStatsSolvers (thmStats thm)
 
-vsAllSolvers :: VerificationSummary -> Set.Set String
+vsAllSolvers :: VerificationSummary -> Set.Set Text
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
 computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
@@ -197,4 +198,4 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
              , ""
              ]
       prettySolvers ss =
-        sectionWithItems "Solvers Used" (item . fromString) ss
+        sectionWithItems "Solvers Used" (item . pretty) ss

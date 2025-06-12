@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -13,6 +14,7 @@ import           Control.Monad.State (gets)
 import           Data.List (nub)
 import           Data.Set (Set)
 import qualified Data.Map as Map
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import           System.IO
 
@@ -63,7 +65,7 @@ what4Theories ::
   Set VarIndex ->
   Bool ->
   Sequent ->
-  TopLevel [String]
+  TopLevel [Text]
 what4Theories unintSet hashConsing goal = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
@@ -74,7 +76,7 @@ what4Theories unintSet hashConsing goal = do
      let pf lit = (predicateVarInfo lit)^.problemFeatures
      return (nub (concatMap evalTheories (map pf lits)))
 
-evalTheories :: ProblemFeatures -> [String]
+evalTheories :: ProblemFeatures -> [Text]
 evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
  where
   xs = [ ("LinearArithmetic", useLinearArithmetic)
@@ -94,7 +96,7 @@ proveWhat4_sym ::
   SolverAdapter St ->
   Bool ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 proveWhat4_sym solver hashConsing satq = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
@@ -107,7 +109,7 @@ proveExportWhat4_sym ::
   Bool ->
   FilePath ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 proveExportWhat4_sym solver hashConsing outFilePath satq = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
@@ -129,7 +131,7 @@ proveWhat4_z3,
   proveWhat4_abc ::
   Bool          {- ^ Hash-consing of What4 terms -}->
   SATQuery      {- ^ The query to be proved -} ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter
@@ -145,7 +147,7 @@ proveWhat4_z3_using ::
   String        {- ^ Solver tactic -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
   SATQuery      {- ^ The query to be proved -} ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 proveWhat4_z3_using tactic hashConsing satq = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
@@ -163,7 +165,7 @@ proveExportWhat4_z3,
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
   SATQuery      {- ^ The query to be proved -} ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_bitwuzla  = proveExportWhat4_sym bitwuzlaAdapter
@@ -183,7 +185,7 @@ setupWhat4_solver :: forall st t ff.
   IO ( [ExtCns Term]
      , [W.Labeler (B.ExprBuilder t st ff)]
      , [Pred (B.ExprBuilder t st ff)]
-     , String)
+     , Text)
 setupWhat4_solver solver sym sc satq =
   do
      -- symbolically evaluate
@@ -195,7 +197,7 @@ setupWhat4_solver solver sym sc satq =
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)
 
-     let solver_name = "W4 ->" ++ solver_adapter_name solver
+     let solver_name = "W4 ->" <> (Text.pack $ solver_adapter_name solver)
 
      return (argNames, bvs, lits, solver_name)
 
@@ -207,7 +209,7 @@ proveWhat4_solver :: forall st t ff.
   SharedContext      {- ^ Context for working with terms -} ->
   SATQuery           {- ^ The query to be proved/checked. -} ->
   IO ()              {- ^ Extra setup actions -} ->
-  IO (Maybe CEX, String)
+  IO (Maybe CEX, Text)
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym sc satq extraSetup =
   do

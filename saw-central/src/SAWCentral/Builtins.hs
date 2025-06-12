@@ -53,6 +53,7 @@ import Data.Typeable
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
+import qualified Data.Text.IO as TextIO
 import System.IO
 import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
 import System.FilePath (hasDrive, (</>))
@@ -558,7 +559,7 @@ printGoalSize =
   do printOutLnTop Info $ "Goal shared size: " ++ show (sequentSharedSize (goalSequent goal))
      printOutLnTop Info $ "Goal unshared size: " ++ show (sequentTreeSize (goalSequent goal))
 
-resolveNames :: [String] -> TopLevel (Set VarIndex)
+resolveNames :: [Text] -> TopLevel (Set VarIndex)
 resolveNames nms =
   do sc <- getSharedContext
      Set.fromList . mconcat <$> mapM (resolveName sc) nms
@@ -569,12 +570,12 @@ resolveNames nms =
 -- The given name is searched for in both the local Cryptol environment
 -- and the SAWCore naming environment. If it is found in neither, an
 -- exception is thrown.
-resolveName :: SharedContext -> String -> TopLevel [VarIndex]
+resolveName :: SharedContext -> Text -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
-     scnms <- io (scResolveName sc tnm)
+     scnms <- io (scResolveName sc nm)
      let ?fileReader = StrictBS.readFile
-     res <- io $ CEnv.resolveIdentifier cenv tnm
+     res <- io $ CEnv.resolveIdentifier cenv nm
      case res of
        Just cnm ->
          do importedName <- io $ Cryptol.importName cnm
@@ -588,8 +589,7 @@ resolveName sc nm =
        Nothing -> fallback scnms
 
  where
- tnm = Text.pack nm
- fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback [] = fail $ Text.unpack $ "Could not resolve name: " <> nm
  fallback scnms = pure scnms
 
 
@@ -600,7 +600,7 @@ normalize_term_opaque :: [Text] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     idxs <- mconcat <$> mapM (resolveName sc) (map Text.unpack opaque)
+     idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
      tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
@@ -609,7 +609,7 @@ goal_normalize :: [Text] -> ProofScript ()
 goal_normalize opaque =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       idxs <- mconcat <$> mapM (resolveName sc) (map Text.unpack opaque)
+       idxs <- mconcat <$> mapM (resolveName sc) opaque
        modmap <- io (scGetModuleMap sc)
        let opaqueSet = Set.fromList idxs
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc modmap opaqueSet) (goalSequent goal)
@@ -690,7 +690,7 @@ unfoldGoal :: [Text] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unints' <- resolveNames (map Text.unpack unints)
+     unints' <- resolveNames unints
      sqt' <- traverseSequentWithFocus (io . unfoldProp sc unints') (goalSequent goal)
      return (sqt', UnfoldEvidence unints')
 
@@ -698,7 +698,7 @@ unfoldFixOnceGoal :: [Text] -> ProofScript ()
 unfoldFixOnceGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unints' <- resolveNames (map Text.unpack unints)
+     unints' <- resolveNames unints
      sqt' <- traverseSequentWithFocus (io . unfoldFixOnceProp sc unints') (goalSequent goal)
      return (sqt', UnfoldFixOnceEvidence unints')
 
@@ -738,7 +738,7 @@ goal_eval :: [Text] -> ProofScript ()
 goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unintSet <- resolveNames (map Text.unpack unints)
+     unintSet <- resolveNames unints
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sqt' <- traverseSequentWithFocus (io . evalProp sc what4PushMuxOps unintSet) (goalSequent goal)
      return (sqt', EvalEvidence unintSet)
@@ -750,13 +750,11 @@ extract_uninterp ::
   TopLevel (TypedTerm, [(Text, [(TypedTerm,TypedTerm)])])
 extract_uninterp unints opaques tt =
   do sc <- getSharedContext
-     let unints' = map Text.unpack unints
-     let opaques' = map Text.unpack opaques
-     idxs <- mconcat <$> mapM (resolveName sc) unints'
+     idxs <- mconcat <$> mapM (resolveName sc) unints
      let unintSet = Set.fromList idxs
      mmap <- io (scGetModuleMap sc)
 
-     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques'
+     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
@@ -1001,7 +999,7 @@ codegenSBV :: SharedContext -> Text -> [Text] -> Text -> TypedTerm -> TopLevel (
 codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do
      let path :: FilePath = Text.unpack pathtxt
          fname :: FilePath = Text.unpack fnametxt
-     unintSet <- resolveNames (map Text.unpack unints)
+     unintSet <- resolveNames unints
      let mpath = if null path then Nothing else Just path
      io $ SBVSim.sbvCodeGen sc mempty unintSet mpath fname t
 
@@ -1016,7 +1014,7 @@ proveSBV conf = proveUnintSBV conf []
 proveUnintSBV :: SBV.SMTConfig -> [Text] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
-     unintSet <- SV.scriptTopLevel (resolveNames (map Text.unpack unints))
+     unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (sbvBackends conf) []
                 (Prover.proveUnintSBV conf timeout) unintSet
 
@@ -1025,7 +1023,7 @@ proveUnintSBV conf unints =
 -- do not call the continuation if the goal has an already cached result,
 -- and otherwise save the result of the call to the cache.
 applyProverToGoal :: [SolverBackend] -> [SolverBackendOption]
-                     -> (SATQuery -> TopLevel (Maybe CEX, String))
+                     -> (SATQuery -> TopLevel (Maybe CEX, Text))
                      -> Set VarIndex -> Sequent
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal backends opts f unintSet sqt = do
@@ -1049,7 +1047,7 @@ applyProverToGoal backends opts f unintSet sqt = do
 
 wrapProver ::
   [SolverBackend] -> [SolverBackendOption] ->
-  (SATQuery -> TopLevel (Maybe CEX, String)) ->
+  (SATQuery -> TopLevel (Maybe CEX, Text)) ->
   Set VarIndex ->
   ProofScript ()
 wrapProver backends opts f unints =
@@ -1057,23 +1055,23 @@ wrapProver backends opts f unints =
 
 wrapW4Prover ::
   SolverBackend -> [SolverBackendOption] ->
-  ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
+  ( Bool -> SATQuery -> TopLevel (Maybe CEX, Text) ) ->
   [Text] ->
   ProofScript ()
 wrapW4Prover backend opts f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
+  unintSet <- SV.scriptTopLevel $ resolveNames unints
   wrapProver [What4, backend] opts (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
-  ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
+  ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, Text) ) ->
   [Text] ->
   FilePath ->
   FilePath ->
   ProofScript ()
 wrapW4ProveExporter f unints path ext = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
+  unintSet <- SV.scriptTopLevel $ resolveNames unints
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
     sc <- getSharedContext
@@ -1251,7 +1249,7 @@ w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty p
 
 offline_unint_smtlib2 :: [Text] -> FilePath -> ProofScript ()
 offline_unint_smtlib2 unints path =
-  do unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
+  do unintSet <- SV.scriptTopLevel $ resolveNames unints
      proveWithSATExporter Prover.writeSMTLib2 unintSet path "." ".smt2"
 
 offline_verilog :: FilePath -> ProofScript ()
@@ -1637,7 +1635,7 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [Text] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mconcat <$> mapM (resolveName sc) (map Text.unpack unints)
+  unints' <- mconcat <$> mapM (resolveName sc) unints
   t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 
@@ -1650,7 +1648,7 @@ beta_reduce_term (TypedTerm schema t) = do
 term_eval :: [Text] -> TypedTerm -> TopLevel TypedTerm
 term_eval unints (TypedTerm schema t0) =
   do sc <- getSharedContext
-     unintSet <- resolveNames (map Text.unpack unints)
+     unintSet <- resolveNames unints
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sym <- liftIO $ Common.newSAWCoreExprBuilder sc what4PushMuxOps
      st <- liftIO $ Common.sawCoreState sym
@@ -1840,7 +1838,7 @@ failsPrim m = do
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
-      do liftIO $ putStrLn "== Anticipated failure message =="
+      do liftIO $ TextIO.putStrLn "== Anticipated failure message =="
          liftIO $ print ex
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
@@ -1910,11 +1908,10 @@ eval_list t = do
 term_theories :: [Text] -> TypedTerm -> TopLevel [Text]
 term_theories unints t = do
   sc <- getSharedContext
-  unintSet <- resolveNames $ map Text.unpack unints
+  unintSet <- resolveNames unints
   hashConsing <- gets SV.rwWhat4HashConsing
   prop <- io (predicateToProp sc Universal (ttTerm t))
-  theories <- Prover.what4Theories unintSet hashConsing (propToSequent prop)
-  return $ map Text.pack theories
+  Prover.what4Theories unintSet hashConsing (propToSequent prop)
 
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
@@ -2397,12 +2394,12 @@ setMonadification sc cry_str saw_str poly_p =
        liftIO $
        case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
          Just schema ->
-           -- putStrLn $ Text.unpack $ "Found Cryptol type for name: " <> show cry_str >>
+           -- TextIO.putStrLn $ "Found Cryptol type for name: " <> show cry_str >>
            importSchemaCEnv sc (rwCryptol rw) schema
          Nothing
            | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
                                                      rwCryptol rw) ->
-             -- putStrLn $ Text.unpack $ "No Cryptol type for name: " <> cry_str >>
+             -- TextIO.putStrLn $ "No Cryptol type for name: " <> cry_str >>
              scTypeOf sc cry_nm_trans
          _ -> fail $ Text.unpack $ "Could not find type for Cryptol name: " <> cry_str
      cry_mon_tp <-

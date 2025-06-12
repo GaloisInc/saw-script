@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Text (Text)
 import qualified Data.Text as Text
 import Text.Read (readMaybe)
 
@@ -50,7 +51,7 @@ proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 proveABC proxy satq = getSharedContext >>= \sc -> liftIO $
   BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
     do let (ecs,fts) = unzip shapes
@@ -86,7 +87,7 @@ getModel argNames shapes satRes =
 w4AbcVerilog ::
   Bool ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd
   where cmd tmp tmpCex = "%read " ++ tmp ++
                          "; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++
@@ -95,7 +96,7 @@ w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd
 w4AbcAIGER ::
   Bool ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 w4AbcAIGER =
   do w4AbcExternal Exporter.writeAIG_SAT cmd
   where cmd tmp tmpCex = "read_aiger " ++ tmp ++ "; sat; write_cex " ++ tmpCex
@@ -105,7 +106,7 @@ w4AbcExternal ::
   (String -> String -> String) ->
   Bool ->
   SATQuery ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 w4AbcExternal exporter argFn _hashcons satq =
        -- Create a temporary directory to put input and output files
     do canonTmpDir <- liftIO getCanonicalTemporaryDirectory
@@ -188,7 +189,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
        let ls = lines out
            sls = filter ("s " `isPrefixOf`) ls
            vls = filter ("v " `isPrefixOf`) ls
-       let stats = solverStats ("external SAT:" ++ execName) (sequentSharedSize (goalSequent g))
+       let stats = solverStats ("external SAT: " <> Text.pack execName) (sequentSharedSize (goalSequent g))
        case (sls, vls) of
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls

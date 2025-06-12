@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module SAWCentral.Prover.SBV
   ( proveUnintSBV
   , proveUnintSBVIO
@@ -5,10 +6,13 @@ module SAWCentral.Prover.SBV
   , SBV.z3, SBV.cvc4, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
   ) where
 
-import System.Directory
+import           Control.Monad
 
 import           Data.Maybe
-import           Control.Monad
+import           Data.Text (Text)
+import qualified Data.Text as Text
+
+import System.Directory
 
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.SBV.Internals as SBV
@@ -28,7 +32,7 @@ proveUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SATQuery      {- ^ A query to be proved -} ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf timeout satq =
   do sc <- getSharedContext
@@ -39,7 +43,7 @@ proveUnintSBVIO ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SATQuery      {- ^ A query to be proved -} ->
-  IO (Maybe CEX, String)
+  IO (Maybe CEX, Text)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBVIO sc conf timeout satq =
   do p <- findExecutable . SBV.executable $ SBV.solver conf
@@ -56,7 +60,7 @@ proveUnintSBVIO sc conf timeout satq =
 
      SBV.SatResult r <- SBV.satWith conf script
 
-     let solver_name = "SBV->" ++ show (SBV.name (SBV.solver conf))
+     let solver_name = "SBV->" <> Text.pack (show (SBV.name (SBV.solver conf)))
 
      case r of
        SBV.Unsatisfiable {} -> return (Nothing, solver_name)

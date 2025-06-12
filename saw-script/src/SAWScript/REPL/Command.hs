@@ -51,6 +51,7 @@ import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Text.IO as TextIO
 
 import qualified SAWSupport.Pretty as PPS (pShow)
 
@@ -347,7 +348,7 @@ tenvCmd = do
   let avail = rwPrimsAvail rw
       typeInfo = rwTypeInfo rw
       typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
-  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ PPS.pShow ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
+  io $ sequence_ [ TextIO.putStrLn (a <> " : " <> Text.pack (PPS.pShow ty)) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
