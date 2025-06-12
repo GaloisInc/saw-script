@@ -10,12 +10,6 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- XXX: the String and [] instances of IsValue and FromValue overlap.
--- This should be fixed by removing the String instance. (There's
--- already a Text instance.)
-{-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
-{-# LANGUAGE OverlappingInstances #-}
-
 module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     isVUnit,
