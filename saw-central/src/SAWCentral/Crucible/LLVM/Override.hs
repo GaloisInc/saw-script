@@ -322,13 +322,8 @@ methodSpecHandler opts sc cc mdMap css h =
   let sym = backendGetSym bak
   let fnName = NE.head css ^. csName
   call_loc <- liftIO $ W4.getCurrentProgramLoc sym
-  liftIO $ printOutLn opts Info $ unwords
-    [ "Matching"
-    , show (length css)
-    , "overrides of "
-    , Text.unpack fnName
-    , "..."
-    ]
+  liftIO $ printOutLn opts Info $ Text.unpack $
+      "Matching " <> Text.pack (show $ length css) <> " overrides of " <> fnName <> "..."
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
   -- First, run the precondition matcher phase.  Collect together a list of the results.
@@ -486,13 +481,9 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
   --
   -- We add a final default branch that simply fails unless some previous override
   -- branch has already succeeded.
-  liftIO $ printOutLn opts Info $ unwords
-    [ "Branching on"
-    , show (length branches')
-    , "override variants of"
-    , Text.unpack fnName
-    , "..."
-    ]
+  liftIO $ printOutLn opts Info $ Text.unpack $
+      "Branching on " <> Text.pack (show $ length branches') <>
+      " override variants of " <> fnName <> "..."
   let retTy = Crucible.handleReturnType h
   res <- Crucible.regValue <$> Crucible.callOverride h
      (Crucible.mkOverride' "overrideBranches" retTy
