@@ -101,8 +101,9 @@ liftBinaryCmp sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm 
   wt <- liftIO . SC.scNat sc $ cellTermWidth c1
   liftIO $ f wt t1 t2
 
--- | Given a primitive Yosys cell and a map of terms for its arguments, construct a record term representing the output.
--- If the provided cell is not a primitive, return Nothing.
+-- | Given a primitive Yosys cell and a map of terms for its
+-- arguments, construct a record term representing the output. If the
+-- provided cell is not a primitive, return Nothing.
 primCellToTerm ::
   forall m b.
   MonadIO m =>
