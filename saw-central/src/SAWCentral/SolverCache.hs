@@ -91,7 +91,8 @@ import Numeric (readHex)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 
-import qualified Data.Text as T
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Text.Printf (printf)
 
@@ -307,7 +308,7 @@ mkSolverCacheKey sc vs opts satq = do
                    , "satVariables " ++ show (M.size (satVariables satq))
                    , "satUninterp "  ++ show (length (satUninterp  satq)) ]
       str_to_hash = unlines str_prefix ++ anonLocalNames (scWriteExternal tm)
-  return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ T.pack $ str_to_hash
+  return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ Text.pack $ str_to_hash
   where anonLocalNames = unlines . map (unwords . go . words) . lines
         go (x:y:_:xs) | y `elem` ["Pi", "Lam"] = x:y:"_":xs
         go xs = xs
@@ -532,8 +533,9 @@ setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} ->
 
 -- | Print all entries in the solver result cache whose SHA256 hash keys start
 -- with the given string
-printSolverCacheByHex :: String -> SolverCacheOp ()
-printSolverCacheByHex hex_pref = SCOpOrFail $ \opts cache -> do
+printSolverCacheByHex :: Text -> SolverCacheOp ()
+printSolverCacheByHex hex_pref_txt = SCOpOrFail $ \opts cache -> do
+  let hex_pref = Text.unpack hex_pref_txt
   (env, db, cache') <- forceSolverCacheOpened cache
   let flt k v kvs = if hex_pref `isPrefixOf` encodeHex (solverCacheKeyHash k)
                     then (k,v):kvs else kvs

@@ -38,6 +38,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import           Data.IORef
 import qualified Data.Map as Map
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           System.IO(hFlush,stdout)
@@ -250,14 +251,12 @@ registerSymFuns opts =
 
   where
   err nm xs =
-    unlines [ "Type error in call to " ++ show (nm::String) ++ ":"
-            , "*** Expected: 2 arguments"
-            , "*** Given:    " ++ show (length xs) ++ " arguments"
-            ]
+      "Type error in call to " <> nm <>
+      ": expected 2 arguments, found " <> Text.pack (show $ length xs)
 
   mk2 nm _sc xs = case xs of
                     [_,_] -> cryTerm opts nm xs
-                    _     -> fail (err nm xs)
+                    _     -> fail $ Text.unpack $ err nm xs
 
 --------------------------------------------------------------------------------
 -- ELF
@@ -275,8 +274,8 @@ getElf path =
   do bs <- BS.readFile path
      case Elf.decodeElfHeaderInfo bs of
        Left (off, msg) ->
-           malformed path $ "Invalid ELF header at offset " ++ show off ++
-                            ": " ++ msg
+           malformed path $ "Invalid ELF header at offset " <> Text.pack (show off) <>
+                            ": " <> Text.pack msg
        Right (Elf.SomeElf hdr) ->
            let elfmachine = Elf.headerMachine (Elf.header hdr)
                elfclass = Elf.headerClass (Elf.header hdr)
@@ -298,8 +297,8 @@ getElf path =
 getRelevant :: FilePath -> Elf.ElfHeaderInfo 64 -> IO RelevantElf
 getRelevant path elf =
   case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of
-    (Left err, _) -> malformed path err
-    (_, Left err) -> malformed path err
+    (Left err, _) -> malformed path $ Text.pack err
+    (_, Left err) -> malformed path $ Text.pack err
     (Right (mem, faddrs, _warnings, _errs), Right (_, addrs, _, _)) ->
       do let toEntry msym = (memSymbolStart msym, memSymbolName msym)
          return RelevantElf { memory = mem
@@ -326,8 +325,8 @@ findSymbol :: FilePath -> AddrSymMap 64 -> ByteString -> IO (MemSegmentOff 64)
 findSymbol path addrs nm =
   case findSymbols addrs nm of
     [addr] -> return $! addr
-    []     -> malformed path ("Could not find function " ++ show nm)
-    _      -> malformed path ("Multiple definitions for " ++ show nm)
+    []     -> malformed path ("Could not find function " <> Text.pack (show nm))
+    _      -> malformed path ("Multiple definitions for " <> Text.pack (show nm))
 
 
 loadGlobal ::
@@ -676,7 +675,7 @@ data X86Unsupported = X86Unsupported FilePath String deriving Show
 -- | Exception for miscellaneous errors during verification. The arguments
 --   are the filename we were looking at, also optionally a function/symbol
 --   name, and a message.
-data X86Error       = X86Error FilePath (Maybe String) String deriving Show
+data X86Error       = X86Error FilePath (Maybe Text) Text deriving Show
 
 instance Exception X86Unsupported
 instance Exception X86Error
@@ -684,7 +683,7 @@ instance Exception X86Error
 unsupported :: FilePath -> String -> IO a
 unsupported path x = throwIO (X86Unsupported path x)
 
-malformed :: FilePath -> String -> IO a
+malformed :: FilePath -> Text -> IO a
 malformed path x = throwIO (X86Error path Nothing x)
 
 timeout :: FilePath -> IO a

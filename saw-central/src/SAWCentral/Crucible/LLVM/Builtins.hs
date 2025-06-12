@@ -246,9 +246,9 @@ displayVerifExceptionOpts opts (DeclNotFound (L.Symbol nm) nms) =
 displayVerifExceptionOpts _ (SetupError e) =
   "Error during simulation setup: " ++ show (ppSetupError e)
 
-show_cfg :: SAW_CFG -> String
-show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
-show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
+show_cfg :: SAW_CFG -> Text
+show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = Text.pack $ show cfg
+show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = Text.pack $ show cfg
 
 -- | Determines whether one LLVM symbol is equivalent to another except
 -- for a numeric suffix. This can determine whether one symbol is the
@@ -262,33 +262,33 @@ matchingStatics (L.Symbol a) (L.Symbol b) = go a b
     go ('.':ds) [] = all isDigit ds
     go _ _ = False
 
-findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException (NE.NonEmpty L.Define)
+findDefMaybeStatic :: L.Module -> Text -> Either LLVMVerificationException (NE.NonEmpty L.Define)
 findDefMaybeStatic llmod nm =
   case NE.nonEmpty (filter (\d -> matchingStatics (L.defName d) nm') (L.modDefines llmod)) of
     Nothing -> Left $ DefNotFound nm' $ map L.defName $ L.modDefines llmod
     Just defs -> Right defs
   where
-    nm' = fromString nm
+    nm' = fromString $ Text.unpack nm
 
-findDecl :: L.Module -> String -> Either LLVMVerificationException L.Declare
+findDecl :: L.Module -> Text -> Either LLVMVerificationException L.Declare
 findDecl llmod nm =
   case find (\d -> (L.decName d) == nm') (L.modDeclares llmod) of
     Just decl -> Right decl
     Nothing -> Left $ DeclNotFound nm' $ map L.decName $ L.modDeclares llmod
   where
-    nm' = fromString nm
+    nm' = fromString $ Text.unpack nm
 
-resolveSpecName :: String -> TopLevel (String, Maybe String)
+resolveSpecName :: Text -> TopLevel (Text, Maybe Text)
 resolveSpecName nm =
-  if Crucible.testBreakpointFunction nm
+  if Crucible.testBreakpointFunction (Text.unpack nm)
   then
-    let (fnName, fnSuffix) = break (== '#') nm
+    let (fnName, fnSuffix) = Text.break (== '#') nm
         parentName =
-          case fnSuffix of
-            _:parentName' -> parentName'
+          case Text.uncons fnSuffix of
+            Just (_, parentName') -> parentName'
             -- TODO: Give a proper error message here instead of panicking,
             -- and document __breakpoint__ naming requirements. See #2097.
-            [] -> panic "resolveSpecName" [
+            Nothing -> panic "resolveSpecName" [
                       "__breakpoint__ function not followed by #<parent_name>",
                       "See https://github.com/GaloisInc/saw-script/issues/2097"
                   ]
@@ -301,7 +301,7 @@ resolveSpecName nm =
 
 llvm_verify ::
   Some LLVMModule        ->
-  String                 ->
+  Text                   ->
   [SomeLLVM MS.ProvedSpec] ->
   Bool                   ->
   LLVMCrucibleSetupM ()      ->
@@ -320,7 +320,7 @@ llvm_verify (Some lm) nm lemmas checkSat setup tactic =
 
 llvm_refine_spec ::
   Some LLVMModule ->
-  String ->
+  Text ->
   [SomeLLVM MS.ProvedSpec] ->
   LLVMCrucibleSetupM () ->
   ProofScript () ->
@@ -338,36 +338,36 @@ llvm_refine_spec (Some lm) nm lemmas setup tactic =
 
 llvm_unsafe_assume_spec ::
   Some LLVMModule  ->
-  String          {- ^ Name of the function -} ->
+  Text                  {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_unsafe_assume_spec (Some lm) nm setup =
   withMethodSpec False lm nm setup $ \_ method_spec ->
-  do printOutLnTop Info $
-       unwords ["Assume override", (method_spec ^. csName)]
+  do printOutLnTop Info $ Text.unpack $
+         "Assume override " <> (method_spec ^. csName)
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty 0)
      returnLLVMProof $ SomeLLVM ps
 
 llvm_array_size_profile ::
   ProofScript () ->
   Some LLVMModule ->
-  String ->
+  Text ->
   [SomeLLVM MS.ProvedSpec] ->
   LLVMCrucibleSetupM () ->
-  TopLevel [(String, [Crucible.FunctionProfile])]
+  TopLevel [(Text, [Crucible.FunctionProfile])]
 llvm_array_size_profile assume (Some lm) nm lemmas setup = do
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
   lemmas' <- checkModuleCompatibility lm lemmas
   withMethodSpec False lm nm setup $ \cc ms -> do
     void . verifyMethodSpec cc ms lemmas' True assume $ Just cell
     profiles <- io $ readIORef cell
-    pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
+    pure $ Map.toList profiles
 
-llvmURI :: String -> URI
+llvmURI :: Text -> URI
 llvmURI symbol_name =
-  fromMaybe (error $ unwords ["mkLLVMName", "Could not create LLVM symbol name", symbol_name]) $
+  fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
   do sch <- mkScheme "llvm"
-     p   <- mkPathPiece (Text.pack symbol_name)
+     p   <- mkPathPiece symbol_name
      pure URI
        { uriScheme = Just sch
        , uriAuthority = Left True -- absolute path
@@ -376,13 +376,13 @@ llvmURI symbol_name =
        , uriFragment = Nothing
        }
 
-llvmNameInfo :: String -> NameInfo
-llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ Text.pack symbol_name ]
+llvmNameInfo :: Text -> NameInfo
+llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]
 
 llvm_compositional_extract ::
   Some LLVMModule ->
-  String ->
-  String ->
+  Text ->
+  Text ->
   [SomeLLVM MS.ProvedSpec] ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
@@ -492,13 +492,12 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           -- XXX could have a real position...
           let pos = PosInternal "llvm_compositional_extract"
-          let func_name' = Text.pack func_name
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
           rw <- getTopLevelRW
           rw' <-
             liftIO $
             extendEnv shared_context
-              (Located func_name' func_name' pos)
+              (Located func_name func_name pos)
               (tMono $ tTerm pos)
               Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)
@@ -544,7 +543,7 @@ checkModuleCompatibility llvmModule = foldM step []
 withMethodSpec ::
   Bool {- ^ path sat -} ->
   LLVMModule arch ->
-  String            {- ^ Name of the function -} ->
+  Text                  {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   (( ?lc :: Crucible.TypeContext
    , ?memOpts::Crucible.MemOptions
@@ -622,8 +621,8 @@ verifyMethodSpec ::
   TopLevel (SolverStats, [MS.VCStats], OverrideState (LLVM arch))
 verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
   ccWithBackend cc $ \bak ->
-  do printOutLnTop Info $
-       unwords ["Verifying", (methodSpec ^. csName) , "..."]
+  do printOutLnTop Info $ Text.unpack $
+         "Verifying " <> (methodSpec ^. csName) <> "..."
 
      let sym = cc^.ccSym
 
@@ -641,7 +640,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      let mem = case methodSpec^.csParentName of
                Just parent -> mem0
                  { Crucible.memImplHeap = Crucible.pushStackFrameMem
-                   (Text.pack $ mconcat [methodSpec ^. csName, "#", parent])
+                   (mconcat [methodSpec ^. csName, "#", parent])
                    (Crucible.memImplHeap mem0)
                  }
                Nothing -> mem0
@@ -660,8 +659,8 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
-     printOutLnTop Info $
-       unwords ["Simulating", (methodSpec ^. csName) , "..."]
+     printOutLnTop Info $ Text.unpack $
+         "Simulating " <> (methodSpec ^. csName) <> "..."
      top_loc <- toW4Loc "llvm_verify" <$> getPosition
      (ret, globals3, invSubst) <-
        verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
@@ -677,8 +676,8 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
-     printOutLnTop Info $
-       unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
+     printOutLnTop Info $ Text.unpack $
+         "Checking proof obligations " <> (methodSpec ^. csName) <> "..."
      (stats, vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
@@ -726,12 +725,15 @@ refineMethodSpec cc methodSpec lemmas tactic =
                   ]
           (x:xs) -> return (x NE.:| xs)
 
-     printOutLnTop Info $
-       unwords ["Refining specification for", (methodSpec ^. csName) , "..."]
+     printOutLnTop Info $ Text.unpack $
+         "Refining specification for " <> (methodSpec ^. csName) <> "..."
 
-     unless (null irrelevantLemmas) $
-         printOutLnTop Warn $ unlines $
-           [ "Irrelevant overrides included in specification refinement for " ++ show (pretty fnm) ] ++
+     unless (null irrelevantLemmas) $ do
+         printOutLnTop Warn $ Text.unpack $
+             "Irrelevant overrides included in specification refinement for " <>
+             -- XXX do we get anything useful by text -> ppdoc -> string -> text?
+             Text.pack (show $ pretty fnm)
+         mapM_ (printOutLnTop Warn) $
            [ " *  " ++ show (pretty nm)
            | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
            ]
@@ -777,8 +779,8 @@ refineMethodSpec cc methodSpec lemmas tactic =
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
-     printOutLnTop Info $
-       unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
+     printOutLnTop Info $ Text.unpack $
+         "Checking proof obligations " <> (methodSpec ^. csName) <> "..."
      (stats, vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
@@ -803,7 +805,8 @@ verifyObligations cc mspec tactic assumes asserts =
      let nm  = mspec ^. csName
      outs <-
        forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) ->
-       do goal  <- io $ scImplies sc assume assert
+       do let msg' = Text.pack msg
+          goal  <- io $ scImplies sc assume assert
           goal' <- io $ boolToProp sc [] goal
           sqt <- if useSequentGoals then
                     io $ booleansToSequent sc assumeTerms [assert]
@@ -815,11 +818,11 @@ verifyObligations cc mspec tactic assumes asserts =
                              , show (W4.plFunction ploc)]) ++
                      (if null (MS.conditionContext md) then [] else
                         "\n" ++ MS.conditionContext md)
-          let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
+          let goalname = nm <> " (" <> Text.takeWhile (/= '\n') msg' <> ")"
               proofgoal = ProofGoal
                           { goalNum  = n
                           , goalType = MS.conditionType md
-                          , goalName = nm
+                          , goalName = Text.unpack nm
                           , goalLoc  = gloc
                           , goalDesc = msg
                           , goalSequent = sqt
@@ -827,17 +830,17 @@ verifyObligations cc mspec tactic assumes asserts =
                           }
           res <- runProofScript tactic goal' proofgoal (Just ploc)
                     (Text.unwords
-                      ["LLVM verification condition", Text.pack (show n), Text.pack goalname])
+                      ["LLVM verification condition", Text.pack (show n), goalname])
                     False -- do not record this theorem in the database
                     useSequentGoals
           case res of
             ValidProof stats thm ->
               return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
             UnfinishedProof pst ->
-              do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
+              do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
                  throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
             InvalidProof stats vals _pst ->
-              do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
+              do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
                  printOutLnTop Info (show stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
                  opts <- rwPPOpts <$> getTopLevelRW
@@ -849,7 +852,7 @@ verifyObligations cc mspec tactic assumes asserts =
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"
                  throwTopLevel "Proof failed." -- Mirroring behavior of llvm_verify
-     printOutLnTop Info $ unwords ["Proof succeeded!", nm]
+     printOutLnTop Info $ Text.unpack $ "Proof succeeded! " <> nm
 
      let stats = mconcat (map fst outs)
      let vcstats = map snd outs
@@ -907,10 +910,9 @@ checkSpecReturnType ::
 checkSpecReturnType cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
-         throwMethodSpec mspec $ unlines
-           [ "Return value specified, but function " ++ mspec ^. csName ++
+         throwMethodSpec mspec $ Text.unpack $
+             "Return value specified, but function " <> mspec ^. csName <>
              " has void return type"
-           ]
     (Just sv, Just retTy) ->
       do retTy' <- exceptToFail $
            typeOfSetupValue cc
@@ -919,10 +921,10 @@ checkSpecReturnType cc mspec =
              sv
          -- This check is too lax, see saw-script#443
          b <- checkRegisterCompatibility retTy retTy'
-         unless b $ throwMethodSpec mspec $ unlines
-           [ "Incompatible types for return value when verifying " ++ mspec^.csName
-           , "Expected: " ++ show retTy
-           , "but given value of type: " ++ show retTy'
+         unless b $ throwMethodSpec mspec $ Text.unpack $ Text.unlines
+           [ "Incompatible types for return value when verifying " <> mspec^.csName
+           , "Expected: " <> Text.pack (show retTy)
+           , "but given value of type: " <> Text.pack (show retTy')
            ]
     (Nothing, _) -> return ()
 
@@ -1232,19 +1234,19 @@ registerOverride opts cc sim_ctx _top_loc mdMap cs =
   do let sym = Common.backendGetSym bak
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
      let fstr = (NE.head cs)^.csName
-         fsym = L.Symbol fstr
+         fsym = L.Symbol (Text.unpack fstr)
          llvmctx = ccLLVMContext cc
          mvar = Crucible.llvmMemVar llvmctx
          halloc = Crucible.simHandleAllocator sim_ctx
          matches dec = matchingStatics (L.decName dec) fsym
      liftIO $
-       printOutLn opts Info $ "Registering overrides for `" ++ fstr ++ "`"
+       printOutLn opts Info $ Text.unpack $ "Registering overrides for `" <> fstr <> "`"
 
      case filter matches (Crucible.allModuleDeclares (ccLLVMModuleAST cc)) of
-       [] -> fail $ "Couldn't find declaration for `" ++ fstr ++ "` when registering override for it."
+       [] -> fail $ Text.unpack $ "Couldn't find declaration for `" <> fstr <> "` when registering override for it."
        (d:ds) ->
          Crucible.llvmDeclToFunHandleRepr' d $ \argTypes retType ->
-           do let fn_name = W4.functionNameFromText $ Text.pack fstr
+           do let fn_name = W4.functionNameFromText fstr
               h <- liftIO $ Crucible.mkHandle' halloc fn_name argTypes retType
               Crucible.bindFnHandle h
                 $ Crucible.UseOverride
@@ -1281,10 +1283,10 @@ registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
      parent <-
        case neNubOrd $ fmap (view csParentName) cs of
          (Just unique_parent NE.:| []) -> return unique_parent
-         _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
-     liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
-     withBreakpointCfgAndBlockId opts cc name parent $ \cfg breakpoint_block_id ->
-       do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
+         _ -> fail $ Text.unpack $ "Multiple parent functions for breakpoint: " <> name
+     liftIO $ printOutLn opts Info $ Text.unpack $ "Registering breakpoint `" <> name <> "`"
+     withBreakpointCfgAndBlockId opts cc (Text.unpack name) (Text.unpack parent) $ \cfg breakpoint_block_id ->
+       do let breakpoint_name = Crucible.BreakpointName name
           let h = Crucible.cfgHandle cfg
           let arg_types = Crucible.blockInputs $
                 Crucible.getBlock breakpoint_block_id $
@@ -1326,12 +1328,12 @@ withCfgAndBlockId ::
   IO a
 withCfgAndBlockId opts context method_spec k =
   case method_spec ^. csParentName of
-    Nothing -> withCfg opts context (method_spec ^. csName) $ \cfg ->
+    Nothing -> withCfg opts context (Text.unpack (method_spec ^. csName)) $ \cfg ->
       k cfg (Crucible.cfgEntryBlockID cfg)
     Just parent -> withBreakpointCfgAndBlockId opts
       context
-      (method_spec ^. csName)
-      parent
+      (Text.unpack (method_spec ^. csName))
+      (Text.unpack parent)
       k
 
 withBreakpointCfgAndBlockId ::
@@ -1396,8 +1398,8 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        forM (neGroupOn (view csParentName) invLemmas) $ \specs ->
        do let parent = fromJust $ (NE.head specs) ^. csParentName
           let breakpoint_names = nubOrd $
-                map (Crucible.BreakpointName . Text.pack . view csName) (NE.toList specs)
-          withCfg opts cc parent $ \parent_cfg ->
+                map (Crucible.BreakpointName . view csName) (NE.toList specs)
+          withCfg opts cc (Text.unpack parent) $ \parent_cfg ->
             return
               ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
               , breakpoint_names
@@ -1478,13 +1480,13 @@ refineSimulate ::
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
   let fstr = mspec^.csName
-      fsym = L.Symbol fstr
+      fsym = L.Symbol (Text.unpack fstr)
       matches dec = matchingStatics (L.decName dec) fsym
       simCtx = cc^.ccLLVMSimContext
       sym = cc^.ccSym
   in
   case filter matches (Crucible.allModuleDeclares (ccLLVMModuleAST cc)) of
-    [] -> fail $ "Couldn't find declaration for `" ++ fstr ++ "` when attempting specification refinement."
+    [] -> fail $ Text.unpack $ "Couldn't find declaration for `" <> fstr <> "` when attempting specification refinement."
     (decl:_ds) ->
       Crucible.llvmDeclToFunHandleRepr' decl $ \argTys retTy ->
       ccWithBackend cc $ \bak ->
@@ -1501,15 +1503,13 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
                         testEquality retTy (Crucible.handleReturnType h)) of
                     (Nothing, _) ->
                         panic "refineSimulate" [
-                            "Argument type mismatch when refining specification for " <>
-                                Text.pack fstr,
+                            "Argument type mismatch when refining specification for " <> fstr,
                             "Argument types: " <> Text.pack (show argTys),
                             "Handle: " <> Text.pack (show h)
                         ]
                     (_, Nothing) ->
                         panic "refineSimulate" [
-                            "Return type mismatch when refining specification for " <>
-                                Text.pack fstr,
+                            "Return type mismatch when refining specification for " <> fstr,
                             "Return type: " <> Text.pack (show retTy),
                             "Handle: " <> Text.pack (show h)
                         ]
@@ -1974,7 +1974,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
 
 llvm_extract ::
   Some LLVMModule ->
-  String ->
+  Text ->
   TopLevel TypedTerm
 llvm_extract (Some lm) fn_name =
   do let ctx = modTrans lm ^. Crucible.transContext
@@ -1994,23 +1994,23 @@ llvm_extract (Some lm) fn_name =
               throwTopLevel "Type aliases are not supported by `llvm_extract`."
        Left err -> throwTopLevel (displayVerifExceptionOpts opts err)
      setupLLVMCrucibleContext False lm $ \cc ->
-       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
-         Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString $ Text.unpack fn_name)) >>= \case
+         Nothing  -> throwTopLevel $ Text.unpack $ "function " <> fn_name <> "not found"
          Just (_,cfg,warns) ->
            do io $ mapM_ (handleTranslationWarning opts) warns
               io $ extractFromLLVMCFG opts sc cc cfg
 
 llvm_cfg ::
   Some LLVMModule ->
-  String ->
+  Text ->
   TopLevel SAW_CFG
 llvm_cfg (Some lm) fn_name =
   do let ctx = modTrans lm ^. Crucible.transContext
      let ?lc = ctx^.Crucible.llvmTypeCtx
      opts <- getOptions
      setupLLVMCrucibleContext False lm $ \cc ->
-       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
-         Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString $ Text.unpack fn_name)) >>= \case
+         Nothing  -> throwTopLevel $ Text.unpack $ "function " <> fn_name <> " not found"
          Just (_,cfg,warns) ->
            do io $ mapM_ (handleTranslationWarning opts) warns
               return (LLVM_CFG cfg)
@@ -2464,12 +2464,12 @@ asCryptolBVType ty
   | otherwise = Nothing
 
 llvm_alloc_global ::
-  String         ->
+  Text ->
   LLVMCrucibleSetupM ()
 llvm_alloc_global name =
   LLVMCrucibleSetupM $
   do loc <- getW4Position "llvm_alloc_global"
-     Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol name
+     Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol (Text.unpack name)
 
 llvm_fresh_pointer ::
   L.Type         ->
@@ -2603,7 +2603,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
 -- smaller type.
 llvm_points_to_bitfield ::
   AllLLVM SetupValue {- ^ lhs pointer -} ->
-  String             {- ^ name of field in bitfield -} ->
+  Text               {- ^ name of field in bitfield -} ->
   AllLLVM SetupValue {- ^ rhs value -} ->
   LLVMCrucibleSetupM ()
 llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
@@ -2611,7 +2611,8 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_points_to_bitfield"
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
-       do st <- get
+       do let fieldName' = Text.unpack fieldName
+          st <- get
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
 
@@ -2622,7 +2623,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
-          bfIndex <- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName
+          bfIndex <- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName'
           let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
           valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
           -- Currently, we require the type of the RHS value to precisely match
@@ -2639,7 +2640,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
                    , MS.conditionType = "LLVM points-to (bitfield)"
                    , MS.conditionContext = ""
                    }
-          Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName val)
+          Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName' val)
 
 -- | Perform a set of validity checks that are shared in common between
 -- 'llvm_points_to_internal' and 'llvm_points_to_bitfield':
@@ -2679,7 +2680,7 @@ llvm_points_to_check_lhs_validity ptr loc path =
        _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
 
 llvm_setup_with_tag ::
-  String ->
+  Text ->
   LLVMCrucibleSetupM () ->
   LLVMCrucibleSetupM ()
 llvm_setup_with_tag tag m =
@@ -2769,9 +2770,9 @@ llvm_ghost_value ::
 llvm_ghost_value ghost val = LLVMCrucibleSetupM $
   ghost_value ghost val
 
-llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [String]
+llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [Text]
 llvm_spec_solvers (SomeLLVM ps) =
-  Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps
+  map Text.pack $ Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps
 
 llvm_spec_size :: SomeLLVM MS.ProvedSpec -> Integer
 llvm_spec_size (SomeLLVM mir) =

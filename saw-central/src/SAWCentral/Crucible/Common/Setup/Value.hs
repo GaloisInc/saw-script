@@ -65,6 +65,7 @@ module SAWCentral.Crucible.Common.Setup.Value
 import           Data.Constraint (Constraint)
 import           Data.Kind (Type)
 import           Data.Set (Set)
+import           Data.Text (Text)
 
 import qualified Prettyprinter as PP
 
@@ -151,9 +152,9 @@ data SetupValue ext where
   SetupStruct :: XSetupStruct ext -> [SetupValue ext] -> SetupValue ext
   SetupArray  :: XSetupArray ext -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: XSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
-  SetupField  :: XSetupField ext -> SetupValue ext -> String -> SetupValue ext
+  SetupField  :: XSetupField ext -> SetupValue ext -> Text -> SetupValue ext
   SetupCast   :: XSetupCast ext -> SetupValue ext -> SetupValue ext
-  SetupUnion  :: XSetupUnion ext -> SetupValue ext -> String -> SetupValue ext
+  SetupUnion  :: XSetupUnion ext -> SetupValue ext -> Text -> SetupValue ext
 
   -- | A tuple value. At the moment, this is only ever used for MIR
   -- verification.
@@ -166,10 +167,10 @@ data SetupValue ext where
   SetupEnum :: XSetupEnum ext -> SetupValue ext
 
   -- | A pointer to a global variable
-  SetupGlobal :: XSetupGlobal ext -> String -> SetupValue ext
+  SetupGlobal :: XSetupGlobal ext -> Text -> SetupValue ext
   -- | This represents the value of a global's initializer.
   SetupGlobalInitializer ::
-    XSetupGlobalInitializer ext -> String -> SetupValue ext
+    XSetupGlobalInitializer ext -> Text -> SetupValue ext
   -- | A mux of two 'SetupValue's based on a boolean-typed 'TypedTerm'.
   SetupMux ::
     XSetupMux ext ->

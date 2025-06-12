@@ -79,7 +79,8 @@ import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Text (Text, pack)
+import           Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Data.Void (absurd)
 import           Numeric.Natural
@@ -325,7 +326,7 @@ methodSpecHandler opts sc cc mdMap css h =
     [ "Matching"
     , show (length css)
     , "overrides of "
-    , fnName
+    , Text.unpack fnName
     , "..."
     ]
   Crucible.RegMap args <- Crucible.getOverrideArgs
@@ -407,7 +408,7 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
 
   liftIO $ printOutLn opts Info $ unwords
     [ "Found a single potential override for"
-    , fnName
+    , Text.unpack fnName
     ]
 
   -- First assert the override preconditions
@@ -489,7 +490,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
     [ "Branching on"
     , show (length branches')
     , "override variants of"
-    , fnName
+    , Text.unpack fnName
     , "..."
     ]
   let retTy = Crucible.handleReturnType h
@@ -524,7 +525,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
          ] ++
          [ let e prettyArgs symFalse unsat = show $ PP.vcat $ concat
                  [ [ PP.pretty $
-                     "No override specification applies for " ++ fnName ++ "."
+                     "No override specification applies for " <> fnName <> "."
                    ]
                  , [ "Arguments:"
                    , bullets '-' prettyArgs
@@ -606,7 +607,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
               )
          ]))
      (Crucible.RegMap args)
-  liftIO $ printOutLn opts Info $ unwords ["Applied override!", fnName]
+  liftIO $ printOutLn opts Info $ Text.unpack $ "Applied override! " <> fnName
   return res
 
 ------------------------------------------------------------------------
@@ -1222,7 +1223,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                notEqual prepost opts loc cc sc cs expected actual
 
         SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-          do ptr2 <- liftIO $ Crucible.doResolveGlobal bak mem (L.Symbol name)
+          do ptr2 <- liftIO $ Crucible.doResolveGlobal bak mem (L.Symbol $ Text.unpack name)
              pred_ <- liftIO $
                Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
              addAssert pred_ md =<<
@@ -1623,9 +1624,9 @@ matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
                          Nothing ->
                            panic "llvm_points_to_bitfield (in matchPointsToBitfieldValue)" [
                                "Unexpected bitfield field offset",
-                               "Field offset: " <> pack (show bfOffset),
-                               "RHS value width: " <> pack (show rhsWidth),
-                               "Bitvector width: " <> pack (show bfWidth)
+                               "Field offset: " <> Text.pack (show bfOffset),
+                               "RHS value width: " <> Text.pack (show rhsWidth),
+                               "Bitvector width: " <> Text.pack (show bfWidth)
                            ]
 
                        -- Finally, select the subsequence of bits from the
@@ -1800,7 +1801,7 @@ invalidateMutableAllocs opts sc cc cs =
                 , fromIntegral sz
                 , mconcat
                   [ "state of memory allocated in precondition (at "
-                  , pack . show . W4.plSourceLoc . MS.conditionLoc
+                  , Text.pack . show . W4.plSourceLoc . MS.conditionLoc
                       $ spec ^. allocSpecMd
                   , ") not described in postcondition"
                   ]
@@ -1820,9 +1821,9 @@ invalidateMutableAllocs opts sc cc cs =
           , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
           , mconcat
             [ "state of mutable global variable \""
-            , pack st
+            , Text.pack st
             , "\" (allocated at "
-            , pack . show $ W4.plSourceLoc loc
+            , Text.pack . show $ W4.plSourceLoc loc
             , ") not described in postcondition"
             ]
           )

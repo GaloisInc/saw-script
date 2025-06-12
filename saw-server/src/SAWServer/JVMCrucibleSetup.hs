@@ -21,6 +21,8 @@ import Control.Monad (unless)
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
+import Data.Text (Text)
+--import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -221,7 +223,7 @@ compileJVMContract fileReader bic ghostEnv cenv0 c =
       JVMSetupM $ fail "Fresh expanded values unsupported in JVM API."
 
 data JVMLoadClassParams
-  = JVMLoadClassParams ServerName String
+  = JVMLoadClassParams ServerName Text
 
 instance FromJSON JVMLoadClassParams where
   parseJSON =

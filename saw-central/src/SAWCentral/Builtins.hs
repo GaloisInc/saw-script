@@ -34,7 +34,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State (MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Control.Exception as Ex
-import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
@@ -153,11 +152,11 @@ import qualified SAWCentral.Prover.Exporter as Prover
 import qualified SAWCentral.Prover.MRSolver as Prover
 import SAWCentral.VerificationSummary
 
-showPrim :: SV.Value -> TopLevel String
+showPrim :: SV.Value -> TopLevel Text
 showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
   nenv <- io . scGetNamingEnv =<< getSharedContext
-  return (SV.showsPrecValue opts nenv 0 v "")
+  return $ Text.pack $ SV.showsPrecValue opts nenv 0 v ""
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
@@ -171,11 +170,12 @@ definePrim _name (TypedTerm tp _) =
     , show (ppTypedTermType tp)
     ]
 
-sbvUninterpreted :: String -> Term -> TopLevel Uninterp
-sbvUninterpreted s t = return $ Uninterp (s, t)
+sbvUninterpreted :: Text -> Term -> TopLevel Uninterp
+sbvUninterpreted s t = return $ Uninterp (Text.unpack s, t)
 
-readBytes :: FilePath -> TopLevel TypedTerm
-readBytes path = do
+readBytes :: Text -> TopLevel TypedTerm
+readBytes pathtxt = do
+  let path :: FilePath = Text.unpack pathtxt
   sc <- getSharedContext
   content <- io $ BS.readFile path
   let len = BS.length content
@@ -186,9 +186,10 @@ readBytes path = do
   let schema = C.Forall [] [] (C.tSeq (C.tNum len) (C.tSeq (C.tNum (8::Int)) C.tBit))
   return (TypedTerm (TypedTermSchema schema) trm)
 
-readSBV :: FilePath -> [Uninterp] -> TopLevel TypedTerm
-readSBV path unintlst =
-    do sc <- getSharedContext
+readSBV :: Text -> [Uninterp] -> TopLevel TypedTerm
+readSBV pathtxt unintlst = do
+       let path = Text.unpack pathtxt
+       sc <- getSharedContext
        opts <- getOptions
        pgm <- io $ SBV.loadSBV path
        let schema = C.Forall [] [] (toCType (SBV.typOf pgm))
@@ -260,8 +261,9 @@ bbPrim t = do
   aig <- io $ Prover.bitblastPrim proxy sc (ttTerm t)
   return (SV.AIGNetwork aig)
 
-loadAIGPrim :: FilePath -> TopLevel AIGNetwork
-loadAIGPrim f = do
+loadAIGPrim :: Text -> TopLevel AIGNetwork
+loadAIGPrim ftxt = do
+  let f = Text.unpack ftxt
   SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
   unless exists $ fail $ "AIG file " ++ f ++ " not found."
@@ -270,21 +272,22 @@ loadAIGPrim f = do
     Left err -> fail $ "Reading AIG failed: " ++ err
     Right ntk -> return (SV.AIGNetwork ntk)
 
-saveAIGPrim :: String -> AIGNetwork -> TopLevel ()
-saveAIGPrim f (SV.AIGNetwork n) = io $ AIG.writeAiger f n
+saveAIGPrim :: Text -> AIGNetwork -> TopLevel ()
+saveAIGPrim f (SV.AIGNetwork n) = io $ AIG.writeAiger (Text.unpack f) n
 
-saveAIGasCNFPrim :: String -> AIGNetwork -> TopLevel ()
+saveAIGasCNFPrim :: Text -> AIGNetwork -> TopLevel ()
 saveAIGasCNFPrim f (SV.AIGNetwork (AIG.Network be ls)) =
   case ls of
-    [l] -> do _ <- io $ AIG.writeCNF be l f
+    [l] -> do _ <- io $ AIG.writeCNF be l (Text.unpack f)
               return ()
     _ -> fail "save_aig_as_cnf: non-boolean term"
 
 -- | Read an AIG file representing a theorem or an arbitrary function
 -- and represent its contents as a @Term@ lambda term. This is
 -- inefficient but semantically correct.
-readAIGPrim :: FilePath -> TopLevel TypedTerm
-readAIGPrim f = do
+readAIGPrim :: Text -> TopLevel TypedTerm
+readAIGPrim ftxt = do
+  let f :: FilePath = Text.unpack ftxt
   sc <- getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
@@ -359,8 +362,9 @@ checkConvertiblePrim x y = do
                         else "Not convertible")
 
 
-readCore :: FilePath -> TopLevel TypedTerm
-readCore path = do
+readCore :: Text -> TopLevel TypedTerm
+readCore pathtxt = do
+  let path :: FilePath = Text.unpack pathtxt
   sc <- getSharedContext
   io (mkTypedTerm sc =<< scReadExternal sc =<< readFile path)
 
@@ -428,14 +432,17 @@ getTopLevelPPOpts :: TopLevel PPS.Opts
 getTopLevelPPOpts =
   rwPPOpts <$> getTopLevelRW
 
-show_term :: Term -> TopLevel String
+show_term :: Term -> TopLevel Text
 show_term t =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     liftIO $ scShowTerm sc opts t
+     str <- liftIO $ scShowTerm sc opts t
+     return $ Text.pack str
 
 print_term :: Term -> TopLevel ()
-print_term t = printOutLnTop Info =<< show_term t
+print_term t = do
+  txt <- show_term t
+  printOutLnTop Info $ Text.unpack txt
 
 print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t =
@@ -456,7 +463,7 @@ goalSummary goal = unlines $ concat
   , if null (goalDesc goal) then [] else [ goalDesc goal ]
   ]
 
-write_goal :: String -> ProofScript ()
+write_goal :: FilePath -> ProofScript ()
 write_goal fp =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
@@ -589,20 +596,20 @@ resolveName sc nm =
 normalize_term :: TypedTerm -> TopLevel TypedTerm
 normalize_term tt = normalize_term_opaque [] tt
 
-normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
+normalize_term_opaque :: [Text] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     idxs <- mconcat <$> mapM (resolveName sc) opaque
+     idxs <- mconcat <$> mapM (resolveName sc) (map Text.unpack opaque)
      let opaqueSet = Set.fromList idxs
      tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
 
-goal_normalize :: [String] -> ProofScript ()
+goal_normalize :: [Text] -> ProofScript ()
 goal_normalize opaque =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       idxs <- mconcat <$> mapM (resolveName sc) opaque
+       idxs <- mconcat <$> mapM (resolveName sc) (map Text.unpack opaque)
        modmap <- io (scGetModuleMap sc)
        let opaqueSet = Set.fromList idxs
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc modmap opaqueSet) (goalSequent goal)
@@ -679,19 +686,19 @@ normalize_sequent =
        sqt' <- io $ normalizeSequent sc (goalSequent goal)
        return (sqt', NormalizeSequentEvidence sqt')
 
-unfoldGoal :: [String] -> ProofScript ()
+unfoldGoal :: [Text] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unints' <- resolveNames unints
+     unints' <- resolveNames (map Text.unpack unints)
      sqt' <- traverseSequentWithFocus (io . unfoldProp sc unints') (goalSequent goal)
      return (sqt', UnfoldEvidence unints')
 
-unfoldFixOnceGoal :: [String] -> ProofScript ()
+unfoldFixOnceGoal :: [Text] -> ProofScript ()
 unfoldFixOnceGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unints' <- resolveNames unints
+     unints' <- resolveNames (map Text.unpack unints)
      sqt' <- traverseSequentWithFocus (io . unfoldFixOnceProp sc unints') (goalSequent goal)
      return (sqt', UnfoldFixOnceEvidence unints')
 
@@ -727,27 +734,29 @@ term_type tt =
             , show (ppTypedTermType tp)
             ]
 
-goal_eval :: [String] -> ProofScript ()
+goal_eval :: [Text] -> ProofScript ()
 goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     unintSet <- resolveNames unints
+     unintSet <- resolveNames (map Text.unpack unints)
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sqt' <- traverseSequentWithFocus (io . evalProp sc what4PushMuxOps unintSet) (goalSequent goal)
      return (sqt', EvalEvidence unintSet)
 
 extract_uninterp ::
-  [String] {- ^ uninterpred identifiers -} ->
-  [String] {- ^ opaque identifiers -} ->
+  [Text] {- ^ uninterpred identifiers -} ->
+  [Text] {- ^ opaque identifiers -} ->
   TypedTerm ->
-  TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+  TopLevel (TypedTerm, [(Text, [(TypedTerm,TypedTerm)])])
 extract_uninterp unints opaques tt =
   do sc <- getSharedContext
-     idxs <- mconcat <$> mapM (resolveName sc) unints
+     let unints' = map Text.unpack unints
+     let opaques' = map Text.unpack opaques
+     idxs <- mconcat <$> mapM (resolveName sc) unints'
      let unintSet = Set.fromList idxs
      mmap <- io (scGetModuleMap sc)
 
-     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
+     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques'
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
@@ -922,25 +931,25 @@ goal_num_when n script =
        g : _ | goalNum g == n -> script
        _ -> return ()
 
-goal_when :: String -> ProofScript () -> ProofScript ()
+goal_when :: Text -> ProofScript () -> ProofScript ()
 goal_when str script =
   do s <- get
      case psGoals s of
-       g : _ | str `isInfixOf` goalName g -> script
+       g : _ | (Text.unpack str) `isInfixOf` goalName g -> script
        _ -> return ()
 
-goal_has_tags :: [String] -> ProofScript Bool
+goal_has_tags :: [Text] -> ProofScript Bool
 goal_has_tags tags =
   do s <- get
      case psGoals s of
-       g : _ | Set.isSubsetOf (Set.fromList tags) (goalTags g) -> return True
+       g : _ | Set.isSubsetOf (Set.fromList (map Text.unpack tags)) (goalTags g) -> return True
        _ -> return False
 
-goal_has_some_tag :: [String] -> ProofScript Bool
+goal_has_some_tag :: [Text] -> ProofScript Bool
 goal_has_some_tag tags =
   do s <- get
      case psGoals s of
-       g : _ | not $ Set.disjoint (Set.fromList tags) (goalTags g) -> return True
+       g : _ | not $ Set.disjoint (Set.fromList (map Text.unpack tags)) (goalTags g) -> return True
        _ -> return False
 
 goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
@@ -956,34 +965,43 @@ proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   wrapProver [AIG] [] (Prover.proveABC proxy) Set.empty
 
-satExternal :: Bool -> String -> [String] -> ProofScript ()
+satExternal :: Bool -> Text -> [Text] -> ProofScript ()
 satExternal doCNF execName args =
   execTactic $ tacticSolve $ \g ->
     do SV.AIGProxy proxy <- SV.getProxy
        sc <- SV.getSharedContext
-       (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName args g
+       let execName' = Text.unpack execName
+           args' = map Text.unpack args
+       (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName' args' g
        case mb of
          Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
          Just a  -> return (stats, SolveCounterexample a)
 
-writeAIGPrim :: FilePath -> Term -> TopLevel ()
-writeAIGPrim = Prover.writeAIG
+writeAIGPrim :: Text -> Term -> TopLevel ()
+writeAIGPrim ftxt e = do
+  let f :: FilePath = Text.unpack ftxt
+  Prover.writeAIG f e
 
-writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim file tt =
-  do write_tt <- Prover.writeSAIGInferLatches tt
-     io $ write_tt file
+writeSAIGPrim :: Text -> TypedTerm -> TopLevel ()
+writeSAIGPrim filetxt tt = do
+  let file :: FilePath = Text.unpack filetxt
+  write_tt <- Prover.writeSAIGInferLatches tt
+  io $ write_tt file
 
-writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
-writeSAIGComputedPrim = Prover.writeSAIG
+writeSAIGComputedPrim :: Text -> Term -> Int -> TopLevel ()
+writeSAIGComputedPrim ftxt e n = do
+  let f :: FilePath = Text.unpack ftxt
+  Prover.writeSAIG f e n
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
 proveRME = wrapProver [RME] [] Prover.proveRME Set.empty
 
-codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
-codegenSBV sc path unints fname (TypedTerm _schema t) =
-  do unintSet <- resolveNames unints
+codegenSBV :: SharedContext -> Text -> [Text] -> Text -> TypedTerm -> TopLevel ()
+codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do
+     let path :: FilePath = Text.unpack pathtxt
+         fname :: FilePath = Text.unpack fnametxt
+     unintSet <- resolveNames (map Text.unpack unints)
      let mpath = if null path then Nothing else Just path
      io $ SBVSim.sbvCodeGen sc mempty unintSet mpath fname t
 
@@ -995,10 +1013,10 @@ proveSBV conf = proveUnintSBV conf []
 -- | Bit-blast a proposition and check its validity using SBV.
 -- (Currently ignores satisfying assignments.) Constants with names in
 -- @unints@ are kept as uninterpreted functions.
-proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
+proveUnintSBV :: SBV.SMTConfig -> [Text] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
-     unintSet <- SV.scriptTopLevel (resolveNames unints)
+     unintSet <- SV.scriptTopLevel (resolveNames (map Text.unpack unints))
      wrapProver (sbvBackends conf) []
                 (Prover.proveUnintSBV conf timeout) unintSet
 
@@ -1040,22 +1058,22 @@ wrapProver backends opts f unints =
 wrapW4Prover ::
   SolverBackend -> [SolverBackendOption] ->
   ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
-  [String] ->
+  [Text] ->
   ProofScript ()
 wrapW4Prover backend opts f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  unintSet <- SV.scriptTopLevel $ resolveNames unints
+  unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
   wrapProver [What4, backend] opts (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
   ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
-  [String] ->
-  String ->
-  String ->
+  [Text] ->
+  FilePath ->
+  FilePath ->
   ProofScript ()
 wrapW4ProveExporter f unints path ext = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  unintSet <- SV.scriptTopLevel $ resolveNames unints
+  unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
     sc <- getSharedContext
@@ -1089,25 +1107,25 @@ proveMathSAT = proveSBV SBV.mathSAT
 proveYices :: ProofScript ()
 proveYices = proveSBV SBV.yices
 
-proveUnintBitwuzla :: [String] -> ProofScript ()
+proveUnintBitwuzla :: [Text] -> ProofScript ()
 proveUnintBitwuzla = proveUnintSBV SBV.bitwuzla
 
-proveUnintBoolector :: [String] -> ProofScript ()
+proveUnintBoolector :: [Text] -> ProofScript ()
 proveUnintBoolector = proveUnintSBV SBV.boolector
 
-proveUnintZ3 :: [String] -> ProofScript ()
+proveUnintZ3 :: [Text] -> ProofScript ()
 proveUnintZ3 = proveUnintSBV SBV.z3
 
-proveUnintCVC4 :: [String] -> ProofScript ()
+proveUnintCVC4 :: [Text] -> ProofScript ()
 proveUnintCVC4 = proveUnintSBV SBV.cvc4
 
-proveUnintCVC5 :: [String] -> ProofScript ()
+proveUnintCVC5 :: [Text] -> ProofScript ()
 proveUnintCVC5 = proveUnintSBV SBV.cvc5
 
-proveUnintMathSAT :: [String] -> ProofScript ()
+proveUnintMathSAT :: [Text] -> ProofScript ()
 proveUnintMathSAT = proveUnintSBV SBV.mathSAT
 
-proveUnintYices :: [String] -> ProofScript ()
+proveUnintYices :: [Text] -> ProofScript ()
 proveUnintYices = proveUnintSBV SBV.yices
 
 
@@ -1133,46 +1151,48 @@ w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 w4_yices :: ProofScript ()
 w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
 
-w4_unint_bitwuzla :: [String] -> ProofScript ()
+w4_unint_bitwuzla :: [Text] -> ProofScript ()
 w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla
 
-w4_unint_boolector :: [String] -> ProofScript ()
+w4_unint_boolector :: [Text] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
 
-w4_unint_z3 :: [String] -> ProofScript ()
+w4_unint_z3 :: [Text] -> ProofScript ()
 w4_unint_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3
 
-w4_unint_z3_using :: String -> [String] -> ProofScript ()
-w4_unint_z3_using tactic = wrapW4Prover Z3 [W4_Tactic tactic] (Prover.proveWhat4_z3_using tactic)
+w4_unint_z3_using :: Text -> [Text] -> ProofScript ()
+w4_unint_z3_using tactic =
+  let tactic' = Text.unpack tactic in
+  wrapW4Prover Z3 [W4_Tactic tactic'] (Prover.proveWhat4_z3_using tactic')
 
-w4_unint_cvc4 :: [String] -> ProofScript ()
+w4_unint_cvc4 :: [Text] -> ProofScript ()
 w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4
 
-w4_unint_cvc5 :: [String] -> ProofScript ()
+w4_unint_cvc5 :: [Text] -> ProofScript ()
 w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
-w4_unint_yices :: [String] -> ProofScript ()
+w4_unint_yices :: [Text] -> ProofScript ()
 w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices
 
-offline_w4_unint_bitwuzla :: [String] -> String -> ProofScript ()
+offline_w4_unint_bitwuzla :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_bitwuzla unints path =
-     wrapW4ProveExporter Prover.proveExportWhat4_bitwuzla unints path ".smt2"
+  wrapW4ProveExporter Prover.proveExportWhat4_bitwuzla unints path ".smt2"
 
-offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
+offline_w4_unint_z3 :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_z3 unints path =
-     wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path ".smt2"
+  wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path ".smt2"
 
-offline_w4_unint_cvc4 :: [String] -> String -> ProofScript ()
+offline_w4_unint_cvc4 :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_cvc4 unints path =
-     wrapW4ProveExporter Prover.proveExportWhat4_cvc4 unints path ".smt2"
+  wrapW4ProveExporter Prover.proveExportWhat4_cvc4 unints path ".smt2"
 
-offline_w4_unint_cvc5 :: [String] -> String -> ProofScript ()
+offline_w4_unint_cvc5 :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_cvc5 unints path =
-     wrapW4ProveExporter Prover.proveExportWhat4_cvc5 unints path ".smt2"
+  wrapW4ProveExporter Prover.proveExportWhat4_cvc5 unints path ".smt2"
 
-offline_w4_unint_yices :: [String] -> String -> ProofScript ()
+offline_w4_unint_yices :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_yices unints path =
-     wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
+  wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
@@ -1229,9 +1249,9 @@ offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." 
 w4_offline_smtlib2 :: FilePath -> ProofScript ()
 w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path "." ".smt2"
 
-offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript ()
+offline_unint_smtlib2 :: [Text] -> FilePath -> ProofScript ()
 offline_unint_smtlib2 unints path =
-  do unintSet <- SV.scriptTopLevel $ resolveNames unints
+  do unintSet <- SV.scriptTopLevel $ resolveNames (map Text.unpack unints)
      proveWithSATExporter Prover.writeSMTLib2 unintSet path "." ".smt2"
 
 offline_verilog :: FilePath -> ProofScript ()
@@ -1614,10 +1634,10 @@ rewritePrim ss (TypedTerm schema t) = do
   (_,t') <- io $ rewriteSharedTerm sc ss t
   return (TypedTerm schema t')
 
-unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
+unfold_term :: [Text] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mconcat <$> mapM (resolveName sc) unints
+  unints' <- mconcat <$> mapM (resolveName sc) (map Text.unpack unints)
   t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 
@@ -1627,10 +1647,10 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-term_eval :: [String] -> TypedTerm -> TopLevel TypedTerm
+term_eval :: [Text] -> TypedTerm -> TopLevel TypedTerm
 term_eval unints (TypedTerm schema t0) =
   do sc <- getSharedContext
-     unintSet <- resolveNames unints
+     unintSet <- resolveNames (map Text.unpack unints)
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sym <- liftIO $ Common.newSAWCoreExprBuilder sc what4PushMuxOps
      st <- liftIO $ Common.sawCoreState sym
@@ -1810,8 +1830,8 @@ timePrim a = do
   printOutLnTop Info $ printf "Time: %s\n" (show diff)
   return r
 
-failPrim :: String -> TopLevel SV.Value
-failPrim msg = fail msg
+failPrim :: Text -> TopLevel SV.Value
+failPrim msg = fail $ Text.unpack msg
 
 failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
@@ -1887,13 +1907,14 @@ eval_list t = do
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
 
-term_theories :: [String] -> TypedTerm -> TopLevel [String]
+term_theories :: [Text] -> TypedTerm -> TopLevel [Text]
 term_theories unints t = do
   sc <- getSharedContext
-  unintSet <- resolveNames unints
+  unintSet <- resolveNames $ map Text.unpack unints
   hashConsing <- gets SV.rwWhat4HashConsing
   prop <- io (predicateToProp sc Universal (ttTerm t))
-  Prover.what4Theories unintSet hashConsing (propToSequent prop)
+  theories <- Prover.what4Theories unintSet hashConsing (propToSequent prop)
+  return $ map Text.pack theories
 
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
@@ -2010,42 +2031,42 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCoreMod :: String -> String -> TopLevel Term
+parseCoreMod :: Text -> Text -> TopLevel Term
 parseCoreMod mnm_str input =
   do sc <- getSharedContext
      let base = "<interactive>"
          path = "<interactive>"
      uterm <-
-       case parseSAWTerm base path (LText.pack input) of
+       case parseSAWTerm base path (LText.fromStrict input) of
          Right uterm -> return uterm
          Left err ->
            do let msg = show err
               printOutLnTop Opts.Error msg
               fail msg
      let mnm =
-           mkModuleName $ Text.splitOn (Text.pack ".") $ Text.pack mnm_str
+           mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
      err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
        Right (SCTypedTerm x _) -> return x
 
-parseCore :: String -> TopLevel Term
-parseCore = parseCoreMod "Cryptol"
+parseCore :: Text -> TopLevel Term
+parseCore input = parseCoreMod "Cryptol" input
 
-parse_core :: String -> TopLevel TypedTerm
+parse_core :: Text -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
-parse_core_mod :: String -> String -> TopLevel TypedTerm
+parse_core_mod :: Text -> Text -> TopLevel TypedTerm
 parse_core_mod mnm input = do
   t <- parseCoreMod mnm input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
-prove_core :: ProofScript () -> String -> TopLevel Theorem
+prove_core :: ProofScript () -> Text -> TopLevel Theorem
 prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
@@ -2070,7 +2091,7 @@ prove_core script input =
        InvalidProof _ _ pst -> failProof pst
        UnfinishedProof pst  -> failProof pst
 
-core_axiom :: String -> TopLevel Theorem
+core_axiom :: Text -> TopLevel Theorem
 core_axiom input =
   do sc <- getSharedContext
      pos <- SV.getPosition
@@ -2081,7 +2102,7 @@ core_axiom input =
      SV.putTheoremDB db'
      SV.returnTheoremProof thm
 
-core_thm :: String -> TopLevel Theorem
+core_thm :: Text -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
@@ -2101,16 +2122,16 @@ specialize_theorem thm ts =
      SV.putTheoremDB db'
      SV.returnTheoremProof thm'
 
-get_opt :: Int -> TopLevel String
+get_opt :: Int -> TopLevel Text
 get_opt n = do
   prog <- io $ System.Environment.getProgName
   args <- io $ System.Environment.getArgs
-  nthPrim (prog : args) n
+  nthPrim (map Text.pack $ prog : args) n
 
 cryptol_prims :: TopLevel CryptolModule
 cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
   where
-    prims :: [(String, Ident, Text)]
+    prims :: [(Text, Ident, Text)]
     prims =
       [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
@@ -2130,7 +2151,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
                 , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
-    parsePrim :: (String, Ident, Text) -> TopLevel (C.Name, TypedTerm)
+    parsePrim :: (Text, Ident, Text) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do
       sc <- getSharedContext
       rw <- getTopLevelRW
@@ -2163,23 +2184,23 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
-cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm =
   do rw <- getTopLevelRW
      let env = rwCryptol rw
      let prim_name =
-           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+           C.PrimIdent (C.textToModName mnm) nm
      let env' =
            env { CEnv.ePrims =
                    Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
      putTopLevelRW (rw { rwCryptol = env' })
 
-cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim_type :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp =
   do rw <- getTopLevelRW
      let env = rwCryptol rw
      let prim_name =
-           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+           C.PrimIdent (C.textToModName mnm) nm
      let env' = env { CEnv.ePrimTypes =
                         Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
      putTopLevelRW (rw { rwCryptol = env' })
@@ -2354,7 +2375,7 @@ refinesTerm vars tt1 tt2 =
      ttRes <- mrSolverGetResultOrFail env errStr Nothing res
      io $ mkTypedTerm sc ttRes
 
-setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
+setMonadification :: SharedContext -> Text -> Text -> Bool -> TopLevel ()
 setMonadification sc cry_str saw_str poly_p =
   do rw <- get
 
@@ -2362,9 +2383,9 @@ setMonadification sc cry_str saw_str poly_p =
      cry_nm <-
        let ?fileReader = StrictBS.readFile in
        liftIO (CEnv.resolveIdentifier
-               (rwCryptol rw) (Text.pack cry_str)) >>= \case
+               (rwCryptol rw) cry_str) >>= \case
        Just n -> return n
-       Nothing -> fail ("No such Cryptol identifer: " ++ cry_str)
+       Nothing -> fail $ Text.unpack $ "No such Cryptol identifer: " <> cry_str
      cry_nmi <- liftIO $ Cryptol.importName cry_nm
 
      -- Step 2: get the monadified type for this Cryptol name
@@ -2376,14 +2397,14 @@ setMonadification sc cry_str saw_str poly_p =
        liftIO $
        case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
          Just schema ->
-           -- putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
+           -- putStrLn $ Text.unpack $ "Found Cryptol type for name: " <> show cry_str >>
            importSchemaCEnv sc (rwCryptol rw) schema
          Nothing
            | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
                                                      rwCryptol rw) ->
-             -- putStrLn ("No Cryptol type for name: " ++ cry_str) >>
+             -- putStrLn $ Text.unpack $ "No Cryptol type for name: " <> cry_str >>
              scTypeOf sc cry_nm_trans
-         _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
+         _ -> fail $ Text.unpack $ "Could not find type for Cryptol name: " <> cry_str
      cry_mon_tp <-
        liftIO $
        Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp poly_p
@@ -2393,7 +2414,7 @@ setMonadification sc cry_str saw_str poly_p =
      -- the cryptol name, or if no macro exists, check that it has the same
      -- type as the monadified type for the Cryptol name and generate a macro
      -- which maps the Cryptol name to the SAW core term
-     let saw_ident = parseIdent saw_str
+     let saw_ident = parseIdent (Text.unpack saw_str)
      saw_trm <- liftIO $ scGlobalDef sc saw_ident
      saw_tp <- liftIO $ scTypeOf sc saw_trm
      let (tp_to_check, macro) =
@@ -2434,12 +2455,12 @@ approxmc t = do
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
 
-set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver :: Text -> TopLevel ()
 set_path_sat_solver nm =
-  case map toLower nm of
+  case Text.toLower nm of
     "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
     "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
-    _ -> fail $ "Unknown path sat solver: " ++ show nm
+    _ -> fail $ Text.unpack $ "Unknown path sat solver: " <> nm
 
 summarize_verification :: TopLevel ()
 summarize_verification =
@@ -2453,7 +2474,7 @@ summarize_verification =
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
-summarize_verification_json :: String -> TopLevel ()
+summarize_verification_json :: FilePath -> TopLevel ()
 summarize_verification_json fpath =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
@@ -2487,11 +2508,11 @@ writeVerificationSummary = do
         in io $ writeFile f' $ formatSummary summary
 
 declare_ghost_state ::
-  String         ->
+  Text ->
   TopLevel SV.Value
 declare_ghost_state name =
   do allocator <- getHandleAlloc
-     global <- liftIO (freshGlobalVar allocator (Text.pack name) knownRepr)
+     global <- liftIO (freshGlobalVar allocator name knownRepr)
      return (SV.VGhostVar global)
 
 ghost_value ::

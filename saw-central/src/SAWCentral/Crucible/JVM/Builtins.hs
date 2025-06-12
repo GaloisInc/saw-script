@@ -62,7 +62,7 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
-import           Data.List (dropWhileEnd, isPrefixOf, sortBy)
+import           Data.List (isPrefixOf, sortBy)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
@@ -201,7 +201,7 @@ excludedRefs = Set.fromList
 
 jvm_verify ::
   J.Class ->
-  String {- ^ method name -} ->
+  Text {- ^ method name -} ->
   [Lemma] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   JVMSetupM () ->
@@ -219,7 +219,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      -- (directly or indirectly) by this class
      allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
      let refs = CJ.initClasses ++ allRefs -- ++ superRefs
-     mapM_ (prepareClassTopLevel . J.unClassName) refs
+     mapM_ (prepareClassTopLevel . Text.pack . J.unClassName) refs
 
      cc <- setupCrucibleContext cls
      SomeOnlineBackend bak <- pure (cc^.jccBackend)
@@ -232,7 +232,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
 
-     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     (cls', method) <- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc (cls', method) loc
 
      -- execute commands of the method spec
@@ -284,7 +284,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
 
 jvm_unsafe_assume_spec ::
   J.Class          ->
-  String          {- ^ Name of the method -} ->
+  Text         {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
   TopLevel Lemma
 jvm_unsafe_assume_spec cls nm setup =
@@ -292,7 +292,7 @@ jvm_unsafe_assume_spec cls nm setup =
      cb <- getJavaCodebase
      pos <- getPosition
      -- cls' is either cls or a (transitive) superclass of cls
-     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     (cls', method) <- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_JVM_unsafe_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$>
@@ -938,7 +938,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
-  | JVMFieldNonReference SetupValue String
+  | JVMFieldNonReference SetupValue Text
   | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch J.FieldId J.Type
@@ -976,7 +976,7 @@ instance Show JVMSetupError where
         unlines
         [ "jvm_field_is: Left-hand side is not a valid object reference"
         , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
-        , "Field name: " ++ fname
+        , "Field name: " ++ Text.unpack fname
         ]
       JVMFieldMultiple _ptr fid ->
         "jvm_field_is: Multiple specifications for the same instance field (" ++ J.fieldIdName fid ++ ")"
@@ -1091,8 +1091,8 @@ cryptolTypeOfActual jty =
     JavaArray n t -> Cryptol.tSeq (Cryptol.tNum n) <$> cryptolTypeOfActual t
     JavaClass _   -> Nothing
 
-parseClassName :: String -> J.ClassName
-parseClassName cname = J.mkClassName (J.dotsToSlashes cname)
+parseClassName :: Text -> J.ClassName
+parseClassName cname = J.mkClassName (J.dotsToSlashes $ Text.unpack cname)
 
 typeOfJavaType :: JavaType -> J.Type
 typeOfJavaType jty =
@@ -1122,7 +1122,7 @@ jvm_fresh_var name jty =
        Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
-  String {- ^ class name -} ->
+  Text {- ^ class name -} ->
   JVMSetupM SetupValue
 jvm_alloc_object cname =
   JVMSetupM $
@@ -1159,20 +1159,20 @@ jvm_alloc_array len ety =
 
 jvm_modifies_field ::
   SetupValue {- ^ object -} ->
-  String     {- ^ field name -} ->
+  Text       {- ^ field name -} ->
   JVMSetupM ()
 jvm_modifies_field ptr fname = generic_field_is ptr fname Nothing
 
 jvm_field_is ::
   SetupValue {- ^ object -} ->
-  String     {- ^ field name -} ->
+  Text       {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
 jvm_field_is ptr fname val = generic_field_is ptr fname (Just val)
 
 generic_field_is ::
   SetupValue {- ^ object -} ->
-  String {- ^ field name -} ->
+  Text {- ^ field name -} ->
   Maybe SetupValue {- ^ field value -} ->
   JVMSetupM ()
 generic_field_is ptr fname mval =
@@ -1189,7 +1189,7 @@ generic_field_is ptr fname mval =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
      case mval of
        Nothing -> pure ()
        Just val ->
@@ -1212,18 +1212,18 @@ generic_field_is ptr fname mval =
      Setup.addPointsTo pt
 
 jvm_modifies_static_field ::
-  String {- ^ field name -} ->
+  Text {- ^ field name -} ->
   JVMSetupM ()
 jvm_modifies_static_field fname = generic_static_field_is fname Nothing
 
 jvm_static_field_is ::
-  String     {- ^ field name -} ->
+  Text       {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
 jvm_static_field_is fname val = generic_static_field_is fname (Just val)
 
 generic_static_field_is ::
-  String {- ^ field name -} ->
+  Text {- ^ field name -} ->
   Maybe SetupValue {- ^ field value -} ->
   JVMSetupM ()
 generic_static_field_is fname mval =
@@ -1236,12 +1236,12 @@ generic_static_field_is fname mval =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      let cname =
-           case dropWhileEnd (/= '.') fname of
-             "" -> J.className (cc ^. jccJVMClass)
-             s -> J.mkClassName (init s)
+           case Text.unsnoc $ Text.dropWhileEnd (/= '.') fname of
+               Nothing -> J.className (cc ^. jccJVMClass)
+               Just (fname', _) -> J.mkClassName (Text.unpack fname')
      -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
      let ptrTy = J.ClassType cname
-     fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
      case mval of
        Nothing -> pure ()
        Just val ->
@@ -1446,7 +1446,7 @@ jvm_return retVal =
      Setup.crucible_return retVal
 
 jvm_setup_with_tag ::
-  String ->
+  Text ->
   JVMSetupM () ->
   JVMSetupM ()
 jvm_setup_with_tag tag m =

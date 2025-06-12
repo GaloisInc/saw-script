@@ -41,6 +41,7 @@ import           Control.Monad.State (StateT)
 import           Control.Monad.Reader (ReaderT, withReaderT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
 import           Data.Text (Text)
+import qualified Data.Text as Text
 import           Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -147,6 +148,6 @@ freshVariable sc name cty =
   do tec <- freshTypedExtCns sc name cty
      liftIO $ typedTermOfExtCns sc tec
 
-setupWithTag :: String -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a
+setupWithTag :: Text -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a
 setupWithTag tag m =
-  withReaderT (croTags %~ Set.insert tag) m
+  withReaderT (croTags %~ Set.insert (Text.unpack tag)) m

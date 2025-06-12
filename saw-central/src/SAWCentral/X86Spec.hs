@@ -65,6 +65,8 @@ import Control.Lens (view, (^.), over)
 import qualified Data.BitVector.Sized as BV
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Map (Map)
 import Data.Proxy(Proxy(..))
 import qualified Data.Map as Map
@@ -325,8 +327,9 @@ cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of
 data V :: SpecType -> CrucibleType -> Type where
 
   CryFun ::
-    (1 <= w) => NatRepr w -> String -> [CryArg p] -> V p (LLVMPointerType w)
-  -- An opaque Cryptol term term; WARNING: type is unchecked
+    (1 <= w) => NatRepr w -> Text -> [CryArg p] -> V p (LLVMPointerType w)
+  -- An opaque Cryptol term; WARNING: type is unchecked
+  -- XXX there does not appear to be anything that creates these
 
   IntLit :: (1 <= w) => NatRepr w -> Integer -> V p (LLVMPointerType w)
   -- A literal value
@@ -348,7 +351,7 @@ data V :: SpecType -> CrucibleType -> Type where
 instance Show (V p t) where
   show val =
     case val of
-      CryFun w f xs -> pars (f ++ " " ++ unwords (map show xs) ++ sh w)
+      CryFun w f xs -> pars (Text.unpack f ++ " " ++ unwords (map show xs) ++ sh w)
       IntLit w x -> pars (show x ++ sh w)
       Loc l     -> show l
       PreLoc l  -> pars ("pre " ++ show l)
@@ -408,12 +411,12 @@ cryCur l = Cry (Loc l)
 
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
-  CryProp :: String -> [ CryArg p ] -> Prop p
+  CryProp :: Text -> [ CryArg p ] -> Prop p
   CryPostMem ::
     V Post (LLVMPointerType 64) {- starting here -} ->
     Integer                     {- this many elemnts -} ->
     Unit                        {- of this size -} ->
-    String                      {- are defined by this Cry. func. -} ->
+    Text                        {- are defined by this Cry. func. -} ->
     [CryArg Post]               {- applied to these argumnets -} ->
     Prop Post
 
@@ -602,7 +605,7 @@ evalCryFunGen ::
   Opts ->
   S p ->
   BaseTypeRepr t ->
-  String ->
+  Text ->
   [CryArg p] ->
   IO (RegValue Sym (BaseToType t))
 evalCryFunGen opts s ty f xs =
@@ -619,7 +622,7 @@ evalCryFunArr ::
   S p ->
   Integer ->
   NatRepr w ->
-  String ->
+  Text ->
   [CryArg p] ->
   IO [ LLVMPtr Sym w ]
 evalCryFunArr opts s n w f xs =
@@ -642,7 +645,7 @@ evalCryFun ::
   Opts ->
   S p ->
   NatRepr w ->
-  String ->
+  Text ->
   [CryArg p] ->
   IO (LLVMPtr Sym w)
 evalCryFun opts s w f xs =
@@ -827,7 +830,7 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
      -- XXX: With the introduction of `CryFun` one could depend on the
      -- current state.  For now, we are simply careful not to,
      -- in particular, `CryFun` is used only in pre-conditions and all
-     -- its argumnets are `LocPre` (i.e., the values before execution).
+     -- its arguments are `LocPre` (i.e., the values before execution).
 
      -- Note 2: Sometimes it is useful for CryFun to depend on the current
      -- state.  For example, consider a function which computes two things
@@ -1306,36 +1309,36 @@ overrideMode spec opts s =
 
 -- | Lookup a cryptol term, and apply it to the given arguments,
 -- returning the result.
-cryTerm :: Opts -> String -> [Term] -> IO Term
+cryTerm :: Opts -> Text -> [Term] -> IO Term
 cryTerm opts x xs =
   case lookupCry x (eTermEnv (optsCry opts)) of
-    Left err -> fail err
+    Left err -> fail $ Text.unpack err
     Right t ->
      do let sym = optsSym opts
         sc <- saw_ctx <$> sawCoreState sym
         scApplyAll sc t xs
 
 -- | Lookup a Crytpol type synonym, which should resolve to a constant.
-cryConst :: CryptolEnv -> String -> Either String Integer
+cryConst :: CryptolEnv -> Text -> Either Text Integer
 cryConst env x =
   do let mp = ifTySyns (getAllIfaceDecls (eModuleEnv env))
      t <- lookupCry x mp
      case matchMaybe (aNat (tsDef t)) of
        Just n  -> return n
-       Nothing -> Left (x ++ " is not a fixed constant type synonym.")
+       Nothing -> Left (x <> " is not a fixed constant type synonym.")
 
 -- | Lookup a name in a map indexed by Cryptol names.
-lookupCry :: String -> Map Name a -> Either String a
+lookupCry :: Text -> Map Name a -> Either Text a
 lookupCry x mp =
   case x `lookupIn` mp of
-    Left [] -> Left $ unlines $ ("Missing Cryptol name: " ++ show x)
-                              : [ "*** " ++ ppName y | y <- Map.keys mp ]
-    Left ys -> Left $ unlines ( "Ambiguous Cryptol name:"
-                              : [ "*** " ++ ppName y | y <- ys ]
-                              )
+    Left [] -> Left $ Text.unlines $ ("Missing Cryptol name: " <> x)
+                                   : [ "*** " <> ppName y | y <- Map.keys mp ]
+    Left ys -> Left $ Text.unlines ( "Ambiguous Cryptol name:"
+                                   : [ "*** " <> ppName y | y <- ys ]
+                                   )
     Right a -> Right a
 
-  where ppName = show . pp
+  where ppName = Text.pack . show . pp
 
 
 

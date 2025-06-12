@@ -1579,9 +1579,9 @@ findDefIdEither cs defName = do
 -- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
 -- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
 -- will raise an error.
-findStatic :: X.MonadThrow m => Mir.CollectionState -> String -> m Mir.Static
+findStatic :: X.MonadThrow m => Mir.CollectionState -> Text -> m Mir.Static
 findStatic cs name = do
-  did <- case findDefIdEither cs (Text.pack name) of
+  did <- case findDefIdEither cs name of
     Left err -> X.throwM $ MIRInvalidIdentifier err
     Right did -> pure did
   case Map.lookup did (cs ^. Mir.collection . Mir.statics) of

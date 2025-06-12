@@ -17,6 +17,7 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -193,7 +194,7 @@ ppSetupValue :: forall ext ann. IsExt ext => SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> ppAllocIndex i
-  SetupNull _    -> PP.pretty "NULL"
+  SetupNull _    -> "NULL"
   SetupStruct x vs ->
     case (ext, x) of
       (LLVMExt, packed) ->
@@ -228,8 +229,8 @@ ppSetupValue setupval = case setupval of
         ppMirSetupSlice slice
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
-  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
-  SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ u)
+  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> f)
+  SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> u)
   SetupCast x v ->
     case (ext, x) of
       (LLVMExt, tp) ->
@@ -238,8 +239,8 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, empty) ->
         absurd empty
-  SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
-  SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
+  SetupGlobal _ nm -> PP.pretty ("global(" <> nm <> ")")
+  SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" <> nm <> ")")
   SetupMux x c t f ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -247,7 +248,7 @@ ppSetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ()) ->
-        PP.pretty "mux" <>
+        "mux" <>
         PP.parens (ppTypedTerm c <> PP.comma PP.<+> ppSetupValue t <> PP.comma PP.<+> ppSetupValue f)
   where
     ext :: SAWExt ext
@@ -275,16 +276,16 @@ ppSetupValue setupval = case setupval of
     ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =
       PP.pretty variantName PP.<+> ppSetupStructDefault fields
     ppMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =
-      PP.pretty "<symbolic enum>"
+      "<symbolic enum>"
 
     ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
     ppMirSetupSlice (MirSetupSliceRaw ref len) =
-      PP.pretty "SliceRaw" <> ppSetupTuple [ref, len]
+      "SliceRaw" <> ppSetupTuple [ref, len]
     ppMirSetupSlice (MirSetupSlice _ arr) =
-      ppSetupValue arr <> PP.pretty "[..]"
+      ppSetupValue arr <> "[..]"
     ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
-      ppSetupValue arr <> PP.pretty "[" <> PP.pretty start <>
-      PP.pretty ".." <> PP.pretty end <> PP.pretty "]"
+      ppSetupValue arr <> "[" <> PP.pretty start <>
+      ".." <> PP.pretty end <> "]"
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
@@ -483,12 +484,12 @@ ppMethodSpec ::
   PP.Doc ann
 ppMethodSpec methodSpec =
   PP.vcat
-  [ PP.pretty "Name: " <> PP.pretty (methodSpec ^. csMethod)
-  , PP.pretty "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))
-  , PP.pretty "Argument types: "
+  [ "Name: " <> PP.pretty (methodSpec ^. csMethod)
+  , "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))
+  , "Argument types: "
   , bullets '-' (map PP.pretty (methodSpec ^. csArgs))
-  , PP.pretty "Return type: " <> case methodSpec ^. csRet of
-                                       Nothing  -> PP.pretty "<void>"
+  , "Return type: " <> case methodSpec ^. csRet of
+                                       Nothing  -> "<void>"
                                        Just ret -> PP.pretty ret
   ]
 

@@ -190,12 +190,12 @@ runX86Sim st m = runStateT (unX86Sim m) st
 
 -- | Throw an X86Error (general failure of the X86 stuff) with the
 --   pathname of the file we choked on.
-throwX86 :: MonadThrow m => FilePath -> String -> m a
+throwX86 :: MonadThrow m => FilePath -> Text -> m a
 throwX86 path msg = throw $ X86Error path Nothing msg
 
 -- | Throw an X86Error (general failure of the X86 stuff) with the
 --   pathname of the file we choked on and also the affected function name.
-throwX86func :: MonadThrow m => FilePath -> String -> String -> m a
+throwX86func :: MonadThrow m => FilePath -> Text -> Text -> m a
 throwX86func path func msg = throw $ X86Error path (Just func) msg
 
 x86Sym :: Getter X86State Sym
@@ -207,35 +207,35 @@ defaultStackBaseAlign = 16
 integerToAlignment ::
   (MonadIO m, MonadThrow m) =>
   FilePath ->
-  String ->
+  Text ->
   Integer ->
   m C.LLVM.Alignment
 integerToAlignment path func i
   | Just ba <- C.LLVM.toAlignment (C.LLVM.toBytes i) = pure ba
-  | otherwise = throwX86func path func $ mconcat ["Invalid alignment specified: ", show i]
+  | otherwise = throwX86func path func $ "Invalid alignment specified: " <> Text.pack (show i)
 
 setReg ::
   (MonadIO m, MonadThrow m) =>
   FilePath ->
-  String ->
+  Text ->
   Register ->
   C.RegValue Sym (C.LLVM.LLVMPointerType 64) ->
   Regs ->
   m Regs
 setReg path func reg val regs
   | Just regs' <- Macaw.updateX86Reg reg (C.RV . const val) regs = pure regs'
-  | otherwise = throwX86func path func $ mconcat ["Invalid register: ", show reg]
+  | otherwise = throwX86func path func $ "Invalid register: " <> Text.pack (show reg)
 
 getReg ::
   (MonadIO m, MonadThrow m) =>
   FilePath ->
-  String ->
+  Text ->
   Register ->
   Regs ->
   m (C.RegValue Sym (C.LLVM.LLVMPointerType 64))
 getReg path func reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
-  Nothing -> throwX86func path func $ mconcat ["Invalid register: ", show reg]
+  Nothing -> throwX86func path func $ "Invalid register: " <> Text.pack (show reg)
 
 -- TODO: extend to more than general purpose registers
 stringToReg :: Text -> Maybe (Some Macaw.X86Reg)
@@ -261,18 +261,16 @@ stringToReg s = case s of
 cryptolUninterpreted ::
   (MonadIO m, MonadThrow m) =>
   FilePath ->
-  String ->
+  Text ->
   CryptolEnv ->
-  String ->
+  Text ->
   SharedContext ->
   [Term] ->
   m Term
 cryptolUninterpreted path func env nm sc xs =
   case lookupIn nm $ eTermEnv env of
-    Left _err -> throwX86func path func $ mconcat
-      [ "Failed to lookup Cryptol name \"", nm
-      , "\" in Cryptol environment"
-      ]
+    Left _err -> throwX86func path func $
+        "Failed to lookup Cryptol name \"" <> nm <> "\" in Cryptol environment"
     Right t -> liftIO $ scApplyAll sc t xs
 
 llvmPointerBlock :: C.LLVM.LLVMPtr sym w -> W4.SymNat sym
@@ -343,8 +341,8 @@ doPtrCmp fixpointSelect f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -
 llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
@@ -358,8 +356,8 @@ llvm_verify_x86 llvmModule path nm globsyms checkSat =
 llvm_verify_fixpoint_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
@@ -378,8 +376,8 @@ llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
 llvm_verify_fixpoint_chc_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
@@ -394,10 +392,10 @@ llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f =
 llvm_verify_x86_with_invariant ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
-  (String, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
+  (Text, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
@@ -409,13 +407,13 @@ data FixpointSelect
  = NoFixpoint
  | SimpleFixpoint TypedTerm
  | SimpleFixpointCHC TypedTerm
- | SimpleInvariant String Integer TypedTerm
+ | SimpleInvariant Text Integer TypedTerm
 
 llvm_verify_x86_common ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   FixpointSelect ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
@@ -474,11 +472,11 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaCh sfs) $ cryptolUninterpreted path nm cenv "Ch"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted path nm cenv "Maj"
 
-      let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
+      let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower <$> rwPreservedRegs rw
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- io $ buildCFG opts halloc preserved path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
-        else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
+        else fail $ Text.unpack $ "Address of \"" <> nm <> "\" is not an absolute address"
       let maxAddr = addrInt + toInteger (Macaw.segmentSize $ Macaw.segoffSegment addr)
 
       let
@@ -493,13 +491,9 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           , _ccLLVMGlobals = error "Attempted to access ccLLVMGlobals"
           }
 
-      liftIO . printOutLn opts Info $ mconcat
-        [ "Simulating function \""
-        , nm
-        , "\" (at address "
-        , show addr
-        , ")"
-        ]
+      liftIO . printOutLn opts Info $ Text.unpack $
+          "Simulating function \"" <> nm <> "\" (at address " <>
+          Text.pack (show addr) <> ")"
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec llvmModule nm (show addr) checkSat setup
@@ -615,11 +609,11 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
-                 case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
+                 case findSymbols (symMap relf) $ encodeUtf8 loopFixpointSymbol of
                    (loopaddr:_) -> pure loopaddr
-                   _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
+                   _ -> fail $ Text.unpack $ "Could not find symbol \"" <> nm <> "\""
                case Map.lookup loopaddr cfgs of
-                 Nothing -> throwX86 path $ "Unable to discover looping CFG from address " <> show loopaddr
+                 Nothing -> throwX86 path $ "Unable to discover looping CFG from address " <> Text.pack (show loopaddr)
                  Just (C.SomeCFG loopcfg) ->
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
@@ -957,7 +951,7 @@ buildCFG ::
   C.HandleAllocator ->
   Set (Some Macaw.X86Reg) {- ^ Registers to treat as callee-saved -} ->
   FilePath {- ^ Path to ELF file -} ->
-  String {- ^ Function's symbol in ELF file -} ->
+  Text {- ^ Function's symbol in ELF file -} ->
   IO ( C.SomeCFG
        (Macaw.MacawExt Macaw.X86_64)
        (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
@@ -973,13 +967,13 @@ buildCFG ::
          (Macaw.ArchRegStruct Macaw.X86_64))
      )
 buildCFG opts halloc preserved path nm = do
-  printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
+  printOutLn opts Info $ Text.unpack $ "Finding symbol for \"" <> nm <> "\""
   elf <- getElf path
   relf <- getRelevant path elf
   (addr :: Macaw.MemSegmentOff 64) <-
-    case findSymbols (symMap relf) . encodeUtf8 $ Text.pack nm of
+    case findSymbols (symMap relf) $ encodeUtf8 nm of
       (addr:_) -> pure addr
-      _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
+      _ -> fail $ Text.unpack $ "Could not find symbol \"" <> nm <> "\""
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   let
     preservedRegs = Set.union preserved Macaw.x86CalleeSavedRegs
@@ -1001,7 +995,7 @@ buildCFG opts halloc preserved path nm = do
     posFn finfo
 
   case Map.lookup addr cfgs of
-    Nothing -> throwX86 path $ "Unable to discover CFG from address " <> show addr
+    Nothing -> throwX86 path $ "Unable to discover CFG from address " <> Text.pack (show addr)
     Just scfg -> pure (scfg, elf, relf, addr, cfgs)
 
 --------------------------------------------------------------------------------
@@ -1012,7 +1006,7 @@ buildCFG opts halloc preserved path nm = do
 -- different memory layout / RegMap).
 buildMethodSpec ::
   LLVMModule LLVMArch ->
-  String {- ^ Name of method -} ->
+  Text {- ^ Name of method -} ->
   String {- ^ Source location for method spec (here, we use the address) -} ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
@@ -1021,12 +1015,12 @@ buildMethodSpec lm nm loc checkSat setup =
   setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc =
-          W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
+          W4.mkProgramLoc (W4.functionNameFromText nm)
           . W4.OtherPos $ Text.pack loc
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     opts <- getOptions
     (args, ret) <- case llvmSignature opts lm nm of
-      Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
+      Left err -> fail $ Text.unpack $ "Could not find declaration for \"" <> nm <> "\": " <> Text.pack err
       Right x -> pure x
     (mtargs, mtret) <- case (,) <$> mapM (llvmTypeToMemType lc) args <*> mapM (llvmTypeToMemType lc) ret of
       Left err -> fail err
@@ -1048,7 +1042,7 @@ llvmTypeToMemType lc t = let ?lc = lc in C.LLVM.liftMemType t
 llvmSignature ::
   Options ->
   LLVMModule LLVMArch ->
-  String ->
+  Text ->
   Either String ([LLVM.Type], Maybe LLVM.Type)
 llvmSignature opts llvmModule nm =
   case findDecl (modAST llvmModule) nm of
@@ -1080,7 +1074,7 @@ initialState ::
   Elf.ElfHeaderInfo 64 ->
   RelevantElf ->
   MS.CrucibleMethodSpecIR LLVM ->
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   IO X86State
 initialState bak opts sc cc path elf relf ms globs maxAddr = do
@@ -1094,11 +1088,11 @@ initialState bak opts sc cc path elf relf ms globs maxAddr = do
   let
     align = C.LLVM.exponentToAlignment 4
     allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
-    allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd nm
-    globalEnd :: String -> Integer
+    allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd (Text.pack nm)
+    globalEnd :: Text -> Integer
     globalEnd nm = maybe 0 (\entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry) $
       (Vector.!? 0)
-      . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
+      . Vector.filter (\e -> Elf.steName e == encodeUtf8 nm)
       $ Elf.symtabEntries symTab
   sz <- W4.bvLit sym knownNat . BV.mkBV knownNat . maximum $ mconcat
     [ [maxAddr, globalEnd "_end"]
@@ -1127,8 +1121,8 @@ initialState bak opts sc cc path elf relf ms globs maxAddr = do
 setupMemory ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Text -> {- ^ Function we're in -}
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 setupMemory path func globsyms balign = do
@@ -1160,7 +1154,7 @@ setupMemory path func globsyms balign = do
 -- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
 setupGlobals ::
   X86Constraints =>
-  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   X86Sim ()
 setupGlobals globsyms = do
   SomeOnlineBackend bak <- use x86Backend
@@ -1169,9 +1163,9 @@ setupGlobals globsyms = do
   relf <- use x86RelevantElf
   base <- use x86GlobalBase
   let
-    readInitialGlobal :: (String, Integer) -> IO [(String, Integer, [Integer])]
+    readInitialGlobal :: (Text, Integer) -> IO [(String, Integer, [Integer])]
     readInitialGlobal (nm, sz) = do
-      res <- loadGlobal relf (encodeUtf8 $ Text.pack nm, sz, Bytes)
+      res <- loadGlobal relf (encodeUtf8 nm, sz, Bytes)
       pure $ (\(name, addr, _unit, bytes) -> (name, addr, bytes)) <$> res
     convertByte :: Integer -> IO (C.LLVM.LLVMVal Sym)
     convertByte byte =
@@ -1191,7 +1185,7 @@ setupGlobals globsyms = do
 allocateStack ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Integer {- ^ Stack size in bytes -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim ()
@@ -1210,7 +1204,7 @@ allocateStack path func szInt balign = do
 -- | Push a fresh pointer as the return address.
 pushFreshReturnAddress ::
   X86Constraints =>
-  FilePath -> String ->
+  FilePath -> Text ->
   X86Sim ()
 pushFreshReturnAddress path func = do
   SomeOnlineBackend bak <- use x86Backend
@@ -1218,7 +1212,7 @@ pushFreshReturnAddress path func = do
   mem <- use x86Mem
   regs <- use x86Regs
   sn <- case W4.userSymbol "stack" of
-    Left err -> throwX86 path $ "Invalid symbol for stack: " <> show err
+    Left err -> throwX86 path $ "Invalid symbol for stack: " <> Text.pack (show err)
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
@@ -1269,7 +1263,7 @@ assumeAllocation env _ = pure env
 assumePointsTo ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1294,7 +1288,7 @@ assumePointsTo _path _func env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldN
 resolvePtrSetupValue ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr ->
   Map MS.AllocIndex LLVMAllocSpec ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1310,9 +1304,9 @@ resolvePtrSetupValue path func env tyenv nameEnv tptr = do
   case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
-      . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
+      . Vector.filter (\e -> Elf.steName e == encodeUtf8 nm)
       $ Elf.symtabEntries symTab of
-      Nothing -> throwX86func path func $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Nothing -> throwX86func path func $ "Global symbol \"" <> nm <> "\" not found"
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset bak mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
@@ -1345,7 +1339,7 @@ resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       $ Elf.symtabEntries symTab of
-      Nothing -> throwX86 path $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Nothing -> throwX86 path $ "Global symbol \"" <> nm <> "\" not found"
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
@@ -1360,7 +1354,7 @@ resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
 setArgs ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1430,7 +1424,7 @@ argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 assertPost ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
@@ -1487,7 +1481,7 @@ assertPost path func env premem preregs mdMap = do
                    , MS.conditionContext = ""
                    }
           pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
-        _ -> throwX86func path func $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
+        _ -> throwX86func path func $ "Invalid return type: " <> Text.pack (show $ C.LLVM.ppMemType retTy)
     _ -> pure []
 
 
@@ -1517,7 +1511,7 @@ assertPost path func env premem preregs mdMap = do
     , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
-    Left err -> throwX86func path func $ show err
+    Left err -> throwX86func path func $ Text.pack (show err)
     Right (_, st) -> pure st
   liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
        do (ann,p') <- W4.annotateTerm sym p
@@ -1528,7 +1522,7 @@ assertPost path func env premem preregs mdMap = do
 assertPointsTo ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  String -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1570,7 +1564,7 @@ checkGoals ::
   IsSymBackend Sym bak =>
   bak ->
   Options ->
-  String ->
+  Text ->
   W4.ProgramLoc ->
   SharedContext ->
   ProofScript () ->
@@ -1609,7 +1603,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
     let proofgoal = ProofGoal
                     { goalNum  = n
                     , goalType = MS.conditionType md
-                    , goalName = nm
+                    , goalName = Text.unpack nm
                     , goalLoc  = gloc
                     , goalDesc = msg
                     , goalSequent = propToSequent g

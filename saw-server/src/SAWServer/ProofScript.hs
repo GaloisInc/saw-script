@@ -55,27 +55,27 @@ import SAWCore.TermNet (merge)
 data Prover
   = RME
   | SBV_ABC_SMTLib
-  | SBV_Bitwuzla [String]
-  | SBV_Boolector [String]
-  | SBV_CVC4 [String]
-  | SBV_CVC5 [String]
-  | SBV_MathSAT [String]
-  | SBV_Yices [String]
-  | SBV_Z3 [String]
+  | SBV_Bitwuzla [Text]
+  | SBV_Boolector [Text]
+  | SBV_CVC4 [Text]
+  | SBV_CVC5 [Text]
+  | SBV_MathSAT [Text]
+  | SBV_Yices [Text]
+  | SBV_Z3 [Text]
   | W4_ABC_SMTLib
   | W4_ABC_Verilog
-  | W4_Bitwuzla [String]
-  | W4_Boolector [String]
-  | W4_CVC4 [String]
-  | W4_CVC5 [String]
-  | W4_Yices [String]
-  | W4_Z3 [String]
+  | W4_Bitwuzla [Text]
+  | W4_Boolector [Text]
+  | W4_CVC4 [Text]
+  | W4_CVC5 [Text]
+  | W4_Yices [Text]
+  | W4_Z3 [Text]
 
 data ProofTactic
   = UseProver Prover
-  | Unfold [String]
+  | Unfold [Text]
   | BetaReduceGoal
-  | EvaluateGoal [String]
+  | EvaluateGoal [Text]
   | Simplify ServerName
   | Admit
   | Trivial
@@ -86,7 +86,7 @@ newtype ProofScript = ProofScript [ProofTactic]
 instance FromJSON Prover where
   parseJSON =
     withObject "prover" $ \o -> do
-      (name :: String) <- o .: "name"
+      (name :: Text) <- o .: "name"
       let unints = fromMaybe [] <$> o .:? "uninterpreted functions"
       case name of
         "abc"            -> pure W4_ABC_SMTLib
@@ -119,7 +119,7 @@ instance FromJSON Prover where
 instance FromJSON ProofTactic where
   parseJSON =
     withObject "proof tactic" $ \o -> do
-      (tac :: String) <- o .: "tactic"
+      (tac :: Text) <- o .: "tactic"
       case tac of
         "use prover"       -> UseProver <$> o .: "prover"
         "unfold"           -> Unfold <$> o .: "names"

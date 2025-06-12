@@ -97,7 +97,7 @@ import qualified Cryptol.Utils.Ident as C
 
 import Cryptol.Utils.PP hiding ((</>))
 import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
-                           , packIdent, interactiveName, identText
+                           , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
 import Cryptol.Utils.Logger (quietLogger)
@@ -158,7 +158,7 @@ data CryptolEnv = CryptolEnv
 -- name.  If the string is qualified (i.e., has @::@), then we only consider
 -- entries from the module in the qualified.
 -- The result is either the corresponding value, or a list of the
-lookupIn :: String -> Map T.Name b -> Either [T.Name] b
+lookupIn :: Text -> Map T.Name b -> Either [T.Name] b
 lookupIn nm mp =
   case [ x | x <- Map.toList mp, matches (fst x) ] of
     [ (_,v) ] -> Right v
@@ -171,9 +171,9 @@ lookupIn nm mp =
 -- If the string is unqualified (i.e., no `::`), then we match all
 -- names with the given identifier.  Otherwise, we only match the
 -- ones in the module specified by the qualifier.
-nameMatcher :: String -> T.Name -> Bool
+nameMatcher :: Text -> T.Name -> Bool
 nameMatcher xs =
-    case C.modNameChunksText (textToModName (pack xs)) of
+    case C.modNameChunksText (textToModName xs) of
       []  -> const False
       [x] -> (x ==) . C.identText . MN.nameIdent
       cs  -> \n ->
@@ -502,10 +502,10 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
-lookupCryptolModule :: CryptolModule -> String -> IO TypedTerm
+lookupCryptolModule :: CryptolModule -> Text -> IO TypedTerm
 lookupCryptolModule (CryptolModule _ tm) name =
-  case Map.lookup (packIdent name) (Map.mapKeys MN.nameIdent tm) of
-    Nothing -> fail $ "Binding not found: " ++ name
+  case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
+    Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
     Just t -> return t
 
 --------------------------------------------------------------------------------
@@ -761,9 +761,9 @@ parseSchema env input = do
 
 declareName ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> P.ModName -> String -> IO (T.Name, CryptolEnv)
+  CryptolEnv -> P.ModName -> Text -> IO (T.Name, CryptolEnv)
 declareName env mname input = do
-  let pname = P.mkUnqual (packIdent input)
+  let pname = P.mkUnqual (mkIdent input)
   let modEnv = eModuleEnv env
   (cname, modEnv') <-
     liftModuleM modEnv $ MM.interactive $

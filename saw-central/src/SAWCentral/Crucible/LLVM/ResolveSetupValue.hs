@@ -47,6 +47,8 @@ import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Data.Word (Word64)
 import           Numeric.Natural
@@ -110,9 +112,9 @@ resolveSetupValueInfo ::
 resolveSetupValueInfo cc env nameEnv v =
   case v of
     SetupGlobal _ name ->
-      case lookup (L.Symbol name) globalTys of
+      case lookup (L.Symbol $ Text.unpack name) globalTys of
         Just (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
-        _ -> throwError $ "Debug info for global name '"++name++"' not found."
+        _ -> throwError $ Text.unpack $ "Debug info for global name '" <> name <> "' not found."
 
     SetupVar i ->
       case Map.lookup i nameEnv of
@@ -127,40 +129,42 @@ resolveSetupValueInfo cc env nameEnv v =
       do i <- resolveSetupValueInfo cc env nameEnv a
          case findStruct i of
            Nothing ->
-             throwError $ unlines $
-               [ "Unable to resolve struct field name: '" ++ n ++ "'"
+             throwError $ Text.unpack $ Text.unlines $
+               [ "Unable to resolve struct field name: '" <> n <> "'"
                , "Could not resolve setup value debug information into a struct type."
                , case i of
                    L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-                   _ -> show i
+                   _ -> Text.pack $ show i
                ]
            Just (snm, xs) ->
-             case [ i' | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i' } <- xs, n == n' ] of
-               [] -> throwError $ unlines $
-                       [ "Unable to resolve struct field name: '" ++ n ++ "'"] ++
-                       [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
+             let nstr = Text.unpack n in
+             case [ i' | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i' } <- xs, nstr == n' ] of
+               [] -> throwError $ Text.unpack $ Text.unlines $
+                       [ "Unable to resolve struct field name: '" <> n <> "'"] ++
+                       [ "Struct with name '" <> Text.pack str <> "' found."  | Just str <- [snm] ] ++
                        [ "The following field names were found for this struct:" ] ++
-                       map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+                       map ("- " <>) [Text.pack n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
                i':_ -> pure i'
 
     SetupUnion () a u ->
       do i <- resolveSetupValueInfo cc env nameEnv a
          case findUnion i of
            Nothing ->
-             throwError $ unlines $
-               [ "Unable to resolve union field name: '" ++ u ++ "'"
+             throwError $ Text.unpack $ Text.unlines $
+               [ "Unable to resolve union field name: '" <> u <> "'"
                , "Could not resolve setup value debug information into a union type."
                , case i of
                    L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-                   _ -> show i
+                   _ -> Text.pack $ show i
                ]
            Just (unm, xs) ->
-             case [ i' | L.UnionFieldInfo{L.ufiName = n', L.ufiInfo = i'} <- xs, u == n' ] of
-               [] -> throwError $ unlines $
-                       [ "Unable to resolve union field name: '" ++ u ++ "'"] ++
-                       [ "Union with name '" ++ str ++ "' found."  | Just str <- [unm] ] ++
+             let ustr = Text.unpack u in
+             case [ i' | L.UnionFieldInfo{L.ufiName = n', L.ufiInfo = i'} <- xs, ustr == n' ] of
+               [] -> throwError $ Text.unpack $ Text.unlines $
+                       [ "Unable to resolve union field name: '" <> u <> "'"] ++
+                       [ "Union with name '" <> Text.pack str <> "' found."  | Just str <- [unm] ] ++
                        [ "The following field names were found for this union:" ] ++
-                       map ("- "++) [n' | L.UnionFieldInfo{L.ufiName = n'} <- xs]
+                       map ("- " <>) [Text.pack n' | L.UnionFieldInfo{L.ufiName = n'} <- xs]
                i':_ -> pure i'
 
     _ -> pure L.Unknown
@@ -200,25 +204,26 @@ recoverStructFieldInfo ::
   Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
   SetupValue (LLVM arch)        {- ^ the value to examine -} ->
   L.Info                        {- ^ extracted LLVM debug information about the type of the value -} ->
-  String                        {- ^ the name of the field -} ->
+  Text                        {- ^ the name of the field -} ->
   Except String Crucible.FieldInfo
 recoverStructFieldInfo cc env nameEnv v info n =
   case findStruct info of
     Nothing ->
-      throwError $ unlines $
-        [ "Unable to resolve struct field name: '" ++ show n ++ "'"
+      throwError $ Text.unpack $ Text.unlines $
+        [ "Unable to resolve struct field name: '" <> n <> "'"
         , "Could not resolve setup value debug information into a struct type."
         , case info of
             L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-            _ -> show info
+            _ -> Text.pack $ show info
         ]
     Just (snm,xs) ->
-      case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, n == n' ] of
-        [] -> throwError $ unlines $
-                [ "Unable to resolve struct field name: '" ++ n ++ "'"] ++
-                [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
+      let nstr = Text.unpack n in
+      case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, nstr == n' ] of
+        [] -> throwError $ Text.unpack $ Text.unlines $
+                [ "Unable to resolve struct field name: '" <> n <> "'"] ++
+                [ "Struct with name '" <> Text.pack str <> "' found."  | Just str <- [snm] ] ++
                 [ "The following field names were found for this struct:" ] ++
-                map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+                map ("- " <>) [Text.pack n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
         o:_ ->
           do vty <- typeOfSetupValue cc env nameEnv v
              case do Crucible.PtrType symTy <- pure vty
@@ -228,12 +233,12 @@ recoverStructFieldInfo cc env nameEnv v info n =
                             (Crucible.siFields si)
                of
                Nothing ->
-                 throwError $ unlines $
-                   [ "Found struct field name: '" ++ n ++ "'"] ++
-                   [ "in struct with name '" ++ str ++ "'."  | Just str <- [snm] ] ++
+                 throwError $ Text.unpack $ Text.unlines $
+                   [ "Found struct field name: '" <> n <> "'"] ++
+                   [ "in struct with name '" <> Text.pack str <> "'."  | Just str <- [snm] ] ++
                    [ "However, the offset of this field found in the debug information could not"
                    , "be correlated with the computed LLVM type of the setup value:"
-                   , show vty
+                   , Text.pack $ show vty
                    ]
                Just fld -> return fld
 
@@ -533,8 +538,8 @@ typeOfSetupValue cc env nameEnv val =
           tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
                 [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
                 [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
-      case lookup (L.Symbol name) tys of
-        Nothing -> throwError $ "typeOfSetupValue: unknown global " ++ show name
+      case lookup (L.Symbol $ Text.unpack name) tys of
+        Nothing -> throwError $ Text.unpack $ "typeOfSetupValue: unknown global " <> name
         Just ty ->
           case let ?lc = lc in Crucible.liftType ty of
             Left err -> throwError $ unlines
@@ -545,7 +550,7 @@ typeOfSetupValue cc env nameEnv val =
             Right symTy -> return (Crucible.PtrType symTy)
 
     SetupGlobalInitializer () name -> do
-      case Map.lookup (L.Symbol name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
+      case Map.lookup (L.Symbol $ Text.unpack name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
             Left err -> throwError $ unlines
@@ -554,7 +559,7 @@ typeOfSetupValue cc env nameEnv val =
                           , err
                           ]
             Right memTy -> return memTy
-        Nothing -> throwError $ "resolveSetupVal: global not found: " ++ name
+        Nothing -> throwError $ Text.unpack $ "resolveSetupVal: global not found: " <> name
 
     SetupMux empty _ _ _ ->
       absurd empty
@@ -672,9 +677,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupNull () ->
       Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal () name ->
-      Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal bak mem (L.Symbol name)
+      Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal bak mem (L.Symbol $ Text.unpack name)
     SetupGlobalInitializer () name ->
-      case Map.lookup (L.Symbol name)
+      case Map.lookup (L.Symbol $ Text.unpack name)
                       (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         -- There was an error in global -> constant translation
         Just (_, Left e) -> fail e
@@ -682,9 +687,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
           let ?lc = lc
           in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) bak mem v
         Just (_, Right (_, Nothing)) ->
-          fail $ "resolveSetupVal: global has no initializer: " ++ name
+          fail $ Text.unpack $ "resolveSetupVal: global has no initializer: " <> name
         Nothing ->
-          fail $ "resolveSetupVal: global not found: " ++ name
+          fail $ Text.unpack $ "resolveSetupVal: global not found: " <> name
     SetupMux empty _ _ _ ->
       absurd empty
 

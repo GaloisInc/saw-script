@@ -29,6 +29,8 @@ module SAWCentral.Crucible.JVM.BuiltinsJVM
 
 import           Data.List (isPrefixOf)
 import           Control.Lens
+import           Data.Text (Text)
+import qualified Data.Text as Text
 import           Data.Map (Map,(!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -95,23 +97,25 @@ import Debug.Trace
 -- | Make sure the class is in the database and allocate handles for its
 -- methods and static fields
 --
-loadJavaClass :: String -> TopLevel J.Class
+loadJavaClass :: Text -> TopLevel J.Class
 loadJavaClass str = do
+  -- XXX fix prepareClassTopLevel to return c so we don't have to look
+  -- it up twice
   cb <- getJavaCodebase
-  c <- io $ findClass cb str
+  c <- io $ findClass cb (Text.unpack str)
   prepareClassTopLevel str
   return c
 
 -----------------------------------------------------------------------
 -- | Allocate the method handles/global static variables for the given
 -- class and add them to the current translation context
-prepareClassTopLevel :: String -> TopLevel ()
+prepareClassTopLevel :: Text -> TopLevel ()
 prepareClassTopLevel str = do
 
    cb <- getJavaCodebase
 
    -- get class from codebase
-   c <- io $ findClass cb str
+   c <- io $ findClass cb (Text.unpack str)
 
    -- get current ctx
    ctx0 <- getJVMTrans
@@ -132,7 +136,7 @@ prepareClassTopLevel str = do
 
 -- | Extract a JVM method to saw-core
 --
-jvm_extract :: J.Class -> String -> TopLevel TypedTerm
+jvm_extract :: J.Class -> Text -> TopLevel TypedTerm
 jvm_extract c mname = do
   sc <- getSharedContext
   cb <- getJavaCodebase
@@ -142,8 +146,8 @@ jvm_extract c mname = do
   let gen       = Nonce.globalNonceGenerator
 
 
-  traceM $ "extracting " ++ mname
-  (mcls, meth) <- io $ CJ.findMethod cb mname c
+  traceM $ "extracting " ++ Text.unpack mname
+  (mcls, meth) <- io $ CJ.findMethod cb (Text.unpack mname) c
   when (not (J.methodIsStatic meth)) $ do
        fail $ unlines [ "Crucible can only extract static methods" ]
 
@@ -152,7 +156,7 @@ jvm_extract c mname = do
   -- allocate all of the handles/static vars that are directly referenced by
   -- this class
   let refs = CJ.initClasses ++ Set.toList (CJ.classRefs c)
-  mapM_ (prepareClassTopLevel . J.unClassName) refs
+  mapM_ (prepareClassTopLevel . Text.pack . J.unClassName) refs
 
   halloc <- getHandleAlloc
   ctx <- getJVMTrans

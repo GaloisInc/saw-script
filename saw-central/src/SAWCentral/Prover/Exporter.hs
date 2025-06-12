@@ -6,6 +6,7 @@
 {-# Language ViewPatterns #-}
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
+{-# Language ScopedTypeVariables #-}
 {-# Language TypeApplications #-}
 {-# Language TupleSections #-}
 module SAWCentral.Prover.Exporter
@@ -62,7 +63,8 @@ import System.Directory (removeFile)
 import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
-import Data.Text (pack)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Prettyprinter (vcat)
 import Prettyprinter.Render.Text
@@ -393,7 +395,7 @@ writeVerilog sc path t = do
   -- during traversal, because that's at least _a_ deterministic order).
   (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sym sval
-  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue sym v
+  let mkInput (v, nm) = map (, Text.pack nm) <$> flattenSValue sym v
   ins <- concat <$> mapM mkInput (zip args argNames)
   edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
@@ -411,12 +413,12 @@ writeCoreProp path t =
      io $ writeFile path (scWriteExternal tm)
 
 coqTranslationConfiguration ::
-  [(String, String)] ->
-  [String] ->
+  [(Text, Text)] ->
+  [Text] ->
   Coq.TranslationConfiguration
 coqTranslationConfiguration renamings skips = Coq.TranslationConfiguration
-  { Coq.constantRenaming = renamings
-  , Coq.constantSkips = skips
+  { Coq.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
+  , Coq.constantSkips = map Text.unpack skips
   , Coq.monadicTranslation = False
   , Coq.postPreamble = []
   , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
@@ -474,9 +476,9 @@ withImportCryptolPrimitivesForSAWCoreExtra config@(Coq.TranslationConfiguration 
 
 
 writeCoqTerm ::
-  String ->
-  [(String, String)] ->
-  [String] ->
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
   FilePath ->
   Term ->
   TopLevel ()
@@ -488,16 +490,16 @@ writeCoqTerm name notations skips path t = do
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Coq.translateTermAsDeclImports configuration mm name t tp of
+  case Coq.translateTermAsDeclImports configuration mm (Text.unpack name) t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       "" -> print doc
       _ -> writeFile path (show doc)
 
 writeCoqProp ::
-  String ->
-  [(String, String)] ->
-  [String] ->
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
   FilePath ->
   Prop ->
   TopLevel ()
@@ -516,9 +518,9 @@ writeCoqCryptolModule ::
   FilePath ->
   -- | Pairs of notation substitutions: operator on the left will be replaced
   -- with the identifier on the right
-  [(String, String)] ->
+  [(Text, Text)] ->
   -- | List of identifiers to skip during translation
-  [String] ->
+  [Text] ->
   TopLevel ()
 writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
@@ -554,8 +556,8 @@ nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule
 
 writeCoqSAWCorePrelude ::
   FilePath ->
-  [(String, String)] ->
-  [String] ->
+  [(Text, Text)] ->
+  [Text] ->
   IO ()
 writeCoqSAWCorePrelude outputFile notations skips = do
   sc  <- mkSharedContext
@@ -568,8 +570,8 @@ writeCoqSAWCorePrelude outputFile notations skips = do
 
 writeCoqCryptolPrimitivesForSAWCore ::
   FilePath -> FilePath -> FilePath ->
-  [(String, String)] ->
-  [String] ->
+  [(Text, Text)] ->
+  [Text] ->
   IO ()
 writeCoqCryptolPrimitivesForSAWCore cryFile specMFile cryMFile notations skips = do
   sc <- mkSharedContext

@@ -62,12 +62,12 @@ module_skeleton m = do
 
 function_skeleton ::
   ModuleSkeleton ->
-  String ->
+  Text ->
   TopLevel FunctionSkeleton
 function_skeleton mskel nm =
-  case mskel ^. modSkelFunctions . at (Text.pack nm) of
+  case mskel ^. modSkelFunctions . at nm of
     Just fskel -> pure fskel
-    Nothing -> throwTopLevel $ mconcat ["No skeleton exists for function \"", nm, "\""]
+    Nothing -> throwTopLevel $ Text.unpack $ "No skeleton exists for function \"" <> nm <> "\""
 
 -- | Manually add a new guess for the size of the argument at the given index
 skeleton_resize_arg_index ::
@@ -88,26 +88,24 @@ skeleton_resize_arg_index skel idx sz initialized =
 
 skelArgIndex ::
   FunctionSkeleton ->
-  String ->
+  Text ->
   Maybe Int
 skelArgIndex skel nm = flip findIndex (skel ^. funSkelArgs) $ \arg ->
-  arg ^. argSkelName == Just (Text.pack nm)
+  arg ^. argSkelName == Just nm
 
 -- | Manually add a new guess for the size of the argument with the given name
 skeleton_resize_arg ::
   FunctionSkeleton ->
-  String ->
+  Text ->
   Int ->
   Bool ->
   TopLevel FunctionSkeleton
 skeleton_resize_arg skel nm sz initialized
   | Just idx <- skelArgIndex skel nm
   = skeleton_resize_arg_index skel idx sz initialized
-  | otherwise = throwTopLevel $ mconcat
-    [ "No argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
+  | otherwise = throwTopLevel $ Text.unpack $
+      "No argument named \"" <> nm <>
+      "\" (enabling debug symbols when compiling might help)"
 
 llvmTypeSize :: C.LLVM.TypeContext -> LLVM.Type -> Int
 llvmTypeSize tc t =
@@ -119,12 +117,12 @@ llvmTypeSize tc t =
 skeleton_guess_arg_sizes ::
   ModuleSkeleton ->
   Some LLVMModule ->
-  [(String, [FunctionProfile])] ->
+  [(Text, [FunctionProfile])] ->
   TopLevel ModuleSkeleton
 skeleton_guess_arg_sizes mskel (Some m) profiles = do
   let (_, tc) = C.LLVM.typeContextFromModule $ modAST m
   fskels <- forM (mskel ^. modSkelFunctions) $ \skel -> do
-    case lookup (Text.unpack $ skel ^. funSkelName) profiles of
+    case lookup (skel ^. funSkelName) profiles of
       Just (prof:_) -> let
         updateArg (a, p)
           | a ^. argSkelType . typeSkelIsPointer
@@ -149,7 +147,7 @@ skeleton_globals_pre ::
 skeleton_globals_pre mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel ->
     when (gskel ^. globSkelMutable) $ do
-      let gname = Text.unpack $ gskel ^. globSkelName
+      let gname = gskel ^. globSkelName
       llvm_alloc_global gname
       when (gskel ^. globSkelInitialized)
         . llvm_points_to True (anySetupGlobal gname)
@@ -161,7 +159,7 @@ skeleton_globals_post ::
 skeleton_globals_post mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel -> do
     when (gskel ^. globSkelMutable && gskel ^. globSkelInitialized) $ do
-      let gname = Text.unpack $ gskel ^. globSkelName
+      let gname = gskel ^. globSkelName
       llvm_points_to True (anySetupGlobal gname)
         $ anySetupGlobalInitializer gname
 
@@ -266,23 +264,21 @@ skeleton_arg_index state idx
 
 stateArgIndex ::
   SkeletonState ->
-  String ->
+  Text ->
   Maybe Int
 stateArgIndex state nm = flip findIndex (state ^. skelArgs) $ \(_, _, mnm) ->
-  mnm == Just (Text.pack nm)
+  mnm == Just nm
 
 skeleton_arg ::
   SkeletonState ->
-  String ->
+  Text ->
   LLVMCrucibleSetupM TypedTerm
 skeleton_arg state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index state idx
-  | otherwise = throwLLVMFun "skeleton_arg" $ mconcat
-    [ "No initialized argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
+  | otherwise = throwLLVMFun "skeleton_arg" $ Text.unpack $
+      "No initialized argument named \"" <> nm <>
+      "\" (enabling debug symbols when compiling might help)"
 
 skeleton_arg_index_pointer ::
   SkeletonState ->
@@ -305,14 +301,13 @@ skeleton_arg_index_pointer state idx
 
 skeleton_arg_pointer ::
   SkeletonState ->
-  String ->
+  Text ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 skeleton_arg_pointer state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index_pointer state idx
   | otherwise = do
-      throwLLVMFun "skeleton_arg_pointer" $ mconcat
-        [ "No argument named \""
-        , nm
-        , "\" (enabling debug symbols when compiling might help)"
-        ]
+      throwLLVMFun "skeleton_arg_pointer" $ Text.unpack $
+        "No argument named \"" <> nm <>
+        "\" (enabling debug symbols when compiling might help)"
+

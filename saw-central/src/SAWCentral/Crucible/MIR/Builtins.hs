@@ -311,11 +311,11 @@ mir_equal val1 val2 =
 -- 'String' as an identifier and the given 'Mir.Ty's as the types used to
 -- instantiate the type parameters. If such a 'Mir.Adt' cannot be found in the
 -- 'Mir.RustModule', this will raise an error.
-mir_find_adt :: Mir.RustModule -> String -> [Mir.Ty] -> TopLevel Mir.Adt
+mir_find_adt :: Mir.RustModule -> Text -> [Mir.Ty] -> TopLevel Mir.Adt
 mir_find_adt rm origName substs = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-  origDid <- findDefId cs (Text.pack origName)
+  origDid <- findDefId cs origName
   findAdt col origDid (Mir.Substs substs)
 
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
@@ -594,7 +594,7 @@ mir_ghost_value ghost val = MIRSetupM $
   ghost_value ghost val
 
 -- | Load a MIR JSON file and return a handle to it.
-mir_load_module :: String -> TopLevel Mir.RustModule
+mir_load_module :: FilePath -> TopLevel Mir.RustModule
 mir_load_module inputFile = do
    b <- io $ BSL.readFile inputFile
 
@@ -698,7 +698,7 @@ mir_points_to_check_lhs_validity ref loc =
 
 mir_unsafe_assume_spec ::
   Mir.RustModule ->
-  String       {- ^ Name of the function -} ->
+  Text         {- ^ Name of the function -} ->
   MIRSetupM () {- ^ Boundary specification -} ->
   TopLevel Lemma
 mir_unsafe_assume_spec rm nm setup =
@@ -714,7 +714,7 @@ mir_unsafe_assume_spec rm nm setup =
 
 mir_verify ::
   Mir.RustModule ->
-  String {- ^ method name -} ->
+  Text {- ^ method name -} ->
   [Lemma] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   MIRSetupM () ->
@@ -803,7 +803,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
 mir_enum_value ::
   X.MonadThrow m =>
   Mir.Adt ->
-  String ->
+  Text ->
   [MS.SetupValue MIR] ->
   m (MS.SetupValue MIR)
 mir_enum_value adt variantNm vs =
@@ -821,9 +821,6 @@ mir_enum_value adt variantNm vs =
     Mir.Adt adtNm Mir.Union _ _ _ _ _ ->
       X.throwM $ MIREnumValueNonEnum adtNm "union"
   where
-    variantNmText :: Text
-    variantNmText = Text.pack variantNm
-
     -- Check if the user-supplied String argument matches the name of the given
     -- variant's DefId. For instance, the variant DefId might be named
     -- @core::option[0]::Option[0]::Some[0]@, but the user will simply write
@@ -831,7 +828,7 @@ mir_enum_value adt variantNm vs =
     -- if the two are the same.
     variantDefIdMatches :: Mir.Variant -> Bool
     variantDefIdMatches variant =
-      getEnumVariantShortName variant == variantNmText
+      getEnumVariantShortName variant == variantNm
 
 -----
 -- MIR slices
@@ -1423,14 +1420,14 @@ findAdt col origName substs =
 -- 'String'). If none can be found or if there are multiple functions
 -- corresponding to that name (see the Haddocks for 'findDefId'), then this will
 -- fail.
-findFn :: Mir.RustModule -> String -> TopLevel Mir.Fn
+findFn :: Mir.RustModule -> Text -> TopLevel Mir.Fn
 findFn rm nm = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-  did <- findDefId cs (Text.pack nm)
+  did <- findDefId cs nm
   case Map.lookup did (col ^. Mir.functions) of
       Just x -> return x
-      Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
+      Nothing -> fail $ Text.unpack $ "Couldn't find MIR function named: " <> nm
 
 -- | Given a full enum variant identifier (e.g.,
 -- @core::option[0]::Option[0]::Some[0]@, retrieve the part of the identifier
@@ -1669,7 +1666,7 @@ data MIRSetupError
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
-  | MIREnumValueVariantNotFound Mir.DefId String
+  | MIREnumValueVariantNotFound Mir.DefId Text
   | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
 
 instance X.Exception MIRSetupError where
@@ -1710,7 +1707,7 @@ instance Show MIRSetupError where
         ]
       MIREnumValueVariantNotFound adtNm variantNm ->
         unlines
-        [ "mir_enum_value: Could not find a variant named `" ++ variantNm ++ "`"
+        [ "mir_enum_value: Could not find a variant named `" ++ Text.unpack variantNm ++ "`"
         , "in the enum " ++ show adtNm
         ]
       MIREnumValueNonEnum adtNm what ->

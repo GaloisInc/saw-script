@@ -16,6 +16,7 @@ module SAWCentral.VerificationSummary
   ) where
 
 import Control.Lens ((^.))
+import qualified Data.Text as Text
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.String
@@ -181,7 +182,7 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
       prettyLLVMSpecs ss =
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
-        vsep [ item (fromString (s ^. CMS.psSpec.CMSLLVM.csName))
+        vsep [ item (fromString $ Text.unpack (s ^. CMS.psSpec.CMSLLVM.csName))
              -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]

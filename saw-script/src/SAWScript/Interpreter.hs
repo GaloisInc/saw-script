@@ -55,6 +55,8 @@ import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
+import Data.Parameterized.Some
+
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, pShow, pShowText)
 
 import qualified SAWCentral.AST as SS
@@ -83,6 +85,7 @@ import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys
+import SAWCentral.Yosys.State (YosysSequential)
 import SAWCore.Conversion
 import SAWCore.Module (Def(..), emptyModule, moduleDefs)
 import SAWCore.Name (mkModuleName)
@@ -101,6 +104,7 @@ import qualified CryptolSAWCore.Prelude as CryptolSAW
 import qualified Lang.Crucible.JVM as CJ
 import           Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
+import qualified Mir.Generator as Mir (RustModule)
 import qualified SAWCentral.Crucible.Common as CC
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
 import qualified SAWCentral.Crucible.JVM.BuiltinsJVM as CJ
@@ -109,6 +113,7 @@ import           SAWCentral.Crucible.JVM.Builtins
 import           SAWCentral.Crucible.MIR.Builtins
 import           SAWCentral.Crucible.LLVM.X86
 import           SAWCentral.Crucible.LLVM.Boilerplate
+import           SAWCentral.Crucible.LLVM.Skeleton (ModuleSkeleton)
 import           SAWCentral.Crucible.LLVM.Skeleton.Builtins
 import           SAWCentral.Crucible.LLVM.FFI
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CIR
@@ -824,10 +829,11 @@ disable_single_override_special_case = do
   putTopLevelRW rw { rwSingleOverrideSpecialCase = False }
 
 
-enable_crucible_profiling :: FilePath -> TopLevel ()
+enable_crucible_profiling :: Text -> TopLevel ()
 enable_crucible_profiling f = do
+  let f' :: FilePath = Text.unpack f
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwProfilingFile = Just f }
+  putTopLevelRW rw { rwProfilingFile = Just f' }
 
 disable_crucible_profiling :: TopLevel ()
 disable_crucible_profiling = do
@@ -864,8 +870,9 @@ disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
-set_solver_cache_path :: FilePath -> TopLevel ()
-set_solver_cache_path path = do
+set_solver_cache_path :: Text -> TopLevel ()
+set_solver_cache_path pathtxt = do
+  let path :: FilePath = Text.unpack pathtxt
   rw <- getTopLevelRW
   case rwSolverCache rw of
     Just _ -> onSolverCache (setSolverCachePath path)
@@ -922,7 +929,7 @@ disable_what4_eval = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4Eval = False }
 
-add_x86_preserved_reg :: String -> TopLevel ()
+add_x86_preserved_reg :: Text -> TopLevel ()
 add_x86_preserved_reg r = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPreservedRegs = r:rwPreservedRegs rw }
@@ -930,7 +937,7 @@ add_x86_preserved_reg r = do
 default_x86_preserved_reg :: TopLevel ()
 default_x86_preserved_reg = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPreservedRegs = [] }
+  putTopLevelRW rw { rwPreservedRegs = mempty }
 
 set_x86_stack_base_align :: Integer -> TopLevel ()
 set_x86_stack_base_align a = do
@@ -977,9 +984,10 @@ set_crucible_timeout t = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleTimeout = t }
 
-include_value :: FilePath -> TopLevel ()
+include_value :: Text -> TopLevel ()
 include_value file = do
-  interpretFile file False
+  let file' :: FilePath = Text.unpack file
+  interpretFile file' False
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
@@ -1058,6 +1066,257 @@ print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   nenv <- io . scGetNamingEnv =<< getSharedContext
   printOutLnTop Info (showsPrecValue opts nenv 0 v "")
+
+dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
+dump_file_AST _bic opts filetxt = do
+  let file = Text.unpack filetxt
+  (SAWScript.Import.loadFile opts >=> mapM_ print) file
+
+parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> IO ()
+parser_printer_roundtrip _bic opts filetxt = do
+  let file = Text.unpack filetxt
+  (SAWScript.Import.loadFile opts >=> PP.putDoc . SS.prettyWholeModule) file
+
+exec :: Text -> [Text] -> Text -> IO Text
+exec name args input = do
+  let name' = Text.unpack name
+      args' = map Text.unpack args
+      input' = Text.unpack input
+  output <- readProcess name' args' input'
+  return $ Text.pack output
+
+------------------------------------------------------------
+-- Filename wrappers
+
+-- The interpreter deals only in Text, and FilePath is actually String.
+-- Rather than push Text through the various backend places (which gets
+-- messy) we'll unpack Text to FilePath up front. Or at least until the
+-- stdlib comes up with a Text-based interface for filenames.
+
+-- | Wrapper for writeAIGviaVerilog because the interpreter deals only in
+--   Text and FilePath is actually String.
+doWriteAIGviaVerilog :: Text -> Term -> TopLevel ()
+doWriteAIGviaVerilog filetext e =
+  let file :: FilePath = Text.unpack filetext in
+  writeAIGviaVerilog file e
+
+do_offline_aig :: Text -> ProofScript ()
+do_offline_aig file =
+  offline_aig (Text.unpack file)
+
+do_offline_aig_external :: Text -> ProofScript ()
+do_offline_aig_external file =
+  offline_aig_external (Text.unpack file)
+
+do_write_cnf :: Text -> TypedTerm -> TopLevel ()
+do_write_cnf f tt =
+  write_cnf (Text.unpack f) tt
+
+do_write_cnf_external :: Text -> TypedTerm -> TopLevel ()
+do_write_cnf_external f tt =
+  write_cnf_external (Text.unpack f) tt
+
+do_write_smtlib2 :: Text -> TypedTerm -> TopLevel ()
+do_write_smtlib2 f tt =
+  write_smtlib2 (Text.unpack f) tt
+
+do_write_smtlib2_w4 :: Text -> TypedTerm -> TopLevel ()
+do_write_smtlib2_w4 f tt =
+  write_smtlib2_w4 (Text.unpack f) tt
+
+do_write_core :: Text -> Term -> TopLevel ()
+do_write_core f t =
+  writeCore (Text.unpack f) t
+
+do_write_verilog :: SharedContext -> Text -> Term -> IO ()
+do_write_verilog sc f t =
+  writeVerilog sc (Text.unpack f) t
+
+do_write_coq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
+do_write_coq_term name notations skips path t =
+  writeCoqTerm name notations skips (Text.unpack path) t
+
+do_write_coq_cryptol_module :: Bool -> Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_coq_cryptol_module monadic infile outfile notations skips =
+  writeCoqCryptolModule monadic (Text.unpack infile) (Text.unpack outfile) notations skips
+
+do_write_coq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_coq_sawcore_prelude outfile notations skips =
+  writeCoqSAWCorePrelude (Text.unpack outfile) notations skips
+
+do_write_coq_cryptol_primitives_for_sawcore :: Text -> Text -> Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_coq_cryptol_primitives_for_sawcore cryfile specfile crymfile notations skips =
+  let cryfile' = Text.unpack cryfile
+      specfile' = Text.unpack specfile
+      crymfile' = Text.unpack crymfile
+  in
+  writeCoqCryptolPrimitivesForSAWCore cryfile' specfile' crymfile' notations skips
+
+do_offline_coq :: Text -> ProofScript ()
+do_offline_coq f =
+  offline_coq (Text.unpack f)
+
+do_auto_match :: Text -> Text -> TopLevel ()
+do_auto_match f1 f2 =
+  autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
+
+do_write_goal :: Text -> ProofScript ()
+do_write_goal f =
+  write_goal (Text.unpack f)
+
+do_offline_w4_unint_bitwuzla :: [Text] -> Text -> ProofScript ()
+do_offline_w4_unint_bitwuzla unints path =
+  offline_w4_unint_bitwuzla unints (Text.unpack path)
+
+do_offline_w4_unint_z3 :: [Text] -> Text -> ProofScript ()
+do_offline_w4_unint_z3 unints path =
+  offline_w4_unint_z3 unints (Text.unpack path)
+
+do_offline_w4_unint_cvc4 :: [Text] -> Text -> ProofScript ()
+do_offline_w4_unint_cvc4 unints path =
+  offline_w4_unint_cvc4 unints (Text.unpack path)
+
+do_offline_w4_unint_cvc5 :: [Text] -> Text -> ProofScript ()
+do_offline_w4_unint_cvc5 unints path =
+  offline_w4_unint_cvc5 unints (Text.unpack path)
+
+do_offline_w4_unint_yices :: [Text] -> Text -> ProofScript ()
+do_offline_w4_unint_yices unints path =
+  offline_w4_unint_yices unints (Text.unpack path)
+
+do_cryptol_load :: (FilePath -> IO BS.ByteString) -> Text -> TopLevel CryptolModule
+do_cryptol_load loader path =
+  cryptol_load loader (Text.unpack path)
+
+do_offline_cnf :: Text -> ProofScript ()
+do_offline_cnf path =
+  offline_cnf (Text.unpack path)
+
+do_offline_cnf_external :: Text -> ProofScript ()
+do_offline_cnf_external path =
+  offline_cnf_external (Text.unpack path)
+
+do_offline_extcore :: Text -> ProofScript ()
+do_offline_extcore path =
+  offline_extcore (Text.unpack path)
+
+do_offline_smtlib2 :: Text -> ProofScript ()
+do_offline_smtlib2 path =
+  offline_smtlib2 (Text.unpack path)
+
+do_w4_offline_smtlib2 :: Text -> ProofScript ()
+do_w4_offline_smtlib2 path =
+  w4_offline_smtlib2 (Text.unpack path)
+
+do_offline_unint_smtlib2 :: [Text] -> Text -> ProofScript ()
+do_offline_unint_smtlib2 unints path =
+  offline_unint_smtlib2 unints (Text.unpack path)
+
+do_offline_verilog :: Text -> ProofScript ()
+do_offline_verilog path =
+  offline_verilog (Text.unpack path)
+
+do_cryptol_add_path :: Text -> TopLevel ()
+do_cryptol_add_path path =
+  cryptol_add_path (Text.unpack path)
+
+do_llvm_load_module :: Text -> TopLevel (Some CIR.LLVMModule)
+do_llvm_load_module path =
+  llvm_load_module (Text.unpack path)
+
+do_llvm_boilerplate :: Text -> ModuleSkeleton -> Bool -> TopLevel ()
+do_llvm_boilerplate path mskel builtins =
+  llvm_boilerplate (Text.unpack path) mskel builtins
+
+do_llvm_verify_x86 ::
+  Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
+    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+do_llvm_verify_x86 llvm path nm globsyms checkSat spec ps =
+  llvm_verify_x86 llvm (Text.unpack path) nm globsyms checkSat spec ps
+
+do_llvm_verify_fixpoint_x86 ::
+  Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
+    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+do_llvm_verify_fixpoint_x86 llvm path nm globsyms checkSat tt spec ps =
+  llvm_verify_fixpoint_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
+
+do_llvm_verify_fixpoint_chc_x86 ::
+  Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
+  LLVMCrucibleSetupM () -> ProofScript ()  -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+do_llvm_verify_fixpoint_chc_x86 llvm path nm globsyms checkSat tt spec ps =
+  llvm_verify_fixpoint_chc_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
+
+do_llvm_verify_x86_with_invariant ::
+  Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
+  (Text, Integer, TypedTerm)  ->
+  LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+do_llvm_verify_x86_with_invariant llvm path nm globsyms checkSat info spec ps =
+  llvm_verify_x86_with_invariant llvm (Text.unpack path) nm globsyms checkSat info spec ps
+
+do_mir_load_module :: Text -> TopLevel Mir.RustModule
+do_mir_load_module file =
+  mir_load_module (Text.unpack file)
+
+do_yosys_import :: Text -> TopLevel TypedTerm
+do_yosys_import path =
+  yosys_import (Text.unpack path)
+
+do_yosys_import_sequential :: Text -> Text -> TopLevel YosysSequential
+do_yosys_import_sequential nm path =
+  yosys_import_sequential nm (Text.unpack path)
+
+do_yosys_verify_sequential_sally :: YosysSequential -> Text -> TypedTerm -> [Text] -> TopLevel ()
+do_yosys_verify_sequential_sally s path q fixed =
+  yosys_verify_sequential_sally s (Text.unpack path) q fixed
+
+-- XXX why are these being passed bic and opts if they don't use them?
+-- (they were that way in HeapsterBuiltins, I took the opportunity to
+-- drop the extra args there; and note that a bunch of other heapster
+-- builtins are also using bicVal for apparently no reason)
+
+do_heapster_init_env :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
+do_heapster_init_env _bic _opts mod_str llvm_filename =
+  heapster_init_env mod_str (Text.unpack llvm_filename)
+
+do_heapster_init_env_debug :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
+do_heapster_init_env_debug _bic _opts mod_str llvm_filename =
+  heapster_init_env_debug mod_str (Text.unpack llvm_filename)
+
+do_heapster_init_env_from_file :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
+do_heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
+  heapster_init_env_from_file (Text.unpack mod_filename) (Text.unpack llvm_filename)
+
+do_heapster_init_env_from_file_debug :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
+do_heapster_init_env_from_file_debug _bic _opts mod_filename llvm_filename =
+  heapster_init_env_from_file_debug (Text.unpack mod_filename) (Text.unpack llvm_filename)
+
+do_heapster_init_env_for_files :: BuiltinContext -> Options -> Text -> [Text] -> TopLevel HeapsterEnv
+do_heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files (Text.unpack mod_filename) (map Text.unpack llvm_filenames)
+
+do_heapster_init_env_for_files_debug :: BuiltinContext -> Options -> Text -> [Text] -> TopLevel HeapsterEnv
+do_heapster_init_env_for_files_debug _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files_debug (Text.unpack mod_filename) (map Text.unpack llvm_filenames)
+
+do_heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv -> Text -> TopLevel ()
+do_heapster_export_coq _bic _opts henv filename =
+  heapster_export_coq henv (Text.unpack filename)
+
+do_heapster_dump_ide_info :: BuiltinContext -> Options -> HeapsterEnv -> Text -> TopLevel ()
+do_heapster_dump_ide_info _bic _opts henv filename =
+  heapster_dump_ide_info henv (Text.unpack filename)
+
+do_load_sawcore_from_file :: BuiltinContext -> Options -> Text -> TopLevel ()
+do_load_sawcore_from_file _ _ mod_filename =
+  load_sawcore_from_file (Text.unpack mod_filename)
+
+do_summarize_verification_json :: Text -> TopLevel ()
+do_summarize_verification_json fpath =
+  summarize_verification_json (Text.unpack fpath)
+
+
+------------------------------------------------------------
+-- Primitive tables
 
 -- | Read a type schema. This is used to digest the type signatures
 -- for builtins, and the expansions for builtin typedefs.
@@ -1229,12 +1488,12 @@ primitives = Map.fromList
     [ "Compute the length of a list." ]
 
   , prim "str_concat"          "String -> String -> String"
-    (pureVal ((++) :: String -> String -> String))
+    (pureVal ((<>) :: Text -> Text -> Text))
     Current
     [ "Concatenate two strings to yield a third." ]
 
   , prim "str_concats"          "[String] -> String"
-    (pureVal (concat :: [String] -> String))
+    (pureVal Text.concat)
     Current
     [ "Concatenate a list of strings together to yield a string." ]
 
@@ -1594,14 +1853,12 @@ primitives = Map.fromList
     [ "Pretty-print the given term in SAWCore syntax up to a given depth." ]
 
   , prim "dump_file_AST"       "String -> TopLevel ()"
-    (bicVal $ const $ \opts -> SAWScript.Import.loadFile opts >=> mapM_ print)
+    (bicVal dump_file_AST)
     Current
     [ "Dump a pretty representation of the SAWScript AST for a file." ]
 
   , prim "parser_printer_roundtrip"       "String -> TopLevel ()"
-    (bicVal $ const $
-      \opts -> SAWScript.Import.loadFile opts >=>
-               PP.putDoc . SS.prettyWholeModule)
+    (bicVal parser_printer_roundtrip)
     Current
     [ "Parses the file as SAWScript and renders the resultant AST back to SAWScript concrete syntax." ]
 
@@ -1852,7 +2109,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_aig_external"  "String -> Term -> TopLevel ()"
-    (pureVal writeAIGviaVerilog)
+    (pureVal doWriteAIGviaVerilog)
     Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
@@ -1890,39 +2147,39 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (pureVal write_cnf)
+    (pureVal do_write_cnf)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
-    (pureVal write_cnf_external)
+    (pureVal do_write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (pureVal write_smtlib2)
+    (pureVal do_write_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (pureVal write_smtlib2_w4)
+    (pureVal do_write_smtlib2_w4)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format,"
     , "using the What4 backend instead of the SBV backend."
     ]
 
   , prim "write_core"          "String -> Term -> TopLevel ()"
-    (pureVal writeCore)
+    (pureVal do_write_core)
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
   , prim "write_verilog"       "String -> Term -> TopLevel ()"
-    (scVal writeVerilog)
+    (scVal do_write_verilog)
     Experimental
     [ "Write out a representation of a term in Verilog format." ]
 
   , prim "write_coq_term" "String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()"
-    (pureVal writeCoqTerm)
+    (pureVal do_write_coq_term)
     Experimental
     [ "Write out a representation of a term in Gallina syntax for Coq."
     , "The first argument is the name to use in a Definition."
@@ -1936,7 +2193,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (writeCoqCryptolModule False))
+    (pureVal (do_write_coq_cryptol_module False))
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq."
@@ -1950,7 +2207,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (writeCoqCryptolModule True))
+    (pureVal (do_write_coq_cryptol_module True))
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq, using the monadified version of the given module."
@@ -1964,7 +2221,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal writeCoqSAWCorePrelude)
+    (pureVal do_write_coq_sawcore_prelude)
     Experimental
     [ "Write out a representation of the SAW Core prelude in Gallina syntax for"
     , "Coq."
@@ -1978,7 +2235,7 @@ primitives = Map.fromList
 
   , prim "write_coq_cryptol_primitives_for_sawcore"
     "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal writeCoqCryptolPrimitivesForSAWCore)
+    (pureVal do_write_coq_cryptol_primitives_for_sawcore)
     Experimental
     [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
     , "CryptolM.sawcore in Gallina syntax for Coq."
@@ -1992,14 +2249,14 @@ primitives = Map.fromList
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
-    (pureVal offline_coq)
+    (pureVal do_offline_coq)
     Experimental
     [ "Write out a representation of the current goal in Gallina syntax"
     , "(for Coq). The argument is a prefix to use for file names."
     ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
-    (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
+    (pureVal do_auto_match)
     Current
     [ "Interactively decides how to align two modules of potentially heterogeneous"
     , "language and prints the result."
@@ -2356,7 +2613,7 @@ primitives = Map.fromList
     , "`set_memoization_incremental` and `set_memoization_hash_incremental`."
     ]
   , prim "write_goal" "String -> ProofScript ()"
-    (pureVal write_goal)
+    (pureVal do_write_goal)
     Current
     [ "Write the current goal that a proof script is attempting to prove"
     , "into the named file."
@@ -2578,53 +2835,53 @@ primitives = Map.fromList
     ]
 
   , prim "offline_aig"         "String -> ProofScript ()"
-    (pureVal offline_aig)
+    (pureVal do_offline_aig)
     Current
     [ "Write the current goal to the given file in AIGER format." ]
 
   , prim "offline_aig_external" "String -> ProofScript ()"
-    (pureVal offline_aig_external)
+    (pureVal do_offline_aig_external)
     Current
     [ "Write the current goal to the given file in AIGER format."
     , "Uses ABC and an intermediate Verilog file."
     ]
 
   , prim "offline_cnf"         "String -> ProofScript ()"
-    (pureVal offline_cnf)
+    (pureVal do_offline_cnf)
     Current
     [ "Write the current goal to the given file in CNF format." ]
 
   , prim "offline_cnf_external" "String -> ProofScript ()"
-    (pureVal offline_cnf_external)
+    (pureVal do_offline_cnf_external)
     Current
     [ "Write the current goal to the given file in CNF format."
     , "Uses ABC and an intermediate Verilog file."
     ]
 
   , prim "offline_extcore"     "String -> ProofScript ()"
-    (pureVal offline_extcore)
+    (pureVal do_offline_extcore)
     Current
     [ "Write the current goal to the given file in SAWCore format." ]
 
   , prim "offline_smtlib2"     "String -> ProofScript ()"
-    (pureVal offline_smtlib2)
+    (pureVal do_offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "w4_offline_smtlib2"  "String -> ProofScript ()"
-    (pureVal w4_offline_smtlib2)
+    (pureVal do_w4_offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript ()"
-    (pureVal offline_unint_smtlib2)
+    (pureVal do_offline_unint_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
 
   , prim "offline_verilog"        "String -> ProofScript ()"
-    (pureVal offline_verilog)
+    (pureVal do_offline_verilog)
     Experimental
     [ "Write the current goal to the given file in Verilog format." ]
 
@@ -2732,35 +2989,35 @@ primitives = Map.fromList
     ]
 
   , prim "offline_w4_unint_bitwuzla" "[String] -> String -> ProofScript ()"
-    (pureVal offline_w4_unint_bitwuzla)
+    (pureVal do_offline_w4_unint_bitwuzla)
     Current
     [ "Write the current goal to the given file using What4 (Bitwuzla backend)"
     , " in SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript ()"
-    (pureVal offline_w4_unint_z3)
+    (pureVal do_offline_w4_unint_z3)
     Current
     [ "Write the current goal to the given file using What4 (Z3 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript ()"
-    (pureVal offline_w4_unint_yices)
+    (pureVal do_offline_w4_unint_yices)
     Current
     [ "Write the current goal to the given file using What4 (Yices backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
-    (pureVal offline_w4_unint_cvc4)
+    (pureVal do_offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
-    (pureVal offline_w4_unint_cvc5)
+    (pureVal do_offline_w4_unint_cvc5)
     Current
     [ "Write the current goal to the given file using What4 (CVC5 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
@@ -2880,7 +3137,7 @@ primitives = Map.fromList
     , "Leave the given names, as defined with 'define', as uninterpreted." ]
 
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
-    (pureVal (cryptol_load BS.readFile))
+    (pureVal (do_cryptol_load BS.readFile))
     Current
     [ "Load the given file as a Cryptol module." ]
 
@@ -2899,7 +3156,7 @@ primitives = Map.fromList
     ]
 
   , prim "cryptol_add_path"    "String -> TopLevel ()"
-    (pureVal cryptol_add_path)
+    (pureVal do_cryptol_add_path)
     Current
     [ "Add a directory to the Cryptol search path. The Cryptol file loader"
     , "will look in this directory when following `import` statements in"
@@ -3051,7 +3308,7 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
-    (pureVal llvm_load_module)
+    (pureVal do_llvm_load_module)
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
@@ -3156,7 +3413,7 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_boilerplate" "String -> ModuleSkeleton -> Bool -> TopLevel ()"
-    (pureVal llvm_boilerplate)
+    (pureVal do_llvm_boilerplate)
     Experimental
     [ "Generate boilerplate for the definitions in the given LLVM module skeleton."
     , "Output is written to the path passed as the first argument."
@@ -3246,7 +3503,7 @@ primitives = Map.fromList
     ]
 
   , prim "exec"               "String -> [String] -> String -> TopLevel String"
-    (\_ _ -> toValue readProcess)
+    (\_ _ -> toValue exec)
     Current
     [ "Execute an external process with the given executable"
     , "name, arguments, and standard input. Returns standard"
@@ -3795,7 +4052,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
-    (pureVal llvm_verify_x86)
+    (pureVal do_llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
     , "LLVM verification. The first argument specifies the LLVM module"
@@ -3809,13 +4066,13 @@ primitives = Map.fromList
     ]
   , prim "crucible_llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
-    (pureVal llvm_verify_x86)
+    (pureVal do_llvm_verify_x86)
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
 
   , prim "llvm_verify_fixpoint_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
-    (pureVal llvm_verify_fixpoint_x86)
+    (pureVal do_llvm_verify_fixpoint_x86)
     Experimental
     [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
     , "involving simple loops with the help of a user-provided term that describes how"
@@ -3824,7 +4081,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify_fixpoint_chc_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
-    (pureVal llvm_verify_fixpoint_chc_x86)
+    (pureVal do_llvm_verify_fixpoint_chc_x86)
     Experimental
     [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
     , "involving simple loops with the help of a user-provided term that describes how"
@@ -3837,7 +4094,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify_x86_with_invariant"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
-    (pureVal llvm_verify_x86_with_invariant)
+    (pureVal do_llvm_verify_x86_with_invariant)
     Experimental
     [ "An experimental extension of 'llvm_verify_x86'. This extension can prove some properties"
     , "involving simple loops with the help of a user-provided loop invariant that describes"
@@ -4527,7 +4784,7 @@ primitives = Map.fromList
     ]
 
   , prim "mir_load_module" "String -> TopLevel MIRModule"
-    (pureVal mir_load_module)
+    (pureVal do_mir_load_module)
     Experimental
     [ "Load a MIR JSON file and return a handle to it." ]
 
@@ -4630,7 +4887,7 @@ primitives = Map.fromList
 
   , prim "mir_static"
     "String -> MIRValue"
-    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue MIR))
+    (pureVal (CMS.SetupGlobal () :: Text -> CMS.SetupValue MIR))
     Experimental
     [ "Return a MIRValue representing a reference to the named static."
     , "The String should be the name of a static value."
@@ -4638,7 +4895,7 @@ primitives = Map.fromList
 
   , prim "mir_static_initializer"
     "String -> MIRValue"
-    (pureVal (CMS.SetupGlobalInitializer () :: String -> CMS.SetupValue MIR))
+    (pureVal (CMS.SetupGlobalInitializer () :: Text -> CMS.SetupValue MIR))
     Experimental
     [ "Return a MIRValue representing the value of the initializer of a named"
     , "static. The String should be the name of a static value."
@@ -4819,7 +5076,7 @@ primitives = Map.fromList
     -- Yosys commands
 
   , prim "yosys_import"  "String -> TopLevel Term"
-    (pureVal yosys_import)
+    (pureVal do_yosys_import)
     Experimental
     [ "Produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command."
     , "The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys."
@@ -4840,7 +5097,7 @@ primitives = Map.fromList
     ]
 
   , prim "yosys_import_sequential"  "String -> String -> TopLevel YosysSequential"
-    (pureVal yosys_import_sequential)
+    (pureVal do_yosys_import_sequential)
     Experimental
     [ "Imports a particular sequential HDL module."
     , "The first parameter is the module name, the second is the path to the Yosys JSON file."
@@ -4872,7 +5129,7 @@ primitives = Map.fromList
     ]
 
   , prim "yosys_verify_sequential_offline_sally"  "YosysSequential -> String -> Term -> [String] -> TopLevel ()"
-    (pureVal yosys_verify_sequential_sally)
+    (pureVal do_yosys_verify_sequential_sally)
     Experimental
     [ "Export a query over the given sequential module to an input file for the Sally model checker."
     , "The first parameter is the sequential module."
@@ -4953,7 +5210,7 @@ primitives = Map.fromList
 
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env)
+    (bicVal do_heapster_init_env)
     Experimental
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file."
@@ -4961,7 +5218,7 @@ primitives = Map.fromList
 
   , prim "heapster_init_env_debug"
     "String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env)
+    (bicVal do_heapster_init_env_debug)
     Experimental
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file with debug tracing turned on"
@@ -4969,7 +5226,7 @@ primitives = Map.fromList
 
   , prim "heapster_init_env_from_file"
     "String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env_from_file)
+    (bicVal do_heapster_init_env_from_file)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file."
@@ -4977,7 +5234,7 @@ primitives = Map.fromList
 
   , prim "heapster_init_env_from_file_debug"
     "String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env_from_file_debug)
+    (bicVal do_heapster_init_env_from_file_debug)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file, with debug"
@@ -4986,14 +5243,14 @@ primitives = Map.fromList
 
   , prim "load_sawcore_from_file"
     "String -> TopLevel ()"
-    (bicVal load_sawcore_from_file)
+    (bicVal do_load_sawcore_from_file)
     Experimental
     [ "Load a SAW core module from a file"
     ]
 
   , prim "heapster_init_env_for_files"
     "String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env_for_files)
+    (bicVal do_heapster_init_env_for_files)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file."
@@ -5001,7 +5258,7 @@ primitives = Map.fromList
 
   , prim "heapster_init_env_for_files_debug"
     "String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal heapster_init_env_for_files_debug)
+    (bicVal do_heapster_init_env_for_files_debug)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file, with debug"
@@ -5278,7 +5535,7 @@ primitives = Map.fromList
 
   , prim "heapster_export_coq"
     "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_export_coq)
+    (bicVal do_heapster_export_coq)
     Experimental
     [ "Export a Heapster environment to a Coq file" ]
 
@@ -5312,7 +5569,7 @@ primitives = Map.fromList
 
   , prim "heapster_dump_ide_info"
     "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_dump_ide_info)
+    (bicVal do_heapster_dump_ide_info)
     Experimental
     [ "Dump environment info to a JSON file for IDE integration."
     ]
@@ -5354,7 +5611,7 @@ primitives = Map.fromList
     ]
 
   , prim "summarize_verification_json" "String -> TopLevel ()"
-    (pureVal summarize_verification_json)
+    (pureVal do_summarize_verification_json)
     Experimental
     [ "Print a JSON summary of all verifications performed"
     , "so far into the named file."
