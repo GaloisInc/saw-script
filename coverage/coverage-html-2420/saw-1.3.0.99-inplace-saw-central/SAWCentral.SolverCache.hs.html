@@ -336,14 +336,14 @@ span.spaces    { background: white }
 <span class="lineno">  317 </span>-- Solver Cache Values ---------------------------------------------------------
 <span class="lineno">  318 </span>
 <span class="lineno">  319 </span>-- | The value type for 'SolverCache': solver version information, the timestamp
-<span class="lineno">  320 </span>-- of when the entry was last used, a 'String' representing the solver used, and
+<span class="lineno">  320 </span>-- of when the entry was last used, a 'Text' representing the solver used, and
 <span class="lineno">  321 </span>-- an optional list of counterexamples, represented as pairs of indexes into the
 <span class="lineno">  322 </span>-- list of 'satVariables' of an associated 'SATQuery'
 <span class="lineno">  323 </span>data SolverCacheValue =
 <span class="lineno">  324 </span>  SolverCacheValue
 <span class="lineno">  325 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">solverCacheValueVersions</span></span></span>   :: SolverBackendVersions
 <span class="lineno">  326 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverCacheValueOptions</span></span></span>    :: [SolverBackendOption]
-<span class="lineno">  327 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverCacheValueSolverName</span></span></span> :: String
+<span class="lineno">  327 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverCacheValueSolverName</span></span></span> :: Text
 <span class="lineno">  328 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverCacheValueCEXs</span></span></span>       :: Maybe [(Int, FirstOrderValue)]
 <span class="lineno">  329 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverCacheValueLastUsed</span></span></span>   :: UTCTime
 <span class="lineno">  330 </span>  } deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
@@ -379,7 +379,7 @@ span.spaces    { background: white }
 <span class="lineno">  360 </span>-- | Convert the result of a solver call on the given 'SATQuery' to a
 <span class="lineno">  361 </span>-- 'SolverCacheValue'
 <span class="lineno">  362 </span>toSolverCacheValue :: SolverBackendVersions -&gt; [SolverBackendOption] -&gt;
-<span class="lineno">  363 </span>                      SATQuery -&gt; (Maybe CEX, String) -&gt;
+<span class="lineno">  363 </span>                      SATQuery -&gt; (Maybe CEX, Text) -&gt;
 <span class="lineno">  364 </span>                      IO (Maybe SolverCacheValue)
 <span class="lineno">  365 </span><span class="decl"><span class="istickedoff">toSolverCacheValue vs opts satq (cexs, solver_name) = do</span>
 <span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">getCurrentTime &lt;&amp;&gt; \t -&gt; case firstsMaybeM (`elemIndex` ecs) cexs of</span>
@@ -392,7 +392,7 @@ span.spaces    { background: white }
 <span class="lineno">  373 </span>
 <span class="lineno">  374 </span>-- | Convert a 'SolverCacheValue' to something which has the same form as the
 <span class="lineno">  375 </span>-- result of a solver call on the given 'SATQuery'
-<span class="lineno">  376 </span>fromSolverCacheValue :: SATQuery -&gt; SolverCacheValue -&gt; (Maybe CEX, String)
+<span class="lineno">  376 </span>fromSolverCacheValue :: SATQuery -&gt; SolverCacheValue -&gt; (Maybe CEX, Text)
 <span class="lineno">  377 </span><span class="decl"><span class="istickedoff">fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =</span>
 <span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">(firstsMaybe (ecs !!) cexs, solver_name)</span>
 <span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">where ecs = M.keys $ satVariables satq</span>

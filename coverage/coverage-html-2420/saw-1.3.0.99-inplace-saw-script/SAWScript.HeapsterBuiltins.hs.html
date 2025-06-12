@@ -966,7 +966,7 @@ span.spaces    { background: white }
 <span class="lineno">  947 </span><span class="spaces">  </span><span class="nottickedoff">-- Divide into &quot;trait::method&quot; and &quot;&lt;type&gt;&quot; at the left angle bracket, if any</span>
 <span class="lineno">  948 </span><span class="spaces">  </span><span class="nottickedoff">let (traitMethod, instType) = T.span (/= '&lt;') str</span>
 <span class="lineno">  949 </span><span class="spaces">  </span><span class="nottickedoff">-- Check for the &lt;&gt; on the type</span>
-<span class="lineno">  950 </span><span class="spaces">  </span><span class="nottickedoff">if instType == &quot;&quot; || T.head instType /= '&lt;' || T.last instType /= '&gt;' then</span>
+<span class="lineno">  950 </span><span class="spaces">  </span><span class="nottickedoff">if not (T.isPrefixOf &quot;&lt;&quot; instType &amp;&amp; T.isSuffixOf &quot;&gt;&quot; instType) then</span>
 <span class="lineno">  951 </span><span class="spaces">    </span><span class="nottickedoff">fail $ T.unpack $ &quot;Ill-formed query string: &quot; &lt;&gt; str</span>
 <span class="lineno">  952 </span><span class="spaces">  </span><span class="nottickedoff">else do</span>
 <span class="lineno">  953 </span><span class="spaces">    </span><span class="nottickedoff">-- pop off the brackets</span>
@@ -975,7 +975,7 @@ span.spaces    { background: white }
 <span class="lineno">  956 </span><span class="spaces">    </span><span class="nottickedoff">-- and replace each &quot;::&quot; with &quot;..&quot;</span>
 <span class="lineno">  957 </span><span class="spaces">    </span><span class="nottickedoff">let (colonTrait, method) =</span>
 <span class="lineno">  958 </span><span class="spaces">          </span><span class="nottickedoff">let (revMethod, revTrait) = T.span (/= ':') (T.reverse traitMethod)</span>
-<span class="lineno">  959 </span><span class="spaces">          </span><span class="nottickedoff">in ((T.reverse . T.drop 2) revTrait, T.reverse revMethod)</span>
+<span class="lineno">  959 </span><span class="spaces">          </span><span class="nottickedoff">in (T.reverse (T.drop 2 revTrait), T.reverse revMethod)</span>
 <span class="lineno">  960 </span><span class="spaces">        </span><span class="nottickedoff">trait = T.intercalate &quot;..&quot; $ T.splitOn &quot;::&quot; colonTrait</span>
 <span class="lineno">  961 </span><span class="spaces">    </span><span class="nottickedoff">-- assemble the lower-level query string</span>
 <span class="lineno">  962 </span><span class="spaces">    </span><span class="nottickedoff">let queryStr = unbracketedType</span>
