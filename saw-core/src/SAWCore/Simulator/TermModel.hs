@@ -100,10 +100,10 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
 
-    primHandler cfg pn _msg env tp =
-      do pn'  <- traverse (readBackTValue sc cfg) pn
+    primHandler cfg ec _msg env tp =
+      do ec'  <- traverse (readBackTValue sc cfg) ec
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scFlatTermF sc (Primitive pn')
+         prim <- scTermF sc (Constant ec')
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 
@@ -182,11 +182,11 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
 
-    primHandler cfg pn _msg env tp =
+    primHandler cfg ec _msg env tp =
       do let ?recordEC = \_ec -> return ()
-         pn'  <- traverse (readBackTValue sc cfg) pn
+         ec'  <- traverse (readBackTValue sc cfg) ec
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scFlatTermF sc (Primitive pn')
+         prim <- scTermF sc (Constant ec')
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 

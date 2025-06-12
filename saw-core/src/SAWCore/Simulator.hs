@@ -32,7 +32,6 @@ module SAWCore.Simulator
 
 import Prelude hiding (mapM)
 
-import Control.Applicative ((<|>))
 import Control.Monad (foldM, liftM)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
@@ -41,7 +40,7 @@ import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -60,6 +59,7 @@ import SAWCore.Module
   , lookupVarIndexInMap
   , Ctor(..)
   , Def(..)
+  , DefQualifier(..)
   , ModuleMap
   , ResolvedName(..)
   )
@@ -159,20 +159,28 @@ evalTermF cfg lam recEval tf env =
 
     LocalVar i              -> force (fst (env !! i))
     Constant ec             -> do ec' <- traverse evalType ec
-                                  let t = case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
-                                            Just (ResolvedDef d) -> defBody d
-                                            _ -> Nothing
-                                  fromMaybe
-                                    (simNeutral cfg env (NeutralConstant ec))
-                                    (simConstant cfg tf ec' <|> (recEval <$> t))
+                                  let str = toAbsoluteName (ecName ec')
+                                  case simConstant cfg tf ec' of
+                                    Just override -> override
+                                    Nothing ->
+                                      case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
+                                        Nothing ->
+                                          panic "evalTermF" ["Constant not found: " <> str]
+                                        Just (ResolvedCtor _) ->
+                                          panic "evalTermF" ["Expected Def, found Ctor: " <> str]
+                                        Just (ResolvedDataType _) ->
+                                          panic "evalTermF" ["Expected Def, found DataType: " <> str]
+                                        Just (ResolvedDef d) ->
+                                          case defBody d of
+                                            Just t -> recEval t
+                                            Nothing ->
+                                              case defQualifier d of
+                                                NoQualifier -> simNeutral cfg env (NeutralConstant ec)
+                                                PrimQualifier -> simPrimitive cfg ec'
+                                                AxiomQualifier -> simPrimitive cfg ec'
+
     FTermF ftf              ->
       case ftf of
-        Primitive ec ->
-          do ec' <- traverse evalType ec
-             case simConstant cfg tf ec' of
-               Just m  -> m
-               Nothing -> simPrimitive cfg ec'
-
         UnitValue           -> return VUnit
 
         UnitType            -> return $ TValue VUnitType

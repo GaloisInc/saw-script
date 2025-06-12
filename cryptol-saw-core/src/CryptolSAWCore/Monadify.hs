@@ -169,8 +169,6 @@ globalDefOpenTerm = closedOpenTerm . globalDefTerm
 asTypedGlobalDef :: Recognizer Term GlobalDef
 asTypedGlobalDef t =
   case unwrapTermF t of
-    FTermF (Primitive ec) ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     Constant ec ->
       Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     FTermF (ExtCns ec) ->

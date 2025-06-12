@@ -133,7 +133,6 @@ asModuleIdentifier (EC _ nmi _) =
 asGlobalDef :: Recognizer Term Ident
 asGlobalDef t =
   case unwrapTermF t of
-    FTermF (Primitive ec) -> asModuleIdentifier ec
     Constant ec -> asModuleIdentifier ec
     _ -> Nothing
 

@@ -616,7 +616,7 @@ scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      i <- scRegisterName sc nmi
      let ec = EC i nmi def_tp
-     t <- scFlatTermF sc (Primitive ec)
+     t <- scTermF sc (Constant ec)
      scRegisterGlobal sc ident t
      scInsDefInMap sc $
                   Def { defNameInfo = nmi,
@@ -1186,7 +1186,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        Primitive ec -> return (ecType ec)
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
@@ -1471,10 +1470,7 @@ scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc Def{..} =
-  case defBody of
-    Just _ -> scTermF sc (Constant (EC defVarIndex defNameInfo defType))
-    Nothing -> scFlatTermF sc (Primitive (EC defVarIndex defNameInfo defType))
+scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType))
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.

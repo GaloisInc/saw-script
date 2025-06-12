@@ -387,7 +387,6 @@ flatTermFToExpr ::
   m Coq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    Primitive ec  -> translateConstant ec
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      ->
       -- We need to explicitly tell Coq that we want unit to be a Type, since
