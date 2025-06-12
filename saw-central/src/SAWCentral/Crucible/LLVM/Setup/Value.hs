@@ -39,6 +39,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , LLVMMethodId(..)
   , llvmMethodParent
   , llvmMethodName
+  , ppLLVMMethodId
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
   , LLVMAllocSpecInit(..)
@@ -152,6 +153,9 @@ makeLenses ''LLVMMethodId
 
 instance PPL.Pretty LLVMMethodId where
   pretty = PPL.pretty . view llvmMethodName
+
+ppLLVMMethodId :: LLVMMethodId -> Text
+ppLLVMMethodId = view llvmMethodName
 
 type instance Setup.MethodId (LLVM _) = LLVMMethodId
 

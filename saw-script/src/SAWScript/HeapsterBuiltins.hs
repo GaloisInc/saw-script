@@ -947,7 +947,7 @@ heapster_find_trait_method_symbol bic opts henv str = do
   -- Divide into "trait::method" and "<type>" at the left angle bracket, if any
   let (traitMethod, instType) = T.span (/= '<') str
   -- Check for the <> on the type
-  if instType == "" || T.head instType /= '<' || T.last instType /= '>' then
+  if not (T.isPrefixOf "<" instType && T.isSuffixOf ">" instType) then
     fail $ T.unpack $ "Ill-formed query string: " <> str
   else do
     -- pop off the brackets
@@ -956,7 +956,7 @@ heapster_find_trait_method_symbol bic opts henv str = do
     -- and replace each "::" with ".."
     let (colonTrait, method) =
           let (revMethod, revTrait) = T.span (/= ':') (T.reverse traitMethod)
-          in ((T.reverse . T.drop 2) revTrait, T.reverse revMethod)
+          in (T.reverse (T.drop 2 revTrait), T.reverse revMethod)
         trait = T.intercalate ".." $ T.splitOn "::" colonTrait
     -- assemble the lower-level query string
     let queryStr = unbracketedType

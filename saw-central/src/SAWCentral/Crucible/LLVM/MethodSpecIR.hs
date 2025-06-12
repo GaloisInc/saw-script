@@ -33,6 +33,7 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , LLVMMethodId(..)
   , llvmMethodParent
   , llvmMethodName
+  , ppLLVMMethodId
   , csName
   , csParentName
     -- * LLVMAllocSpec

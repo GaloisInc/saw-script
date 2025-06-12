@@ -731,8 +731,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
      unless (null irrelevantLemmas) $ do
          printOutLnTop Warn $ Text.unpack $
              "Irrelevant overrides included in specification refinement for " <>
-             -- XXX do we get anything useful by text -> ppdoc -> string -> text?
-             Text.pack (show $ pretty fnm)
+             ppLLVMMethodId fnm
          mapM_ (printOutLnTop Warn) $
            [ " *  " ++ show (pretty nm)
            | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
