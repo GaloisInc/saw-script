@@ -8,9 +8,12 @@ module SAWServer.VerifyCommon
   , AssumeParams(..)
   ) where
 
-import qualified Argo.Doc as Doc
 import Prelude hiding (mod)
+
+import Data.Text (Text)
 import Data.Aeson (FromJSON(..), withObject, (.:))
+
+import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression ( Expression )
 import SAWServer.SAWServer ( ServerName )
@@ -21,7 +24,7 @@ import SAWServer.ProofScript ( ProofScript )
 data VerifyParams ty =
   VerifyParams
     { verifyModule       :: ServerName
-    , verifyFunctionName :: String
+    , verifyFunctionName :: Text
     , verifyLemmas       :: [ServerName]
     , verifyCheckSat     :: Bool
     -- TODO: might want to be able to save contracts and refer to them by name?
@@ -35,13 +38,13 @@ data VerifyParams ty =
 -- | A global allocation from the x86 machine code perspective. The
 -- first argument is the symbol name of the global, and the second
 -- argument is how many bytes it should be allocated to point to.
-data X86Alloc = X86Alloc String Integer
+data X86Alloc = X86Alloc Text Integer
 
 data X86VerifyParams ty =
   X86VerifyParams
     { x86VerifyModule       :: ServerName
     , x86VerifyObjectFile   :: String
-    , x86VerifyFunctionName :: String
+    , x86VerifyFunctionName :: Text
     , x86VerifyGlobals      :: [X86Alloc]
     , x86VerifyLemmas       :: [ServerName]
     , x86VerifyCheckSat     :: Bool
@@ -128,7 +131,7 @@ instance Doc.DescribedMethod (X86VerifyParams a) OK where
 data AssumeParams ty =
   AssumeParams
     { assumeModule       :: ServerName
-    , assumeFunctionName :: String
+    , assumeFunctionName :: Text
     -- TODO: might want to be able to save contracts and refer to them by name?
     , assumeContract     :: Contract ty Expression -- ServerName
     , assumeLemmaName    :: ServerName

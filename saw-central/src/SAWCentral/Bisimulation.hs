@@ -258,7 +258,7 @@ openConstantApp :: TypedTerm
 openConstantApp constant t = do
   sc <- getSharedContext
   -- Unfold constant
-  name <- Text.unpack <$> constantName (unwrapTermF (ttTerm t))
+  name <- constantName (unwrapTermF (ttTerm t))
   tUnfolded <- unfold_term [name] t
 
   -- Break down lambda into its component parts.

@@ -204,7 +204,8 @@ import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
-import Data.Text (Text, unpack)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Parameterized.Some
 import Data.Typeable
 import qualified Prettyprinter as PP
@@ -393,7 +394,7 @@ showsProofResult opts r =
   where
     showVal t = shows (ppFirstOrderValue opts t)
     showEqn (x, t) = showEC x . showString " = " . showVal t
-    showEC ec = showString (unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -406,7 +407,7 @@ showsSatResult opts r =
     SatUnknown  -> showString "Unknown"
   where
     showVal t = shows (ppFirstOrderValue opts t)
-    showEC ec = showString (unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
     showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -453,7 +454,7 @@ showsPrecValue opts nenv p v =
       PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
         where
           showFld (n, fv) =
-            showString (unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
+            showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
@@ -629,7 +630,7 @@ data TopLevelRW =
 
   , rwWhat4Eval :: Bool
 
-  , rwPreservedRegs :: [String]
+  , rwPreservedRegs :: [Text]
   , rwStackBaseAlign :: Integer
 
   , rwAllocSymInitCheck :: Bool
@@ -693,8 +694,8 @@ io f = (TopLevel_ (liftIO f))
     handleX86Error (X86Error path optfunc s) =
       do let pos = case optfunc of
                Nothing -> SS.FileOnlyPos path
-               Just func -> SS.FileAndFunctionPos path func
-         rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ s))
+               Just func -> SS.FileAndFunctionPos path (Text.unpack func)
+         rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ Text.unpack s))
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
@@ -850,7 +851,7 @@ extendEnv sc x ty md v rw =
          VCryptolModule m ->
            pure $ CEnv.bindCryptolModule (modname, m) ce
          VString s ->
-           do tt <- typedTermOfString sc (unpack s)
+           do tt <- typedTermOfString sc (Text.unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          VBool b ->
            do tt <- typedTermOfBool sc b

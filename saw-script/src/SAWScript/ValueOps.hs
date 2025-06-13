@@ -10,12 +10,6 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- XXX: the String and [] instances of IsValue and FromValue overlap.
--- This should be fixed by removing the String instance. (There's
--- already a Text instance.)
-{-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
-{-# LANGUAGE OverlappingInstances #-}
-
 module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     isVUnit,
@@ -82,7 +76,8 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Reader (ask, local)
 
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text)
+import qualified Data.Text as Text (unpack)
 --import Data.Map ( Map )
 import qualified Data.Map as M
 --import Data.Set ( Set )
@@ -141,7 +136,7 @@ indexValue _ _ = error "indexValue"
 lookupValue :: Value -> Text -> Value
 lookupValue (VRecord vm) name =
     case M.lookup name vm of
-      Nothing -> error $ "no such record field: " ++ unpack name
+      Nothing -> error $ "no such record field: " ++ Text.unpack name
       Just x -> x
 lookupValue _ _ = error "lookupValue"
 
@@ -610,13 +605,6 @@ instance IsValue Cryptol.Schema where
 instance FromValue Cryptol.Schema where
     fromValue (VType s) = s
     fromValue _ = error "fromValue Schema"
-
-instance IsValue String where
-    toValue n = VString (pack n)
-
-instance FromValue String where
-    fromValue (VString n) = unpack n
-    fromValue _ = error "fromValue String"
 
 instance IsValue Text where
     toValue n = VString n

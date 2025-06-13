@@ -1,6 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
 module SAWCentral.Prover.RME where
 
 import Control.Monad.IO.Class
+import Data.Text (Text)
 import qualified Data.Map as Map
 
 import qualified Data.RME as RME
@@ -17,7 +19,7 @@ import SAWCentral.Value
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::
   SATQuery {- ^ The query to be proved -} ->
-  TopLevel (Maybe CEX, String)
+  TopLevel (Maybe CEX, Text)
 proveRME satq = getSharedContext >>= \sc -> liftIO $
   RME.withBitBlastedSATQuery sc Map.empty satq $ \lit shapes ->
     case RME.sat lit of

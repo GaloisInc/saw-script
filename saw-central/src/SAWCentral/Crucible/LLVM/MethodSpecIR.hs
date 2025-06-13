@@ -33,6 +33,7 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , LLVMMethodId(..)
   , llvmMethodParent
   , llvmMethodName
+  , ppLLVMMethodId
   , csName
   , csParentName
     -- * LLVMAllocSpec
@@ -118,6 +119,8 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
 
 import           Control.Lens
 import           Data.Functor.Compose (Compose(..))
+import           Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Map as Map
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
@@ -146,10 +149,10 @@ import           CryptolSAWCore.TypedTerm
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
 
-csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) String
+csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) Text
 csName = MS.csMethod . llvmMethodName
 
-csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe String)
+csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe Text)
 csParentName = MS.csMethod . llvmMethodParent
 
 --------------------------------------------------------------------------------
@@ -275,13 +278,13 @@ initialDefCrucibleMethodSpecIR ::
   LLVMModule arch ->
   L.Define ->
   ProgramLoc ->
-  Maybe String ->
+  Maybe Text ->
   Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
 initialDefCrucibleMethodSpecIR llvmModule def loc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
-  let methId = LLVMMethodId nm parent
+  let methId = LLVMMethodId (Text.pack nm) parent
   return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialDeclCrucibleMethodSpecIR ::
@@ -289,13 +292,13 @@ initialDeclCrucibleMethodSpecIR ::
   LLVMModule arch ->
   L.Declare ->
   ProgramLoc ->
-  Maybe String ->
+  Maybe Text ->
   Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
 initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
-  let methId = LLVMMethodId nm parent
+  let methId = LLVMMethodId (Text.pack nm) parent
   return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialCrucibleSetupState ::
@@ -303,7 +306,7 @@ initialCrucibleSetupState ::
   LLVMCrucibleContext arch ->
   L.Define ->
   ProgramLoc ->
-  Maybe String ->
+  Maybe Text ->
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
   ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
@@ -314,7 +317,7 @@ initialCrucibleSetupStateDecl ::
   LLVMCrucibleContext arch ->
   L.Declare ->
   ProgramLoc ->
-  Maybe String ->
+  Maybe Text ->
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
@@ -365,19 +368,19 @@ anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 anySetupCast :: AllLLVM MS.SetupValue -> L.Type -> AllLLVM MS.SetupValue
 anySetupCast val ty = mkAllLLVM (MS.SetupCast ty (getAllLLVM val))
 
-anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
+anySetupField :: AllLLVM MS.SetupValue -> Text -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
 
-anySetupUnion :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
+anySetupUnion :: AllLLVM MS.SetupValue -> Text -> AllLLVM MS.SetupValue
 anySetupUnion val uname = mkAllLLVM (MS.SetupUnion () (getAllLLVM val) uname)
 
 anySetupNull :: AllLLVM MS.SetupValue
 anySetupNull = mkAllLLVM (MS.SetupNull ())
 
-anySetupGlobal :: String -> AllLLVM MS.SetupValue
+anySetupGlobal :: Text -> AllLLVM MS.SetupValue
 anySetupGlobal globalName = mkAllLLVM (MS.SetupGlobal () globalName)
 
-anySetupGlobalInitializer :: String -> AllLLVM MS.SetupValue
+anySetupGlobalInitializer :: Text -> AllLLVM MS.SetupValue
 anySetupGlobalInitializer globalName =
   mkAllLLVM (MS.SetupGlobalInitializer () globalName)
 

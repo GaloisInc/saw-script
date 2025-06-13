@@ -372,5 +372,5 @@ data JavaType
   | JavaFloat
   | JavaDouble
   | JavaArray Int JavaType
-  | JavaClass String
+  | JavaClass Text
   deriving (Eq, Show)

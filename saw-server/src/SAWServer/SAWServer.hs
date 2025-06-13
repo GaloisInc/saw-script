@@ -114,19 +114,19 @@ data CrucibleSetupVal ty e
     -- ^ The @'Maybe' 'ServerName'@ value represents a possible MIR
     -- ADT. This should always be 'Just' with MIR verification and
     -- 'Nothing' with LLVM or JVM verification.
-  | EnumValue ServerName String [CrucibleSetupVal ty e]
+  | EnumValue ServerName Text [CrucibleSetupVal ty e]
   | TupleValue [CrucibleSetupVal ty e]
   | SliceValue (CrucibleSetupVal ty e)
   | SliceRangeValue (CrucibleSetupVal ty e) Int Int
   | StrSliceValue (CrucibleSetupVal ty e)
   | StrSliceRangeValue (CrucibleSetupVal ty e) Int Int
   -- | RecordValue [(String, CrucibleSetupVal e)]
-  | FieldLValue (CrucibleSetupVal ty e) String
+  | FieldLValue (CrucibleSetupVal ty e) Text
   | CastLValue (CrucibleSetupVal ty e) ty
-  | UnionLValue (CrucibleSetupVal ty e) String
+  | UnionLValue (CrucibleSetupVal ty e) Text
   | ElementLValue (CrucibleSetupVal ty e) Int
-  | GlobalInitializer String
-  | GlobalLValue String
+  | GlobalInitializer Text
+  | GlobalLValue Text
   | NamedValue ServerName
   | CryptolExpr e
   | FreshExpandedValue Text ty

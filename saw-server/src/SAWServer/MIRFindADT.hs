@@ -8,7 +8,6 @@ module SAWServer.MIRFindADT
 
 import Control.Lens (view)
 import Data.Aeson (FromJSON(..), withObject, (.:))
-import qualified Data.Text as T
 import Data.Text (Text)
 
 import SAWCentral.Crucible.MIR.Builtins (mir_find_adt)
@@ -68,7 +67,7 @@ mirFindADT params = do
       mod' <- getMIRModule $ mfaModule params
       adt <- tl $ mir_find_adt
                     mod'
-                    (T.unpack $ mfaADTOrigName params)
+                    (mfaADTOrigName params)
                     (map (mirType sawenv) $ mfaTypeSubstitutions params)
       let sn = mfaADTServerName params
       setServerVal sn adt

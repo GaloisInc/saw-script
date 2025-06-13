@@ -247,9 +247,9 @@ yosys_verify_sequential_sally ::
   YosysSequential ->
   FilePath {- ^ Path to write the resulting Sally input -} ->
   SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of "fixed" inputs, and a record of circuit outputs -} ->
-  [String] {- ^ Names of circuit inputs that are fixed -} ->
+  [Text] {- ^ Names of circuit inputs that are fixed -} ->
   TopLevel ()
 yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
   sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
-  queryModelChecker sym sc s path q . Set.fromList $ Text.pack <$> fixed
+  queryModelChecker sym sc s path q $ Set.fromList fixed

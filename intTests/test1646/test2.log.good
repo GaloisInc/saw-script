@@ -1,6 +1,6 @@
  Loading file "test2.saw"
  x=a
- fromValue String
+ fromValue Text
 CallStack (from HasCallStack):
-  error, called at saw-script/src/SAWScript/ValueOps.hs:619:19 in saw-1.3.0.99-inplace-saw-script:SAWScript.ValueOps
+  error, called at saw-script/src/SAWScript/ValueOps.hs:614:19 in saw-1.3.0.99-inplace-saw-script:SAWScript.ValueOps
 FAILED

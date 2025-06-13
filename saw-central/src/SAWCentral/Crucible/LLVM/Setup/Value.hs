@@ -39,6 +39,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , LLVMMethodId(..)
   , llvmMethodParent
   , llvmMethodName
+  , ppLLVMMethodId
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
   , LLVMAllocSpecInit(..)
@@ -85,6 +86,7 @@ import           Data.Map ( Map )
 import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Sequence (Seq)
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import           Data.Void (Void)
@@ -143,14 +145,17 @@ type instance Setup.ExtType (LLVM arch) = CL.MemType
 
 data LLVMMethodId =
   LLVMMethodId
-    { _llvmMethodName   :: String
-    , _llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
+    { _llvmMethodName   :: Text
+    , _llvmMethodParent :: Maybe Text -- ^ Something to do with breakpoints...
     } deriving (Eq, Ord, Show)
 
 makeLenses ''LLVMMethodId
 
 instance PPL.Pretty LLVMMethodId where
   pretty = PPL.pretty . view llvmMethodName
+
+ppLLVMMethodId :: LLVMMethodId -> Text
+ppLLVMMethodId = view llvmMethodName
 
 type instance Setup.MethodId (LLVM _) = LLVMMethodId
 
@@ -314,7 +319,7 @@ instance PPL.Pretty (LLVMAllocGlobal arch) where
 type instance Setup.ResolvedState (LLVM arch) = LLVMResolvedState
 
 data ResolvedPathItem
-  = ResolvedField String
+  = ResolvedField Text
   | ResolvedElem Int
   | ResolvedCast L.Type
  deriving (Show, Eq, Ord)
@@ -339,7 +344,7 @@ type ResolvedPath = [ResolvedPathItem]
 data LLVMResolvedState =
   ResolvedState
     { _rsAllocs :: Map Setup.AllocIndex [ResolvedPath]
-    , _rsGlobals :: Map String [ResolvedPath]
+    , _rsGlobals :: Map Text [ResolvedPath]
     }
   deriving (Eq, Ord, Show)
 

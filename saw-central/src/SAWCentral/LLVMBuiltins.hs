@@ -23,6 +23,8 @@ module SAWCentral.LLVMBuiltins where
 import Control.Applicative hiding (many)
 #endif
 import Data.String
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Parameterized.Some
 import Control.Monad (unless)
 import Control.Monad.State (gets)
@@ -52,9 +54,9 @@ llvm_load_module file =
            printOutLnTop Warn $ show $ LLVM.ppParseWarnings warnings
          return llvm_mod
 
-llvm_type :: String -> TopLevel LLVM.Type
+llvm_type :: Text -> TopLevel LLVM.Type
 llvm_type str =
-  case LLVM.parseType str of
+  case LLVM.parseType (Text.unpack str) of
     Left e -> fail (show e)
     Right t -> return t
 
@@ -70,8 +72,8 @@ llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)
 llvm_array :: Int -> LLVM.Type -> LLVM.Type
 llvm_array n t = LLVM.Array (fromIntegral n) t
 
-llvm_alias :: String -> LLVM.Type
-llvm_alias n = LLVM.Alias (fromString n)
+llvm_alias :: Text -> LLVM.Type
+llvm_alias n = LLVM.Alias (fromString $ Text.unpack n)
 
 llvm_packed_struct_type :: [LLVM.Type] -> LLVM.Type
 llvm_packed_struct_type = LLVM.PackedStruct
