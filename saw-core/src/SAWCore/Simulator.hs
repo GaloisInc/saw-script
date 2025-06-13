@@ -54,6 +54,8 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( allModuleActualDefs
   , allModulePrimitives
+  , ctorNumParams
+  , ctorNumArgs
   , defNameInfo
   , findCtorInMap
   , lookupVarIndexInMap
@@ -166,8 +168,8 @@ evalTermF cfg lam recEval tf env =
                                       case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
                                         Nothing ->
                                           panic "evalTermF" ["Constant not found: " <> str]
-                                        Just (ResolvedCtor _) ->
-                                          panic "evalTermF" ["Expected Def, found Ctor: " <> str]
+                                        Just (ResolvedCtor ctor) ->
+                                          pure $ ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
                                         Just (ResolvedDataType _) ->
                                           panic "evalTermF" ["Expected Def, found DataType: " <> str]
                                         Just (ResolvedDef d) ->
@@ -286,6 +288,14 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
+    ctorValue :: ExtCns (TValue l) -> Int -> Int -> Value l
+    ctorValue ec = go [] []
+      where
+        go :: [Thunk l] -> [Thunk l] -> Int -> Int -> Value l
+        go params args i j
+          | i > 0 = VFun "_" (\x -> pure $ go (x : params) args (i-1) j)
+          | j > 0 = VFun "_" (\x -> pure $ go params (x : args) i (j-1))
+          | otherwise = VCtorApp ec (reverse params) (reverse args)
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
