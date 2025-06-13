@@ -49,8 +49,6 @@ module SAWScript.ValueOps (
     withLocalEnvProof,
     -- used in SAWScript.Interpreter
     withOptions,
-    -- used in SAWScript.Interpreter
-    withStackTraceFrame,
  ) where
 
 import Prelude hiding (fail)
@@ -191,70 +189,3 @@ withLocalEnvProof env (ProofScript m) = do
 withOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 withOptions f (TopLevel_ m) =
   TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
-
--- | Implement stack tracing by adding error handlers that rethrow
--- user errors, prepended with the given string.
-withStackTraceFrame :: String -> Value -> Value
-withStackTraceFrame str val =
-  let doTopLevel :: TopLevel a -> TopLevel a
-      doTopLevel action = do
-        trace <- gets rwStackTrace
-        modify (\rw -> rw { rwStackTrace = str : trace })
-        result <- action
-        modify (\rw -> rw { rwStackTrace = trace })
-        return result
-      doProofScript :: ProofScript a -> ProofScript a
-      doProofScript (ProofScript m) =
-        let m' =
-              underExceptT (underStateT doTopLevel) m
-        in
-        ProofScript m'
-      doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
-      doLLVM (LLVMCrucibleSetupM m) =
-        LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
-      doJVM :: JVMSetupM a -> JVMSetupM a
-      doJVM (JVMSetupM m) =
-        JVMSetupM (underReaderT (underStateT doTopLevel) m)
-      doMIR :: MIRSetupM a -> MIRSetupM a
-      doMIR (MIRSetupM m) =
-        MIRSetupM (underReaderT (underStateT doTopLevel) m)
-  in
-  case val of
-    VLambda f ->
-      let wrap x =
-            withStackTraceFrame str `fmap` doTopLevel (f x)
-      in
-      VLambda wrap
-    VTopLevel m ->
-      let m' =
-            withStackTraceFrame str `fmap` doTopLevel m
-      in
-      VTopLevel m'
-    VProofScript m ->
-      let m' =
-            withStackTraceFrame str `fmap` doProofScript m
-      in
-      VProofScript m'
-    VBind pos v1 v2 ->
-      let v1' = withStackTraceFrame str v1
-          v2' = withStackTraceFrame str v2
-      in
-      VBind pos v1' v2'
-    VLLVMCrucibleSetup m ->
-      let m' =
-            withStackTraceFrame str `fmap` doLLVM m
-      in
-      VLLVMCrucibleSetup m'
-    VJVMSetup m ->
-      let m' =
-            withStackTraceFrame str `fmap` doJVM m
-      in
-      VJVMSetup m'
-    VMIRSetup m ->
-      let m' =
-            withStackTraceFrame str `fmap` doMIR m
-      in
-      VMIRSetup m'
-    _ ->
-      val
-

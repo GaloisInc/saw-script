@@ -34,6 +34,7 @@ module SAWScript.Interpreter
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask)
+import Control.Monad.State (gets, modify)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import qualified Data.ByteString as BS
@@ -337,6 +338,78 @@ processTypeCheck (errs_or_output, warns) =
           printOutLnTop Warn (show pos ++ ": Warning: " ++ msg)
     mapM_ issueWarning warns
     either failTypecheck return errs_or_output
+
+
+------------------------------------------------------------
+-- Stack tracing
+
+-- | Implement stack tracing by adding error handlers that rethrow
+-- user errors, prepended with the given string.
+--
+-- XXX this is the wrong way to do this.
+withStackTraceFrame :: String -> Value -> Value
+withStackTraceFrame str val =
+  let doTopLevel :: TopLevel a -> TopLevel a
+      doTopLevel action = do
+        trace <- gets rwStackTrace
+        modify (\rw -> rw { rwStackTrace = str : trace })
+        result <- action
+        modify (\rw -> rw { rwStackTrace = trace })
+        return result
+      doProofScript :: ProofScript a -> ProofScript a
+      doProofScript (ProofScript m) =
+        let m' =
+              underExceptT (underStateT doTopLevel) m
+        in
+        ProofScript m'
+      doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
+      doLLVM (LLVMCrucibleSetupM m) =
+        LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
+      doJVM :: JVMSetupM a -> JVMSetupM a
+      doJVM (JVMSetupM m) =
+        JVMSetupM (underReaderT (underStateT doTopLevel) m)
+      doMIR :: MIRSetupM a -> MIRSetupM a
+      doMIR (MIRSetupM m) =
+        MIRSetupM (underReaderT (underStateT doTopLevel) m)
+  in
+  case val of
+    VLambda f ->
+      let wrap x =
+            withStackTraceFrame str `fmap` doTopLevel (f x)
+      in
+      VLambda wrap
+    VTopLevel m ->
+      let m' =
+            withStackTraceFrame str `fmap` doTopLevel m
+      in
+      VTopLevel m'
+    VProofScript m ->
+      let m' =
+            withStackTraceFrame str `fmap` doProofScript m
+      in
+      VProofScript m'
+    VBind pos v1 v2 ->
+      let v1' = withStackTraceFrame str v1
+          v2' = withStackTraceFrame str v2
+      in
+      VBind pos v1' v2'
+    VLLVMCrucibleSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doLLVM m
+      in
+      VLLVMCrucibleSetup m'
+    VJVMSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doJVM m
+      in
+      VJVMSetup m'
+    VMIRSetup m ->
+      let m' =
+            withStackTraceFrame str `fmap` doMIR m
+      in
+      VMIRSetup m'
+    _ ->
+      val
 
 
 ------------------------------------------------------------
