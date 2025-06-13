@@ -196,8 +196,8 @@ span.spaces    { background: white }
 <span class="lineno">  177 </span>buildTypeEnv :: Ctx =&gt; [Cry.TParam] -&gt; [Term] -&gt; LLVMCrucibleSetupM TypeEnv
 <span class="lineno">  178 </span><span class="decl"><span class="istickedoff">buildTypeEnv [] [] = pure mempty</span>
 <span class="lineno">  179 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv (param:params) (argTerm:argTerms) =</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">case asCtorParams argTerm of</span>
-<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">Just (ecName -&gt; ModuleIdentifier &quot;Cryptol.TCNum&quot;, [], [asNat -&gt; Just n]) -&gt;</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">case asGlobalApply &quot;Cryptol.TCNum&quot; argTerm of</span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">Just [asNat -&gt; Just n] -&gt;</span>
 <span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff">bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) &lt;$&gt;</span>
 <span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">buildTypeEnv params argTerms</span>
 <span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>

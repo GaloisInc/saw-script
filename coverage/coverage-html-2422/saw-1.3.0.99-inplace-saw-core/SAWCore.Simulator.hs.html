@@ -51,7 +51,7 @@ span.spaces    { background: white }
 <span class="lineno">   32 </span>
 <span class="lineno">   33 </span>import Prelude hiding (mapM)
 <span class="lineno">   34 </span>
-<span class="lineno">   35 </span>import Control.Monad (foldM, liftM)
+<span class="lineno">   35 </span>import Control.Monad (liftM)
 <span class="lineno">   36 </span>import Control.Monad.Trans.Except
 <span class="lineno">   37 </span>import Control.Monad.Trans.Maybe
 <span class="lineno">   38 </span>import Control.Monad.Fix (MonadFix(mfix))
@@ -73,248 +73,248 @@ span.spaces    { background: white }
 <span class="lineno">   54 </span>import SAWCore.Module
 <span class="lineno">   55 </span>  ( allModuleActualDefs
 <span class="lineno">   56 </span>  , allModulePrimitives
-<span class="lineno">   57 </span>  , defNameInfo
-<span class="lineno">   58 </span>  , findCtorInMap
-<span class="lineno">   59 </span>  , lookupVarIndexInMap
-<span class="lineno">   60 </span>  , Ctor(..)
-<span class="lineno">   61 </span>  , Def(..)
-<span class="lineno">   62 </span>  , DefQualifier(..)
-<span class="lineno">   63 </span>  , ModuleMap
-<span class="lineno">   64 </span>  , ResolvedName(..)
-<span class="lineno">   65 </span>  )
-<span class="lineno">   66 </span>import SAWCore.Name
-<span class="lineno">   67 </span>import SAWCore.SharedTerm
-<span class="lineno">   68 </span>import SAWCore.Prelude.Constants
-<span class="lineno">   69 </span>
-<span class="lineno">   70 </span>import SAWCore.Simulator.Value
-<span class="lineno">   71 </span>import SAWCore.Term.Functor
-<span class="lineno">   72 </span>import qualified SAWCore.Simulator.Prims as Prims
-<span class="lineno">   73 </span>
-<span class="lineno">   74 </span>type Id = Identity
+<span class="lineno">   57 </span>  , ctorNumParams
+<span class="lineno">   58 </span>  , ctorNumArgs
+<span class="lineno">   59 </span>  , defNameInfo
+<span class="lineno">   60 </span>  , findCtorInMap
+<span class="lineno">   61 </span>  , lookupVarIndexInMap
+<span class="lineno">   62 </span>  , Ctor(..)
+<span class="lineno">   63 </span>  , Def(..)
+<span class="lineno">   64 </span>  , DefQualifier(..)
+<span class="lineno">   65 </span>  , ModuleMap
+<span class="lineno">   66 </span>  , ResolvedName(..)
+<span class="lineno">   67 </span>  )
+<span class="lineno">   68 </span>import SAWCore.Name
+<span class="lineno">   69 </span>import SAWCore.SharedTerm
+<span class="lineno">   70 </span>import SAWCore.Prelude.Constants
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>import SAWCore.Simulator.Value
+<span class="lineno">   73 </span>import SAWCore.Term.Functor
+<span class="lineno">   74 </span>import qualified SAWCore.Simulator.Prims as Prims
 <span class="lineno">   75 </span>
-<span class="lineno">   76 </span>type ThunkIn m l           = Thunk (WithM m l)
-<span class="lineno">   77 </span>type OpenValueIn m l       = OpenValue (WithM m l)
-<span class="lineno">   78 </span>--type ValueIn m l           = Value (WithM m l)
-<span class="lineno">   79 </span>type PrimIn m l            = Prims.Prim (WithM m l)
-<span class="lineno">   80 </span>type TValueIn m l          = TValue (WithM m l)
-<span class="lineno">   81 </span>type MValueIn m l          = MValue (WithM m l)
-<span class="lineno">   82 </span>type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
-<span class="lineno">   83 </span>
-<span class="lineno">   84 </span>------------------------------------------------------------
-<span class="lineno">   85 </span>-- Simulator configuration
-<span class="lineno">   86 </span>
-<span class="lineno">   87 </span>data SimulatorConfig l =
-<span class="lineno">   88 </span>  SimulatorConfig
-<span class="lineno">   89 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simPrimitive</span></span></span> :: ExtCns (TValue l) -&gt; MValue l
-<span class="lineno">   90 </span>  -- ^ Interpretation of 'Primitive' terms.
-<span class="lineno">   91 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simExtCns</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; MValue l
-<span class="lineno">   92 </span>  -- ^ Interpretation of 'ExtCns' terms.
-<span class="lineno">   93 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simConstant</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; Maybe (MValue l)
-<span class="lineno">   94 </span>  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
-<span class="lineno">   95 </span>  -- the body of the constant should be evaluated. 'Just' indicates
-<span class="lineno">   96 </span>  -- that the constant's definition should be overridden.
-<span class="lineno">   97 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simCtorApp</span></span></span> :: ExtCns (TValue l) -&gt; Maybe (MValue l)
-<span class="lineno">   98 </span>  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
-<span class="lineno">   99 </span>  -- the constructor is treated as normal. 'Just' replaces the
-<span class="lineno">  100 </span>  -- constructor with a custom implementation.
-<span class="lineno">  101 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simNeutral</span></span></span> :: Env l -&gt; NeutralTerm -&gt; MValue l
-<span class="lineno">  102 </span>  -- ^ Handler that fires if the simulator encounters a term that it
-<span class="lineno">  103 </span>  --   cannot otherwise evaluate because it is blocked. For some simulators,
-<span class="lineno">  104 </span>  --   this is just an error condition; for others, sensible action can
-<span class="lineno">  105 </span>  --   be taken.
-<span class="lineno">  106 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
-<span class="lineno">  107 </span>  }
-<span class="lineno">  108 </span>
-<span class="lineno">  109 </span>------------------------------------------------------------
-<span class="lineno">  110 </span>-- Evaluation of terms
-<span class="lineno">  111 </span>
-<span class="lineno">  112 </span>type Env l = [(Thunk l, TValue l)]
-<span class="lineno">  113 </span>type EnvIn m l = Env (WithM m l)
-<span class="lineno">  114 </span>
-<span class="lineno">  115 </span>-- | Meaning of an open term, parameterized by environment of bound variables
-<span class="lineno">  116 </span>type OpenValue l = Env l -&gt; MValue l
-<span class="lineno">  117 </span>
-<span class="lineno">  118 </span>{-# SPECIALIZE
-<span class="lineno">  119 </span>  evalTermF :: Show (Extra l) =&gt;
-<span class="lineno">  120 </span>    SimulatorConfigIn Id l -&gt;
-<span class="lineno">  121 </span>    (Term -&gt; OpenValueIn Id l) -&gt;
-<span class="lineno">  122 </span>    (Term -&gt; MValueIn Id l) -&gt;
-<span class="lineno">  123 </span>    TermF Term -&gt;
-<span class="lineno">  124 </span>    OpenValueIn Id l #-}
-<span class="lineno">  125 </span>
-<span class="lineno">  126 </span>{-# SPECIALIZE
-<span class="lineno">  127 </span>  evalTermF :: Show (Extra l) =&gt;
-<span class="lineno">  128 </span>    SimulatorConfigIn IO l -&gt;
-<span class="lineno">  129 </span>    (Term -&gt; OpenValueIn IO l) -&gt;
-<span class="lineno">  130 </span>    (Term -&gt; MValueIn IO l) -&gt;
-<span class="lineno">  131 </span>    TermF Term -&gt;
-<span class="lineno">  132 </span>    OpenValueIn IO l #-}
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>-- | Generic evaluator for TermFs.
-<span class="lineno">  135 </span>evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
-<span class="lineno">  136 </span>             SimulatorConfig l          -- ^ Evaluator for global constants
-<span class="lineno">  137 </span>          -&gt; (Term -&gt; OpenValue l)      -- ^ Evaluator for subterms under binders
-<span class="lineno">  138 </span>          -&gt; (Term -&gt; MValue l)         -- ^ Evaluator for subterms in the same bound variable context
-<span class="lineno">  139 </span>          -&gt; TermF Term -&gt; OpenValue l
-<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">evalTermF cfg lam recEval tf env =</span>
-<span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">App t1 t2               -&gt; recEval t1 &gt;&gt;= \case</span>
-<span class="lineno">  143 </span><span class="spaces">                                 </span><span class="istickedoff">VFun _ f -&gt;</span>
-<span class="lineno">  144 </span><span class="spaces">                                   </span><span class="istickedoff">do x &lt;- recEvalDelay t2</span>
-<span class="lineno">  145 </span><span class="spaces">                                      </span><span class="istickedoff">f x</span>
-<span class="lineno">  146 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralApp (NeutralBox t1) t2)</span></span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp t          -&gt; do v &lt;- evalType tp</span>
-<span class="lineno">  148 </span><span class="spaces">                                  </span><span class="istickedoff">return $ VFun nm (\x -&gt; lam t ((x,<span class="nottickedoff">v</span>) : env))</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">Pi nm t1 t2             -&gt; do v &lt;- evalType t1</span>
-<span class="lineno">  150 </span><span class="spaces">                                  </span><span class="istickedoff">body &lt;-</span>
-<span class="lineno">  151 </span><span class="spaces">                                    </span><span class="istickedoff">if inBitSet 0 (looseVars t2) then</span>
-<span class="lineno">  152 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; toTValue &lt;$&gt; lam t2 ((x,<span class="nottickedoff">v</span>) : env)))</span>
-<span class="lineno">  153 </span><span class="spaces">                                    </span><span class="istickedoff">else</span>
-<span class="lineno">  154 </span><span class="spaces">                                      </span><span class="istickedoff">do -- put dummy values in the environment; the term should never reference them</span>
-<span class="lineno">  155 </span><span class="spaces">                                         </span><span class="istickedoff">let <span class="nottickedoff">val = ready VUnit</span></span>
-<span class="lineno">  156 </span><span class="spaces">                                         </span><span class="istickedoff">let <span class="nottickedoff">tp  = VUnitType</span></span>
-<span class="lineno">  157 </span><span class="spaces">                                         </span><span class="istickedoff">VNondependentPi . toTValue &lt;$&gt; lam t2 (<span class="nottickedoff">(val,tp)</span>:env)</span>
-<span class="lineno">  158 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPiType nm v body</span>
-<span class="lineno">  159 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">LocalVar i              -&gt; force (fst (env !! i))</span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">Constant ec             -&gt; do ec' &lt;- traverse evalType ec</span>
-<span class="lineno">  162 </span><span class="spaces">                                  </span><span class="istickedoff">let <span class="nottickedoff">str = toAbsoluteName (ecName ec')</span></span>
-<span class="lineno">  163 </span><span class="spaces">                                  </span><span class="istickedoff">case simConstant cfg tf ec' of</span>
-<span class="lineno">  164 </span><span class="spaces">                                    </span><span class="istickedoff">Just override -&gt; override</span>
-<span class="lineno">  165 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  166 </span><span class="spaces">                                      </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of</span>
-<span class="lineno">  167 </span><span class="spaces">                                        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  168 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Constant not found: &quot; &lt;&gt; str]</span></span>
-<span class="lineno">  169 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedCtor _) -&gt;</span>
-<span class="lineno">  170 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Expected Def, found Ctor: &quot; &lt;&gt; str]</span></span>
-<span class="lineno">  171 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedDataType _) -&gt;</span>
-<span class="lineno">  172 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Expected Def, found DataType: &quot; &lt;&gt; str]</span></span>
-<span class="lineno">  173 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedDef d) -&gt;</span>
-<span class="lineno">  174 </span><span class="spaces">                                          </span><span class="istickedoff">case defBody d of</span>
-<span class="lineno">  175 </span><span class="spaces">                                            </span><span class="istickedoff">Just t -&gt; recEval t</span>
-<span class="lineno">  176 </span><span class="spaces">                                            </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  177 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">case defQualifier d of</span></span>
-<span class="lineno">  178 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">NoQualifier -&gt; simNeutral cfg env (NeutralConstant ec)</span></span>
-<span class="lineno">  179 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">PrimQualifier -&gt; simPrimitive cfg ec'</span></span>
-<span class="lineno">  180 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">AxiomQualifier -&gt; simPrimitive cfg ec'</span></span>
-<span class="lineno">  181 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf              -&gt;</span>
-<span class="lineno">  183 </span><span class="spaces">      </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  184 </span><span class="spaces">        </span><span class="istickedoff">UnitValue           -&gt; <span class="nottickedoff">return VUnit</span></span>
-<span class="lineno">  185 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  186 </span><span class="spaces">        </span><span class="istickedoff">UnitType            -&gt; return $ TValue VUnitType</span>
+<span class="lineno">   76 </span>type Id = Identity
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>type ThunkIn m l           = Thunk (WithM m l)
+<span class="lineno">   79 </span>type OpenValueIn m l       = OpenValue (WithM m l)
+<span class="lineno">   80 </span>--type ValueIn m l           = Value (WithM m l)
+<span class="lineno">   81 </span>type PrimIn m l            = Prims.Prim (WithM m l)
+<span class="lineno">   82 </span>type TValueIn m l          = TValue (WithM m l)
+<span class="lineno">   83 </span>type MValueIn m l          = MValue (WithM m l)
+<span class="lineno">   84 </span>type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>------------------------------------------------------------
+<span class="lineno">   87 </span>-- Simulator configuration
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>data SimulatorConfig l =
+<span class="lineno">   90 </span>  SimulatorConfig
+<span class="lineno">   91 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simPrimitive</span></span></span> :: ExtCns (TValue l) -&gt; MValue l
+<span class="lineno">   92 </span>  -- ^ Interpretation of 'Primitive' terms.
+<span class="lineno">   93 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simExtCns</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; MValue l
+<span class="lineno">   94 </span>  -- ^ Interpretation of 'ExtCns' terms.
+<span class="lineno">   95 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simConstant</span></span></span> :: TermF Term -&gt; ExtCns (TValue l) -&gt; Maybe (MValue l)
+<span class="lineno">   96 </span>  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
+<span class="lineno">   97 </span>  -- the body of the constant should be evaluated. 'Just' indicates
+<span class="lineno">   98 </span>  -- that the constant's definition should be overridden.
+<span class="lineno">   99 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simCtorApp</span></span></span> :: ExtCns (TValue l) -&gt; Maybe (MValue l)
+<span class="lineno">  100 </span>  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
+<span class="lineno">  101 </span>  -- the constructor is treated as normal. 'Just' replaces the
+<span class="lineno">  102 </span>  -- constructor with a custom implementation.
+<span class="lineno">  103 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simNeutral</span></span></span> :: Env l -&gt; NeutralTerm -&gt; MValue l
+<span class="lineno">  104 </span>  -- ^ Handler that fires if the simulator encounters a term that it
+<span class="lineno">  105 </span>  --   cannot otherwise evaluate because it is blocked. For some simulators,
+<span class="lineno">  106 </span>  --   this is just an error condition; for others, sensible action can
+<span class="lineno">  107 </span>  --   be taken.
+<span class="lineno">  108 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
+<span class="lineno">  109 </span>  }
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>------------------------------------------------------------
+<span class="lineno">  112 </span>-- Evaluation of terms
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>type Env l = [(Thunk l, TValue l)]
+<span class="lineno">  115 </span>type EnvIn m l = Env (WithM m l)
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>-- | Meaning of an open term, parameterized by environment of bound variables
+<span class="lineno">  118 </span>type OpenValue l = Env l -&gt; MValue l
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>{-# SPECIALIZE
+<span class="lineno">  121 </span>  evalTermF :: Show (Extra l) =&gt;
+<span class="lineno">  122 </span>    SimulatorConfigIn Id l -&gt;
+<span class="lineno">  123 </span>    (Term -&gt; OpenValueIn Id l) -&gt;
+<span class="lineno">  124 </span>    (Term -&gt; MValueIn Id l) -&gt;
+<span class="lineno">  125 </span>    TermF Term -&gt;
+<span class="lineno">  126 </span>    OpenValueIn Id l #-}
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>{-# SPECIALIZE
+<span class="lineno">  129 </span>  evalTermF :: Show (Extra l) =&gt;
+<span class="lineno">  130 </span>    SimulatorConfigIn IO l -&gt;
+<span class="lineno">  131 </span>    (Term -&gt; OpenValueIn IO l) -&gt;
+<span class="lineno">  132 </span>    (Term -&gt; MValueIn IO l) -&gt;
+<span class="lineno">  133 </span>    TermF Term -&gt;
+<span class="lineno">  134 </span>    OpenValueIn IO l #-}
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>-- | Generic evaluator for TermFs.
+<span class="lineno">  137 </span>evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =&gt;
+<span class="lineno">  138 </span>             SimulatorConfig l          -- ^ Evaluator for global constants
+<span class="lineno">  139 </span>          -&gt; (Term -&gt; OpenValue l)      -- ^ Evaluator for subterms under binders
+<span class="lineno">  140 </span>          -&gt; (Term -&gt; MValue l)         -- ^ Evaluator for subterms in the same bound variable context
+<span class="lineno">  141 </span>          -&gt; TermF Term -&gt; OpenValue l
+<span class="lineno">  142 </span><span class="decl"><span class="istickedoff">evalTermF cfg lam recEval tf env =</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">App t1 t2               -&gt; recEval t1 &gt;&gt;= \case</span>
+<span class="lineno">  145 </span><span class="spaces">                                 </span><span class="istickedoff">VFun _ f -&gt;</span>
+<span class="lineno">  146 </span><span class="spaces">                                   </span><span class="istickedoff">do x &lt;- recEvalDelay t2</span>
+<span class="lineno">  147 </span><span class="spaces">                                      </span><span class="istickedoff">f x</span>
+<span class="lineno">  148 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralApp (NeutralBox t1) t2)</span></span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp t          -&gt; do v &lt;- evalType tp</span>
+<span class="lineno">  150 </span><span class="spaces">                                  </span><span class="istickedoff">return $ VFun nm (\x -&gt; lam t ((x,<span class="nottickedoff">v</span>) : env))</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">Pi nm t1 t2             -&gt; do v &lt;- evalType t1</span>
+<span class="lineno">  152 </span><span class="spaces">                                  </span><span class="istickedoff">body &lt;-</span>
+<span class="lineno">  153 </span><span class="spaces">                                    </span><span class="istickedoff">if inBitSet 0 (looseVars t2) then</span>
+<span class="lineno">  154 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; toTValue &lt;$&gt; lam t2 ((x,<span class="nottickedoff">v</span>) : env)))</span>
+<span class="lineno">  155 </span><span class="spaces">                                    </span><span class="istickedoff">else</span>
+<span class="lineno">  156 </span><span class="spaces">                                      </span><span class="istickedoff">do -- put dummy values in the environment; the term should never reference them</span>
+<span class="lineno">  157 </span><span class="spaces">                                         </span><span class="istickedoff">let <span class="nottickedoff">val = ready VUnit</span></span>
+<span class="lineno">  158 </span><span class="spaces">                                         </span><span class="istickedoff">let <span class="nottickedoff">tp  = VUnitType</span></span>
+<span class="lineno">  159 </span><span class="spaces">                                         </span><span class="istickedoff">VNondependentPi . toTValue &lt;$&gt; lam t2 (<span class="nottickedoff">(val,tp)</span>:env)</span>
+<span class="lineno">  160 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPiType nm v body</span>
+<span class="lineno">  161 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">LocalVar i              -&gt; force (fst (env !! i))</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">Constant ec             -&gt; do ec' &lt;- traverse evalType ec</span>
+<span class="lineno">  164 </span><span class="spaces">                                  </span><span class="istickedoff">let <span class="nottickedoff">str = toAbsoluteName (ecName ec')</span></span>
+<span class="lineno">  165 </span><span class="spaces">                                  </span><span class="istickedoff">case simConstant cfg tf ec' of</span>
+<span class="lineno">  166 </span><span class="spaces">                                    </span><span class="istickedoff">Just override -&gt; override</span>
+<span class="lineno">  167 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  168 </span><span class="spaces">                                      </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of</span>
+<span class="lineno">  169 </span><span class="spaces">                                        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  170 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Constant not found: &quot; &lt;&gt; str]</span></span>
+<span class="lineno">  171 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt;</span>
+<span class="lineno">  172 </span><span class="spaces">                                          </span><span class="istickedoff">pure $ ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)</span>
+<span class="lineno">  173 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedDataType _) -&gt;</span>
+<span class="lineno">  174 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF&quot; [&quot;Expected Def, found DataType: &quot; &lt;&gt; str]</span></span>
+<span class="lineno">  175 </span><span class="spaces">                                        </span><span class="istickedoff">Just (ResolvedDef d) -&gt;</span>
+<span class="lineno">  176 </span><span class="spaces">                                          </span><span class="istickedoff">case defBody d of</span>
+<span class="lineno">  177 </span><span class="spaces">                                            </span><span class="istickedoff">Just t -&gt; recEval t</span>
+<span class="lineno">  178 </span><span class="spaces">                                            </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  179 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">case defQualifier d of</span></span>
+<span class="lineno">  180 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">NoQualifier -&gt; simNeutral cfg env (NeutralConstant ec)</span></span>
+<span class="lineno">  181 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">PrimQualifier -&gt; simPrimitive cfg ec'</span></span>
+<span class="lineno">  182 </span><span class="spaces">                                                </span><span class="istickedoff"><span class="nottickedoff">AxiomQualifier -&gt; simPrimitive cfg ec'</span></span>
+<span class="lineno">  183 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf              -&gt;</span>
+<span class="lineno">  185 </span><span class="spaces">      </span><span class="istickedoff">case ftf of</span>
+<span class="lineno">  186 </span><span class="spaces">        </span><span class="istickedoff">UnitValue           -&gt; <span class="nottickedoff">return VUnit</span></span>
 <span class="lineno">  187 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  188 </span><span class="spaces">        </span><span class="istickedoff">PairValue x y       -&gt; do tx &lt;- recEvalDelay x</span>
-<span class="lineno">  189 </span><span class="spaces">                                  </span><span class="istickedoff">ty &lt;- recEvalDelay y</span>
-<span class="lineno">  190 </span><span class="spaces">                                  </span><span class="istickedoff">return $ VPair tx ty</span>
-<span class="lineno">  191 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff">PairType x y        -&gt; do vx &lt;- evalType x</span>
-<span class="lineno">  193 </span><span class="spaces">                                  </span><span class="istickedoff">vy &lt;- evalType y</span>
-<span class="lineno">  194 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPairType vx vy</span>
-<span class="lineno">  195 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  196 </span><span class="spaces">        </span><span class="istickedoff">PairLeft x          -&gt; recEval x &gt;&gt;= \case</span>
-<span class="lineno">  197 </span><span class="spaces">                                 </span><span class="istickedoff">VPair l _r -&gt; force l</span>
-<span class="lineno">  198 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; simNeutral cfg env (NeutralPairLeft (NeutralBox x))</span>
-<span class="lineno">  199 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">PairRight x         -&gt; recEval x &gt;&gt;= \case</span>
-<span class="lineno">  201 </span><span class="spaces">                                 </span><span class="istickedoff">VPair _l r -&gt; force r</span>
-<span class="lineno">  202 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; simNeutral cfg env (NeutralPairRight (NeutralBox x))</span>
-<span class="lineno">  203 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  204 </span><span class="spaces">        </span><span class="istickedoff">CtorApp c ps ts     -&gt; do c'  &lt;- traverse evalType c</span>
-<span class="lineno">  205 </span><span class="spaces">                                  </span><span class="istickedoff">ps' &lt;- mapM recEvalDelay ps</span>
-<span class="lineno">  206 </span><span class="spaces">                                  </span><span class="istickedoff">ts' &lt;- mapM recEvalDelay ts</span>
-<span class="lineno">  207 </span><span class="spaces">                                  </span><span class="istickedoff">case simCtorApp cfg c' of</span>
-<span class="lineno">  208 </span><span class="spaces">                                    </span><span class="istickedoff">Just mv -&gt;</span>
-<span class="lineno">  209 </span><span class="spaces">                                      </span><span class="istickedoff">do v &lt;- mv</span>
-<span class="lineno">  210 </span><span class="spaces">                                         </span><span class="istickedoff">foldM apply v (ps' ++ ts')</span>
-<span class="lineno">  211 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  212 </span><span class="spaces">                                      </span><span class="istickedoff">pure $ VCtorApp c' ps' ts'</span>
-<span class="lineno">  213 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  214 </span><span class="spaces">        </span><span class="istickedoff">DataTypeApp d ps ts -&gt; do d' &lt;- traverse evalType d</span>
-<span class="lineno">  215 </span><span class="spaces">                                  </span><span class="istickedoff">ps' &lt;- mapM recEval ps</span>
-<span class="lineno">  216 </span><span class="spaces">                                  </span><span class="istickedoff">ts' &lt;- mapM recEval ts</span>
-<span class="lineno">  217 </span><span class="spaces">                                  </span><span class="istickedoff">pure (TValue (VDataType d' ps' ts'))</span>
-<span class="lineno">  218 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  219 </span><span class="spaces">        </span><span class="istickedoff">RecursorType d ps m mtp -&gt;</span>
-<span class="lineno">  220 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">TValue &lt;$&gt; (VRecursorType &lt;$&gt;</span></span>
-<span class="lineno">  221 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">traverse evalType d &lt;*&gt;</span></span>
-<span class="lineno">  222 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">mapM recEval ps &lt;*&gt;</span></span>
-<span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">recEval m &lt;*&gt;</span></span>
-<span class="lineno">  224 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(evalType mtp))</span></span>
-<span class="lineno">  225 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  226 </span><span class="spaces">        </span><span class="istickedoff">Recursor r -&gt;</span>
-<span class="lineno">  227 </span><span class="spaces">          </span><span class="istickedoff">do let f (e,ety) = do v  &lt;- recEvalDelay e</span>
-<span class="lineno">  228 </span><span class="spaces">                                </span><span class="istickedoff">ty &lt;- evalType ety</span>
-<span class="lineno">  229 </span><span class="spaces">                                </span><span class="istickedoff">pure (v,<span class="nottickedoff">ty</span>)</span>
-<span class="lineno">  230 </span><span class="spaces">             </span><span class="istickedoff">d   &lt;- traverse evalType (recursorDataType r)</span>
-<span class="lineno">  231 </span><span class="spaces">             </span><span class="istickedoff">ps  &lt;- traverse recEval (recursorParams r)</span>
-<span class="lineno">  232 </span><span class="spaces">             </span><span class="istickedoff">m   &lt;- recEval (recursorMotive r)</span>
-<span class="lineno">  233 </span><span class="spaces">             </span><span class="istickedoff">mty &lt;- evalType (recursorMotiveTy r)</span>
-<span class="lineno">  234 </span><span class="spaces">             </span><span class="istickedoff">es  &lt;- traverse f (recursorElims r)</span>
-<span class="lineno">  235 </span><span class="spaces">             </span><span class="istickedoff">pure (VRecursor d ps m mty es)</span>
-<span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  237 </span><span class="spaces">        </span><span class="istickedoff">RecursorApp rectm ixs arg -&gt;</span>
-<span class="lineno">  238 </span><span class="spaces">          </span><span class="istickedoff">do r &lt;- recEval rectm</span>
-<span class="lineno">  239 </span><span class="spaces">             </span><span class="istickedoff">case r of</span>
-<span class="lineno">  240 </span><span class="spaces">               </span><span class="istickedoff">VRecursor d ps motive motiveTy ps_fs -&gt;</span>
-<span class="lineno">  241 </span><span class="spaces">                 </span><span class="istickedoff">do argv &lt;- recEval arg</span>
-<span class="lineno">  242 </span><span class="spaces">                    </span><span class="istickedoff">case evalConstructor argv of</span>
-<span class="lineno">  243 </span><span class="spaces">                      </span><span class="istickedoff">Just (ctor, args)</span>
-<span class="lineno">  244 </span><span class="spaces">                        </span><span class="istickedoff">| Just (elim,elimTy) &lt;- Map.lookup (ctorVarIndex ctor) ps_fs</span>
-<span class="lineno">  245 </span><span class="spaces">                        </span><span class="istickedoff">-&gt; do let <span class="nottickedoff">rTy = VRecursorType d ps motive motiveTy</span></span>
-<span class="lineno">  246 </span><span class="spaces">                              </span><span class="istickedoff">ctorTy &lt;- toTValue &lt;$&gt; lam (ctorType ctor) <span class="nottickedoff">[]</span></span>
-<span class="lineno">  247 </span><span class="spaces">                              </span><span class="istickedoff">allArgs &lt;- processRecArgs ps args ctorTy [(elim,<span class="nottickedoff">elimTy</span>),(ready r,<span class="nottickedoff">rTy</span>)]</span>
-<span class="lineno">  248 </span><span class="spaces">                              </span><span class="istickedoff">lam (ctorIotaTemplate ctor) allArgs</span>
-<span class="lineno">  249 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  250 </span><span class="spaces">                        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">panic &quot;evalTermF / RecursorApp&quot; [&quot;could not find info for constructor: &quot; &lt;&gt; Text.pack (show ctor)]</span></span>
-<span class="lineno">  251 </span><span class="spaces">                      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))</span></span>
-<span class="lineno">  252 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)</span></span>
-<span class="lineno">  253 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  254 </span><span class="spaces">        </span><span class="istickedoff">RecordType elem_tps -&gt;</span>
-<span class="lineno">  255 </span><span class="spaces">          </span><span class="istickedoff">TValue . VRecordType &lt;$&gt; traverse (traverse evalType) elem_tps</span>
-<span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  257 </span><span class="spaces">        </span><span class="istickedoff">RecordValue elems   -&gt;</span>
-<span class="lineno">  258 </span><span class="spaces">          </span><span class="istickedoff">VRecordValue &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; recEvalDelay t) elems</span>
+<span class="lineno">  188 </span><span class="spaces">        </span><span class="istickedoff">UnitType            -&gt; return $ TValue VUnitType</span>
+<span class="lineno">  189 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  190 </span><span class="spaces">        </span><span class="istickedoff">PairValue x y       -&gt; do tx &lt;- recEvalDelay x</span>
+<span class="lineno">  191 </span><span class="spaces">                                  </span><span class="istickedoff">ty &lt;- recEvalDelay y</span>
+<span class="lineno">  192 </span><span class="spaces">                                  </span><span class="istickedoff">return $ VPair tx ty</span>
+<span class="lineno">  193 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  194 </span><span class="spaces">        </span><span class="istickedoff">PairType x y        -&gt; do vx &lt;- evalType x</span>
+<span class="lineno">  195 </span><span class="spaces">                                  </span><span class="istickedoff">vy &lt;- evalType y</span>
+<span class="lineno">  196 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPairType vx vy</span>
+<span class="lineno">  197 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  198 </span><span class="spaces">        </span><span class="istickedoff">PairLeft x          -&gt; recEval x &gt;&gt;= \case</span>
+<span class="lineno">  199 </span><span class="spaces">                                 </span><span class="istickedoff">VPair l _r -&gt; force l</span>
+<span class="lineno">  200 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; simNeutral cfg env (NeutralPairLeft (NeutralBox x))</span>
+<span class="lineno">  201 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">PairRight x         -&gt; recEval x &gt;&gt;= \case</span>
+<span class="lineno">  203 </span><span class="spaces">                                 </span><span class="istickedoff">VPair _l r -&gt; force r</span>
+<span class="lineno">  204 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; simNeutral cfg env (NeutralPairRight (NeutralBox x))</span>
+<span class="lineno">  205 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  206 </span><span class="spaces">        </span><span class="istickedoff">DataTypeApp d ps ts -&gt; do d' &lt;- traverse evalType d</span>
+<span class="lineno">  207 </span><span class="spaces">                                  </span><span class="istickedoff">ps' &lt;- mapM recEval ps</span>
+<span class="lineno">  208 </span><span class="spaces">                                  </span><span class="istickedoff">ts' &lt;- mapM recEval ts</span>
+<span class="lineno">  209 </span><span class="spaces">                                  </span><span class="istickedoff">pure (TValue (VDataType d' ps' ts'))</span>
+<span class="lineno">  210 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  211 </span><span class="spaces">        </span><span class="istickedoff">RecursorType d ps m mtp -&gt;</span>
+<span class="lineno">  212 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">TValue &lt;$&gt; (VRecursorType &lt;$&gt;</span></span>
+<span class="lineno">  213 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">traverse evalType d &lt;*&gt;</span></span>
+<span class="lineno">  214 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">mapM recEval ps &lt;*&gt;</span></span>
+<span class="lineno">  215 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">recEval m &lt;*&gt;</span></span>
+<span class="lineno">  216 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(evalType mtp))</span></span>
+<span class="lineno">  217 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff">Recursor r -&gt;</span>
+<span class="lineno">  219 </span><span class="spaces">          </span><span class="istickedoff">do let f (e,ety) = do v  &lt;- recEvalDelay e</span>
+<span class="lineno">  220 </span><span class="spaces">                                </span><span class="istickedoff">ty &lt;- evalType ety</span>
+<span class="lineno">  221 </span><span class="spaces">                                </span><span class="istickedoff">pure (v,<span class="nottickedoff">ty</span>)</span>
+<span class="lineno">  222 </span><span class="spaces">             </span><span class="istickedoff">d   &lt;- traverse evalType (recursorDataType r)</span>
+<span class="lineno">  223 </span><span class="spaces">             </span><span class="istickedoff">ps  &lt;- traverse recEval (recursorParams r)</span>
+<span class="lineno">  224 </span><span class="spaces">             </span><span class="istickedoff">m   &lt;- recEval (recursorMotive r)</span>
+<span class="lineno">  225 </span><span class="spaces">             </span><span class="istickedoff">mty &lt;- evalType (recursorMotiveTy r)</span>
+<span class="lineno">  226 </span><span class="spaces">             </span><span class="istickedoff">es  &lt;- traverse f (recursorElims r)</span>
+<span class="lineno">  227 </span><span class="spaces">             </span><span class="istickedoff">pure (VRecursor d ps m mty es)</span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  229 </span><span class="spaces">        </span><span class="istickedoff">RecursorApp rectm ixs arg -&gt;</span>
+<span class="lineno">  230 </span><span class="spaces">          </span><span class="istickedoff">do r &lt;- recEval rectm</span>
+<span class="lineno">  231 </span><span class="spaces">             </span><span class="istickedoff">case r of</span>
+<span class="lineno">  232 </span><span class="spaces">               </span><span class="istickedoff">VRecursor d ps motive motiveTy ps_fs -&gt;</span>
+<span class="lineno">  233 </span><span class="spaces">                 </span><span class="istickedoff">do argv &lt;- recEval arg</span>
+<span class="lineno">  234 </span><span class="spaces">                    </span><span class="istickedoff">case evalConstructor argv of</span>
+<span class="lineno">  235 </span><span class="spaces">                      </span><span class="istickedoff">Just (ctor, args)</span>
+<span class="lineno">  236 </span><span class="spaces">                        </span><span class="istickedoff">| Just (elim,elimTy) &lt;- Map.lookup (ctorVarIndex ctor) ps_fs</span>
+<span class="lineno">  237 </span><span class="spaces">                        </span><span class="istickedoff">-&gt; do let <span class="nottickedoff">rTy = VRecursorType d ps motive motiveTy</span></span>
+<span class="lineno">  238 </span><span class="spaces">                              </span><span class="istickedoff">ctorTy &lt;- toTValue &lt;$&gt; lam (ctorType ctor) <span class="nottickedoff">[]</span></span>
+<span class="lineno">  239 </span><span class="spaces">                              </span><span class="istickedoff">allArgs &lt;- processRecArgs ps args ctorTy [(elim,<span class="nottickedoff">elimTy</span>),(ready r,<span class="nottickedoff">rTy</span>)]</span>
+<span class="lineno">  240 </span><span class="spaces">                              </span><span class="istickedoff">lam (ctorIotaTemplate ctor) allArgs</span>
+<span class="lineno">  241 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  242 </span><span class="spaces">                        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">panic &quot;evalTermF / RecursorApp&quot; [&quot;could not find info for constructor: &quot; &lt;&gt; Text.pack (show ctor)]</span></span>
+<span class="lineno">  243 </span><span class="spaces">                      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))</span></span>
+<span class="lineno">  244 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)</span></span>
+<span class="lineno">  245 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">RecordType elem_tps -&gt;</span>
+<span class="lineno">  247 </span><span class="spaces">          </span><span class="istickedoff">TValue . VRecordType &lt;$&gt; traverse (traverse evalType) elem_tps</span>
+<span class="lineno">  248 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff">RecordValue elems   -&gt;</span>
+<span class="lineno">  250 </span><span class="spaces">          </span><span class="istickedoff">VRecordValue &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; recEvalDelay t) elems</span>
+<span class="lineno">  251 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  252 </span><span class="spaces">        </span><span class="istickedoff">RecordProj t fld    -&gt; recEval t &gt;&gt;= \case</span>
+<span class="lineno">  253 </span><span class="spaces">                                 </span><span class="istickedoff">v@VRecordValue{} -&gt; valRecordProj v fld</span>
+<span class="lineno">  254 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)</span></span>
+<span class="lineno">  255 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  256 </span><span class="spaces">        </span><span class="istickedoff">Sort s _h           -&gt; return $ TValue (VSort s)</span>
+<span class="lineno">  257 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  258 </span><span class="spaces">        </span><span class="istickedoff">NatLit n            -&gt; return $ VNat n</span>
 <span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  260 </span><span class="spaces">        </span><span class="istickedoff">RecordProj t fld    -&gt; recEval t &gt;&gt;= \case</span>
-<span class="lineno">  261 </span><span class="spaces">                                 </span><span class="istickedoff">v@VRecordValue{} -&gt; valRecordProj v fld</span>
-<span class="lineno">  262 </span><span class="spaces">                                 </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)</span></span>
+<span class="lineno">  260 </span><span class="spaces">        </span><span class="istickedoff">ArrayValue _ tv     -&gt; liftM VVector $ mapM recEvalDelay tv</span>
+<span class="lineno">  261 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  262 </span><span class="spaces">        </span><span class="istickedoff">StringLit s         -&gt; return $ VString s</span>
 <span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  264 </span><span class="spaces">        </span><span class="istickedoff">Sort s _h           -&gt; return $ TValue (VSort s)</span>
-<span class="lineno">  265 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  266 </span><span class="spaces">        </span><span class="istickedoff">NatLit n            -&gt; return $ VNat n</span>
-<span class="lineno">  267 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  268 </span><span class="spaces">        </span><span class="istickedoff">ArrayValue _ tv     -&gt; liftM VVector $ mapM recEvalDelay tv</span>
+<span class="lineno">  264 </span><span class="spaces">        </span><span class="istickedoff">ExtCns ec           -&gt; do ec' &lt;- traverse evalType ec</span>
+<span class="lineno">  265 </span><span class="spaces">                                  </span><span class="istickedoff">simExtCns cfg tf ec'</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">evalType :: Term -&gt; EvalM l (TValue l)</span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">evalType t = toTValue &lt;$&gt; recEval t</span>
 <span class="lineno">  269 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">StringLit s         -&gt; return $ VString s</span>
-<span class="lineno">  271 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff">ExtCns ec           -&gt; do ec' &lt;- traverse evalType ec</span>
-<span class="lineno">  273 </span><span class="spaces">                                  </span><span class="istickedoff">simExtCns cfg tf ec'</span>
-<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">evalType :: Term -&gt; EvalM l (TValue l)</span>
-<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">evalType t = toTValue &lt;$&gt; recEval t</span>
-<span class="lineno">  277 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">toTValue :: HasCallStack =&gt; Value l -&gt; TValue l</span>
-<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">toTValue (TValue x) = x</span>
-<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">toTValue t = <span class="nottickedoff">panic &quot;evalTermF / toTValue&quot; [&quot;Not a type value: &quot; &lt;&gt; Text.pack (show t)]</span></span>
-<span class="lineno">  281 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor :: Value l -&gt; Maybe (Ctor, [Thunk l])</span>
-<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VCtorApp c _ps args) =</span>
-<span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex c) (simModMap cfg) of</span>
-<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt; Just (ctor, args)</span>
-<span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat 0) =</span>
-<span class="lineno">  288 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeZeroIdent (simModMap cfg)</span>
-<span class="lineno">  289 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [])</span>
-<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat n) =</span>
-<span class="lineno">  291 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeSuccIdent (simModMap cfg)</span>
-<span class="lineno">  292 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ ready (VNat (pred n)) ])</span>
-<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor _ =</span>
-<span class="lineno">  294 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  295 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay :: Term -&gt; EvalM l (Thunk l)</span>
-<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay = delay . recEval</span></span>
-<span class="lineno">  298 </span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">toTValue :: HasCallStack =&gt; Value l -&gt; TValue l</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">toTValue (TValue x) = x</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">toTValue t = <span class="nottickedoff">panic &quot;evalTermF / toTValue&quot; [&quot;Not a type value: &quot; &lt;&gt; Text.pack (show t)]</span></span>
+<span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor :: Value l -&gt; Maybe (Ctor, [Thunk l])</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VCtorApp c _ps args) =</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex c) (simModMap cfg) of</span>
+<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt; Just (ctor, args)</span>
+<span class="lineno">  278 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat 0) =</span>
+<span class="lineno">  280 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeZeroIdent (simModMap cfg)</span>
+<span class="lineno">  281 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [])</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VNat n) =</span>
+<span class="lineno">  283 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeSuccIdent (simModMap cfg)</span>
+<span class="lineno">  284 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ ready (VNat (pred n)) ])</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor _ =</span>
+<span class="lineno">  286 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  287 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay :: Term -&gt; EvalM l (Thunk l)</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay = delay . recEval</span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff">ctorValue :: ExtCns (TValue l) -&gt; Int -&gt; Int -&gt; Value l</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">ctorValue ec = go [] []</span>
+<span class="lineno">  293 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  294 </span><span class="spaces">        </span><span class="istickedoff">go :: [Thunk l] -&gt; [Thunk l] -&gt; Int -&gt; Int -&gt; Value l</span>
+<span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">go params args i j</span>
+<span class="lineno">  296 </span><span class="spaces">          </span><span class="istickedoff">| i &gt; 0 = VFun &quot;_&quot; (\x -&gt; pure $ go (<span class="nottickedoff">x</span> : params) args (i-1) j)</span>
+<span class="lineno">  297 </span><span class="spaces">          </span><span class="istickedoff">| j &gt; 0 = VFun &quot;_&quot; (\x -&gt; pure $ go params (x : args) i (j-1))</span>
+<span class="lineno">  298 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = VCtorApp ec (reverse params) (reverse args)</span></span>
 <span class="lineno">  299 </span>
 <span class="lineno">  300 </span>processRecArgs ::
 <span class="lineno">  301 </span>  (VMonadLazy l, Show (Extra l)) =&gt;
@@ -402,7 +402,7 @@ span.spaces    { background: white }
 <span class="lineno">  383 </span>  EvalM l (SimulatorConfig l)
 <span class="lineno">  384 </span><span class="decl"><span class="istickedoff">evalGlobal' modmap prims extcns constant neutral primHandler =</span>
 <span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">do checkPrimitives <span class="nottickedoff">modmap</span> <span class="nottickedoff">prims</span></span>
-<span class="lineno">  386 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> extcns constant' ctors neutral modmap)</span>
+<span class="lineno">  386 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> extcns constant' <span class="nottickedoff">ctors</span> neutral modmap)</span>
 <span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">constant' :: TermF Term -&gt; ExtCns (TValue l) -&gt; Maybe (MValue l)</span>
 <span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">constant' tf ec =</span>
@@ -416,12 +416,12 @@ span.spaces    { background: white }
 <span class="lineno">  397 </span><span class="spaces">            </span><span class="istickedoff">ImportedName{} -&gt; Nothing</span>
 <span class="lineno">  398 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">ctors :: ExtCns (TValue l) -&gt; Maybe (MValue l)</span>
-<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff">ctors ec =</span>
-<span class="lineno">  401 </span><span class="spaces">      </span><span class="istickedoff">case ecName ec of</span>
-<span class="lineno">  402 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
-<span class="lineno">  403 </span><span class="spaces">          </span><span class="istickedoff">let pn = PrimName (ecVarIndex ec) ident (ecType ec)</span>
-<span class="lineno">  404 </span><span class="spaces">          </span><span class="istickedoff">in evalPrim <span class="nottickedoff">(primHandler ec)</span> pn &lt;$&gt; Map.lookup ident prims</span>
-<span class="lineno">  405 </span><span class="spaces">        </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctors ec =</span></span>
+<span class="lineno">  401 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ecName ec of</span></span>
+<span class="lineno">  402 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ModuleIdentifier ident -&gt;</span></span>
+<span class="lineno">  403 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">let pn = PrimName (ecVarIndex ec) ident (ecType ec)</span></span>
+<span class="lineno">  404 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">in evalPrim (primHandler ec) pn &lt;$&gt; Map.lookup ident prims</span></span>
+<span class="lineno">  405 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ImportedName{} -&gt; Nothing</span></span>
 <span class="lineno">  406 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  407 </span><span class="spaces">    </span><span class="istickedoff">primitive :: ExtCns (TValue l) -&gt; MValue l</span>
 <span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">primitive ec =</span></span>

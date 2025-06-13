@@ -293,350 +293,347 @@ span.spaces    { background: white }
 <span class="lineno">  274 </span>
 <span class="lineno">  275 </span>-- | Recognize a term as a @Left@ or @Right@
 <span class="lineno">  276 </span>asEither :: Recognizer Term (Either Term Term)
-<span class="lineno">  277 </span><span class="decl"><span class="nottickedoff">asEither (asCtor -&gt; Just (c, [_, _, x]))</span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="nottickedoff">| ecName c == ModuleIdentifier &quot;Prelude.Left&quot;  = return $ Left x</span>
-<span class="lineno">  279 </span><span class="spaces">  </span><span class="nottickedoff">| ecName c == ModuleIdentifier &quot;Prelude.Right&quot; = return $ Right x</span>
-<span class="lineno">  280 </span><span class="spaces"></span><span class="nottickedoff">asEither _ = Nothing</span></span>
-<span class="lineno">  281 </span>
-<span class="lineno">  282 </span>-- | Recognize the @Num@ type
-<span class="lineno">  283 </span>asNumType :: Recognizer Term ()
-<span class="lineno">  284 </span><span class="decl"><span class="nottickedoff">asNumType (asDataType -&gt; Just (primName -&gt; &quot;Cryptol.Num&quot;, _)) = Just ()</span>
-<span class="lineno">  285 </span><span class="spaces"></span><span class="nottickedoff">asNumType _ = Nothing</span></span>
-<span class="lineno">  286 </span>
-<span class="lineno">  287 </span>-- | Recognize a term as a @TCNum n@ or @TCInf@
-<span class="lineno">  288 </span>asNum :: Recognizer Term (Either Term ())
-<span class="lineno">  289 </span><span class="decl"><span class="nottickedoff">asNum (asCtor -&gt; Just (c, [n]))</span>
-<span class="lineno">  290 </span><span class="spaces">  </span><span class="nottickedoff">| ecName c == ModuleIdentifier &quot;Cryptol.TCNum&quot;  = return $ Left n</span>
-<span class="lineno">  291 </span><span class="spaces"></span><span class="nottickedoff">asNum (asCtor -&gt; Just (c, []))</span>
-<span class="lineno">  292 </span><span class="spaces">  </span><span class="nottickedoff">| ecName c == ModuleIdentifier &quot;Cryptol.TCInf&quot;  = return $ Right ()</span>
-<span class="lineno">  293 </span><span class="spaces"></span><span class="nottickedoff">asNum _ = Nothing</span></span>
-<span class="lineno">  294 </span>
-<span class="lineno">  295 </span>-- | Recognize a term as being of the form @isFinite n@
-<span class="lineno">  296 </span>asIsFinite :: Recognizer Term Term
-<span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">asIsFinite (asApp -&gt; Just (isGlobalDef &quot;CryptolM.isFinite&quot; -&gt; Just (), n)) =</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">Just n</span>
-<span class="lineno">  299 </span><span class="spaces"></span><span class="nottickedoff">asIsFinite _ = Nothing</span></span>
-<span class="lineno">  300 </span>
-<span class="lineno">  301 </span>-- | Recognize a term as being of the form @IsLtNat m n@
-<span class="lineno">  302 </span>asIsLtNat :: Recognizer Term (Term, Term)
-<span class="lineno">  303 </span><span class="decl"><span class="nottickedoff">asIsLtNat (asApplyAll -&gt; (isGlobalDef &quot;Prelude.IsLtNat&quot; -&gt; Just (), [m, n])) =</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">Just (m, n)</span>
-<span class="lineno">  305 </span><span class="spaces"></span><span class="nottickedoff">asIsLtNat _ = Nothing</span></span>
-<span class="lineno">  306 </span>
-<span class="lineno">  307 </span>-- | Recognize a bitvector type with a potentially symbolic length
-<span class="lineno">  308 </span>asSymBitvectorType :: Recognizer Term Term
-<span class="lineno">  309 </span><span class="decl"><span class="nottickedoff">asSymBitvectorType (asVectorType -&gt; Just (n, asBoolType -&gt; Just ())) = Just n</span>
-<span class="lineno">  310 </span><span class="spaces"></span><span class="nottickedoff">asSymBitvectorType _ = Nothing</span></span>
-<span class="lineno">  311 </span>
-<span class="lineno">  312 </span>-- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
-<span class="lineno">  313 </span>asLambdaName :: Recognizer Term LocalName
-<span class="lineno">  314 </span><span class="decl"><span class="nottickedoff">asLambdaName (asLambda -&gt; Just (nm, _, _)) = Just nm</span>
-<span class="lineno">  315 </span><span class="spaces"></span><span class="nottickedoff">asLambdaName _ = Nothing</span></span>
-<span class="lineno">  316 </span>
-<span class="lineno">  317 </span>
-<span class="lineno">  318 </span>----------------------------------------------------------------------
-<span class="lineno">  319 </span>-- * Utility Functions for Transforming 'Term's
-<span class="lineno">  320 </span>----------------------------------------------------------------------
-<span class="lineno">  321 </span>
-<span class="lineno">  322 </span>-- | Transform the immediate subterms of a term using the supplied function
-<span class="lineno">  323 </span>traverseSubterms :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; Term -&gt; m Term
-<span class="lineno">  324 </span><span class="decl"><span class="nottickedoff">traverseSubterms f (unwrapTermF -&gt; tf) = traverse f tf &gt;&gt;= mkTermF</span></span>
-<span class="lineno">  325 </span>
-<span class="lineno">  326 </span>-- | Like 'memoFixTermFun', but threads through an accumulating argument
-<span class="lineno">  327 </span>memoFixTermFunAccum :: MonadIO m =&gt;
-<span class="lineno">  328 </span>                       ((b -&gt; Term -&gt; m a) -&gt; b -&gt; Term -&gt; m a) -&gt;
-<span class="lineno">  329 </span>                       b -&gt; Term -&gt; m a
-<span class="lineno">  330 </span><span class="decl"><span class="nottickedoff">memoFixTermFunAccum f acc_top term_top =</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="nottickedoff">do table_ref &lt;- liftIO $ newIORef IntMap.empty</span>
-<span class="lineno">  332 </span><span class="spaces">     </span><span class="nottickedoff">let go acc t@(STApp { stAppIndex = ix }) =</span>
-<span class="lineno">  333 </span><span class="spaces">           </span><span class="nottickedoff">liftIO (readIORef table_ref) &gt;&gt;= \table -&gt;</span>
-<span class="lineno">  334 </span><span class="spaces">           </span><span class="nottickedoff">case IntMap.lookup ix table of</span>
-<span class="lineno">  335 </span><span class="spaces">             </span><span class="nottickedoff">Just ret -&gt; return ret</span>
-<span class="lineno">  336 </span><span class="spaces">             </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno">  337 </span><span class="spaces">               </span><span class="nottickedoff">do ret &lt;- f go acc t</span>
-<span class="lineno">  338 </span><span class="spaces">                  </span><span class="nottickedoff">liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)</span>
-<span class="lineno">  339 </span><span class="spaces">                  </span><span class="nottickedoff">return ret</span>
-<span class="lineno">  340 </span><span class="spaces">         </span><span class="nottickedoff">go acc t = f go acc t</span>
-<span class="lineno">  341 </span><span class="spaces">     </span><span class="nottickedoff">go acc_top term_top</span></span>
-<span class="lineno">  342 </span>
-<span class="lineno">  343 </span>-- | Build a recursive memoized function for tranforming 'Term's. Take in a
-<span class="lineno">  344 </span>-- function @f@ that intuitively performs one step of the transformation and
-<span class="lineno">  345 </span>-- allow it to recursively call the memoized function being defined by passing
-<span class="lineno">  346 </span>-- it as the first argument to @f@.
-<span class="lineno">  347 </span>memoFixTermFun :: MonadIO m =&gt; ((Term -&gt; m a) -&gt; Term -&gt; m a) -&gt; Term -&gt; m a
-<span class="lineno">  348 </span><span class="decl"><span class="nottickedoff">memoFixTermFun f = memoFixTermFunAccum (f .) ()</span></span>
-<span class="lineno">  349 </span>
-<span class="lineno">  350 </span>
-<span class="lineno">  351 </span>----------------------------------------------------------------------
-<span class="lineno">  352 </span>-- * Lifting MR Solver Terms
-<span class="lineno">  353 </span>----------------------------------------------------------------------
-<span class="lineno">  354 </span>
-<span class="lineno">  355 </span>-- | Apply 'liftTerm' to all component terms in a 'TermLike' object
-<span class="lineno">  356 </span>liftTermLike :: (TermLike a, MonadTerm m) =&gt;
-<span class="lineno">  357 </span>                DeBruijnIndex -&gt; DeBruijnIndex -&gt; a -&gt; m a
-<span class="lineno">  358 </span><span class="decl"><span class="nottickedoff">liftTermLike i n = mapTermLike (liftTerm i n)</span></span>
-<span class="lineno">  359 </span>
-<span class="lineno">  360 </span>-- | Apply 'substTerm' to all component terms in a 'TermLike' object
-<span class="lineno">  361 </span>substTermLike :: (TermLike a, MonadTerm m) =&gt;
-<span class="lineno">  362 </span>                DeBruijnIndex -&gt; [Term] -&gt; a -&gt; m a
-<span class="lineno">  363 </span><span class="decl"><span class="nottickedoff">substTermLike i s = mapTermLike (substTerm i s)</span></span>
-<span class="lineno">  364 </span>
-<span class="lineno">  365 </span>-- | A term-like object is one that supports monadically mapping over all
-<span class="lineno">  366 </span>-- component terms. This is mainly used for lifting and substitution - see
-<span class="lineno">  367 </span>-- @liftTermLike@ and @substTermLike@. This class can be derived using
-<span class="lineno">  368 </span>-- @DeriveAnyClass@.
-<span class="lineno">  369 </span>class TermLike a where
-<span class="lineno">  370 </span>  mapTermLike :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; a -&gt; m a
-<span class="lineno">  371 </span>
-<span class="lineno">  372 </span>  -- Default instance for @DeriveAnyClass@
-<span class="lineno">  373 </span>  default mapTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =&gt;
-<span class="lineno">  374 </span>                         (Term -&gt; m Term) -&gt; a -&gt; m a
-<span class="lineno">  375 </span>  <span class="decl"><span class="nottickedoff">mapTermLike f = fmap to . gMapTermLike f . from</span></span>
-<span class="lineno">  376 </span>
-<span class="lineno">  377 </span>-- | A generic version of 'TermLike' for @DeriveAnyClass@, based on:
-<span class="lineno">  378 </span>-- https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:12
-<span class="lineno">  379 </span>class GTermLike f where
-<span class="lineno">  380 </span>  gMapTermLike :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; f p -&gt; m (f p)
-<span class="lineno">  381 </span>
-<span class="lineno">  382 </span>-- | 'TermLike' on empty types
-<span class="lineno">  383 </span>instance GTermLike V1 where
-<span class="lineno">  384 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike _ = \case {}</span></span>
-<span class="lineno">  385 </span>
-<span class="lineno">  386 </span>-- | 'TermLike' on unary types
-<span class="lineno">  387 </span>instance GTermLike U1 where
-<span class="lineno">  388 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike _ U1 = return U1</span></span>
-<span class="lineno">  389 </span>
-<span class="lineno">  390 </span>-- | 'TermLike' on sums
-<span class="lineno">  391 </span>instance (GTermLike f, GTermLike g) =&gt; GTermLike (f :+: g) where
-<span class="lineno">  392 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (L1 a) = L1 &lt;$&gt; gMapTermLike f a</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">gMapTermLike f (R1 b) = R1 &lt;$&gt; gMapTermLike f b</span></span>
-<span class="lineno">  394 </span>
-<span class="lineno">  395 </span>-- | 'TermLike' on products
-<span class="lineno">  396 </span>instance (GTermLike f, GTermLike g) =&gt; GTermLike (f :*: g) where
-<span class="lineno">  397 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (a :*: b) = (:*:) &lt;$&gt; gMapTermLike f a &lt;*&gt; gMapTermLike f b</span></span>
-<span class="lineno">  398 </span>
-<span class="lineno">  399 </span>-- | 'TermLike' on fields
-<span class="lineno">  400 </span>instance TermLike a =&gt; GTermLike (K1 i a) where
-<span class="lineno">  401 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (K1 a) = K1 &lt;$&gt; mapTermLike f a</span></span>
-<span class="lineno">  402 </span>
-<span class="lineno">  403 </span>-- | 'GTermLike' ignores meta-information
-<span class="lineno">  404 </span>instance GTermLike a =&gt; GTermLike (M1 i c a) where
-<span class="lineno">  405 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (M1 a) = M1 &lt;$&gt; gMapTermLike f a</span></span>
-<span class="lineno">  406 </span>
-<span class="lineno">  407 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b)</span></span>
-<span class="lineno">  408 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c)</span></span>
-<span class="lineno">  409 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d)</span></span>
-<span class="lineno">  410 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e)</span></span>
-<span class="lineno">  411 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e,f)</span></span>
-<span class="lineno">  412 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e,f,g)</span></span>
-<span class="lineno">  413 </span>-- NOTE: longer tuple types not supported by GHC 8.10
-<span class="lineno">  414 </span>-- deriving instance _ =&gt; TermLike (a,b,c,d,e,f,g,i)
-<span class="lineno">  415 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike [a]</span></span>
-<span class="lineno">  416 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike ()</span></span>
+<span class="lineno">  277 </span><span class="decl"><span class="nottickedoff">asEither (asGlobalApply &quot;Prelude.Left&quot;  -&gt; Just [_, _, x]) = pure $ Left x</span>
+<span class="lineno">  278 </span><span class="spaces"></span><span class="nottickedoff">asEither (asGlobalApply &quot;Prelude.Right&quot; -&gt; Just [_, _, x]) = pure $ Right x</span>
+<span class="lineno">  279 </span><span class="spaces"></span><span class="nottickedoff">asEither _ = Nothing</span></span>
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | Recognize the @Num@ type
+<span class="lineno">  282 </span>asNumType :: Recognizer Term ()
+<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">asNumType (asDataType -&gt; Just (primName -&gt; &quot;Cryptol.Num&quot;, _)) = Just ()</span>
+<span class="lineno">  284 </span><span class="spaces"></span><span class="nottickedoff">asNumType _ = Nothing</span></span>
+<span class="lineno">  285 </span>
+<span class="lineno">  286 </span>-- | Recognize a term as a @TCNum n@ or @TCInf@
+<span class="lineno">  287 </span>asNum :: Recognizer Term (Either Term ())
+<span class="lineno">  288 </span><span class="decl"><span class="nottickedoff">asNum (asGlobalApply &quot;Cryptol.TCNum&quot; -&gt; Just [n]) = pure $ Left n</span>
+<span class="lineno">  289 </span><span class="spaces"></span><span class="nottickedoff">asNum (asGlobalApply &quot;Cryptol.TCInf&quot; -&gt; Just []) = pure $ Right ()</span>
+<span class="lineno">  290 </span><span class="spaces"></span><span class="nottickedoff">asNum _ = Nothing</span></span>
+<span class="lineno">  291 </span>
+<span class="lineno">  292 </span>-- | Recognize a term as being of the form @isFinite n@
+<span class="lineno">  293 </span>asIsFinite :: Recognizer Term Term
+<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">asIsFinite (asApp -&gt; Just (isGlobalDef &quot;CryptolM.isFinite&quot; -&gt; Just (), n)) =</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">Just n</span>
+<span class="lineno">  296 </span><span class="spaces"></span><span class="nottickedoff">asIsFinite _ = Nothing</span></span>
+<span class="lineno">  297 </span>
+<span class="lineno">  298 </span>-- | Recognize a term as being of the form @IsLtNat m n@
+<span class="lineno">  299 </span>asIsLtNat :: Recognizer Term (Term, Term)
+<span class="lineno">  300 </span><span class="decl"><span class="nottickedoff">asIsLtNat (asApplyAll -&gt; (isGlobalDef &quot;Prelude.IsLtNat&quot; -&gt; Just (), [m, n])) =</span>
+<span class="lineno">  301 </span><span class="spaces">  </span><span class="nottickedoff">Just (m, n)</span>
+<span class="lineno">  302 </span><span class="spaces"></span><span class="nottickedoff">asIsLtNat _ = Nothing</span></span>
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>-- | Recognize a bitvector type with a potentially symbolic length
+<span class="lineno">  305 </span>asSymBitvectorType :: Recognizer Term Term
+<span class="lineno">  306 </span><span class="decl"><span class="nottickedoff">asSymBitvectorType (asVectorType -&gt; Just (n, asBoolType -&gt; Just ())) = Just n</span>
+<span class="lineno">  307 </span><span class="spaces"></span><span class="nottickedoff">asSymBitvectorType _ = Nothing</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>-- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
+<span class="lineno">  310 </span>asLambdaName :: Recognizer Term LocalName
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">asLambdaName (asLambda -&gt; Just (nm, _, _)) = Just nm</span>
+<span class="lineno">  312 </span><span class="spaces"></span><span class="nottickedoff">asLambdaName _ = Nothing</span></span>
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>----------------------------------------------------------------------
+<span class="lineno">  316 </span>-- * Utility Functions for Transforming 'Term's
+<span class="lineno">  317 </span>----------------------------------------------------------------------
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | Transform the immediate subterms of a term using the supplied function
+<span class="lineno">  320 </span>traverseSubterms :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; Term -&gt; m Term
+<span class="lineno">  321 </span><span class="decl"><span class="nottickedoff">traverseSubterms f (unwrapTermF -&gt; tf) = traverse f tf &gt;&gt;= mkTermF</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>-- | Like 'memoFixTermFun', but threads through an accumulating argument
+<span class="lineno">  324 </span>memoFixTermFunAccum :: MonadIO m =&gt;
+<span class="lineno">  325 </span>                       ((b -&gt; Term -&gt; m a) -&gt; b -&gt; Term -&gt; m a) -&gt;
+<span class="lineno">  326 </span>                       b -&gt; Term -&gt; m a
+<span class="lineno">  327 </span><span class="decl"><span class="nottickedoff">memoFixTermFunAccum f acc_top term_top =</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="nottickedoff">do table_ref &lt;- liftIO $ newIORef IntMap.empty</span>
+<span class="lineno">  329 </span><span class="spaces">     </span><span class="nottickedoff">let go acc t@(STApp { stAppIndex = ix }) =</span>
+<span class="lineno">  330 </span><span class="spaces">           </span><span class="nottickedoff">liftIO (readIORef table_ref) &gt;&gt;= \table -&gt;</span>
+<span class="lineno">  331 </span><span class="spaces">           </span><span class="nottickedoff">case IntMap.lookup ix table of</span>
+<span class="lineno">  332 </span><span class="spaces">             </span><span class="nottickedoff">Just ret -&gt; return ret</span>
+<span class="lineno">  333 </span><span class="spaces">             </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">  334 </span><span class="spaces">               </span><span class="nottickedoff">do ret &lt;- f go acc t</span>
+<span class="lineno">  335 </span><span class="spaces">                  </span><span class="nottickedoff">liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)</span>
+<span class="lineno">  336 </span><span class="spaces">                  </span><span class="nottickedoff">return ret</span>
+<span class="lineno">  337 </span><span class="spaces">         </span><span class="nottickedoff">go acc t = f go acc t</span>
+<span class="lineno">  338 </span><span class="spaces">     </span><span class="nottickedoff">go acc_top term_top</span></span>
+<span class="lineno">  339 </span>
+<span class="lineno">  340 </span>-- | Build a recursive memoized function for tranforming 'Term's. Take in a
+<span class="lineno">  341 </span>-- function @f@ that intuitively performs one step of the transformation and
+<span class="lineno">  342 </span>-- allow it to recursively call the memoized function being defined by passing
+<span class="lineno">  343 </span>-- it as the first argument to @f@.
+<span class="lineno">  344 </span>memoFixTermFun :: MonadIO m =&gt; ((Term -&gt; m a) -&gt; Term -&gt; m a) -&gt; Term -&gt; m a
+<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">memoFixTermFun f = memoFixTermFunAccum (f .) ()</span></span>
+<span class="lineno">  346 </span>
+<span class="lineno">  347 </span>
+<span class="lineno">  348 </span>----------------------------------------------------------------------
+<span class="lineno">  349 </span>-- * Lifting MR Solver Terms
+<span class="lineno">  350 </span>----------------------------------------------------------------------
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>-- | Apply 'liftTerm' to all component terms in a 'TermLike' object
+<span class="lineno">  353 </span>liftTermLike :: (TermLike a, MonadTerm m) =&gt;
+<span class="lineno">  354 </span>                DeBruijnIndex -&gt; DeBruijnIndex -&gt; a -&gt; m a
+<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">liftTermLike i n = mapTermLike (liftTerm i n)</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>-- | Apply 'substTerm' to all component terms in a 'TermLike' object
+<span class="lineno">  358 </span>substTermLike :: (TermLike a, MonadTerm m) =&gt;
+<span class="lineno">  359 </span>                DeBruijnIndex -&gt; [Term] -&gt; a -&gt; m a
+<span class="lineno">  360 </span><span class="decl"><span class="nottickedoff">substTermLike i s = mapTermLike (substTerm i s)</span></span>
+<span class="lineno">  361 </span>
+<span class="lineno">  362 </span>-- | A term-like object is one that supports monadically mapping over all
+<span class="lineno">  363 </span>-- component terms. This is mainly used for lifting and substitution - see
+<span class="lineno">  364 </span>-- @liftTermLike@ and @substTermLike@. This class can be derived using
+<span class="lineno">  365 </span>-- @DeriveAnyClass@.
+<span class="lineno">  366 </span>class TermLike a where
+<span class="lineno">  367 </span>  mapTermLike :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; a -&gt; m a
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>  -- Default instance for @DeriveAnyClass@
+<span class="lineno">  370 </span>  default mapTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =&gt;
+<span class="lineno">  371 </span>                         (Term -&gt; m Term) -&gt; a -&gt; m a
+<span class="lineno">  372 </span>  <span class="decl"><span class="nottickedoff">mapTermLike f = fmap to . gMapTermLike f . from</span></span>
+<span class="lineno">  373 </span>
+<span class="lineno">  374 </span>-- | A generic version of 'TermLike' for @DeriveAnyClass@, based on:
+<span class="lineno">  375 </span>-- https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:12
+<span class="lineno">  376 </span>class GTermLike f where
+<span class="lineno">  377 </span>  gMapTermLike :: MonadTerm m =&gt; (Term -&gt; m Term) -&gt; f p -&gt; m (f p)
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span>-- | 'TermLike' on empty types
+<span class="lineno">  380 </span>instance GTermLike V1 where
+<span class="lineno">  381 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike _ = \case {}</span></span>
+<span class="lineno">  382 </span>
+<span class="lineno">  383 </span>-- | 'TermLike' on unary types
+<span class="lineno">  384 </span>instance GTermLike U1 where
+<span class="lineno">  385 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike _ U1 = return U1</span></span>
+<span class="lineno">  386 </span>
+<span class="lineno">  387 </span>-- | 'TermLike' on sums
+<span class="lineno">  388 </span>instance (GTermLike f, GTermLike g) =&gt; GTermLike (f :+: g) where
+<span class="lineno">  389 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (L1 a) = L1 &lt;$&gt; gMapTermLike f a</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="nottickedoff">gMapTermLike f (R1 b) = R1 &lt;$&gt; gMapTermLike f b</span></span>
+<span class="lineno">  391 </span>
+<span class="lineno">  392 </span>-- | 'TermLike' on products
+<span class="lineno">  393 </span>instance (GTermLike f, GTermLike g) =&gt; GTermLike (f :*: g) where
+<span class="lineno">  394 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (a :*: b) = (:*:) &lt;$&gt; gMapTermLike f a &lt;*&gt; gMapTermLike f b</span></span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>-- | 'TermLike' on fields
+<span class="lineno">  397 </span>instance TermLike a =&gt; GTermLike (K1 i a) where
+<span class="lineno">  398 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (K1 a) = K1 &lt;$&gt; mapTermLike f a</span></span>
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>-- | 'GTermLike' ignores meta-information
+<span class="lineno">  401 </span>instance GTermLike a =&gt; GTermLike (M1 i c a) where
+<span class="lineno">  402 </span>  <span class="decl"><span class="nottickedoff">gMapTermLike f (M1 a) = M1 &lt;$&gt; gMapTermLike f a</span></span>
+<span class="lineno">  403 </span>
+<span class="lineno">  404 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b)</span></span>
+<span class="lineno">  405 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c)</span></span>
+<span class="lineno">  406 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d)</span></span>
+<span class="lineno">  407 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e)</span></span>
+<span class="lineno">  408 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e,f)</span></span>
+<span class="lineno">  409 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike (a,b,c,d,e,f,g)</span></span>
+<span class="lineno">  410 </span>-- NOTE: longer tuple types not supported by GHC 8.10
+<span class="lineno">  411 </span>-- deriving instance _ =&gt; TermLike (a,b,c,d,e,f,g,i)
+<span class="lineno">  412 </span><span class="decl"><span class="nottickedoff">deriving instance _ =&gt; TermLike [a]</span></span>
+<span class="lineno">  413 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike ()</span></span>
+<span class="lineno">  414 </span>
+<span class="lineno">  415 </span>instance TermLike Term where
+<span class="lineno">  416 </span>  <span class="decl"><span class="nottickedoff">mapTermLike f = f</span></span>
 <span class="lineno">  417 </span>
-<span class="lineno">  418 </span>instance TermLike Term where
-<span class="lineno">  419 </span>  <span class="decl"><span class="nottickedoff">mapTermLike f = f</span></span>
-<span class="lineno">  420 </span>
-<span class="lineno">  421 </span>instance TermLike FunName where
-<span class="lineno">  422 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
-<span class="lineno">  423 </span>instance TermLike LocalName where
-<span class="lineno">  424 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
-<span class="lineno">  425 </span>instance TermLike Natural where
-<span class="lineno">  426 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
-<span class="lineno">  427 </span>
-<span class="lineno">  428 </span><span class="decl"><span class="nottickedoff">deriving anyclass instance TermLike Type</span></span>
-<span class="lineno">  429 </span><span class="decl"><span class="nottickedoff">deriving anyclass instance TermLike EvTerm</span></span>
-<span class="lineno">  430 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike NormComp</span></span>
-<span class="lineno">  431 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike CompFun</span></span>
-<span class="lineno">  432 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike Comp</span></span>
-<span class="lineno">  433 </span>
-<span class="lineno">  434 </span>
-<span class="lineno">  435 </span>----------------------------------------------------------------------
-<span class="lineno">  436 </span>-- * Pretty-Printing MR Solver Terms
-<span class="lineno">  437 </span>----------------------------------------------------------------------
-<span class="lineno">  438 </span>
-<span class="lineno">  439 </span>-- | The monad for pretty-printing in a context of SAW core variables. The
-<span class="lineno">  440 </span>-- context is in innermost-to-outermost order, i.e. from newest to oldest
-<span class="lineno">  441 </span>-- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
-<span class="lineno">  442 </span>-- 
-<span class="lineno">  443 </span>-- NOTE: By convention, functions which return something of type 'PPInCtxM'
-<span class="lineno">  444 </span>-- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
-<span class="lineno">  445 </span>-- functions which return something of type 'PPS.Doc' have the prefix @pp@
-<span class="lineno">  446 </span>-- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
-<span class="lineno">  447 </span>-- the rest of saw-script (e.g. 'ppTerm' defined in @SAWCore.Term.Pretty@,
-<span class="lineno">  448 </span>-- 'ppFirstOrderValue' defined in @SAWCore.FiniteValue@).
-<span class="lineno">  449 </span>newtype PPInCtxM a = PPInCtxM (Reader (PPS.Opts, [LocalName]) a)
-<span class="lineno">  450 </span>                   deriving newtype (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>,
-<span class="lineno">  451 </span>                                     <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadReader (PPS.Opts, [LocalName])</span></span></span></span></span></span>)
-<span class="lineno">  452 </span>
-<span class="lineno">  453 </span>-- | Locally set the context of SAW core variables for a 'PPInCtxM' computation
-<span class="lineno">  454 </span>prettyWithCtx :: MRVarCtx -&gt; PPInCtxM a -&gt; PPInCtxM a
-<span class="lineno">  455 </span><span class="decl"><span class="nottickedoff">prettyWithCtx ctx = local (fmap $ const $ map fst $ mrVarCtxInnerToOuter ctx)</span></span>
-<span class="lineno">  456 </span>
-<span class="lineno">  457 </span>-- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context and 'PPS.Opts'
-<span class="lineno">  458 </span>runPPInCtxM :: PPInCtxM a -&gt; PPS.Opts -&gt; MRVarCtx -&gt; a
-<span class="lineno">  459 </span><span class="decl"><span class="nottickedoff">runPPInCtxM (PPInCtxM m) opts ctx =</span>
-<span class="lineno">  460 </span><span class="spaces">  </span><span class="nottickedoff">runReader m (opts, map fst $ mrVarCtxInnerToOuter ctx)</span></span>
-<span class="lineno">  461 </span>
-<span class="lineno">  462 </span>-- | Pretty-print an object in a SAW core context with the given 'PPS.Opts'
-<span class="lineno">  463 </span>ppInCtx :: PrettyInCtx a =&gt; PPS.Opts -&gt; MRVarCtx -&gt; a -&gt; PPS.Doc
-<span class="lineno">  464 </span><span class="decl"><span class="nottickedoff">ppInCtx opts ctx a = runPPInCtxM (prettyInCtx a) opts ctx</span></span>
-<span class="lineno">  465 </span>
-<span class="lineno">  466 </span>-- | Pretty-print an object in a SAW core context and render to a 'String' with
-<span class="lineno">  467 </span>-- the given 'PPS.Opts'
-<span class="lineno">  468 </span>showInCtx :: PrettyInCtx a =&gt; PPS.Opts -&gt; MRVarCtx -&gt; a -&gt; String
-<span class="lineno">  469 </span><span class="decl"><span class="nottickedoff">showInCtx opts ctx a = PPS.render opts $ runPPInCtxM (prettyInCtx a) opts ctx</span></span>
-<span class="lineno">  470 </span>
-<span class="lineno">  471 </span>-- | A generic function for pretty-printing an object in a SAW core context of
-<span class="lineno">  472 </span>-- locally-bound names
-<span class="lineno">  473 </span>class PrettyInCtx a where
-<span class="lineno">  474 </span>  prettyInCtx :: a -&gt; PPInCtxM PPS.Doc
-<span class="lineno">  475 </span>
-<span class="lineno">  476 </span>instance PrettyInCtx Term where
-<span class="lineno">  477 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx t = do (opts, ctx) &lt;- ask</span>
-<span class="lineno">  478 </span><span class="spaces">                     </span><span class="nottickedoff">return $ ppTermInCtx opts ctx t</span></span>
-<span class="lineno">  479 </span>
-<span class="lineno">  480 </span>-- | Combine a list of pretty-printed documents like applications are combined
-<span class="lineno">  481 </span>prettyAppList :: [PPInCtxM PPS.Doc] -&gt; PPInCtxM PPS.Doc
-<span class="lineno">  482 </span><span class="decl"><span class="nottickedoff">prettyAppList = fmap (group . hang 2 . vsep) . sequence</span></span>
-<span class="lineno">  483 </span>
-<span class="lineno">  484 </span>-- | Pretty-print the application of a 'Term'
-<span class="lineno">  485 </span>prettyTermApp :: Term -&gt; [Term] -&gt; PPInCtxM PPS.Doc
-<span class="lineno">  486 </span><span class="decl"><span class="nottickedoff">prettyTermApp f_top args =</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx $ foldl (\f arg -&gt; Unshared $ App f arg) f_top args</span></span>
-<span class="lineno">  488 </span>
-<span class="lineno">  489 </span>-- | Pretty-print the application of a 'Term' in a SAW core context with the
-<span class="lineno">  490 </span>-- given 'PPS.Opts'
-<span class="lineno">  491 </span>ppTermAppInCtx :: PPS.Opts -&gt; MRVarCtx -&gt; Term -&gt; [Term] -&gt; PPS.Doc
-<span class="lineno">  492 </span><span class="decl"><span class="nottickedoff">ppTermAppInCtx opts ctx f_top args =</span>
-<span class="lineno">  493 </span><span class="spaces">  </span><span class="nottickedoff">runPPInCtxM (prettyTermApp f_top args) opts ctx</span></span>
-<span class="lineno">  494 </span>
-<span class="lineno">  495 </span>instance PrettyInCtx MRVarCtx where
-<span class="lineno">  496 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx ctx_top = do</span>
-<span class="lineno">  497 </span><span class="spaces">    </span><span class="nottickedoff">(opts, _) &lt;- ask</span>
-<span class="lineno">  498 </span><span class="spaces">    </span><span class="nottickedoff">return $ align $ sep $ helper opts [] $ mrVarCtxOuterToInner ctx_top</span>
-<span class="lineno">  499 </span><span class="spaces">    </span><span class="nottickedoff">where helper :: PPS.Opts -&gt; [LocalName] -&gt; [(LocalName,Term)] -&gt; [PPS.Doc]</span>
-<span class="lineno">  500 </span><span class="spaces">          </span><span class="nottickedoff">helper _ _ [] = []</span>
-<span class="lineno">  501 </span><span class="spaces">          </span><span class="nottickedoff">helper opts ns [(n, tp)] =</span>
-<span class="lineno">  502 </span><span class="spaces">            </span><span class="nottickedoff">[ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) &lt;&gt; &quot;:&quot; &lt;&gt;</span>
-<span class="lineno">  503 </span><span class="spaces">             </span><span class="nottickedoff">ppTermInCtx opts ns tp]</span>
-<span class="lineno">  504 </span><span class="spaces">          </span><span class="nottickedoff">helper opts ns ((n, tp):ctx) =</span>
-<span class="lineno">  505 </span><span class="spaces">            </span><span class="nottickedoff">(ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) &lt;&gt; &quot;:&quot; &lt;&gt;</span>
-<span class="lineno">  506 </span><span class="spaces">             </span><span class="nottickedoff">ppTermInCtx opts ns tp &lt;&gt; &quot;,&quot;) : (helper opts (n:ns) ctx)</span></span>
+<span class="lineno">  418 </span>instance TermLike FunName where
+<span class="lineno">  419 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
+<span class="lineno">  420 </span>instance TermLike LocalName where
+<span class="lineno">  421 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
+<span class="lineno">  422 </span>instance TermLike Natural where
+<span class="lineno">  423 </span>  <span class="decl"><span class="nottickedoff">mapTermLike _ = return</span></span>
+<span class="lineno">  424 </span>
+<span class="lineno">  425 </span><span class="decl"><span class="nottickedoff">deriving anyclass instance TermLike Type</span></span>
+<span class="lineno">  426 </span><span class="decl"><span class="nottickedoff">deriving anyclass instance TermLike EvTerm</span></span>
+<span class="lineno">  427 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike NormComp</span></span>
+<span class="lineno">  428 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike CompFun</span></span>
+<span class="lineno">  429 </span><span class="decl"><span class="nottickedoff">deriving instance TermLike Comp</span></span>
+<span class="lineno">  430 </span>
+<span class="lineno">  431 </span>
+<span class="lineno">  432 </span>----------------------------------------------------------------------
+<span class="lineno">  433 </span>-- * Pretty-Printing MR Solver Terms
+<span class="lineno">  434 </span>----------------------------------------------------------------------
+<span class="lineno">  435 </span>
+<span class="lineno">  436 </span>-- | The monad for pretty-printing in a context of SAW core variables. The
+<span class="lineno">  437 </span>-- context is in innermost-to-outermost order, i.e. from newest to oldest
+<span class="lineno">  438 </span>-- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
+<span class="lineno">  439 </span>-- 
+<span class="lineno">  440 </span>-- NOTE: By convention, functions which return something of type 'PPInCtxM'
+<span class="lineno">  441 </span>-- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
+<span class="lineno">  442 </span>-- functions which return something of type 'PPS.Doc' have the prefix @pp@
+<span class="lineno">  443 </span>-- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
+<span class="lineno">  444 </span>-- the rest of saw-script (e.g. 'ppTerm' defined in @SAWCore.Term.Pretty@,
+<span class="lineno">  445 </span>-- 'ppFirstOrderValue' defined in @SAWCore.FiniteValue@).
+<span class="lineno">  446 </span>newtype PPInCtxM a = PPInCtxM (Reader (PPS.Opts, [LocalName]) a)
+<span class="lineno">  447 </span>                   deriving newtype (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>,
+<span class="lineno">  448 </span>                                     <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadReader (PPS.Opts, [LocalName])</span></span></span></span></span></span>)
+<span class="lineno">  449 </span>
+<span class="lineno">  450 </span>-- | Locally set the context of SAW core variables for a 'PPInCtxM' computation
+<span class="lineno">  451 </span>prettyWithCtx :: MRVarCtx -&gt; PPInCtxM a -&gt; PPInCtxM a
+<span class="lineno">  452 </span><span class="decl"><span class="nottickedoff">prettyWithCtx ctx = local (fmap $ const $ map fst $ mrVarCtxInnerToOuter ctx)</span></span>
+<span class="lineno">  453 </span>
+<span class="lineno">  454 </span>-- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context and 'PPS.Opts'
+<span class="lineno">  455 </span>runPPInCtxM :: PPInCtxM a -&gt; PPS.Opts -&gt; MRVarCtx -&gt; a
+<span class="lineno">  456 </span><span class="decl"><span class="nottickedoff">runPPInCtxM (PPInCtxM m) opts ctx =</span>
+<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">runReader m (opts, map fst $ mrVarCtxInnerToOuter ctx)</span></span>
+<span class="lineno">  458 </span>
+<span class="lineno">  459 </span>-- | Pretty-print an object in a SAW core context with the given 'PPS.Opts'
+<span class="lineno">  460 </span>ppInCtx :: PrettyInCtx a =&gt; PPS.Opts -&gt; MRVarCtx -&gt; a -&gt; PPS.Doc
+<span class="lineno">  461 </span><span class="decl"><span class="nottickedoff">ppInCtx opts ctx a = runPPInCtxM (prettyInCtx a) opts ctx</span></span>
+<span class="lineno">  462 </span>
+<span class="lineno">  463 </span>-- | Pretty-print an object in a SAW core context and render to a 'String' with
+<span class="lineno">  464 </span>-- the given 'PPS.Opts'
+<span class="lineno">  465 </span>showInCtx :: PrettyInCtx a =&gt; PPS.Opts -&gt; MRVarCtx -&gt; a -&gt; String
+<span class="lineno">  466 </span><span class="decl"><span class="nottickedoff">showInCtx opts ctx a = PPS.render opts $ runPPInCtxM (prettyInCtx a) opts ctx</span></span>
+<span class="lineno">  467 </span>
+<span class="lineno">  468 </span>-- | A generic function for pretty-printing an object in a SAW core context of
+<span class="lineno">  469 </span>-- locally-bound names
+<span class="lineno">  470 </span>class PrettyInCtx a where
+<span class="lineno">  471 </span>  prettyInCtx :: a -&gt; PPInCtxM PPS.Doc
+<span class="lineno">  472 </span>
+<span class="lineno">  473 </span>instance PrettyInCtx Term where
+<span class="lineno">  474 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx t = do (opts, ctx) &lt;- ask</span>
+<span class="lineno">  475 </span><span class="spaces">                     </span><span class="nottickedoff">return $ ppTermInCtx opts ctx t</span></span>
+<span class="lineno">  476 </span>
+<span class="lineno">  477 </span>-- | Combine a list of pretty-printed documents like applications are combined
+<span class="lineno">  478 </span>prettyAppList :: [PPInCtxM PPS.Doc] -&gt; PPInCtxM PPS.Doc
+<span class="lineno">  479 </span><span class="decl"><span class="nottickedoff">prettyAppList = fmap (group . hang 2 . vsep) . sequence</span></span>
+<span class="lineno">  480 </span>
+<span class="lineno">  481 </span>-- | Pretty-print the application of a 'Term'
+<span class="lineno">  482 </span>prettyTermApp :: Term -&gt; [Term] -&gt; PPInCtxM PPS.Doc
+<span class="lineno">  483 </span><span class="decl"><span class="nottickedoff">prettyTermApp f_top args =</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx $ foldl (\f arg -&gt; Unshared $ App f arg) f_top args</span></span>
+<span class="lineno">  485 </span>
+<span class="lineno">  486 </span>-- | Pretty-print the application of a 'Term' in a SAW core context with the
+<span class="lineno">  487 </span>-- given 'PPS.Opts'
+<span class="lineno">  488 </span>ppTermAppInCtx :: PPS.Opts -&gt; MRVarCtx -&gt; Term -&gt; [Term] -&gt; PPS.Doc
+<span class="lineno">  489 </span><span class="decl"><span class="nottickedoff">ppTermAppInCtx opts ctx f_top args =</span>
+<span class="lineno">  490 </span><span class="spaces">  </span><span class="nottickedoff">runPPInCtxM (prettyTermApp f_top args) opts ctx</span></span>
+<span class="lineno">  491 </span>
+<span class="lineno">  492 </span>instance PrettyInCtx MRVarCtx where
+<span class="lineno">  493 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx ctx_top = do</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="nottickedoff">(opts, _) &lt;- ask</span>
+<span class="lineno">  495 </span><span class="spaces">    </span><span class="nottickedoff">return $ align $ sep $ helper opts [] $ mrVarCtxOuterToInner ctx_top</span>
+<span class="lineno">  496 </span><span class="spaces">    </span><span class="nottickedoff">where helper :: PPS.Opts -&gt; [LocalName] -&gt; [(LocalName,Term)] -&gt; [PPS.Doc]</span>
+<span class="lineno">  497 </span><span class="spaces">          </span><span class="nottickedoff">helper _ _ [] = []</span>
+<span class="lineno">  498 </span><span class="spaces">          </span><span class="nottickedoff">helper opts ns [(n, tp)] =</span>
+<span class="lineno">  499 </span><span class="spaces">            </span><span class="nottickedoff">[ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) &lt;&gt; &quot;:&quot; &lt;&gt;</span>
+<span class="lineno">  500 </span><span class="spaces">             </span><span class="nottickedoff">ppTermInCtx opts ns tp]</span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="nottickedoff">helper opts ns ((n, tp):ctx) =</span>
+<span class="lineno">  502 </span><span class="spaces">            </span><span class="nottickedoff">(ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) &lt;&gt; &quot;:&quot; &lt;&gt;</span>
+<span class="lineno">  503 </span><span class="spaces">             </span><span class="nottickedoff">ppTermInCtx opts ns tp &lt;&gt; &quot;,&quot;) : (helper opts (n:ns) ctx)</span></span>
+<span class="lineno">  504 </span>
+<span class="lineno">  505 </span>instance PrettyInCtx PPS.Doc where
+<span class="lineno">  506 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx pp = return pp</span></span>
 <span class="lineno">  507 </span>
-<span class="lineno">  508 </span>instance PrettyInCtx PPS.Doc where
-<span class="lineno">  509 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx pp = return pp</span></span>
+<span class="lineno">  508 </span>instance PrettyInCtx Type where
+<span class="lineno">  509 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Type t) = prettyInCtx t</span></span>
 <span class="lineno">  510 </span>
-<span class="lineno">  511 </span>instance PrettyInCtx Type where
-<span class="lineno">  512 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Type t) = prettyInCtx t</span></span>
+<span class="lineno">  511 </span>instance PrettyInCtx MRVar where
+<span class="lineno">  512 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (MRVar ec) = return $ ppName $ ecName ec</span></span>
 <span class="lineno">  513 </span>
-<span class="lineno">  514 </span>instance PrettyInCtx MRVar where
-<span class="lineno">  515 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (MRVar ec) = return $ ppName $ ecName ec</span></span>
+<span class="lineno">  514 </span>instance PrettyInCtx a =&gt; PrettyInCtx [a] where
+<span class="lineno">  515 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx xs = list &lt;$&gt; mapM prettyInCtx xs</span></span>
 <span class="lineno">  516 </span>
-<span class="lineno">  517 </span>instance PrettyInCtx a =&gt; PrettyInCtx [a] where
-<span class="lineno">  518 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx xs = list &lt;$&gt; mapM prettyInCtx xs</span></span>
+<span class="lineno">  517 </span>instance {-# OVERLAPPING #-} PrettyInCtx String where
+<span class="lineno">  518 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx str = return $ fromString str</span></span>
 <span class="lineno">  519 </span>
-<span class="lineno">  520 </span>instance {-# OVERLAPPING #-} PrettyInCtx String where
-<span class="lineno">  521 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx str = return $ fromString str</span></span>
+<span class="lineno">  520 </span>instance PrettyInCtx Text where
+<span class="lineno">  521 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx str = return $ fromString $ unpack str</span></span>
 <span class="lineno">  522 </span>
-<span class="lineno">  523 </span>instance PrettyInCtx Text where
-<span class="lineno">  524 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx str = return $ fromString $ unpack str</span></span>
+<span class="lineno">  523 </span>instance PrettyInCtx Int where
+<span class="lineno">  524 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx i = return $ viaShow i</span></span>
 <span class="lineno">  525 </span>
-<span class="lineno">  526 </span>instance PrettyInCtx Int where
+<span class="lineno">  526 </span>instance PrettyInCtx Natural where
 <span class="lineno">  527 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx i = return $ viaShow i</span></span>
 <span class="lineno">  528 </span>
-<span class="lineno">  529 </span>instance PrettyInCtx Natural where
-<span class="lineno">  530 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx i = return $ viaShow i</span></span>
-<span class="lineno">  531 </span>
-<span class="lineno">  532 </span>instance PrettyInCtx a =&gt; PrettyInCtx (Maybe a) where
-<span class="lineno">  533 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Just x) = (&lt;+&gt;) &quot;Just&quot; &lt;$&gt; prettyInCtx x</span>
-<span class="lineno">  534 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx Nothing = return &quot;Nothing&quot;</span></span>
-<span class="lineno">  535 </span>
-<span class="lineno">  536 </span>instance (PrettyInCtx a, PrettyInCtx b) =&gt; PrettyInCtx (Either a b) where
-<span class="lineno">  537 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Left  a) = (&lt;+&gt;) &quot;Left&quot;  &lt;$&gt; prettyInCtx a</span>
-<span class="lineno">  538 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Right b) = (&lt;+&gt;) &quot;Right&quot; &lt;$&gt; prettyInCtx b</span></span>
-<span class="lineno">  539 </span>
-<span class="lineno">  540 </span>instance (PrettyInCtx a, PrettyInCtx b) =&gt; PrettyInCtx (a,b) where
-<span class="lineno">  541 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (x, y) = (\x' y' -&gt; parens (x' &lt;&gt; &quot;,&quot; &lt;&gt; y')) &lt;$&gt; prettyInCtx x</span>
-<span class="lineno">  542 </span><span class="spaces">                                                            </span><span class="nottickedoff">&lt;*&gt; prettyInCtx y</span></span>
-<span class="lineno">  543 </span>
-<span class="lineno">  544 </span>instance PrettyInCtx TermProj where
-<span class="lineno">  545 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx TermProjLeft = return (pretty '.' &lt;&gt; &quot;1&quot;)</span>
-<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx TermProjRight = return (pretty '.' &lt;&gt; &quot;2&quot;)</span>
-<span class="lineno">  547 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (TermProjRecord fld) = return (pretty '.' &lt;&gt; pretty fld)</span></span>
-<span class="lineno">  548 </span>
-<span class="lineno">  549 </span>instance PrettyInCtx FunName where
-<span class="lineno">  550 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CallSName var) = prettyInCtx var</span>
-<span class="lineno">  551 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (EVarFunName var) = prettyInCtx var</span>
-<span class="lineno">  552 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (GlobalName g projs) =</span>
-<span class="lineno">  553 </span><span class="spaces">    </span><span class="nottickedoff">foldM (\pp proj -&gt; (pp &lt;&gt;) &lt;$&gt; prettyInCtx proj) (ppName $</span>
-<span class="lineno">  554 </span><span class="spaces">                                                      </span><span class="nottickedoff">globalDefName g) projs</span></span>
-<span class="lineno">  555 </span>
-<span class="lineno">  556 </span>instance PrettyInCtx Comp where
-<span class="lineno">  557 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CompTerm t) = prettyInCtx t</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompBind c f) =</span>
-<span class="lineno">  559 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [prettyInCtx c, return &quot;&gt;&gt;=&quot;, prettyInCtx f]</span>
-<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompReturn t) =</span>
-<span class="lineno">  561 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  562 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span></span>
-<span class="lineno">  563 </span>
-<span class="lineno">  564 </span>instance PrettyInCtx CompFun where
-<span class="lineno">  565 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CompFunTerm _ t) = prettyInCtx t</span>
-<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompFunReturn _ t) =</span>
-<span class="lineno">  567 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  568 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span>
-<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompFunComp f g) =</span>
-<span class="lineno">  570 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [prettyInCtx f, return &quot;&gt;=&gt;&quot;, prettyInCtx g]</span></span>
-<span class="lineno">  571 </span>
-<span class="lineno">  572 </span>instance PrettyInCtx NormComp where
-<span class="lineno">  573 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (RetS t) =</span>
-<span class="lineno">  574 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  575 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span>
-<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ErrorS str) =</span>
-<span class="lineno">  577 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;errorS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  578 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx str]</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Ite cond t1 t2) =</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;ite&quot;, return &quot;_&quot;, parens &lt;$&gt; prettyInCtx cond,</span>
-<span class="lineno">  581 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t1, parens &lt;$&gt; prettyInCtx t2]</span>
-<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Eithers elims eith) =</span>
-<span class="lineno">  583 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;eithers&quot;, return (parens &quot;SpecM _ _&quot;),</span>
-<span class="lineno">  584 </span><span class="spaces">                   </span><span class="nottickedoff">prettyInCtx (map snd elims), parens &lt;$&gt; prettyInCtx eith]</span>
-<span class="lineno">  585 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (MaybeElim tp m f mayb) =</span>
-<span class="lineno">  586 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;maybe&quot;, parens &lt;$&gt; prettyInCtx tp,</span>
-<span class="lineno">  587 </span><span class="spaces">                   </span><span class="nottickedoff">return (parens &quot;SpecM _ _&quot;), parens &lt;$&gt; prettyInCtx m,</span>
-<span class="lineno">  588 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx f, parens &lt;$&gt; prettyInCtx mayb]</span>
-<span class="lineno">  589 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (OrS t1 t2) =</span>
-<span class="lineno">  590 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;orS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  591 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t1, parens &lt;$&gt; prettyInCtx t2]</span>
-<span class="lineno">  592 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (AssertBoolBind cond k) =</span>
-<span class="lineno">  593 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;assertBoolS&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  594 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx cond, return &quot;&gt;&gt;=&quot;,</span>
-<span class="lineno">  595 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx k]</span>
-<span class="lineno">  596 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (AssumeBoolBind cond k) =</span>
-<span class="lineno">  597 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;assumeBoolS&quot;, return &quot;_&quot;,</span>
-<span class="lineno">  598 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx cond, return &quot;&gt;&gt;=&quot;,</span>
-<span class="lineno">  599 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx k]</span>
-<span class="lineno">  600 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ExistsBind tp k) =</span>
-<span class="lineno">  601 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;existsS&quot;, return &quot;_&quot;, prettyInCtx tp,</span>
+<span class="lineno">  529 </span>instance PrettyInCtx a =&gt; PrettyInCtx (Maybe a) where
+<span class="lineno">  530 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Just x) = (&lt;+&gt;) &quot;Just&quot; &lt;$&gt; prettyInCtx x</span>
+<span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx Nothing = return &quot;Nothing&quot;</span></span>
+<span class="lineno">  532 </span>
+<span class="lineno">  533 </span>instance (PrettyInCtx a, PrettyInCtx b) =&gt; PrettyInCtx (Either a b) where
+<span class="lineno">  534 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (Left  a) = (&lt;+&gt;) &quot;Left&quot;  &lt;$&gt; prettyInCtx a</span>
+<span class="lineno">  535 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Right b) = (&lt;+&gt;) &quot;Right&quot; &lt;$&gt; prettyInCtx b</span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>instance (PrettyInCtx a, PrettyInCtx b) =&gt; PrettyInCtx (a,b) where
+<span class="lineno">  538 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (x, y) = (\x' y' -&gt; parens (x' &lt;&gt; &quot;,&quot; &lt;&gt; y')) &lt;$&gt; prettyInCtx x</span>
+<span class="lineno">  539 </span><span class="spaces">                                                            </span><span class="nottickedoff">&lt;*&gt; prettyInCtx y</span></span>
+<span class="lineno">  540 </span>
+<span class="lineno">  541 </span>instance PrettyInCtx TermProj where
+<span class="lineno">  542 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx TermProjLeft = return (pretty '.' &lt;&gt; &quot;1&quot;)</span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx TermProjRight = return (pretty '.' &lt;&gt; &quot;2&quot;)</span>
+<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (TermProjRecord fld) = return (pretty '.' &lt;&gt; pretty fld)</span></span>
+<span class="lineno">  545 </span>
+<span class="lineno">  546 </span>instance PrettyInCtx FunName where
+<span class="lineno">  547 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CallSName var) = prettyInCtx var</span>
+<span class="lineno">  548 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (EVarFunName var) = prettyInCtx var</span>
+<span class="lineno">  549 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (GlobalName g projs) =</span>
+<span class="lineno">  550 </span><span class="spaces">    </span><span class="nottickedoff">foldM (\pp proj -&gt; (pp &lt;&gt;) &lt;$&gt; prettyInCtx proj) (ppName $</span>
+<span class="lineno">  551 </span><span class="spaces">                                                      </span><span class="nottickedoff">globalDefName g) projs</span></span>
+<span class="lineno">  552 </span>
+<span class="lineno">  553 </span>instance PrettyInCtx Comp where
+<span class="lineno">  554 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CompTerm t) = prettyInCtx t</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompBind c f) =</span>
+<span class="lineno">  556 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [prettyInCtx c, return &quot;&gt;&gt;=&quot;, prettyInCtx f]</span>
+<span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompReturn t) =</span>
+<span class="lineno">  558 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  559 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span></span>
+<span class="lineno">  560 </span>
+<span class="lineno">  561 </span>instance PrettyInCtx CompFun where
+<span class="lineno">  562 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (CompFunTerm _ t) = prettyInCtx t</span>
+<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompFunReturn _ t) =</span>
+<span class="lineno">  564 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  565 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span>
+<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (CompFunComp f g) =</span>
+<span class="lineno">  567 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [prettyInCtx f, return &quot;&gt;=&gt;&quot;, prettyInCtx g]</span></span>
+<span class="lineno">  568 </span>
+<span class="lineno">  569 </span>instance PrettyInCtx NormComp where
+<span class="lineno">  570 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (RetS t) =</span>
+<span class="lineno">  571 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;retS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  572 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t]</span>
+<span class="lineno">  573 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ErrorS str) =</span>
+<span class="lineno">  574 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;errorS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  575 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx str]</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Ite cond t1 t2) =</span>
+<span class="lineno">  577 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;ite&quot;, return &quot;_&quot;, parens &lt;$&gt; prettyInCtx cond,</span>
+<span class="lineno">  578 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t1, parens &lt;$&gt; prettyInCtx t2]</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (Eithers elims eith) =</span>
+<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;eithers&quot;, return (parens &quot;SpecM _ _&quot;),</span>
+<span class="lineno">  581 </span><span class="spaces">                   </span><span class="nottickedoff">prettyInCtx (map snd elims), parens &lt;$&gt; prettyInCtx eith]</span>
+<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (MaybeElim tp m f mayb) =</span>
+<span class="lineno">  583 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;maybe&quot;, parens &lt;$&gt; prettyInCtx tp,</span>
+<span class="lineno">  584 </span><span class="spaces">                   </span><span class="nottickedoff">return (parens &quot;SpecM _ _&quot;), parens &lt;$&gt; prettyInCtx m,</span>
+<span class="lineno">  585 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx f, parens &lt;$&gt; prettyInCtx mayb]</span>
+<span class="lineno">  586 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (OrS t1 t2) =</span>
+<span class="lineno">  587 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;orS&quot;, return &quot;_&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  588 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx t1, parens &lt;$&gt; prettyInCtx t2]</span>
+<span class="lineno">  589 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (AssertBoolBind cond k) =</span>
+<span class="lineno">  590 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;assertBoolS&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  591 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx cond, return &quot;&gt;&gt;=&quot;,</span>
+<span class="lineno">  592 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx k]</span>
+<span class="lineno">  593 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (AssumeBoolBind cond k) =</span>
+<span class="lineno">  594 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;assumeBoolS&quot;, return &quot;_&quot;,</span>
+<span class="lineno">  595 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx cond, return &quot;&gt;&gt;=&quot;,</span>
+<span class="lineno">  596 </span><span class="spaces">                   </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx k]</span>
+<span class="lineno">  597 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ExistsBind tp k) =</span>
+<span class="lineno">  598 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;existsS&quot;, return &quot;_&quot;, prettyInCtx tp,</span>
+<span class="lineno">  599 </span><span class="spaces">                   </span><span class="nottickedoff">return &quot;&gt;&gt;=&quot;, parens &lt;$&gt; prettyInCtx k]</span>
+<span class="lineno">  600 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ForallBind tp k) =</span>
+<span class="lineno">  601 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;forallS&quot;, return &quot;_&quot;, prettyInCtx tp,</span>
 <span class="lineno">  602 </span><span class="spaces">                   </span><span class="nottickedoff">return &quot;&gt;&gt;=&quot;, parens &lt;$&gt; prettyInCtx k]</span>
-<span class="lineno">  603 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ForallBind tp k) =</span>
-<span class="lineno">  604 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;forallS&quot;, return &quot;_&quot;, prettyInCtx tp,</span>
-<span class="lineno">  605 </span><span class="spaces">                   </span><span class="nottickedoff">return &quot;&gt;&gt;=&quot;, parens &lt;$&gt; prettyInCtx k]</span>
-<span class="lineno">  606 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (FunBind f args (CompFunReturn _ _)) =</span>
-<span class="lineno">  607 </span><span class="spaces">    </span><span class="nottickedoff">snd $ prettyInCtxFunBindH f args</span>
-<span class="lineno">  608 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (FunBind f args k)</span>
-<span class="lineno">  609 </span><span class="spaces">    </span><span class="nottickedoff">| (g, m) &lt;- prettyInCtxFunBindH f args =</span>
-<span class="lineno">  610 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [g &lt;$&gt; m, return &quot;&gt;&gt;=&quot;, prettyInCtx k]</span></span>
-<span class="lineno">  611 </span>
-<span class="lineno">  612 </span>-- | A helper function for the 'FunBind' case of 'prettyInCtx'. Returns the
-<span class="lineno">  613 </span>-- string you would get if the associated 'CompFun' is 'CompFunReturn', as well
-<span class="lineno">  614 </span>-- as a 'PPS.Doc' function (which is either 'id' or 'parens') to apply in the
-<span class="lineno">  615 </span>-- case where the associated 'CompFun' is something else.
-<span class="lineno">  616 </span>prettyInCtxFunBindH :: FunName -&gt; [Term] -&gt;
-<span class="lineno">  617 </span>                       (PPS.Doc -&gt; PPS.Doc, PPInCtxM PPS.Doc)
-<span class="lineno">  618 </span><span class="decl"><span class="nottickedoff">prettyInCtxFunBindH f [] = (id, prettyInCtx f)</span>
-<span class="lineno">  619 </span><span class="spaces"></span><span class="nottickedoff">prettyInCtxFunBindH f args = (parens,) $</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="nottickedoff">prettyTermApp (funNameTerm f) args</span></span>
+<span class="lineno">  603 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (FunBind f args (CompFunReturn _ _)) =</span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="nottickedoff">snd $ prettyInCtxFunBindH f args</span>
+<span class="lineno">  605 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (FunBind f args k)</span>
+<span class="lineno">  606 </span><span class="spaces">    </span><span class="nottickedoff">| (g, m) &lt;- prettyInCtxFunBindH f args =</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [g &lt;$&gt; m, return &quot;&gt;&gt;=&quot;, prettyInCtx k]</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>-- | A helper function for the 'FunBind' case of 'prettyInCtx'. Returns the
+<span class="lineno">  610 </span>-- string you would get if the associated 'CompFun' is 'CompFunReturn', as well
+<span class="lineno">  611 </span>-- as a 'PPS.Doc' function (which is either 'id' or 'parens') to apply in the
+<span class="lineno">  612 </span>-- case where the associated 'CompFun' is something else.
+<span class="lineno">  613 </span>prettyInCtxFunBindH :: FunName -&gt; [Term] -&gt;
+<span class="lineno">  614 </span>                       (PPS.Doc -&gt; PPS.Doc, PPInCtxM PPS.Doc)
+<span class="lineno">  615 </span><span class="decl"><span class="nottickedoff">prettyInCtxFunBindH f [] = (id, prettyInCtx f)</span>
+<span class="lineno">  616 </span><span class="spaces"></span><span class="nottickedoff">prettyInCtxFunBindH f args = (parens,) $</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="nottickedoff">prettyTermApp (funNameTerm f) args</span></span>
 
 </pre>
 </body>

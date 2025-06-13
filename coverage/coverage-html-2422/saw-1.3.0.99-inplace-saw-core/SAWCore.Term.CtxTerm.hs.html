@@ -560,667 +560,692 @@ span.spaces    { background: white }
 <span class="lineno">  541 </span>
 <span class="lineno">  542 </span>
 <span class="lineno">  543 </span>-- | Build an application of a constructor as a 'CtxTerm'
-<span class="lineno">  544 </span>ctxCtorAppM :: MonadTerm m =&gt;
-<span class="lineno">  545 </span>  DataIdent d -&gt;
-<span class="lineno">  546 </span>  ExtCns Term -&gt;
-<span class="lineno">  547 </span>  m (CtxTermsCtx ctx params) -&gt;
-<span class="lineno">  548 </span>  m (CtxTermsCtx ctx args) -&gt;
-<span class="lineno">  549 </span>  m (CtxTerm ctx d)
-<span class="lineno">  550 </span><span class="decl"><span class="istickedoff">ctxCtorAppM _d c paramsM argsM =</span>
-<span class="lineno">  551 </span><span class="spaces">  </span><span class="istickedoff">CtxTerm &lt;$&gt;</span>
-<span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">(mkFlatTermF =&lt;&lt;</span>
-<span class="lineno">  553 </span><span class="spaces">   </span><span class="istickedoff">(CtorApp c &lt;$&gt; (ctxTermsCtxToListUnsafe &lt;$&gt; paramsM) &lt;*&gt;</span>
-<span class="lineno">  554 </span><span class="spaces">    </span><span class="istickedoff">(ctxTermsCtxToListUnsafe &lt;$&gt; argsM)))</span></span>
-<span class="lineno">  555 </span>
-<span class="lineno">  556 </span>data Rec d
+<span class="lineno">  544 </span>ctxCtorAppM ::
+<span class="lineno">  545 </span>  forall m d ctx params args.
+<span class="lineno">  546 </span>  MonadTerm m =&gt;
+<span class="lineno">  547 </span>  DataIdent d -&gt;
+<span class="lineno">  548 </span>  ExtCns Term -&gt;
+<span class="lineno">  549 </span>  m (CtxTermsCtx ctx params) -&gt;
+<span class="lineno">  550 </span>  m (CtxTermsCtx ctx args) -&gt;
+<span class="lineno">  551 </span>  m (CtxTerm ctx d)
+<span class="lineno">  552 </span><span class="decl"><span class="istickedoff">ctxCtorAppM _d c paramsM argsM =</span>
+<span class="lineno">  553 </span><span class="spaces">  </span><span class="istickedoff">ctxApplyMultiInv (ctxApplyMultiInv t paramsM) argsM</span>
+<span class="lineno">  554 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  555 </span><span class="spaces">    </span><span class="istickedoff">t :: m (CtxTerm ctx (InvArrows params (InvArrows args d)))</span>
+<span class="lineno">  556 </span><span class="spaces">    </span><span class="istickedoff">t = CtxTerm &lt;$&gt; mkTermF (Constant c)</span></span>
 <span class="lineno">  557 </span>
-<span class="lineno">  558 </span>ctxRecursorAppM :: MonadTerm m =&gt;
-<span class="lineno">  559 </span>  m (CtxTerm ctx (Rec d)) -&gt;
-<span class="lineno">  560 </span>  m (CtxTermsCtx ctx ixs) -&gt;
-<span class="lineno">  561 </span>  m (CtxTerm ctx d) -&gt;
-<span class="lineno">  562 </span>  m (CtxTerm ctx a)
-<span class="lineno">  563 </span><span class="decl"><span class="istickedoff">ctxRecursorAppM recM ixsM argM =</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="istickedoff">do app &lt;- RecursorApp &lt;$&gt;</span>
-<span class="lineno">  565 </span><span class="spaces">              </span><span class="istickedoff">(unCtxTermUnsafe &lt;$&gt; recM) &lt;*&gt;</span>
-<span class="lineno">  566 </span><span class="spaces">              </span><span class="istickedoff">(ctxTermsCtxToListUnsafe &lt;$&gt; ixsM) &lt;*&gt;</span>
-<span class="lineno">  567 </span><span class="spaces">              </span><span class="istickedoff">(unCtxTermUnsafe &lt;$&gt; argM)</span>
-<span class="lineno">  568 </span><span class="spaces">     </span><span class="istickedoff">CtxTerm &lt;$&gt; mkFlatTermF app</span></span>
-<span class="lineno">  569 </span>
-<span class="lineno">  570 </span>--
-<span class="lineno">  571 </span>-- * Generalized Lifting and Substitution
-<span class="lineno">  572 </span>--
-<span class="lineno">  573 </span>
-<span class="lineno">  574 </span>-- | The class of &quot;in-context&quot; types that support lifting and substitution
-<span class="lineno">  575 </span>class Monad m =&gt; CtxLiftSubst f m where
-<span class="lineno">  576 </span>  -- | Lift an @f@ into an extended context
-<span class="lineno">  577 </span>  ctxLift :: InvBindings tp1 ctx ctx' -&gt; Bindings tp2 ctx as -&gt;
-<span class="lineno">  578 </span>             f (ctx &lt;+&gt; ctx') a -&gt;
-<span class="lineno">  579 </span>             m (f (CtxInvApp ctx as &lt;+&gt; ctx') a)
-<span class="lineno">  580 </span>  -- | Substitute a list of terms into an @f@
-<span class="lineno">  581 </span>  ctxSubst :: CtxTermsCtx ctx1 subst -&gt;
-<span class="lineno">  582 </span>              InvBindings tp (ctx1 &lt;+&gt; subst) ctx2 -&gt;
-<span class="lineno">  583 </span>              f ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) a -&gt;
-<span class="lineno">  584 </span>              m (f (ctx1 &lt;+&gt; ctx2) a)
-<span class="lineno">  585 </span>
-<span class="lineno">  586 </span>-- | Lift an @f@ into a context extended with one type
-<span class="lineno">  587 </span>ctxLift1 :: CtxLiftSubst f m =&gt; f ctx b -&gt; m (f (ctx ::&gt; a) b)
-<span class="lineno">  588 </span><span class="decl"><span class="nottickedoff">ctxLift1 = ctxLift InvNoBind (Bind &quot;_&quot; CtxUnit NoBind)</span></span>
-<span class="lineno">  589 </span>
-<span class="lineno">  590 </span>-- | Lift an @f@ that is in an extended list of 'Bindings'
-<span class="lineno">  591 </span>ctxLiftInBindings :: CtxLiftSubst f m =&gt; InvBindings tp1 ctx ctx1 -&gt;
-<span class="lineno">  592 </span>                     Bindings tp2 (ctx &lt;+&gt; ctx1) ctx2 -&gt;
-<span class="lineno">  593 </span>                     Bindings tp3 ctx as -&gt;
-<span class="lineno">  594 </span>                     f (CtxInvApp (ctx &lt;+&gt; ctx1) ctx2) a -&gt;
-<span class="lineno">  595 </span>                     m (f (CtxInvApp (CtxInvApp ctx as &lt;+&gt; ctx1) ctx2) a)
-<span class="lineno">  596 </span><span class="decl"><span class="istickedoff">ctxLiftInBindings = helper . mapInvBindings <span class="nottickedoff">(CtxEither . Left)</span></span>
-<span class="lineno">  597 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  598 </span><span class="spaces">    </span><span class="istickedoff">helper :: CtxLiftSubst f m =&gt; InvBindings (CtxEither tp1 tp2) ctx ctx1 -&gt;</span>
-<span class="lineno">  599 </span><span class="spaces">              </span><span class="istickedoff">Bindings tp2 (ctx &lt;+&gt; ctx1) ctx2 -&gt;</span>
-<span class="lineno">  600 </span><span class="spaces">              </span><span class="istickedoff">Bindings tp3 ctx as -&gt;</span>
-<span class="lineno">  601 </span><span class="spaces">              </span><span class="istickedoff">f (CtxInvApp (ctx &lt;+&gt; ctx1) ctx2) a -&gt;</span>
-<span class="lineno">  602 </span><span class="spaces">              </span><span class="istickedoff">m (f (CtxInvApp (CtxInvApp ctx as &lt;+&gt; ctx1) ctx2) a)</span>
-<span class="lineno">  603 </span><span class="spaces">    </span><span class="istickedoff">helper ctx1 NoBind as = ctxLift ctx1 as</span>
-<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">helper ctx1 (Bind str tp ctx2) as =</span>
-<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">helper (InvBind ctx1 <span class="nottickedoff">str</span> <span class="nottickedoff">(CtxEither $ Right tp)</span>) ctx2 as</span></span>
-<span class="lineno">  606 </span>
-<span class="lineno">  607 </span>-- | Substitute into an @f@ that is in an extended list of 'Bindings'
-<span class="lineno">  608 </span>ctxSubstInBindings :: CtxLiftSubst f m =&gt; CtxTermsCtx ctx1 subst -&gt;
-<span class="lineno">  609 </span>                      InvBindings tp1 (ctx1 &lt;+&gt; subst) ctx2 -&gt;
-<span class="lineno">  610 </span>                      Bindings tp2 ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) ctx3 -&gt;
-<span class="lineno">  611 </span>                      f (CtxInvApp ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) ctx3) a -&gt;
-<span class="lineno">  612 </span>                      m (f (CtxInvApp (ctx1 &lt;+&gt; ctx2) ctx3) a)
-<span class="lineno">  613 </span><span class="decl"><span class="istickedoff">ctxSubstInBindings subst =</span>
-<span class="lineno">  614 </span><span class="spaces">  </span><span class="istickedoff">helper subst . mapInvBindings <span class="nottickedoff">(CtxEither . Left)</span> where</span>
-<span class="lineno">  615 </span><span class="spaces">  </span><span class="istickedoff">helper :: CtxLiftSubst f m =&gt; CtxTermsCtx ctx1 s -&gt;</span>
-<span class="lineno">  616 </span><span class="spaces">            </span><span class="istickedoff">InvBindings (CtxEither tp1 tp2) (ctx1 &lt;+&gt; s) ctx2 -&gt;</span>
-<span class="lineno">  617 </span><span class="spaces">            </span><span class="istickedoff">Bindings tp2 ((ctx1 &lt;+&gt; s) &lt;+&gt; ctx2) ctx3 -&gt;</span>
-<span class="lineno">  618 </span><span class="spaces">            </span><span class="istickedoff">f (CtxInvApp ((ctx1 &lt;+&gt; s) &lt;+&gt; ctx2) ctx3) a -&gt;</span>
-<span class="lineno">  619 </span><span class="spaces">            </span><span class="istickedoff">m (f (CtxInvApp (ctx1 &lt;+&gt; ctx2) ctx3) a)</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="istickedoff">helper s ctx2 NoBind f = ctxSubst s ctx2 f</span>
-<span class="lineno">  621 </span><span class="spaces">  </span><span class="istickedoff">helper s ctx2 (Bind x tp ctx3) f =</span>
-<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">helper s (InvBind ctx2 x (CtxEither $ Right tp)) ctx3 f</span></span></span>
-<span class="lineno">  623 </span>
-<span class="lineno">  624 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTerm m where
-<span class="lineno">  625 </span>  <span class="decl"><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTerm t) =</span>
-<span class="lineno">  626 </span><span class="spaces">    </span><span class="istickedoff">CtxTerm &lt;$&gt; liftTerm (invBindingsLength ctx1) (bindingsLength ctx2) t</span></span>
-<span class="lineno">  627 </span>  <span class="decl"><span class="istickedoff">ctxSubst subst ctx (CtxTerm t) =</span>
-<span class="lineno">  628 </span><span class="spaces">    </span><span class="istickedoff">-- NOTE: our term lists put the least recently-bound variable first, so we</span>
-<span class="lineno">  629 </span><span class="spaces">    </span><span class="istickedoff">-- have to reverse here to call substTerm, which wants the term for the most</span>
-<span class="lineno">  630 </span><span class="spaces">    </span><span class="istickedoff">-- recently-bound variable first</span>
-<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">CtxTerm &lt;$&gt;</span>
-<span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">substTerm (invBindingsLength ctx) (reverse (ctxTermsCtxToListUnsafe subst)) t</span></span>
-<span class="lineno">  633 </span>
-<span class="lineno">  634 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTerms m where
-<span class="lineno">  635 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ CtxTermsNil = return CtxTermsNil</span>
-<span class="lineno">  636 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTermsCons t ts) =</span>
-<span class="lineno">  637 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCons &lt;$&gt; ctxLift ctx1 ctx2 t &lt;*&gt; ctxLift ctx1 ctx2 ts</span></span>
-<span class="lineno">  638 </span>  <span class="decl"><span class="istickedoff">ctxSubst _ _ CtxTermsNil = return CtxTermsNil</span>
-<span class="lineno">  639 </span><span class="spaces">  </span><span class="istickedoff">ctxSubst subst ctx (CtxTermsCons t ts) =</span>
-<span class="lineno">  640 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCons &lt;$&gt; ctxSubst subst ctx t &lt;*&gt;</span>
-<span class="lineno">  641 </span><span class="spaces">    </span><span class="istickedoff">ctxSubst <span class="nottickedoff">subst</span> <span class="nottickedoff">ctx</span> ts</span></span>
-<span class="lineno">  642 </span>
-<span class="lineno">  643 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTermsCtx m where
-<span class="lineno">  644 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ CtxTermsCtxNil = return CtxTermsCtxNil</span>
-<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTermsCtxCons ts t) =</span>
-<span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCtxCons &lt;$&gt; ctxLift ctx1 ctx2 ts &lt;*&gt; ctxLift ctx1 ctx2 t</span></span>
-<span class="lineno">  647 </span>  <span class="decl"><span class="nottickedoff">ctxSubst _ _ CtxTermsCtxNil = return CtxTermsCtxNil</span>
-<span class="lineno">  648 </span><span class="spaces">  </span><span class="nottickedoff">ctxSubst subst ctx (CtxTermsCtxCons ts t) =</span>
-<span class="lineno">  649 </span><span class="spaces">    </span><span class="nottickedoff">CtxTermsCtxCons &lt;$&gt; ctxSubst subst ctx ts &lt;*&gt;</span>
-<span class="lineno">  650 </span><span class="spaces">    </span><span class="nottickedoff">ctxSubst subst ctx t</span></span>
-<span class="lineno">  651 </span>
-<span class="lineno">  652 </span>instance CtxLiftSubst tp m =&gt; CtxLiftSubst (Bindings tp) m where
-<span class="lineno">  653 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ NoBind = return NoBind</span>
-<span class="lineno">  654 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (Bind x x_tp bs) =</span>
-<span class="lineno">  655 </span><span class="spaces">    </span><span class="istickedoff">Bind x &lt;$&gt; ctxLift ctx1 ctx2 x_tp &lt;*&gt;</span>
-<span class="lineno">  656 </span><span class="spaces">    </span><span class="istickedoff">ctxLift (InvBind ctx1 <span class="nottickedoff">x</span> <span class="nottickedoff">(error &quot;Unused&quot;)</span>) ctx2 bs</span></span>
-<span class="lineno">  657 </span>  <span class="decl"><span class="istickedoff">ctxSubst _ _ NoBind = return NoBind</span>
-<span class="lineno">  658 </span><span class="spaces">  </span><span class="istickedoff">ctxSubst subst ctx (Bind x x_tp bs) =</span>
-<span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Bind x &lt;$&gt; ctxSubst subst ctx x_tp &lt;*&gt;</span></span>
-<span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctxSubst subst (InvBind ctx x (error &quot;Unused&quot;)) bs</span></span></span>
-<span class="lineno">  661 </span>
-<span class="lineno">  662 </span>instance MonadTerm m =&gt; CtxLiftSubst (CtorArg d ixs) m where
-<span class="lineno">  663 </span>  <span class="decl"><span class="istickedoff">ctxLift ctx1 ctx2 (ConstArg tp) = ConstArg &lt;$&gt; ctxLift ctx1 ctx2 tp</span>
-<span class="lineno">  664 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (RecursiveArg zs ixs) =</span>
-<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">RecursiveArg &lt;$&gt; ctxLift <span class="nottickedoff">ctx1</span> <span class="nottickedoff">ctx2</span> zs &lt;*&gt;</span>
-<span class="lineno">  666 </span><span class="spaces">    </span><span class="istickedoff">ctxLiftInBindings ctx1 zs ctx2 ixs</span></span>
-<span class="lineno">  667 </span>  <span class="decl"><span class="nottickedoff">ctxSubst subst ctx (ConstArg tp) = ConstArg &lt;$&gt; ctxSubst subst ctx tp</span>
-<span class="lineno">  668 </span><span class="spaces">  </span><span class="nottickedoff">ctxSubst subst ctx (RecursiveArg zs ixs) =</span>
-<span class="lineno">  669 </span><span class="spaces">    </span><span class="nottickedoff">RecursiveArg &lt;$&gt; ctxSubst subst ctx zs &lt;*&gt;</span>
-<span class="lineno">  670 </span><span class="spaces">    </span><span class="nottickedoff">ctxSubstInBindings subst ctx zs ixs</span></span>
-<span class="lineno">  671 </span>
-<span class="lineno">  672 </span>-- | Make a closed term and then lift it into a context
-<span class="lineno">  673 </span>mkLiftedClosedTerm :: MonadTerm m =&gt; Bindings tp EmptyCtx as -&gt; Term -&gt;
-<span class="lineno">  674 </span>                      m (CtxTerm (CtxInv as) a)
-<span class="lineno">  675 </span><span class="decl"><span class="nottickedoff">mkLiftedClosedTerm inners t = ctxLift InvNoBind inners $ mkClosedTerm t</span></span>
+<span class="lineno">  558 </span>-- | Abstract an inside-out type list using Haskell arrows. Used only
+<span class="lineno">  559 </span>-- to define 'ctxCtorAppM'.
+<span class="lineno">  560 </span>type family InvArrows as b where
+<span class="lineno">  561 </span>  InvArrows EmptyCtx b = b
+<span class="lineno">  562 </span>  InvArrows (as ::&gt; a) b = InvArrows as (a -&gt; b)
+<span class="lineno">  563 </span>
+<span class="lineno">  564 </span>-- | Apply a 'CtxTerm' to an inside-out list of arguments. Used only
+<span class="lineno">  565 </span>-- to define 'ctxCtorAppM`.
+<span class="lineno">  566 </span>ctxApplyMultiInv ::
+<span class="lineno">  567 </span>  MonadTerm m =&gt;
+<span class="lineno">  568 </span>  m (CtxTerm ctx (InvArrows as b)) -&gt;
+<span class="lineno">  569 </span>  m (CtxTermsCtx ctx as) -&gt;
+<span class="lineno">  570 </span>  m (CtxTerm ctx b)
+<span class="lineno">  571 </span><span class="decl"><span class="istickedoff">ctxApplyMultiInv fm argsm =</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="istickedoff">do f &lt;- fm</span>
+<span class="lineno">  573 </span><span class="spaces">     </span><span class="istickedoff">args &lt;- argsm</span>
+<span class="lineno">  574 </span><span class="spaces">     </span><span class="istickedoff">helper f args</span>
+<span class="lineno">  575 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">helper :: MonadTerm m =&gt; CtxTerm ctx (InvArrows as b) -&gt;</span>
+<span class="lineno">  577 </span><span class="spaces">              </span><span class="istickedoff">CtxTermsCtx ctx as -&gt; m (CtxTerm ctx b)</span>
+<span class="lineno">  578 </span><span class="spaces">    </span><span class="istickedoff">helper f CtxTermsCtxNil = pure f</span>
+<span class="lineno">  579 </span><span class="spaces">    </span><span class="istickedoff">helper f (CtxTermsCtxCons args arg) = ctxApply (helper f args) (pure arg)</span></span>
+<span class="lineno">  580 </span>
+<span class="lineno">  581 </span>data Rec d
+<span class="lineno">  582 </span>
+<span class="lineno">  583 </span>ctxRecursorAppM :: MonadTerm m =&gt;
+<span class="lineno">  584 </span>  m (CtxTerm ctx (Rec d)) -&gt;
+<span class="lineno">  585 </span>  m (CtxTermsCtx ctx ixs) -&gt;
+<span class="lineno">  586 </span>  m (CtxTerm ctx d) -&gt;
+<span class="lineno">  587 </span>  m (CtxTerm ctx a)
+<span class="lineno">  588 </span><span class="decl"><span class="istickedoff">ctxRecursorAppM recM ixsM argM =</span>
+<span class="lineno">  589 </span><span class="spaces">  </span><span class="istickedoff">do app &lt;- RecursorApp &lt;$&gt;</span>
+<span class="lineno">  590 </span><span class="spaces">              </span><span class="istickedoff">(unCtxTermUnsafe &lt;$&gt; recM) &lt;*&gt;</span>
+<span class="lineno">  591 </span><span class="spaces">              </span><span class="istickedoff">(ctxTermsCtxToListUnsafe &lt;$&gt; ixsM) &lt;*&gt;</span>
+<span class="lineno">  592 </span><span class="spaces">              </span><span class="istickedoff">(unCtxTermUnsafe &lt;$&gt; argM)</span>
+<span class="lineno">  593 </span><span class="spaces">     </span><span class="istickedoff">CtxTerm &lt;$&gt; mkFlatTermF app</span></span>
+<span class="lineno">  594 </span>
+<span class="lineno">  595 </span>--
+<span class="lineno">  596 </span>-- * Generalized Lifting and Substitution
+<span class="lineno">  597 </span>--
+<span class="lineno">  598 </span>
+<span class="lineno">  599 </span>-- | The class of &quot;in-context&quot; types that support lifting and substitution
+<span class="lineno">  600 </span>class Monad m =&gt; CtxLiftSubst f m where
+<span class="lineno">  601 </span>  -- | Lift an @f@ into an extended context
+<span class="lineno">  602 </span>  ctxLift :: InvBindings tp1 ctx ctx' -&gt; Bindings tp2 ctx as -&gt;
+<span class="lineno">  603 </span>             f (ctx &lt;+&gt; ctx') a -&gt;
+<span class="lineno">  604 </span>             m (f (CtxInvApp ctx as &lt;+&gt; ctx') a)
+<span class="lineno">  605 </span>  -- | Substitute a list of terms into an @f@
+<span class="lineno">  606 </span>  ctxSubst :: CtxTermsCtx ctx1 subst -&gt;
+<span class="lineno">  607 </span>              InvBindings tp (ctx1 &lt;+&gt; subst) ctx2 -&gt;
+<span class="lineno">  608 </span>              f ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) a -&gt;
+<span class="lineno">  609 </span>              m (f (ctx1 &lt;+&gt; ctx2) a)
+<span class="lineno">  610 </span>
+<span class="lineno">  611 </span>-- | Lift an @f@ into a context extended with one type
+<span class="lineno">  612 </span>ctxLift1 :: CtxLiftSubst f m =&gt; f ctx b -&gt; m (f (ctx ::&gt; a) b)
+<span class="lineno">  613 </span><span class="decl"><span class="nottickedoff">ctxLift1 = ctxLift InvNoBind (Bind &quot;_&quot; CtxUnit NoBind)</span></span>
+<span class="lineno">  614 </span>
+<span class="lineno">  615 </span>-- | Lift an @f@ that is in an extended list of 'Bindings'
+<span class="lineno">  616 </span>ctxLiftInBindings :: CtxLiftSubst f m =&gt; InvBindings tp1 ctx ctx1 -&gt;
+<span class="lineno">  617 </span>                     Bindings tp2 (ctx &lt;+&gt; ctx1) ctx2 -&gt;
+<span class="lineno">  618 </span>                     Bindings tp3 ctx as -&gt;
+<span class="lineno">  619 </span>                     f (CtxInvApp (ctx &lt;+&gt; ctx1) ctx2) a -&gt;
+<span class="lineno">  620 </span>                     m (f (CtxInvApp (CtxInvApp ctx as &lt;+&gt; ctx1) ctx2) a)
+<span class="lineno">  621 </span><span class="decl"><span class="istickedoff">ctxLiftInBindings = helper . mapInvBindings <span class="nottickedoff">(CtxEither . Left)</span></span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">helper :: CtxLiftSubst f m =&gt; InvBindings (CtxEither tp1 tp2) ctx ctx1 -&gt;</span>
+<span class="lineno">  624 </span><span class="spaces">              </span><span class="istickedoff">Bindings tp2 (ctx &lt;+&gt; ctx1) ctx2 -&gt;</span>
+<span class="lineno">  625 </span><span class="spaces">              </span><span class="istickedoff">Bindings tp3 ctx as -&gt;</span>
+<span class="lineno">  626 </span><span class="spaces">              </span><span class="istickedoff">f (CtxInvApp (ctx &lt;+&gt; ctx1) ctx2) a -&gt;</span>
+<span class="lineno">  627 </span><span class="spaces">              </span><span class="istickedoff">m (f (CtxInvApp (CtxInvApp ctx as &lt;+&gt; ctx1) ctx2) a)</span>
+<span class="lineno">  628 </span><span class="spaces">    </span><span class="istickedoff">helper ctx1 NoBind as = ctxLift ctx1 as</span>
+<span class="lineno">  629 </span><span class="spaces">    </span><span class="istickedoff">helper ctx1 (Bind str tp ctx2) as =</span>
+<span class="lineno">  630 </span><span class="spaces">      </span><span class="istickedoff">helper (InvBind ctx1 <span class="nottickedoff">str</span> <span class="nottickedoff">(CtxEither $ Right tp)</span>) ctx2 as</span></span>
+<span class="lineno">  631 </span>
+<span class="lineno">  632 </span>-- | Substitute into an @f@ that is in an extended list of 'Bindings'
+<span class="lineno">  633 </span>ctxSubstInBindings :: CtxLiftSubst f m =&gt; CtxTermsCtx ctx1 subst -&gt;
+<span class="lineno">  634 </span>                      InvBindings tp1 (ctx1 &lt;+&gt; subst) ctx2 -&gt;
+<span class="lineno">  635 </span>                      Bindings tp2 ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) ctx3 -&gt;
+<span class="lineno">  636 </span>                      f (CtxInvApp ((ctx1 &lt;+&gt; subst) &lt;+&gt; ctx2) ctx3) a -&gt;
+<span class="lineno">  637 </span>                      m (f (CtxInvApp (ctx1 &lt;+&gt; ctx2) ctx3) a)
+<span class="lineno">  638 </span><span class="decl"><span class="istickedoff">ctxSubstInBindings subst =</span>
+<span class="lineno">  639 </span><span class="spaces">  </span><span class="istickedoff">helper subst . mapInvBindings <span class="nottickedoff">(CtxEither . Left)</span> where</span>
+<span class="lineno">  640 </span><span class="spaces">  </span><span class="istickedoff">helper :: CtxLiftSubst f m =&gt; CtxTermsCtx ctx1 s -&gt;</span>
+<span class="lineno">  641 </span><span class="spaces">            </span><span class="istickedoff">InvBindings (CtxEither tp1 tp2) (ctx1 &lt;+&gt; s) ctx2 -&gt;</span>
+<span class="lineno">  642 </span><span class="spaces">            </span><span class="istickedoff">Bindings tp2 ((ctx1 &lt;+&gt; s) &lt;+&gt; ctx2) ctx3 -&gt;</span>
+<span class="lineno">  643 </span><span class="spaces">            </span><span class="istickedoff">f (CtxInvApp ((ctx1 &lt;+&gt; s) &lt;+&gt; ctx2) ctx3) a -&gt;</span>
+<span class="lineno">  644 </span><span class="spaces">            </span><span class="istickedoff">m (f (CtxInvApp (ctx1 &lt;+&gt; ctx2) ctx3) a)</span>
+<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">helper s ctx2 NoBind f = ctxSubst s ctx2 f</span>
+<span class="lineno">  646 </span><span class="spaces">  </span><span class="istickedoff">helper s ctx2 (Bind x tp ctx3) f =</span>
+<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">helper s (InvBind ctx2 x (CtxEither $ Right tp)) ctx3 f</span></span></span>
+<span class="lineno">  648 </span>
+<span class="lineno">  649 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTerm m where
+<span class="lineno">  650 </span>  <span class="decl"><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTerm t) =</span>
+<span class="lineno">  651 </span><span class="spaces">    </span><span class="istickedoff">CtxTerm &lt;$&gt; liftTerm (invBindingsLength ctx1) (bindingsLength ctx2) t</span></span>
+<span class="lineno">  652 </span>  <span class="decl"><span class="istickedoff">ctxSubst subst ctx (CtxTerm t) =</span>
+<span class="lineno">  653 </span><span class="spaces">    </span><span class="istickedoff">-- NOTE: our term lists put the least recently-bound variable first, so we</span>
+<span class="lineno">  654 </span><span class="spaces">    </span><span class="istickedoff">-- have to reverse here to call substTerm, which wants the term for the most</span>
+<span class="lineno">  655 </span><span class="spaces">    </span><span class="istickedoff">-- recently-bound variable first</span>
+<span class="lineno">  656 </span><span class="spaces">    </span><span class="istickedoff">CtxTerm &lt;$&gt;</span>
+<span class="lineno">  657 </span><span class="spaces">    </span><span class="istickedoff">substTerm (invBindingsLength ctx) (reverse (ctxTermsCtxToListUnsafe subst)) t</span></span>
+<span class="lineno">  658 </span>
+<span class="lineno">  659 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTerms m where
+<span class="lineno">  660 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ CtxTermsNil = return CtxTermsNil</span>
+<span class="lineno">  661 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTermsCons t ts) =</span>
+<span class="lineno">  662 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCons &lt;$&gt; ctxLift ctx1 ctx2 t &lt;*&gt; ctxLift ctx1 ctx2 ts</span></span>
+<span class="lineno">  663 </span>  <span class="decl"><span class="istickedoff">ctxSubst _ _ CtxTermsNil = return CtxTermsNil</span>
+<span class="lineno">  664 </span><span class="spaces">  </span><span class="istickedoff">ctxSubst subst ctx (CtxTermsCons t ts) =</span>
+<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCons &lt;$&gt; ctxSubst subst ctx t &lt;*&gt;</span>
+<span class="lineno">  666 </span><span class="spaces">    </span><span class="istickedoff">ctxSubst <span class="nottickedoff">subst</span> <span class="nottickedoff">ctx</span> ts</span></span>
+<span class="lineno">  667 </span>
+<span class="lineno">  668 </span>instance MonadTerm m =&gt; CtxLiftSubst CtxTermsCtx m where
+<span class="lineno">  669 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ CtxTermsCtxNil = return CtxTermsCtxNil</span>
+<span class="lineno">  670 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (CtxTermsCtxCons ts t) =</span>
+<span class="lineno">  671 </span><span class="spaces">    </span><span class="istickedoff">CtxTermsCtxCons &lt;$&gt; ctxLift ctx1 ctx2 ts &lt;*&gt; ctxLift ctx1 ctx2 t</span></span>
+<span class="lineno">  672 </span>  <span class="decl"><span class="nottickedoff">ctxSubst _ _ CtxTermsCtxNil = return CtxTermsCtxNil</span>
+<span class="lineno">  673 </span><span class="spaces">  </span><span class="nottickedoff">ctxSubst subst ctx (CtxTermsCtxCons ts t) =</span>
+<span class="lineno">  674 </span><span class="spaces">    </span><span class="nottickedoff">CtxTermsCtxCons &lt;$&gt; ctxSubst subst ctx ts &lt;*&gt;</span>
+<span class="lineno">  675 </span><span class="spaces">    </span><span class="nottickedoff">ctxSubst subst ctx t</span></span>
 <span class="lineno">  676 </span>
-<span class="lineno">  677 </span>
-<span class="lineno">  678 </span>--
-<span class="lineno">  679 </span>-- * Constructor Argument Types
-<span class="lineno">  680 </span>--
-<span class="lineno">  681 </span>
-<span class="lineno">  682 </span>-- | A specification of the type of an argument for a constructor of datatype
-<span class="lineno">  683 </span>-- @d@, that has a specified list @ixs@ of indices, inside a context @ctx@ of
-<span class="lineno">  684 </span>-- parameters and earlier arguments
-<span class="lineno">  685 </span>data CtorArg d ixs ctx a where
-<span class="lineno">  686 </span>  -- | A fixed, constant type
-<span class="lineno">  687 </span>  ConstArg :: CtxTerm ctx (Typ a) -&gt; CtorArg d ixs ctx (Typ a)
-<span class="lineno">  688 </span>  -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
-<span class="lineno">  689 </span>  -- specifies a recursive argument type of the form
-<span class="lineno">  690 </span>  --
-<span class="lineno">  691 </span>  -- &gt; (z1::tp1) -&gt; .. -&gt; (zn::tpn) -&gt; d p1 .. pm e1 .. ek
-<span class="lineno">  692 </span>  --
-<span class="lineno">  693 </span>  -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
-<span class="lineno">  694 </span>  -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
-<span class="lineno">  695 </span>  -- parameters of @d@ (not given here), and the @ei@ are the type indices of
-<span class="lineno">  696 </span>  -- @d@.
-<span class="lineno">  697 </span>  RecursiveArg ::
-<span class="lineno">  698 </span>    Bindings CtxTerm ctx zs -&gt;
-<span class="lineno">  699 </span>    CtxTerms (CtxInvApp ctx zs) ixs -&gt;
-<span class="lineno">  700 </span>    CtorArg d ixs ctx (Typ (Arrows zs d))
+<span class="lineno">  677 </span>instance CtxLiftSubst tp m =&gt; CtxLiftSubst (Bindings tp) m where
+<span class="lineno">  678 </span>  <span class="decl"><span class="istickedoff">ctxLift _ _ NoBind = return NoBind</span>
+<span class="lineno">  679 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (Bind x x_tp bs) =</span>
+<span class="lineno">  680 </span><span class="spaces">    </span><span class="istickedoff">Bind x &lt;$&gt; ctxLift ctx1 ctx2 x_tp &lt;*&gt;</span>
+<span class="lineno">  681 </span><span class="spaces">    </span><span class="istickedoff">ctxLift (InvBind ctx1 <span class="nottickedoff">x</span> <span class="nottickedoff">(error &quot;Unused&quot;)</span>) ctx2 bs</span></span>
+<span class="lineno">  682 </span>  <span class="decl"><span class="istickedoff">ctxSubst _ _ NoBind = return NoBind</span>
+<span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff">ctxSubst subst ctx (Bind x x_tp bs) =</span>
+<span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Bind x &lt;$&gt; ctxSubst subst ctx x_tp &lt;*&gt;</span></span>
+<span class="lineno">  685 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctxSubst subst (InvBind ctx x (error &quot;Unused&quot;)) bs</span></span></span>
+<span class="lineno">  686 </span>
+<span class="lineno">  687 </span>instance MonadTerm m =&gt; CtxLiftSubst (CtorArg d ixs) m where
+<span class="lineno">  688 </span>  <span class="decl"><span class="istickedoff">ctxLift ctx1 ctx2 (ConstArg tp) = ConstArg &lt;$&gt; ctxLift ctx1 ctx2 tp</span>
+<span class="lineno">  689 </span><span class="spaces">  </span><span class="istickedoff">ctxLift ctx1 ctx2 (RecursiveArg zs ixs) =</span>
+<span class="lineno">  690 </span><span class="spaces">    </span><span class="istickedoff">RecursiveArg &lt;$&gt; ctxLift <span class="nottickedoff">ctx1</span> <span class="nottickedoff">ctx2</span> zs &lt;*&gt;</span>
+<span class="lineno">  691 </span><span class="spaces">    </span><span class="istickedoff">ctxLiftInBindings ctx1 zs ctx2 ixs</span></span>
+<span class="lineno">  692 </span>  <span class="decl"><span class="nottickedoff">ctxSubst subst ctx (ConstArg tp) = ConstArg &lt;$&gt; ctxSubst subst ctx tp</span>
+<span class="lineno">  693 </span><span class="spaces">  </span><span class="nottickedoff">ctxSubst subst ctx (RecursiveArg zs ixs) =</span>
+<span class="lineno">  694 </span><span class="spaces">    </span><span class="nottickedoff">RecursiveArg &lt;$&gt; ctxSubst subst ctx zs &lt;*&gt;</span>
+<span class="lineno">  695 </span><span class="spaces">    </span><span class="nottickedoff">ctxSubstInBindings subst ctx zs ixs</span></span>
+<span class="lineno">  696 </span>
+<span class="lineno">  697 </span>-- | Make a closed term and then lift it into a context
+<span class="lineno">  698 </span>mkLiftedClosedTerm :: MonadTerm m =&gt; Bindings tp EmptyCtx as -&gt; Term -&gt;
+<span class="lineno">  699 </span>                      m (CtxTerm (CtxInv as) a)
+<span class="lineno">  700 </span><span class="decl"><span class="nottickedoff">mkLiftedClosedTerm inners t = ctxLift InvNoBind inners $ mkClosedTerm t</span></span>
 <span class="lineno">  701 </span>
-<span class="lineno">  702 </span>-- | A structure that defines the parameters, arguments, and return type indices
-<span class="lineno">  703 </span>-- of a constructor, using 'CtxTerm' and friends to get the bindings right
-<span class="lineno">  704 </span>data CtorArgStruct d params ixs =
-<span class="lineno">  705 </span>  forall args.
-<span class="lineno">  706 </span>  CtorArgStruct
-<span class="lineno">  707 </span>  {
-<span class="lineno">  708 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctorParams</span></span></span> :: Bindings CtxTerm EmptyCtx params,
-<span class="lineno">  709 </span>    <span class="decl"><span class="nottickedoff">ctorArgs</span></span> :: Bindings (CtorArg d ixs) (CtxInv params) args,
-<span class="lineno">  710 </span>    <span class="decl"><span class="nottickedoff">ctorIndices</span></span> :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
-<span class="lineno">  711 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">dataTypeIndices</span></span></span> :: Bindings CtxTerm (CtxInv params) ixs
-<span class="lineno">  712 </span>  }
-<span class="lineno">  713 </span>
-<span class="lineno">  714 </span>
-<span class="lineno">  715 </span>-- | Convert a 'CtorArg' into the type that it represents, given a context of
-<span class="lineno">  716 </span>-- the parameters and of the previous arguments
-<span class="lineno">  717 </span>ctxCtorArgType :: MonadTerm m =&gt; DataIdent d -&gt;
-<span class="lineno">  718 </span>                  InvBindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno">  719 </span>                  InvBindings CtxTerm params prevs -&gt;
-<span class="lineno">  720 </span>                  CtorArg d ixs (params &lt;+&gt; prevs) a -&gt;
-<span class="lineno">  721 </span>                  m (CtxTerm (params &lt;+&gt; prevs) a)
-<span class="lineno">  722 </span><span class="decl"><span class="istickedoff">ctxCtorArgType _ _ _ (ConstArg tp) = return tp</span>
-<span class="lineno">  723 </span><span class="spaces"></span><span class="istickedoff">ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =</span>
-<span class="lineno">  724 </span><span class="spaces">  </span><span class="istickedoff">ctxPi zs_ctx $ \_ -&gt;</span>
-<span class="lineno">  725 </span><span class="spaces">  </span><span class="istickedoff">ctxDataTypeM d ((fst &lt;$&gt; ctxVars2 params prevs) &gt;&gt;= ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx)</span>
-<span class="lineno">  726 </span><span class="spaces">  </span><span class="istickedoff">(return $ invertCtxTerms ixs)</span></span>
-<span class="lineno">  727 </span>
-<span class="lineno">  728 </span>-- | Convert a bindings list of 'CtorArg's to a binding list of types
-<span class="lineno">  729 </span>ctxCtorArgBindings :: MonadTerm m =&gt; DataIdent d -&gt;
-<span class="lineno">  730 </span>                      InvBindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno">  731 </span>                      InvBindings CtxTerm params prevs -&gt;
-<span class="lineno">  732 </span>                      Bindings (CtorArg d ixs) (params &lt;+&gt; prevs) args -&gt;
-<span class="lineno">  733 </span>                      m (Bindings CtxTerm (params &lt;+&gt; prevs) args)
-<span class="lineno">  734 </span><span class="decl"><span class="istickedoff">ctxCtorArgBindings _ _ _ NoBind = return NoBind</span>
-<span class="lineno">  735 </span><span class="spaces"></span><span class="istickedoff">ctxCtorArgBindings d params prevs (Bind x arg args) =</span>
-<span class="lineno">  736 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- ctxCtorArgType d params prevs arg</span>
-<span class="lineno">  737 </span><span class="spaces">     </span><span class="istickedoff">rest &lt;- ctxCtorArgBindings d params (InvBind prevs <span class="nottickedoff">x</span> <span class="nottickedoff">tp</span>) args</span>
-<span class="lineno">  738 </span><span class="spaces">     </span><span class="istickedoff">return (Bind x tp rest)</span></span>
+<span class="lineno">  702 </span>
+<span class="lineno">  703 </span>--
+<span class="lineno">  704 </span>-- * Constructor Argument Types
+<span class="lineno">  705 </span>--
+<span class="lineno">  706 </span>
+<span class="lineno">  707 </span>-- | A specification of the type of an argument for a constructor of datatype
+<span class="lineno">  708 </span>-- @d@, that has a specified list @ixs@ of indices, inside a context @ctx@ of
+<span class="lineno">  709 </span>-- parameters and earlier arguments
+<span class="lineno">  710 </span>data CtorArg d ixs ctx a where
+<span class="lineno">  711 </span>  -- | A fixed, constant type
+<span class="lineno">  712 </span>  ConstArg :: CtxTerm ctx (Typ a) -&gt; CtorArg d ixs ctx (Typ a)
+<span class="lineno">  713 </span>  -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
+<span class="lineno">  714 </span>  -- specifies a recursive argument type of the form
+<span class="lineno">  715 </span>  --
+<span class="lineno">  716 </span>  -- &gt; (z1::tp1) -&gt; .. -&gt; (zn::tpn) -&gt; d p1 .. pm e1 .. ek
+<span class="lineno">  717 </span>  --
+<span class="lineno">  718 </span>  -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
+<span class="lineno">  719 </span>  -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
+<span class="lineno">  720 </span>  -- parameters of @d@ (not given here), and the @ei@ are the type indices of
+<span class="lineno">  721 </span>  -- @d@.
+<span class="lineno">  722 </span>  RecursiveArg ::
+<span class="lineno">  723 </span>    Bindings CtxTerm ctx zs -&gt;
+<span class="lineno">  724 </span>    CtxTerms (CtxInvApp ctx zs) ixs -&gt;
+<span class="lineno">  725 </span>    CtorArg d ixs ctx (Typ (Arrows zs d))
+<span class="lineno">  726 </span>
+<span class="lineno">  727 </span>-- | A structure that defines the parameters, arguments, and return type indices
+<span class="lineno">  728 </span>-- of a constructor, using 'CtxTerm' and friends to get the bindings right
+<span class="lineno">  729 </span>data CtorArgStruct d params ixs =
+<span class="lineno">  730 </span>  forall args.
+<span class="lineno">  731 </span>  CtorArgStruct
+<span class="lineno">  732 </span>  {
+<span class="lineno">  733 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctorParams</span></span></span> :: Bindings CtxTerm EmptyCtx params,
+<span class="lineno">  734 </span>    <span class="decl"><span class="nottickedoff">ctorArgs</span></span> :: Bindings (CtorArg d ixs) (CtxInv params) args,
+<span class="lineno">  735 </span>    <span class="decl"><span class="nottickedoff">ctorIndices</span></span> :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
+<span class="lineno">  736 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">dataTypeIndices</span></span></span> :: Bindings CtxTerm (CtxInv params) ixs
+<span class="lineno">  737 </span>  }
+<span class="lineno">  738 </span>
 <span class="lineno">  739 </span>
-<span class="lineno">  740 </span>-- | Compute the type of a constructor from the name of its datatype and its
-<span class="lineno">  741 </span>-- 'CtorArgStruct'
-<span class="lineno">  742 </span>ctxCtorType :: MonadTerm m =&gt; PrimName Term -&gt; CtorArgStruct d params ixs -&gt; m Term
-<span class="lineno">  743 </span><span class="decl"><span class="istickedoff">ctxCtorType d (CtorArgStruct{..}) =</span>
-<span class="lineno">  744 </span><span class="spaces">  </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
-<span class="lineno">  745 </span><span class="spaces">  </span><span class="istickedoff">(ctxPi ctorParams $ \params -&gt;</span>
-<span class="lineno">  746 </span><span class="spaces">    </span><span class="istickedoff">do bs &lt;-</span>
-<span class="lineno">  747 </span><span class="spaces">         </span><span class="istickedoff">ctxCtorArgBindings (DataIdent d) (invertBindings ctorParams)</span>
-<span class="lineno">  748 </span><span class="spaces">         </span><span class="istickedoff">InvNoBind ctorArgs</span>
-<span class="lineno">  749 </span><span class="spaces">       </span><span class="istickedoff">ctxPi bs $ \_ -&gt;</span>
-<span class="lineno">  750 </span><span class="spaces">         </span><span class="istickedoff">ctxDataTypeM (DataIdent d)</span>
-<span class="lineno">  751 </span><span class="spaces">         </span><span class="istickedoff">(ctxLift InvNoBind bs $ invertCtxTerms params)</span>
-<span class="lineno">  752 </span><span class="spaces">         </span><span class="istickedoff">(return $ invertCtxTerms ctorIndices))</span></span>
-<span class="lineno">  753 </span>
-<span class="lineno">  754 </span>
-<span class="lineno">  755 </span>--
-<span class="lineno">  756 </span>-- * Computing with Eliminators
-<span class="lineno">  757 </span>--
-<span class="lineno">  758 </span>
-<span class="lineno">  759 </span>-- | Build the type of the @p_ret@ function, also known as the &quot;motive&quot;
-<span class="lineno">  760 </span>-- function, of a recursor on datatype @d@. This type has the form
-<span class="lineno">  761 </span>--
-<span class="lineno">  762 </span>-- &gt; (i1::ix1) -&gt; .. -&gt; (im::ixm) -&gt; d p1 .. pn i1 .. im -&gt; s
-<span class="lineno">  763 </span>--
-<span class="lineno">  764 </span>-- where the @pi@ are free variables for the parameters of @d@, the @ixj@
-<span class="lineno">  765 </span>-- are the indices of @d@, and @s@ is any sort supplied as an argument.
-<span class="lineno">  766 </span>ctxPRetTp :: MonadTerm m =&gt; Proxy (Typ a) -&gt; DataIdent d -&gt;
-<span class="lineno">  767 </span>             InvBindings CtxTerm EmptyCtx ps -&gt;
-<span class="lineno">  768 </span>             Bindings CtxTerm ps ixs -&gt; Sort -&gt;
-<span class="lineno">  769 </span>             m (CtxTerm ps (Typ (Arrows ixs (d -&gt; Typ a))))
-<span class="lineno">  770 </span><span class="decl"><span class="istickedoff">ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =</span>
-<span class="lineno">  771 </span><span class="spaces">  </span><span class="istickedoff">ctxPiProxy <span class="nottickedoff">(Proxy :: Proxy (Typ (d -&gt; Typ a)))</span> ixs $ \ix_vars -&gt;</span>
-<span class="lineno">  772 </span><span class="spaces">  </span><span class="istickedoff">do param_vars &lt;- ctxVars params</span>
-<span class="lineno">  773 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)</span>
-<span class="lineno">  774 </span><span class="spaces">       </span><span class="istickedoff">(return $ invertCtxTerms ix_vars)</span>
-<span class="lineno">  775 </span><span class="spaces">     </span><span class="istickedoff">ctxPi1 &quot;_&quot; dt $ \_ -&gt; ctxSort s</span></span>
-<span class="lineno">  776 </span>
-<span class="lineno">  777 </span>-- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
-<span class="lineno">  778 </span>-- for the parameter variables returned by that function
-<span class="lineno">  779 </span>mkPRetTp :: MonadTerm m =&gt;
-<span class="lineno">  780 </span>  PrimName Term -&gt;
-<span class="lineno">  781 </span>  [(LocalName, Term)] -&gt;
-<span class="lineno">  782 </span>  [(LocalName, Term)] -&gt;
-<span class="lineno">  783 </span>  [Term] -&gt;
-<span class="lineno">  784 </span>  Sort -&gt;
-<span class="lineno">  785 </span>  m Term
-<span class="lineno">  786 </span><span class="decl"><span class="istickedoff">mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =</span>
-<span class="lineno">  787 </span><span class="spaces">  </span><span class="istickedoff">case ctxBindingsOfTerms untyped_p_ctx of</span>
-<span class="lineno">  788 </span><span class="spaces">    </span><span class="istickedoff">ExistsTp p_ctx -&gt;</span>
-<span class="lineno">  789 </span><span class="spaces">      </span><span class="istickedoff">case (ctxBindingsOfTerms untyped_ix_ctx,</span>
-<span class="lineno">  790 </span><span class="spaces">            </span><span class="istickedoff">ctxTermsForBindings p_ctx untyped_params) of</span>
-<span class="lineno">  791 </span><span class="spaces">        </span><span class="istickedoff">(ExistsTp ix_ctx, Just params) -&gt;</span>
-<span class="lineno">  792 </span><span class="spaces">          </span><span class="istickedoff">do p_ret &lt;- (ctxPRetTp <span class="nottickedoff">Proxy</span> (DataIdent d)</span>
-<span class="lineno">  793 </span><span class="spaces">                       </span><span class="istickedoff">(invertBindings p_ctx) ix_ctx s)</span>
-<span class="lineno">  794 </span><span class="spaces">             </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
-<span class="lineno">  795 </span><span class="spaces">               </span><span class="istickedoff">ctxSubst (invertCtxTerms params) InvNoBind</span>
-<span class="lineno">  796 </span><span class="spaces">               </span><span class="istickedoff">(castPRet (invertBindings p_ctx) p_ret)</span>
-<span class="lineno">  797 </span><span class="spaces">        </span><span class="istickedoff">(_, Nothing) -&gt;</span>
-<span class="lineno">  798 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">error &quot;mkPRetTp: incorrect number of parameters&quot;</span></span>
-<span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  800 </span><span class="spaces">    </span><span class="istickedoff">castPRet :: InvBindings tp ctx1 ctx -&gt; CtxTerm ctx a -&gt;</span>
-<span class="lineno">  801 </span><span class="spaces">                </span><span class="istickedoff">CtxTerm (EmptyCtx &lt;+&gt; ctx) a</span>
-<span class="lineno">  802 </span><span class="spaces">    </span><span class="istickedoff">castPRet ctx =</span>
-<span class="lineno">  803 </span><span class="spaces">      </span><span class="istickedoff">case ctxAppNilEq ctx of</span>
-<span class="lineno">  804 </span><span class="spaces">        </span><span class="istickedoff">Refl -&gt; id</span></span>
-<span class="lineno">  805 </span>
-<span class="lineno">  806 </span>
-<span class="lineno">  807 </span>-- | Compute the type of an eliminator function for a constructor from the name
-<span class="lineno">  808 </span>-- of its datatype, its name, and its 'CtorArgStruct'. This type has, as free
-<span class="lineno">  809 </span>-- variables, both the parameters of the datatype and a &quot;motive&quot; function from
-<span class="lineno">  810 </span>-- indices of the datatype to a return type. It is of the form
-<span class="lineno">  811 </span>--
-<span class="lineno">  812 </span>-- &gt; (x1::arg1) -&gt; maybe (rec1::rec_tp1) -&gt; .. -&gt;
-<span class="lineno">  813 </span>-- &gt; (xn::argn) -&gt; maybe (recn::rec_tpn) -&gt;
-<span class="lineno">  814 </span>-- &gt;   p_ret ix_1 .. ix_k (ctor params x1 .. xn)
-<span class="lineno">  815 </span>--
-<span class="lineno">  816 </span>-- where the ixs are the type indices of the return type for the constructor,
-<span class="lineno">  817 </span>-- the (xi::argi) are the arguments of the constructor, and the @maybe@s
-<span class="lineno">  818 </span>-- indicate additional arguments that are present only for arguments of
-<span class="lineno">  819 </span>-- recursive type, that is, where @argi@ has the form
-<span class="lineno">  820 </span>--
-<span class="lineno">  821 </span>-- &gt; (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk
-<span class="lineno">  822 </span>--
-<span class="lineno">  823 </span>-- In this case, @rec_tpi@ has the form
-<span class="lineno">  824 </span>--
-<span class="lineno">  825 </span>-- &gt; (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; p_ret t1 .. tk (f z1 .. zm)
-<span class="lineno">  826 </span>--
-<span class="lineno">  827 </span>-- Note that the output type cannot be expressed in the type of this function,
-<span class="lineno">  828 </span>-- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
-<span class="lineno">  829 </span>-- just casted to whatever type the caller specifies.
-<span class="lineno">  830 </span>ctxCtorElimType :: MonadTerm m =&gt;
-<span class="lineno">  831 </span>  Proxy (Typ ret) -&gt;
-<span class="lineno">  832 </span>  Proxy (Typ a) -&gt;
-<span class="lineno">  833 </span>  DataIdent d -&gt;
-<span class="lineno">  834 </span>  ExtCns Term -&gt;
-<span class="lineno">  835 </span>  CtorArgStruct d params ixs -&gt;
-<span class="lineno">  836 </span>  m (CtxTerm (CtxInv params ::&gt;(Arrows ixs (d -&gt; Typ a))) (Typ ret))
-<span class="lineno">  837 </span><span class="decl"><span class="istickedoff">ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c</span>
-<span class="lineno">  838 </span><span class="spaces">  </span><span class="istickedoff">(CtorArgStruct{..}) =</span>
-<span class="lineno">  839 </span><span class="spaces">  </span><span class="istickedoff">(do let params = invertBindings ctorParams</span>
-<span class="lineno">  840 </span><span class="spaces">      </span><span class="istickedoff">-- NOTE: we use propSort for the type of p_ret just as arbitrary sort, but</span>
-<span class="lineno">  841 </span><span class="spaces">      </span><span class="istickedoff">-- it doesn't matter because p_ret_tp is only actually used to form</span>
-<span class="lineno">  842 </span><span class="spaces">      </span><span class="istickedoff">-- contexts, and is never actually used directly in the output</span>
-<span class="lineno">  843 </span><span class="spaces">      </span><span class="istickedoff">p_ret_tp &lt;- ctxPRetTp <span class="nottickedoff">a_top</span> d_top params dataTypeIndices propSort</span>
-<span class="lineno">  844 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  845 </span><span class="spaces">      </span><span class="istickedoff">-- Lift the argument and return indices into the context of p_ret</span>
-<span class="lineno">  846 </span><span class="spaces">      </span><span class="istickedoff">args &lt;- ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">p_ret_tp</span> NoBind) ctorArgs</span>
-<span class="lineno">  847 </span><span class="spaces">      </span><span class="istickedoff">ixs &lt;-</span>
-<span class="lineno">  848 </span><span class="spaces">        </span><span class="istickedoff">ctxLiftInBindings InvNoBind ctorArgs (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">p_ret_tp</span> NoBind)</span>
-<span class="lineno">  849 </span><span class="spaces">        </span><span class="istickedoff">ctorIndices</span>
-<span class="lineno">  850 </span><span class="spaces">      </span><span class="istickedoff">-- Form the context (params ::&gt; p_ret)</span>
-<span class="lineno">  851 </span><span class="spaces">      </span><span class="istickedoff">let params_pret = InvBind params <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">(ctxLiftNil params p_ret_tp)</span></span>
-<span class="lineno">  852 </span><span class="spaces">      </span><span class="istickedoff">-- Call the helper and cast the result to (Typ ret)</span>
-<span class="lineno">  853 </span><span class="spaces">      </span><span class="istickedoff">castCtxTerm <span class="nottickedoff">Proxy</span> <span class="nottickedoff">ret</span> &lt;$&gt;</span>
-<span class="lineno">  854 </span><span class="spaces">        </span><span class="istickedoff">helper <span class="nottickedoff">a_top</span> d_top params_pret InvNoBind args ixs</span>
-<span class="lineno">  855 </span><span class="spaces">  </span><span class="istickedoff">) where</span>
-<span class="lineno">  856 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  857 </span><span class="spaces">  </span><span class="istickedoff">-- Iterate through the argument types of the constructor, building up a</span>
-<span class="lineno">  858 </span><span class="spaces">  </span><span class="istickedoff">-- function from those arguments to the result type of the p_ret function.</span>
-<span class="lineno">  859 </span><span class="spaces">  </span><span class="istickedoff">-- Note that, technically, this function also takes in recursive calls, so has</span>
-<span class="lineno">  860 </span><span class="spaces">  </span><span class="istickedoff">-- a slightly richer type, but we are not going to try to compute this richer</span>
-<span class="lineno">  861 </span><span class="spaces">  </span><span class="istickedoff">-- type in Haskell land.</span>
-<span class="lineno">  862 </span><span class="spaces">  </span><span class="istickedoff">helper :: MonadTerm m =&gt;</span>
-<span class="lineno">  863 </span><span class="spaces">    </span><span class="istickedoff">Proxy (Typ a) -&gt;</span>
-<span class="lineno">  864 </span><span class="spaces">    </span><span class="istickedoff">DataIdent d -&gt;</span>
-<span class="lineno">  865 </span><span class="spaces">    </span><span class="istickedoff">InvBindings CtxTerm EmptyCtx (ps ::&gt; Arrows ixs (d -&gt; Typ a)) -&gt;</span>
-<span class="lineno">  866 </span><span class="spaces">    </span><span class="istickedoff">InvBindings CtxTerm (ps ::&gt; Arrows ixs (d -&gt; Typ a)) prevs -&gt;</span>
-<span class="lineno">  867 </span><span class="spaces">    </span><span class="istickedoff">Bindings (CtorArg d ixs) ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) args -&gt;</span>
-<span class="lineno">  868 </span><span class="spaces">    </span><span class="istickedoff">CtxTerms (CtxInvApp ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) args) ixs -&gt;</span>
-<span class="lineno">  869 </span><span class="spaces">    </span><span class="istickedoff">m (CtxTerm ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) (Typ (Arrows args a)))</span>
-<span class="lineno">  870 </span><span class="spaces">  </span><span class="istickedoff">helper _a d params_pret prevs NoBind ret_ixs =</span>
-<span class="lineno">  871 </span><span class="spaces">    </span><span class="istickedoff">-- If we are finished with our arguments, construct the final result type</span>
-<span class="lineno">  872 </span><span class="spaces">    </span><span class="istickedoff">-- (p_ret ret_ixs (c params prevs))</span>
-<span class="lineno">  873 </span><span class="spaces">    </span><span class="istickedoff">do (vars, prev_vars) &lt;- ctxVars2 params_pret prevs</span>
-<span class="lineno">  874 </span><span class="spaces">       </span><span class="istickedoff">let (param_terms, p_ret) = ctxTermsCtxHeadTail vars</span>
-<span class="lineno">  875 </span><span class="spaces">       </span><span class="istickedoff">ctxApply (ctxApplyMulti (return p_ret) (return ret_ixs)) $</span>
-<span class="lineno">  876 </span><span class="spaces">         </span><span class="istickedoff">ctxCtorAppM <span class="nottickedoff">d</span> c (return param_terms) (return prev_vars)</span>
-<span class="lineno">  877 </span><span class="spaces">  </span><span class="istickedoff">helper a d params_pret prevs (Bind str (ConstArg tp) args) ixs =</span>
-<span class="lineno">  878 </span><span class="spaces">    </span><span class="istickedoff">-- For a constant argument type, just abstract it and continue</span>
-<span class="lineno">  879 </span><span class="spaces">    </span><span class="istickedoff">(ctxPi (Bind str tp NoBind) $ \_ -&gt;</span>
-<span class="lineno">  880 </span><span class="spaces">      </span><span class="istickedoff">helper <span class="nottickedoff">a</span> d params_pret (InvBind prevs <span class="nottickedoff">str</span> <span class="nottickedoff">tp</span>) args ixs)</span>
-<span class="lineno">  881 </span><span class="spaces">  </span><span class="istickedoff">helper (a :: Proxy (Typ a)) (d::DataIdent d) params_pret</span>
-<span class="lineno">  882 </span><span class="spaces">    </span><span class="istickedoff">prevs (Bind str (RecursiveArg zs ts) args) ixs =</span>
-<span class="lineno">  883 </span><span class="spaces">    </span><span class="istickedoff">-- For a recursive argument type of the form</span>
-<span class="lineno">  884 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno">  885 </span><span class="spaces">    </span><span class="istickedoff">-- (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk</span>
-<span class="lineno">  886 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno">  887 </span><span class="spaces">    </span><span class="istickedoff">-- form the type abstraction</span>
-<span class="lineno">  888 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno">  889 </span><span class="spaces">    </span><span class="istickedoff">-- (arg:: (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk) -&gt;</span>
-<span class="lineno">  890 </span><span class="spaces">    </span><span class="istickedoff">-- (ih :: (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; p_ret t1 .. tk (arg z1 .. zm)) -&gt;</span>
-<span class="lineno">  891 </span><span class="spaces">    </span><span class="istickedoff">-- rest</span>
-<span class="lineno">  892 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno">  893 </span><span class="spaces">    </span><span class="istickedoff">-- where rest is the result of a recursive call</span>
-<span class="lineno">  894 </span><span class="spaces">    </span><span class="istickedoff">do</span>
-<span class="lineno">  895 </span><span class="spaces">      </span><span class="istickedoff">-- Build terms for the params and p_ret variables</span>
-<span class="lineno">  896 </span><span class="spaces">      </span><span class="istickedoff">(param_vars, p_ret) &lt;-</span>
-<span class="lineno">  897 </span><span class="spaces">        </span><span class="istickedoff">ctxTermsCtxHeadTail &lt;$&gt; fst &lt;$&gt; ctxVars2 params_pret prevs</span>
-<span class="lineno">  898 </span><span class="spaces">      </span><span class="istickedoff">-- Build the type of the argument arg</span>
-<span class="lineno">  899 </span><span class="spaces">      </span><span class="istickedoff">arg_tp &lt;- ctxPi zs (\_ -&gt; ctxDataTypeM d</span>
-<span class="lineno">  900 </span><span class="spaces">                                </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs param_vars)</span>
-<span class="lineno">  901 </span><span class="spaces">                                </span><span class="istickedoff">(return $ invertCtxTerms ts))</span>
-<span class="lineno">  902 </span><span class="spaces">      </span><span class="istickedoff">-- Lift zs and ts into the context of arg</span>
-<span class="lineno">  903 </span><span class="spaces">      </span><span class="istickedoff">let arg_ctx = Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">arg_tp</span> NoBind</span>
-<span class="lineno">  904 </span><span class="spaces">      </span><span class="istickedoff">zs' &lt;- ctxLift <span class="nottickedoff">InvNoBind</span> <span class="nottickedoff">arg_ctx</span> zs</span>
-<span class="lineno">  905 </span><span class="spaces">      </span><span class="istickedoff">ts' &lt;- ctxLiftInBindings InvNoBind zs arg_ctx ts</span>
-<span class="lineno">  906 </span><span class="spaces">      </span><span class="istickedoff">-- Build the pi-abstraction for arg</span>
-<span class="lineno">  907 </span><span class="spaces">      </span><span class="istickedoff">ctxPi1 str arg_tp $ \arg -&gt;</span>
-<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">do rest &lt;-</span>
-<span class="lineno">  909 </span><span class="spaces">             </span><span class="istickedoff">helper <span class="nottickedoff">a</span> d params_pret (InvBind prevs <span class="nottickedoff">str</span> <span class="nottickedoff">arg_tp</span>) args ixs</span>
-<span class="lineno">  910 </span><span class="spaces">           </span><span class="istickedoff">-- Build the type of ih, in the context of arg</span>
-<span class="lineno">  911 </span><span class="spaces">           </span><span class="istickedoff">ih_tp &lt;- ctxPi zs' $ \z_vars -&gt;</span>
-<span class="lineno">  912 </span><span class="spaces">             </span><span class="istickedoff">ctxApplyProxy <span class="nottickedoff">(Proxy :: Proxy d)</span> <span class="nottickedoff">(Proxy :: Proxy (Typ a))</span></span>
-<span class="lineno">  913 </span><span class="spaces">             </span><span class="istickedoff">(ctxApplyMulti</span>
-<span class="lineno">  914 </span><span class="spaces">              </span><span class="istickedoff">(ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">arg_tp</span> zs') p_ret) (return ts'))</span>
-<span class="lineno">  915 </span><span class="spaces">             </span><span class="istickedoff">(ctxApplyMulti (ctxLift <span class="nottickedoff">InvNoBind</span> zs' arg) (return z_vars))</span>
-<span class="lineno">  916 </span><span class="spaces">           </span><span class="istickedoff">-- Finally, build the pi-abstraction for ih around the rest</span>
-<span class="lineno">  917 </span><span class="spaces">           </span><span class="istickedoff">--</span>
-<span class="lineno">  918 </span><span class="spaces">           </span><span class="istickedoff">-- NOTE: we cast away the IH argument, because that is a type that is</span>
-<span class="lineno">  919 </span><span class="spaces">           </span><span class="istickedoff">-- computed from the argument structure, and we cannot (well, we</span>
-<span class="lineno">  920 </span><span class="spaces">           </span><span class="istickedoff">-- could, but it would be much more work to) express that computation</span>
-<span class="lineno">  921 </span><span class="spaces">           </span><span class="istickedoff">-- in the Haskell type system</span>
-<span class="lineno">  922 </span><span class="spaces">           </span><span class="istickedoff">castCtxTerm <span class="nottickedoff">Proxy</span> <span class="nottickedoff">Proxy</span> &lt;$&gt;</span>
-<span class="lineno">  923 </span><span class="spaces">             </span><span class="istickedoff">(ctxPi1 &quot;_&quot; ih_tp $ \_ -&gt;</span>
-<span class="lineno">  924 </span><span class="spaces">               </span><span class="istickedoff">ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">ih_tp</span> NoBind) rest)</span></span>
-<span class="lineno">  925 </span>
-<span class="lineno">  926 </span>-- | Build a function that substitutes parameters and a @p_ret@ return type
-<span class="lineno">  927 </span>-- function into the type of an eliminator, as returned by 'ctxCtorElimType',
-<span class="lineno">  928 </span>-- for the given constructor. We return the substitution function in the monad
-<span class="lineno">  929 </span>-- so that we only call 'ctxCtorElimType' once but can call the function many
-<span class="lineno">  930 </span>-- times, in order to amortize the overhead of 'ctxCtorElimType'.
-<span class="lineno">  931 </span>mkCtorElimTypeFun :: MonadTerm m =&gt;
-<span class="lineno">  932 </span>  PrimName Term {- ^ data type -} -&gt;
-<span class="lineno">  933 </span>  ExtCns Term {- ^ constructor type -} -&gt;
-<span class="lineno">  934 </span>  CtorArgStruct d params ixs -&gt;
-<span class="lineno">  935 </span>  m ([Term] -&gt; Term -&gt; m Term)
-<span class="lineno">  936 </span><span class="decl"><span class="istickedoff">mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =</span>
-<span class="lineno">  937 </span><span class="spaces">  </span><span class="istickedoff">do ctxElimType &lt;- ctxCtorElimType <span class="nottickedoff">Proxy</span> <span class="nottickedoff">Proxy</span> (DataIdent d) c argStruct</span>
-<span class="lineno">  938 </span><span class="spaces">     </span><span class="istickedoff">case ctxAppNilEq (invertBindings ctorParams) of</span>
-<span class="lineno">  939 </span><span class="spaces">       </span><span class="istickedoff">Refl -&gt;</span>
-<span class="lineno">  940 </span><span class="spaces">         </span><span class="istickedoff">return $ \params p_ret -&gt;</span>
-<span class="lineno">  941 </span><span class="spaces">         </span><span class="istickedoff">whnfTerm =&lt;&lt;</span>
-<span class="lineno">  942 </span><span class="spaces">         </span><span class="istickedoff">case ctxTermsForBindings ctorParams params of</span>
-<span class="lineno">  943 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error &quot;ctorElimTypeFun: wrong number of parameters!&quot;</span></span>
-<span class="lineno">  944 </span><span class="spaces">           </span><span class="istickedoff">Just paramsCtx -&gt;</span>
-<span class="lineno">  945 </span><span class="spaces">             </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
-<span class="lineno">  946 </span><span class="spaces">             </span><span class="istickedoff">ctxSubstInBindings</span>
-<span class="lineno">  947 </span><span class="spaces">             </span><span class="istickedoff">(CtxTermsCtxCons (invertCtxTerms paramsCtx) (mkClosedTerm p_ret))</span>
-<span class="lineno">  948 </span><span class="spaces">             </span><span class="istickedoff">InvNoBind NoBind ctxElimType</span></span>
-<span class="lineno">  949 </span>
+<span class="lineno">  740 </span>-- | Convert a 'CtorArg' into the type that it represents, given a context of
+<span class="lineno">  741 </span>-- the parameters and of the previous arguments
+<span class="lineno">  742 </span>ctxCtorArgType :: MonadTerm m =&gt; DataIdent d -&gt;
+<span class="lineno">  743 </span>                  InvBindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno">  744 </span>                  InvBindings CtxTerm params prevs -&gt;
+<span class="lineno">  745 </span>                  CtorArg d ixs (params &lt;+&gt; prevs) a -&gt;
+<span class="lineno">  746 </span>                  m (CtxTerm (params &lt;+&gt; prevs) a)
+<span class="lineno">  747 </span><span class="decl"><span class="istickedoff">ctxCtorArgType _ _ _ (ConstArg tp) = return tp</span>
+<span class="lineno">  748 </span><span class="spaces"></span><span class="istickedoff">ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =</span>
+<span class="lineno">  749 </span><span class="spaces">  </span><span class="istickedoff">ctxPi zs_ctx $ \_ -&gt;</span>
+<span class="lineno">  750 </span><span class="spaces">  </span><span class="istickedoff">ctxDataTypeM d ((fst &lt;$&gt; ctxVars2 params prevs) &gt;&gt;= ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx)</span>
+<span class="lineno">  751 </span><span class="spaces">  </span><span class="istickedoff">(return $ invertCtxTerms ixs)</span></span>
+<span class="lineno">  752 </span>
+<span class="lineno">  753 </span>-- | Convert a bindings list of 'CtorArg's to a binding list of types
+<span class="lineno">  754 </span>ctxCtorArgBindings :: MonadTerm m =&gt; DataIdent d -&gt;
+<span class="lineno">  755 </span>                      InvBindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno">  756 </span>                      InvBindings CtxTerm params prevs -&gt;
+<span class="lineno">  757 </span>                      Bindings (CtorArg d ixs) (params &lt;+&gt; prevs) args -&gt;
+<span class="lineno">  758 </span>                      m (Bindings CtxTerm (params &lt;+&gt; prevs) args)
+<span class="lineno">  759 </span><span class="decl"><span class="istickedoff">ctxCtorArgBindings _ _ _ NoBind = return NoBind</span>
+<span class="lineno">  760 </span><span class="spaces"></span><span class="istickedoff">ctxCtorArgBindings d params prevs (Bind x arg args) =</span>
+<span class="lineno">  761 </span><span class="spaces">  </span><span class="istickedoff">do tp &lt;- ctxCtorArgType d params prevs arg</span>
+<span class="lineno">  762 </span><span class="spaces">     </span><span class="istickedoff">rest &lt;- ctxCtorArgBindings d params (InvBind prevs <span class="nottickedoff">x</span> <span class="nottickedoff">tp</span>) args</span>
+<span class="lineno">  763 </span><span class="spaces">     </span><span class="istickedoff">return (Bind x tp rest)</span></span>
+<span class="lineno">  764 </span>
+<span class="lineno">  765 </span>-- | Compute the type of a constructor from the name of its datatype and its
+<span class="lineno">  766 </span>-- 'CtorArgStruct'
+<span class="lineno">  767 </span>ctxCtorType :: MonadTerm m =&gt; PrimName Term -&gt; CtorArgStruct d params ixs -&gt; m Term
+<span class="lineno">  768 </span><span class="decl"><span class="istickedoff">ctxCtorType d (CtorArgStruct{..}) =</span>
+<span class="lineno">  769 </span><span class="spaces">  </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
+<span class="lineno">  770 </span><span class="spaces">  </span><span class="istickedoff">(ctxPi ctorParams $ \params -&gt;</span>
+<span class="lineno">  771 </span><span class="spaces">    </span><span class="istickedoff">do bs &lt;-</span>
+<span class="lineno">  772 </span><span class="spaces">         </span><span class="istickedoff">ctxCtorArgBindings (DataIdent d) (invertBindings ctorParams)</span>
+<span class="lineno">  773 </span><span class="spaces">         </span><span class="istickedoff">InvNoBind ctorArgs</span>
+<span class="lineno">  774 </span><span class="spaces">       </span><span class="istickedoff">ctxPi bs $ \_ -&gt;</span>
+<span class="lineno">  775 </span><span class="spaces">         </span><span class="istickedoff">ctxDataTypeM (DataIdent d)</span>
+<span class="lineno">  776 </span><span class="spaces">         </span><span class="istickedoff">(ctxLift InvNoBind bs $ invertCtxTerms params)</span>
+<span class="lineno">  777 </span><span class="spaces">         </span><span class="istickedoff">(return $ invertCtxTerms ctorIndices))</span></span>
+<span class="lineno">  778 </span>
+<span class="lineno">  779 </span>
+<span class="lineno">  780 </span>--
+<span class="lineno">  781 </span>-- * Computing with Eliminators
+<span class="lineno">  782 </span>--
+<span class="lineno">  783 </span>
+<span class="lineno">  784 </span>-- | Build the type of the @p_ret@ function, also known as the &quot;motive&quot;
+<span class="lineno">  785 </span>-- function, of a recursor on datatype @d@. This type has the form
+<span class="lineno">  786 </span>--
+<span class="lineno">  787 </span>-- &gt; (i1::ix1) -&gt; .. -&gt; (im::ixm) -&gt; d p1 .. pn i1 .. im -&gt; s
+<span class="lineno">  788 </span>--
+<span class="lineno">  789 </span>-- where the @pi@ are free variables for the parameters of @d@, the @ixj@
+<span class="lineno">  790 </span>-- are the indices of @d@, and @s@ is any sort supplied as an argument.
+<span class="lineno">  791 </span>ctxPRetTp :: MonadTerm m =&gt; Proxy (Typ a) -&gt; DataIdent d -&gt;
+<span class="lineno">  792 </span>             InvBindings CtxTerm EmptyCtx ps -&gt;
+<span class="lineno">  793 </span>             Bindings CtxTerm ps ixs -&gt; Sort -&gt;
+<span class="lineno">  794 </span>             m (CtxTerm ps (Typ (Arrows ixs (d -&gt; Typ a))))
+<span class="lineno">  795 </span><span class="decl"><span class="istickedoff">ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =</span>
+<span class="lineno">  796 </span><span class="spaces">  </span><span class="istickedoff">ctxPiProxy <span class="nottickedoff">(Proxy :: Proxy (Typ (d -&gt; Typ a)))</span> ixs $ \ix_vars -&gt;</span>
+<span class="lineno">  797 </span><span class="spaces">  </span><span class="istickedoff">do param_vars &lt;- ctxVars params</span>
+<span class="lineno">  798 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)</span>
+<span class="lineno">  799 </span><span class="spaces">       </span><span class="istickedoff">(return $ invertCtxTerms ix_vars)</span>
+<span class="lineno">  800 </span><span class="spaces">     </span><span class="istickedoff">ctxPi1 &quot;_&quot; dt $ \_ -&gt; ctxSort s</span></span>
+<span class="lineno">  801 </span>
+<span class="lineno">  802 </span>-- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
+<span class="lineno">  803 </span>-- for the parameter variables returned by that function
+<span class="lineno">  804 </span>mkPRetTp :: MonadTerm m =&gt;
+<span class="lineno">  805 </span>  PrimName Term -&gt;
+<span class="lineno">  806 </span>  [(LocalName, Term)] -&gt;
+<span class="lineno">  807 </span>  [(LocalName, Term)] -&gt;
+<span class="lineno">  808 </span>  [Term] -&gt;
+<span class="lineno">  809 </span>  Sort -&gt;
+<span class="lineno">  810 </span>  m Term
+<span class="lineno">  811 </span><span class="decl"><span class="istickedoff">mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =</span>
+<span class="lineno">  812 </span><span class="spaces">  </span><span class="istickedoff">case ctxBindingsOfTerms untyped_p_ctx of</span>
+<span class="lineno">  813 </span><span class="spaces">    </span><span class="istickedoff">ExistsTp p_ctx -&gt;</span>
+<span class="lineno">  814 </span><span class="spaces">      </span><span class="istickedoff">case (ctxBindingsOfTerms untyped_ix_ctx,</span>
+<span class="lineno">  815 </span><span class="spaces">            </span><span class="istickedoff">ctxTermsForBindings p_ctx untyped_params) of</span>
+<span class="lineno">  816 </span><span class="spaces">        </span><span class="istickedoff">(ExistsTp ix_ctx, Just params) -&gt;</span>
+<span class="lineno">  817 </span><span class="spaces">          </span><span class="istickedoff">do p_ret &lt;- (ctxPRetTp <span class="nottickedoff">Proxy</span> (DataIdent d)</span>
+<span class="lineno">  818 </span><span class="spaces">                       </span><span class="istickedoff">(invertBindings p_ctx) ix_ctx s)</span>
+<span class="lineno">  819 </span><span class="spaces">             </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
+<span class="lineno">  820 </span><span class="spaces">               </span><span class="istickedoff">ctxSubst (invertCtxTerms params) InvNoBind</span>
+<span class="lineno">  821 </span><span class="spaces">               </span><span class="istickedoff">(castPRet (invertBindings p_ctx) p_ret)</span>
+<span class="lineno">  822 </span><span class="spaces">        </span><span class="istickedoff">(_, Nothing) -&gt;</span>
+<span class="lineno">  823 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">error &quot;mkPRetTp: incorrect number of parameters&quot;</span></span>
+<span class="lineno">  824 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  825 </span><span class="spaces">    </span><span class="istickedoff">castPRet :: InvBindings tp ctx1 ctx -&gt; CtxTerm ctx a -&gt;</span>
+<span class="lineno">  826 </span><span class="spaces">                </span><span class="istickedoff">CtxTerm (EmptyCtx &lt;+&gt; ctx) a</span>
+<span class="lineno">  827 </span><span class="spaces">    </span><span class="istickedoff">castPRet ctx =</span>
+<span class="lineno">  828 </span><span class="spaces">      </span><span class="istickedoff">case ctxAppNilEq ctx of</span>
+<span class="lineno">  829 </span><span class="spaces">        </span><span class="istickedoff">Refl -&gt; id</span></span>
+<span class="lineno">  830 </span>
+<span class="lineno">  831 </span>
+<span class="lineno">  832 </span>-- | Compute the type of an eliminator function for a constructor from the name
+<span class="lineno">  833 </span>-- of its datatype, its name, and its 'CtorArgStruct'. This type has, as free
+<span class="lineno">  834 </span>-- variables, both the parameters of the datatype and a &quot;motive&quot; function from
+<span class="lineno">  835 </span>-- indices of the datatype to a return type. It is of the form
+<span class="lineno">  836 </span>--
+<span class="lineno">  837 </span>-- &gt; (x1::arg1) -&gt; maybe (rec1::rec_tp1) -&gt; .. -&gt;
+<span class="lineno">  838 </span>-- &gt; (xn::argn) -&gt; maybe (recn::rec_tpn) -&gt;
+<span class="lineno">  839 </span>-- &gt;   p_ret ix_1 .. ix_k (ctor params x1 .. xn)
+<span class="lineno">  840 </span>--
+<span class="lineno">  841 </span>-- where the ixs are the type indices of the return type for the constructor,
+<span class="lineno">  842 </span>-- the (xi::argi) are the arguments of the constructor, and the @maybe@s
+<span class="lineno">  843 </span>-- indicate additional arguments that are present only for arguments of
+<span class="lineno">  844 </span>-- recursive type, that is, where @argi@ has the form
+<span class="lineno">  845 </span>--
+<span class="lineno">  846 </span>-- &gt; (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk
+<span class="lineno">  847 </span>--
+<span class="lineno">  848 </span>-- In this case, @rec_tpi@ has the form
+<span class="lineno">  849 </span>--
+<span class="lineno">  850 </span>-- &gt; (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; p_ret t1 .. tk (f z1 .. zm)
+<span class="lineno">  851 </span>--
+<span class="lineno">  852 </span>-- Note that the output type cannot be expressed in the type of this function,
+<span class="lineno">  853 </span>-- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
+<span class="lineno">  854 </span>-- just casted to whatever type the caller specifies.
+<span class="lineno">  855 </span>ctxCtorElimType :: MonadTerm m =&gt;
+<span class="lineno">  856 </span>  Proxy (Typ ret) -&gt;
+<span class="lineno">  857 </span>  Proxy (Typ a) -&gt;
+<span class="lineno">  858 </span>  DataIdent d -&gt;
+<span class="lineno">  859 </span>  ExtCns Term -&gt;
+<span class="lineno">  860 </span>  CtorArgStruct d params ixs -&gt;
+<span class="lineno">  861 </span>  m (CtxTerm (CtxInv params ::&gt;(Arrows ixs (d -&gt; Typ a))) (Typ ret))
+<span class="lineno">  862 </span><span class="decl"><span class="istickedoff">ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c</span>
+<span class="lineno">  863 </span><span class="spaces">  </span><span class="istickedoff">(CtorArgStruct{..}) =</span>
+<span class="lineno">  864 </span><span class="spaces">  </span><span class="istickedoff">(do let params = invertBindings ctorParams</span>
+<span class="lineno">  865 </span><span class="spaces">      </span><span class="istickedoff">-- NOTE: we use propSort for the type of p_ret just as arbitrary sort, but</span>
+<span class="lineno">  866 </span><span class="spaces">      </span><span class="istickedoff">-- it doesn't matter because p_ret_tp is only actually used to form</span>
+<span class="lineno">  867 </span><span class="spaces">      </span><span class="istickedoff">-- contexts, and is never actually used directly in the output</span>
+<span class="lineno">  868 </span><span class="spaces">      </span><span class="istickedoff">p_ret_tp &lt;- ctxPRetTp <span class="nottickedoff">a_top</span> d_top params dataTypeIndices propSort</span>
+<span class="lineno">  869 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  870 </span><span class="spaces">      </span><span class="istickedoff">-- Lift the argument and return indices into the context of p_ret</span>
+<span class="lineno">  871 </span><span class="spaces">      </span><span class="istickedoff">args &lt;- ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">p_ret_tp</span> NoBind) ctorArgs</span>
+<span class="lineno">  872 </span><span class="spaces">      </span><span class="istickedoff">ixs &lt;-</span>
+<span class="lineno">  873 </span><span class="spaces">        </span><span class="istickedoff">ctxLiftInBindings InvNoBind ctorArgs (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">p_ret_tp</span> NoBind)</span>
+<span class="lineno">  874 </span><span class="spaces">        </span><span class="istickedoff">ctorIndices</span>
+<span class="lineno">  875 </span><span class="spaces">      </span><span class="istickedoff">-- Form the context (params ::&gt; p_ret)</span>
+<span class="lineno">  876 </span><span class="spaces">      </span><span class="istickedoff">let params_pret = InvBind params <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">(ctxLiftNil params p_ret_tp)</span></span>
+<span class="lineno">  877 </span><span class="spaces">      </span><span class="istickedoff">-- Call the helper and cast the result to (Typ ret)</span>
+<span class="lineno">  878 </span><span class="spaces">      </span><span class="istickedoff">castCtxTerm <span class="nottickedoff">Proxy</span> <span class="nottickedoff">ret</span> &lt;$&gt;</span>
+<span class="lineno">  879 </span><span class="spaces">        </span><span class="istickedoff">helper <span class="nottickedoff">a_top</span> d_top params_pret InvNoBind args ixs</span>
+<span class="lineno">  880 </span><span class="spaces">  </span><span class="istickedoff">) where</span>
+<span class="lineno">  881 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  882 </span><span class="spaces">  </span><span class="istickedoff">-- Iterate through the argument types of the constructor, building up a</span>
+<span class="lineno">  883 </span><span class="spaces">  </span><span class="istickedoff">-- function from those arguments to the result type of the p_ret function.</span>
+<span class="lineno">  884 </span><span class="spaces">  </span><span class="istickedoff">-- Note that, technically, this function also takes in recursive calls, so has</span>
+<span class="lineno">  885 </span><span class="spaces">  </span><span class="istickedoff">-- a slightly richer type, but we are not going to try to compute this richer</span>
+<span class="lineno">  886 </span><span class="spaces">  </span><span class="istickedoff">-- type in Haskell land.</span>
+<span class="lineno">  887 </span><span class="spaces">  </span><span class="istickedoff">helper :: MonadTerm m =&gt;</span>
+<span class="lineno">  888 </span><span class="spaces">    </span><span class="istickedoff">Proxy (Typ a) -&gt;</span>
+<span class="lineno">  889 </span><span class="spaces">    </span><span class="istickedoff">DataIdent d -&gt;</span>
+<span class="lineno">  890 </span><span class="spaces">    </span><span class="istickedoff">InvBindings CtxTerm EmptyCtx (ps ::&gt; Arrows ixs (d -&gt; Typ a)) -&gt;</span>
+<span class="lineno">  891 </span><span class="spaces">    </span><span class="istickedoff">InvBindings CtxTerm (ps ::&gt; Arrows ixs (d -&gt; Typ a)) prevs -&gt;</span>
+<span class="lineno">  892 </span><span class="spaces">    </span><span class="istickedoff">Bindings (CtorArg d ixs) ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) args -&gt;</span>
+<span class="lineno">  893 </span><span class="spaces">    </span><span class="istickedoff">CtxTerms (CtxInvApp ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) args) ixs -&gt;</span>
+<span class="lineno">  894 </span><span class="spaces">    </span><span class="istickedoff">m (CtxTerm ((ps ::&gt; Arrows ixs (d -&gt; Typ a)) &lt;+&gt; prevs) (Typ (Arrows args a)))</span>
+<span class="lineno">  895 </span><span class="spaces">  </span><span class="istickedoff">helper _a d params_pret prevs NoBind ret_ixs =</span>
+<span class="lineno">  896 </span><span class="spaces">    </span><span class="istickedoff">-- If we are finished with our arguments, construct the final result type</span>
+<span class="lineno">  897 </span><span class="spaces">    </span><span class="istickedoff">-- (p_ret ret_ixs (c params prevs))</span>
+<span class="lineno">  898 </span><span class="spaces">    </span><span class="istickedoff">do (vars, prev_vars) &lt;- ctxVars2 params_pret prevs</span>
+<span class="lineno">  899 </span><span class="spaces">       </span><span class="istickedoff">let (param_terms, p_ret) = ctxTermsCtxHeadTail vars</span>
+<span class="lineno">  900 </span><span class="spaces">       </span><span class="istickedoff">ctxApply (ctxApplyMulti (return p_ret) (return ret_ixs)) $</span>
+<span class="lineno">  901 </span><span class="spaces">         </span><span class="istickedoff">ctxCtorAppM <span class="nottickedoff">d</span> c (return param_terms) (return prev_vars)</span>
+<span class="lineno">  902 </span><span class="spaces">  </span><span class="istickedoff">helper a d params_pret prevs (Bind str (ConstArg tp) args) ixs =</span>
+<span class="lineno">  903 </span><span class="spaces">    </span><span class="istickedoff">-- For a constant argument type, just abstract it and continue</span>
+<span class="lineno">  904 </span><span class="spaces">    </span><span class="istickedoff">(ctxPi (Bind str tp NoBind) $ \_ -&gt;</span>
+<span class="lineno">  905 </span><span class="spaces">      </span><span class="istickedoff">helper <span class="nottickedoff">a</span> d params_pret (InvBind prevs <span class="nottickedoff">str</span> <span class="nottickedoff">tp</span>) args ixs)</span>
+<span class="lineno">  906 </span><span class="spaces">  </span><span class="istickedoff">helper (a :: Proxy (Typ a)) (d::DataIdent d) params_pret</span>
+<span class="lineno">  907 </span><span class="spaces">    </span><span class="istickedoff">prevs (Bind str (RecursiveArg zs ts) args) ixs =</span>
+<span class="lineno">  908 </span><span class="spaces">    </span><span class="istickedoff">-- For a recursive argument type of the form</span>
+<span class="lineno">  909 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno">  910 </span><span class="spaces">    </span><span class="istickedoff">-- (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk</span>
+<span class="lineno">  911 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno">  912 </span><span class="spaces">    </span><span class="istickedoff">-- form the type abstraction</span>
+<span class="lineno">  913 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno">  914 </span><span class="spaces">    </span><span class="istickedoff">-- (arg:: (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; d params t1 .. tk) -&gt;</span>
+<span class="lineno">  915 </span><span class="spaces">    </span><span class="istickedoff">-- (ih :: (z1::Z1) -&gt; .. -&gt; (zm::Zm) -&gt; p_ret t1 .. tk (arg z1 .. zm)) -&gt;</span>
+<span class="lineno">  916 </span><span class="spaces">    </span><span class="istickedoff">-- rest</span>
+<span class="lineno">  917 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">-- where rest is the result of a recursive call</span>
+<span class="lineno">  919 </span><span class="spaces">    </span><span class="istickedoff">do</span>
+<span class="lineno">  920 </span><span class="spaces">      </span><span class="istickedoff">-- Build terms for the params and p_ret variables</span>
+<span class="lineno">  921 </span><span class="spaces">      </span><span class="istickedoff">(param_vars, p_ret) &lt;-</span>
+<span class="lineno">  922 </span><span class="spaces">        </span><span class="istickedoff">ctxTermsCtxHeadTail &lt;$&gt; fst &lt;$&gt; ctxVars2 params_pret prevs</span>
+<span class="lineno">  923 </span><span class="spaces">      </span><span class="istickedoff">-- Build the type of the argument arg</span>
+<span class="lineno">  924 </span><span class="spaces">      </span><span class="istickedoff">arg_tp &lt;- ctxPi zs (\_ -&gt; ctxDataTypeM d</span>
+<span class="lineno">  925 </span><span class="spaces">                                </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs param_vars)</span>
+<span class="lineno">  926 </span><span class="spaces">                                </span><span class="istickedoff">(return $ invertCtxTerms ts))</span>
+<span class="lineno">  927 </span><span class="spaces">      </span><span class="istickedoff">-- Lift zs and ts into the context of arg</span>
+<span class="lineno">  928 </span><span class="spaces">      </span><span class="istickedoff">let arg_ctx = Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">arg_tp</span> NoBind</span>
+<span class="lineno">  929 </span><span class="spaces">      </span><span class="istickedoff">zs' &lt;- ctxLift <span class="nottickedoff">InvNoBind</span> <span class="nottickedoff">arg_ctx</span> zs</span>
+<span class="lineno">  930 </span><span class="spaces">      </span><span class="istickedoff">ts' &lt;- ctxLiftInBindings InvNoBind zs arg_ctx ts</span>
+<span class="lineno">  931 </span><span class="spaces">      </span><span class="istickedoff">-- Build the pi-abstraction for arg</span>
+<span class="lineno">  932 </span><span class="spaces">      </span><span class="istickedoff">ctxPi1 str arg_tp $ \arg -&gt;</span>
+<span class="lineno">  933 </span><span class="spaces">        </span><span class="istickedoff">do rest &lt;-</span>
+<span class="lineno">  934 </span><span class="spaces">             </span><span class="istickedoff">helper <span class="nottickedoff">a</span> d params_pret (InvBind prevs <span class="nottickedoff">str</span> <span class="nottickedoff">arg_tp</span>) args ixs</span>
+<span class="lineno">  935 </span><span class="spaces">           </span><span class="istickedoff">-- Build the type of ih, in the context of arg</span>
+<span class="lineno">  936 </span><span class="spaces">           </span><span class="istickedoff">ih_tp &lt;- ctxPi zs' $ \z_vars -&gt;</span>
+<span class="lineno">  937 </span><span class="spaces">             </span><span class="istickedoff">ctxApplyProxy <span class="nottickedoff">(Proxy :: Proxy d)</span> <span class="nottickedoff">(Proxy :: Proxy (Typ a))</span></span>
+<span class="lineno">  938 </span><span class="spaces">             </span><span class="istickedoff">(ctxApplyMulti</span>
+<span class="lineno">  939 </span><span class="spaces">              </span><span class="istickedoff">(ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">arg_tp</span> zs') p_ret) (return ts'))</span>
+<span class="lineno">  940 </span><span class="spaces">             </span><span class="istickedoff">(ctxApplyMulti (ctxLift <span class="nottickedoff">InvNoBind</span> zs' arg) (return z_vars))</span>
+<span class="lineno">  941 </span><span class="spaces">           </span><span class="istickedoff">-- Finally, build the pi-abstraction for ih around the rest</span>
+<span class="lineno">  942 </span><span class="spaces">           </span><span class="istickedoff">--</span>
+<span class="lineno">  943 </span><span class="spaces">           </span><span class="istickedoff">-- NOTE: we cast away the IH argument, because that is a type that is</span>
+<span class="lineno">  944 </span><span class="spaces">           </span><span class="istickedoff">-- computed from the argument structure, and we cannot (well, we</span>
+<span class="lineno">  945 </span><span class="spaces">           </span><span class="istickedoff">-- could, but it would be much more work to) express that computation</span>
+<span class="lineno">  946 </span><span class="spaces">           </span><span class="istickedoff">-- in the Haskell type system</span>
+<span class="lineno">  947 </span><span class="spaces">           </span><span class="istickedoff">castCtxTerm <span class="nottickedoff">Proxy</span> <span class="nottickedoff">Proxy</span> &lt;$&gt;</span>
+<span class="lineno">  948 </span><span class="spaces">             </span><span class="istickedoff">(ctxPi1 &quot;_&quot; ih_tp $ \_ -&gt;</span>
+<span class="lineno">  949 </span><span class="spaces">               </span><span class="istickedoff">ctxLift InvNoBind (Bind <span class="nottickedoff">&quot;_&quot;</span> <span class="nottickedoff">ih_tp</span> NoBind) rest)</span></span>
 <span class="lineno">  950 </span>
-<span class="lineno">  951 </span>-- | Reduce an application of a recursor to a particular constructor.
-<span class="lineno">  952 </span>-- This is known in the Coq literature as an iota reduction. More specifically,
-<span class="lineno">  953 </span>-- the call
-<span class="lineno">  954 </span>--
-<span class="lineno">  955 </span>-- &gt; ctxReduceRecursor rec f_c [x1, .., xk]
-<span class="lineno">  956 </span>--
-<span class="lineno">  957 </span>-- reduces the term @(RecursorApp rec ixs (CtorApp c ps xs))@ to
-<span class="lineno">  958 </span>--
-<span class="lineno">  959 </span>-- &gt; f_c x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
-<span class="lineno">  960 </span>--
-<span class="lineno">  961 </span>-- where @f_c@ is the eliminator function associated to the constructor @c@ by the
-<span class="lineno">  962 </span>-- recursor value @rec@.  Here @maybe rec_tm_i@ indicates an optional recursive call
-<span class="lineno">  963 </span>-- of the recursor on one of the @xi@. These recursive calls only exist for those
-<span class="lineno">  964 </span>-- arguments @xi@ that are recursive arguments, i.e., that are specified with
-<span class="lineno">  965 </span>-- 'RecursiveArg', and are omitted for non-recursive arguments specified by 'ConstArg'.
-<span class="lineno">  966 </span>--
-<span class="lineno">  967 </span>-- Specifically, for a @'RecursiveArg' zs ixs@ argument @xi@, which has type
-<span class="lineno">  968 </span>-- @\(z1::Z1) -&gt; .. -&gt; d p1 .. pn ix1 .. ixp@, we build the recursive call
-<span class="lineno">  969 </span>--
-<span class="lineno">  970 </span>-- &gt; \(z1::[xs/args]Z1) -&gt; .. -&gt;
-<span class="lineno">  971 </span>-- &gt;   RecursorApp rec [xs/args]ixs (xi z1 ... zn)
-<span class="lineno">  972 </span>--
-<span class="lineno">  973 </span>-- where @[xs/args]@ substitutes the concrete values for the earlier
-<span class="lineno">  974 </span>-- constructor arguments @xs@ for the remaining free variables.
+<span class="lineno">  951 </span>-- | Build a function that substitutes parameters and a @p_ret@ return type
+<span class="lineno">  952 </span>-- function into the type of an eliminator, as returned by 'ctxCtorElimType',
+<span class="lineno">  953 </span>-- for the given constructor. We return the substitution function in the monad
+<span class="lineno">  954 </span>-- so that we only call 'ctxCtorElimType' once but can call the function many
+<span class="lineno">  955 </span>-- times, in order to amortize the overhead of 'ctxCtorElimType'.
+<span class="lineno">  956 </span>mkCtorElimTypeFun :: MonadTerm m =&gt;
+<span class="lineno">  957 </span>  PrimName Term {- ^ data type -} -&gt;
+<span class="lineno">  958 </span>  ExtCns Term {- ^ constructor type -} -&gt;
+<span class="lineno">  959 </span>  CtorArgStruct d params ixs -&gt;
+<span class="lineno">  960 </span>  m ([Term] -&gt; Term -&gt; m Term)
+<span class="lineno">  961 </span><span class="decl"><span class="istickedoff">mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =</span>
+<span class="lineno">  962 </span><span class="spaces">  </span><span class="istickedoff">do ctxElimType &lt;- ctxCtorElimType <span class="nottickedoff">Proxy</span> <span class="nottickedoff">Proxy</span> (DataIdent d) c argStruct</span>
+<span class="lineno">  963 </span><span class="spaces">     </span><span class="istickedoff">case ctxAppNilEq (invertBindings ctorParams) of</span>
+<span class="lineno">  964 </span><span class="spaces">       </span><span class="istickedoff">Refl -&gt;</span>
+<span class="lineno">  965 </span><span class="spaces">         </span><span class="istickedoff">return $ \params p_ret -&gt;</span>
+<span class="lineno">  966 </span><span class="spaces">         </span><span class="istickedoff">whnfTerm =&lt;&lt;</span>
+<span class="lineno">  967 </span><span class="spaces">         </span><span class="istickedoff">case ctxTermsForBindings ctorParams params of</span>
+<span class="lineno">  968 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error &quot;ctorElimTypeFun: wrong number of parameters!&quot;</span></span>
+<span class="lineno">  969 </span><span class="spaces">           </span><span class="istickedoff">Just paramsCtx -&gt;</span>
+<span class="lineno">  970 </span><span class="spaces">             </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
+<span class="lineno">  971 </span><span class="spaces">             </span><span class="istickedoff">ctxSubstInBindings</span>
+<span class="lineno">  972 </span><span class="spaces">             </span><span class="istickedoff">(CtxTermsCtxCons (invertCtxTerms paramsCtx) (mkClosedTerm p_ret))</span>
+<span class="lineno">  973 </span><span class="spaces">             </span><span class="istickedoff">InvNoBind NoBind ctxElimType</span></span>
+<span class="lineno">  974 </span>
 <span class="lineno">  975 </span>
-<span class="lineno">  976 </span>ctxReduceRecursor :: forall m d params ixs.
-<span class="lineno">  977 </span>  MonadTerm m =&gt;
-<span class="lineno">  978 </span>  Term {- ^ abstracted recursor -} -&gt;
-<span class="lineno">  979 </span>  Term {- ^ constructor elimnator function -} -&gt;
-<span class="lineno">  980 </span>  [Term] {- ^ constructor arguments -} -&gt;
-<span class="lineno">  981 </span>  CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} -&gt;
-<span class="lineno">  982 </span>  m Term
-<span class="lineno">  983 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =</span>
-<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">let inctx :: Term -&gt; CtxTerm (CtxInv params) tp</span>
-<span class="lineno">  985 </span><span class="spaces">      </span><span class="istickedoff">inctx = CtxTerm</span>
-<span class="lineno">  986 </span><span class="spaces">   </span><span class="istickedoff">in</span>
-<span class="lineno">  987 </span><span class="spaces">  </span><span class="istickedoff">case ctxTermsForBindingsOpen ctorArgs c_args of</span>
-<span class="lineno">  988 </span><span class="spaces">     </span><span class="istickedoff">Just argsCtx -&gt;</span>
-<span class="lineno">  989 </span><span class="spaces">       </span><span class="istickedoff">ctxReduceRecursor_ (inctx rec) (inctx elimf) argsCtx ctorArgs</span>
-<span class="lineno">  990 </span><span class="spaces">     </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  991 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">error &quot;ctxReduceRecursorRaw: wrong number of constructor arguments!&quot;</span></span></span>
-<span class="lineno">  992 </span>
-<span class="lineno">  993 </span>
-<span class="lineno">  994 </span>-- | This operation does the real work of building the
-<span class="lineno">  995 </span>--   iota reduction for @ctxReduceRecursor@.  We assume
-<span class="lineno">  996 </span>--   the input terms we are given live in an ambient
-<span class="lineno">  997 </span>--   context @amb@.
-<span class="lineno">  998 </span>ctxReduceRecursor_ :: forall m amb d ixs elim args.
-<span class="lineno">  999 </span>  MonadTerm m =&gt;
-<span class="lineno"> 1000 </span>  CtxTerm  amb (Rec d) {- ^ recursor value eliminatiting data type d -}-&gt;
-<span class="lineno"> 1001 </span>  CtxTerm  amb elim    {- ^ eliminator function for the constructor -} -&gt;
-<span class="lineno"> 1002 </span>  CtxTerms amb args    {- ^ constructor actual arguments -} -&gt;
-<span class="lineno"> 1003 </span>  Bindings (CtorArg d ixs) amb args
-<span class="lineno"> 1004 </span>    {- ^ telescope describing the constructor arguments -} -&gt;
-<span class="lineno"> 1005 </span>  m Term
-<span class="lineno"> 1006 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor_ rec fi args0 argCtx =</span>
-<span class="lineno"> 1007 </span><span class="spaces">  </span><span class="istickedoff">do args &lt;- mk_args CtxTermsCtxNil args0 argCtx</span>
-<span class="lineno"> 1008 </span><span class="spaces">     </span><span class="istickedoff">whnfTerm =&lt;&lt; foldM (\f arg -&gt; mkTermF $ App f arg) (unAmb fi) args</span>
-<span class="lineno"> 1009 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1010 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno"> 1011 </span><span class="spaces">   </span><span class="istickedoff">-- extract a raw term into the ambient context</span>
-<span class="lineno"> 1012 </span><span class="spaces">    </span><span class="istickedoff">unAmb :: forall tp. CtxTerm amb tp -&gt; Term</span>
-<span class="lineno"> 1013 </span><span class="spaces">    </span><span class="istickedoff">unAmb (CtxTerm t) = t</span>
-<span class="lineno"> 1014 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1015 </span><span class="spaces">    </span><span class="istickedoff">mk_args :: forall ctx xs.</span>
-<span class="lineno"> 1016 </span><span class="spaces">               </span><span class="istickedoff">CtxTermsCtx amb ctx -&gt;  -- already processed parameters/arguments</span>
-<span class="lineno"> 1017 </span><span class="spaces">               </span><span class="istickedoff">CtxTerms    amb xs -&gt;   -- remaining actual arguments to process</span>
-<span class="lineno"> 1018 </span><span class="spaces">               </span><span class="istickedoff">Bindings (CtorArg d ixs) (amb&lt;+&gt;ctx) xs -&gt;</span>
-<span class="lineno"> 1019 </span><span class="spaces">                 </span><span class="istickedoff">-- telescope for typing the actual arguments</span>
-<span class="lineno"> 1020 </span><span class="spaces">               </span><span class="istickedoff">m [Term]</span>
-<span class="lineno"> 1021 </span><span class="spaces">    </span><span class="istickedoff">-- no more arguments to process</span>
-<span class="lineno"> 1022 </span><span class="spaces">    </span><span class="istickedoff">mk_args _ _ NoBind = return []</span>
-<span class="lineno"> 1023 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1024 </span><span class="spaces">    </span><span class="istickedoff">-- process an argument that is not a recursive call</span>
-<span class="lineno"> 1025 </span><span class="spaces">    </span><span class="istickedoff">mk_args pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =</span>
-<span class="lineno"> 1026 </span><span class="spaces">      </span><span class="istickedoff">do tl &lt;- mk_args (CtxTermsCtxCons pre_xs x) xs args</span>
-<span class="lineno"> 1027 </span><span class="spaces">         </span><span class="istickedoff">pure (unAmb x : tl)</span>
-<span class="lineno"> 1028 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1029 </span><span class="spaces">    </span><span class="istickedoff">-- process an argument that is a recursive call</span>
-<span class="lineno"> 1030 </span><span class="spaces">    </span><span class="istickedoff">mk_args pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =</span>
-<span class="lineno"> 1031 </span><span class="spaces">      </span><span class="istickedoff">do zs'  &lt;- ctxSubstInBindings <span class="nottickedoff">pre_xs</span> <span class="nottickedoff">InvNoBind</span> NoBind zs</span>
-<span class="lineno"> 1032 </span><span class="spaces">         </span><span class="istickedoff">ixs' &lt;- ctxSubstInBindings pre_xs InvNoBind zs ixs</span>
-<span class="lineno"> 1033 </span><span class="spaces">         </span><span class="istickedoff">recx &lt;- mk_rec_arg zs' ixs' x</span>
-<span class="lineno"> 1034 </span><span class="spaces">         </span><span class="istickedoff">tl   &lt;- mk_args (CtxTermsCtxCons pre_xs <span class="nottickedoff">x</span>) xs args</span>
-<span class="lineno"> 1035 </span><span class="spaces">         </span><span class="istickedoff">pure (unAmb x : recx : tl)</span>
-<span class="lineno"> 1036 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1037 </span><span class="spaces">    </span><span class="istickedoff">-- Build an individual recursive call, given the parameters, the bindings</span>
-<span class="lineno"> 1038 </span><span class="spaces">    </span><span class="istickedoff">-- for the RecursiveArg, and the argument we are going to recurse on</span>
-<span class="lineno"> 1039 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg :: forall zs.</span>
-<span class="lineno"> 1040 </span><span class="spaces">      </span><span class="istickedoff">Bindings CtxTerm amb zs -&gt;         -- telescope describing the zs</span>
-<span class="lineno"> 1041 </span><span class="spaces">      </span><span class="istickedoff">CtxTerms (CtxInvApp amb zs) ixs -&gt; -- actual values for the indicies, shifted under zs</span>
-<span class="lineno"> 1042 </span><span class="spaces">      </span><span class="istickedoff">CtxTerm amb (Arrows zs d) -&gt;       -- actual value in recursive position</span>
-<span class="lineno"> 1043 </span><span class="spaces">      </span><span class="istickedoff">m Term</span>
-<span class="lineno"> 1044 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg zs_ctx ixs x = unAmb &lt;$&gt;</span>
-<span class="lineno"> 1045 </span><span class="spaces">      </span><span class="istickedoff">-- eta expand over the zs and apply the RecursorApp form</span>
-<span class="lineno"> 1046 </span><span class="spaces">      </span><span class="istickedoff">ctxLambda zs_ctx (\zs -&gt;</span>
-<span class="lineno"> 1047 </span><span class="spaces">        </span><span class="istickedoff">ctxRecursorAppM</span>
-<span class="lineno"> 1048 </span><span class="spaces">          </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx rec)</span>
-<span class="lineno"> 1049 </span><span class="spaces">          </span><span class="istickedoff">(return (invertCtxTerms ixs))</span>
-<span class="lineno"> 1050 </span><span class="spaces">          </span><span class="istickedoff">(ctxApplyMulti</span>
-<span class="lineno"> 1051 </span><span class="spaces">            </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx x)</span>
-<span class="lineno"> 1052 </span><span class="spaces">            </span><span class="istickedoff">(return zs)))</span></span>
-<span class="lineno"> 1053 </span>
-<span class="lineno"> 1054 </span>
-<span class="lineno"> 1055 </span>--
-<span class="lineno"> 1056 </span>-- * Parsing and Building Constructor Types
-<span class="lineno"> 1057 </span>--
-<span class="lineno"> 1058 </span>
-<span class="lineno"> 1059 </span>-- | Generic method for testing whether a datatype occurs in an object
-<span class="lineno"> 1060 </span>class UsesDataType a where
-<span class="lineno"> 1061 </span>  usesDataType :: DataIdent d -&gt; a -&gt; Bool
-<span class="lineno"> 1062 </span>
-<span class="lineno"> 1063 </span>instance UsesDataType (TermF Term) where
-<span class="lineno"> 1064 </span>  <span class="decl"><span class="istickedoff">usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))</span>
-<span class="lineno"> 1065 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlyfalse">d' == d</span> = <span class="nottickedoff">True</span></span>
-<span class="lineno"> 1066 </span><span class="spaces">  </span><span class="istickedoff">usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))</span>
-<span class="lineno"> 1067 </span><span class="spaces">    </span><span class="istickedoff">| <span class="nottickedoff">d' == d</span> = <span class="nottickedoff">True</span></span>
-<span class="lineno"> 1068 </span><span class="spaces">  </span><span class="istickedoff">usesDataType (DataIdent d) (FTermF (Recursor rec))</span>
-<span class="lineno"> 1069 </span><span class="spaces">    </span><span class="istickedoff">| <span class="nottickedoff">recursorDataType rec == d</span> = <span class="nottickedoff">True</span></span>
-<span class="lineno"> 1070 </span><span class="spaces">  </span><span class="istickedoff">usesDataType d tf = any (usesDataType d) tf</span></span>
-<span class="lineno"> 1071 </span>
-<span class="lineno"> 1072 </span>instance UsesDataType Term where
-<span class="lineno"> 1073 </span>  <span class="decl"><span class="istickedoff">usesDataType d = usesDataType d . unwrapTermF</span></span>
-<span class="lineno"> 1074 </span>
-<span class="lineno"> 1075 </span>instance UsesDataType (CtxTerm ctx a) where
-<span class="lineno"> 1076 </span>  <span class="decl"><span class="istickedoff">usesDataType d (CtxTerm t) = usesDataType d t</span></span>
-<span class="lineno"> 1077 </span>
-<span class="lineno"> 1078 </span>instance UsesDataType (Bindings CtxTerm ctx as) where
-<span class="lineno"> 1079 </span>  <span class="decl"><span class="istickedoff">usesDataType _ NoBind = False</span>
-<span class="lineno"> 1080 </span><span class="spaces">  </span><span class="istickedoff">usesDataType d (Bind _ tp tps) = <span class="nottickedoff">usesDataType d tp || usesDataType d tps</span></span></span>
-<span class="lineno"> 1081 </span>
-<span class="lineno"> 1082 </span>
-<span class="lineno"> 1083 </span>-- | Check that a type is a valid application of datatype @d@ for use in
-<span class="lineno"> 1084 </span>-- specific ways in the type of a constructor for @d@. This requires that this
-<span class="lineno"> 1085 </span>-- application of @d@ be of the form
-<span class="lineno"> 1086 </span>--
-<span class="lineno"> 1087 </span>-- &gt; d p1 .. pn x1 .. xm
-<span class="lineno"> 1088 </span>--
-<span class="lineno"> 1089 </span>-- where the @pi@ are the distinct bound variables bound in the @params@
-<span class="lineno"> 1090 </span>-- context, given as argument, and that the @xj@ have no occurrences of @d@. If
-<span class="lineno"> 1091 </span>-- the given type is of this form, return the @xj@.
-<span class="lineno"> 1092 </span>asCtorDTApp :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno"> 1093 </span>               Bindings CtxTerm (CtxInv params) ixs -&gt;
-<span class="lineno"> 1094 </span>               InvBindings tp1 (CtxInv params) ctx1 -&gt;
-<span class="lineno"> 1095 </span>               Bindings tp2 (CtxInv params &lt;+&gt; ctx1) ctx2 -&gt;
-<span class="lineno"> 1096 </span>               CtxTerm (CtxInvApp (CtxInv params &lt;+&gt; ctx1) ctx2) (Typ a) -&gt;
-<span class="lineno"> 1097 </span>               Maybe (CtxTerms (CtxInvApp (CtxInv params &lt;+&gt; ctx1) ctx2) ixs)
-<span class="lineno"> 1098 </span><span class="decl"><span class="istickedoff">asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs -&gt;</span>
-<span class="lineno"> 1099 </span><span class="spaces">                                       </span><span class="istickedoff">Just (param_vars, ixs))</span>
-<span class="lineno"> 1100 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">isVarList <span class="nottickedoff">Proxy</span> params ctx1 ctx2 param_vars &amp;&amp;</span></span>
-<span class="lineno"> 1101 </span><span class="spaces">    </span><span class="istickedoff"><span class="tickonlytrue">not (any (usesDataType d) $ ctxTermsToListUnsafe ixs)</span></span>
-<span class="lineno"> 1102 </span><span class="spaces">  </span><span class="istickedoff">= Just ixs</span>
-<span class="lineno"> 1103 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1104 </span><span class="spaces">    </span><span class="istickedoff">-- Check that the given list of terms is a list of bound variables, one for</span>
-<span class="lineno"> 1105 </span><span class="spaces">    </span><span class="istickedoff">-- each parameter, in the context extended by the given arguments</span>
-<span class="lineno"> 1106 </span><span class="spaces">    </span><span class="istickedoff">isVarList :: Proxy prev_params -&gt;</span>
-<span class="lineno"> 1107 </span><span class="spaces">                 </span><span class="istickedoff">Bindings tp1 prev_params params -&gt;</span>
-<span class="lineno"> 1108 </span><span class="spaces">                 </span><span class="istickedoff">InvBindings tp2 (CtxInvApp prev_params params) ctx1 -&gt;</span>
-<span class="lineno"> 1109 </span><span class="spaces">                 </span><span class="istickedoff">Bindings tp3 (CtxInvApp prev_params params &lt;+&gt; ctx1) ctx2 -&gt;</span>
-<span class="lineno"> 1110 </span><span class="spaces">                 </span><span class="istickedoff">CtxTerms (CtxInvApp</span>
-<span class="lineno"> 1111 </span><span class="spaces">                           </span><span class="istickedoff">(CtxInvApp prev_params params &lt;+&gt; ctx1) ctx2) params -&gt;</span>
-<span class="lineno"> 1112 </span><span class="spaces">                 </span><span class="istickedoff">Bool</span>
-<span class="lineno"> 1113 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ _ _ _ CtxTermsNil = True</span>
-<span class="lineno"> 1114 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ (Bind _ _ ps) c1 c2 (CtxTermsCons</span>
-<span class="lineno"> 1115 </span><span class="spaces">                                     </span><span class="istickedoff">(CtxTerm (unwrapTermF -&gt; LocalVar i)) ts) =</span>
-<span class="lineno"> 1116 </span><span class="spaces">      </span><span class="istickedoff">i == bindingsLength ps + invBindingsLength c1 + bindingsLength c2 &amp;&amp;</span>
-<span class="lineno"> 1117 </span><span class="spaces">      </span><span class="istickedoff">isVarList <span class="nottickedoff">Proxy</span> ps c1 c2 ts</span>
-<span class="lineno"> 1118 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ _ _ _ _ = <span class="nottickedoff">False</span></span>
-<span class="lineno"> 1119 </span><span class="spaces"></span><span class="istickedoff">asCtorDTApp _ _ _ _ _ _ = Nothing</span></span>
-<span class="lineno"> 1120 </span>
-<span class="lineno"> 1121 </span>
-<span class="lineno"> 1122 </span>-- | Existential return type for 'asCtorArg'
-<span class="lineno"> 1123 </span>data ExCtorArg d ixs ctx =
-<span class="lineno"> 1124 </span>  forall a. ExCtorArg (CtorArg d ixs ctx (Typ a))
-<span class="lineno"> 1125 </span>
-<span class="lineno"> 1126 </span>-- | Check that an argument for a constructor has one of the allowed forms
-<span class="lineno"> 1127 </span>asCtorArg :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno"> 1128 </span>             Bindings CtxTerm (CtxInv params) ixs -&gt;
-<span class="lineno"> 1129 </span>             InvBindings tp (CtxInv params) prevs -&gt;
-<span class="lineno"> 1130 </span>             CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
-<span class="lineno"> 1131 </span>             Maybe (ExCtorArg d ixs (CtxInv params &lt;+&gt; prevs))
-<span class="lineno"> 1132 </span><span class="decl"><span class="istickedoff">asCtorArg d params dt_ixs prevs (ctxAsPiMulti -&gt;</span>
-<span class="lineno"> 1133 </span><span class="spaces">                                 </span><span class="istickedoff">CtxMultiPi zs</span>
-<span class="lineno"> 1134 </span><span class="spaces">                                 </span><span class="istickedoff">(asCtorDTApp d params dt_ixs prevs zs -&gt;</span>
-<span class="lineno"> 1135 </span><span class="spaces">                                  </span><span class="istickedoff">Just ixs))</span>
-<span class="lineno"> 1136 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">not (usesDataType <span class="nottickedoff">d</span> zs)</span></span>
-<span class="lineno"> 1137 </span><span class="spaces">  </span><span class="istickedoff">= Just (ExCtorArg $ RecursiveArg zs ixs)</span>
-<span class="lineno"> 1138 </span><span class="spaces"></span><span class="istickedoff">asCtorArg d _ _ _ tp</span>
-<span class="lineno"> 1139 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">not (usesDataType d tp)</span></span>
-<span class="lineno"> 1140 </span><span class="spaces">  </span><span class="istickedoff">= Just (ExCtorArg $ ConstArg tp)</span>
-<span class="lineno"> 1141 </span><span class="spaces"></span><span class="istickedoff">asCtorArg _ _ _ _ _ = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 1142 </span>
-<span class="lineno"> 1143 </span>-- | Existential return type of 'asPiCtorArg'
-<span class="lineno"> 1144 </span>data CtxPiCtorArg d ixs ctx =
-<span class="lineno"> 1145 </span>  forall a b .
-<span class="lineno"> 1146 </span>  CtxPiCtorArg LocalName (CtorArg d ixs ctx (Typ a))
-<span class="lineno"> 1147 </span>  (CtxTerm (ctx ::&gt; a) (Typ b))
-<span class="lineno"> 1148 </span>
-<span class="lineno"> 1149 </span>-- | Check that a constructor type is a pi-abstraction that takes as input an
-<span class="lineno"> 1150 </span>-- argument of one of the allowed forms described by 'CtorArg'
-<span class="lineno"> 1151 </span>asPiCtorArg :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno"> 1152 </span>               Bindings CtxTerm (CtxInv params) ixs -&gt;
-<span class="lineno"> 1153 </span>               InvBindings tp (CtxInv params) prevs -&gt;
-<span class="lineno"> 1154 </span>               CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
-<span class="lineno"> 1155 </span>               Maybe (CtxPiCtorArg d ixs (CtxInv params &lt;+&gt; prevs))
-<span class="lineno"> 1156 </span><span class="decl"><span class="istickedoff">asPiCtorArg d params dt_ixs prevs (ctxAsPi -&gt;</span>
-<span class="lineno"> 1157 </span><span class="spaces">                                   </span><span class="istickedoff">Just (CtxPi x</span>
-<span class="lineno"> 1158 </span><span class="spaces">                                         </span><span class="istickedoff">(asCtorArg d params dt_ixs prevs -&gt;</span>
-<span class="lineno"> 1159 </span><span class="spaces">                                          </span><span class="istickedoff">Just (ExCtorArg arg)) rest)) =</span>
-<span class="lineno"> 1160 </span><span class="spaces">  </span><span class="istickedoff">Just $ CtxPiCtorArg x arg (castTopCtxElem rest)</span>
-<span class="lineno"> 1161 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1162 </span><span class="spaces">    </span><span class="istickedoff">castTopCtxElem :: CtxTerm (ctx ::&gt; a1) b -&gt; CtxTerm (ctx ::&gt; a2) b</span>
-<span class="lineno"> 1163 </span><span class="spaces">    </span><span class="istickedoff">castTopCtxElem (CtxTerm t) = CtxTerm t</span>
-<span class="lineno"> 1164 </span><span class="spaces"></span><span class="istickedoff">asPiCtorArg _ _ _ _ _ = Nothing</span></span>
-<span class="lineno"> 1165 </span>
-<span class="lineno"> 1166 </span>-- | Existential return type of 'mkCtorArgsIxs'
-<span class="lineno"> 1167 </span>data CtorArgsIxs d ixs prevs =
-<span class="lineno"> 1168 </span>  forall args.
-<span class="lineno"> 1169 </span>  CtorArgsIxs (Bindings (CtorArg d ixs) prevs args)
-<span class="lineno"> 1170 </span>  (CtxTerms (CtxInvApp prevs args) ixs)
-<span class="lineno"> 1171 </span>
-<span class="lineno"> 1172 </span>-- | Helper function for 'mkCtorArgStruct'
-<span class="lineno"> 1173 </span>mkCtorArgsIxs :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno"> 1174 </span>                 Bindings CtxTerm (CtxInv params) ixs -&gt;
-<span class="lineno"> 1175 </span>                 InvBindings (CtorArg d ixs) (CtxInv params) prevs -&gt;
-<span class="lineno"> 1176 </span>                 CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
-<span class="lineno"> 1177 </span>                 Maybe (CtorArgsIxs d ixs (CtxInv params &lt;+&gt; prevs))
-<span class="lineno"> 1178 </span><span class="decl"><span class="istickedoff">mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs -&gt;</span>
-<span class="lineno"> 1179 </span><span class="spaces">                                     </span><span class="istickedoff">Just (CtxPiCtorArg x arg rest)) =</span>
-<span class="lineno"> 1180 </span><span class="spaces">  </span><span class="istickedoff">case mkCtorArgsIxs d params dt_ixs (InvBind prevs <span class="nottickedoff">x</span> <span class="nottickedoff">arg</span>) rest of</span>
-<span class="lineno"> 1181 </span><span class="spaces">    </span><span class="istickedoff">Just (CtorArgsIxs args ixs) -&gt; Just (CtorArgsIxs (Bind x arg args) ixs)</span>
-<span class="lineno"> 1182 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
-<span class="lineno"> 1183 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs NoBind -&gt;</span>
-<span class="lineno"> 1184 </span><span class="spaces">                                     </span><span class="istickedoff">Just ixs) =</span>
-<span class="lineno"> 1185 </span><span class="spaces">  </span><span class="istickedoff">Just (CtorArgsIxs NoBind ixs)</span>
-<span class="lineno"> 1186 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs _ _ _ _ _ = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 1187 </span>
-<span class="lineno"> 1188 </span>
-<span class="lineno"> 1189 </span>-- | Take in a datatype and 'Bindings' lists for its parameters and indices, and
-<span class="lineno"> 1190 </span>-- also a prospective type of a constructor for that datatype, where the
-<span class="lineno"> 1191 </span>-- constructor type is allowed to have the parameters but not the indices free.
-<span class="lineno"> 1192 </span>-- Test that the constructor type is an allowed type for a constructor of this
-<span class="lineno"> 1193 </span>-- datatype, and, if so, build a 'CtorArgStruct' for it.
-<span class="lineno"> 1194 </span>mkCtorArgStruct ::
-<span class="lineno"> 1195 </span>  PrimName Term -&gt;
-<span class="lineno"> 1196 </span>  Bindings CtxTerm EmptyCtx params -&gt;
-<span class="lineno"> 1197 </span>  Bindings CtxTerm (CtxInv params) ixs -&gt;
-<span class="lineno"> 1198 </span>  Term -&gt;
-<span class="lineno"> 1199 </span>  Maybe (CtorArgStruct d params ixs)
-<span class="lineno"> 1200 </span><span class="decl"><span class="istickedoff">mkCtorArgStruct d params dt_ixs ctor_tp =</span>
-<span class="lineno"> 1201 </span><span class="spaces">  </span><span class="istickedoff">case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of</span>
-<span class="lineno"> 1202 </span><span class="spaces">    </span><span class="istickedoff">Just (CtorArgsIxs args ctor_ixs) -&gt;</span>
-<span class="lineno"> 1203 </span><span class="spaces">      </span><span class="istickedoff">Just (CtorArgStruct params args ctor_ixs dt_ixs)</span>
-<span class="lineno"> 1204 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  976 </span>-- | Reduce an application of a recursor to a particular constructor.
+<span class="lineno">  977 </span>-- This is known in the Coq literature as an iota reduction. More specifically,
+<span class="lineno">  978 </span>-- the call
+<span class="lineno">  979 </span>--
+<span class="lineno">  980 </span>-- &gt; ctxReduceRecursor rec f_c [x1, .., xk]
+<span class="lineno">  981 </span>--
+<span class="lineno">  982 </span>-- reduces the term @(RecursorApp rec ixs (CtorApp c ps xs))@ to
+<span class="lineno">  983 </span>--
+<span class="lineno">  984 </span>-- &gt; f_c x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
+<span class="lineno">  985 </span>--
+<span class="lineno">  986 </span>-- where @f_c@ is the eliminator function associated to the constructor @c@ by the
+<span class="lineno">  987 </span>-- recursor value @rec@.  Here @maybe rec_tm_i@ indicates an optional recursive call
+<span class="lineno">  988 </span>-- of the recursor on one of the @xi@. These recursive calls only exist for those
+<span class="lineno">  989 </span>-- arguments @xi@ that are recursive arguments, i.e., that are specified with
+<span class="lineno">  990 </span>-- 'RecursiveArg', and are omitted for non-recursive arguments specified by 'ConstArg'.
+<span class="lineno">  991 </span>--
+<span class="lineno">  992 </span>-- Specifically, for a @'RecursiveArg' zs ixs@ argument @xi@, which has type
+<span class="lineno">  993 </span>-- @\(z1::Z1) -&gt; .. -&gt; d p1 .. pn ix1 .. ixp@, we build the recursive call
+<span class="lineno">  994 </span>--
+<span class="lineno">  995 </span>-- &gt; \(z1::[xs/args]Z1) -&gt; .. -&gt;
+<span class="lineno">  996 </span>-- &gt;   RecursorApp rec [xs/args]ixs (xi z1 ... zn)
+<span class="lineno">  997 </span>--
+<span class="lineno">  998 </span>-- where @[xs/args]@ substitutes the concrete values for the earlier
+<span class="lineno">  999 </span>-- constructor arguments @xs@ for the remaining free variables.
+<span class="lineno"> 1000 </span>
+<span class="lineno"> 1001 </span>ctxReduceRecursor :: forall m d params ixs.
+<span class="lineno"> 1002 </span>  MonadTerm m =&gt;
+<span class="lineno"> 1003 </span>  Term {- ^ abstracted recursor -} -&gt;
+<span class="lineno"> 1004 </span>  Term {- ^ constructor elimnator function -} -&gt;
+<span class="lineno"> 1005 </span>  [Term] {- ^ constructor arguments -} -&gt;
+<span class="lineno"> 1006 </span>  CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} -&gt;
+<span class="lineno"> 1007 </span>  m Term
+<span class="lineno"> 1008 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =</span>
+<span class="lineno"> 1009 </span><span class="spaces">  </span><span class="istickedoff">let inctx :: Term -&gt; CtxTerm (CtxInv params) tp</span>
+<span class="lineno"> 1010 </span><span class="spaces">      </span><span class="istickedoff">inctx = CtxTerm</span>
+<span class="lineno"> 1011 </span><span class="spaces">   </span><span class="istickedoff">in</span>
+<span class="lineno"> 1012 </span><span class="spaces">  </span><span class="istickedoff">case ctxTermsForBindingsOpen ctorArgs c_args of</span>
+<span class="lineno"> 1013 </span><span class="spaces">     </span><span class="istickedoff">Just argsCtx -&gt;</span>
+<span class="lineno"> 1014 </span><span class="spaces">       </span><span class="istickedoff">ctxReduceRecursor_ (inctx rec) (inctx elimf) argsCtx ctorArgs</span>
+<span class="lineno"> 1015 </span><span class="spaces">     </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1016 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">error &quot;ctxReduceRecursorRaw: wrong number of constructor arguments!&quot;</span></span></span>
+<span class="lineno"> 1017 </span>
+<span class="lineno"> 1018 </span>
+<span class="lineno"> 1019 </span>-- | This operation does the real work of building the
+<span class="lineno"> 1020 </span>--   iota reduction for @ctxReduceRecursor@.  We assume
+<span class="lineno"> 1021 </span>--   the input terms we are given live in an ambient
+<span class="lineno"> 1022 </span>--   context @amb@.
+<span class="lineno"> 1023 </span>ctxReduceRecursor_ :: forall m amb d ixs elim args.
+<span class="lineno"> 1024 </span>  MonadTerm m =&gt;
+<span class="lineno"> 1025 </span>  CtxTerm  amb (Rec d) {- ^ recursor value eliminatiting data type d -}-&gt;
+<span class="lineno"> 1026 </span>  CtxTerm  amb elim    {- ^ eliminator function for the constructor -} -&gt;
+<span class="lineno"> 1027 </span>  CtxTerms amb args    {- ^ constructor actual arguments -} -&gt;
+<span class="lineno"> 1028 </span>  Bindings (CtorArg d ixs) amb args
+<span class="lineno"> 1029 </span>    {- ^ telescope describing the constructor arguments -} -&gt;
+<span class="lineno"> 1030 </span>  m Term
+<span class="lineno"> 1031 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor_ rec fi args0 argCtx =</span>
+<span class="lineno"> 1032 </span><span class="spaces">  </span><span class="istickedoff">do args &lt;- mk_args CtxTermsCtxNil args0 argCtx</span>
+<span class="lineno"> 1033 </span><span class="spaces">     </span><span class="istickedoff">whnfTerm =&lt;&lt; foldM (\f arg -&gt; mkTermF $ App f arg) (unAmb fi) args</span>
+<span class="lineno"> 1034 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1035 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno"> 1036 </span><span class="spaces">   </span><span class="istickedoff">-- extract a raw term into the ambient context</span>
+<span class="lineno"> 1037 </span><span class="spaces">    </span><span class="istickedoff">unAmb :: forall tp. CtxTerm amb tp -&gt; Term</span>
+<span class="lineno"> 1038 </span><span class="spaces">    </span><span class="istickedoff">unAmb (CtxTerm t) = t</span>
+<span class="lineno"> 1039 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1040 </span><span class="spaces">    </span><span class="istickedoff">mk_args :: forall ctx xs.</span>
+<span class="lineno"> 1041 </span><span class="spaces">               </span><span class="istickedoff">CtxTermsCtx amb ctx -&gt;  -- already processed parameters/arguments</span>
+<span class="lineno"> 1042 </span><span class="spaces">               </span><span class="istickedoff">CtxTerms    amb xs -&gt;   -- remaining actual arguments to process</span>
+<span class="lineno"> 1043 </span><span class="spaces">               </span><span class="istickedoff">Bindings (CtorArg d ixs) (amb&lt;+&gt;ctx) xs -&gt;</span>
+<span class="lineno"> 1044 </span><span class="spaces">                 </span><span class="istickedoff">-- telescope for typing the actual arguments</span>
+<span class="lineno"> 1045 </span><span class="spaces">               </span><span class="istickedoff">m [Term]</span>
+<span class="lineno"> 1046 </span><span class="spaces">    </span><span class="istickedoff">-- no more arguments to process</span>
+<span class="lineno"> 1047 </span><span class="spaces">    </span><span class="istickedoff">mk_args _ _ NoBind = return []</span>
+<span class="lineno"> 1048 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1049 </span><span class="spaces">    </span><span class="istickedoff">-- process an argument that is not a recursive call</span>
+<span class="lineno"> 1050 </span><span class="spaces">    </span><span class="istickedoff">mk_args pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =</span>
+<span class="lineno"> 1051 </span><span class="spaces">      </span><span class="istickedoff">do tl &lt;- mk_args (CtxTermsCtxCons pre_xs x) xs args</span>
+<span class="lineno"> 1052 </span><span class="spaces">         </span><span class="istickedoff">pure (unAmb x : tl)</span>
+<span class="lineno"> 1053 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1054 </span><span class="spaces">    </span><span class="istickedoff">-- process an argument that is a recursive call</span>
+<span class="lineno"> 1055 </span><span class="spaces">    </span><span class="istickedoff">mk_args pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =</span>
+<span class="lineno"> 1056 </span><span class="spaces">      </span><span class="istickedoff">do zs'  &lt;- ctxSubstInBindings <span class="nottickedoff">pre_xs</span> <span class="nottickedoff">InvNoBind</span> NoBind zs</span>
+<span class="lineno"> 1057 </span><span class="spaces">         </span><span class="istickedoff">ixs' &lt;- ctxSubstInBindings pre_xs InvNoBind zs ixs</span>
+<span class="lineno"> 1058 </span><span class="spaces">         </span><span class="istickedoff">recx &lt;- mk_rec_arg zs' ixs' x</span>
+<span class="lineno"> 1059 </span><span class="spaces">         </span><span class="istickedoff">tl   &lt;- mk_args (CtxTermsCtxCons pre_xs <span class="nottickedoff">x</span>) xs args</span>
+<span class="lineno"> 1060 </span><span class="spaces">         </span><span class="istickedoff">pure (unAmb x : recx : tl)</span>
+<span class="lineno"> 1061 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1062 </span><span class="spaces">    </span><span class="istickedoff">-- Build an individual recursive call, given the parameters, the bindings</span>
+<span class="lineno"> 1063 </span><span class="spaces">    </span><span class="istickedoff">-- for the RecursiveArg, and the argument we are going to recurse on</span>
+<span class="lineno"> 1064 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg :: forall zs.</span>
+<span class="lineno"> 1065 </span><span class="spaces">      </span><span class="istickedoff">Bindings CtxTerm amb zs -&gt;         -- telescope describing the zs</span>
+<span class="lineno"> 1066 </span><span class="spaces">      </span><span class="istickedoff">CtxTerms (CtxInvApp amb zs) ixs -&gt; -- actual values for the indicies, shifted under zs</span>
+<span class="lineno"> 1067 </span><span class="spaces">      </span><span class="istickedoff">CtxTerm amb (Arrows zs d) -&gt;       -- actual value in recursive position</span>
+<span class="lineno"> 1068 </span><span class="spaces">      </span><span class="istickedoff">m Term</span>
+<span class="lineno"> 1069 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg zs_ctx ixs x = unAmb &lt;$&gt;</span>
+<span class="lineno"> 1070 </span><span class="spaces">      </span><span class="istickedoff">-- eta expand over the zs and apply the RecursorApp form</span>
+<span class="lineno"> 1071 </span><span class="spaces">      </span><span class="istickedoff">ctxLambda zs_ctx (\zs -&gt;</span>
+<span class="lineno"> 1072 </span><span class="spaces">        </span><span class="istickedoff">ctxRecursorAppM</span>
+<span class="lineno"> 1073 </span><span class="spaces">          </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx rec)</span>
+<span class="lineno"> 1074 </span><span class="spaces">          </span><span class="istickedoff">(return (invertCtxTerms ixs))</span>
+<span class="lineno"> 1075 </span><span class="spaces">          </span><span class="istickedoff">(ctxApplyMulti</span>
+<span class="lineno"> 1076 </span><span class="spaces">            </span><span class="istickedoff">(ctxLift <span class="nottickedoff">InvNoBind</span> zs_ctx x)</span>
+<span class="lineno"> 1077 </span><span class="spaces">            </span><span class="istickedoff">(return zs)))</span></span>
+<span class="lineno"> 1078 </span>
+<span class="lineno"> 1079 </span>
+<span class="lineno"> 1080 </span>--
+<span class="lineno"> 1081 </span>-- * Parsing and Building Constructor Types
+<span class="lineno"> 1082 </span>--
+<span class="lineno"> 1083 </span>
+<span class="lineno"> 1084 </span>-- | Generic method for testing whether a datatype occurs in an object
+<span class="lineno"> 1085 </span>class UsesDataType a where
+<span class="lineno"> 1086 </span>  usesDataType :: DataIdent d -&gt; a -&gt; Bool
+<span class="lineno"> 1087 </span>
+<span class="lineno"> 1088 </span>instance UsesDataType (TermF Term) where
+<span class="lineno"> 1089 </span>  <span class="decl"><span class="istickedoff">usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))</span>
+<span class="lineno"> 1090 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlyfalse">d' == d</span> = <span class="nottickedoff">True</span></span>
+<span class="lineno"> 1091 </span><span class="spaces">  </span><span class="istickedoff">usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))</span>
+<span class="lineno"> 1092 </span><span class="spaces">    </span><span class="istickedoff">| <span class="nottickedoff">d' == d</span> = <span class="nottickedoff">True</span></span>
+<span class="lineno"> 1093 </span><span class="spaces">  </span><span class="istickedoff">usesDataType (DataIdent d) (FTermF (Recursor rec))</span>
+<span class="lineno"> 1094 </span><span class="spaces">    </span><span class="istickedoff">| <span class="nottickedoff">recursorDataType rec == d</span> = <span class="nottickedoff">True</span></span>
+<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">usesDataType d tf = any (usesDataType d) tf</span></span>
+<span class="lineno"> 1096 </span>
+<span class="lineno"> 1097 </span>instance UsesDataType Term where
+<span class="lineno"> 1098 </span>  <span class="decl"><span class="istickedoff">usesDataType d = usesDataType d . unwrapTermF</span></span>
+<span class="lineno"> 1099 </span>
+<span class="lineno"> 1100 </span>instance UsesDataType (CtxTerm ctx a) where
+<span class="lineno"> 1101 </span>  <span class="decl"><span class="istickedoff">usesDataType d (CtxTerm t) = usesDataType d t</span></span>
+<span class="lineno"> 1102 </span>
+<span class="lineno"> 1103 </span>instance UsesDataType (Bindings CtxTerm ctx as) where
+<span class="lineno"> 1104 </span>  <span class="decl"><span class="istickedoff">usesDataType _ NoBind = False</span>
+<span class="lineno"> 1105 </span><span class="spaces">  </span><span class="istickedoff">usesDataType d (Bind _ tp tps) = <span class="nottickedoff">usesDataType d tp || usesDataType d tps</span></span></span>
+<span class="lineno"> 1106 </span>
+<span class="lineno"> 1107 </span>
+<span class="lineno"> 1108 </span>-- | Check that a type is a valid application of datatype @d@ for use in
+<span class="lineno"> 1109 </span>-- specific ways in the type of a constructor for @d@. This requires that this
+<span class="lineno"> 1110 </span>-- application of @d@ be of the form
+<span class="lineno"> 1111 </span>--
+<span class="lineno"> 1112 </span>-- &gt; d p1 .. pn x1 .. xm
+<span class="lineno"> 1113 </span>--
+<span class="lineno"> 1114 </span>-- where the @pi@ are the distinct bound variables bound in the @params@
+<span class="lineno"> 1115 </span>-- context, given as argument, and that the @xj@ have no occurrences of @d@. If
+<span class="lineno"> 1116 </span>-- the given type is of this form, return the @xj@.
+<span class="lineno"> 1117 </span>asCtorDTApp :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno"> 1118 </span>               Bindings CtxTerm (CtxInv params) ixs -&gt;
+<span class="lineno"> 1119 </span>               InvBindings tp1 (CtxInv params) ctx1 -&gt;
+<span class="lineno"> 1120 </span>               Bindings tp2 (CtxInv params &lt;+&gt; ctx1) ctx2 -&gt;
+<span class="lineno"> 1121 </span>               CtxTerm (CtxInvApp (CtxInv params &lt;+&gt; ctx1) ctx2) (Typ a) -&gt;
+<span class="lineno"> 1122 </span>               Maybe (CtxTerms (CtxInvApp (CtxInv params &lt;+&gt; ctx1) ctx2) ixs)
+<span class="lineno"> 1123 </span><span class="decl"><span class="istickedoff">asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs -&gt;</span>
+<span class="lineno"> 1124 </span><span class="spaces">                                       </span><span class="istickedoff">Just (param_vars, ixs))</span>
+<span class="lineno"> 1125 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">isVarList <span class="nottickedoff">Proxy</span> params ctx1 ctx2 param_vars &amp;&amp;</span></span>
+<span class="lineno"> 1126 </span><span class="spaces">    </span><span class="istickedoff"><span class="tickonlytrue">not (any (usesDataType d) $ ctxTermsToListUnsafe ixs)</span></span>
+<span class="lineno"> 1127 </span><span class="spaces">  </span><span class="istickedoff">= Just ixs</span>
+<span class="lineno"> 1128 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1129 </span><span class="spaces">    </span><span class="istickedoff">-- Check that the given list of terms is a list of bound variables, one for</span>
+<span class="lineno"> 1130 </span><span class="spaces">    </span><span class="istickedoff">-- each parameter, in the context extended by the given arguments</span>
+<span class="lineno"> 1131 </span><span class="spaces">    </span><span class="istickedoff">isVarList :: Proxy prev_params -&gt;</span>
+<span class="lineno"> 1132 </span><span class="spaces">                 </span><span class="istickedoff">Bindings tp1 prev_params params -&gt;</span>
+<span class="lineno"> 1133 </span><span class="spaces">                 </span><span class="istickedoff">InvBindings tp2 (CtxInvApp prev_params params) ctx1 -&gt;</span>
+<span class="lineno"> 1134 </span><span class="spaces">                 </span><span class="istickedoff">Bindings tp3 (CtxInvApp prev_params params &lt;+&gt; ctx1) ctx2 -&gt;</span>
+<span class="lineno"> 1135 </span><span class="spaces">                 </span><span class="istickedoff">CtxTerms (CtxInvApp</span>
+<span class="lineno"> 1136 </span><span class="spaces">                           </span><span class="istickedoff">(CtxInvApp prev_params params &lt;+&gt; ctx1) ctx2) params -&gt;</span>
+<span class="lineno"> 1137 </span><span class="spaces">                 </span><span class="istickedoff">Bool</span>
+<span class="lineno"> 1138 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ _ _ _ CtxTermsNil = True</span>
+<span class="lineno"> 1139 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ (Bind _ _ ps) c1 c2 (CtxTermsCons</span>
+<span class="lineno"> 1140 </span><span class="spaces">                                     </span><span class="istickedoff">(CtxTerm (unwrapTermF -&gt; LocalVar i)) ts) =</span>
+<span class="lineno"> 1141 </span><span class="spaces">      </span><span class="istickedoff">i == bindingsLength ps + invBindingsLength c1 + bindingsLength c2 &amp;&amp;</span>
+<span class="lineno"> 1142 </span><span class="spaces">      </span><span class="istickedoff">isVarList <span class="nottickedoff">Proxy</span> ps c1 c2 ts</span>
+<span class="lineno"> 1143 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ _ _ _ _ = <span class="nottickedoff">False</span></span>
+<span class="lineno"> 1144 </span><span class="spaces"></span><span class="istickedoff">asCtorDTApp _ _ _ _ _ _ = Nothing</span></span>
+<span class="lineno"> 1145 </span>
+<span class="lineno"> 1146 </span>
+<span class="lineno"> 1147 </span>-- | Existential return type for 'asCtorArg'
+<span class="lineno"> 1148 </span>data ExCtorArg d ixs ctx =
+<span class="lineno"> 1149 </span>  forall a. ExCtorArg (CtorArg d ixs ctx (Typ a))
+<span class="lineno"> 1150 </span>
+<span class="lineno"> 1151 </span>-- | Check that an argument for a constructor has one of the allowed forms
+<span class="lineno"> 1152 </span>asCtorArg :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno"> 1153 </span>             Bindings CtxTerm (CtxInv params) ixs -&gt;
+<span class="lineno"> 1154 </span>             InvBindings tp (CtxInv params) prevs -&gt;
+<span class="lineno"> 1155 </span>             CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
+<span class="lineno"> 1156 </span>             Maybe (ExCtorArg d ixs (CtxInv params &lt;+&gt; prevs))
+<span class="lineno"> 1157 </span><span class="decl"><span class="istickedoff">asCtorArg d params dt_ixs prevs (ctxAsPiMulti -&gt;</span>
+<span class="lineno"> 1158 </span><span class="spaces">                                 </span><span class="istickedoff">CtxMultiPi zs</span>
+<span class="lineno"> 1159 </span><span class="spaces">                                 </span><span class="istickedoff">(asCtorDTApp d params dt_ixs prevs zs -&gt;</span>
+<span class="lineno"> 1160 </span><span class="spaces">                                  </span><span class="istickedoff">Just ixs))</span>
+<span class="lineno"> 1161 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">not (usesDataType <span class="nottickedoff">d</span> zs)</span></span>
+<span class="lineno"> 1162 </span><span class="spaces">  </span><span class="istickedoff">= Just (ExCtorArg $ RecursiveArg zs ixs)</span>
+<span class="lineno"> 1163 </span><span class="spaces"></span><span class="istickedoff">asCtorArg d _ _ _ tp</span>
+<span class="lineno"> 1164 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">not (usesDataType d tp)</span></span>
+<span class="lineno"> 1165 </span><span class="spaces">  </span><span class="istickedoff">= Just (ExCtorArg $ ConstArg tp)</span>
+<span class="lineno"> 1166 </span><span class="spaces"></span><span class="istickedoff">asCtorArg _ _ _ _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 1167 </span>
+<span class="lineno"> 1168 </span>-- | Existential return type of 'asPiCtorArg'
+<span class="lineno"> 1169 </span>data CtxPiCtorArg d ixs ctx =
+<span class="lineno"> 1170 </span>  forall a b .
+<span class="lineno"> 1171 </span>  CtxPiCtorArg LocalName (CtorArg d ixs ctx (Typ a))
+<span class="lineno"> 1172 </span>  (CtxTerm (ctx ::&gt; a) (Typ b))
+<span class="lineno"> 1173 </span>
+<span class="lineno"> 1174 </span>-- | Check that a constructor type is a pi-abstraction that takes as input an
+<span class="lineno"> 1175 </span>-- argument of one of the allowed forms described by 'CtorArg'
+<span class="lineno"> 1176 </span>asPiCtorArg :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno"> 1177 </span>               Bindings CtxTerm (CtxInv params) ixs -&gt;
+<span class="lineno"> 1178 </span>               InvBindings tp (CtxInv params) prevs -&gt;
+<span class="lineno"> 1179 </span>               CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
+<span class="lineno"> 1180 </span>               Maybe (CtxPiCtorArg d ixs (CtxInv params &lt;+&gt; prevs))
+<span class="lineno"> 1181 </span><span class="decl"><span class="istickedoff">asPiCtorArg d params dt_ixs prevs (ctxAsPi -&gt;</span>
+<span class="lineno"> 1182 </span><span class="spaces">                                   </span><span class="istickedoff">Just (CtxPi x</span>
+<span class="lineno"> 1183 </span><span class="spaces">                                         </span><span class="istickedoff">(asCtorArg d params dt_ixs prevs -&gt;</span>
+<span class="lineno"> 1184 </span><span class="spaces">                                          </span><span class="istickedoff">Just (ExCtorArg arg)) rest)) =</span>
+<span class="lineno"> 1185 </span><span class="spaces">  </span><span class="istickedoff">Just $ CtxPiCtorArg x arg (castTopCtxElem rest)</span>
+<span class="lineno"> 1186 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1187 </span><span class="spaces">    </span><span class="istickedoff">castTopCtxElem :: CtxTerm (ctx ::&gt; a1) b -&gt; CtxTerm (ctx ::&gt; a2) b</span>
+<span class="lineno"> 1188 </span><span class="spaces">    </span><span class="istickedoff">castTopCtxElem (CtxTerm t) = CtxTerm t</span>
+<span class="lineno"> 1189 </span><span class="spaces"></span><span class="istickedoff">asPiCtorArg _ _ _ _ _ = Nothing</span></span>
+<span class="lineno"> 1190 </span>
+<span class="lineno"> 1191 </span>-- | Existential return type of 'mkCtorArgsIxs'
+<span class="lineno"> 1192 </span>data CtorArgsIxs d ixs prevs =
+<span class="lineno"> 1193 </span>  forall args.
+<span class="lineno"> 1194 </span>  CtorArgsIxs (Bindings (CtorArg d ixs) prevs args)
+<span class="lineno"> 1195 </span>  (CtxTerms (CtxInvApp prevs args) ixs)
+<span class="lineno"> 1196 </span>
+<span class="lineno"> 1197 </span>-- | Helper function for 'mkCtorArgStruct'
+<span class="lineno"> 1198 </span>mkCtorArgsIxs :: DataIdent d -&gt; Bindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno"> 1199 </span>                 Bindings CtxTerm (CtxInv params) ixs -&gt;
+<span class="lineno"> 1200 </span>                 InvBindings (CtorArg d ixs) (CtxInv params) prevs -&gt;
+<span class="lineno"> 1201 </span>                 CtxTerm (CtxInv params &lt;+&gt; prevs) (Typ a) -&gt;
+<span class="lineno"> 1202 </span>                 Maybe (CtorArgsIxs d ixs (CtxInv params &lt;+&gt; prevs))
+<span class="lineno"> 1203 </span><span class="decl"><span class="istickedoff">mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs -&gt;</span>
+<span class="lineno"> 1204 </span><span class="spaces">                                     </span><span class="istickedoff">Just (CtxPiCtorArg x arg rest)) =</span>
+<span class="lineno"> 1205 </span><span class="spaces">  </span><span class="istickedoff">case mkCtorArgsIxs d params dt_ixs (InvBind prevs <span class="nottickedoff">x</span> <span class="nottickedoff">arg</span>) rest of</span>
+<span class="lineno"> 1206 </span><span class="spaces">    </span><span class="istickedoff">Just (CtorArgsIxs args ixs) -&gt; Just (CtorArgsIxs (Bind x arg args) ixs)</span>
+<span class="lineno"> 1207 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 1208 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs NoBind -&gt;</span>
+<span class="lineno"> 1209 </span><span class="spaces">                                     </span><span class="istickedoff">Just ixs) =</span>
+<span class="lineno"> 1210 </span><span class="spaces">  </span><span class="istickedoff">Just (CtorArgsIxs NoBind ixs)</span>
+<span class="lineno"> 1211 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs _ _ _ _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 1212 </span>
+<span class="lineno"> 1213 </span>
+<span class="lineno"> 1214 </span>-- | Take in a datatype and 'Bindings' lists for its parameters and indices, and
+<span class="lineno"> 1215 </span>-- also a prospective type of a constructor for that datatype, where the
+<span class="lineno"> 1216 </span>-- constructor type is allowed to have the parameters but not the indices free.
+<span class="lineno"> 1217 </span>-- Test that the constructor type is an allowed type for a constructor of this
+<span class="lineno"> 1218 </span>-- datatype, and, if so, build a 'CtorArgStruct' for it.
+<span class="lineno"> 1219 </span>mkCtorArgStruct ::
+<span class="lineno"> 1220 </span>  PrimName Term -&gt;
+<span class="lineno"> 1221 </span>  Bindings CtxTerm EmptyCtx params -&gt;
+<span class="lineno"> 1222 </span>  Bindings CtxTerm (CtxInv params) ixs -&gt;
+<span class="lineno"> 1223 </span>  Term -&gt;
+<span class="lineno"> 1224 </span>  Maybe (CtorArgStruct d params ixs)
+<span class="lineno"> 1225 </span><span class="decl"><span class="istickedoff">mkCtorArgStruct d params dt_ixs ctor_tp =</span>
+<span class="lineno"> 1226 </span><span class="spaces">  </span><span class="istickedoff">case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of</span>
+<span class="lineno"> 1227 </span><span class="spaces">    </span><span class="istickedoff">Just (CtorArgsIxs args ctor_ixs) -&gt;</span>
+<span class="lineno"> 1228 </span><span class="spaces">      </span><span class="istickedoff">Just (CtorArgStruct params args ctor_ixs dt_ixs)</span>
+<span class="lineno"> 1229 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Nothing</span></span></span>
 
 </pre>
 </body>
