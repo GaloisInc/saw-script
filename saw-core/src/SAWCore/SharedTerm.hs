@@ -275,7 +275,7 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad (foldM, forM, forM_, join, unless, when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), ReaderT(..))
 import qualified Control.Monad.State.Strict as State
@@ -689,6 +689,13 @@ scCompleteDataType sc dtName ctors =
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
+     forM_ ctors $ \ctor ->
+       case ctorNameInfo ctor of
+         ModuleIdentifier ident ->
+           -- register constructor in scGlobalEnv if it has an Ident name
+           scRegisterGlobal sc ident =<< scTermF sc (Constant (ctorExtCns ctor))
+         ImportedName{} ->
+           pure ()
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
