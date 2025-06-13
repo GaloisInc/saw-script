@@ -68,7 +68,7 @@ data Value l
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
   | VRecursor
-     !(PrimName (TValue l)) -- data type ident
+     !(ExtCns (TValue l)) -- data type ident
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
@@ -87,11 +87,11 @@ data TValue l
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
+  | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
-     !(PrimName (TValue l)) -- data type name
+     !(ExtCns (TValue l)) -- data type name
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive function

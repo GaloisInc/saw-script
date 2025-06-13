@@ -67,7 +67,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import SAWCore.Conversion (natConversions)
 import SAWCore.Module
   ( ctorExtCns
-  , dtPrimName
+  , dtExtCns
   , lookupVarIndexInMap
   , Ctor(..)
   , DataType(..)
@@ -180,10 +180,10 @@ data TCError
   | UnboundName Text
   | SubtypeFailure SCTypedTerm Term
   | EmptyVectorLit
-  | NoSuchDataType Ident
+  | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
-  | NotFullyAppliedRec (PrimName Term)
-  | BadDataTypeParamsOrArgsLength (PrimName Term) [Term] [Term]
+  | NotFullyAppliedRec (ExtCns Term)
+  | BadDataTypeParamsOrArgsLength (ExtCns Term) [Term] [Term]
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
@@ -504,9 +504,9 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
     -- and then apply the cached Pi type of dt to params and args
     do mm <- liftTCM scGetModuleMap
        dt <-
-         case lookupVarIndexInMap (primVarIndex d) mm of
+         case lookupVarIndexInMap (ecVarIndex d) mm of
            Just (ResolvedDataType dt) -> pure dt
-           _ -> throwTCError $ NoSuchDataType (primName d)
+           _ -> throwTCError $ NoSuchDataType (ecName d)
        let err = BadDataTypeParamsOrArgsLength (fmap typedVal d) (map typedVal params) (map typedVal args)
        unless (length params == length (dtParams dt) &&
                length args == length (dtIndices dt))
@@ -627,7 +627,7 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  PrimName SCTypedTerm {- ^ data type name -} ->
+  ExtCns SCTypedTerm {- ^ data type name -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
@@ -635,9 +635,9 @@ inferRecursorType ::
 inferRecursorType d params motive motiveTy =
   do mm <- liftTCM scGetModuleMap
      dt <-
-       case lookupVarIndexInMap (primVarIndex d) mm of
+       case lookupVarIndexInMap (ecVarIndex d) mm of
          Just (ResolvedDataType dt) -> pure dt
-         _ -> throwTCError $ NoSuchDataType (primName d)
+         _ -> throwTCError $ NoSuchDataType (ecName d)
 
      let mk_err str =
            MalformedRecursor
@@ -683,7 +683,7 @@ compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
-     d <- traverse typeInferComplete (dtPrimName dt)
+     d <- traverse typeInferComplete (dtExtCns dt)
      let ctorVarIxs = map ctorVarIndex (dtCtors dt)
      ctorOrder <- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))
      let elims = Map.fromList (zip ctorVarIxs cs_fs')

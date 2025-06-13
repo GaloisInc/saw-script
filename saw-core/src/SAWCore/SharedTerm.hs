@@ -312,7 +312,8 @@ import SAWCore.Change
 import SAWCore.Module
   ( beginDataType
   , completeDataType
-  , dtPrimName
+  , dtExtCns
+  , dtNameInfo
   , ctorNumParams
   , ctorExtCns
   , emptyModuleMap
@@ -534,7 +535,7 @@ scApply sc f = scTermF sc . App f
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scDataTypeAppParams :: SharedContext
-                    -> PrimName Term -- ^ The data type
+                    -> ExtCns Term -- ^ The data type
                     -> [Term] -- ^ The parameters
                     -> [Term] -- ^ The arguments
                     -> IO Term
@@ -547,7 +548,7 @@ scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
 scDataTypeApp sc d_id args =
   do d <- scRequireDataType sc d_id
      let (params,args') = splitAt (length (dtParams d)) args
-     scDataTypeAppParams sc (dtPrimName d) params args'
+     scDataTypeAppParams sc (dtExtCns d) params args'
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
@@ -669,17 +670,18 @@ scBeginDataType ::
   [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
   [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
-  IO (PrimName Term)
+  IO (ExtCns Term)
 scBeginDataType sc dtName dtParams dtIndices dtSort =
   do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtName)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     let dtNameInfo = ModuleIdentifier dtName
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
-     pure $ PrimName dtVarIndex dtName dtType
+     pure $ EC dtVarIndex (ModuleIdentifier dtName) dtType
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
@@ -801,7 +803,7 @@ allowedElimSort dt s =
 -- as 'scBuildCtor' is called during construction of the 'DataType'.
 scBuildCtor ::
   SharedContext ->
-  PrimName Term {- ^ data type -} ->
+  ExtCns Term {- ^ data type -} ->
   Ident {- ^ constructor name -} ->
   CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
   IO Ctor
@@ -866,26 +868,26 @@ scBuildCtor sc d c arg_struct =
 -- 'ctxCtorElimType' function for more details.
 scRecursorElimTypes ::
   SharedContext ->
-  PrimName Term ->
+  ExtCns Term ->
   [Term] ->
   Term ->
   IO [(ExtCns Term, Term)]
 scRecursorElimTypes sc d params p_ret =
   do mm <- scGetModuleMap sc
-     case lookupVarIndexInMap (primVarIndex d) mm of
+     case lookupVarIndexInMap (ecVarIndex d) mm of
        Just (ResolvedDataType dt) ->
          do forM (dtCtors dt) $ \ctor ->
               do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
                  return (ctorExtCns ctor, elim_type)
        _ ->
-         panic "scRecursorElimTypes" ["Could not find datatype: " <> identText (primName d)]
+         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (ecName d)]
 
 
 -- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
 -- given @d@, @params@, and the sort @s@
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  scShCtxM sc $ mkPRetTp (dtPrimName dt) (dtParams dt) (dtIndices dt) params s
+  scShCtxM sc $ mkPRetTp (dtExtCns dt) (dtParams dt) (dtIndices dt) params s
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
@@ -1222,7 +1224,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
         DataTypeApp dt params args -> do
-          lift $ foldM (reducePi sc) (primType dt) (params ++ args)
+          lift $ foldM (reducePi sc) (ecType dt) (params ++ args)
         RecursorType _d _ps _motive motive_ty -> do
           s <- sort motive_ty
           lift $ scSort sc s
@@ -1814,7 +1816,7 @@ scBoolType sc = scGlobalDef sc "Prelude.Bool"
 scNatType :: SharedContext -> IO Term
 scNatType sc =
  do dt <- scRequireDataType sc preludeNatIdent
-    scFlatTermF sc (DataTypeApp (dtPrimName dt) [] [])
+    scFlatTermF sc (DataTypeApp (dtExtCns dt) [] [])
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.

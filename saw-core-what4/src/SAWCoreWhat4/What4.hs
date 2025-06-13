@@ -616,7 +616,7 @@ muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
   sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType (primName -> "Prelude.Stream") [TValue tp] [] ) c x y =
+muxWhat4Extra sym (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] [] ) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
                   muxBVal sym tp c xi yi

@@ -613,7 +613,7 @@ muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
 muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
+muxSbvExtra (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
                   muxBVal tp c xi yi

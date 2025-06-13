@@ -360,7 +360,7 @@ ruleOfTerm t ann =
       -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
       -- (the type of x and y) and x are parameters, and y is an index
       FTermF (DataTypeApp dt [_, x] [y])
-          | primName dt == eqIdent -> mkRewriteRule [] x y False ann
+          | ecName dt == ModuleIdentifier eqIdent -> mkRewriteRule [] x y False ann
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body ann
       _ -> error "ruleOfSharedTerm: Illegal argument"
@@ -504,9 +504,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          let d = recursorDataType crec
          mm <- scGetModuleMap sc
          dt <-
-           case lookupVarIndexInMap (primVarIndex d) mm of
+           case lookupVarIndexInMap (ecVarIndex d) mm of
              Just (ResolvedDataType dt) -> pure dt
-             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> identText (primName d)]
+             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> toAbsoluteName (ecName d)]
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing

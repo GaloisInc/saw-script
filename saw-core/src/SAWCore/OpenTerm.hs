@@ -125,8 +125,8 @@ import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
   ( ctorExtCns
+  , dtExtCns
   , dtNumParams
-  , dtPrimName
   , Ctor(..)
   , DataType(..)
   )
@@ -358,9 +358,9 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
   maybe_dt <- liftTCM scFindDataType d
   dt <- case maybe_dt of
           Just dt -> pure dt
-          Nothing -> throwTCError $ NoSuchDataType d
+          Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier d)
   (params, args) <- splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
-  d' <- traverse typeInferComplete (dtPrimName dt)
+  d' <- traverse typeInferComplete (dtExtCns dt)
   typeInferComplete $ DataTypeApp d' params args
 
 -- | Build an 'OpenTerm' for a global name with a definition

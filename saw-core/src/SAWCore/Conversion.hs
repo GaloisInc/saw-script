@@ -267,11 +267,11 @@ asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = R.asGlobalApply o t
 
 -- | Match a datatype.
-asDataType :: ArgsMatchable v a => PrimName a -> v a -> Matcher a
-asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName (primName o))) match
+asDataType :: ArgsMatchable v a => ExtCns a -> v a -> Matcher a
+asDataType o = resolveArgs $ Matcher (Net.Atom (toShortName (ecName o))) match
   where match t = do
           DataTypeApp dt params l <- R.asFTermF t
-          guard (primVarIndex dt == primVarIndex o)
+          guard (ecVarIndex dt == ecVarIndex o)
           return (params ++ l)
 
 -- | Match any sort.
@@ -403,7 +403,7 @@ mkCtor i paramsB argsB =
   foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
 
 mkDataType ::
-  PrimName Term ->
+  ExtCns Term ->
   [TermBuilder Term] ->
   [TermBuilder Term] ->
   TermBuilder Term

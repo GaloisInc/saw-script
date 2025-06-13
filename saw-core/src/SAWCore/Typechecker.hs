@@ -49,7 +49,7 @@ import SAWCore.Panic (panic)
 
 import SAWCore.Module
   ( ctorExtCns
-  , dtPrimName
+  , dtExtCns
   , emptyModule
   , findDataTypeInMap
   , resolveNameInMap
@@ -119,7 +119,7 @@ inferResolveNameApp n args =
             inferApplyAll t args
        (_, Just (ResolvedDataType dt)) ->
          do let (params, ixs) = splitAt (length $ dtParams dt) args
-            d <- traverse typeInferComplete (dtPrimName dt)
+            d <- traverse typeInferComplete (dtExtCns dt)
             -- NOTE: typeInferComplete will check that we have the correct number
             -- of indices
             typeInferComplete (DataTypeApp d params ixs)
@@ -189,7 +189,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
      let dt_ident = mkIdent mnm str
      dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
-       Nothing -> throwTCError $ NoSuchDataType dt_ident
+       Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferComplete args
      case typed_args of
        (splitAt (length $ dtParams dt) ->
@@ -204,7 +204,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
             typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec (dtPrimName dt)
+       _ -> throwTCError $ NotFullyAppliedRec (dtExtCns dt)
 
 typeInferCompleteTerm (Un.Recursor _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"

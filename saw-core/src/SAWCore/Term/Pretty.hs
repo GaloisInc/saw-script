@@ -404,7 +404,7 @@ ppFlatTermF prec tf =
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         nm <- ppPrimName d
+         nm <- ppExtCns d
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
              (params_pp ++ [motive_pp])
@@ -413,7 +413,7 @@ ppFlatTermF prec tf =
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
-         nm <- ppPrimName d
+         nm <- ppExtCns d
          f_pps <- forM ctorOrder $ \ec ->
                     do cnm <- ppExtCns ec
                        case Map.lookup (ecVarIndex ec) fs_pp of
@@ -430,7 +430,7 @@ ppFlatTermF prec tf =
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
     DataTypeApp dt params args ->
-      do dnm <- ppPrimName dt
+      do dnm <- ppExtCns dt
          ppAppList prec (annotate PPS.DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     RecordType alist ->
@@ -465,15 +465,6 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
-
--- | Pretty-print a 'PrimName', using the best unambiguous alias from
--- the naming environment.
-ppPrimName :: PrimName e -> PPM PPS.Doc
-ppPrimName pn =
-  do ne <- asks ppNamingEnv
-     case bestDisplayName ne (primVarIndex pn) of
-       Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppIdent (primName pn)
 
 -- | Pretty-print an 'ExtCns', using the best unambiguous alias from
 -- the naming environment.

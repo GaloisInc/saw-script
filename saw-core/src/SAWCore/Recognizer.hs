@@ -252,14 +252,14 @@ asRecordSelector t = do
   return (u, s)
 
 -- | A version of 'asDataType' that returns the parameters separately
-asDataTypeParams :: Recognizer Term (PrimName Term, [Term], [Term])
+asDataTypeParams :: Recognizer Term (ExtCns Term, [Term], [Term])
 asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
 
 -- | A version of 'asDataTypeParams' that combines the params and normal args
-asDataType :: Recognizer Term (PrimName Term, [Term])
+asDataType :: Recognizer Term (ExtCns Term, [Term])
 asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
 
-asRecursorType :: Recognizer Term (PrimName Term, [Term], Term, Term)
+asRecursorType :: Recognizer Term (ExtCns Term, [Term], Term, Term)
 asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
      return (d,ps,motive,motive_ty)
@@ -270,7 +270,7 @@ asRecursorApp t =
      Recursor crec <- asFTermF rc
      return (rc, crec, ixs, arg)
 
-isDataType :: PrimName Term -> Recognizer [Term] a -> Recognizer Term a
+isDataType :: ExtCns Term -> Recognizer [Term] a -> Recognizer Term a
 isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else Nothing
@@ -393,7 +393,7 @@ asBoolType = isGlobalDef "Prelude.Bool"
 
 asNatType :: Recognizer Term ()
 asNatType (asDataType -> Just (o, []))
-  | primName o == preludeNatIdent = return ()
+  | ecName o == ModuleIdentifier preludeNatIdent = return ()
 asNatType _ = Nothing
 
 asIntegerType :: Recognizer Term ()
@@ -421,7 +421,7 @@ asEq :: Recognizer Term (Term, Term, Term)
 asEq t =
   do (o, l) <- asDataType t
      case l of
-       [a, x, y] | "Prelude.Eq" == primName o -> return (a, x, y)
+       [a, x, y] | ModuleIdentifier "Prelude.Eq" == ecName o -> return (a, x, y)
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term
