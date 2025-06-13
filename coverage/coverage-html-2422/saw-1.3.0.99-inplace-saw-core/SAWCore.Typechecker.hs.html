@@ -68,7 +68,7 @@ span.spaces    { background: white }
 <span class="lineno">   49 </span>
 <span class="lineno">   50 </span>import SAWCore.Module
 <span class="lineno">   51 </span>  ( ctorExtCns
-<span class="lineno">   52 </span>  , dtPrimName
+<span class="lineno">   52 </span>  , dtExtCns
 <span class="lineno">   53 </span>  , emptyModule
 <span class="lineno">   54 </span>  , findDataTypeInMap
 <span class="lineno">   55 </span>  , resolveNameInMap
@@ -138,7 +138,7 @@ span.spaces    { background: white }
 <span class="lineno">  119 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll t args</span>
 <span class="lineno">  120 </span><span class="spaces">       </span><span class="istickedoff">(_, Just (ResolvedDataType dt)) -&gt;</span>
 <span class="lineno">  121 </span><span class="spaces">         </span><span class="istickedoff">do let (params, ixs) = splitAt (length $ dtParams dt) args</span>
-<span class="lineno">  122 </span><span class="spaces">            </span><span class="istickedoff">d &lt;- traverse typeInferComplete (dtPrimName dt)</span>
+<span class="lineno">  122 </span><span class="spaces">            </span><span class="istickedoff">d &lt;- traverse typeInferComplete (dtExtCns dt)</span>
 <span class="lineno">  123 </span><span class="spaces">            </span><span class="istickedoff">-- NOTE: typeInferComplete will check that we have the correct number</span>
 <span class="lineno">  124 </span><span class="spaces">            </span><span class="istickedoff">-- of indices</span>
 <span class="lineno">  125 </span><span class="spaces">            </span><span class="istickedoff">typeInferComplete (DataTypeApp d params ixs)</span>
@@ -208,7 +208,7 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces">     </span><span class="istickedoff">let dt_ident = mkIdent mnm str</span>
 <span class="lineno">  190 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- case findDataTypeInMap dt_ident mm of</span>
 <span class="lineno">  191 </span><span class="spaces">       </span><span class="istickedoff">Just d -&gt; return d</span>
-<span class="lineno">  192 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType dt_ident</span></span>
+<span class="lineno">  192 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)</span></span>
 <span class="lineno">  193 </span><span class="spaces">     </span><span class="istickedoff">typed_args &lt;- mapM typeInferComplete args</span>
 <span class="lineno">  194 </span><span class="spaces">     </span><span class="istickedoff">case typed_args of</span>
 <span class="lineno">  195 </span><span class="spaces">       </span><span class="istickedoff">(splitAt (length $ dtParams dt) -&gt;</span>
@@ -223,7 +223,7 @@ span.spaces    { background: white }
 <span class="lineno">  204 </span><span class="spaces">            </span><span class="istickedoff">typed_r &lt;- typeInferComplete (RecursorApp r ixs arg)</span>
 <span class="lineno">  205 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll typed_r rem_args</span>
 <span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  207 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NotFullyAppliedRec (dtPrimName dt)</span></span>
+<span class="lineno">  207 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NotFullyAppliedRec (dtExtCns dt)</span></span>
 <span class="lineno">  208 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  209 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.Recursor _) =</span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">error &quot;typeInferComplete: found a bare Recursor, which should never happen!&quot;</span></span>

@@ -87,7 +87,7 @@ span.spaces    { background: white }
 <span class="lineno">   68 </span>  | VString !Text
 <span class="lineno">   69 </span>  | VRecordValue ![(FieldName, Thunk l)]
 <span class="lineno">   70 </span>  | VRecursor
-<span class="lineno">   71 </span>     !(PrimName (TValue l)) -- data type ident
+<span class="lineno">   71 </span>     !(ExtCns (TValue l)) -- data type ident
 <span class="lineno">   72 </span>     ![Value l]  -- data type parameters
 <span class="lineno">   73 </span>     !(Value l)  -- motive function
 <span class="lineno">   74 </span>     !(TValue l) -- type of motive
@@ -106,11 +106,11 @@ span.spaces    { background: white }
 <span class="lineno">   87 </span>  | VStringType
 <span class="lineno">   88 </span>  | VUnitType
 <span class="lineno">   89 </span>  | VPairType !(TValue l) !(TValue l)
-<span class="lineno">   90 </span>  | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
+<span class="lineno">   90 </span>  | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
 <span class="lineno">   91 </span>  | VRecordType ![(FieldName, TValue l)]
 <span class="lineno">   92 </span>  | VSort !Sort
 <span class="lineno">   93 </span>  | VRecursorType
-<span class="lineno">   94 </span>     !(PrimName (TValue l)) -- data type name
+<span class="lineno">   94 </span>     !(ExtCns (TValue l)) -- data type name
 <span class="lineno">   95 </span>     ![Value l]  -- data type parameters
 <span class="lineno">   96 </span>     !(Value l)  -- motive function
 <span class="lineno">   97 </span>     !(TValue l) -- type of motive function
@@ -255,7 +255,7 @@ span.spaces    { background: white }
 <span class="lineno">  236 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
 <span class="lineno">  237 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
 <span class="lineno">  238 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
-<span class="lineno">  239 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
+<span class="lineno">  239 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = <span class="nottickedoff">VPair x (ready (vTuple xs))</span></span></span>
 <span class="lineno">  240 </span>
 <span class="lineno">  241 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
 <span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
@@ -335,10 +335,10 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">VBoolType     -&gt; return FOTBit</span>
 <span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; FOTVec n &lt;$&gt; asFirstOrderTypeTValue v1</span>
 <span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; return FOTInt</span>
-<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return (FOTIntMod m)</span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return <span class="nottickedoff">(FOTIntMod m)</span></span>
 <span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
 <span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
-<span class="lineno">  322 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return (FOTTuple [])</span>
+<span class="lineno">  322 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return <span class="nottickedoff">(FOTTuple [])</span></span>
 <span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
 <span class="lineno">  324 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
 <span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>

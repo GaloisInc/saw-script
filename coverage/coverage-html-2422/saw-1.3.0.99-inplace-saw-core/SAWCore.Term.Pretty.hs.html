@@ -423,7 +423,7 @@ span.spaces    { background: white }
 <span class="lineno">  404 </span><span class="spaces">    </span><span class="istickedoff">RecursorType d params motive _motiveTy -&gt;</span>
 <span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do params_pp &lt;- mapM (ppTerm' PrecArg) params</span></span>
 <span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">motive_pp &lt;- ppTerm' PrecArg motive</span></span>
-<span class="lineno">  407 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nm &lt;- ppPrimName d</span></span>
+<span class="lineno">  407 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nm &lt;- ppExtCns d</span></span>
 <span class="lineno">  408 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return $</span></span>
 <span class="lineno">  409 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ppAppList prec (annotate PPS.RecursorStyle (nm &lt;&gt; &quot;#recType&quot;))</span></span>
 <span class="lineno">  410 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(params_pp ++ [motive_pp])</span></span>
@@ -432,7 +432,7 @@ span.spaces    { background: white }
 <span class="lineno">  413 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do params_pp &lt;- mapM (ppTerm' PrecArg) params</span></span>
 <span class="lineno">  414 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">motive_pp &lt;- ppTerm' PrecArg motive</span></span>
 <span class="lineno">  415 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">fs_pp &lt;- traverse (ppTerm' PrecTerm . fst) cs_fs</span></span>
-<span class="lineno">  416 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nm &lt;- ppPrimName d</span></span>
+<span class="lineno">  416 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nm &lt;- ppExtCns d</span></span>
 <span class="lineno">  417 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">f_pps &lt;- forM ctorOrder $ \ec -&gt;</span></span>
 <span class="lineno">  418 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">do cnm &lt;- ppExtCns ec</span></span>
 <span class="lineno">  419 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">case Map.lookup (ecVarIndex ec) fs_pp of</span></span>
@@ -449,7 +449,7 @@ span.spaces    { background: white }
 <span class="lineno">  430 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])</span></span>
 <span class="lineno">  431 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  432 </span><span class="spaces">    </span><span class="istickedoff">DataTypeApp dt params args -&gt;</span>
-<span class="lineno">  433 </span><span class="spaces">      </span><span class="istickedoff">do dnm &lt;- ppPrimName dt</span>
+<span class="lineno">  433 </span><span class="spaces">      </span><span class="istickedoff">do dnm &lt;- ppExtCns dt</span>
 <span class="lineno">  434 </span><span class="spaces">         </span><span class="istickedoff">ppAppList prec (annotate <span class="nottickedoff">PPS.DataTypeStyle</span> dnm) &lt;$&gt; mapM (ppTerm' PrecArg) (params ++ args)</span>
 <span class="lineno">  435 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">RecordType alist -&gt;</span>
@@ -485,241 +485,232 @@ span.spaces    { background: white }
 <span class="lineno">  466 </span><span class="spaces">  </span><span class="nottickedoff">where bits' = Text.pack (show bits)</span></span>
 <span class="lineno">  467 </span>
 <span class="lineno">  468 </span>
-<span class="lineno">  469 </span>-- | Pretty-print a 'PrimName', using the best unambiguous alias from
+<span class="lineno">  469 </span>-- | Pretty-print an 'ExtCns', using the best unambiguous alias from
 <span class="lineno">  470 </span>-- the naming environment.
-<span class="lineno">  471 </span>ppPrimName :: PrimName e -&gt; PPM PPS.Doc
-<span class="lineno">  472 </span><span class="decl"><span class="istickedoff">ppPrimName pn =</span>
+<span class="lineno">  471 </span>ppExtCns :: ExtCns e -&gt; PPM PPS.Doc
+<span class="lineno">  472 </span><span class="decl"><span class="istickedoff">ppExtCns ec =</span>
 <span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
-<span class="lineno">  474 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (primVarIndex pn) of</span>
+<span class="lineno">  474 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (ecVarIndex ec) of</span>
 <span class="lineno">  475 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
-<span class="lineno">  476 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppIdent (primName pn)</span></span>
+<span class="lineno">  476 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecName ec)</span></span>
 <span class="lineno">  477 </span>
-<span class="lineno">  478 </span>-- | Pretty-print an 'ExtCns', using the best unambiguous alias from
-<span class="lineno">  479 </span>-- the naming environment.
-<span class="lineno">  480 </span>ppExtCns :: ExtCns e -&gt; PPM PPS.Doc
-<span class="lineno">  481 </span><span class="decl"><span class="istickedoff">ppExtCns ec =</span>
-<span class="lineno">  482 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
-<span class="lineno">  483 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (ecVarIndex ec) of</span>
-<span class="lineno">  484 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
-<span class="lineno">  485 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecName ec)</span></span>
-<span class="lineno">  486 </span>
-<span class="lineno">  487 </span>ppName :: NameInfo -&gt; PPS.Doc
-<span class="lineno">  488 </span><span class="decl"><span class="istickedoff">ppName (ModuleIdentifier i) = ppIdent i</span>
-<span class="lineno">  489 </span><span class="spaces"></span><span class="istickedoff">ppName (ImportedName absName _) = pretty (render absName)</span></span>
-<span class="lineno">  490 </span>
-<span class="lineno">  491 </span>-- | Pretty-print a non-shared term
-<span class="lineno">  492 </span>ppTermF :: Prec -&gt; TermF Term -&gt; PPM PPS.Doc
-<span class="lineno">  493 </span><span class="decl"><span class="istickedoff">ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf</span>
-<span class="lineno">  494 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (App e1 e2) =</span>
-<span class="lineno">  495 </span><span class="spaces">  </span><span class="istickedoff">ppAppList prec &lt;$&gt; ppTerm' PrecApp e1 &lt;*&gt; mapM (ppTerm' PrecArg) [e2]</span>
-<span class="lineno">  496 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Lambda x tp body) =</span>
-<span class="lineno">  497 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
-<span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">(ppLambda &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt; ppTermInBinder PrecLambda x body)</span>
-<span class="lineno">  499 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Pi x tp body) =</span>
-<span class="lineno">  500 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">(ppPi &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt;</span>
-<span class="lineno">  502 </span><span class="spaces">   </span><span class="istickedoff">ppTermInBinder PrecLambda x body)</span>
-<span class="lineno">  503 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (LocalVar x) = annotate <span class="nottickedoff">PPS.LocalVarStyle</span> &lt;$&gt; pretty &lt;$&gt; varLookupM x</span>
-<span class="lineno">  504 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Constant ec) = annotate <span class="nottickedoff">PPS.ConstantStyle</span> &lt;$&gt; ppExtCns ec</span></span>
-<span class="lineno">  505 </span>
-<span class="lineno">  506 </span>
-<span class="lineno">  507 </span>-- | Internal function to recursively pretty-print a term
-<span class="lineno">  508 </span>ppTerm' :: Prec -&gt; Term -&gt; PPM PPS.Doc
-<span class="lineno">  509 </span><span class="decl"><span class="istickedoff">ppTerm' prec = atNextDepthM <span class="nottickedoff">&quot;...&quot;</span> . ppTerm'' where</span>
-<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">ppTerm'' (Unshared tf) = <span class="nottickedoff">ppTermF prec tf</span></span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =</span>
-<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">do maybe_memo_var &lt;- memoLookupM idx</span>
-<span class="lineno">  513 </span><span class="spaces">       </span><span class="istickedoff">case maybe_memo_var of</span>
-<span class="lineno">  514 </span><span class="spaces">         </span><span class="istickedoff">Just memo_var -&gt; ppMemoVar memo_var</span>
-<span class="lineno">  515 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; ppTermF prec tf</span></span>
+<span class="lineno">  478 </span>ppName :: NameInfo -&gt; PPS.Doc
+<span class="lineno">  479 </span><span class="decl"><span class="istickedoff">ppName (ModuleIdentifier i) = ppIdent i</span>
+<span class="lineno">  480 </span><span class="spaces"></span><span class="istickedoff">ppName (ImportedName absName _) = pretty (render absName)</span></span>
+<span class="lineno">  481 </span>
+<span class="lineno">  482 </span>-- | Pretty-print a non-shared term
+<span class="lineno">  483 </span>ppTermF :: Prec -&gt; TermF Term -&gt; PPM PPS.Doc
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf</span>
+<span class="lineno">  485 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (App e1 e2) =</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">ppAppList prec &lt;$&gt; ppTerm' PrecApp e1 &lt;*&gt; mapM (ppTerm' PrecArg) [e2]</span>
+<span class="lineno">  487 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Lambda x tp body) =</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">(ppLambda &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt; ppTermInBinder PrecLambda x body)</span>
+<span class="lineno">  490 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Pi x tp body) =</span>
+<span class="lineno">  491 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
+<span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">(ppPi &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt;</span>
+<span class="lineno">  493 </span><span class="spaces">   </span><span class="istickedoff">ppTermInBinder PrecLambda x body)</span>
+<span class="lineno">  494 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (LocalVar x) = annotate <span class="nottickedoff">PPS.LocalVarStyle</span> &lt;$&gt; pretty &lt;$&gt; varLookupM x</span>
+<span class="lineno">  495 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Constant ec) = annotate <span class="nottickedoff">PPS.ConstantStyle</span> &lt;$&gt; ppExtCns ec</span></span>
+<span class="lineno">  496 </span>
+<span class="lineno">  497 </span>
+<span class="lineno">  498 </span>-- | Internal function to recursively pretty-print a term
+<span class="lineno">  499 </span>ppTerm' :: Prec -&gt; Term -&gt; PPM PPS.Doc
+<span class="lineno">  500 </span><span class="decl"><span class="istickedoff">ppTerm' prec = atNextDepthM <span class="nottickedoff">&quot;...&quot;</span> . ppTerm'' where</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">ppTerm'' (Unshared tf) = <span class="nottickedoff">ppTermF prec tf</span></span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =</span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">do maybe_memo_var &lt;- memoLookupM idx</span>
+<span class="lineno">  504 </span><span class="spaces">       </span><span class="istickedoff">case maybe_memo_var of</span>
+<span class="lineno">  505 </span><span class="spaces">         </span><span class="istickedoff">Just memo_var -&gt; ppMemoVar memo_var</span>
+<span class="lineno">  506 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; ppTermF prec tf</span></span>
+<span class="lineno">  507 </span>
+<span class="lineno">  508 </span>
+<span class="lineno">  509 </span>--------------------------------------------------------------------------------
+<span class="lineno">  510 </span>-- * Memoization Tables and Dealing with Binders in Terms
+<span class="lineno">  511 </span>--------------------------------------------------------------------------------
+<span class="lineno">  512 </span>
+<span class="lineno">  513 </span>-- | An occurrence map maps each shared term index to its term and how many
+<span class="lineno">  514 </span>-- times that term occurred
+<span class="lineno">  515 </span>type OccurrenceMap = IntMap (Term, Int)
 <span class="lineno">  516 </span>
-<span class="lineno">  517 </span>
-<span class="lineno">  518 </span>--------------------------------------------------------------------------------
-<span class="lineno">  519 </span>-- * Memoization Tables and Dealing with Binders in Terms
-<span class="lineno">  520 </span>--------------------------------------------------------------------------------
-<span class="lineno">  521 </span>
-<span class="lineno">  522 </span>-- | An occurrence map maps each shared term index to its term and how many
-<span class="lineno">  523 </span>-- times that term occurred
-<span class="lineno">  524 </span>type OccurrenceMap = IntMap (Term, Int)
-<span class="lineno">  525 </span>
-<span class="lineno">  526 </span>-- | Returns map that associates each term index appearing in the term to the
-<span class="lineno">  527 </span>-- number of occurrences in the shared term. Subterms that are on the left-hand
-<span class="lineno">  528 </span>-- side of an application are excluded. (FIXME: why?) The boolean flag indicates
-<span class="lineno">  529 </span>-- whether to descend under lambdas and other binders.
-<span class="lineno">  530 </span>scTermCount :: Bool -&gt; Term -&gt; OccurrenceMap
-<span class="lineno">  531 </span><span class="decl"><span class="istickedoff">scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty</span></span>
-<span class="lineno">  532 </span>
-<span class="lineno">  533 </span>scTermCountAux :: Bool -&gt; [Term] -&gt; State OccurrenceMap ()
-<span class="lineno">  534 </span><span class="decl"><span class="istickedoff">scTermCountAux doBinders = go</span>
-<span class="lineno">  535 </span><span class="spaces">  </span><span class="istickedoff">where go :: [Term] -&gt; State OccurrenceMap ()</span>
-<span class="lineno">  536 </span><span class="spaces">        </span><span class="istickedoff">go [] = return <span class="nottickedoff">()</span></span>
-<span class="lineno">  537 </span><span class="spaces">        </span><span class="istickedoff">go (t:r) =</span>
-<span class="lineno">  538 </span><span class="spaces">          </span><span class="istickedoff">case t of</span>
-<span class="lineno">  539 </span><span class="spaces">            </span><span class="istickedoff">Unshared _ -&gt; <span class="nottickedoff">recurse</span></span>
-<span class="lineno">  540 </span><span class="spaces">            </span><span class="istickedoff">STApp{ stAppIndex = i } -&gt; do</span>
-<span class="lineno">  541 </span><span class="spaces">              </span><span class="istickedoff">m &lt;- get</span>
-<span class="lineno">  542 </span><span class="spaces">              </span><span class="istickedoff">case IntMap.lookup i m of</span>
-<span class="lineno">  543 </span><span class="spaces">                </span><span class="istickedoff">Just (_, n) -&gt; do</span>
-<span class="lineno">  544 </span><span class="spaces">                  </span><span class="istickedoff">put $ n `seq` IntMap.insert i (t, n+1) m</span>
-<span class="lineno">  545 </span><span class="spaces">                  </span><span class="istickedoff">go r</span>
-<span class="lineno">  546 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  547 </span><span class="spaces">                  </span><span class="istickedoff">put (IntMap.insert i (<span class="nottickedoff">t</span>, 1) m)</span>
-<span class="lineno">  548 </span><span class="spaces">                  </span><span class="istickedoff">recurse</span>
-<span class="lineno">  549 </span><span class="spaces">          </span><span class="istickedoff">where</span>
-<span class="lineno">  550 </span><span class="spaces">            </span><span class="istickedoff">recurse = go (r ++ argsAndSubterms t)</span>
-<span class="lineno">  551 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff">argsAndSubterms (unwrapTermF -&gt; App f arg) = arg : argsAndSubterms f</span>
-<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">argsAndSubterms h =</span>
-<span class="lineno">  554 </span><span class="spaces">          </span><span class="istickedoff">case unwrapTermF h of</span>
-<span class="lineno">  555 </span><span class="spaces">            </span><span class="istickedoff">Lambda _ t1 _ | not doBinders  -&gt; [t1]</span>
-<span class="lineno">  556 </span><span class="spaces">            </span><span class="istickedoff">Pi _ t1 _     | not doBinders  -&gt; [t1]</span>
-<span class="lineno">  557 </span><span class="spaces">            </span><span class="istickedoff">Constant{}                     -&gt; []</span>
-<span class="lineno">  558 </span><span class="spaces">            </span><span class="istickedoff">FTermF (DataTypeApp _ ps xs)   -&gt; ps ++ xs</span>
-<span class="lineno">  559 </span><span class="spaces">            </span><span class="istickedoff">FTermF (RecursorType _ ps m _) -&gt; <span class="nottickedoff">ps ++ [m]</span></span>
-<span class="lineno">  560 </span><span class="spaces">            </span><span class="istickedoff">FTermF (Recursor crec)         -&gt; <span class="nottickedoff">recursorParams crec ++</span></span>
-<span class="lineno">  561 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">[recursorMotive crec] ++</span></span>
-<span class="lineno">  562 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">map fst (Map.elems (recursorElims crec))</span></span>
-<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">tf                             -&gt; Fold.toList tf</span></span>
-<span class="lineno">  564 </span>
-<span class="lineno">  565 </span>
-<span class="lineno">  566 </span>-- | Return true if the printing of the given term should be memoized; we do not
-<span class="lineno">  567 </span>-- want to memoize the printing of terms that are &quot;too small&quot;
-<span class="lineno">  568 </span>shouldMemoizeTerm :: Term -&gt; Bool
-<span class="lineno">  569 </span><span class="decl"><span class="istickedoff">shouldMemoizeTerm t =</span>
-<span class="lineno">  570 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  571 </span><span class="spaces">    </span><span class="istickedoff">FTermF UnitValue -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  572 </span><span class="spaces">    </span><span class="istickedoff">FTermF UnitType -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  573 </span><span class="spaces">    </span><span class="istickedoff">FTermF (DataTypeApp _ [] []) -&gt; False</span>
-<span class="lineno">  574 </span><span class="spaces">    </span><span class="istickedoff">FTermF Sort{} -&gt; False</span>
-<span class="lineno">  575 </span><span class="spaces">    </span><span class="istickedoff">FTermF NatLit{} -&gt; False</span>
-<span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">FTermF (ArrayValue _ v) | <span class="nottickedoff">V.length v == 0</span> -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">FTermF StringLit{} -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  578 </span><span class="spaces">    </span><span class="istickedoff">FTermF ExtCns{} -&gt; False</span>
-<span class="lineno">  579 </span><span class="spaces">    </span><span class="istickedoff">LocalVar{} -&gt; False</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; True</span></span>
-<span class="lineno">  581 </span>
-<span class="lineno">  582 </span>-- | Compute a memoization table for a term, and pretty-print the term using the
-<span class="lineno">  583 </span>-- table to memoize the printing. Also print the table itself as a sequence of
-<span class="lineno">  584 </span>-- let-bindings for the entries in the memoization table. If the flag is true,
-<span class="lineno">  585 </span>-- compute a global table, otherwise compute a local table.
-<span class="lineno">  586 </span>ppTermWithMemoTable :: Prec -&gt; Bool -&gt; Term -&gt; PPM PPS.Doc
-<span class="lineno">  587 </span><span class="decl"><span class="istickedoff">ppTermWithMemoTable prec global_p trm = do</span>
-<span class="lineno">  588 </span><span class="spaces">     </span><span class="istickedoff">min_occs &lt;- PPS.ppMinSharing &lt;$&gt; ppOpts &lt;$&gt; ask</span>
-<span class="lineno">  589 </span><span class="spaces">     </span><span class="istickedoff">let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm</span>
-<span class="lineno">  590 </span><span class="spaces">     </span><span class="istickedoff">ppLets global_p occPairs [] (ppTerm' prec trm)</span></span>
-<span class="lineno">  591 </span>
-<span class="lineno">  592 </span>-- Filter an occurrence map, filtering out terms that only occur
-<span class="lineno">  593 </span>-- once, that are &quot;too small&quot; to memoize, and, for the global table, terms
-<span class="lineno">  594 </span>-- that are not closed
-<span class="lineno">  595 </span>filterOccurenceMap :: Int -&gt; Bool -&gt; OccurrenceMap -&gt; OccurrenceMap
-<span class="lineno">  596 </span><span class="decl"><span class="istickedoff">filterOccurenceMap min_occs global_p =</span>
-<span class="lineno">  597 </span><span class="spaces">    </span><span class="istickedoff">IntMap.filter</span>
-<span class="lineno">  598 </span><span class="spaces">      </span><span class="istickedoff">(\(t,cnt) -&gt;</span>
-<span class="lineno">  599 </span><span class="spaces">        </span><span class="istickedoff">cnt &gt;= min_occs &amp;&amp; shouldMemoizeTerm t &amp;&amp;</span>
-<span class="lineno">  600 </span><span class="spaces">        </span><span class="istickedoff">(if global_p then termIsClosed t else True))</span></span>
-<span class="lineno">  601 </span>
-<span class="lineno">  602 </span>
-<span class="lineno">  603 </span>-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
-<span class="lineno">  604 </span>-- Term and then add it to the memoization table of subsequent printing. The
-<span class="lineno">  605 </span>-- pretty-printing of these terms is reverse-accumulated in the second
-<span class="lineno">  606 </span>-- list. Finally, print the given base document in the context of let-bindings
-<span class="lineno">  607 </span>-- for the bound terms.
-<span class="lineno">  608 </span>ppLets :: Bool -&gt; [(TermIndex, (Term, Int))] -&gt; [(MemoVar, PPS.Doc)] -&gt; PPM PPS.Doc -&gt; PPM PPS.Doc
-<span class="lineno">  609 </span>
-<span class="lineno">  610 </span>-- Special case: don't print let-binding if there are no bound vars
-<span class="lineno">  611 </span><span class="decl"><span class="istickedoff">ppLets _ [] [] baseDoc = baseDoc</span>
-<span class="lineno">  612 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  613 </span><span class="spaces"></span><span class="istickedoff">-- When we have run out of (idx,term) pairs, pretty-print a let binding for</span>
-<span class="lineno">  614 </span><span class="spaces"></span><span class="istickedoff">-- all the accumulated bindings around the term</span>
-<span class="lineno">  615 </span><span class="spaces"></span><span class="istickedoff">ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =&lt;&lt; baseDoc</span>
-<span class="lineno">  616 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  617 </span><span class="spaces"></span><span class="istickedoff">-- To add an (idx,term) pair, first check if idx is already bound, and, if</span>
-<span class="lineno">  618 </span><span class="spaces"></span><span class="istickedoff">-- not, add a new MemoVar bind it to idx</span>
-<span class="lineno">  619 </span><span class="spaces"></span><span class="istickedoff">ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="istickedoff">do isBound &lt;- isJust &lt;$&gt; memoLookupM termIdx</span>
-<span class="lineno">  621 </span><span class="spaces">     </span><span class="istickedoff">if isBound then ppLets global_p idxs bindings baseDoc else</span>
-<span class="lineno">  622 </span><span class="spaces">       </span><span class="istickedoff">do termDoc &lt;- ppTerm' PrecTerm term</span>
-<span class="lineno">  623 </span><span class="spaces">          </span><span class="istickedoff">withMemoVar global_p termIdx <span class="nottickedoff">(hash term)</span> $ \memoVarM -&gt;</span>
-<span class="lineno">  624 </span><span class="spaces">            </span><span class="istickedoff">let bindings' = case memoVarM of</span>
-<span class="lineno">  625 </span><span class="spaces">                  </span><span class="istickedoff">Just memoVar -&gt; (memoVar, termDoc):bindings</span>
-<span class="lineno">  626 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">bindings</span></span>
-<span class="lineno">  627 </span><span class="spaces">            </span><span class="istickedoff">in  ppLets global_p idxs bindings' baseDoc</span></span>
-<span class="lineno">  628 </span>
-<span class="lineno">  629 </span>-- | Pretty-print a term inside a binder for a variable of the given name,
-<span class="lineno">  630 </span>-- returning both the result of pretty-printing and the fresh name actually used
-<span class="lineno">  631 </span>-- for the newly bound variable. If the variable occurs in the term, then do not
-<span class="lineno">  632 </span>-- use an underscore for it, and use &quot;_x&quot; instead.
-<span class="lineno">  633 </span>--
-<span class="lineno">  634 </span>-- Also, pretty-print let-bindings around the term for all subterms that occur
-<span class="lineno">  635 </span>-- more than once at the same binding level.
-<span class="lineno">  636 </span>ppTermInBinder :: Prec -&gt; LocalName -&gt; Term -&gt; PPM (LocalName, PPS.Doc)
-<span class="lineno">  637 </span><span class="decl"><span class="istickedoff">ppTermInBinder prec basename trm =</span>
-<span class="lineno">  638 </span><span class="spaces">  </span><span class="istickedoff">let nm = if <span class="tickonlyfalse">basename == &quot;_&quot; &amp;&amp; inBitSet 0 (looseVars trm)</span> then <span class="nottickedoff">&quot;_x&quot;</span></span>
-<span class="lineno">  639 </span><span class="spaces">           </span><span class="istickedoff">else basename in</span>
-<span class="lineno">  640 </span><span class="spaces">  </span><span class="istickedoff">withBoundVarM nm $ ppTermWithMemoTable prec False trm</span></span>
-<span class="lineno">  641 </span>
-<span class="lineno">  642 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
-<span class="lineno">  643 </span>-- more than once at the same binding level
-<span class="lineno">  644 </span>ppTerm :: PPS.Opts -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  645 </span><span class="decl"><span class="istickedoff">ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv</span></span>
-<span class="lineno">  646 </span>
-<span class="lineno">  647 </span>-- | Like 'ppTerm', but also supply a context of bound names, where the most
-<span class="lineno">  648 </span>-- recently-bound variable is listed first in the context
-<span class="lineno">  649 </span>ppTermInCtx :: PPS.Opts -&gt; [LocalName] -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  650 </span><span class="decl"><span class="nottickedoff">ppTermInCtx opts ctx trm =</span>
-<span class="lineno">  651 </span><span class="spaces">  </span><span class="nottickedoff">runPPM opts emptyDisplayNameEnv $</span>
-<span class="lineno">  652 </span><span class="spaces">  </span><span class="nottickedoff">flip (Fold.foldl' (\m x -&gt; snd &lt;$&gt; withBoundVarM x m)) ctx $</span>
-<span class="lineno">  653 </span><span class="spaces">  </span><span class="nottickedoff">ppTermWithMemoTable PrecTerm True trm</span></span>
-<span class="lineno">  654 </span>
-<span class="lineno">  655 </span>-- | Pretty-print a term and render it to a string, using the given options
-<span class="lineno">  656 </span>scPrettyTerm :: PPS.Opts -&gt; Term -&gt; String
-<span class="lineno">  657 </span><span class="decl"><span class="istickedoff">scPrettyTerm opts t =</span>
-<span class="lineno">  658 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $ ppTerm opts t</span></span>
+<span class="lineno">  517 </span>-- | Returns map that associates each term index appearing in the term to the
+<span class="lineno">  518 </span>-- number of occurrences in the shared term. Subterms that are on the left-hand
+<span class="lineno">  519 </span>-- side of an application are excluded. (FIXME: why?) The boolean flag indicates
+<span class="lineno">  520 </span>-- whether to descend under lambdas and other binders.
+<span class="lineno">  521 </span>scTermCount :: Bool -&gt; Term -&gt; OccurrenceMap
+<span class="lineno">  522 </span><span class="decl"><span class="istickedoff">scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty</span></span>
+<span class="lineno">  523 </span>
+<span class="lineno">  524 </span>scTermCountAux :: Bool -&gt; [Term] -&gt; State OccurrenceMap ()
+<span class="lineno">  525 </span><span class="decl"><span class="istickedoff">scTermCountAux doBinders = go</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">where go :: [Term] -&gt; State OccurrenceMap ()</span>
+<span class="lineno">  527 </span><span class="spaces">        </span><span class="istickedoff">go [] = return <span class="nottickedoff">()</span></span>
+<span class="lineno">  528 </span><span class="spaces">        </span><span class="istickedoff">go (t:r) =</span>
+<span class="lineno">  529 </span><span class="spaces">          </span><span class="istickedoff">case t of</span>
+<span class="lineno">  530 </span><span class="spaces">            </span><span class="istickedoff">Unshared _ -&gt; <span class="nottickedoff">recurse</span></span>
+<span class="lineno">  531 </span><span class="spaces">            </span><span class="istickedoff">STApp{ stAppIndex = i } -&gt; do</span>
+<span class="lineno">  532 </span><span class="spaces">              </span><span class="istickedoff">m &lt;- get</span>
+<span class="lineno">  533 </span><span class="spaces">              </span><span class="istickedoff">case IntMap.lookup i m of</span>
+<span class="lineno">  534 </span><span class="spaces">                </span><span class="istickedoff">Just (_, n) -&gt; do</span>
+<span class="lineno">  535 </span><span class="spaces">                  </span><span class="istickedoff">put $ n `seq` IntMap.insert i (t, n+1) m</span>
+<span class="lineno">  536 </span><span class="spaces">                  </span><span class="istickedoff">go r</span>
+<span class="lineno">  537 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  538 </span><span class="spaces">                  </span><span class="istickedoff">put (IntMap.insert i (<span class="nottickedoff">t</span>, 1) m)</span>
+<span class="lineno">  539 </span><span class="spaces">                  </span><span class="istickedoff">recurse</span>
+<span class="lineno">  540 </span><span class="spaces">          </span><span class="istickedoff">where</span>
+<span class="lineno">  541 </span><span class="spaces">            </span><span class="istickedoff">recurse = go (r ++ argsAndSubterms t)</span>
+<span class="lineno">  542 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">argsAndSubterms (unwrapTermF -&gt; App f arg) = arg : argsAndSubterms f</span>
+<span class="lineno">  544 </span><span class="spaces">        </span><span class="istickedoff">argsAndSubterms h =</span>
+<span class="lineno">  545 </span><span class="spaces">          </span><span class="istickedoff">case unwrapTermF h of</span>
+<span class="lineno">  546 </span><span class="spaces">            </span><span class="istickedoff">Lambda _ t1 _ | not doBinders  -&gt; [t1]</span>
+<span class="lineno">  547 </span><span class="spaces">            </span><span class="istickedoff">Pi _ t1 _     | not doBinders  -&gt; [t1]</span>
+<span class="lineno">  548 </span><span class="spaces">            </span><span class="istickedoff">Constant{}                     -&gt; []</span>
+<span class="lineno">  549 </span><span class="spaces">            </span><span class="istickedoff">FTermF (DataTypeApp _ ps xs)   -&gt; ps ++ xs</span>
+<span class="lineno">  550 </span><span class="spaces">            </span><span class="istickedoff">FTermF (RecursorType _ ps m _) -&gt; <span class="nottickedoff">ps ++ [m]</span></span>
+<span class="lineno">  551 </span><span class="spaces">            </span><span class="istickedoff">FTermF (Recursor crec)         -&gt; <span class="nottickedoff">recursorParams crec ++</span></span>
+<span class="lineno">  552 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">[recursorMotive crec] ++</span></span>
+<span class="lineno">  553 </span><span class="spaces">                                              </span><span class="istickedoff"><span class="nottickedoff">map fst (Map.elems (recursorElims crec))</span></span>
+<span class="lineno">  554 </span><span class="spaces">            </span><span class="istickedoff">tf                             -&gt; Fold.toList tf</span></span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>
+<span class="lineno">  557 </span>-- | Return true if the printing of the given term should be memoized; we do not
+<span class="lineno">  558 </span>-- want to memoize the printing of terms that are &quot;too small&quot;
+<span class="lineno">  559 </span>shouldMemoizeTerm :: Term -&gt; Bool
+<span class="lineno">  560 </span><span class="decl"><span class="istickedoff">shouldMemoizeTerm t =</span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">FTermF UnitValue -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  563 </span><span class="spaces">    </span><span class="istickedoff">FTermF UnitType -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  564 </span><span class="spaces">    </span><span class="istickedoff">FTermF (DataTypeApp _ [] []) -&gt; False</span>
+<span class="lineno">  565 </span><span class="spaces">    </span><span class="istickedoff">FTermF Sort{} -&gt; False</span>
+<span class="lineno">  566 </span><span class="spaces">    </span><span class="istickedoff">FTermF NatLit{} -&gt; False</span>
+<span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">FTermF (ArrayValue _ v) | <span class="nottickedoff">V.length v == 0</span> -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">FTermF StringLit{} -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  569 </span><span class="spaces">    </span><span class="istickedoff">FTermF ExtCns{} -&gt; False</span>
+<span class="lineno">  570 </span><span class="spaces">    </span><span class="istickedoff">LocalVar{} -&gt; False</span>
+<span class="lineno">  571 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; True</span></span>
+<span class="lineno">  572 </span>
+<span class="lineno">  573 </span>-- | Compute a memoization table for a term, and pretty-print the term using the
+<span class="lineno">  574 </span>-- table to memoize the printing. Also print the table itself as a sequence of
+<span class="lineno">  575 </span>-- let-bindings for the entries in the memoization table. If the flag is true,
+<span class="lineno">  576 </span>-- compute a global table, otherwise compute a local table.
+<span class="lineno">  577 </span>ppTermWithMemoTable :: Prec -&gt; Bool -&gt; Term -&gt; PPM PPS.Doc
+<span class="lineno">  578 </span><span class="decl"><span class="istickedoff">ppTermWithMemoTable prec global_p trm = do</span>
+<span class="lineno">  579 </span><span class="spaces">     </span><span class="istickedoff">min_occs &lt;- PPS.ppMinSharing &lt;$&gt; ppOpts &lt;$&gt; ask</span>
+<span class="lineno">  580 </span><span class="spaces">     </span><span class="istickedoff">let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm</span>
+<span class="lineno">  581 </span><span class="spaces">     </span><span class="istickedoff">ppLets global_p occPairs [] (ppTerm' prec trm)</span></span>
+<span class="lineno">  582 </span>
+<span class="lineno">  583 </span>-- Filter an occurrence map, filtering out terms that only occur
+<span class="lineno">  584 </span>-- once, that are &quot;too small&quot; to memoize, and, for the global table, terms
+<span class="lineno">  585 </span>-- that are not closed
+<span class="lineno">  586 </span>filterOccurenceMap :: Int -&gt; Bool -&gt; OccurrenceMap -&gt; OccurrenceMap
+<span class="lineno">  587 </span><span class="decl"><span class="istickedoff">filterOccurenceMap min_occs global_p =</span>
+<span class="lineno">  588 </span><span class="spaces">    </span><span class="istickedoff">IntMap.filter</span>
+<span class="lineno">  589 </span><span class="spaces">      </span><span class="istickedoff">(\(t,cnt) -&gt;</span>
+<span class="lineno">  590 </span><span class="spaces">        </span><span class="istickedoff">cnt &gt;= min_occs &amp;&amp; shouldMemoizeTerm t &amp;&amp;</span>
+<span class="lineno">  591 </span><span class="spaces">        </span><span class="istickedoff">(if global_p then termIsClosed t else True))</span></span>
+<span class="lineno">  592 </span>
+<span class="lineno">  593 </span>
+<span class="lineno">  594 </span>-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
+<span class="lineno">  595 </span>-- Term and then add it to the memoization table of subsequent printing. The
+<span class="lineno">  596 </span>-- pretty-printing of these terms is reverse-accumulated in the second
+<span class="lineno">  597 </span>-- list. Finally, print the given base document in the context of let-bindings
+<span class="lineno">  598 </span>-- for the bound terms.
+<span class="lineno">  599 </span>ppLets :: Bool -&gt; [(TermIndex, (Term, Int))] -&gt; [(MemoVar, PPS.Doc)] -&gt; PPM PPS.Doc -&gt; PPM PPS.Doc
+<span class="lineno">  600 </span>
+<span class="lineno">  601 </span>-- Special case: don't print let-binding if there are no bound vars
+<span class="lineno">  602 </span><span class="decl"><span class="istickedoff">ppLets _ [] [] baseDoc = baseDoc</span>
+<span class="lineno">  603 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  604 </span><span class="spaces"></span><span class="istickedoff">-- When we have run out of (idx,term) pairs, pretty-print a let binding for</span>
+<span class="lineno">  605 </span><span class="spaces"></span><span class="istickedoff">-- all the accumulated bindings around the term</span>
+<span class="lineno">  606 </span><span class="spaces"></span><span class="istickedoff">ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =&lt;&lt; baseDoc</span>
+<span class="lineno">  607 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  608 </span><span class="spaces"></span><span class="istickedoff">-- To add an (idx,term) pair, first check if idx is already bound, and, if</span>
+<span class="lineno">  609 </span><span class="spaces"></span><span class="istickedoff">-- not, add a new MemoVar bind it to idx</span>
+<span class="lineno">  610 </span><span class="spaces"></span><span class="istickedoff">ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =</span>
+<span class="lineno">  611 </span><span class="spaces">  </span><span class="istickedoff">do isBound &lt;- isJust &lt;$&gt; memoLookupM termIdx</span>
+<span class="lineno">  612 </span><span class="spaces">     </span><span class="istickedoff">if isBound then ppLets global_p idxs bindings baseDoc else</span>
+<span class="lineno">  613 </span><span class="spaces">       </span><span class="istickedoff">do termDoc &lt;- ppTerm' PrecTerm term</span>
+<span class="lineno">  614 </span><span class="spaces">          </span><span class="istickedoff">withMemoVar global_p termIdx <span class="nottickedoff">(hash term)</span> $ \memoVarM -&gt;</span>
+<span class="lineno">  615 </span><span class="spaces">            </span><span class="istickedoff">let bindings' = case memoVarM of</span>
+<span class="lineno">  616 </span><span class="spaces">                  </span><span class="istickedoff">Just memoVar -&gt; (memoVar, termDoc):bindings</span>
+<span class="lineno">  617 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">bindings</span></span>
+<span class="lineno">  618 </span><span class="spaces">            </span><span class="istickedoff">in  ppLets global_p idxs bindings' baseDoc</span></span>
+<span class="lineno">  619 </span>
+<span class="lineno">  620 </span>-- | Pretty-print a term inside a binder for a variable of the given name,
+<span class="lineno">  621 </span>-- returning both the result of pretty-printing and the fresh name actually used
+<span class="lineno">  622 </span>-- for the newly bound variable. If the variable occurs in the term, then do not
+<span class="lineno">  623 </span>-- use an underscore for it, and use &quot;_x&quot; instead.
+<span class="lineno">  624 </span>--
+<span class="lineno">  625 </span>-- Also, pretty-print let-bindings around the term for all subterms that occur
+<span class="lineno">  626 </span>-- more than once at the same binding level.
+<span class="lineno">  627 </span>ppTermInBinder :: Prec -&gt; LocalName -&gt; Term -&gt; PPM (LocalName, PPS.Doc)
+<span class="lineno">  628 </span><span class="decl"><span class="istickedoff">ppTermInBinder prec basename trm =</span>
+<span class="lineno">  629 </span><span class="spaces">  </span><span class="istickedoff">let nm = if <span class="tickonlyfalse">basename == &quot;_&quot; &amp;&amp; inBitSet 0 (looseVars trm)</span> then <span class="nottickedoff">&quot;_x&quot;</span></span>
+<span class="lineno">  630 </span><span class="spaces">           </span><span class="istickedoff">else basename in</span>
+<span class="lineno">  631 </span><span class="spaces">  </span><span class="istickedoff">withBoundVarM nm $ ppTermWithMemoTable prec False trm</span></span>
+<span class="lineno">  632 </span>
+<span class="lineno">  633 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
+<span class="lineno">  634 </span>-- more than once at the same binding level
+<span class="lineno">  635 </span>ppTerm :: PPS.Opts -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  636 </span><span class="decl"><span class="istickedoff">ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv</span></span>
+<span class="lineno">  637 </span>
+<span class="lineno">  638 </span>-- | Like 'ppTerm', but also supply a context of bound names, where the most
+<span class="lineno">  639 </span>-- recently-bound variable is listed first in the context
+<span class="lineno">  640 </span>ppTermInCtx :: PPS.Opts -&gt; [LocalName] -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  641 </span><span class="decl"><span class="nottickedoff">ppTermInCtx opts ctx trm =</span>
+<span class="lineno">  642 </span><span class="spaces">  </span><span class="nottickedoff">runPPM opts emptyDisplayNameEnv $</span>
+<span class="lineno">  643 </span><span class="spaces">  </span><span class="nottickedoff">flip (Fold.foldl' (\m x -&gt; snd &lt;$&gt; withBoundVarM x m)) ctx $</span>
+<span class="lineno">  644 </span><span class="spaces">  </span><span class="nottickedoff">ppTermWithMemoTable PrecTerm True trm</span></span>
+<span class="lineno">  645 </span>
+<span class="lineno">  646 </span>-- | Pretty-print a term and render it to a string, using the given options
+<span class="lineno">  647 </span>scPrettyTerm :: PPS.Opts -&gt; Term -&gt; String
+<span class="lineno">  648 </span><span class="decl"><span class="istickedoff">scPrettyTerm opts t =</span>
+<span class="lineno">  649 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $ ppTerm opts t</span></span>
+<span class="lineno">  650 </span>
+<span class="lineno">  651 </span>-- | Like 'scPrettyTerm', but also supply a context of bound names, where the
+<span class="lineno">  652 </span>-- most recently-bound variable is listed first in the context
+<span class="lineno">  653 </span>scPrettyTermInCtx :: PPS.Opts -&gt; [LocalName] -&gt; Term -&gt; String
+<span class="lineno">  654 </span><span class="decl"><span class="nottickedoff">scPrettyTermInCtx opts ctx trm =</span>
+<span class="lineno">  655 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $</span>
+<span class="lineno">  656 </span><span class="spaces">  </span><span class="nottickedoff">runPPM opts emptyDisplayNameEnv $</span>
+<span class="lineno">  657 </span><span class="spaces">  </span><span class="nottickedoff">flip (Fold.foldl' (\m x -&gt; snd &lt;$&gt; withBoundVarM x m)) ctx $</span>
+<span class="lineno">  658 </span><span class="spaces">  </span><span class="nottickedoff">ppTermWithMemoTable PrecTerm False trm</span></span>
 <span class="lineno">  659 </span>
-<span class="lineno">  660 </span>-- | Like 'scPrettyTerm', but also supply a context of bound names, where the
-<span class="lineno">  661 </span>-- most recently-bound variable is listed first in the context
-<span class="lineno">  662 </span>scPrettyTermInCtx :: PPS.Opts -&gt; [LocalName] -&gt; Term -&gt; String
-<span class="lineno">  663 </span><span class="decl"><span class="nottickedoff">scPrettyTermInCtx opts ctx trm =</span>
-<span class="lineno">  664 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $</span>
-<span class="lineno">  665 </span><span class="spaces">  </span><span class="nottickedoff">runPPM opts emptyDisplayNameEnv $</span>
-<span class="lineno">  666 </span><span class="spaces">  </span><span class="nottickedoff">flip (Fold.foldl' (\m x -&gt; snd &lt;$&gt; withBoundVarM x m)) ctx $</span>
-<span class="lineno">  667 </span><span class="spaces">  </span><span class="nottickedoff">ppTermWithMemoTable PrecTerm False trm</span></span>
-<span class="lineno">  668 </span>
+<span class="lineno">  660 </span>
+<span class="lineno">  661 </span>-- | Pretty-print a term and render it to a string
+<span class="lineno">  662 </span>showTerm :: Term -&gt; String
+<span class="lineno">  663 </span><span class="decl"><span class="istickedoff">showTerm t = scPrettyTerm PPS.defaultOpts t</span></span>
+<span class="lineno">  664 </span>
+<span class="lineno">  665 </span>
+<span class="lineno">  666 </span>--------------------------------------------------------------------------------
+<span class="lineno">  667 </span>-- * Pretty-printers with naming environments
+<span class="lineno">  668 </span>--------------------------------------------------------------------------------
 <span class="lineno">  669 </span>
-<span class="lineno">  670 </span>-- | Pretty-print a term and render it to a string
-<span class="lineno">  671 </span>showTerm :: Term -&gt; String
-<span class="lineno">  672 </span><span class="decl"><span class="istickedoff">showTerm t = scPrettyTerm PPS.defaultOpts t</span></span>
-<span class="lineno">  673 </span>
-<span class="lineno">  674 </span>
-<span class="lineno">  675 </span>--------------------------------------------------------------------------------
-<span class="lineno">  676 </span>-- * Pretty-printers with naming environments
-<span class="lineno">  677 </span>--------------------------------------------------------------------------------
-<span class="lineno">  678 </span>
-<span class="lineno">  679 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
-<span class="lineno">  680 </span>-- more than once at the same binding level
-<span class="lineno">  681 </span>ppTermWithNames :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  682 </span><span class="decl"><span class="istickedoff">ppTermWithNames opts ne trm =</span>
-<span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm</span></span>
-<span class="lineno">  684 </span>
-<span class="lineno">  685 </span>showTermWithNames :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; String
-<span class="lineno">  686 </span><span class="decl"><span class="istickedoff">showTermWithNames opts ne trm =</span>
-<span class="lineno">  687 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $ ppTermWithNames opts ne trm</span></span>
-<span class="lineno">  688 </span>
-<span class="lineno">  689 </span>
-<span class="lineno">  690 </span>ppTermContainerWithNames ::
-<span class="lineno">  691 </span>  (Traversable m) =&gt;
-<span class="lineno">  692 </span>  (m PPS.Doc -&gt; PPS.Doc) -&gt;
-<span class="lineno">  693 </span>  PPS.Opts -&gt; DisplayNameEnv -&gt; m Term -&gt; PPS.Doc
-<span class="lineno">  694 </span><span class="decl"><span class="istickedoff">ppTermContainerWithNames ppContainer opts ne trms =</span>
-<span class="lineno">  695 </span><span class="spaces">  </span><span class="istickedoff">let min_occs = PPS.ppMinSharing opts</span>
-<span class="lineno">  696 </span><span class="spaces">      </span><span class="istickedoff">global_p = True</span>
-<span class="lineno">  697 </span><span class="spaces">      </span><span class="istickedoff">occPairs = IntMap.assocs $</span>
-<span class="lineno">  698 </span><span class="spaces">                   </span><span class="istickedoff">filterOccurenceMap min_occs global_p $</span>
-<span class="lineno">  699 </span><span class="spaces">                   </span><span class="istickedoff">flip execState mempty $</span>
-<span class="lineno">  700 </span><span class="spaces">                   </span><span class="istickedoff">traverse (\t -&gt; scTermCountAux global_p [t]) $</span>
-<span class="lineno">  701 </span><span class="spaces">                   </span><span class="istickedoff">trms</span>
-<span class="lineno">  702 </span><span class="spaces">   </span><span class="istickedoff">in runPPM opts ne $ ppLets global_p occPairs []</span>
-<span class="lineno">  703 </span><span class="spaces">        </span><span class="istickedoff">(ppContainer &lt;$&gt; traverse (ppTerm' PrecTerm) trms)</span></span>
+<span class="lineno">  670 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
+<span class="lineno">  671 </span>-- more than once at the same binding level
+<span class="lineno">  672 </span>ppTermWithNames :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  673 </span><span class="decl"><span class="istickedoff">ppTermWithNames opts ne trm =</span>
+<span class="lineno">  674 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm</span></span>
+<span class="lineno">  675 </span>
+<span class="lineno">  676 </span>showTermWithNames :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; String
+<span class="lineno">  677 </span><span class="decl"><span class="istickedoff">showTermWithNames opts ne trm =</span>
+<span class="lineno">  678 </span><span class="spaces">  </span><span class="istickedoff">PPS.render opts $ ppTermWithNames opts ne trm</span></span>
+<span class="lineno">  679 </span>
+<span class="lineno">  680 </span>
+<span class="lineno">  681 </span>ppTermContainerWithNames ::
+<span class="lineno">  682 </span>  (Traversable m) =&gt;
+<span class="lineno">  683 </span>  (m PPS.Doc -&gt; PPS.Doc) -&gt;
+<span class="lineno">  684 </span>  PPS.Opts -&gt; DisplayNameEnv -&gt; m Term -&gt; PPS.Doc
+<span class="lineno">  685 </span><span class="decl"><span class="istickedoff">ppTermContainerWithNames ppContainer opts ne trms =</span>
+<span class="lineno">  686 </span><span class="spaces">  </span><span class="istickedoff">let min_occs = PPS.ppMinSharing opts</span>
+<span class="lineno">  687 </span><span class="spaces">      </span><span class="istickedoff">global_p = True</span>
+<span class="lineno">  688 </span><span class="spaces">      </span><span class="istickedoff">occPairs = IntMap.assocs $</span>
+<span class="lineno">  689 </span><span class="spaces">                   </span><span class="istickedoff">filterOccurenceMap min_occs global_p $</span>
+<span class="lineno">  690 </span><span class="spaces">                   </span><span class="istickedoff">flip execState mempty $</span>
+<span class="lineno">  691 </span><span class="spaces">                   </span><span class="istickedoff">traverse (\t -&gt; scTermCountAux global_p [t]) $</span>
+<span class="lineno">  692 </span><span class="spaces">                   </span><span class="istickedoff">trms</span>
+<span class="lineno">  693 </span><span class="spaces">   </span><span class="istickedoff">in runPPM opts ne $ ppLets global_p occPairs []</span>
+<span class="lineno">  694 </span><span class="spaces">        </span><span class="istickedoff">(ppContainer &lt;$&gt; traverse (ppTerm' PrecTerm) trms)</span></span>
 
 </pre>
 </body>

@@ -286,11 +286,11 @@ span.spaces    { background: white }
 <span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">where match t = R.asGlobalApply o t</span></span>
 <span class="lineno">  268 </span>
 <span class="lineno">  269 </span>-- | Match a datatype.
-<span class="lineno">  270 </span>asDataType :: ArgsMatchable v a =&gt; PrimName a -&gt; v a -&gt; Matcher a
-<span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName (primName o))) match</span>
+<span class="lineno">  270 </span>asDataType :: ArgsMatchable v a =&gt; ExtCns a -&gt; v a -&gt; Matcher a
+<span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">asDataType o = resolveArgs $ Matcher (Net.Atom (toShortName (ecName o))) match</span>
 <span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">where match t = do</span>
 <span class="lineno">  273 </span><span class="spaces">          </span><span class="nottickedoff">DataTypeApp dt params l &lt;- R.asFTermF t</span>
-<span class="lineno">  274 </span><span class="spaces">          </span><span class="nottickedoff">guard (primVarIndex dt == primVarIndex o)</span>
+<span class="lineno">  274 </span><span class="spaces">          </span><span class="nottickedoff">guard (ecVarIndex dt == ecVarIndex o)</span>
 <span class="lineno">  275 </span><span class="spaces">          </span><span class="nottickedoff">return (params ++ l)</span></span>
 <span class="lineno">  276 </span>
 <span class="lineno">  277 </span>-- | Match any sort.
@@ -422,7 +422,7 @@ span.spaces    { background: white }
 <span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)</span></span>
 <span class="lineno">  404 </span>
 <span class="lineno">  405 </span>mkDataType ::
-<span class="lineno">  406 </span>  PrimName Term -&gt;
+<span class="lineno">  406 </span>  ExtCns Term -&gt;
 <span class="lineno">  407 </span>  [TermBuilder Term] -&gt;
 <span class="lineno">  408 </span>  [TermBuilder Term] -&gt;
 <span class="lineno">  409 </span>  TermBuilder Term

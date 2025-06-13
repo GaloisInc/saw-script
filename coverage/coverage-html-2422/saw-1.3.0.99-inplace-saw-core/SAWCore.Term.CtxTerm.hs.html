@@ -115,7 +115,7 @@ span.spaces    { background: white }
 <span class="lineno">   96 </span>-- | An identifier for a datatype that is statically associated with Haskell
 <span class="lineno">   97 </span>-- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
 <span class="lineno">   98 </span>-- we simplify datatypes to arbitrary Haskell types.
-<span class="lineno">   99 </span>newtype DataIdent d = DataIdent (PrimName Term)
+<span class="lineno">   99 </span>newtype DataIdent d = DataIdent (ExtCns Term)
 <span class="lineno">  100 </span>  -- Invariant, the type of datatypes is always a closed term
 <span class="lineno">  101 </span>
 <span class="lineno">  102 </span>-- | Append a list of types to a context, i.e., &quot;invert&quot; the list of types,
@@ -783,7 +783,7 @@ span.spaces    { background: white }
 <span class="lineno">  764 </span>
 <span class="lineno">  765 </span>-- | Compute the type of a constructor from the name of its datatype and its
 <span class="lineno">  766 </span>-- 'CtorArgStruct'
-<span class="lineno">  767 </span>ctxCtorType :: MonadTerm m =&gt; PrimName Term -&gt; CtorArgStruct d params ixs -&gt; m Term
+<span class="lineno">  767 </span>ctxCtorType :: MonadTerm m =&gt; ExtCns Term -&gt; CtorArgStruct d params ixs -&gt; m Term
 <span class="lineno">  768 </span><span class="decl"><span class="istickedoff">ctxCtorType d (CtorArgStruct{..}) =</span>
 <span class="lineno">  769 </span><span class="spaces">  </span><span class="istickedoff">elimClosedTerm &lt;$&gt;</span>
 <span class="lineno">  770 </span><span class="spaces">  </span><span class="istickedoff">(ctxPi ctorParams $ \params -&gt;</span>
@@ -821,7 +821,7 @@ span.spaces    { background: white }
 <span class="lineno">  802 </span>-- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 <span class="lineno">  803 </span>-- for the parameter variables returned by that function
 <span class="lineno">  804 </span>mkPRetTp :: MonadTerm m =&gt;
-<span class="lineno">  805 </span>  PrimName Term -&gt;
+<span class="lineno">  805 </span>  ExtCns Term -&gt;
 <span class="lineno">  806 </span>  [(LocalName, Term)] -&gt;
 <span class="lineno">  807 </span>  [(LocalName, Term)] -&gt;
 <span class="lineno">  808 </span>  [Term] -&gt;
@@ -973,7 +973,7 @@ span.spaces    { background: white }
 <span class="lineno">  954 </span>-- so that we only call 'ctxCtorElimType' once but can call the function many
 <span class="lineno">  955 </span>-- times, in order to amortize the overhead of 'ctxCtorElimType'.
 <span class="lineno">  956 </span>mkCtorElimTypeFun :: MonadTerm m =&gt;
-<span class="lineno">  957 </span>  PrimName Term {- ^ data type -} -&gt;
+<span class="lineno">  957 </span>  ExtCns Term {- ^ data type -} -&gt;
 <span class="lineno">  958 </span>  ExtCns Term {- ^ constructor type -} -&gt;
 <span class="lineno">  959 </span>  CtorArgStruct d params ixs -&gt;
 <span class="lineno">  960 </span>  m ([Term] -&gt; Term -&gt; m Term)
@@ -1236,7 +1236,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1217 </span>-- Test that the constructor type is an allowed type for a constructor of this
 <span class="lineno"> 1218 </span>-- datatype, and, if so, build a 'CtorArgStruct' for it.
 <span class="lineno"> 1219 </span>mkCtorArgStruct ::
-<span class="lineno"> 1220 </span>  PrimName Term -&gt;
+<span class="lineno"> 1220 </span>  ExtCns Term -&gt;
 <span class="lineno"> 1221 </span>  Bindings CtxTerm EmptyCtx params -&gt;
 <span class="lineno"> 1222 </span>  Bindings CtxTerm (CtxInv params) ixs -&gt;
 <span class="lineno"> 1223 </span>  Term -&gt;

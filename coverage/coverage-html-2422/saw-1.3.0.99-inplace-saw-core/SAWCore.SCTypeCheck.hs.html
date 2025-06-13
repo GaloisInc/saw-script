@@ -86,7 +86,7 @@ span.spaces    { background: white }
 <span class="lineno">   67 </span>import SAWCore.Conversion (natConversions)
 <span class="lineno">   68 </span>import SAWCore.Module
 <span class="lineno">   69 </span>  ( ctorExtCns
-<span class="lineno">   70 </span>  , dtPrimName
+<span class="lineno">   70 </span>  , dtExtCns
 <span class="lineno">   71 </span>  , lookupVarIndexInMap
 <span class="lineno">   72 </span>  , Ctor(..)
 <span class="lineno">   73 </span>  , DataType(..)
@@ -199,10 +199,10 @@ span.spaces    { background: white }
 <span class="lineno">  180 </span>  | UnboundName Text
 <span class="lineno">  181 </span>  | SubtypeFailure SCTypedTerm Term
 <span class="lineno">  182 </span>  | EmptyVectorLit
-<span class="lineno">  183 </span>  | NoSuchDataType Ident
+<span class="lineno">  183 </span>  | NoSuchDataType NameInfo
 <span class="lineno">  184 </span>  | NoSuchCtor NameInfo
-<span class="lineno">  185 </span>  | NotFullyAppliedRec (PrimName Term)
-<span class="lineno">  186 </span>  | BadDataTypeParamsOrArgsLength (PrimName Term) [Term] [Term]
+<span class="lineno">  185 </span>  | NotFullyAppliedRec (ExtCns Term)
+<span class="lineno">  186 </span>  | BadDataTypeParamsOrArgsLength (ExtCns Term) [Term] [Term]
 <span class="lineno">  187 </span>  | BadRecursorApp Term [Term] Term
 <span class="lineno">  188 </span>  | BadConstType NameInfo Term Term
 <span class="lineno">  189 </span>  | MalformedRecursor Term String
@@ -523,9 +523,9 @@ span.spaces    { background: white }
 <span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">-- and then apply the cached Pi type of dt to params and args</span>
 <span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
 <span class="lineno">  506 </span><span class="spaces">       </span><span class="istickedoff">dt &lt;-</span>
-<span class="lineno">  507 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (primVarIndex d) mm of</span>
+<span class="lineno">  507 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex d) mm of</span>
 <span class="lineno">  508 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
-<span class="lineno">  509 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (primName d)</span></span>
+<span class="lineno">  509 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (ecName d)</span></span>
 <span class="lineno">  510 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">err = BadDataTypeParamsOrArgsLength (fmap typedVal d) (map typedVal params) (map typedVal args)</span></span>
 <span class="lineno">  511 </span><span class="spaces">       </span><span class="istickedoff">unless (length params == length (dtParams dt) &amp;&amp;</span>
 <span class="lineno">  512 </span><span class="spaces">               </span><span class="istickedoff">length args == length (dtIndices dt))</span>
@@ -646,7 +646,7 @@ span.spaces    { background: white }
 <span class="lineno">  627 </span>
 <span class="lineno">  628 </span>
 <span class="lineno">  629 </span>inferRecursorType ::
-<span class="lineno">  630 </span>  PrimName SCTypedTerm {- ^ data type name -} -&gt;
+<span class="lineno">  630 </span>  ExtCns SCTypedTerm {- ^ data type name -} -&gt;
 <span class="lineno">  631 </span>  [SCTypedTerm] {- ^ data type parameters -} -&gt;
 <span class="lineno">  632 </span>  SCTypedTerm   {- ^ elimination motive -} -&gt;
 <span class="lineno">  633 </span>  SCTypedTerm   {- ^ type of the elimination motive -} -&gt;
@@ -654,9 +654,9 @@ span.spaces    { background: white }
 <span class="lineno">  635 </span><span class="decl"><span class="istickedoff">inferRecursorType d params motive motiveTy =</span>
 <span class="lineno">  636 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- liftTCM scGetModuleMap</span>
 <span class="lineno">  637 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;-</span>
-<span class="lineno">  638 </span><span class="spaces">       </span><span class="istickedoff">case lookupVarIndexInMap (primVarIndex d) mm of</span>
+<span class="lineno">  638 </span><span class="spaces">       </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex d) mm of</span>
 <span class="lineno">  639 </span><span class="spaces">         </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
-<span class="lineno">  640 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (primName d)</span></span>
+<span class="lineno">  640 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (ecName d)</span></span>
 <span class="lineno">  641 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  642 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">mk_err str =</span></span>
 <span class="lineno">  643 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">MalformedRecursor</span></span>
@@ -702,7 +702,7 @@ span.spaces    { background: white }
 <span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff">do motiveTy &lt;- typeInferComplete (typedType motive)</span>
 <span class="lineno">  684 </span><span class="spaces">     </span><span class="istickedoff">cs_fs' &lt;- forM cs_fs (\e -&gt; do ety &lt;- typeInferComplete (typedType e)</span>
 <span class="lineno">  685 </span><span class="spaces">                                    </span><span class="istickedoff">pure (e,ety))</span>
-<span class="lineno">  686 </span><span class="spaces">     </span><span class="istickedoff">d &lt;- traverse typeInferComplete (dtPrimName dt)</span>
+<span class="lineno">  686 </span><span class="spaces">     </span><span class="istickedoff">d &lt;- traverse typeInferComplete (dtExtCns dt)</span>
 <span class="lineno">  687 </span><span class="spaces">     </span><span class="istickedoff">let ctorVarIxs = map ctorVarIndex (dtCtors dt)</span>
 <span class="lineno">  688 </span><span class="spaces">     </span><span class="istickedoff">ctorOrder &lt;- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))</span>
 <span class="lineno">  689 </span><span class="spaces">     </span><span class="istickedoff">let elims = Map.fromList (zip ctorVarIxs cs_fs')</span>
@@ -721,7 +721,7 @@ span.spaces    { background: white }
 <span class="lineno">  702 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the elimination functions each have the right types, and</span>
 <span class="lineno">  703 </span><span class="spaces">     </span><span class="istickedoff">-- that we have exactly one for each constructor of dt</span>
 <span class="lineno">  704 </span><span class="spaces">     </span><span class="istickedoff">elims_tps &lt;-</span>
-<span class="lineno">  705 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scRecursorElimTypes (fmap <span class="nottickedoff">typedVal</span> d) (map typedVal params) (typedVal motive)</span>
+<span class="lineno">  705 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)</span>
 <span class="lineno">  706 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  707 </span><span class="spaces">     </span><span class="istickedoff">forM_ elims_tps $ \(c,req_tp) -&gt;</span>
 <span class="lineno">  708 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup (ecVarIndex c) elims of</span>

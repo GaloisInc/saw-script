@@ -379,7 +379,7 @@ span.spaces    { background: white }
 <span class="lineno">  360 </span><span class="spaces">      </span><span class="istickedoff">-- NOTE: this assumes the Coq-style equality type Eq X x y, where both X</span>
 <span class="lineno">  361 </span><span class="spaces">      </span><span class="istickedoff">-- (the type of x and y) and x are parameters, and y is an index</span>
 <span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">FTermF (DataTypeApp dt [_, x] [y])</span>
-<span class="lineno">  363 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">primName dt == eqIdent</span> -&gt; mkRewriteRule [] x y False ann</span>
+<span class="lineno">  363 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">ecName dt == ModuleIdentifier eqIdent</span> -&gt; mkRewriteRule [] x y False ann</span>
 <span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff">Pi _ ty body -&gt; rule { ctxt = ty : ctxt rule }</span>
 <span class="lineno">  365 </span><span class="spaces">          </span><span class="istickedoff">where rule = ruleOfTerm body ann</span>
 <span class="lineno">  366 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error &quot;ruleOfSharedTerm: Illegal argument&quot;</span></span></span>
@@ -523,9 +523,9 @@ span.spaces    { background: white }
 <span class="lineno">  504 </span><span class="spaces">         </span><span class="istickedoff">let d = recursorDataType crec</span>
 <span class="lineno">  505 </span><span class="spaces">         </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
 <span class="lineno">  506 </span><span class="spaces">         </span><span class="istickedoff">dt &lt;-</span>
-<span class="lineno">  507 </span><span class="spaces">           </span><span class="istickedoff">case lookupVarIndexInMap (primVarIndex d) mm of</span>
+<span class="lineno">  507 </span><span class="spaces">           </span><span class="istickedoff">case lookupVarIndexInMap (ecVarIndex d) mm of</span>
 <span class="lineno">  508 </span><span class="spaces">             </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
-<span class="lineno">  509 </span><span class="spaces">             </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;scExpandRewriteRule&quot; [&quot;Datatype not found: &quot; &lt;&gt; identText (primName d)]</span></span>
+<span class="lineno">  509 </span><span class="spaces">             </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;scExpandRewriteRule&quot; [&quot;Datatype not found: &quot; &lt;&gt; toAbsoluteName (ecName d)]</span></span>
 <span class="lineno">  510 </span><span class="spaces">         </span><span class="istickedoff">rules &lt;- traverse ctorRule (dtCtors dt)</span>
 <span class="lineno">  511 </span><span class="spaces">         </span><span class="istickedoff">return (Just rules)</span>
 <span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; return Nothing</span>

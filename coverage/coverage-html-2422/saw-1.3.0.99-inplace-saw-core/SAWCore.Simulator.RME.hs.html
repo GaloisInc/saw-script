@@ -316,7 +316,7 @@ span.spaces    { background: white }
 <span class="lineno">  297 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; if x == y then x else error $ &quot;muxRValue: VInt &quot; ++ show (x, y)</span></span>
 <span class="lineno">  298 </span>
 <span class="lineno">  299 </span>muxExtra :: TValue ReedMuller -&gt; RME -&gt; RExtra -&gt; RExtra -&gt; RExtra
-<span class="lineno">  300 </span><span class="decl"><span class="nottickedoff">muxExtra (VDataType (primName -&gt; &quot;Prelude.Stream&quot;) [TValue tp] []) b (AStream xs) (AStream ys) =</span>
+<span class="lineno">  300 </span><span class="decl"><span class="nottickedoff">muxExtra (VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) b (AStream xs) (AStream ys) =</span>
 <span class="lineno">  301 </span><span class="spaces">  </span><span class="nottickedoff">AStream (muxRValue tp b &lt;$&gt; xs &lt;*&gt; ys)</span>
 <span class="lineno">  302 </span><span class="spaces"></span><span class="nottickedoff">muxExtra tp _ _ _ = panic &quot;muxExtra&quot; [&quot;Type mismatch: &quot; &lt;&gt; Text.pack (show tp)]</span></span>
 <span class="lineno">  303 </span>

@@ -144,8 +144,8 @@ span.spaces    { background: white }
 <span class="lineno">  125 </span>import SAWCore.SCTypeCheck
 <span class="lineno">  126 </span>import SAWCore.Module
 <span class="lineno">  127 </span>  ( ctorExtCns
-<span class="lineno">  128 </span>  , dtNumParams
-<span class="lineno">  129 </span>  , dtPrimName
+<span class="lineno">  128 </span>  , dtExtCns
+<span class="lineno">  129 </span>  , dtNumParams
 <span class="lineno">  130 </span>  , Ctor(..)
 <span class="lineno">  131 </span>  , DataType(..)
 <span class="lineno">  132 </span>  )
@@ -377,9 +377,9 @@ span.spaces    { background: white }
 <span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">maybe_dt &lt;- liftTCM scFindDataType d</span>
 <span class="lineno">  359 </span><span class="spaces">  </span><span class="nottickedoff">dt &lt;- case maybe_dt of</span>
 <span class="lineno">  360 </span><span class="spaces">          </span><span class="nottickedoff">Just dt -&gt; pure dt</span>
-<span class="lineno">  361 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; throwTCError $ NoSuchDataType d</span>
+<span class="lineno">  361 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; throwTCError $ NoSuchDataType (ModuleIdentifier d)</span>
 <span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">(params, args) &lt;- splitAt (dtNumParams dt) &lt;$&gt; mapM unOpenTerm all_args</span>
-<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">d' &lt;- traverse typeInferComplete (dtPrimName dt)</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">d' &lt;- traverse typeInferComplete (dtExtCns dt)</span>
 <span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">typeInferComplete $ DataTypeApp d' params args</span></span>
 <span class="lineno">  365 </span>
 <span class="lineno">  366 </span>-- | Build an 'OpenTerm' for a global name with a definition

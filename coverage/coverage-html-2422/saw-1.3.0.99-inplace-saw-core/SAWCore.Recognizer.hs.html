@@ -271,14 +271,14 @@ span.spaces    { background: white }
 <span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">return (u, <span class="nottickedoff">s</span>)</span></span>
 <span class="lineno">  253 </span>
 <span class="lineno">  254 </span>-- | A version of 'asDataType' that returns the parameters separately
-<span class="lineno">  255 </span>asDataTypeParams :: Recognizer Term (PrimName Term, [Term], [Term])
+<span class="lineno">  255 </span>asDataTypeParams :: Recognizer Term (ExtCns Term, [Term], [Term])
 <span class="lineno">  256 </span><span class="decl"><span class="istickedoff">asDataTypeParams t = do DataTypeApp c ps args &lt;- asFTermF t; return (c,ps,args)</span></span>
 <span class="lineno">  257 </span>
 <span class="lineno">  258 </span>-- | A version of 'asDataTypeParams' that combines the params and normal args
-<span class="lineno">  259 </span>asDataType :: Recognizer Term (PrimName Term, [Term])
+<span class="lineno">  259 </span>asDataType :: Recognizer Term (ExtCns Term, [Term])
 <span class="lineno">  260 </span><span class="decl"><span class="istickedoff">asDataType t = do DataTypeApp c ps args &lt;- asFTermF t; return (c,ps ++ args)</span></span>
 <span class="lineno">  261 </span>
-<span class="lineno">  262 </span>asRecursorType :: Recognizer Term (PrimName Term, [Term], Term, Term)
+<span class="lineno">  262 </span>asRecursorType :: Recognizer Term (ExtCns Term, [Term], Term, Term)
 <span class="lineno">  263 </span><span class="decl"><span class="istickedoff">asRecursorType t =</span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">do RecursorType d ps motive motive_ty &lt;- asFTermF t</span>
 <span class="lineno">  265 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">d</span>,<span class="nottickedoff">ps</span>,motive,motive_ty)</span></span>
@@ -289,7 +289,7 @@ span.spaces    { background: white }
 <span class="lineno">  270 </span><span class="spaces">     </span><span class="istickedoff">Recursor crec &lt;- asFTermF rc</span>
 <span class="lineno">  271 </span><span class="spaces">     </span><span class="istickedoff">return (rc, crec, ixs, arg)</span></span>
 <span class="lineno">  272 </span>
-<span class="lineno">  273 </span>isDataType :: PrimName Term -&gt; Recognizer [Term] a -&gt; Recognizer Term a
+<span class="lineno">  273 </span>isDataType :: ExtCns Term -&gt; Recognizer [Term] a -&gt; Recognizer Term a
 <span class="lineno">  274 </span><span class="decl"><span class="nottickedoff">isDataType i p t = do</span>
 <span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">(o,l) &lt;- asDataType t</span>
 <span class="lineno">  276 </span><span class="spaces">  </span><span class="nottickedoff">if i == o then p l else Nothing</span></span>
@@ -412,7 +412,7 @@ span.spaces    { background: white }
 <span class="lineno">  393 </span>
 <span class="lineno">  394 </span>asNatType :: Recognizer Term ()
 <span class="lineno">  395 </span><span class="decl"><span class="nottickedoff">asNatType (asDataType -&gt; Just (o, []))</span>
-<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">| primName o == preludeNatIdent = return ()</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">| ecName o == ModuleIdentifier preludeNatIdent = return ()</span>
 <span class="lineno">  397 </span><span class="spaces"></span><span class="nottickedoff">asNatType _ = Nothing</span></span>
 <span class="lineno">  398 </span>
 <span class="lineno">  399 </span>asIntegerType :: Recognizer Term ()
@@ -440,7 +440,7 @@ span.spaces    { background: white }
 <span class="lineno">  421 </span><span class="decl"><span class="istickedoff">asEq t =</span>
 <span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">do (o, l) &lt;- asDataType t</span>
 <span class="lineno">  423 </span><span class="spaces">     </span><span class="istickedoff">case l of</span>
-<span class="lineno">  424 </span><span class="spaces">       </span><span class="istickedoff">[a, x, y] | <span class="tickonlytrue">&quot;Prelude.Eq&quot; == primName o</span> -&gt; return (a, x, y)</span>
+<span class="lineno">  424 </span><span class="spaces">       </span><span class="istickedoff">[a, x, y] | <span class="tickonlytrue">ModuleIdentifier &quot;Prelude.Eq&quot; == ecName o</span> -&gt; return (a, x, y)</span>
 <span class="lineno">  425 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  426 </span>
 <span class="lineno">  427 </span>asEqTrue :: Recognizer Term Term

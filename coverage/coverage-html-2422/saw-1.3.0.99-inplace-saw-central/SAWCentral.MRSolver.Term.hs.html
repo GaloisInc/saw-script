@@ -299,7 +299,7 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span>
 <span class="lineno">  281 </span>-- | Recognize the @Num@ type
 <span class="lineno">  282 </span>asNumType :: Recognizer Term ()
-<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">asNumType (asDataType -&gt; Just (primName -&gt; &quot;Cryptol.Num&quot;, _)) = Just ()</span>
+<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">asNumType (asDataType -&gt; Just (ecName -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;, _)) = Just ()</span>
 <span class="lineno">  284 </span><span class="spaces"></span><span class="nottickedoff">asNumType _ = Nothing</span></span>
 <span class="lineno">  285 </span>
 <span class="lineno">  286 </span>-- | Recognize a term as a @TCNum n@ or @TCInf@
