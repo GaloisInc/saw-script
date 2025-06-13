@@ -589,11 +589,9 @@ monadifyType ctx (asApplyAll -> (f, args))
 -}
 
 -- Num cases
-monadifyTpExpr _ (asCtor -> Just (ec, []))
-  | ecName ec == ModuleIdentifier "Cryptol.TCInf"
+monadifyTpExpr _ (asGlobalApply "Cryptol.TCInf" -> Just [])
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
-monadifyTpExpr _ (asCtor -> Just (ec, [asNat -> Just n]))
-  | ecName ec == ModuleIdentifier "Cryptol.TCNum"
+monadifyTpExpr _ (asGlobalApply "Cryptol.TCNum" -> Just [asNat -> Just n])
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
   | Just op <- monadifyNumBinOp f
@@ -1198,8 +1196,10 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asTupleValue -> Just []) =
   return $ ArgMonTerm $ fromSemiPureTerm MTyUnit unitOpenTerm
+{-
 monadifyTerm' _ (asCtor -> Just (ec, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm ec) args
+-}
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
   (Map.lookup (globalDefName glob) <$> monStMonTable <$> ask) >>= \case
   Just macro ->

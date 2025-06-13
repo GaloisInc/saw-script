@@ -32,7 +32,7 @@ module SAWCore.Simulator
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM)
+import Control.Monad (liftM)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.Monad.Fix (MonadFix(mfix))
@@ -200,16 +200,6 @@ evalTermF cfg lam recEval tf env =
         PairRight x         -> recEval x >>= \case
                                  VPair _l r -> force r
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
-
-        CtorApp c ps ts     -> do c'  <- traverse evalType c
-                                  ps' <- mapM recEvalDelay ps
-                                  ts' <- mapM recEvalDelay ts
-                                  case simCtorApp cfg c' of
-                                    Just mv ->
-                                      do v <- mv
-                                         foldM apply v (ps' ++ ts')
-                                    Nothing ->
-                                      pure $ VCtorApp c' ps' ts'
 
         DataTypeApp d ps ts -> do d' <- traverse evalType d
                                   ps' <- mapM recEval ps

@@ -49,7 +49,6 @@ import SAWCore.Panic (panic)
 
 import SAWCore.Module
   ( ctorExtCns
-  , ctorNumParams
   , dtPrimName
   , emptyModule
   , findDataTypeInMap
@@ -115,11 +114,9 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
-         do let (params, ctor_args) = splitAt (ctorNumParams ctor) args
-            c <- traverse typeInferComplete (ctorExtCns ctor)
-            -- NOTE: typeInferComplete will check that we have the correct number
-            -- of arguments
-            typeInferComplete (CtorApp c params ctor_args)
+         do c <- traverse typeInferComplete (ctorExtCns ctor)
+            t <- typeInferComplete (Constant c)
+            inferApplyAll t args
        (_, Just (ResolvedDataType dt)) ->
          do let (params, ixs) = splitAt (length $ dtParams dt) args
             d <- traverse typeInferComplete (dtPrimName dt)

@@ -199,11 +199,6 @@ data FlatTermF e
     -- | An inductively-defined type, applied to parameters and type indices
   | DataTypeApp !(PrimName e) ![e] ![e]
 
-    -- | An application of a constructor to its arguments, i.e., an element of
-    -- an inductively-defined type; the parameters (of the inductive type to
-    -- which this constructor belongs) and indices are kept separate
-  | CtorApp !(ExtCns e) ![e] ![e]
-
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
     --   type of the motive function.
@@ -326,9 +321,6 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (CtorApp cx psx lx) (CtorApp cy psy ly) =
-      do c <- zipExtCns f cx cy
-         Just $ CtorApp c (zipWith f psx psy) (zipWith f lx ly)
     go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly) =
       do d <- zipPrimName f dx dy
          Just $ DataTypeApp d (zipWith f psx psy) (zipWith f lx ly)
@@ -573,8 +565,6 @@ termToPat t =
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
         foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
-      FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (toShortName (ecName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

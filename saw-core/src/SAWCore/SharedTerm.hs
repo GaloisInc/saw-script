@@ -557,15 +557,15 @@ scCtorAppParams :: SharedContext
                 -> [Term] -- ^ The arguments
                 -> IO Term
 scCtorAppParams sc c params args =
-  scFlatTermF sc (CtorApp c params args)
+  do t <- scTermF sc (Constant c)
+     scApplyAll sc t (params ++ args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
 scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
 scCtorApp sc c_id args =
-  do ctor <- scRequireCtor sc c_id
-     let (params,args') = splitAt (ctorNumParams ctor) args
-     scCtorAppParams sc (ctorExtCns ctor) params args'
+  do t <- scGlobalDef sc c_id
+     scApplyAll sc t args
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -947,14 +947,7 @@ data WHNFElim
 -- either the @Zero@ constructor or a natural number literal
 convertsToNat :: Term -> Maybe Natural
 convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
-convertsToNat t = helper t where
-  helper (asFTermF -> Just (NatLit k)) = return k
-  helper (asCtor -> Just (z, []))
-    | ecName z == ModuleIdentifier preludeZeroIdent = return 0
-  helper (asCtor -> Just (s, [t']))
-    | ecName s == ModuleIdentifier preludeSuccIdent = (1+) <$> helper t'
-  helper _ = Nothing
-
+convertsToNat t = asNat t
 
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term, and evaluates all arguments to type
@@ -987,13 +980,7 @@ scWhnf sc t0 =
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
     go (ElimRecursor rec crec _ : xs)
-                              (asCtorParams ->
-                               Just (c, _, args))               = scReduceRecursor sc rec crec c args >>= go xs
-
-    go (ElimRecursor rec crec _ : xs)
                               (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
-
-    go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
                                 Just (r, crec, ixs, arg))       = go (ElimRecursor r crec ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
@@ -1016,10 +1003,21 @@ scWhnf sc t0 =
                                                                      args' <- mapM memo args
                                                                      t' <- scDataTypeAppParams sc d ps' args'
                                                                      foldM reapply t' xs
-    go xs                     t@(asConstant -> Just ec)         = do mbody <- scFindDefBody sc (ecVarIndex ec)
-                                                                     case mbody of
-                                                                       Just body -> go xs body
-                                                                       Nothing -> foldM reapply t xs
+    go xs                     t@(asConstant -> Just ec)         = do r <- resolveConstant ec
+                                                                     case r of
+                                                                       ResolvedDef d ->
+                                                                         case defBody d of
+                                                                           Just body -> go xs body
+                                                                           Nothing -> foldM reapply t xs
+                                                                       ResolvedCtor ctor ->
+                                                                         case asArgsRec xs of
+                                                                           Nothing -> foldM reapply t xs
+                                                                           Just (rec, crec, args, xs') ->
+                                                                             do let args' = drop (ctorNumParams ctor) args
+                                                                                scReduceRecursor sc rec crec ec args' >>= go xs'
+                                                                       ResolvedDataType _ ->
+                                                                         foldM reapply t xs
+
     go xs                     t                                 = foldM reapply t xs
 
     betaReduce :: (?cache :: Cache IO TermIndex Term) =>
@@ -1036,11 +1034,21 @@ scWhnf sc t0 =
     reapply t (ElimRecursor r _crec ixs) =
       scFlatTermF sc (RecursorApp r ixs t)
 
-    tryDef :: (?cache :: Cache IO TermIndex Term) =>
-              Ident -> [WHNFElim] -> Def -> IO Term
-    tryDef _ xs (Def {defBody = Just t}) = go xs t
-    tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
+    resolveConstant :: ExtCns Term -> IO ResolvedName
+    resolveConstant ec =
+      do mm <- scGetModuleMap sc
+         case lookupVarIndexInMap (ecVarIndex ec) mm of
+           Just r -> pure r
+           Nothing -> panic "scWhnf" ["Constant not found: " <> toAbsoluteName (ecName ec)]
 
+    -- look for a prefix of ElimApps followed by an ElimRecursor
+    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], [WHNFElim])
+    asArgsRec (ElimRecursor rec crec _ : xs) = Just (rec, crec, [], xs)
+    asArgsRec (ElimApp x : xs) =
+      case asArgsRec xs of
+        Just (rec, crec, args, xs') -> Just (rec, crec, x : args, xs')
+        Nothing -> Nothing
+    asArgsRec _ = Nothing
 
 -- | Test if two terms are convertible up to a given evaluation procedure. In
 -- practice, this procedure is usually 'scWhnf', possibly combined with some
@@ -1206,8 +1214,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           case asPairType tp of
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
-        CtorApp c params args -> do
-          lift $ foldM (reducePi sc) (ecType c) (params ++ args)
         DataTypeApp dt params args -> do
           lift $ foldM (reducePi sc) (primType dt) (params ++ args)
         RecursorType _d _ps _motive motive_ty -> do

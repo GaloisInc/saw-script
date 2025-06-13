@@ -66,9 +66,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Conversion (natConversions)
 import SAWCore.Module
-  ( ctorNumArgs
-  , ctorNumParams
-  , ctorExtCns
+  ( ctorExtCns
   , dtPrimName
   , lookupVarIndexInMap
   , Ctor(..)
@@ -185,7 +183,6 @@ data TCError
   | NoSuchDataType Ident
   | NoSuchCtor NameInfo
   | NotFullyAppliedRec (PrimName Term)
-  | BadCtorParamsOrArgsLength (ExtCns Term) [Term] [Term]
   | BadDataTypeParamsOrArgsLength (PrimName Term) [Term] [Term]
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
@@ -259,11 +256,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constructor: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadCtorParamsOrArgsLength ec params args) =
-      ppWithPos
-      [ return ("Wrong number of parameters or arguments to constructor: "),
-        ishow (Unshared $ FTermF $ CtorApp ec params args)
-      ]
   helper (BadDataTypeParamsOrArgsLength pn params args) =
       ppWithPos
       [ return ("Wrong number of parameters or arguments to datatype: "),
@@ -522,22 +514,6 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
 
        -- NOTE: we assume dtType is already well-typed and in WHNF
        foldM (applyPiTyped err) (dtType dt) (params ++ args)
-
-  typeInfer (CtorApp c params args) =
-    -- Look up the Ctor structure, check the length of the params and args, and
-    -- then apply the cached Pi type of ctor to params and args
-    do mm <- liftTCM scGetModuleMap
-       ctor <-
-         case lookupVarIndexInMap (ecVarIndex c) mm of
-           Just (ResolvedCtor ctor) -> pure ctor
-           _ -> throwTCError $ NoSuchCtor (ecName c)
-       let err = BadCtorParamsOrArgsLength (fmap typedVal c) (map typedVal params) (map typedVal args)
-       unless (length params == ctorNumParams ctor &&
-               length args == ctorNumArgs ctor)
-              (throwTCError err)
-
-       -- NOTE: we assume ctorType is already well-typed and in WHNF
-       foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
 
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty

@@ -429,10 +429,6 @@ ppFlatTermF prec tf =
          arg_pp <- ppTerm' PrecArg arg
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
-    CtorApp c params args ->
-      do cnm <- ppExtCns c
-         ppAppList prec (annotate PPS.CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
-
     DataTypeApp dt params args ->
       do dnm <- ppPrimName dt
          ppAppList prec (annotate PPS.DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
@@ -560,7 +556,6 @@ scTermCountAux doBinders = go
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
             FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
-            FTermF (CtorApp _ ps xs)       -> ps ++ xs
             FTermF (RecursorType _ ps m _) -> ps ++ [m]
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
@@ -575,7 +570,6 @@ shouldMemoizeTerm t =
   case unwrapTermF t of
     FTermF UnitValue -> False
     FTermF UnitType -> False
-    FTermF (CtorApp _ [] []) -> False
     FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False
     FTermF NatLit{} -> False

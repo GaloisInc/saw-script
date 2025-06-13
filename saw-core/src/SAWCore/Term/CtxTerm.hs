@@ -541,17 +541,42 @@ ctxAsDataTypeApp _ _ _ _ = Nothing
 
 
 -- | Build an application of a constructor as a 'CtxTerm'
-ctxCtorAppM :: MonadTerm m =>
+ctxCtorAppM ::
+  forall m d ctx params args.
+  MonadTerm m =>
   DataIdent d ->
   ExtCns Term ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTermsCtx ctx args) ->
   m (CtxTerm ctx d)
 ctxCtorAppM _d c paramsM argsM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (CtorApp c <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (ctxTermsCtxToListUnsafe <$> argsM)))
+  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) argsM
+  where
+    t :: m (CtxTerm ctx (InvArrows params (InvArrows args d)))
+    t = CtxTerm <$> mkTermF (Constant c)
+
+-- | Abstract an inside-out type list using Haskell arrows. Used only
+-- to define 'ctxCtorAppM'.
+type family InvArrows as b where
+  InvArrows EmptyCtx b = b
+  InvArrows (as ::> a) b = InvArrows as (a -> b)
+
+-- | Apply a 'CtxTerm' to an inside-out list of arguments. Used only
+-- to define 'ctxCtorAppM`.
+ctxApplyMultiInv ::
+  MonadTerm m =>
+  m (CtxTerm ctx (InvArrows as b)) ->
+  m (CtxTermsCtx ctx as) ->
+  m (CtxTerm ctx b)
+ctxApplyMultiInv fm argsm =
+  do f <- fm
+     args <- argsm
+     helper f args
+  where
+    helper :: MonadTerm m => CtxTerm ctx (InvArrows as b) ->
+              CtxTermsCtx ctx as -> m (CtxTerm ctx b)
+    helper f CtxTermsCtxNil = pure f
+    helper f (CtxTermsCtxCons args arg) = ctxApply (helper f args) (pure arg)
 
 data Rec d
 

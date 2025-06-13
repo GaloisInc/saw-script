@@ -177,8 +177,8 @@ throwFFISetup msg =
 buildTypeEnv :: Ctx => [Cry.TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
-  case asCtorParams argTerm of
-    Just (ecName -> ModuleIdentifier "Cryptol.TCNum", [], [asNat -> Just n]) ->
+  case asGlobalApply "Cryptol.TCNum" argTerm of
+    Just [asNat -> Just n] ->
       bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
     _ ->

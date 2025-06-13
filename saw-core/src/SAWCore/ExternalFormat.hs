@@ -147,10 +147,6 @@ scWriteExternal t0 =
             PairType x y        -> pure $ unwords ["PairT", show x, show y]
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
-            CtorApp i ps es     ->
-              do stashName i
-                 pure $ unwords ("Ctor" : show (ecVarIndex i) : show (ecType i) :
-                                 map show ps ++ argsep : map show es)
             DataTypeApp i ps es ->
               do stashPrimName i
                  pure $ unwords ("Data" : show (primVarIndex i) : show (primType i) :
@@ -305,8 +301,6 @@ scReadExternal sc input =
         ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
-        ("Ctor" : i : t : (separateArgs -> Just (ps, es))) ->
-          FTermF <$> (CtorApp <$> readEC i t <*> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : t : (separateArgs -> Just (ps, es))) ->
           FTermF <$> (DataTypeApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
 

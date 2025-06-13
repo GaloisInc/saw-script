@@ -264,10 +264,7 @@ asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 -- | Match a constructor
 asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
-  where match t = do
-          CtorApp c params l <- R.asFTermF t
-          guard (ModuleIdentifier o == ecName c)
-          return (params ++ l)
+  where match t = R.asGlobalApply o t
 
 -- | Match a datatype.
 asDataType :: ArgsMatchable v a => PrimName a -> v a -> Matcher a
@@ -403,9 +400,7 @@ mkTupleSelector i t
 
 mkCtor :: ExtCns Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
-  do params <- sequence paramsB
-     args <- sequence argsB
-     mkTermF $ FTermF $ CtorApp i params args
+  foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
 
 mkDataType ::
   PrimName Term ->
