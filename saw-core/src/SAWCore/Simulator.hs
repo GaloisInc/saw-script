@@ -392,16 +392,14 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
         Nothing ->
           case ecName ec of
             ModuleIdentifier ident ->
-              let pn = PrimName (ecVarIndex ec) ident (ecType ec)
-               in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
+              evalPrim (primHandler ec) ec <$> Map.lookup ident prims
             ImportedName{} -> Nothing
 
     ctors :: ExtCns (TValue l) -> Maybe (MValue l)
     ctors ec =
       case ecName ec of
         ModuleIdentifier ident ->
-          let pn = PrimName (ecVarIndex ec) ident (ecType ec)
-          in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
+          evalPrim (primHandler ec) ec <$> Map.lookup ident prims
         ImportedName{} -> Nothing
 
     primitive :: ExtCns (TValue l) -> MValue l
@@ -411,7 +409,7 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
           panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (ecName ec)]
         ModuleIdentifier ident ->
           case Map.lookup ident prims of
-            Just v  -> evalPrim (primHandler ec) (PrimName (ecVarIndex ec) ident (ecType ec)) v
+            Just v  -> evalPrim (primHandler ec) ec v
             Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
 
 -- | Check that all the primitives declared in the given module
@@ -646,23 +644,23 @@ evalOpen cfg memoClosed t env = do
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
   (Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  PrimName (TValue (WithM Id l)) ->
+  ExtCns (TValue (WithM Id l)) ->
   PrimIn Id l ->
   MValueIn Id l
  #-}
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
   (Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  PrimName (TValue (WithM IO l)) ->
+  ExtCns (TValue (WithM IO l)) ->
   PrimIn IO l ->
   MValueIn IO l
  #-}
 evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
   (Text -> Env l -> TValue l -> MValue l) ->
-  PrimName (TValue l) ->
+  ExtCns (TValue l) ->
   Prims.Prim l ->
   MValue l
-evalPrim fallback pn = loop [] (primType pn)
+evalPrim fallback ec = loop [] (ecType ec)
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
     loop env (VPiType nm t body) (Prims.PrimFun f) =
@@ -694,7 +692,7 @@ evalPrim fallback pn = loop [] (primType pn)
 
     loop _env _tp _p =
       panic "evalPrim" [
-          "Type mismatch in primitive: " <>  identText (primName pn)]
+          "Type mismatch in primitive: " <> toAbsoluteName (ecName ec)]
 
 -- | A basic handler for stuck primitives.
 defaultPrimHandler ::

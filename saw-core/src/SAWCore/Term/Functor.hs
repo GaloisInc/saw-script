@@ -35,7 +35,6 @@ module SAWCore.Term.Functor
   , FieldName
   , LocalName
   , ExtCns(..)
-  , PrimName(..)
   , VarIndex
   , NameInfo(..)
   , toShortName

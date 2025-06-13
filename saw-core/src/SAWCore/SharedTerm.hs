@@ -28,7 +28,6 @@ module SAWCore.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
-  , PrimName(..)
   , NameInfo(..)
   , ppName
     -- * Shared terms
