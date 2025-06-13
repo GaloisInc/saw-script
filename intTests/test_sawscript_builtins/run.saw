@@ -1,0 +1,22 @@
+// Test that run works.
+
+enable_experimental;
+
+// first give summarize_verification something to say
+// (otherwise it just prints a bunch of blank lines)
+prove_print z3 {{ True == True }};
+
+// this should not do anything
+print "nothing should happen:";
+let x = summarize_verification;
+print "hopefully nothing happened";
+
+// this should print (see #2343)
+print "this should print:";
+let () = run x;
+print "that should have printed";
+
+// this should also print (see #2343)
+print "this should also print:";
+return (run x);
+print "that should also have printed";

@@ -1,0 +1,58 @@
+// Some tests for SAWScript lists.
+
+print "null:";
+print (true, null []);
+print (false, null [1]);
+
+print "nth:";
+print (1, nth [1] 0);
+print (4, nth [1, 2, 3, 4, 5] 3);
+// XXX: fails does not successfully trap this failure (see #2424)
+//fails (return (nth [1, 2, 3] 4));
+//fails (return (nth [] 0));
+
+print "head:";
+print (1, head [1]);
+print (3, head [3, 4, 5]);
+// XXX: fails does not successfully trap this failure (see #2424)
+//fails (return (head []));
+
+print "tail:";
+print ([], tail [1]);
+print ([4, 5], tail [3, 4, 5]);
+// XXX: fails does not successfully trap this failure (see #2424)
+//fails (return (tail []));
+
+print "length";
+print (0, length []);
+print (1, length [1]);
+print (5, length [1, 2, 3, 4, 5]);
+
+// note that concat is what's usually called append
+print "concat:";
+print ([], concat [] []);
+print ([1], concat [] [1]);
+print ([1], concat [1], []);
+print ([2, 1], concat [2] [1]);
+print ([2, 4, 6, 8, 1, 2, 3], concat [2, 4, 6, 8] [1, 2, 3]);
+
+print "str_concat:";
+print ("", str_concat "" "");
+print ("a", str_concat "" "a");
+print ("a", str_concat "a" "");
+print ("ba", str_concat "b" "a");
+print ("defgabc", str_concat "defg" "abc");
+
+// str_concats is what's usually called concat
+print ("", str_concats ["", "", ""]);
+print ("abc", str_concats ["a", "b", "c"]);
+
+// for
+print "***";
+for [] print;
+print "***";
+for [1] print;
+print "***";
+for [1, 2] print;
+print "***";
+

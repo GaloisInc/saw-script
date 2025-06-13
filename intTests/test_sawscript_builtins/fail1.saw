@@ -1,0 +1,11 @@
+// Currently you cannot use fail at the syntactic top level, because
+// it has polymorphic type.
+//
+// Which is to say it fails anyway, because for some reason the check
+// involved happens at runtime rather than in the typechecker. But it
+// throws away the failure message.
+//
+// See #2425.
+
+fail "requested failure";
+print "oops, fail didn't exit";

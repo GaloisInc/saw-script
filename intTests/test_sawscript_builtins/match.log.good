@@ -1,0 +1,10 @@
+ Loading file "match.saw"
+ caseSatResult:
+ ("sat",True)
+ unsat
+ caseProofResult:
+ ("Theorem",Theorem (let { x@1 = Vec 8 Bool
+    }
+ in (x : x@1)
+-> EqTrue (ecEq x@1 (PEqSeqBool (TCNum 8)) x x)))
+ ("Counterexample",bvNat 8 0)

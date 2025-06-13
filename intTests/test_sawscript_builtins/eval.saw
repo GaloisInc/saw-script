@@ -1,0 +1,22 @@
+
+print true;
+print (eval_bool {{ True }});
+
+print 33;
+print (eval_int {{ 33 : [8] }});
+
+print 10;
+print (eval_size {| 10 |});
+
+print "[True, False]";
+print (eval_list {{ [True, False] }});
+
+print "[34, 35]";
+print (list_term [ {{ 34 : [8] }}, {{ 35 : [8] }} ]);
+
+// Note that because a list of bools is a bitvector this should
+// (and does) print a number:
+let t = {{ True }};
+let f = {{ False }};
+print 42;
+print (list_term [ t, f, t, f, t, f ]);

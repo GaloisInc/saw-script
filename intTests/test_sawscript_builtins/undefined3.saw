@@ -1,0 +1,5 @@
+// Try let-binding undefined.
+//
+// This will crash because we don't do lazy evaluation.
+
+let f = undefined;
