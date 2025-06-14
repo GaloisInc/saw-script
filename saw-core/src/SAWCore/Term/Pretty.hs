@@ -429,10 +429,6 @@ ppFlatTermF prec tf =
          arg_pp <- ppTerm' PrecArg arg
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
-    DataTypeApp dt params args ->
-      do dnm <- ppExtCns dt
-         ppAppList prec (annotate PPS.DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
-
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->
@@ -546,7 +542,6 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
             FTermF (RecursorType _ ps m _) -> ps ++ [m]
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
@@ -561,7 +556,6 @@ shouldMemoizeTerm t =
   case unwrapTermF t of
     FTermF UnitValue -> False
     FTermF UnitType -> False
-    FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False

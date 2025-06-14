@@ -398,11 +398,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "fst") <*> traverse translateTerm [t]
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
-    -- TODO: maybe have more customizable translation of data types
-    DataTypeApp n is as ->
-      case ecName n of
-        ModuleIdentifier ident -> translateIdentWithArgs ident (is ++ as)
-        ImportedName{} -> Coq.App <$> translateConstant n <*> traverse translateTerm (is ++ as)
 
     RecursorType _d _params motive motiveTy ->
       -- type of the motive looks like

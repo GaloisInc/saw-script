@@ -142,10 +142,6 @@ scWriteExternal t0 =
             PairType x y        -> pure $ unwords ["PairT", show x, show y]
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
-            DataTypeApp i ps es ->
-              do stashName i
-                 pure $ unwords ("Data" : show (ecVarIndex i) : show (ecType i) :
-                                 map show ps ++ argsep : map show es)
 
             RecursorType d ps motive motive_ty ->
               do stashName d
@@ -283,8 +279,6 @@ scReadExternal sc input =
         ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
-        ("Data" : i : t : (separateArgs -> Just (ps, es))) ->
-          FTermF <$> (DataTypeApp <$> readEC i t <*> traverse readIdx ps <*> traverse readIdx es)
 
         ("RecursorType" : i : t :
          (separateArgs ->

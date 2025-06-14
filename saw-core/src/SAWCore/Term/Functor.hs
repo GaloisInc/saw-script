@@ -195,9 +195,6 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | An inductively-defined type, applied to parameters and type indices
-  | DataTypeApp !(ExtCns e) ![e] ![e]
-
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
     --   type of the motive function.
@@ -314,10 +311,6 @@ zipWithFlatTermF f = go
     go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
-
-    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly) =
-      do d <- zipExtCns f dx dy
-         Just $ DataTypeApp d (zipWith f psx psy) (zipWith f lx ly)
 
     go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
       do d <- zipExtCns f d1 d2
@@ -557,8 +550,6 @@ termToPat t =
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
-      FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (toShortName (ecName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

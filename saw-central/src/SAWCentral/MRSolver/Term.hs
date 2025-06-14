@@ -280,8 +280,7 @@ asEither _ = Nothing
 
 -- | Recognize the @Num@ type
 asNumType :: Recognizer Term ()
-asNumType (asDataType -> Just (ecName -> ModuleIdentifier "Cryptol.Num", _)) = Just ()
-asNumType _ = Nothing
+asNumType = isGlobalDef "Cryptol.Num"
 
 -- | Recognize a term as a @TCNum n@ or @TCInf@
 asNum :: Recognizer Term (Either Term ())

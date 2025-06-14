@@ -50,7 +50,6 @@ module SAWCore.Conversion
   , asAnyRecordType
   , asRecordSelector
   , asCtor
-  , asDataType
   , asAnySort
   , asSort
   , asAnyNatLit
@@ -71,7 +70,6 @@ module SAWCore.Conversion
   , pureApp
   , mkTuple
   , mkCtor
-  , mkDataType
   , mkNatLit
   , mkVecLit
     -- ** Prelude builders
@@ -266,14 +264,6 @@ asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = R.asGlobalApply o t
 
--- | Match a datatype.
-asDataType :: ArgsMatchable v a => ExtCns a -> v a -> Matcher a
-asDataType o = resolveArgs $ Matcher (Net.Atom (toShortName (ecName o))) match
-  where match t = do
-          DataTypeApp dt params l <- R.asFTermF t
-          guard (ecVarIndex dt == ecVarIndex o)
-          return (params ++ l)
-
 -- | Match any sort.
 asAnySort :: Matcher Sort
 asAnySort = asVar $ \t -> do Sort v _ <- R.asFTermF t; return v
@@ -401,16 +391,6 @@ mkTupleSelector i t
 mkCtor :: ExtCns Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
   foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
-
-mkDataType ::
-  ExtCns Term ->
-  [TermBuilder Term] ->
-  [TermBuilder Term] ->
-  TermBuilder Term
-mkDataType i paramsB argsB =
-  do params <- sequence paramsB
-     args <- sequence argsB
-     mkTermF $ FTermF $ DataTypeApp i params args
 
 mkNatLit :: Natural -> TermBuilder Term
 mkNatLit n = mkTermF (FTermF (NatLit n))

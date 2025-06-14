@@ -183,7 +183,6 @@ data TCError
   | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
   | NotFullyAppliedRec (ExtCns Term)
-  | BadDataTypeParamsOrArgsLength (ExtCns Term) [Term] [Term]
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
@@ -256,11 +255,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constructor: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadDataTypeParamsOrArgsLength pn params args) =
-      ppWithPos
-      [ return ("Wrong number of parameters or arguments to datatype: "),
-        ishow (Unshared $ FTermF $ DataTypeApp pn params args)
-      ]
   helper (BadConstType n rty ty) =
     ppWithPos [ return ("Type of constant " ++ show n), ishow rty
               , return "doesn't match declared type", ishow ty ]
@@ -498,22 +492,6 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
     ensurePairType tp >>= \(t1,_) -> return t1
   typeInfer (PairRight (SCTypedTerm _ tp)) =
     ensurePairType tp >>= \(_,t2) -> return t2
-
-  typeInfer (DataTypeApp d params args) =
-    -- Look up the DataType structure, check the length of the params and args,
-    -- and then apply the cached Pi type of dt to params and args
-    do mm <- liftTCM scGetModuleMap
-       dt <-
-         case lookupVarIndexInMap (ecVarIndex d) mm of
-           Just (ResolvedDataType dt) -> pure dt
-           _ -> throwTCError $ NoSuchDataType (ecName d)
-       let err = BadDataTypeParamsOrArgsLength (fmap typedVal d) (map typedVal params) (map typedVal args)
-       unless (length params == length (dtParams dt) &&
-               length args == length (dtIndices dt))
-              (throwTCError err)
-
-       -- NOTE: we assume dtType is already well-typed and in WHNF
-       foldM (applyPiTyped err) (dtType dt) (params ++ args)
 
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty

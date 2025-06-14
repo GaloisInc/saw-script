@@ -37,11 +37,8 @@ module SAWCore.Recognizer
   , asRecordType
   , asRecordValue
   , asRecordSelector
-  , asDataType
-  , asDataTypeParams
   , asRecursorApp
   , asRecursorType
-  , isDataType
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
@@ -251,14 +248,6 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
--- | A version of 'asDataType' that returns the parameters separately
-asDataTypeParams :: Recognizer Term (ExtCns Term, [Term], [Term])
-asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
-
--- | A version of 'asDataTypeParams' that combines the params and normal args
-asDataType :: Recognizer Term (ExtCns Term, [Term])
-asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
-
 asRecursorType :: Recognizer Term (ExtCns Term, [Term], Term, Term)
 asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
@@ -269,11 +258,6 @@ asRecursorApp t =
   do RecursorApp rc ixs arg <- asFTermF t
      Recursor crec <- asFTermF rc
      return (rc, crec, ixs, arg)
-
-isDataType :: ExtCns Term -> Recognizer [Term] a -> Recognizer Term a
-isDataType i p t = do
-  (o,l) <- asDataType t
-  if i == o then p l else Nothing
 
 asNat :: Recognizer Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = pure i
@@ -392,7 +376,7 @@ asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
 
 asNatType :: Recognizer Term ()
-asNatType (asDataType -> Just (o, []))
+asNatType (asConstant -> Just o)
   | ecName o == ModuleIdentifier preludeNatIdent = return ()
 asNatType _ = Nothing
 
@@ -419,9 +403,9 @@ asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
 
 asEq :: Recognizer Term (Term, Term, Term)
 asEq t =
-  do (o, l) <- asDataType t
+  do l <- asGlobalApply "Prelude.Eq" t
      case l of
-       [a, x, y] | ModuleIdentifier "Prelude.Eq" == ecName o -> return (a, x, y)
+       [a, x, y] -> Just (a, x, y)
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term

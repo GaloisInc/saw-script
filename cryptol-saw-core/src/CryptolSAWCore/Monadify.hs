@@ -342,8 +342,7 @@ isBaseType _ = True
 
 -- | Convert a SAW core 'Term' to a monadification kind, if possible
 monadifyKind :: Term -> Maybe SomeKindRepr
-monadifyKind (asDataType -> Just (num, []))
-  | ecName num == ModuleIdentifier "Cryptol.Num" = Just $ SomeKindRepr MKNumRepr
+monadifyKind (asGlobalApply "Cryptol.Num" -> Just []) = Just $ SomeKindRepr MKNumRepr
 monadifyKind (asSort -> Just s) | s == mkSort 0 = Just $ SomeKindRepr MKTypeRepr
 monadifyKind _ = Nothing
 
@@ -554,12 +553,6 @@ monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
     MTyIndesc $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
                                                monadifyTypeArgType ctx tp2]
 -}
-monadifyTpExpr ctx (asDataType -> Just (ecName -> ModuleIdentifier ident, args)) =
-  -- NOTE: this case only recognizes data types whose arguments are all types
-  -- and/or Nums
-  SomeTpExpr MKTypeRepr $
-  MTyIndesc $ dataTypeOpenTerm ident (map (someTpExprVal .
-                                                   monadifyTpExpr ctx) args)
 monadifyTpExpr _ (asBitvectorType -> Just w) =
   SomeTpExpr MKTypeRepr $ MTyBV w
 monadifyTpExpr ctx (asVectorType -> Just (asNat -> Just n, a)) =
@@ -1293,8 +1286,7 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
         [dataTypeOpenTerm "Cryptol.Num" [],
          numExprVal n, numExprVal m] in
   case ts of
-    [(asDataType -> Just (num, []))]
-      | ecName num == ModuleIdentifier "Cryptol.Num" ->
+    [(asGlobalApply "Cryptol.Num" -> Just [])] ->
         return $ ArgMonTerm $
         mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqS" True
     _ ->

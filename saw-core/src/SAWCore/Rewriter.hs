@@ -356,14 +356,13 @@ intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Term -> Maybe a -> RewriteRule a
 ruleOfTerm t ann =
-    case unwrapTermF t of
-      -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
-      -- (the type of x and y) and x are parameters, and y is an index
-      FTermF (DataTypeApp dt [_, x] [y])
-          | ecName dt == ModuleIdentifier eqIdent -> mkRewriteRule [] x y False ann
-      Pi _ ty body -> rule { ctxt = ty : ctxt rule }
-          where rule = ruleOfTerm body ann
-      _ -> error "ruleOfSharedTerm: Illegal argument"
+  case t of
+    (R.asGlobalApply eqIdent -> Just [_, x, y]) ->
+      mkRewriteRule [] x y False ann
+    (R.asPi -> Just (_, ty, body)) ->
+      rule { ctxt = ty : ctxt rule }
+      where rule = ruleOfTerm body ann
+    _ -> panic "ruleOfSharedTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
 -- this is a rule that immediately loops whether used forwards or backwards.
@@ -467,7 +466,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          -- The type @ti@ is in the de Bruijn context @ctxt1@.
          ti <- scWhnf sc (reverse ctxt !! i)
          -- The datatype parameters are also in context @ctxt1@.
-         (_d, params1, _ixs) <- maybe (fail "expected DataTypeApp") return (R.asDataTypeParams ti)
+         let (_d, (params1, _ixs)) = fmap (splitAt (length (recursorParams crec))) (R.asApplyAll ti)
          let ctorRule ctor =
                do -- Compute the argument types @argTs@ in context @ctxt1@.
                   ctorT <- piAppType (ctorType ctor) params1
@@ -818,8 +817,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           -- NOTE: we don't rewrite arguments of constructors, datatypes, or
           -- recursors because of dependent types, as we could potentially cause
           -- a term to become ill-typed
-          DataTypeApp{}    -> return ftf -- could treat same as CtorApp
-
           RecursorType{}   -> return ftf
           Recursor{}       -> return ftf
           RecursorApp{}    -> return ftf -- could treat same as CtorApp

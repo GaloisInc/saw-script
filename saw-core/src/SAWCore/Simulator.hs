@@ -57,6 +57,8 @@ import SAWCore.Module
   , ctorNumParams
   , ctorNumArgs
   , defNameInfo
+  , dtNumIndices
+  , dtNumParams
   , findCtorInMap
   , lookupVarIndexInMap
   , Ctor(..)
@@ -170,8 +172,8 @@ evalTermF cfg lam recEval tf env =
                                           panic "evalTermF" ["Constant not found: " <> str]
                                         Just (ResolvedCtor ctor) ->
                                           pure $ ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
-                                        Just (ResolvedDataType _) ->
-                                          panic "evalTermF" ["Expected Def, found DataType: " <> str]
+                                        Just (ResolvedDataType dt) ->
+                                          pure $ dtValue ec' (dtNumParams dt) (dtNumIndices dt)
                                         Just (ResolvedDef d) ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -202,11 +204,6 @@ evalTermF cfg lam recEval tf env =
         PairRight x         -> recEval x >>= \case
                                  VPair _l r -> force r
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
-
-        DataTypeApp d ps ts -> do d' <- traverse evalType d
-                                  ps' <- mapM recEval ps
-                                  ts' <- mapM recEval ts
-                                  pure (TValue (VDataType d' ps' ts'))
 
         RecursorType d ps m mtp ->
           TValue <$> (VRecursorType <$>
@@ -296,6 +293,17 @@ evalTermF cfg lam recEval tf env =
           | i > 0 = VFun "_" (\x -> pure $ go (x : params) args (i-1) j)
           | j > 0 = VFun "_" (\x -> pure $ go params (x : args) i (j-1))
           | otherwise = VCtorApp ec (reverse params) (reverse args)
+
+    dtValue :: ExtCns (TValue l) -> Int -> Int -> Value l
+    dtValue ec = go [] []
+      where
+        go :: [Value l] -> [Value l] -> Int -> Int -> Value l
+        go params idxs i j
+          | i > 0 = VFun "_" (\x -> force x >>= \v -> pure $ go (v : params) idxs (i-1) j)
+          | j > 0 = VFun "_" (\x -> force x >>= \v -> pure $ go params (v : idxs) i (j-1))
+          | otherwise = TValue $ VDataType ec (reverse params) (reverse idxs)
+
+--   | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>

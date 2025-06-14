@@ -65,6 +65,8 @@ module SAWCore.SharedTerm
   , scRegisterGlobal
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
+  , scDataTypeAppParams
+  , scDataTypeApp
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
@@ -89,8 +91,6 @@ module SAWCore.SharedTerm
   , scInjectCode
     -- ** Term construction
     -- *** Datatypes and constructors
-  , scDataTypeAppParams
-  , scDataTypeApp
   , scCtorAppParams
   , scCtorApp
   , scApplyCtor
@@ -539,15 +539,13 @@ scDataTypeAppParams :: SharedContext
                     -> [Term] -- ^ The arguments
                     -> IO Term
 scDataTypeAppParams sc d params args =
-  scFlatTermF sc (DataTypeApp d params args)
+  do t <- scTermF sc (Constant d)
+     scApplyAll sc t (params ++ args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
 scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
-scDataTypeApp sc d_id args =
-  do d <- scRequireDataType sc d_id
-     let (params,args') = splitAt (length (dtParams d)) args
-     scDataTypeAppParams sc (dtExtCns d) params args'
+scDataTypeApp sc d_id args = scGlobalApply sc d_id args
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
@@ -563,9 +561,7 @@ scCtorAppParams sc c params args =
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
 scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
-scCtorApp sc c_id args =
-  do t <- scGlobalDef sc c_id
-     scApplyAll sc t args
+scCtorApp sc c_id args = scGlobalApply sc c_id args
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -680,6 +676,7 @@ scBeginDataType sc dtName dtParams dtIndices dtSort =
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
+     scRegisterGlobal sc dtName =<< scTermF sc (Constant (dtExtCns dt))
      pure $ EC dtVarIndex (ModuleIdentifier dtName) dtType
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
@@ -1006,11 +1003,6 @@ scWhnf sc t0 =
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
                                                                      foldM reapply t' xs
-    go xs                     (asDataTypeParams ->
-                                 Just (d,ps,args))              = do ps' <- mapM memo ps
-                                                                     args' <- mapM memo args
-                                                                     t' <- scDataTypeAppParams sc d ps' args'
-                                                                     foldM reapply t' xs
     go xs                     t@(asConstant -> Just ec)         = do r <- resolveConstant ec
                                                                      case r of
                                                                        ResolvedDef d ->
@@ -1222,8 +1214,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           case asPairType tp of
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
-        DataTypeApp dt params args -> do
-          lift $ foldM (reducePi sc) (ecType dt) (params ++ args)
         RecursorType _d _ps _motive motive_ty -> do
           s <- sort motive_ty
           lift $ scSort sc s
@@ -1813,9 +1803,7 @@ scBoolType sc = scGlobalDef sc "Prelude.Bool"
 
 -- | Create a term representing the prelude Natural type.
 scNatType :: SharedContext -> IO Term
-scNatType sc =
- do dt <- scRequireDataType sc preludeNatIdent
-    scFlatTermF sc (DataTypeApp (dtExtCns dt) [] [])
+scNatType sc = scGlobalDef sc preludeNatIdent
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.

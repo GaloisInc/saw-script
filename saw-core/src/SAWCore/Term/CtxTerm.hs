@@ -79,6 +79,7 @@ import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
+import SAWCore.Recognizer
 import SAWCore.Term.Functor
 
 
@@ -512,17 +513,18 @@ ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
 ctxAsPiMulti t = CtxMultiPi NoBind t
 
 -- | Build an application of a datatype as a 'CtxTerm'
-ctxDataTypeM :: MonadTerm m =>
+ctxDataTypeM ::
+  forall m d ctx params ixs.
+  MonadTerm m =>
   DataIdent d ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTermsCtx ctx ixs) ->
   m (CtxTerm ctx (Typ d))
 ctxDataTypeM (DataIdent d) paramsM ixsM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (DataTypeApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (ctxTermsCtxToListUnsafe <$> ixsM)))
-
+  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) ixsM
+  where
+    t :: m (CtxTerm ctx (InvArrows params (InvArrows ixs (Typ d))))
+    t = CtxTerm <$> mkTermF (Constant d)
 
 -- | Test if a 'CtxTerm' is an application of a specific datatype with the
 -- supplied context of parameters and indices
@@ -530,14 +532,15 @@ ctxAsDataTypeApp :: DataIdent d -> Bindings tp1 EmptyCtx params ->
                     Bindings tp2 (CtxInv params) ixs ->
                     CtxTerm ctx (Typ a) ->
                     Maybe (CtxTerms ctx params, CtxTerms ctx ixs)
-ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm
-                                           (unwrapTermF ->
-                                            FTermF (DataTypeApp d' params' ixs')))
-  | d == d'
-  = do params_ret <- ctxTermsForBindingsOpen params params'
-       ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
-       return (params_ret, ixs_ret)
-ctxAsDataTypeApp _ _ _ _ = Nothing
+ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm t) =
+  do let (f, args) = asApplyAll t
+     d' <- asConstant f
+     guard (d == d')
+     guard (length args == bindingsLength params + bindingsLength ixs)
+     let (params', ixs') = splitAt (bindingsLength params) args
+     params_ret <- ctxTermsForBindingsOpen params params'
+     ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
+     pure (params_ret, ixs_ret)
 
 
 -- | Build an application of a constructor as a 'CtxTerm'
@@ -556,13 +559,13 @@ ctxCtorAppM _d c paramsM argsM =
     t = CtxTerm <$> mkTermF (Constant c)
 
 -- | Abstract an inside-out type list using Haskell arrows. Used only
--- to define 'ctxCtorAppM'.
+-- to define 'ctxDataTypeM' and 'ctxCtorAppM'.
 type family InvArrows as b where
   InvArrows EmptyCtx b = b
   InvArrows (as ::> a) b = InvArrows as (a -> b)
 
 -- | Apply a 'CtxTerm' to an inside-out list of arguments. Used only
--- to define 'ctxCtorAppM`.
+-- to define 'ctxDataTypeM' and 'ctxCtorAppM`.
 ctxApplyMultiInv ::
   MonadTerm m =>
   m (CtxTerm ctx (InvArrows as b)) ->
@@ -1086,8 +1089,10 @@ class UsesDataType a where
   usesDataType :: DataIdent d -> a -> Bool
 
 instance UsesDataType (TermF Term) where
-  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+  usesDataType (DataIdent d) (Constant d')
     | d' == d = True
+--  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+--    | d' == d = True
   usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))
     | d' == d = True
   usesDataType (DataIdent d) (FTermF (Recursor rec))

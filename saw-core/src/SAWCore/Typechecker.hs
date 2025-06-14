@@ -118,11 +118,9 @@ inferResolveNameApp n args =
             t <- typeInferComplete (Constant c)
             inferApplyAll t args
        (_, Just (ResolvedDataType dt)) ->
-         do let (params, ixs) = splitAt (length $ dtParams dt) args
-            d <- traverse typeInferComplete (dtExtCns dt)
-            -- NOTE: typeInferComplete will check that we have the correct number
-            -- of indices
-            typeInferComplete (DataTypeApp d params ixs)
+         do c <- traverse typeInferComplete (dtExtCns dt)
+            t <- typeInferComplete (Constant c)
+            inferApplyAll t args
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scDefTerm d
             f <- SCTypedTerm t <$> liftTCM scTypeOf t
