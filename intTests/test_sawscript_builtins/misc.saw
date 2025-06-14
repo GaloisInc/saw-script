@@ -7,9 +7,12 @@ enable_experimental;
 // arguments there were. Also, reading the arguments to saw itself
 // isn't super useful. It's reasonable to have a way to pass arguments
 // to a SAW script, but that isn't really what we've got. See #1068.
+//
+// Update: we do not necessarily get run with the same options, so
+// just print the first option, which will still be "saw".
 
 print (get_opt 0);
-print (get_opt 1);
+//print (get_opt 1);
 // XXX: fails does not successfully trap this failure (see #2424)
 //fails (return (print (get_opt 2)));
 
