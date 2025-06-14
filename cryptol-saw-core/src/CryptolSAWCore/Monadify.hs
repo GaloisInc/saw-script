@@ -115,6 +115,7 @@ import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
 import Control.Monad.Trans (MonadTrans(..))
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Maybe (isJust)
 import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
@@ -545,14 +546,12 @@ monadifyTpExpr ctx (asPairType -> Just (tp1, tp2)) =
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
 -}
-{- FIXME: do we ever need this?
-monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
-  | primName eq_pn == "Prelude.Eq" =
-  , isJust (monadifyKind k_trm) =
+monadifyTpExpr ctx (asGlobalApply "Prelude.Eq" -> Just [k_trm, tp1, tp2])
+  | isJust (monadifyKind k_trm) =
+    SomeTpExpr MKTypeRepr $
     -- NOTE: technically this is a Prop and not a sort 0, but it doesn't matter
     MTyIndesc $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
                                                monadifyTypeArgType ctx tp2]
--}
 monadifyTpExpr _ (asBitvectorType -> Just w) =
   SomeTpExpr MKTypeRepr $ MTyBV w
 monadifyTpExpr ctx (asVectorType -> Just (asNat -> Just n, a)) =
