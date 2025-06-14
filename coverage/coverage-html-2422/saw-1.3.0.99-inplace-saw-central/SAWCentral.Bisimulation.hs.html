@@ -277,7 +277,7 @@ span.spaces    { background: white }
 <span class="lineno">  258 </span><span class="decl"><span class="istickedoff">openConstantApp constant t = do</span>
 <span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">-- Unfold constant</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">name &lt;- Text.unpack &lt;$&gt; constantName (unwrapTermF (ttTerm t))</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">name &lt;- constantName (unwrapTermF (ttTerm t))</span>
 <span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">tUnfolded &lt;- unfold_term [name] t</span>
 <span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">-- Break down lambda into its component parts.</span>

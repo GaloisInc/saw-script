@@ -266,12 +266,12 @@ span.spaces    { background: white }
 <span class="lineno">  247 </span>  YosysSequential -&gt;
 <span class="lineno">  248 </span>  FilePath {- ^ Path to write the resulting Sally input -} -&gt;
 <span class="lineno">  249 </span>  SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of &quot;fixed&quot; inputs, and a record of circuit outputs -} -&gt;
-<span class="lineno">  250 </span>  [String] {- ^ Names of circuit inputs that are fixed -} -&gt;
+<span class="lineno">  250 </span>  [Text] {- ^ Names of circuit inputs that are fixed -} -&gt;
 <span class="lineno">  251 </span>  TopLevel ()
 <span class="lineno">  252 </span><span class="decl"><span class="istickedoff">yosys_verify_sequential_sally s path q fixed = do</span>
 <span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno">  254 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- liftIO $ Common.newSAWCoreExprBuilder <span class="nottickedoff">sc</span> False</span>
-<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">queryModelChecker sym sc s path q . Set.fromList $ Text.pack &lt;$&gt; fixed</span></span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">queryModelChecker sym sc s path q $ Set.fromList fixed</span></span>
 
 </pre>
 </body>

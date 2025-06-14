@@ -116,7 +116,7 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span>
 <span class="lineno">   98 </span>import Cryptol.Utils.PP hiding ((&lt;/&gt;))
 <span class="lineno">   99 </span>import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
-<span class="lineno">  100 </span>                           , packIdent, interactiveName, identText
+<span class="lineno">  100 </span>                           , mkIdent, interactiveName, identText
 <span class="lineno">  101 </span>                           , textToModName
 <span class="lineno">  102 </span>                           , prelPrim)
 <span class="lineno">  103 </span>import Cryptol.Utils.Logger (quietLogger)
@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span>-- name.  If the string is qualified (i.e., has @::@), then we only consider
 <span class="lineno">  159 </span>-- entries from the module in the qualified.
 <span class="lineno">  160 </span>-- The result is either the corresponding value, or a list of the
-<span class="lineno">  161 </span>lookupIn :: String -&gt; Map T.Name b -&gt; Either [T.Name] b
+<span class="lineno">  161 </span>lookupIn :: Text -&gt; Map T.Name b -&gt; Either [T.Name] b
 <span class="lineno">  162 </span><span class="decl"><span class="nottickedoff">lookupIn nm mp =</span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">case [ x | x &lt;- Map.toList mp, matches (fst x) ] of</span>
 <span class="lineno">  164 </span><span class="spaces">    </span><span class="nottickedoff">[ (_,v) ] -&gt; Right v</span>
@@ -190,9 +190,9 @@ span.spaces    { background: white }
 <span class="lineno">  171 </span>-- If the string is unqualified (i.e., no `::`), then we match all
 <span class="lineno">  172 </span>-- names with the given identifier.  Otherwise, we only match the
 <span class="lineno">  173 </span>-- ones in the module specified by the qualifier.
-<span class="lineno">  174 </span>nameMatcher :: String -&gt; T.Name -&gt; Bool
+<span class="lineno">  174 </span>nameMatcher :: Text -&gt; T.Name -&gt; Bool
 <span class="lineno">  175 </span><span class="decl"><span class="nottickedoff">nameMatcher xs =</span>
-<span class="lineno">  176 </span><span class="spaces">    </span><span class="nottickedoff">case C.modNameChunksText (textToModName (pack xs)) of</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="nottickedoff">case C.modNameChunksText (textToModName xs) of</span>
 <span class="lineno">  177 </span><span class="spaces">      </span><span class="nottickedoff">[]  -&gt; const False</span>
 <span class="lineno">  178 </span><span class="spaces">      </span><span class="nottickedoff">[x] -&gt; (x ==) . C.identText . MN.nameIdent</span>
 <span class="lineno">  179 </span><span class="spaces">      </span><span class="nottickedoff">cs  -&gt; \n -&gt;</span>
@@ -521,10 +521,10 @@ span.spaces    { background: white }
 <span class="lineno">  502 </span><span class="spaces">    </span><span class="nottickedoff">addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)</span>
 <span class="lineno">  503 </span><span class="spaces">    </span><span class="nottickedoff">addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)</span></span>
 <span class="lineno">  504 </span>
-<span class="lineno">  505 </span>lookupCryptolModule :: CryptolModule -&gt; String -&gt; IO TypedTerm
+<span class="lineno">  505 </span>lookupCryptolModule :: CryptolModule -&gt; Text -&gt; IO TypedTerm
 <span class="lineno">  506 </span><span class="decl"><span class="nottickedoff">lookupCryptolModule (CryptolModule _ tm) name =</span>
-<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">case Map.lookup (packIdent name) (Map.mapKeys MN.nameIdent tm) of</span>
-<span class="lineno">  508 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;Binding not found: &quot; ++ name</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="nottickedoff">case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of</span>
+<span class="lineno">  508 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ Text.unpack $ &quot;Binding not found: &quot; &lt;&gt; name</span>
 <span class="lineno">  509 </span><span class="spaces">    </span><span class="nottickedoff">Just t -&gt; return t</span></span>
 <span class="lineno">  510 </span>
 <span class="lineno">  511 </span>--------------------------------------------------------------------------------
@@ -780,9 +780,9 @@ span.spaces    { background: white }
 <span class="lineno">  761 </span>
 <span class="lineno">  762 </span>declareName ::
 <span class="lineno">  763 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno">  764 </span>  CryptolEnv -&gt; P.ModName -&gt; String -&gt; IO (T.Name, CryptolEnv)
+<span class="lineno">  764 </span>  CryptolEnv -&gt; P.ModName -&gt; Text -&gt; IO (T.Name, CryptolEnv)
 <span class="lineno">  765 </span><span class="decl"><span class="nottickedoff">declareName env mname input = do</span>
-<span class="lineno">  766 </span><span class="spaces">  </span><span class="nottickedoff">let pname = P.mkUnqual (packIdent input)</span>
+<span class="lineno">  766 </span><span class="spaces">  </span><span class="nottickedoff">let pname = P.mkUnqual (mkIdent input)</span>
 <span class="lineno">  767 </span><span class="spaces">  </span><span class="nottickedoff">let modEnv = eModuleEnv env</span>
 <span class="lineno">  768 </span><span class="spaces">  </span><span class="nottickedoff">(cname, modEnv') &lt;-</span>
 <span class="lineno">  769 </span><span class="spaces">    </span><span class="nottickedoff">liftModuleM modEnv $ MM.interactive $</span>

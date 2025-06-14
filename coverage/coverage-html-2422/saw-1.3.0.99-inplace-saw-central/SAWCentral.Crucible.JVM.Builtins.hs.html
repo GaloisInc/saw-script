@@ -81,7 +81,7 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span>import           Data.Foldable (for_)
 <span class="lineno">   63 </span>import           Data.Function
 <span class="lineno">   64 </span>import           Data.IORef
-<span class="lineno">   65 </span>import           Data.List (dropWhileEnd, isPrefixOf, sortBy)
+<span class="lineno">   65 </span>import           Data.List (isPrefixOf, sortBy)
 <span class="lineno">   66 </span>import           Data.List.NonEmpty (NonEmpty)
 <span class="lineno">   67 </span>import qualified Data.List.NonEmpty as NE
 <span class="lineno">   68 </span>import           Data.Map (Map)
@@ -220,7 +220,7 @@ span.spaces    { background: white }
 <span class="lineno">  201 </span>
 <span class="lineno">  202 </span>jvm_verify ::
 <span class="lineno">  203 </span>  J.Class -&gt;
-<span class="lineno">  204 </span>  String {- ^ method name -} -&gt;
+<span class="lineno">  204 </span>  Text {- ^ method name -} -&gt;
 <span class="lineno">  205 </span>  [Lemma] {- ^ overrides -} -&gt;
 <span class="lineno">  206 </span>  Bool {- ^ path sat checking -} -&gt;
 <span class="lineno">  207 </span>  JVMSetupM () -&gt;
@@ -238,7 +238,7 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="spaces">     </span><span class="istickedoff">-- (directly or indirectly) by this class</span>
 <span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">allRefs &lt;- io $ Set.toList &lt;$&gt; allClassRefs cb (J.className cls)</span>
 <span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">let refs = CJ.initClasses ++ allRefs -- ++ superRefs</span>
-<span class="lineno">  222 </span><span class="spaces">     </span><span class="istickedoff">mapM_ (prepareClassTopLevel . J.unClassName) refs</span>
+<span class="lineno">  222 </span><span class="spaces">     </span><span class="istickedoff">mapM_ (prepareClassTopLevel . Text.pack . J.unClassName) refs</span>
 <span class="lineno">  223 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  224 </span><span class="spaces">     </span><span class="istickedoff">cc &lt;- setupCrucibleContext cls</span>
 <span class="lineno">  225 </span><span class="spaces">     </span><span class="istickedoff">SomeOnlineBackend bak &lt;- pure (cc^.jccBackend)</span>
@@ -251,7 +251,7 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span><span class="spaces">     </span><span class="istickedoff">profFile &lt;- rwProfilingFile &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  233 </span><span class="spaces">     </span><span class="istickedoff">(writeFinalProfile, pfs) &lt;- io $ setupProfiling <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;jvm_verify&quot;</span> profFile</span>
 <span class="lineno">  234 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  235 </span><span class="spaces">     </span><span class="istickedoff">(cls', method) &lt;- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version</span>
+<span class="lineno">  235 </span><span class="spaces">     </span><span class="istickedoff">(cls', method) &lt;- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version</span>
 <span class="lineno">  236 </span><span class="spaces">     </span><span class="istickedoff">let st0 = initialCrucibleSetupState cc (cls', method) loc</span>
 <span class="lineno">  237 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  238 </span><span class="spaces">     </span><span class="istickedoff">-- execute commands of the method spec</span>
@@ -303,7 +303,7 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span>
 <span class="lineno">  285 </span>jvm_unsafe_assume_spec ::
 <span class="lineno">  286 </span>  J.Class          -&gt;
-<span class="lineno">  287 </span>  String          {- ^ Name of the method -} -&gt;
+<span class="lineno">  287 </span>  Text         {- ^ Name of the method -} -&gt;
 <span class="lineno">  288 </span>  JVMSetupM () {- ^ Boundary specification -} -&gt;
 <span class="lineno">  289 </span>  TopLevel Lemma
 <span class="lineno">  290 </span><span class="decl"><span class="istickedoff">jvm_unsafe_assume_spec cls nm setup =</span>
@@ -311,7 +311,7 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span><span class="spaces">     </span><span class="istickedoff">cb &lt;- getJavaCodebase</span>
 <span class="lineno">  293 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- getPosition</span>
 <span class="lineno">  294 </span><span class="spaces">     </span><span class="istickedoff">-- cls' is either cls or a (transitive) superclass of cls</span>
-<span class="lineno">  295 </span><span class="spaces">     </span><span class="istickedoff">(cls', method) &lt;- io $ findMethod <span class="nottickedoff">cb</span> <span class="nottickedoff">pos</span> nm cls -- TODO: switch to crucible-jvm version</span>
+<span class="lineno">  295 </span><span class="spaces">     </span><span class="istickedoff">(cls', method) &lt;- io $ findMethod <span class="nottickedoff">cb</span> <span class="nottickedoff">pos</span> (Text.unpack nm) cls -- TODO: switch to crucible-jvm version</span>
 <span class="lineno">  296 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_JVM_unsafe_assume_spec&quot; pos</span>
 <span class="lineno">  297 </span><span class="spaces">     </span><span class="istickedoff">let st0 = initialCrucibleSetupState cc (cls', method) loc</span>
 <span class="lineno">  298 </span><span class="spaces">     </span><span class="istickedoff">ms &lt;- (view Setup.csMethodSpec) &lt;$&gt;</span>
@@ -957,7 +957,7 @@ span.spaces    { background: white }
 <span class="lineno">  938 </span>
 <span class="lineno">  939 </span>data JVMSetupError
 <span class="lineno">  940 </span>  = JVMFreshVarInvalidType JavaType
-<span class="lineno">  941 </span>  | JVMFieldNonReference SetupValue String
+<span class="lineno">  941 </span>  | JVMFieldNonReference SetupValue Text
 <span class="lineno">  942 </span>  | JVMFieldMultiple AllocIndex J.FieldId
 <span class="lineno">  943 </span>  | JVMFieldFailure String -- TODO: switch to a more structured type
 <span class="lineno">  944 </span>  | JVMFieldTypeMismatch J.FieldId J.Type
@@ -995,7 +995,7 @@ span.spaces    { background: white }
 <span class="lineno">  976 </span><span class="spaces">        </span><span class="istickedoff">unlines</span>
 <span class="lineno">  977 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;jvm_field_is: Left-hand side is not a valid object reference&quot;</span>
 <span class="lineno">  978 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Left-hand side: &quot; ++ show (MS.ppSetupValue ptr)</span>
-<span class="lineno">  979 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Field name: &quot; ++ fname</span>
+<span class="lineno">  979 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Field name: &quot; ++ Text.unpack fname</span>
 <span class="lineno">  980 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno">  981 </span><span class="spaces">      </span><span class="istickedoff">JVMFieldMultiple _ptr fid -&gt;</span>
 <span class="lineno">  982 </span><span class="spaces">        </span><span class="istickedoff">&quot;jvm_field_is: Multiple specifications for the same instance field (&quot; ++ J.fieldIdName fid ++ &quot;)&quot;</span>
@@ -1110,8 +1110,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1091 </span><span class="spaces">    </span><span class="istickedoff">JavaArray n t -&gt; Cryptol.tSeq (Cryptol.tNum n) &lt;$&gt; cryptolTypeOfActual t</span>
 <span class="lineno"> 1092 </span><span class="spaces">    </span><span class="istickedoff">JavaClass _   -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno"> 1093 </span>
-<span class="lineno"> 1094 </span>parseClassName :: String -&gt; J.ClassName
-<span class="lineno"> 1095 </span><span class="decl"><span class="istickedoff">parseClassName cname = J.mkClassName (J.dotsToSlashes cname)</span></span>
+<span class="lineno"> 1094 </span>parseClassName :: Text -&gt; J.ClassName
+<span class="lineno"> 1095 </span><span class="decl"><span class="istickedoff">parseClassName cname = J.mkClassName (J.dotsToSlashes $ Text.unpack cname)</span></span>
 <span class="lineno"> 1096 </span>
 <span class="lineno"> 1097 </span>typeOfJavaType :: JavaType -&gt; J.Type
 <span class="lineno"> 1098 </span><span class="decl"><span class="istickedoff">typeOfJavaType jty =</span>
@@ -1141,7 +1141,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1122 </span><span class="spaces">       </span><span class="istickedoff">Just cty -&gt; Setup.freshVariable sc name cty</span></span>
 <span class="lineno"> 1123 </span>
 <span class="lineno"> 1124 </span>jvm_alloc_object ::
-<span class="lineno"> 1125 </span>  String {- ^ class name -} -&gt;
+<span class="lineno"> 1125 </span>  Text {- ^ class name -} -&gt;
 <span class="lineno"> 1126 </span>  JVMSetupM SetupValue
 <span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">jvm_alloc_object cname =</span>
 <span class="lineno"> 1128 </span><span class="spaces">  </span><span class="istickedoff">JVMSetupM $</span>
@@ -1178,20 +1178,20 @@ span.spaces    { background: white }
 <span class="lineno"> 1159 </span>
 <span class="lineno"> 1160 </span>jvm_modifies_field ::
 <span class="lineno"> 1161 </span>  SetupValue {- ^ object -} -&gt;
-<span class="lineno"> 1162 </span>  String     {- ^ field name -} -&gt;
+<span class="lineno"> 1162 </span>  Text       {- ^ field name -} -&gt;
 <span class="lineno"> 1163 </span>  JVMSetupM ()
 <span class="lineno"> 1164 </span><span class="decl"><span class="istickedoff">jvm_modifies_field ptr fname = generic_field_is ptr fname Nothing</span></span>
 <span class="lineno"> 1165 </span>
 <span class="lineno"> 1166 </span>jvm_field_is ::
 <span class="lineno"> 1167 </span>  SetupValue {- ^ object -} -&gt;
-<span class="lineno"> 1168 </span>  String     {- ^ field name -} -&gt;
+<span class="lineno"> 1168 </span>  Text       {- ^ field name -} -&gt;
 <span class="lineno"> 1169 </span>  SetupValue {- ^ field value -} -&gt;
 <span class="lineno"> 1170 </span>  JVMSetupM ()
 <span class="lineno"> 1171 </span><span class="decl"><span class="istickedoff">jvm_field_is ptr fname val = generic_field_is ptr fname (Just val)</span></span>
 <span class="lineno"> 1172 </span>
 <span class="lineno"> 1173 </span>generic_field_is ::
 <span class="lineno"> 1174 </span>  SetupValue {- ^ object -} -&gt;
-<span class="lineno"> 1175 </span>  String {- ^ field name -} -&gt;
+<span class="lineno"> 1175 </span>  Text {- ^ field name -} -&gt;
 <span class="lineno"> 1176 </span>  Maybe SetupValue {- ^ field value -} -&gt;
 <span class="lineno"> 1177 </span>  JVMSetupM ()
 <span class="lineno"> 1178 </span><span class="decl"><span class="istickedoff">generic_field_is ptr fname mval =</span>
@@ -1208,7 +1208,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1189 </span><span class="spaces">     </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
 <span class="lineno"> 1190 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
 <span class="lineno"> 1191 </span><span class="spaces">     </span><span class="istickedoff">ptrTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> ptr</span>
-<span class="lineno"> 1192 </span><span class="spaces">     </span><span class="istickedoff">fid &lt;- either (X.throwM . JVMFieldFailure) pure =&lt;&lt; (liftIO $ runExceptT $ findField cb <span class="nottickedoff">pos</span> ptrTy fname)</span>
+<span class="lineno"> 1192 </span><span class="spaces">     </span><span class="istickedoff">fid &lt;- either (X.throwM . JVMFieldFailure) pure =&lt;&lt; (liftIO $ runExceptT $ findField cb <span class="nottickedoff">pos</span> ptrTy (Text.unpack fname))</span>
 <span class="lineno"> 1193 </span><span class="spaces">     </span><span class="istickedoff">case mval of</span>
 <span class="lineno"> 1194 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno"> 1195 </span><span class="spaces">       </span><span class="istickedoff">Just val -&gt;</span>
@@ -1231,18 +1231,18 @@ span.spaces    { background: white }
 <span class="lineno"> 1212 </span><span class="spaces">     </span><span class="istickedoff">Setup.addPointsTo pt</span></span>
 <span class="lineno"> 1213 </span>
 <span class="lineno"> 1214 </span>jvm_modifies_static_field ::
-<span class="lineno"> 1215 </span>  String {- ^ field name -} -&gt;
+<span class="lineno"> 1215 </span>  Text {- ^ field name -} -&gt;
 <span class="lineno"> 1216 </span>  JVMSetupM ()
 <span class="lineno"> 1217 </span><span class="decl"><span class="istickedoff">jvm_modifies_static_field fname = generic_static_field_is fname Nothing</span></span>
 <span class="lineno"> 1218 </span>
 <span class="lineno"> 1219 </span>jvm_static_field_is ::
-<span class="lineno"> 1220 </span>  String     {- ^ field name -} -&gt;
+<span class="lineno"> 1220 </span>  Text       {- ^ field name -} -&gt;
 <span class="lineno"> 1221 </span>  SetupValue {- ^ field value -} -&gt;
 <span class="lineno"> 1222 </span>  JVMSetupM ()
 <span class="lineno"> 1223 </span><span class="decl"><span class="istickedoff">jvm_static_field_is fname val = generic_static_field_is fname (Just val)</span></span>
 <span class="lineno"> 1224 </span>
 <span class="lineno"> 1225 </span>generic_static_field_is ::
-<span class="lineno"> 1226 </span>  String {- ^ field name -} -&gt;
+<span class="lineno"> 1226 </span>  Text {- ^ field name -} -&gt;
 <span class="lineno"> 1227 </span>  Maybe SetupValue {- ^ field value -} -&gt;
 <span class="lineno"> 1228 </span>  JVMSetupM ()
 <span class="lineno"> 1229 </span><span class="decl"><span class="istickedoff">generic_static_field_is fname mval =</span>
@@ -1255,12 +1255,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1236 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">env = MS.csAllocations (st ^. Setup.csMethodSpec)</span></span>
 <span class="lineno"> 1237 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
 <span class="lineno"> 1238 </span><span class="spaces">     </span><span class="istickedoff">let cname =</span>
-<span class="lineno"> 1239 </span><span class="spaces">           </span><span class="istickedoff">case dropWhileEnd (/= '.') fname of</span>
-<span class="lineno"> 1240 </span><span class="spaces">             </span><span class="istickedoff">&quot;&quot; -&gt; J.className (cc ^. jccJVMClass)</span>
-<span class="lineno"> 1241 </span><span class="spaces">             </span><span class="istickedoff">s -&gt; J.mkClassName (init s)</span>
+<span class="lineno"> 1239 </span><span class="spaces">           </span><span class="istickedoff">case Text.unsnoc $ Text.dropWhileEnd (/= '.') fname of</span>
+<span class="lineno"> 1240 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; J.className (cc ^. jccJVMClass)</span>
+<span class="lineno"> 1241 </span><span class="spaces">               </span><span class="istickedoff">Just (fname', _) -&gt; J.mkClassName (Text.unpack fname')</span>
 <span class="lineno"> 1242 </span><span class="spaces">     </span><span class="istickedoff">-- liftIO $ putStrLn $ &quot;jvm_static_field_is &quot; ++ J.unClassName cname ++ &quot; &quot; ++ fname</span>
 <span class="lineno"> 1243 </span><span class="spaces">     </span><span class="istickedoff">let ptrTy = J.ClassType cname</span>
-<span class="lineno"> 1244 </span><span class="spaces">     </span><span class="istickedoff">fid &lt;- either (X.throwM . JVMStaticFailure) pure =&lt;&lt; (liftIO $ runExceptT $ findField cb <span class="nottickedoff">pos</span> ptrTy fname)</span>
+<span class="lineno"> 1244 </span><span class="spaces">     </span><span class="istickedoff">fid &lt;- either (X.throwM . JVMStaticFailure) pure =&lt;&lt; (liftIO $ runExceptT $ findField cb <span class="nottickedoff">pos</span> ptrTy (Text.unpack fname))</span>
 <span class="lineno"> 1245 </span><span class="spaces">     </span><span class="istickedoff">case mval of</span>
 <span class="lineno"> 1246 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno"> 1247 </span><span class="spaces">       </span><span class="istickedoff">Just val -&gt;</span>
@@ -1465,7 +1465,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1446 </span><span class="spaces">     </span><span class="istickedoff">Setup.crucible_return retVal</span></span>
 <span class="lineno"> 1447 </span>
 <span class="lineno"> 1448 </span>jvm_setup_with_tag ::
-<span class="lineno"> 1449 </span>  String -&gt;
+<span class="lineno"> 1449 </span>  Text -&gt;
 <span class="lineno"> 1450 </span>  JVMSetupM () -&gt;
 <span class="lineno"> 1451 </span>  JVMSetupM ()
 <span class="lineno"> 1452 </span><span class="decl"><span class="nottickedoff">jvm_setup_with_tag tag m =</span>
