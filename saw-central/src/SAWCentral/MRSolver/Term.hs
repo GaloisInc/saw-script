@@ -274,22 +274,18 @@ asBvToNatKnownW _ = Nothing
 
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
-asEither (asCtor -> Just (c, [_, _, x]))
-  | primName c == "Prelude.Left"  = return $ Left x
-  | primName c == "Prelude.Right" = return $ Right x
+asEither (asGlobalApply "Prelude.Left"  -> Just [_, _, x]) = pure $ Left x
+asEither (asGlobalApply "Prelude.Right" -> Just [_, _, x]) = pure $ Right x
 asEither _ = Nothing
 
 -- | Recognize the @Num@ type
 asNumType :: Recognizer Term ()
-asNumType (asDataType -> Just (primName -> "Cryptol.Num", _)) = Just ()
-asNumType _ = Nothing
+asNumType = isGlobalDef "Cryptol.Num"
 
 -- | Recognize a term as a @TCNum n@ or @TCInf@
 asNum :: Recognizer Term (Either Term ())
-asNum (asCtor -> Just (c, [n]))
-  | primName c == "Cryptol.TCNum"  = return $ Left n
-asNum (asCtor -> Just (c, []))
-  | primName c == "Cryptol.TCInf"  = return $ Right ()
+asNum (asGlobalApply "Cryptol.TCNum" -> Just [n]) = pure $ Left n
+asNum (asGlobalApply "Cryptol.TCInf" -> Just []) = pure $ Right ()
 asNum _ = Nothing
 
 -- | Recognize a term as being of the form @isFinite n@

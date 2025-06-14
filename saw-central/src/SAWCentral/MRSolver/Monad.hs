@@ -1361,7 +1361,7 @@ mrGetInvariantBody tm = case asApplyAll tm of
   (isGlobalDef "SpecM.bindS" -> Just (),
    [_, _, _,
     (asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
-                    [_, (asCtor -> Just (primName -> "Cryptol.TCNum", _))])),
+                    [_, (asGlobalApply "Cryptol.TCNum" -> Just [_])])),
     k]) ->
     do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
        body <- mrApplyAll k [pf]

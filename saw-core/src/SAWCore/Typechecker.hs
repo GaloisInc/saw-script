@@ -48,9 +48,8 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( ctorNumParams
-  , ctorPrimName
-  , dtPrimName
+  ( ctorExtCns
+  , dtExtCns
   , emptyModule
   , findDataTypeInMap
   , resolveNameInMap
@@ -115,17 +114,13 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
-         do let (params, ctor_args) = splitAt (ctorNumParams ctor) args
-            c <- traverse typeInferComplete (ctorPrimName ctor)
-            -- NOTE: typeInferComplete will check that we have the correct number
-            -- of arguments
-            typeInferComplete (CtorApp c params ctor_args)
+         do c <- traverse typeInferComplete (ctorExtCns ctor)
+            t <- typeInferComplete (Constant c)
+            inferApplyAll t args
        (_, Just (ResolvedDataType dt)) ->
-         do let (params, ixs) = splitAt (length $ dtParams dt) args
-            d <- traverse typeInferComplete (dtPrimName dt)
-            -- NOTE: typeInferComplete will check that we have the correct number
-            -- of indices
-            typeInferComplete (DataTypeApp d params ixs)
+         do c <- traverse typeInferComplete (dtExtCns dt)
+            t <- typeInferComplete (Constant c)
+            inferApplyAll t args
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scDefTerm d
             f <- SCTypedTerm t <$> liftTCM scTypeOf t
@@ -192,7 +187,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
      let dt_ident = mkIdent mnm str
      dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
-       Nothing -> throwTCError $ NoSuchDataType dt_ident
+       Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferComplete args
      case typed_args of
        (splitAt (length $ dtParams dt) ->
@@ -207,7 +202,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
             typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec (dtPrimName dt)
+       _ -> throwTCError $ NotFullyAppliedRec (dtExtCns dt)
 
 typeInferCompleteTerm (Un.Recursor _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"

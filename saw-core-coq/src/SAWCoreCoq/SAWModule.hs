@@ -65,7 +65,9 @@ translateCtor ::
   Ctor -> m Coq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
   maybe_constructorName <-
-    liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ctorName
+    case ctorNameInfo of
+      ModuleIdentifier ident -> liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ident
+      ImportedName{} -> pure Nothing
   let constructorName = case maybe_constructorName of
         Just n -> identName n
         Nothing -> error "translateCtor: unexpected translation for constructor"
@@ -86,11 +88,15 @@ translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
 -- translateDataType (DataType {..})
 --   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
-  atDefSite <$> findSpecialTreatment dtName >>= \case
-  DefPreserve            -> translateNamed $ identName dtName
-  DefRename   targetName -> translateNamed $ targetName
-  DefReplace  str        -> return $ Coq.Snippet str
-  DefSkip                -> return $ skipped dtName
+  case dtNameInfo of
+    ModuleIdentifier dtName ->
+      atDefSite <$> findSpecialTreatment dtName >>= \case
+      DefPreserve            -> translateNamed $ identName dtName
+      DefRename   targetName -> translateNamed $ targetName
+      DefReplace  str        -> return $ Coq.Snippet str
+      DefSkip                -> return $ skipped dtName
+    ImportedName{} ->
+      translateNamed $ Text.unpack (toShortName dtNameInfo)
   where
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = do

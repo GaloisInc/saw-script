@@ -40,8 +40,6 @@ module SAWCore.Name
   , VarIndex
   , ExtCns(..)
   , scFreshNameURI
-  , PrimName(..)
-  , primNameToExtCns
     -- * Display Name Environments
   , DisplayNameEnv(..)
   , emptyDisplayNameEnv
@@ -256,29 +254,6 @@ instance Ord (ExtCns e) where
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
 
-
--- Primitive Names ------------------------------------------------------------
-
--- | Names of SAWCore primitives, data types and data type constructors.
-data PrimName e =
-  PrimName
-  { primVarIndex :: !VarIndex
-  , primName     :: !Ident
-  , primType     :: e
-  }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance Eq (PrimName e) where
-  x == y = primName x == primName y
-
-instance Ord (PrimName e) where
-  compare x y = compare (primName x) (primName y)
-
-instance Hashable (PrimName e) where
-  hashWithSalt x pn = hashWithSalt x (primName pn)
-
-primNameToExtCns :: PrimName e -> ExtCns e
-primNameToExtCns (PrimName varIdx nm tp) = EC varIdx (ModuleIdentifier nm) tp
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $

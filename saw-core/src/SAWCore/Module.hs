@@ -27,13 +27,13 @@ module SAWCore.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
+  , ctorExtCns
   , ctorNumParams
   , ctorNumArgs
-  , ctorPrimName
   , DataType(..)
+  , dtExtCns
   , dtNumParams
   , dtNumIndices
-  , dtPrimName
     -- * Modules
   , Module
   , ModuleDecl(..)
@@ -130,13 +130,13 @@ instance Hashable Def -- automatically derived
 data Ctor =
   forall d params ixs.
   Ctor
-  { ctorName :: !Ident
+  { ctorNameInfo :: !NameInfo
     -- ^ The name of this constructor
   , ctorVarIndex :: !VarIndex
     -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct d params ixs
     -- ^ Arguments to the constructor
-  , ctorDataType :: !(PrimName Term)
+  , ctorDataType :: !(ExtCns Term)
     -- ^ The datatype this constructor belongs to
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
@@ -189,20 +189,20 @@ ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
 
 -- | Compute the ExtCns that uniquely references a constructor
-ctorPrimName :: Ctor -> PrimName Term
-ctorPrimName ctor = PrimName (ctorVarIndex ctor) (ctorName ctor) (ctorType ctor)
+ctorExtCns :: Ctor -> ExtCns Term
+ctorExtCns ctor = EC (ctorVarIndex ctor) (ctorNameInfo ctor) (ctorType ctor)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
 instance Eq Ctor where
-  (==) = lift2 ctorName (==)
+  (==) = lift2 ctorExtCns (==)
 
 instance Ord Ctor where
-  compare = lift2 ctorName compare
+  compare = lift2 ctorExtCns compare
 
 instance Show Ctor where
-  show = show . ctorName
+  show = show . toAbsoluteName . ctorNameInfo
 
 
 -- Datatypes -------------------------------------------------------------------
@@ -210,7 +210,7 @@ instance Show Ctor where
 -- | An inductively-defined datatype
 data DataType =
   DataType
-  { dtName :: Ident
+  { dtNameInfo :: NameInfo
     -- ^ The name of this datatype
   , dtVarIndex :: !VarIndex
     -- ^ Unique var index for this data type
@@ -240,17 +240,17 @@ dtNumIndices :: DataType -> Int
 dtNumIndices dt = length $ dtIndices dt
 
 -- | Compute the ExtCns that uniquely references a datatype
-dtPrimName :: DataType -> PrimName Term
-dtPrimName dt = PrimName (dtVarIndex dt) (dtName dt) (dtType dt)
+dtExtCns :: DataType -> ExtCns Term
+dtExtCns dt = EC (dtVarIndex dt) (dtNameInfo dt) (dtType dt)
 
 instance Eq DataType where
-  (==) = lift2 dtName (==)
+  (==) = lift2 dtNameInfo (==)
 
 instance Ord DataType where
-  compare = lift2 dtName compare
+  compare = lift2 dtNameInfo compare
 
 instance Show DataType where
-  show = show . dtName
+  show = show . dtNameInfo
 
 
 -- Modules ---------------------------------------------------------------------
@@ -272,8 +272,8 @@ data ResolvedName
 
 -- | Get the 'NameInfo' for a 'ResolvedName'
 resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo (ResolvedCtor ctor) = ModuleIdentifier (ctorName ctor)
-resolvedNameInfo (ResolvedDataType dt) = ModuleIdentifier (dtName dt)
+resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor
+resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt
 resolvedNameInfo (ResolvedDef d) = defNameInfo d
 
 -- | Get the type of a 'ResolvedName' as a 'Term'.

@@ -40,7 +40,7 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
-import SAWCore.Module (ModuleMap, dtPrimName)
+import SAWCore.Module (ModuleMap, dtExtCns)
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
 import qualified SAWCore.Prim as Prim
@@ -263,14 +263,14 @@ readBackTValue sc cfg = loop
            scRecordType sc fs'
       VDataType nm ps vs ->
         do nm' <- traverse loop nm
-           (ps',vs') <- splitAt (length ps) <$> readBackDataTypeParams (primType nm) (ps++vs)
+           (ps',vs') <- splitAt (length ps) <$> readBackDataTypeParams (ecType nm) (ps++vs)
            scDataTypeAppParams sc nm' ps' vs'
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
       VRecursorType d ps m mty ->
         do d'   <- traverse loop d
-           ps'  <- readBackDataTypeParams (primType d) ps
+           ps'  <- readBackDataTypeParams (ecType d) ps
            m'   <- readBackValue sc cfg mty m
            mty' <- loop mty
            scFlatTermF sc (RecursorType d' ps' m' mty')
@@ -424,7 +424,7 @@ readBackValue sc cfg = loop
 
     loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
       do cnm' <- traverse (readBackTValue sc cfg) cnm
-         (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (primType cnm) (ps++vs)
+         (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (ecType cnm) (ps++vs)
          scCtorAppParams sc cnm' ps' vs'
 
     loop (VRecordType fs) (VRecordValue vs) =
@@ -1098,7 +1098,7 @@ bvShiftOp sc cfg szf tmOp bvOp =
            n0'  <- scNat sc n0
            w'   <- readBackValue sc cfg (VVecType n VBoolType) w
            dt   <- scRequireDataType sc preludeNatIdent
-           pn   <- traverse (evalType cfg) (dtPrimName dt)
+           pn   <- traverse (evalType cfg) (dtExtCns dt)
            amt' <- readBackValue sc cfg (VDataType pn [] []) amt
            tm   <- tmOp sc n0' w' amt'
            pure (VWord (Left (n, tm)))
@@ -1206,7 +1206,7 @@ mkStreamOp sc cfg =
         do ref <- liftIO (newIORef mempty)
            stm <- liftIO $ delay $ do
                      natDT <- scRequireDataType sc preludeNatIdent
-                     natPN <- traverse (evalType cfg) (dtPrimName natDT)
+                     natPN <- traverse (evalType cfg) (dtExtCns natDT)
                      ty' <- readBackTValue sc cfg ty
                      ftm <- readBackValue sc cfg (VPiType nm (VDataType natPN [] []) (VNondependentPi ty)) f
                      scCtorApp sc (mkIdent preludeModuleName "MkStream") [ty',ftm]

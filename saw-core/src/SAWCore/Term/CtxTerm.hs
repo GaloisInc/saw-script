@@ -79,6 +79,7 @@ import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
+import SAWCore.Recognizer
 import SAWCore.Term.Functor
 
 
@@ -96,7 +97,7 @@ data Typ (a :: Type)
 -- | An identifier for a datatype that is statically associated with Haskell
 -- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
 -- we simplify datatypes to arbitrary Haskell types.
-newtype DataIdent d = DataIdent (PrimName Term)
+newtype DataIdent d = DataIdent (ExtCns Term)
   -- Invariant, the type of datatypes is always a closed term
 
 -- | Append a list of types to a context, i.e., "invert" the list of types,
@@ -512,17 +513,18 @@ ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
 ctxAsPiMulti t = CtxMultiPi NoBind t
 
 -- | Build an application of a datatype as a 'CtxTerm'
-ctxDataTypeM :: MonadTerm m =>
+ctxDataTypeM ::
+  forall m d ctx params ixs.
+  MonadTerm m =>
   DataIdent d ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTermsCtx ctx ixs) ->
   m (CtxTerm ctx (Typ d))
 ctxDataTypeM (DataIdent d) paramsM ixsM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (DataTypeApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (ctxTermsCtxToListUnsafe <$> ixsM)))
-
+  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) ixsM
+  where
+    t :: m (CtxTerm ctx (InvArrows params (InvArrows ixs (Typ d))))
+    t = CtxTerm <$> mkTermF (Constant d)
 
 -- | Test if a 'CtxTerm' is an application of a specific datatype with the
 -- supplied context of parameters and indices
@@ -530,28 +532,54 @@ ctxAsDataTypeApp :: DataIdent d -> Bindings tp1 EmptyCtx params ->
                     Bindings tp2 (CtxInv params) ixs ->
                     CtxTerm ctx (Typ a) ->
                     Maybe (CtxTerms ctx params, CtxTerms ctx ixs)
-ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm
-                                           (unwrapTermF ->
-                                            FTermF (DataTypeApp d' params' ixs')))
-  | d == d'
-  = do params_ret <- ctxTermsForBindingsOpen params params'
-       ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
-       return (params_ret, ixs_ret)
-ctxAsDataTypeApp _ _ _ _ = Nothing
+ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm t) =
+  do let (f, args) = asApplyAll t
+     d' <- asConstant f
+     guard (d == d')
+     guard (length args == bindingsLength params + bindingsLength ixs)
+     let (params', ixs') = splitAt (bindingsLength params) args
+     params_ret <- ctxTermsForBindingsOpen params params'
+     ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
+     pure (params_ret, ixs_ret)
 
 
 -- | Build an application of a constructor as a 'CtxTerm'
-ctxCtorAppM :: MonadTerm m =>
+ctxCtorAppM ::
+  forall m d ctx params args.
+  MonadTerm m =>
   DataIdent d ->
-  PrimName Term ->
+  ExtCns Term ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTermsCtx ctx args) ->
   m (CtxTerm ctx d)
 ctxCtorAppM _d c paramsM argsM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (CtorApp c <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (ctxTermsCtxToListUnsafe <$> argsM)))
+  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) argsM
+  where
+    t :: m (CtxTerm ctx (InvArrows params (InvArrows args d)))
+    t = CtxTerm <$> mkTermF (Constant c)
+
+-- | Abstract an inside-out type list using Haskell arrows. Used only
+-- to define 'ctxDataTypeM' and 'ctxCtorAppM'.
+type family InvArrows as b where
+  InvArrows EmptyCtx b = b
+  InvArrows (as ::> a) b = InvArrows as (a -> b)
+
+-- | Apply a 'CtxTerm' to an inside-out list of arguments. Used only
+-- to define 'ctxDataTypeM' and 'ctxCtorAppM`.
+ctxApplyMultiInv ::
+  MonadTerm m =>
+  m (CtxTerm ctx (InvArrows as b)) ->
+  m (CtxTermsCtx ctx as) ->
+  m (CtxTerm ctx b)
+ctxApplyMultiInv fm argsm =
+  do f <- fm
+     args <- argsm
+     helper f args
+  where
+    helper :: MonadTerm m => CtxTerm ctx (InvArrows as b) ->
+              CtxTermsCtx ctx as -> m (CtxTerm ctx b)
+    helper f CtxTermsCtxNil = pure f
+    helper f (CtxTermsCtxCons args arg) = ctxApply (helper f args) (pure arg)
 
 data Rec d
 
@@ -739,7 +767,7 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
-ctxCtorType :: MonadTerm m => PrimName Term -> CtorArgStruct d params ixs -> m Term
+ctxCtorType :: MonadTerm m => ExtCns Term -> CtorArgStruct d params ixs -> m Term
 ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
@@ -777,7 +805,7 @@ ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
 mkPRetTp :: MonadTerm m =>
-  PrimName Term ->
+  ExtCns Term ->
   [(LocalName, Term)] ->
   [(LocalName, Term)] ->
   [Term] ->
@@ -831,7 +859,7 @@ ctxCtorElimType :: MonadTerm m =>
   Proxy (Typ ret) ->
   Proxy (Typ a) ->
   DataIdent d ->
-  PrimName Term ->
+  ExtCns Term ->
   CtorArgStruct d params ixs ->
   m (CtxTerm (CtxInv params ::>(Arrows ixs (d -> Typ a))) (Typ ret))
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
@@ -929,8 +957,8 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
 mkCtorElimTypeFun :: MonadTerm m =>
-  PrimName Term {- ^ data type -} ->
-  PrimName Term {- ^ constructor type -} ->
+  ExtCns Term {- ^ data type -} ->
+  ExtCns Term {- ^ constructor type -} ->
   CtorArgStruct d params ixs ->
   m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
@@ -1061,8 +1089,10 @@ class UsesDataType a where
   usesDataType :: DataIdent d -> a -> Bool
 
 instance UsesDataType (TermF Term) where
-  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+  usesDataType (DataIdent d) (Constant d')
     | d' == d = True
+--  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+--    | d' == d = True
   usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))
     | d' == d = True
   usesDataType (DataIdent d) (FTermF (Recursor rec))
@@ -1192,7 +1222,7 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
 mkCtorArgStruct ::
-  PrimName Term ->
+  ExtCns Term ->
   Bindings CtxTerm EmptyCtx params ->
   Bindings CtxTerm (CtxInv params) ixs ->
   Term ->

@@ -55,7 +55,7 @@ data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !(PrimName (TValue l)) ![Thunk l] ![Thunk l]
+  | VCtorApp !(ExtCns (TValue l)) ![Thunk l] ![Thunk l]
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
@@ -68,7 +68,7 @@ data Value l
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
   | VRecursor
-     !(PrimName (TValue l)) -- data type ident
+     !(ExtCns (TValue l)) -- data type ident
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
@@ -87,11 +87,11 @@ data TValue l
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
+  | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
-     !(PrimName (TValue l)) -- data type name
+     !(ExtCns (TValue l)) -- data type name
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive function
@@ -178,7 +178,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s _ps _xv -> shows (primName s)
+      VCtorApp s _ps _xv -> shows (toAbsoluteName (ecName s))
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"

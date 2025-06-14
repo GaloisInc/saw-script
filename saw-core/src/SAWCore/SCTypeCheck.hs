@@ -66,10 +66,8 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Conversion (natConversions)
 import SAWCore.Module
-  ( ctorNumArgs
-  , ctorNumParams
-  , ctorPrimName
-  , dtPrimName
+  ( ctorExtCns
+  , dtExtCns
   , lookupVarIndexInMap
   , Ctor(..)
   , DataType(..)
@@ -182,10 +180,9 @@ data TCError
   | UnboundName Text
   | SubtypeFailure SCTypedTerm Term
   | EmptyVectorLit
-  | NoSuchDataType Ident
-  | NoSuchCtor Ident
-  | NotFullyAppliedRec (PrimName Term)
-  | BadParamsOrArgsLength Bool (PrimName Term) [Term] [Term]
+  | NoSuchDataType NameInfo
+  | NoSuchCtor NameInfo
+  | NotFullyAppliedRec (ExtCns Term)
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
@@ -258,13 +255,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constructor: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadParamsOrArgsLength is_dt ident params args) =
-      ppWithPos
-      [ return ("Wrong number of parameters or arguments to "
-                ++ (if is_dt then "datatype" else "constructor") ++ ": "),
-        ishow (Unshared $ FTermF $
-               (if is_dt then DataTypeApp else CtorApp) ident params args)
-      ]
   helper (BadConstType n rty ty) =
     ppWithPos [ return ("Type of constant " ++ show n), ishow rty
               , return "doesn't match declared type", ishow ty ]
@@ -503,38 +493,6 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (PairRight (SCTypedTerm _ tp)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
-  typeInfer (DataTypeApp d params args) =
-    -- Look up the DataType structure, check the length of the params and args,
-    -- and then apply the cached Pi type of dt to params and args
-    do mm <- liftTCM scGetModuleMap
-       dt <-
-         case lookupVarIndexInMap (primVarIndex d) mm of
-           Just (ResolvedDataType dt) -> pure dt
-           _ -> throwTCError $ NoSuchDataType (primName d)
-       let err = BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
-       unless (length params == length (dtParams dt) &&
-               length args == length (dtIndices dt))
-              (throwTCError err)
-
-       -- NOTE: we assume dtType is already well-typed and in WHNF
-       foldM (applyPiTyped err) (dtType dt) (params ++ args)
-
-  typeInfer (CtorApp c params args) =
-    -- Look up the Ctor structure, check the length of the params and args, and
-    -- then apply the cached Pi type of ctor to params and args
-    do mm <- liftTCM scGetModuleMap
-       ctor <-
-         case lookupVarIndexInMap (primVarIndex c) mm of
-           Just (ResolvedCtor ctor) -> pure ctor
-           _ -> throwTCError $ NoSuchCtor (primName c)
-       let err = BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
-       unless (length params == ctorNumParams ctor &&
-               length args == ctorNumArgs ctor)
-              (throwTCError err)
-
-       -- NOTE: we assume ctorType is already well-typed and in WHNF
-       foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
-
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty
        liftTCM scSort s
@@ -647,7 +605,7 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  PrimName SCTypedTerm {- ^ data type name -} ->
+  ExtCns SCTypedTerm {- ^ data type name -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
@@ -655,9 +613,9 @@ inferRecursorType ::
 inferRecursorType d params motive motiveTy =
   do mm <- liftTCM scGetModuleMap
      dt <-
-       case lookupVarIndexInMap (primVarIndex d) mm of
+       case lookupVarIndexInMap (ecVarIndex d) mm of
          Just (ResolvedDataType dt) -> pure dt
-         _ -> throwTCError $ NoSuchDataType (primName d)
+         _ -> throwTCError $ NoSuchDataType (ecName d)
 
      let mk_err str =
            MalformedRecursor
@@ -703,9 +661,9 @@ compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
-     d <- traverse typeInferComplete (dtPrimName dt)
+     d <- traverse typeInferComplete (dtExtCns dt)
      let ctorVarIxs = map ctorVarIndex (dtCtors dt)
-     ctorOrder <- traverse (traverse typeInferComplete) (map ctorPrimName (dtCtors dt))
+     ctorOrder <- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
      let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
      let mk_err str =
@@ -725,7 +683,7 @@ compileRecursor dt params motive cs_fs =
        liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)
 
      forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup (primVarIndex c) elims of
+       case Map.lookup (ecVarIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp

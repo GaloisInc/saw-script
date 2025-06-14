@@ -124,12 +124,8 @@ import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
-  ( ctorNumParams
-  , ctorPrimName
-  , dtNumParams
-  , dtPrimName
-  , Ctor(..)
-  , DataType(..)
+  ( ctorExtCns
+  , dtExtCns
   )
 import SAWCore.Recognizer
 
@@ -343,25 +339,27 @@ projRecordOpenTerm (OpenTerm m) f =
 
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-ctorOpenTerm c all_args = OpenTerm $ do
-  maybe_ctor <- liftTCM scFindCtor c
-  ctor <- case maybe_ctor of
-            Just ctor -> pure ctor
-            Nothing -> throwTCError $ NoSuchCtor c
-  (params, args) <- splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
-  c' <- traverse typeInferComplete (ctorPrimName ctor)
-  typeInferComplete $ CtorApp c' params args
+ctorOpenTerm c all_args = applyOpenTermMulti ctor_open_term all_args
+  where
+    ctor_open_term =
+      OpenTerm $
+      do maybe_ctor <- liftTCM scFindCtor c
+         ctor <- case maybe_ctor of
+                   Just ctor -> pure ctor
+                   Nothing -> throwTCError $ NoSuchCtor (ModuleIdentifier c)
+         typeInferComplete $ Constant (ctorExtCns ctor)
 
 -- | Build an 'OpenTerm' for a datatype applied to its arguments
 dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
-dataTypeOpenTerm d all_args = OpenTerm $ do
-  maybe_dt <- liftTCM scFindDataType d
-  dt <- case maybe_dt of
-          Just dt -> pure dt
-          Nothing -> throwTCError $ NoSuchDataType d
-  (params, args) <- splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
-  d' <- traverse typeInferComplete (dtPrimName dt)
-  typeInferComplete $ DataTypeApp d' params args
+dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
+  where
+    dt_open_term =
+      OpenTerm $
+      do maybe_dt <- liftTCM scFindDataType d
+         dt <- case maybe_dt of
+                 Just dt -> pure dt
+                 Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier d)
+         typeInferComplete $ Constant (dtExtCns dt)
 
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
@@ -375,27 +373,8 @@ globalOpenTerm ident =
 identOpenTerm :: Ident -> OpenTerm
 identOpenTerm ident =
   OpenTerm $
-  do maybe_ctor <- liftTCM scFindCtor ident
-     maybe_dt <- liftTCM scFindDataType ident
-
-     -- First, determine the variables we need to abstract over and the function
-     -- for building an application of this identifier dependent on the class of
-     -- identifier
-     let (var_ctx, app_fun) =
-           case (maybe_ctor, maybe_dt) of
-             (Just ctor, _) -> (fst (asPiList (ctorType ctor)), scCtorApp)
-             (_, Just dt) -> (dtParams dt ++ dtIndices dt, scDataTypeApp)
-             (Nothing, Nothing) -> ([], scGlobalApply)
-
-     -- Build the term \ (x1:tp1) ... (xn:tpn) -> ident x1 ... xn as follows:
-     -- 1. Construct vars as the list x1 ... xn of terms, noting that xn has
-     --    deBruijn index 0 and x1 has deBruijn index (length var_ctx) - 1;
-     -- 2. Apply ident to those variables; and
-     -- 3. Lambda-abstract the variables.
-     vars <- reverse <$> mapM (liftTCM scLocalVar) [0 .. (length var_ctx) - 1]
-     ident_app <- liftTCM app_fun ident vars
-     lam <- liftTCM scLambdaList var_ctx ident_app
-     typeInferComplete lam
+  do ident_app <- liftTCM scGlobalDef ident
+     typeInferComplete ident_app
 
 -- | Build an 'OpenTerm' for an external constant
 extCnsOpenTerm :: ExtCns Term -> OpenTerm

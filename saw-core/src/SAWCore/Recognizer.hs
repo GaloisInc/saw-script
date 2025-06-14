@@ -27,6 +27,7 @@ module SAWCore.Recognizer
   , asApp
   , (<@>), (@>), (<@)
   , asApplyAll
+  , asGlobalApply
   , asPairType
   , asPairValue
   , asPairSelector
@@ -36,13 +37,8 @@ module SAWCore.Recognizer
   , asRecordType
   , asRecordValue
   , asRecordSelector
-  , asCtorParams
-  , asCtor
-  , asDataType
-  , asDataTypeParams
   , asRecursorApp
   , asRecursorType
-  , isDataType
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
@@ -169,6 +165,12 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
+asGlobalApply :: Ident -> Recognizer Term [Term]
+asGlobalApply i t =
+  do let (f, xs) = asApplyAll t
+     isGlobalDef i f
+     pure xs
+
 asPairType :: Recognizer Term (Term, Term)
 asPairType t = do
   ftf <- asFTermF t
@@ -246,24 +248,7 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
--- | Test whether a term is an application of a constructor, and, if so, return
--- the constructor, its parameters, and its arguments
-asCtorParams :: Recognizer Term (PrimName Term, [Term], [Term])
-asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
-
--- | A version of 'asCtorParams' that combines the parameters and normal args
-asCtor :: Recognizer Term (PrimName Term, [Term])
-asCtor t = do CtorApp c ps args <- asFTermF t; return (c,ps ++ args)
-
--- | A version of 'asDataType' that returns the parameters separately
-asDataTypeParams :: Recognizer Term (PrimName Term, [Term], [Term])
-asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
-
--- | A version of 'asDataTypeParams' that combines the params and normal args
-asDataType :: Recognizer Term (PrimName Term, [Term])
-asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
-
-asRecursorType :: Recognizer Term (PrimName Term, [Term], Term, Term)
+asRecursorType :: Recognizer Term (ExtCns Term, [Term], Term, Term)
 asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
      return (d,ps,motive,motive_ty)
@@ -274,17 +259,10 @@ asRecursorApp t =
      Recursor crec <- asFTermF rc
      return (rc, crec, ixs, arg)
 
-isDataType :: PrimName Term -> Recognizer [Term] a -> Recognizer Term a
-isDataType i p t = do
-  (o,l) <- asDataType t
-  if i == o then p l else Nothing
-
 asNat :: Recognizer Term Natural
-asNat (unwrapTermF -> FTermF (NatLit i)) = return i
-asNat (asCtor -> Just (c, []))
-  | primName c == preludeZeroIdent = return 0
-asNat (asCtor -> Just (c, [asNat -> Just i]))
-  | primName c == preludeSuccIdent = return (i+1)
+asNat (unwrapTermF -> FTermF (NatLit i)) = pure i
+asNat (asGlobalApply preludeZeroIdent -> Just []) = pure 0
+asNat (asGlobalApply preludeSuccIdent -> Just [asNat -> Just i]) = pure (i+1)
 asNat _ = Nothing
 
 -- | Recognize an application of @bvNat@
@@ -398,8 +376,8 @@ asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
 
 asNatType :: Recognizer Term ()
-asNatType (asDataType -> Just (o, []))
-  | primName o == preludeNatIdent = return ()
+asNatType (asConstant -> Just o)
+  | ecName o == ModuleIdentifier preludeNatIdent = return ()
 asNatType _ = Nothing
 
 asIntegerType :: Recognizer Term ()
@@ -425,9 +403,9 @@ asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
 
 asEq :: Recognizer Term (Term, Term, Term)
 asEq t =
-  do (o, l) <- asDataType t
+  do l <- asGlobalApply "Prelude.Eq" t
      case l of
-       [a, x, y] | "Prelude.Eq" == primName o -> return (a, x, y)
+       [a, x, y] -> Just (a, x, y)
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term

@@ -297,7 +297,7 @@ muxInt b x y =
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
 muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
-muxExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
+muxExtra (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
   AStream (muxRValue tp b <$> xs <*> ys)
 muxExtra tp _ _ _ = panic "muxExtra" ["Type mismatch: " <> Text.pack (show tp)]
 
