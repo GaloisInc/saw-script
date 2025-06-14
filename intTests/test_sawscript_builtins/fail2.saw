@@ -1,0 +1,6 @@
+
+// Try failing inside a function.
+
+let f () = do { fail "requested failure"; return (); };
+f ();
+print "oops, fail didn't exit";

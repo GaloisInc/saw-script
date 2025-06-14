@@ -1,0 +1,40 @@
+enable_experimental;
+
+// We get run with "saw misc.saw" so this will print "saw" and "misc.saw"
+// respectively.
+//
+// Note that there doesn't seem to be any way to find out how many
+// arguments there were. Also, reading the arguments to saw itself
+// isn't super useful. It's reasonable to have a way to pass arguments
+// to a SAW script, but that isn't really what we've got. See #1068.
+//
+// Update: we do not necessarily get run with the same options, so
+// just print the first option, which will still be "saw".
+
+print (get_opt 0);
+//print (get_opt 1);
+// XXX: fails does not successfully trap this failure (see #2424)
+//fails (return (print (get_opt 2)));
+
+// now check show
+print (false, show false);
+print ("0", show 0);
+print ("()", show ());
+print ("(1, 2, 3)", show (1, 2, 3));
+print ("[1, 2, 3]", show [1, 2, 3]);
+print ("\"abc\"", show "abc");
+print ("{{ 1 }}", show {{ 1 }});
+print ("{| 2 |}", show {| 2 |});
+print ("{| [8] |}", show {| [8] |});
+let f () = ();
+print ("f", show f);
+print ("do { return 0; }", show (do { return 0; }));
+let r = { x = 3, y = "abc" };
+print ("(record)", show r);
+print ("\\x -> 3", show (\x -> 3));
+print ("return 3", show (return 3));
+print ("(TopLevel)", show summarize_verification);
+print ("(ProofScript)", show z3);
+
+// we could go on with the 40-odd other kinds of Value,
+// but let's not for now

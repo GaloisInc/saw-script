@@ -1,0 +1,35 @@
+ Loading file "run.saw"
+ nothing should happen:
+ hopefully nothing happened
+ this should print:
+
+
+# Theorems Proved or Assumed
+
+* Theorem:
+~~~~
+  let { x@1 = True
+      }
+   in EqTrue (ecEq Bool PEqBit x@1 x@1)
+~~~~
+
+# Solvers Used
+
+* SBV->Z3
+ that should have printed
+ this should also print:
+
+
+# Theorems Proved or Assumed
+
+* Theorem:
+~~~~
+  let { x@1 = True
+      }
+   in EqTrue (ecEq Bool PEqBit x@1 x@1)
+~~~~
+
+# Solvers Used
+
+* SBV->Z3
+ that should also have printed

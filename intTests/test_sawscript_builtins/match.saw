@@ -1,0 +1,36 @@
+// Tests for the workarounds for there being no match in SAWScript
+
+// caseSatResult
+//
+// There is no way to directly generate values of type SatResult,
+// so we have to run some sat queries to get them.
+//
+// There are three possible results -- sat, unsat, and unknown. I
+// don't know offhand how to get a solver to reliably and quickly
+// produce an unknown, and I suspect there isn't a good way, so we'll
+// leave that case off for now.
+
+print "caseSatResult:";
+
+resultSat <- sat z3 {{ \x -> x == True }};
+resultUnsat <- sat z3 {{ \x -> (x == True) && (x == False) }};
+
+let no = print "unsat";
+let yes t = print ("sat", t);
+caseSatResult resultSat no yes;
+caseSatResult resultUnsat no yes;
+
+// caseProofResult
+//
+// There is likewise no way to directly generate values of type
+// ProofResult, so we need to run some proofs.
+
+print "caseProofResult:";
+
+resultValid <- prove z3 {{ \(x : [8]) -> x == x }};
+resultInvalid <- prove z3 {{ \(x : [8]) -> x < x }};
+
+let yes thm = print ("Theorem", thm);
+let no cex = print ("Counterexample", cex);
+caseProofResult resultValid yes no;
+caseProofResult resultInvalid yes no;

@@ -1,0 +1,24 @@
+// include a reasonable collection of SAWScript syntax
+// (this file is not executed so doesn't need to make sense)
+// (nor is it typechecked, at least currently)
+
+import "Foo.cry" as Foo (foo);
+import "Bar.cry" hiding (bar);
+
+123;
+a <- return 456; 
+
+let f x = x;
+
+rec g x = x
+and h x = g x;
+
+do {
+  let {{ b = False }};
+  let c = if true then {{ False }} else {{ True }};
+  let (d, e) = (b, c);
+
+  typedef t = Int;
+};
+
+return (concat "x" 3);

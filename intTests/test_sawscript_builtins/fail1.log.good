@@ -1,0 +1,5 @@
+ Loading file "fail1.saw"
+ Stack trace:
+Not a monomorphic type: t.3
+
+FAILED

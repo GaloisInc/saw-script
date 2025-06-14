@@ -1,0 +1,18 @@
+ Loading file "misc.saw"
+ saw
+ (false,"false")
+ ("0","0")
+ ("()","()")
+ ("(1, 2, 3)","(1,2,3)")
+ ("[1, 2, 3]","[1,2,3]")
+ ("\"abc\"","\"abc\"")
+ ("{{ 1 }}","\\(u1217 : isort 0) ->\n  \\(_P : PLiteral u1217) -> ecNumber (TCNum 1) u1217 _P")
+ ("{| 2 |}","2")
+ ("{| [8] |}","[8]")
+ ("f","<<function>>")
+ ("do { return 0; }","<<monadic>>")
+ ("(record)","{x=3,y=\"abc\"}")
+ ("\\x -> 3","<<function>>")
+ ("return 3","<<monadic>>")
+ ("(TopLevel)","<<TopLevel>>")
+ ("(ProofScript)","<<proof script>>")

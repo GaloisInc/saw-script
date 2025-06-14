@@ -1,0 +1,14 @@
+
+// Put the include file in a subdir so it doesn't also get run
+// directly.
+include "include/test.saw";
+
+data <- read_bytes "include/foo.txt";
+print data;
+
+print "dump_file_AST:";
+dump_file_AST "include/syntax.saw";
+
+print "parser_printer_roundtrip:";
+parser_printer_roundtrip "include/syntax.saw";
+

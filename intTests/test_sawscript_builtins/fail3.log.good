@@ -1,0 +1,6 @@
+ Loading file "fail3.saw"
+ Stack trace:
+"fail" (fail3.saw:5:3-5:7)
+requested failure
+
+FAILED

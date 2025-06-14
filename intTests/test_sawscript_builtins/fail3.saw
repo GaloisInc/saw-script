@@ -1,0 +1,9 @@
+
+// Try failing inside a top-level do-block.
+
+do {
+  fail "requested failure";
+  print "oops, fail didn't exit";
+  return ();
+};
+

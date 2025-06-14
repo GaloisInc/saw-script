@@ -1,0 +1,2 @@
+out <- exec "cat" ["exec.saw", "-"] "fnord";
+print out;
