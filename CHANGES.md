@@ -63,7 +63,7 @@ The most notable changes are:
   the new SAWScript commands `mir_raw_ptr_const`, `mir_raw_ptr_mut`,
   `mir_alloc_raw_ptr_const`, and `mir_alloc_raw_ptr_mut`, which are similar to
   the existing `mir_ref`, `mir_ref_mut`, `mir_alloc`, and `mir_alloc_mut`
-  commands for reference types.
+  commands for reference types. There is also `mir_cast_raw_ptr`.
 
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 

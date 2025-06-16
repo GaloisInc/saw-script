@@ -17,6 +17,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_ref_of
   , mir_ref_of_mut
   , mir_assert
+  , mir_cast_raw_ptr
   , mir_execute_func
   , mir_equal
   , mir_find_adt
@@ -644,6 +645,12 @@ mir_postcond term = MIRSetupM $ do
   loc <- SS.toW4Loc "mir_postcond" <$> lift (lift getPosition)
   Setup.crucible_postcond loc term
 
+mir_cast_raw_ptr ::
+  SetupValue {- ^ raw pointer -} ->
+  Mir.Ty     {- ^ new pointee type -} ->
+  SetupValue
+mir_cast_raw_ptr ptr mty = MS.SetupCast mty ptr
+
 mir_points_to ::
   SetupValue {- ^ LHS reference/pointer -} ->
   SetupValue {- ^ RHS value -} ->
@@ -678,6 +685,7 @@ mir_points_to ref val =
 -- 'mir_points_to' command. In particular:
 --
 -- * Check that the LHS is in fact a valid reference or pointer type.
+-- * Make sure that it does not contain any casts.
 --
 -- Returns the 'Mir.Ty' that the LHS points to.
 mir_points_to_check_lhs_validity ::
@@ -690,6 +698,9 @@ mir_points_to_check_lhs_validity ref loc =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      refTy <- typeOfSetupValue cc env nameEnv ref
+     when (containsCast ref) $
+       throwCrucibleSetup loc
+         "The first argument of mir_points_to must not contain any casts"
      case refTy of
        Mir.TyRef referentTy _ -> pure referentTy
        Mir.TyRawPtr referentTy _ -> pure referentTy

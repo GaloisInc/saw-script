@@ -891,7 +891,7 @@ instantiateSetupValue sc s v =
     MS.SetupGlobal _ _                -> return v
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
-    MS.SetupCast empty _              -> absurd empty
+    MS.SetupCast _ _                  -> return v
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer _ _     -> return v
     MS.SetupMux x c t f               -> MS.SetupMux x
@@ -1029,18 +1029,41 @@ learnSetupCondition opts sc cc spec prepost cond =
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   forall w.
-  Options          {- ^ saw script print out opts -} ->
-  SharedContext      {- ^ context for constructing SAW terms    -} ->
-  MIRCrucibleContext    {- ^ context for interacting with Crucible -} ->
-  CrucibleMethodSpecIR {- ^ specification for current function override  -} ->
-  MS.PrePost                                                          ->
+  Options              {- ^ saw script print out opts -} ->
+  SharedContext        {- ^ context for constructing SAW terms -} ->
+  MIRCrucibleContext   {- ^ context for interacting with Crucible -} ->
+  CrucibleMethodSpecIR {- ^ specification for current function override -} ->
+  MS.PrePost ->
   MS.ConditionMetadata ->
-  MIRVal             {- ^ concrete simulation value             -} ->
-  Mir.Ty             {- ^ expected memory type                  -} ->
-  SetupValue         {- ^ expected specification value          -} ->
+  MIRVal               {- ^ concrete simulation value -} ->
+  Mir.Ty               {- ^ expected memory type -} ->
+  SetupValue           {- ^ expected specification value -} ->
+  OverrideMatcher MIR w ()
+matchArg opts sc cc cs prepost md actual expectedTy expected =
+  matchArg' opts sc cc cs prepost md actual expectedTy expected False
+
+-- | The implementation of matchArg, with an additional argument to keep track
+-- of whether the given 'SetupValue' is contained inside a 'SetupCast'. The
+-- 'SetupVar' case uses different types depending on whether it is in a
+-- 'SetupCast' or not, but the 'SetupCast' case can't just recursively call
+-- 'matchArg' with different types, since we don't know what the types should be
+-- until we get to the 'SetupVar'. So instead we just pass along that fact that
+-- we are recursing inside a 'SetupCast'.
+matchArg' ::
+  forall w.
+  Options              {- ^ saw script print out opts -} ->
+  SharedContext        {- ^ context for constructing SAW terms -} ->
+  MIRCrucibleContext   {- ^ context for interacting with Crucible -} ->
+  CrucibleMethodSpecIR {- ^ specification for current function override -} ->
+  MS.PrePost ->
+  MS.ConditionMetadata ->
+  MIRVal               {- ^ concrete simulation value -} ->
+  Mir.Ty               {- ^ expected memory type -} ->
+  SetupValue           {- ^ expected specification value -} ->
+  Bool                 {- ^ whether the SetupValue is inside a cast -} ->
   OverrideMatcher MIR w ()
 
-matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expectedTT)
+matchArg' opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expectedTT) _
   | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym <- Ov.getSymInterface
@@ -1048,15 +1071,38 @@ matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expec
        realTerm <- valueToSC sym md failMsg tval actual
        matchTerm sc md prepost realTerm (ttTerm expectedTT)
 
-matchArg opts sc cc cs prepost md actual expectedTy expected =
+matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
   mccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
-  case (actual, expectedTy, expected) of
-    (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) ->
+  case (actual, expectedTy, expected, inCast) of
+    (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var, False) ->
       assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
+    (MIRVal (RefShape {}) ref, _, MS.SetupVar var, True) ->
+      -- When we have a cast, the type inside the Crucible reference may be
+      -- different from the pointee type of the SetupValue in SAW after the
+      -- cast. Here, we are creating a MirPointer, so we want to use the
+      -- "true" type of the reference. This means pointeeTy and expectedTy are
+      -- wrong, so we ignore those and instead look up the pointee type from
+      -- the MirAllocSpec for this variable (i.e. the type given to the
+      -- mir_alloc that created it).
+      --
+      -- See Note [Raw pointer casts] in SAWCentral.Crucible.MIR.Setup.Value
+      -- for more info.
+      case Map.lookup var tyenv of
+        Just (Some ma) ->
+          assignVar cc md var $
+            Some (MirPointer (ma^.maType) (ma^.maPtrKind) (ma^.maMutbl) (ma^.maMirType) ref)
+        Nothing ->
+          panic "matchArg" ["No MirAllocSpec for SetupVar " <> Text.pack (show var)]
+
+    (MIRVal (RefShape {}) _, _, MS.SetupCast _ v, _) ->
+      -- Ideally we would pass the "true" type of the underlying reference here,
+      -- instead of passing along the post-cast types unchanged, but we don't
+      -- know the true type until we get to a SetupVar.
+      matchArg' opts sc cc cs prepost md actual expectedTy v True
 
     -- match arrays point-wise
-    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)
+    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs, False)
       | Mir.MirVector_Vector xs' <- xs
       , V.length xs' == length zs ->
         sequence_
@@ -1071,14 +1117,14 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              | (x, z) <- zip (V.toList xs'') zs ]
 
     -- match the underlying, non-zero-sized field of a repr(transparent) struct
-    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs)
+    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs, False)
       | Just i <- Mir.findReprTransparentField col adt
       , Just y <- adt ^? Mir.adtvariants . ix 0 . Mir.vfields . ix i . Mir.fty
       , Just z <- zs ^? ix i ->
         matchArg opts sc cc cs prepost md (MIRVal shp val) y z
 
     -- match the fields of a struct point-wise
-    (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs) ->
+    (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs, False) ->
        do let variants = adt ^. Mir.adtvariants
           variant <-
             case variants of
@@ -1100,7 +1146,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
               Ctx.:> Crucible.RV actualDiscr
               Ctx.:> Crucible.RV variantAssn),
      _,
-     MS.SetupEnum enum_) ->
+     MS.SetupEnum enum_,
+     False) ->
         case enum_ of
           -- ...if the expected value is a specific enum variant, then we must:
           --
@@ -1184,14 +1231,15 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
               ]
 
     -- match the fields of a tuple point-wise
-    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
+    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs, False) ->
       matchFields sym xsFldShps xs ys zs
 
     -- See Note [Matching slices in overrides]
     (MIRVal (SliceShape actualSliceRefTy actualElemTy actualMutbl actualElemTpr)
             (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
      Mir.TyRef _ _,
-     MS.SetupSlice slice)
+     MS.SetupSlice slice,
+     False)
        | -- Currently, all slice lengths must be concrete, so the case below
          -- should always succeed.
          Just actualSliceLenBV <- W4.asBV actualSliceLenSym -> do
@@ -1253,7 +1301,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              -- Match the reference values.
              matchSlice expectedArrRefTy expectedArrRef
 
-    (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
+    (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name, False) -> do
       static <- findStatic colState name
       Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
       let y = staticRefMux sym yGlobalVar
@@ -1263,24 +1311,23 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
           pred_ <- liftIO $
             Mir.mirRef_eqIO bak x y
           addAssert pred_ md =<< notEq
-    (_, _, MS.SetupGlobalInitializer () name) -> do
+    (_, _, MS.SetupGlobalInitializer () name, _) -> do
       static <- findStatic colState name
       let staticTy = static ^. Mir.sTy
       unless (checkCompatibleTys expectedTy staticTy) fail_
       staticInitMirVal <- findStaticInitializer cc static
       pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
       addAssert pred_ md =<< notEq
-    (_, _, MS.SetupMux () c t f) -> do
+    (_, _, MS.SetupMux () c t f, _) -> do
       cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
       withConditionalPred cPred $
-        matchArg opts sc cc cs prepost md actual expectedTy t
+        matchArg' opts sc cc cs prepost md actual expectedTy t inCast
       cNegPred <- liftIO $ W4.notPred sym cPred
       withConditionalPred cNegPred $
-        matchArg opts sc cc cs prepost md actual expectedTy f
+        matchArg' opts sc cc cs prepost md actual expectedTy f inCast
 
-    (_, _, MS.SetupNull empty)                -> absurd empty
-    (_, _, MS.SetupCast empty _)              -> absurd empty
-    (_, _, MS.SetupUnion empty _ _)           -> absurd empty
+    (_, _, MS.SetupNull empty, _)      -> absurd empty
+    (_, _, MS.SetupUnion empty _ _, _) -> absurd empty
 
     _ -> fail_
   where
@@ -1431,7 +1478,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupTerm _                    -> Set.empty
         MS.SetupGlobal _ _                -> Set.empty
         MS.SetupGlobalInitializer _ _     -> Set.empty
-        MS.SetupCast empty _              -> absurd empty
+        MS.SetupCast _ x                  -> setupVars x
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
         MS.SetupMux _ _ t f               -> setupVars t <> setupVars f
