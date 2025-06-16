@@ -12,3 +12,7 @@ pub fn get_thing() -> Thing {
         c: []
     }
 }
+
+pub fn get_thing_b() -> i32 {
+    get_thing().b
+}

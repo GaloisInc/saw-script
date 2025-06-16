@@ -412,7 +412,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupStruct adt flds ->
       case adt of
         _ | adt ^. Mir.adtReprTransparent,
-            [fld] <- flds ->
+            Just i <- Mir.findReprTransparentField col adt,
+            Just fld <- flds ^? ix i ->
           resolveTransparentSetupVal adt fld
         Mir.Adt nm Mir.Struct variants _ _ _ _ -> do
           -- First, retrieve the struct variant.
@@ -453,7 +454,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
         MirSetupEnumVariant adt variant variantIdxInt flds ->
           case adt of
             _ | adt ^. Mir.adtReprTransparent,
-                [fld] <- flds -> do
+                Just i <- Mir.findReprTransparentField col adt,
+                Just fld <- flds ^? ix i -> do
               resolveTransparentSetupVal adt fld
             Mir.Adt nm (Mir.Enum discrTp) variants _ _ _ _ -> do
               -- Resolve the field values and check that they have the expected
