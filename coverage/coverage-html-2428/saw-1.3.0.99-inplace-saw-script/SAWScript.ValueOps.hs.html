@@ -1,0 +1,810 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWScript.ValueOps
+<span class="lineno">    3 </span>Description : Operations on the SAWScript Value datatype, plus other code from Value.hs
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    9 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWScript.ValueOps (
+<span class="lineno">   14 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   15 </span>    isVUnit,
+<span class="lineno">   16 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   17 </span>    -- XXX: name overlaps with unrelated fn from Data.Parameterized.Nonce
+<span class="lineno">   18 </span>    --      and should be changed
+<span class="lineno">   19 </span>    indexValue,
+<span class="lineno">   20 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   21 </span>    lookupValue,
+<span class="lineno">   22 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   23 </span>    tupleLookupValue,
+<span class="lineno">   24 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   25 </span>    toplevelSubshell,
+<span class="lineno">   26 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   27 </span>    proofScriptSubshell,
+<span class="lineno">   28 </span>    -- XXX apparently unused
+<span class="lineno">   29 </span>    thenValue,
+<span class="lineno">   30 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   31 </span>    bindValue,
+<span class="lineno">   32 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   33 </span>    forValue,
+<span class="lineno">   34 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   35 </span>    emptyLocal,
+<span class="lineno">   36 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   37 </span>    extendLocal,
+<span class="lineno">   38 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   39 </span>    bracketTopLevel,
+<span class="lineno">   40 </span>    -- unused but that probably won't stay that way
+<span class="lineno">   41 </span>    TopLevelCheckpoint(..),
+<span class="lineno">   42 </span>    -- used by SAWScript.REPL.Monad
+<span class="lineno">   43 </span>    makeCheckpoint,
+<span class="lineno">   44 </span>    -- used by SAWScript.REPL.Monad
+<span class="lineno">   45 </span>    restoreCheckpoint,
+<span class="lineno">   46 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   47 </span>    checkpoint,
+<span class="lineno">   48 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   49 </span>    proof_checkpoint,
+<span class="lineno">   50 </span>    -- used by SAWScript.Interpreter and locally in topLevelSubshell
+<span class="lineno">   51 </span>    withLocalEnv,
+<span class="lineno">   52 </span>    -- used locally in proofScriptSubshell
+<span class="lineno">   53 </span>    withLocalEnvProof,
+<span class="lineno">   54 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   55 </span>    withOptions,
+<span class="lineno">   56 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   57 </span>    withStackTraceFrame,
+<span class="lineno">   58 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   59 </span>    toValueCase,
+<span class="lineno">   60 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   61 </span>    caseProofResultPrim,
+<span class="lineno">   62 </span>    -- used in SAWScript.Interpreter
+<span class="lineno">   63 </span>    caseSatResultPrim,
+<span class="lineno">   64 </span>    -- used by SAWScript.REPL.Monad, SAWScript.Interpreter
+<span class="lineno">   65 </span>    IsValue(..),
+<span class="lineno">   66 </span>    -- used by SAWScript.Interpreter
+<span class="lineno">   67 </span>    FromValue(..),
+<span class="lineno">   68 </span> ) where
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>import Prelude hiding (fail)
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>import Control.Monad.Catch (MonadThrow(..), try)
+<span class="lineno">   73 </span>import Control.Monad.State (get, gets, modify, put)
+<span class="lineno">   74 </span>import qualified Control.Exception as X
+<span class="lineno">   75 </span>import Control.Monad.IO.Class (liftIO)
+<span class="lineno">   76 </span>import Control.Monad.Trans.Class (MonadTrans(lift))
+<span class="lineno">   77 </span>import Control.Monad.Reader (ask, local)
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>import Data.Text (Text)
+<span class="lineno">   80 </span>import qualified Data.Text as Text (unpack)
+<span class="lineno">   81 </span>--import Data.Map ( Map )
+<span class="lineno">   82 </span>import qualified Data.Map as M
+<span class="lineno">   83 </span>--import Data.Set ( Set )
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>import Data.Parameterized.Some
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>import qualified Text.LLVM.AST as LLVM (Type)
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>import qualified Lang.JVM.Codebase as JSS
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>import qualified Cryptol.TypeCheck.AST as Cryptol
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>import qualified Lang.Crucible.JVM as CJ
+<span class="lineno">   94 </span>import Lang.Crucible.LLVM.ArraySizeProfile (FunctionProfile)
+<span class="lineno">   95 </span>import Mir.Intrinsics (MIR)
+<span class="lineno">   96 </span>import Mir.Generator (RustModule)
+<span class="lineno">   97 </span>import qualified Mir.Mir as MIR
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>import SAWCore.FiniteValue (FirstOrderValue(..))
+<span class="lineno">  100 </span>import SAWCore.SharedTerm
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>import CryptolSAWCore.CryptolEnv as CEnv
+<span class="lineno">  103 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>import qualified SAWCentral.AST as SS
+<span class="lineno">  106 </span>import qualified SAWCentral.Position as SS
+<span class="lineno">  107 </span>--import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
+<span class="lineno">  108 </span>--import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
+<span class="lineno">  109 </span>import SAWCentral.Options (Options, Verbosity(..))
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>import SAWCentral.Proof (ProofResult(..), Theorem)
+<span class="lineno">  112 </span>import SAWCentral.Bisimulation (BisimTheorem)
+<span class="lineno">  113 </span>import SAWCentral.JavaExpr (JavaType(..))
+<span class="lineno">  114 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
+<span class="lineno">  115 </span>import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
+<span class="lineno">  116 </span>import SAWCentral.Crucible.LLVM.Skeleton (ModuleSkeleton, FunctionSkeleton)
+<span class="lineno">  117 </span>import qualified SAWCentral.Yosys as Yo (YosysIR)
+<span class="lineno">  118 </span>import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
+<span class="lineno">  119 </span>import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>import SAWCentral.Value
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>isVUnit :: Value -&gt; Bool
+<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">isVUnit (VTuple []) = True</span>
+<span class="lineno">  127 </span><span class="spaces"></span><span class="istickedoff">isVUnit _ = <span class="nottickedoff">False</span></span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>indexValue :: Value -&gt; Value -&gt; Value
+<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">indexValue (VArray vs) (VInteger x)</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="nottickedoff">| i &lt; length vs = vs !! i</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise = error &quot;array index out of bounds&quot;</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="nottickedoff">where i = fromInteger x</span>
+<span class="lineno">  134 </span><span class="spaces"></span><span class="nottickedoff">indexValue _ _ = error &quot;indexValue&quot;</span></span>
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>lookupValue :: Value -&gt; Text -&gt; Value
+<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">lookupValue (VRecord vm) name =</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">case M.lookup name vm of</span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; error $ &quot;no such record field: &quot; ++ Text.unpack name</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="nottickedoff">Just x -&gt; x</span>
+<span class="lineno">  141 </span><span class="spaces"></span><span class="nottickedoff">lookupValue _ _ = error &quot;lookupValue&quot;</span></span>
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>tupleLookupValue :: Value -&gt; Integer -&gt; Value
+<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">tupleLookupValue (VTuple vs) i</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">| 0 &lt;= i &amp;&amp; fromIntegral i &lt; length vs = vs !! fromIntegral i</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = error $ &quot;no such tuple index: &quot; ++ show i</span>
+<span class="lineno">  147 </span><span class="spaces"></span><span class="nottickedoff">tupleLookupValue _ _ = error &quot;tupleLookupValue&quot;</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>toplevelSubshell :: Value
+<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">toplevelSubshell = VLambda $ \_ -&gt;</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">do m &lt;- roSubshell &lt;$&gt; ask</span>
+<span class="lineno">  152 </span><span class="spaces">     </span><span class="nottickedoff">env &lt;- getLocalEnv</span>
+<span class="lineno">  153 </span><span class="spaces">     </span><span class="nottickedoff">return (VTopLevel (toValue &lt;$&gt; withLocalEnv env m))</span></span>
+<span class="lineno">  154 </span>
+<span class="lineno">  155 </span>proofScriptSubshell :: Value
+<span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">proofScriptSubshell = VLambda $ \_ -&gt;</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">do m &lt;- roProofSubshell &lt;$&gt; ask</span>
+<span class="lineno">  158 </span><span class="spaces">     </span><span class="nottickedoff">env &lt;- getLocalEnv</span>
+<span class="lineno">  159 </span><span class="spaces">     </span><span class="nottickedoff">return (VProofScript (toValue &lt;$&gt; withLocalEnvProof env m))</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>applyValue :: Value -&gt; Value -&gt; TopLevel Value
+<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">applyValue (VLambda f) x = f x</span>
+<span class="lineno">  163 </span><span class="spaces"></span><span class="istickedoff">applyValue _ _ = <span class="nottickedoff">throwTopLevel &quot;applyValue&quot;</span></span></span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>thenValue :: SS.Pos -&gt; Value -&gt; Value -&gt; Value
+<span class="lineno">  166 </span><span class="decl"><span class="nottickedoff">thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>bindValue :: SS.Pos -&gt; Value -&gt; Value -&gt; TopLevel Value
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">bindValue pos v1 v2 = return (VBind pos v1 v2)</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>forValue :: [Value] -&gt; Value -&gt; TopLevel Value
+<span class="lineno">  172 </span><span class="decl"><span class="istickedoff">forValue [] _ = return $ VReturn (VArray [])</span>
+<span class="lineno">  173 </span><span class="spaces"></span><span class="istickedoff">forValue (x : xs) f =</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">do m1 &lt;- applyValue f x</span>
+<span class="lineno">  175 </span><span class="spaces">     </span><span class="istickedoff">m2 &lt;- forValue xs f</span>
+<span class="lineno">  176 </span><span class="spaces">     </span><span class="istickedoff">bindValue (SS.PosInternal &quot;&lt;for&gt;&quot;) m1 (VLambda $ \v1 -&gt;</span>
+<span class="lineno">  177 </span><span class="spaces">       </span><span class="istickedoff">bindValue <span class="nottickedoff">(SS.PosInternal &quot;&lt;for&gt;&quot;)</span> m2 (VLambda $ \v2 -&gt;</span>
+<span class="lineno">  178 </span><span class="spaces">         </span><span class="istickedoff">return $ VReturn (VArray (v1 : fromValue v2))))</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>emptyLocal :: LocalEnv
+<span class="lineno">  181 </span><span class="decl"><span class="nottickedoff">emptyLocal = []</span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>extendLocal :: SS.LName -&gt; SS.Schema -&gt; Maybe String -&gt; Value -&gt; LocalEnv -&gt; LocalEnv
+<span class="lineno">  184 </span><span class="decl"><span class="istickedoff">extendLocal x ty md v env = LocalLet x ty <span class="nottickedoff">md</span> v : env</span></span>
+<span class="lineno">  185 </span>
+<span class="lineno">  186 </span>-- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
+<span class="lineno">  187 </span>-- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to
+<span class="lineno">  188 </span>-- implement 'Control.Monad.Catch.MonadMask', which it can't do.
+<span class="lineno">  189 </span>bracketTopLevel :: TopLevel a -&gt; (a -&gt; TopLevel b) -&gt; (a -&gt; TopLevel c) -&gt; TopLevel c
+<span class="lineno">  190 </span><span class="decl"><span class="istickedoff">bracketTopLevel acquire release action =</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">do  resource &lt;- acquire</span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">try (action <span class="nottickedoff">resource</span>) &gt;&gt;= \case</span>
+<span class="lineno">  193 </span><span class="spaces">        </span><span class="istickedoff">Left (bad :: X.SomeException) -&gt; release resource &gt;&gt; throwM bad</span>
+<span class="lineno">  194 </span><span class="spaces">        </span><span class="istickedoff">Right good -&gt; release resource &gt;&gt; pure <span class="nottickedoff">good</span></span></span>
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>combineRW :: TopLevelCheckpoint -&gt; TopLevelRW -&gt; IO TopLevelRW
+<span class="lineno">  197 </span><span class="decl"><span class="istickedoff">combineRW (TopLevelCheckpoint chk scc) rw =</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">do cenv' &lt;- CEnv.combineCryptolEnv <span class="nottickedoff">(rwCryptol chk)</span> <span class="nottickedoff">(rwCryptol rw)</span></span>
+<span class="lineno">  199 </span><span class="spaces">     </span><span class="istickedoff">sc' &lt;- restoreSharedContext <span class="nottickedoff">scc</span> (rwSharedContext rw)</span>
+<span class="lineno">  200 </span><span class="spaces">     </span><span class="istickedoff">return chk{ rwCryptol = <span class="nottickedoff">cenv'</span></span>
+<span class="lineno">  201 </span><span class="spaces">               </span><span class="istickedoff">, rwSharedContext = sc'</span>
+<span class="lineno">  202 </span><span class="spaces">               </span><span class="istickedoff">}</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>-- | Represents the mutable state of the TopLevel monad
+<span class="lineno">  205 </span>--   that can later be restored.
+<span class="lineno">  206 </span>data TopLevelCheckpoint =
+<span class="lineno">  207 </span>  TopLevelCheckpoint
+<span class="lineno">  208 </span>    TopLevelRW
+<span class="lineno">  209 </span>    SharedContextCheckpoint
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>makeCheckpoint :: TopLevelRW -&gt; IO TopLevelCheckpoint
+<span class="lineno">  212 </span><span class="decl"><span class="istickedoff">makeCheckpoint rw =</span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">do scc &lt;- checkpointSharedContext (rwSharedContext rw)</span>
+<span class="lineno">  214 </span><span class="spaces">     </span><span class="istickedoff">return (TopLevelCheckpoint rw <span class="nottickedoff">scc</span>)</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>restoreCheckpoint :: TopLevelCheckpoint -&gt; TopLevel ()
+<span class="lineno">  217 </span><span class="decl"><span class="istickedoff">restoreCheckpoint chk =</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno">  219 </span><span class="spaces">     </span><span class="istickedoff">rw' &lt;- io (combineRW chk rw)</span>
+<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw'</span></span>
+<span class="lineno">  221 </span>
+<span class="lineno">  222 </span>-- | Capture the current state of the TopLevel monad
+<span class="lineno">  223 </span>--   and return an action that, if invoked, resets
+<span class="lineno">  224 </span>--   the state back to that point.
+<span class="lineno">  225 </span>checkpoint :: TopLevel (() -&gt; TopLevel ())
+<span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">checkpoint = TopLevel_ $</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">do chk &lt;- liftIO . makeCheckpoint =&lt;&lt; get</span>
+<span class="lineno">  228 </span><span class="spaces">     </span><span class="nottickedoff">return $ \_ -&gt;</span>
+<span class="lineno">  229 </span><span class="spaces">       </span><span class="nottickedoff">do printOutLnTop Info &quot;Restoring state from checkpoint&quot;</span>
+<span class="lineno">  230 </span><span class="spaces">          </span><span class="nottickedoff">restoreCheckpoint chk</span></span>
+<span class="lineno">  231 </span>
+<span class="lineno">  232 </span>-- | Capture the current proof state and return an
+<span class="lineno">  233 </span>--   action that, if invoked, resets the state back to that point.
+<span class="lineno">  234 </span>proof_checkpoint :: ProofScript (() -&gt; ProofScript ())
+<span class="lineno">  235 </span><span class="decl"><span class="nottickedoff">proof_checkpoint =</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">do ps &lt;- get</span>
+<span class="lineno">  237 </span><span class="spaces">     </span><span class="nottickedoff">return $ \_ -&gt;</span>
+<span class="lineno">  238 </span><span class="spaces">       </span><span class="nottickedoff">do scriptTopLevel (printOutLnTop Info &quot;Restoring proof state from checkpoint&quot;)</span>
+<span class="lineno">  239 </span><span class="spaces">          </span><span class="nottickedoff">put ps</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>withLocalEnv :: LocalEnv -&gt; TopLevel a -&gt; TopLevel a
+<span class="lineno">  242 </span><span class="decl"><span class="istickedoff">withLocalEnv env m = do</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">prevEnv &lt;- gets rwLocalEnv</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">modify (\rw -&gt; rw { rwLocalEnv = env })</span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- m</span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">modify (\rw -&gt; rw { rwLocalEnv = prevEnv })</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">return result</span></span>
+<span class="lineno">  248 </span>
+<span class="lineno">  249 </span>withLocalEnvProof :: LocalEnv -&gt; ProofScript a -&gt; ProofScript a
+<span class="lineno">  250 </span><span class="decl"><span class="nottickedoff">withLocalEnvProof env (ProofScript m) = do</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">ProofScript (underExceptT (underStateT (withLocalEnv env)) m)</span></span>
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>withOptions :: (Options -&gt; Options) -&gt; TopLevel a -&gt; TopLevel a
+<span class="lineno">  254 </span><span class="decl"><span class="nottickedoff">withOptions f (TopLevel_ m) =</span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="nottickedoff">TopLevel_ (local (\x -&gt; x {roOptions = f (roOptions x)}) m)</span></span>
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>-- | Implement stack tracing by adding error handlers that rethrow
+<span class="lineno">  258 </span>-- user errors, prepended with the given string.
+<span class="lineno">  259 </span>withStackTraceFrame :: String -&gt; Value -&gt; Value
+<span class="lineno">  260 </span><span class="decl"><span class="istickedoff">withStackTraceFrame str val =</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">let doTopLevel :: TopLevel a -&gt; TopLevel a</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">doTopLevel action = do</span>
+<span class="lineno">  263 </span><span class="spaces">        </span><span class="istickedoff">trace &lt;- gets rwStackTrace</span>
+<span class="lineno">  264 </span><span class="spaces">        </span><span class="istickedoff">modify (\rw -&gt; rw { rwStackTrace = str : trace })</span>
+<span class="lineno">  265 </span><span class="spaces">        </span><span class="istickedoff">result &lt;- action</span>
+<span class="lineno">  266 </span><span class="spaces">        </span><span class="istickedoff">modify (\rw -&gt; rw { rwStackTrace = trace })</span>
+<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff">return result</span>
+<span class="lineno">  268 </span><span class="spaces">      </span><span class="istickedoff">doProofScript :: ProofScript a -&gt; ProofScript a</span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff">doProofScript (ProofScript m) =</span>
+<span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  271 </span><span class="spaces">              </span><span class="istickedoff">underExceptT (underStateT doTopLevel) m</span>
+<span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  273 </span><span class="spaces">        </span><span class="istickedoff">ProofScript m'</span>
+<span class="lineno">  274 </span><span class="spaces">      </span><span class="istickedoff">doLLVM :: LLVMCrucibleSetupM a -&gt; LLVMCrucibleSetupM a</span>
+<span class="lineno">  275 </span><span class="spaces">      </span><span class="istickedoff">doLLVM (LLVMCrucibleSetupM m) =</span>
+<span class="lineno">  276 </span><span class="spaces">        </span><span class="istickedoff">LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)</span>
+<span class="lineno">  277 </span><span class="spaces">      </span><span class="istickedoff">doJVM :: JVMSetupM a -&gt; JVMSetupM a</span>
+<span class="lineno">  278 </span><span class="spaces">      </span><span class="istickedoff">doJVM (JVMSetupM m) =</span>
+<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff">JVMSetupM (underReaderT (underStateT doTopLevel) m)</span>
+<span class="lineno">  280 </span><span class="spaces">      </span><span class="istickedoff">doMIR :: MIRSetupM a -&gt; MIRSetupM a</span>
+<span class="lineno">  281 </span><span class="spaces">      </span><span class="istickedoff">doMIR (MIRSetupM m) =</span>
+<span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff">MIRSetupM (underReaderT (underStateT doTopLevel) m)</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">VLambda f -&gt;</span>
+<span class="lineno">  286 </span><span class="spaces">      </span><span class="istickedoff">let wrap x =</span>
+<span class="lineno">  287 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame str `fmap` doTopLevel (f x)</span>
+<span class="lineno">  288 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  289 </span><span class="spaces">      </span><span class="istickedoff">VLambda wrap</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">VTopLevel m -&gt;</span>
+<span class="lineno">  291 </span><span class="spaces">      </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  292 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame <span class="nottickedoff">str</span> `fmap` doTopLevel m</span>
+<span class="lineno">  293 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  294 </span><span class="spaces">      </span><span class="istickedoff">VTopLevel m'</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">VProofScript m -&gt;</span>
+<span class="lineno">  296 </span><span class="spaces">      </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  297 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame <span class="nottickedoff">str</span> `fmap` doProofScript m</span>
+<span class="lineno">  298 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  299 </span><span class="spaces">      </span><span class="istickedoff">VProofScript m'</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">VBind pos v1 v2 -&gt;</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="istickedoff">let v1' = withStackTraceFrame str v1</span>
+<span class="lineno">  302 </span><span class="spaces">          </span><span class="istickedoff">v2' = withStackTraceFrame str v2</span>
+<span class="lineno">  303 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  304 </span><span class="spaces">      </span><span class="istickedoff">VBind pos v1' v2'</span>
+<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">VLLVMCrucibleSetup m -&gt;</span>
+<span class="lineno">  306 </span><span class="spaces">      </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  307 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame <span class="nottickedoff">str</span> `fmap` doLLVM m</span>
+<span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  309 </span><span class="spaces">      </span><span class="istickedoff">VLLVMCrucibleSetup m'</span>
+<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">VJVMSetup m -&gt;</span>
+<span class="lineno">  311 </span><span class="spaces">      </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  312 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame <span class="nottickedoff">str</span> `fmap` doJVM m</span>
+<span class="lineno">  313 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  314 </span><span class="spaces">      </span><span class="istickedoff">VJVMSetup m'</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">VMIRSetup m -&gt;</span>
+<span class="lineno">  316 </span><span class="spaces">      </span><span class="istickedoff">let m' =</span>
+<span class="lineno">  317 </span><span class="spaces">            </span><span class="istickedoff">withStackTraceFrame <span class="nottickedoff">str</span> `fmap` doMIR m</span>
+<span class="lineno">  318 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  319 </span><span class="spaces">      </span><span class="istickedoff">VMIRSetup m'</span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">val</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>toValueCase :: (FromValue b) =&gt;
+<span class="lineno">  324 </span>               (b -&gt; Value -&gt; Value -&gt; TopLevel Value)
+<span class="lineno">  325 </span>            -&gt; Value
+<span class="lineno">  326 </span><span class="decl"><span class="istickedoff">toValueCase prim =</span>
+<span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">VLambda $ \b -&gt; return $</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">VLambda $ \v1 -&gt; return $</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">VLambda $ \v2 -&gt;</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">prim (fromValue b) v1 v2</span></span>
+<span class="lineno">  331 </span>
+<span class="lineno">  332 </span>caseProofResultPrim ::
+<span class="lineno">  333 </span>  ProofResult -&gt;
+<span class="lineno">  334 </span>  Value {- ^ valid case -} -&gt;
+<span class="lineno">  335 </span>  Value {- ^ invalid/unknown case -} -&gt;
+<span class="lineno">  336 </span>  TopLevel Value
+<span class="lineno">  337 </span><span class="decl"><span class="istickedoff">caseProofResultPrim pr vValid vInvalid = do</span>
+<span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">case pr of</span>
+<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">ValidProof _ thm -&gt;</span>
+<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">applyValue vValid (toValue <span class="nottickedoff">thm</span>)</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">InvalidProof _ pairs _pst -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let fov = FOVTuple (map snd pairs)</span></span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span></span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">applyValue vInvalid (toValue tt)</span></span>
+<span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">UnfinishedProof _ -&gt; do</span>
+<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc (FOVTuple [])</span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff">applyValue vInvalid (toValue tt)</span></span>
+<span class="lineno">  349 </span>
+<span class="lineno">  350 </span>caseSatResultPrim ::
+<span class="lineno">  351 </span>  SatResult -&gt;
+<span class="lineno">  352 </span>  Value {- ^ unsat case -} -&gt;
+<span class="lineno">  353 </span>  Value {- ^ sat/unknown case -} -&gt;
+<span class="lineno">  354 </span>  TopLevel Value
+<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">caseSatResultPrim sr vUnsat vSat = do</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">case sr of</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="nottickedoff">Unsat _ -&gt; return vUnsat</span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="nottickedoff">Sat _ pairs -&gt; do</span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="nottickedoff">let fov = FOVTuple (map snd pairs)</span>
+<span class="lineno">  361 </span><span class="spaces">      </span><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="nottickedoff">applyValue vSat (toValue tt)</span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="nottickedoff">SatUnknown -&gt; do</span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="nottickedoff">let fov = FOVTuple []</span>
+<span class="lineno">  365 </span><span class="spaces">      </span><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="nottickedoff">applyValue vSat (toValue tt)</span></span>
+<span class="lineno">  367 </span>
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>------------------------------------------------------------
+<span class="lineno">  370 </span>-- IsValue and FromValue
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>-- | Used for encoding primitive operations in the Value type.
+<span class="lineno">  373 </span>class IsValue a where
+<span class="lineno">  374 </span>    toValue :: a -&gt; Value
+<span class="lineno">  375 </span>
+<span class="lineno">  376 </span>class FromValue a where
+<span class="lineno">  377 </span>    fromValue :: Value -&gt; a
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span>instance (FromValue a, IsValue b) =&gt; IsValue (a -&gt; b) where
+<span class="lineno">  380 </span>    <span class="decl"><span class="istickedoff">toValue f = VLambda (\v -&gt; return (toValue (f (fromValue v))))</span></span>
+<span class="lineno">  381 </span>
+<span class="lineno">  382 </span>instance (IsValue a, FromValue b) =&gt; FromValue (a -&gt; TopLevel b) where
+<span class="lineno">  383 </span>    <span class="decl"><span class="nottickedoff">fromValue (VLambda f) = \x -&gt; fromValue &lt;$&gt; f (toValue x)</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue (-&gt;)&quot;</span></span>
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>instance FromValue Value where
+<span class="lineno">  387 </span>    <span class="decl"><span class="istickedoff">fromValue x = x</span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>instance IsValue Value where
+<span class="lineno">  390 </span>    <span class="decl"><span class="istickedoff">toValue x = x</span></span>
+<span class="lineno">  391 </span>
+<span class="lineno">  392 </span>instance IsValue () where
+<span class="lineno">  393 </span>    <span class="decl"><span class="istickedoff">toValue _ = VTuple []</span></span>
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span>instance FromValue () where
+<span class="lineno">  396 </span>    <span class="decl"><span class="istickedoff">fromValue _ = ()</span></span>
+<span class="lineno">  397 </span>
+<span class="lineno">  398 </span>instance (IsValue a, IsValue b) =&gt; IsValue (a, b) where
+<span class="lineno">  399 </span>    <span class="decl"><span class="nottickedoff">toValue (x, y) = VTuple [toValue x, toValue y]</span></span>
+<span class="lineno">  400 </span>
+<span class="lineno">  401 </span>instance (FromValue a, FromValue b) =&gt; FromValue (a, b) where
+<span class="lineno">  402 </span>    <span class="decl"><span class="nottickedoff">fromValue (VTuple [x, y]) = (fromValue x, fromValue y)</span>
+<span class="lineno">  403 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue (,)&quot;</span></span>
+<span class="lineno">  404 </span>
+<span class="lineno">  405 </span>instance (IsValue a, IsValue b, IsValue c) =&gt; IsValue (a, b, c) where
+<span class="lineno">  406 </span>    <span class="decl"><span class="nottickedoff">toValue (x, y, z) = VTuple [toValue x, toValue y, toValue z]</span></span>
+<span class="lineno">  407 </span>
+<span class="lineno">  408 </span>instance (FromValue a, FromValue b, FromValue c) =&gt; FromValue (a, b, c) where
+<span class="lineno">  409 </span>    <span class="decl"><span class="nottickedoff">fromValue (VTuple [x, y, z]) = (fromValue x, fromValue y, fromValue z)</span>
+<span class="lineno">  410 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue (,,)&quot;</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>instance IsValue a =&gt; IsValue [a] where
+<span class="lineno">  413 </span>    <span class="decl"><span class="istickedoff">toValue xs = VArray (map toValue xs)</span></span>
+<span class="lineno">  414 </span>
+<span class="lineno">  415 </span>
+<span class="lineno">  416 </span>instance FromValue a =&gt; FromValue [a] where
+<span class="lineno">  417 </span>    <span class="decl"><span class="istickedoff">fromValue (VArray xs) = map fromValue xs</span>
+<span class="lineno">  418 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue []&quot;</span></span></span>
+<span class="lineno">  419 </span>
+<span class="lineno">  420 </span>instance IsValue a =&gt; IsValue (IO a) where
+<span class="lineno">  421 </span>    <span class="decl"><span class="istickedoff">toValue action = toValue (io action)</span></span>
+<span class="lineno">  422 </span>
+<span class="lineno">  423 </span>instance IsValue a =&gt; IsValue (Maybe a) where
+<span class="lineno">  424 </span>  <span class="decl"><span class="nottickedoff">toValue (Just x) = VMaybe . Just $ toValue x</span>
+<span class="lineno">  425 </span><span class="spaces">  </span><span class="nottickedoff">toValue Nothing = VMaybe Nothing</span></span>
+<span class="lineno">  426 </span>
+<span class="lineno">  427 </span>instance FromValue a =&gt; FromValue (Maybe a) where
+<span class="lineno">  428 </span>  <span class="decl"><span class="nottickedoff">fromValue (VMaybe (Just v)) = Just $ fromValue v</span>
+<span class="lineno">  429 </span><span class="spaces">  </span><span class="nottickedoff">fromValue (VMaybe Nothing) = Nothing</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">fromValue _ = error &quot;fromValue Maybe&quot;</span></span>
+<span class="lineno">  431 </span>
+<span class="lineno">  432 </span>instance IsValue a =&gt; IsValue (TopLevel a) where
+<span class="lineno">  433 </span>    <span class="decl"><span class="istickedoff">toValue action = VTopLevel (fmap toValue action)</span></span>
+<span class="lineno">  434 </span>
+<span class="lineno">  435 </span>instance FromValue a =&gt; FromValue (TopLevel a) where
+<span class="lineno">  436 </span>    <span class="decl"><span class="istickedoff">fromValue (VTopLevel action) = fmap fromValue action</span>
+<span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VReturn v) = return (fromValue v)</span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VBind pos m1 v2) = do</span>
+<span class="lineno">  439 </span><span class="spaces">      </span><span class="istickedoff">savepos &lt;- pushPosition pos</span>
+<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">v1 &lt;- fromValue m1</span>
+<span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">popPosition savepos</span>
+<span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">m2 &lt;- applyValue v2 v1</span>
+<span class="lineno">  443 </span><span class="spaces">      </span><span class="istickedoff">fromValue m2</span>
+<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error $ &quot;fromValue TopLevel:&quot; &lt;&gt; show v</span></span></span>
+<span class="lineno">  445 </span>
+<span class="lineno">  446 </span>instance IsValue a =&gt; IsValue (ProofScript a) where
+<span class="lineno">  447 </span>    <span class="decl"><span class="istickedoff">toValue m = VProofScript (fmap toValue m)</span></span>
+<span class="lineno">  448 </span>
+<span class="lineno">  449 </span>instance FromValue a =&gt; FromValue (ProofScript a) where
+<span class="lineno">  450 </span>    <span class="decl"><span class="istickedoff">fromValue (VProofScript m) = fmap fromValue m</span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">-- Inject top-level computations automatically into proof scripts.</span>
+<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">-- This should really only possible in interactive subshell mode; otherwise</span>
+<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">--  the type system should keep this from happening.</span>
+<span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VTopLevel m) = <span class="nottickedoff">ProofScript (lift (lift (fmap fromValue m)))</span></span>
+<span class="lineno">  455 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VReturn v) = return <span class="nottickedoff">(fromValue v)</span></span>
+<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VBind pos m1 v2) = ProofScript $ do</span>
+<span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff">savepos &lt;- lift $ lift $ pushPosition <span class="nottickedoff">pos</span></span>
+<span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff">v1 &lt;- unProofScript (fromValue m1)</span>
+<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff">lift $ lift $ popPosition savepos</span>
+<span class="lineno">  460 </span><span class="spaces">      </span><span class="istickedoff">m2 &lt;- lift $ lift $ applyValue v2 v1</span>
+<span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">unProofScript (fromValue m2)</span>
+<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue ProofScript&quot;</span></span></span>
+<span class="lineno">  463 </span>
+<span class="lineno">  464 </span>instance IsValue a =&gt; IsValue (LLVMCrucibleSetupM a) where
+<span class="lineno">  465 </span>    <span class="decl"><span class="istickedoff">toValue m = VLLVMCrucibleSetup (fmap toValue m)</span></span>
+<span class="lineno">  466 </span>
+<span class="lineno">  467 </span>instance FromValue a =&gt; FromValue (LLVMCrucibleSetupM a) where
+<span class="lineno">  468 </span>    <span class="decl"><span class="istickedoff">fromValue (VLLVMCrucibleSetup m) = fmap fromValue m</span>
+<span class="lineno">  469 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VReturn v) = return (fromValue v)</span>
+<span class="lineno">  470 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do</span>
+<span class="lineno">  471 </span><span class="spaces">      </span><span class="istickedoff">-- TODO: Should both of these be run with the new position?</span>
+<span class="lineno">  472 </span><span class="spaces">      </span><span class="istickedoff">savepos &lt;- lift $ lift $ pushPosition pos</span>
+<span class="lineno">  473 </span><span class="spaces">      </span><span class="istickedoff">v1 &lt;- runLLVMCrucibleSetupM (fromValue m1)</span>
+<span class="lineno">  474 </span><span class="spaces">      </span><span class="istickedoff">lift $ lift $ popPosition savepos</span>
+<span class="lineno">  475 </span><span class="spaces">      </span><span class="istickedoff">m2 &lt;- lift $ lift $ applyValue v2 v1</span>
+<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">runLLVMCrucibleSetupM (fromValue m2)</span>
+<span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue CrucibleSetup&quot;</span></span></span>
+<span class="lineno">  478 </span>
+<span class="lineno">  479 </span>instance IsValue a =&gt; IsValue (JVMSetupM a) where
+<span class="lineno">  480 </span>    <span class="decl"><span class="istickedoff">toValue m = VJVMSetup (fmap toValue m)</span></span>
+<span class="lineno">  481 </span>
+<span class="lineno">  482 </span>instance FromValue a =&gt; FromValue (JVMSetupM a) where
+<span class="lineno">  483 </span>    <span class="decl"><span class="istickedoff">fromValue (VJVMSetup m) = fmap fromValue m</span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VReturn v) = <span class="nottickedoff">return (fromValue v)</span></span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VBind pos m1 v2) = JVMSetupM $ do</span>
+<span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">savepos &lt;- lift $ lift $ pushPosition pos</span>
+<span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">v1 &lt;- runJVMSetupM (fromValue m1)</span>
+<span class="lineno">  488 </span><span class="spaces">      </span><span class="istickedoff">lift $ lift $ popPosition savepos</span>
+<span class="lineno">  489 </span><span class="spaces">      </span><span class="istickedoff">m2 &lt;- lift $ lift $ applyValue v2 v1</span>
+<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">runJVMSetupM (fromValue m2)</span>
+<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue JVMSetup&quot;</span></span></span>
+<span class="lineno">  492 </span>
+<span class="lineno">  493 </span>instance IsValue a =&gt; IsValue (MIRSetupM a) where
+<span class="lineno">  494 </span>    <span class="decl"><span class="istickedoff">toValue m = VMIRSetup (fmap toValue m)</span></span>
+<span class="lineno">  495 </span>
+<span class="lineno">  496 </span>instance FromValue a =&gt; FromValue (MIRSetupM a) where
+<span class="lineno">  497 </span>    <span class="decl"><span class="istickedoff">fromValue (VMIRSetup m) = fmap fromValue m</span>
+<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VReturn v) = <span class="nottickedoff">return (fromValue v)</span></span>
+<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">fromValue (VBind pos m1 v2) = MIRSetupM $ do</span>
+<span class="lineno">  500 </span><span class="spaces">      </span><span class="istickedoff">savepos &lt;- lift $ lift $ pushPosition pos</span>
+<span class="lineno">  501 </span><span class="spaces">      </span><span class="istickedoff">v1 &lt;- runMIRSetupM (fromValue m1)</span>
+<span class="lineno">  502 </span><span class="spaces">      </span><span class="istickedoff">lift $ lift $ popPosition savepos</span>
+<span class="lineno">  503 </span><span class="spaces">      </span><span class="istickedoff">m2 &lt;- lift $ lift $ applyValue v2 v1</span>
+<span class="lineno">  504 </span><span class="spaces">      </span><span class="istickedoff">runMIRSetupM (fromValue m2)</span>
+<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue MIRSetup&quot;</span></span></span>
+<span class="lineno">  506 </span>
+<span class="lineno">  507 </span>instance IsValue (CMSLLVM.AllLLVM CMS.SetupValue) where
+<span class="lineno">  508 </span>  <span class="decl"><span class="istickedoff">toValue = VLLVMCrucibleSetupValue</span></span>
+<span class="lineno">  509 </span>
+<span class="lineno">  510 </span>instance FromValue (CMSLLVM.AllLLVM CMS.SetupValue) where
+<span class="lineno">  511 </span>  <span class="decl"><span class="istickedoff">fromValue (VLLVMCrucibleSetupValue v) = v</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Crucible.SetupValue&quot;</span></span></span>
+<span class="lineno">  513 </span>
+<span class="lineno">  514 </span>instance IsValue (CMS.SetupValue CJ.JVM) where
+<span class="lineno">  515 </span>  <span class="decl"><span class="istickedoff">toValue v = VJVMSetupValue v</span></span>
+<span class="lineno">  516 </span>
+<span class="lineno">  517 </span>instance FromValue (CMS.SetupValue CJ.JVM) where
+<span class="lineno">  518 </span>  <span class="decl"><span class="istickedoff">fromValue (VJVMSetupValue v) = v</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Crucible.SetupValue&quot;</span></span></span>
+<span class="lineno">  520 </span>
+<span class="lineno">  521 </span>instance IsValue (CMS.SetupValue MIR) where
+<span class="lineno">  522 </span>  <span class="decl"><span class="istickedoff">toValue v = VMIRSetupValue v</span></span>
+<span class="lineno">  523 </span>
+<span class="lineno">  524 </span>instance FromValue (CMS.SetupValue MIR) where
+<span class="lineno">  525 </span>  <span class="decl"><span class="istickedoff">fromValue (VMIRSetupValue v) = v</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Crucible.SetupValue&quot;</span></span></span>
+<span class="lineno">  527 </span>
+<span class="lineno">  528 </span>instance IsValue SAW_CFG where
+<span class="lineno">  529 </span>    <span class="decl"><span class="nottickedoff">toValue t = VCFG t</span></span>
+<span class="lineno">  530 </span>
+<span class="lineno">  531 </span>instance FromValue SAW_CFG where
+<span class="lineno">  532 </span>    <span class="decl"><span class="nottickedoff">fromValue (VCFG t) = t</span>
+<span class="lineno">  533 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue CFG&quot;</span></span>
+<span class="lineno">  534 </span>
+<span class="lineno">  535 </span>instance IsValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
+<span class="lineno">  536 </span>    <span class="decl"><span class="istickedoff">toValue mir = VLLVMCrucibleMethodSpec mir</span></span>
+<span class="lineno">  537 </span>
+<span class="lineno">  538 </span>instance FromValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
+<span class="lineno">  539 </span>    <span class="decl"><span class="istickedoff">fromValue (VLLVMCrucibleMethodSpec mir) = mir</span>
+<span class="lineno">  540 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue ProvedSpec LLVM&quot;</span></span></span>
+<span class="lineno">  541 </span>
+<span class="lineno">  542 </span>instance IsValue (CMS.ProvedSpec CJ.JVM) where
+<span class="lineno">  543 </span>    <span class="decl"><span class="istickedoff">toValue t = VJVMMethodSpec t</span></span>
+<span class="lineno">  544 </span>
+<span class="lineno">  545 </span>instance FromValue (CMS.ProvedSpec CJ.JVM) where
+<span class="lineno">  546 </span>    <span class="decl"><span class="istickedoff">fromValue (VJVMMethodSpec t) = t</span>
+<span class="lineno">  547 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue ProvedSpec JVM&quot;</span></span></span>
+<span class="lineno">  548 </span>
+<span class="lineno">  549 </span>instance IsValue (CMS.ProvedSpec MIR) where
+<span class="lineno">  550 </span>    <span class="decl"><span class="istickedoff">toValue t = VMIRMethodSpec t</span></span>
+<span class="lineno">  551 </span>
+<span class="lineno">  552 </span>instance FromValue (CMS.ProvedSpec MIR) where
+<span class="lineno">  553 </span>    <span class="decl"><span class="istickedoff">fromValue (VMIRMethodSpec t) = t</span>
+<span class="lineno">  554 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue ProvedSpec MIR&quot;</span></span></span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>instance IsValue ModuleSkeleton where
+<span class="lineno">  557 </span>    <span class="decl"><span class="nottickedoff">toValue s = VLLVMModuleSkeleton s</span></span>
+<span class="lineno">  558 </span>
+<span class="lineno">  559 </span>instance FromValue ModuleSkeleton where
+<span class="lineno">  560 </span>    <span class="decl"><span class="nottickedoff">fromValue (VLLVMModuleSkeleton s) = s</span>
+<span class="lineno">  561 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue ModuleSkeleton&quot;</span></span>
+<span class="lineno">  562 </span>
+<span class="lineno">  563 </span>instance IsValue FunctionSkeleton where
+<span class="lineno">  564 </span>    <span class="decl"><span class="nottickedoff">toValue s = VLLVMFunctionSkeleton s</span></span>
+<span class="lineno">  565 </span>
+<span class="lineno">  566 </span>instance FromValue FunctionSkeleton where
+<span class="lineno">  567 </span>    <span class="decl"><span class="nottickedoff">fromValue (VLLVMFunctionSkeleton s) = s</span>
+<span class="lineno">  568 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue FunctionSkeleton&quot;</span></span>
+<span class="lineno">  569 </span>
+<span class="lineno">  570 </span>instance IsValue SkeletonState where
+<span class="lineno">  571 </span>    <span class="decl"><span class="nottickedoff">toValue s = VLLVMSkeletonState s</span></span>
+<span class="lineno">  572 </span>
+<span class="lineno">  573 </span>instance FromValue SkeletonState where
+<span class="lineno">  574 </span>    <span class="decl"><span class="nottickedoff">fromValue (VLLVMSkeletonState s) = s</span>
+<span class="lineno">  575 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue SkeletonState&quot;</span></span>
+<span class="lineno">  576 </span>
+<span class="lineno">  577 </span>instance IsValue FunctionProfile where
+<span class="lineno">  578 </span>    <span class="decl"><span class="nottickedoff">toValue s = VLLVMFunctionProfile s</span></span>
+<span class="lineno">  579 </span>
+<span class="lineno">  580 </span>instance FromValue FunctionProfile where
+<span class="lineno">  581 </span>    <span class="decl"><span class="nottickedoff">fromValue (VLLVMFunctionProfile s) = s</span>
+<span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue FunctionProfile&quot;</span></span>
+<span class="lineno">  583 </span>
+<span class="lineno">  584 </span>instance IsValue (AIGNetwork) where
+<span class="lineno">  585 </span>    <span class="decl"><span class="nottickedoff">toValue t = VAIG t</span></span>
+<span class="lineno">  586 </span>
+<span class="lineno">  587 </span>instance FromValue (AIGNetwork) where
+<span class="lineno">  588 </span>    <span class="decl"><span class="nottickedoff">fromValue (VAIG t) = t</span>
+<span class="lineno">  589 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue AIGNetwork&quot;</span></span>
+<span class="lineno">  590 </span>
+<span class="lineno">  591 </span>instance IsValue TypedTerm where
+<span class="lineno">  592 </span>    <span class="decl"><span class="istickedoff">toValue t = VTerm t</span></span>
+<span class="lineno">  593 </span>
+<span class="lineno">  594 </span>instance FromValue TypedTerm where
+<span class="lineno">  595 </span>    <span class="decl"><span class="istickedoff">fromValue (VTerm t) = t</span>
+<span class="lineno">  596 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue TypedTerm&quot;</span></span></span>
+<span class="lineno">  597 </span>
+<span class="lineno">  598 </span>instance FromValue Term where
+<span class="lineno">  599 </span>    <span class="decl"><span class="istickedoff">fromValue (VTerm t) = ttTerm t</span>
+<span class="lineno">  600 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue SharedTerm&quot;</span></span></span>
+<span class="lineno">  601 </span>
+<span class="lineno">  602 </span>instance IsValue Cryptol.Schema where
+<span class="lineno">  603 </span>    <span class="decl"><span class="istickedoff">toValue s = VType s</span></span>
+<span class="lineno">  604 </span>
+<span class="lineno">  605 </span>instance FromValue Cryptol.Schema where
+<span class="lineno">  606 </span>    <span class="decl"><span class="istickedoff">fromValue (VType s) = s</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Schema&quot;</span></span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>instance IsValue Text where
+<span class="lineno">  610 </span>    <span class="decl"><span class="istickedoff">toValue n = VString n</span></span>
+<span class="lineno">  611 </span>
+<span class="lineno">  612 </span>instance FromValue Text where
+<span class="lineno">  613 </span>    <span class="decl"><span class="istickedoff">fromValue (VString n) = n</span>
+<span class="lineno">  614 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = error &quot;fromValue Text&quot;</span></span>
+<span class="lineno">  615 </span>
+<span class="lineno">  616 </span>instance IsValue Integer where
+<span class="lineno">  617 </span>    <span class="decl"><span class="istickedoff">toValue n = VInteger n</span></span>
+<span class="lineno">  618 </span>
+<span class="lineno">  619 </span>instance FromValue Integer where
+<span class="lineno">  620 </span>    <span class="decl"><span class="istickedoff">fromValue (VInteger n) = n</span>
+<span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Integer&quot;</span></span></span>
+<span class="lineno">  622 </span>
+<span class="lineno">  623 </span>instance IsValue Int where
+<span class="lineno">  624 </span>    <span class="decl"><span class="nottickedoff">toValue n = VInteger (toInteger n)</span></span>
+<span class="lineno">  625 </span>
+<span class="lineno">  626 </span>instance FromValue Int where
+<span class="lineno">  627 </span>    <span class="decl"><span class="istickedoff">fromValue (VInteger n)</span>
+<span class="lineno">  628 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger (minBound :: Int) &lt;= n &amp;&amp;</span></span>
+<span class="lineno">  629 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue">toInteger (maxBound :: Int) &gt;= n</span> = fromIntegral n</span>
+<span class="lineno">  630 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Int&quot;</span></span></span>
+<span class="lineno">  631 </span>
+<span class="lineno">  632 </span>instance IsValue Bool where
+<span class="lineno">  633 </span>    <span class="decl"><span class="istickedoff">toValue b = VBool b</span></span>
+<span class="lineno">  634 </span>
+<span class="lineno">  635 </span>instance FromValue Bool where
+<span class="lineno">  636 </span>    <span class="decl"><span class="istickedoff">fromValue (VBool b) = b</span>
+<span class="lineno">  637 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Bool&quot;</span></span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>instance IsValue SAWSimpset where
+<span class="lineno">  640 </span>    <span class="decl"><span class="istickedoff">toValue ss = VSimpset ss</span></span>
+<span class="lineno">  641 </span>
+<span class="lineno">  642 </span>instance FromValue SAWSimpset where
+<span class="lineno">  643 </span>    <span class="decl"><span class="istickedoff">fromValue (VSimpset ss) = ss</span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Simpset&quot;</span></span></span>
+<span class="lineno">  645 </span>
+<span class="lineno">  646 </span>instance IsValue SAWRefnset where
+<span class="lineno">  647 </span>    <span class="decl"><span class="nottickedoff">toValue rs = VRefnset rs</span></span>
+<span class="lineno">  648 </span>
+<span class="lineno">  649 </span>instance FromValue SAWRefnset where
+<span class="lineno">  650 </span>    <span class="decl"><span class="nottickedoff">fromValue (VRefnset rs) = rs</span>
+<span class="lineno">  651 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue Refnset&quot;</span></span>
+<span class="lineno">  652 </span>
+<span class="lineno">  653 </span>instance IsValue Theorem where
+<span class="lineno">  654 </span>    <span class="decl"><span class="istickedoff">toValue t = VTheorem t</span></span>
+<span class="lineno">  655 </span>
+<span class="lineno">  656 </span>instance FromValue Theorem where
+<span class="lineno">  657 </span>    <span class="decl"><span class="istickedoff">fromValue (VTheorem t) = t</span>
+<span class="lineno">  658 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Theorem&quot;</span></span></span>
+<span class="lineno">  659 </span>
+<span class="lineno">  660 </span>instance IsValue BisimTheorem where
+<span class="lineno">  661 </span>    <span class="decl"><span class="istickedoff">toValue = VBisimTheorem</span></span>
+<span class="lineno">  662 </span>
+<span class="lineno">  663 </span>instance FromValue BisimTheorem where
+<span class="lineno">  664 </span>    <span class="decl"><span class="istickedoff">fromValue (VBisimTheorem t) = t</span>
+<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue BisimTheorem&quot;</span></span></span>
+<span class="lineno">  666 </span>
+<span class="lineno">  667 </span>instance IsValue JavaType where
+<span class="lineno">  668 </span>    <span class="decl"><span class="istickedoff">toValue t = VJavaType t</span></span>
+<span class="lineno">  669 </span>
+<span class="lineno">  670 </span>instance FromValue JavaType where
+<span class="lineno">  671 </span>    <span class="decl"><span class="istickedoff">fromValue (VJavaType t) = t</span>
+<span class="lineno">  672 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue JavaType&quot;</span></span></span>
+<span class="lineno">  673 </span>
+<span class="lineno">  674 </span>instance IsValue LLVM.Type where
+<span class="lineno">  675 </span>    <span class="decl"><span class="istickedoff">toValue t = VLLVMType t</span></span>
+<span class="lineno">  676 </span>
+<span class="lineno">  677 </span>instance FromValue LLVM.Type where
+<span class="lineno">  678 </span>    <span class="decl"><span class="istickedoff">fromValue (VLLVMType t) = t</span>
+<span class="lineno">  679 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue LLVMType&quot;</span></span></span>
+<span class="lineno">  680 </span>
+<span class="lineno">  681 </span>instance IsValue MIR.Ty where
+<span class="lineno">  682 </span>    <span class="decl"><span class="istickedoff">toValue t = VMIRType t</span></span>
+<span class="lineno">  683 </span>
+<span class="lineno">  684 </span>instance FromValue MIR.Ty where
+<span class="lineno">  685 </span>    <span class="decl"><span class="istickedoff">fromValue (VMIRType t) = t</span>
+<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue MIRType&quot;</span></span></span>
+<span class="lineno">  687 </span>
+<span class="lineno">  688 </span>instance IsValue Uninterp where
+<span class="lineno">  689 </span>    <span class="decl"><span class="nottickedoff">toValue me = VUninterp me</span></span>
+<span class="lineno">  690 </span>
+<span class="lineno">  691 </span>instance FromValue Uninterp where
+<span class="lineno">  692 </span>    <span class="decl"><span class="nottickedoff">fromValue (VUninterp me) = me</span>
+<span class="lineno">  693 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue Uninterp&quot;</span></span>
+<span class="lineno">  694 </span>
+<span class="lineno">  695 </span>instance IsValue CryptolModule where
+<span class="lineno">  696 </span>    <span class="decl"><span class="nottickedoff">toValue m = VCryptolModule m</span></span>
+<span class="lineno">  697 </span>
+<span class="lineno">  698 </span>instance FromValue CryptolModule where
+<span class="lineno">  699 </span>    <span class="decl"><span class="nottickedoff">fromValue (VCryptolModule m) = m</span>
+<span class="lineno">  700 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue ModuleEnv&quot;</span></span>
+<span class="lineno">  701 </span>
+<span class="lineno">  702 </span>instance IsValue JSS.Class where
+<span class="lineno">  703 </span>    <span class="decl"><span class="istickedoff">toValue c = VJavaClass c</span></span>
+<span class="lineno">  704 </span>
+<span class="lineno">  705 </span>instance FromValue JSS.Class where
+<span class="lineno">  706 </span>    <span class="decl"><span class="istickedoff">fromValue (VJavaClass c) = c</span>
+<span class="lineno">  707 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue JavaClass&quot;</span></span></span>
+<span class="lineno">  708 </span>
+<span class="lineno">  709 </span>instance IsValue (Some CMSLLVM.LLVMModule) where
+<span class="lineno">  710 </span>    <span class="decl"><span class="istickedoff">toValue m = VLLVMModule m</span></span>
+<span class="lineno">  711 </span>
+<span class="lineno">  712 </span>instance IsValue (CMSLLVM.LLVMModule arch) where
+<span class="lineno">  713 </span>    <span class="decl"><span class="nottickedoff">toValue m = VLLVMModule (Some m)</span></span>
+<span class="lineno">  714 </span>
+<span class="lineno">  715 </span>instance FromValue (Some CMSLLVM.LLVMModule) where
+<span class="lineno">  716 </span>    <span class="decl"><span class="istickedoff">fromValue (VLLVMModule m) = m</span>
+<span class="lineno">  717 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue CMSLLVM.LLVMModule&quot;</span></span></span>
+<span class="lineno">  718 </span>
+<span class="lineno">  719 </span>instance IsValue RustModule where
+<span class="lineno">  720 </span>    <span class="decl"><span class="istickedoff">toValue m = VMIRModule m</span></span>
+<span class="lineno">  721 </span>
+<span class="lineno">  722 </span>instance FromValue RustModule where
+<span class="lineno">  723 </span>    <span class="decl"><span class="istickedoff">fromValue (VMIRModule m) = m</span>
+<span class="lineno">  724 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue RustModule&quot;</span></span></span>
+<span class="lineno">  725 </span>
+<span class="lineno">  726 </span>instance IsValue MIR.Adt where
+<span class="lineno">  727 </span>    <span class="decl"><span class="istickedoff">toValue adt = VMIRAdt adt</span></span>
+<span class="lineno">  728 </span>
+<span class="lineno">  729 </span>instance FromValue MIR.Adt where
+<span class="lineno">  730 </span>    <span class="decl"><span class="istickedoff">fromValue (VMIRAdt adt) = adt</span>
+<span class="lineno">  731 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Adt&quot;</span></span></span>
+<span class="lineno">  732 </span>
+<span class="lineno">  733 </span>instance IsValue HeapsterEnv where
+<span class="lineno">  734 </span>    <span class="decl"><span class="nottickedoff">toValue m = VHeapsterEnv m</span></span>
+<span class="lineno">  735 </span>
+<span class="lineno">  736 </span>instance FromValue HeapsterEnv where
+<span class="lineno">  737 </span>    <span class="decl"><span class="nottickedoff">fromValue (VHeapsterEnv m) = m</span>
+<span class="lineno">  738 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ = error &quot;fromValue HeapsterEnv&quot;</span></span>
+<span class="lineno">  739 </span>
+<span class="lineno">  740 </span>instance IsValue ProofResult where
+<span class="lineno">  741 </span>   <span class="decl"><span class="istickedoff">toValue r = VProofResult r</span></span>
+<span class="lineno">  742 </span>
+<span class="lineno">  743 </span>instance FromValue ProofResult where
+<span class="lineno">  744 </span>   <span class="decl"><span class="istickedoff">fromValue (VProofResult r) = r</span>
+<span class="lineno">  745 </span><span class="spaces">   </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error $ &quot;fromValue ProofResult: &quot; ++ show v</span></span></span>
+<span class="lineno">  746 </span>
+<span class="lineno">  747 </span>instance IsValue SatResult where
+<span class="lineno">  748 </span>   <span class="decl"><span class="istickedoff">toValue r = VSatResult r</span></span>
+<span class="lineno">  749 </span>
+<span class="lineno">  750 </span>instance FromValue SatResult where
+<span class="lineno">  751 </span>   <span class="decl"><span class="nottickedoff">fromValue (VSatResult r) = r</span>
+<span class="lineno">  752 </span><span class="spaces">   </span><span class="nottickedoff">fromValue v = error $ &quot;fromValue SatResult: &quot; ++ show v</span></span>
+<span class="lineno">  753 </span>
+<span class="lineno">  754 </span>instance IsValue CMS.GhostGlobal where
+<span class="lineno">  755 </span>  <span class="decl"><span class="nottickedoff">toValue = VGhostVar</span></span>
+<span class="lineno">  756 </span>
+<span class="lineno">  757 </span>instance FromValue CMS.GhostGlobal where
+<span class="lineno">  758 </span>  <span class="decl"><span class="istickedoff">fromValue (VGhostVar r) = r</span>
+<span class="lineno">  759 </span><span class="spaces">  </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error (&quot;fromValue GlobalVar: &quot; ++ show v)</span></span></span>
+<span class="lineno">  760 </span>
+<span class="lineno">  761 </span>instance IsValue Yo.YosysIR where
+<span class="lineno">  762 </span>  <span class="decl"><span class="nottickedoff">toValue = VYosysModule</span></span>
+<span class="lineno">  763 </span>
+<span class="lineno">  764 </span>instance FromValue Yo.YosysIR where
+<span class="lineno">  765 </span>  <span class="decl"><span class="nottickedoff">fromValue (VYosysModule ir) = ir</span>
+<span class="lineno">  766 </span><span class="spaces">  </span><span class="nottickedoff">fromValue v = error (&quot;fromValue YosysIR: &quot; ++ show v)</span></span>
+<span class="lineno">  767 </span>
+<span class="lineno">  768 </span>instance IsValue Yo.YosysImport where
+<span class="lineno">  769 </span>  <span class="decl"><span class="nottickedoff">toValue = VYosysImport</span></span>
+<span class="lineno">  770 </span>
+<span class="lineno">  771 </span>instance FromValue Yo.YosysImport where
+<span class="lineno">  772 </span>  <span class="decl"><span class="nottickedoff">fromValue (VYosysImport i) = i</span>
+<span class="lineno">  773 </span><span class="spaces">  </span><span class="nottickedoff">fromValue v = error (&quot;fromValue YosysImport: &quot; ++ show v)</span></span>
+<span class="lineno">  774 </span>
+<span class="lineno">  775 </span>instance IsValue Yo.YosysSequential where
+<span class="lineno">  776 </span>  <span class="decl"><span class="istickedoff">toValue = VYosysSequential</span></span>
+<span class="lineno">  777 </span>
+<span class="lineno">  778 </span>instance FromValue Yo.YosysSequential where
+<span class="lineno">  779 </span>  <span class="decl"><span class="istickedoff">fromValue (VYosysSequential s) = s</span>
+<span class="lineno">  780 </span><span class="spaces">  </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error (&quot;fromValue YosysSequential: &quot; ++ show v)</span></span></span>
+<span class="lineno">  781 </span>
+<span class="lineno">  782 </span>instance IsValue Yo.YosysTheorem where
+<span class="lineno">  783 </span>  <span class="decl"><span class="istickedoff">toValue = VYosysTheorem</span></span>
+<span class="lineno">  784 </span>
+<span class="lineno">  785 </span>instance FromValue Yo.YosysTheorem where
+<span class="lineno">  786 </span>  <span class="decl"><span class="istickedoff">fromValue (VYosysTheorem thm) = thm</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error (&quot;fromValue YosysTheorem: &quot; ++ show v)</span></span></span>
+
+</pre>
+</body>
+</html>
