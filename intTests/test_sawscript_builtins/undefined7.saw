@@ -1,0 +1,4 @@
+// This, unlike the behavior in undefined6, is reasonable and expected.
+
+let m = let x = undefined in do { return (); };
+print "oops didn't die";

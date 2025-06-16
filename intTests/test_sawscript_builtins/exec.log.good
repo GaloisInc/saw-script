@@ -1,0 +1,4 @@
+ Loading file "exec.saw"
+ out <- exec "cat" ["exec.saw", "-"] "fnord";
+print out;
+fnord

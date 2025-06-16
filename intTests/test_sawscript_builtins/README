@@ -1,0 +1,25 @@
+Here we have tests for the language-level SAWScript builtins,
+as well as a few aspects of the language itself.
+
+Exactly what that does and doesn't include isn't super well defined,
+because as of this writing the boundary between the language and the
+underlying SAW system isn't well defined either, but in general it
+means stuff that wouldn't leave the interpreter if that boundary
+_were_ well defined.
+
+So for example:
+   - monad ops
+   - list ops
+   - things that work around missing language features like caseSatResult
+   - show
+   - eval_*
+   - undefined, fail
+   - include, read_bytes
+   - interpreter internal bits like dump_file_AST
+
+For the time being it does not include the operations for manipulating
+SAWCore or Cryptol terms and types.
+
+Note that while "fails" and "return" are not explicitly tested,
+they're used in various places that will notice if they don't work
+and that seems sufficient.

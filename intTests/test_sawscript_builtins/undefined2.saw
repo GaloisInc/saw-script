@@ -1,0 +1,6 @@
+// Try undefined in a top-level do block.
+
+do {
+  undefined;
+  return ();
+};

@@ -1,0 +1,7 @@
+// Try undefined in a pure function.
+
+let f () = undefined;
+print "not dead yet";
+let x = f ();
+print "oops didn't die";
+

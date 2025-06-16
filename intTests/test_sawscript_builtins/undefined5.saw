@@ -1,0 +1,8 @@
+// Try undefined in a monadic function.
+
+let f () = do { undefined; return (); };
+print "not dead yet";
+let x = f ();
+print "still not dead";
+x;
+print "oops didn't die";
