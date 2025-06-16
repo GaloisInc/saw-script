@@ -246,7 +246,7 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run `llvm_fresh_var` from
 the post state (i.e., after `llvm_execute_func`).
 
-## The SetupValue and JVMValue Types
+## The SetupValue, JVMValue, and MIRValue Types
 
 Many specifications require reasoning about both pure values and about
 the configuration of the heap. The `SetupValue` type corresponds to
@@ -858,17 +858,18 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `SetupValue`
-arguments, the first of which must be a reference or pointer, and states that
-the memory specified by that reference or pointer should contain the value given
-in the second argument (which may be any type of `SetupValue`).
+- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `MIRValue`
+  arguments, the first of which must be a reference or raw pointer, and states
+  that the memory specified by that reference or raw pointer should contain the
+  value given in the second argument (which may be any type of `MIRValue`).
 
 As a convenience, SAW also provides:
 
-- `mir_ref_of : SetupValue -> MIRSetup SetupValue`
-- `mir_ref_of_mut : SetupValue -> MIRSetup SetupValue`
+- `mir_ref_of : MIRValue -> MIRSetup MIRValue`
+- `mir_ref_of_mut : MIRValue -> MIRSetup MIRValue`
 
-which combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to` into a single operation.
+which combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to` into a single
+operation.
 
 ## Working with Compound Types
 
