@@ -404,7 +404,7 @@ ppFlatTermF prec tf =
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         nm <- ppPrimName d
+         nm <- ppExtCns d
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
              (params_pp ++ [motive_pp])
@@ -413,10 +413,10 @@ ppFlatTermF prec tf =
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
-         nm <- ppPrimName d
+         nm <- ppExtCns d
          f_pps <- forM ctorOrder $ \ec ->
-                    do cnm <- ppPrimName ec
-                       case Map.lookup (primVarIndex ec) fs_pp of
+                    do cnm <- ppExtCns ec
+                       case Map.lookup (ecVarIndex ec) fs_pp of
                          Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
                          Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
          return $
@@ -428,14 +428,6 @@ ppFlatTermF prec tf =
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
-
-    CtorApp c params args ->
-      do cnm <- ppPrimName c
-         ppAppList prec (annotate PPS.CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
-
-    DataTypeApp dt params args ->
-      do dnm <- ppPrimName dt
-         ppAppList prec (annotate PPS.DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
@@ -469,15 +461,6 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
-
--- | Pretty-print a 'PrimName', using the best unambiguous alias from
--- the naming environment.
-ppPrimName :: PrimName e -> PPM PPS.Doc
-ppPrimName pn =
-  do ne <- asks ppNamingEnv
-     case bestDisplayName ne (primVarIndex pn) of
-       Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppIdent (primName pn)
 
 -- | Pretty-print an 'ExtCns', using the best unambiguous alias from
 -- the naming environment.
@@ -559,8 +542,6 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
-            FTermF (CtorApp _ ps xs)       -> ps ++ xs
             FTermF (RecursorType _ ps m _) -> ps ++ [m]
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
@@ -575,8 +556,6 @@ shouldMemoizeTerm t =
   case unwrapTermF t of
     FTermF UnitValue -> False
     FTermF UnitType -> False
-    FTermF (CtorApp _ [] []) -> False
-    FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False

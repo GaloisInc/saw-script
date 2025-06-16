@@ -105,11 +105,6 @@ scWriteExternal t0 =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (ecVarIndex ec) (ecName ec) nms, lns, x)
 
-    stashPrimName :: PrimName Int -> WriteM ()
-    stashPrimName pn =
-       do (m, nms, lns, x) <- State.get
-          State.put (m, Map.insert (primVarIndex pn) (ModuleIdentifier (primName pn)) nms, lns, x)
-
     go :: Term -> WriteM Int
     go (Unshared tf) = do
       tf' <- traverse go tf
@@ -147,30 +142,22 @@ scWriteExternal t0 =
             PairType x y        -> pure $ unwords ["PairT", show x, show y]
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
-            CtorApp i ps es     ->
-              do stashPrimName i
-                 pure $ unwords ("Ctor" : show (primVarIndex i) : show (primType i) :
-                                 map show ps ++ argsep : map show es)
-            DataTypeApp i ps es ->
-              do stashPrimName i
-                 pure $ unwords ("Data" : show (primVarIndex i) : show (primType i) :
-                                 map show ps ++ argsep : map show es)
 
             RecursorType d ps motive motive_ty ->
-              do stashPrimName d
+              do stashName d
                  pure $ unwords
-                     (["RecursorType", show (primVarIndex d), show (primType d)] ++
+                     (["RecursorType", show (ecVarIndex d), show (ecType d)] ++
                       map show ps ++
                       [argsep, show motive, show motive_ty])
             Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder) ->
-              do stashPrimName d
-                 mapM_ stashPrimName ctorOrder
+              do stashName d
+                 mapM_ stashName ctorOrder
                  pure $ unwords
-                      (["Recursor" , show (primVarIndex d), show (primType d)] ++
+                      (["Recursor" , show (ecVarIndex d), show (ecType d)] ++
                        map show ps ++
                        [ argsep, show motive, show motive_ty
                        , show (Map.toList cs_fs)
-                       , show (map (\ec -> (primVarIndex ec, primType ec)) ctorOrder)
+                       , show (map (\ec -> (ecVarIndex ec, ecType ec)) ctorOrder)
                        ])
             RecursorApp r ixs e -> pure $
               unwords (["RecursorApp", show r] ++
@@ -245,17 +232,10 @@ scReadExternal sc input =
                        pure (c, (e',ty')))
          pure (Map.fromList elims)
 
-    readCtorList :: String -> ReadM [PrimName Term]
+    readCtorList :: String -> ReadM [ExtCns Term]
     readCtorList str =
       do (ls :: [(VarIndex,Int)]) <- readM str
-         forM ls (\(vi,i) -> readPrimName' vi =<< getTerm i)
-
-    readPrimName' :: VarIndex -> Term -> ReadM (PrimName Term)
-    readPrimName' vi t' =
-      do EC _ nmi tp <- readEC' vi t'
-         case nmi of
-           ModuleIdentifier ident -> pure (PrimName vi ident tp)
-           _ -> lift $ fail $ "scReadExternal: primitive name must be a module identifier" ++ show nmi
+         forM ls (\(vi,i) -> readEC' vi =<< getTerm i)
 
     readEC' :: VarIndex -> Term -> ReadM (ExtCns Term)
     readEC' vi t' =
@@ -284,12 +264,6 @@ scReadExternal sc input =
          t' <- readIdx t
          readEC' vi t'
 
-    readPrimName :: String -> String -> ReadM (PrimName Term)
-    readPrimName i t =
-      do vi <- readM i
-         t' <- readIdx t
-         readPrimName' vi t'
-
     parse :: [String] -> ReadM (TermF Term)
     parse tokens =
       case tokens of
@@ -305,16 +279,12 @@ scReadExternal sc input =
         ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
-        ("Ctor" : i : t : (separateArgs -> Just (ps, es))) ->
-          FTermF <$> (CtorApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
-        ("Data" : i : t : (separateArgs -> Just (ps, es))) ->
-          FTermF <$> (DataTypeApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
 
         ("RecursorType" : i : t :
          (separateArgs ->
           Just (ps, [motive,motive_ty]))) ->
             do tp <- RecursorType <$>
-                       readPrimName i t <*>
+                       readEC i t <*>
                        traverse readIdx ps <*>
                        readIdx motive <*>
                        readIdx motive_ty
@@ -323,7 +293,7 @@ scReadExternal sc input =
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder]))) ->
             do rec <- CompiledRecursor <$>
-                        readPrimName i t <*>
+                        readEC i t <*>
                         traverse readIdx ps <*>
                         readIdx motive <*>
                         readIdx motiveTy <*>

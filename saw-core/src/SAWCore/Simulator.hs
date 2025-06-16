@@ -32,7 +32,7 @@ module SAWCore.Simulator
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM)
+import Control.Monad (liftM)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.Monad.Fix (MonadFix(mfix))
@@ -54,7 +54,11 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( allModuleActualDefs
   , allModulePrimitives
+  , ctorNumParams
+  , ctorNumArgs
   , defNameInfo
+  , dtNumIndices
+  , dtNumParams
   , findCtorInMap
   , lookupVarIndexInMap
   , Ctor(..)
@@ -94,7 +98,7 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
-  , simCtorApp :: PrimName (TValue l) -> Maybe (MValue l)
+  , simCtorApp :: ExtCns (TValue l) -> Maybe (MValue l)
   -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
@@ -166,10 +170,10 @@ evalTermF cfg lam recEval tf env =
                                       case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
                                         Nothing ->
                                           panic "evalTermF" ["Constant not found: " <> str]
-                                        Just (ResolvedCtor _) ->
-                                          panic "evalTermF" ["Expected Def, found Ctor: " <> str]
-                                        Just (ResolvedDataType _) ->
-                                          panic "evalTermF" ["Expected Def, found DataType: " <> str]
+                                        Just (ResolvedCtor ctor) ->
+                                          ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
+                                        Just (ResolvedDataType dt) ->
+                                          dtValue ec' (dtNumParams dt) (dtNumIndices dt)
                                         Just (ResolvedDef d) ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -200,21 +204,6 @@ evalTermF cfg lam recEval tf env =
         PairRight x         -> recEval x >>= \case
                                  VPair _l r -> force r
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
-
-        CtorApp c ps ts     -> do c'  <- traverse evalType c
-                                  ps' <- mapM recEvalDelay ps
-                                  ts' <- mapM recEvalDelay ts
-                                  case simCtorApp cfg c' of
-                                    Just mv ->
-                                      do v <- mv
-                                         foldM apply v (ps' ++ ts')
-                                    Nothing ->
-                                      pure $ VCtorApp c' ps' ts'
-
-        DataTypeApp d ps ts -> do d' <- traverse evalType d
-                                  ps' <- mapM recEval ps
-                                  ts' <- mapM recEval ts
-                                  pure (TValue (VDataType d' ps' ts'))
 
         RecursorType d ps m mtp ->
           TValue <$> (VRecursorType <$>
@@ -281,8 +270,9 @@ evalTermF cfg lam recEval tf env =
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _ps args) =
-       do ctor <- findCtorInMap (primName c) (simModMap cfg)
-          Just (ctor, args)
+      case lookupVarIndexInMap (ecVarIndex c) (simModMap cfg) of
+        Just (ResolvedCtor ctor) -> Just (ctor, args)
+        _ -> Nothing
     evalConstructor (VNat 0) =
        do ctor <- findCtorInMap preludeZeroIdent (simModMap cfg)
           Just (ctor, [])
@@ -295,6 +285,33 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
+    ctorValue :: ExtCns (TValue l) -> Int -> Int -> MValue l
+    ctorValue ec i j =
+      vFunList (replicate i "_") $ \params ->
+      vFunList (replicate j "_") $ \args ->
+      pure $ VCtorApp ec params args
+
+    dtValue :: ExtCns (TValue l) -> Int -> Int -> MValue l
+    dtValue ec i j =
+      vStrictFunList (replicate i "_") $ \params ->
+      vStrictFunList (replicate j "_") $ \idxs ->
+      pure $ TValue $ VDataType ec params idxs
+
+-- | Create a 'Value' for a lazy multi-argument function.
+vFunList :: forall l. VMonad l => [LocalName] -> ([Thunk l] -> MValue l) -> MValue l
+vFunList names k = go [] names
+  where
+    go :: [Thunk l] -> [LocalName] -> MValue l
+    go args [] = k (reverse args)
+    go args (n : ns) = pure $ VFun n (\x -> go (x : args) ns)
+
+-- | Create a 'Value' for a strict multi-argument function.
+vStrictFunList :: forall l. VMonad l => [LocalName] -> ([Value l] -> MValue l) -> MValue l
+vStrictFunList names k = go [] names
+  where
+    go :: [Value l] -> [LocalName] -> MValue l
+    go args [] = k (reverse args)
+    go args (n : ns) = pure $ VFun n (\x -> force x >>= \v -> go (v : args) ns)
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
@@ -391,12 +408,15 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
         Nothing ->
           case ecName ec of
             ModuleIdentifier ident ->
-              let pn = PrimName (ecVarIndex ec) ident (ecType ec)
-               in evalPrim (primHandler ec) pn <$> Map.lookup ident prims
+              evalPrim (primHandler ec) ec <$> Map.lookup ident prims
             ImportedName{} -> Nothing
 
-    ctors :: PrimName (TValue l) -> Maybe (MValue l)
-    ctors pn = evalPrim (primHandler (primNameToExtCns pn)) pn <$> Map.lookup (primName pn) prims
+    ctors :: ExtCns (TValue l) -> Maybe (MValue l)
+    ctors ec =
+      case ecName ec of
+        ModuleIdentifier ident ->
+          evalPrim (primHandler ec) ec <$> Map.lookup ident prims
+        ImportedName{} -> Nothing
 
     primitive :: ExtCns (TValue l) -> MValue l
     primitive ec =
@@ -405,7 +425,7 @@ evalGlobal' modmap prims extcns constant neutral primHandler =
           panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (ecName ec)]
         ModuleIdentifier ident ->
           case Map.lookup ident prims of
-            Just v  -> evalPrim (primHandler ec) (PrimName (ecVarIndex ec) ident (ecType ec)) v
+            Just v  -> evalPrim (primHandler ec) ec v
             Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
 
 -- | Check that all the primitives declared in the given module
@@ -640,23 +660,23 @@ evalOpen cfg memoClosed t env = do
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
   (Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  PrimName (TValue (WithM Id l)) ->
+  ExtCns (TValue (WithM Id l)) ->
   PrimIn Id l ->
   MValueIn Id l
  #-}
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
   (Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  PrimName (TValue (WithM IO l)) ->
+  ExtCns (TValue (WithM IO l)) ->
   PrimIn IO l ->
   MValueIn IO l
  #-}
 evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
   (Text -> Env l -> TValue l -> MValue l) ->
-  PrimName (TValue l) ->
+  ExtCns (TValue l) ->
   Prims.Prim l ->
   MValue l
-evalPrim fallback pn = loop [] (primType pn)
+evalPrim fallback ec = loop [] (ecType ec)
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
     loop env (VPiType nm t body) (Prims.PrimFun f) =
@@ -688,7 +708,7 @@ evalPrim fallback pn = loop [] (primType pn)
 
     loop _env _tp _p =
       panic "evalPrim" [
-          "Type mismatch in primitive: " <>  identText (primName pn)]
+          "Type mismatch in primitive: " <> toAbsoluteName (ecName ec)]
 
 -- | A basic handler for stuck primitives.
 defaultPrimHandler ::

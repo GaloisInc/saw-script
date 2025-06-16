@@ -133,7 +133,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)
 
-import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
+import SAWCore.Module (Def(..), ResolvedName(..), ctorNumParams, lookupVarIndexInMap)
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
@@ -169,10 +169,8 @@ asNestedPairs _ = Nothing
 
 -- | Recognize a term of the form @Cons _ x1 (Cons _ x2 (... (Nil _)))@
 asList :: Recognizer Term [Term]
-asList (asCtor -> Just (nm, [_]))
-  | primName nm == "Prelude.Nil" = return []
-asList (asCtor -> Just (nm, [_, hd, tl]))
-  | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
+asList (asGlobalApply "Prelude.Nil" -> Just [_]) = pure []
+asList (asGlobalApply "Prelude.Cons" -> Just [_, hd, tl]) = (hd:) <$> asList tl
 asList _ = Nothing
 
 -- | Apply a SAW core term of type @MultiFixBodies@ to a list of monadic
@@ -465,11 +463,16 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
-      | Just (c, _, cargs) <- asCtorParams arg ->
-      do hd' <- liftSC4 scReduceRecursor rc crec c cargs
-                  >>= liftSC1 betaNormalize
-         t' <- mrApplyAll hd' args
-         normCompTerm t'
+      | (asConstant -> Just c, cargs) <- asApplyAll arg ->
+        do mm <- liftSC0 scGetModuleMap
+           case lookupVarIndexInMap (ecVarIndex c) mm of
+             Just (ResolvedCtor ctor) ->
+               do let cargs' = drop (ctorNumParams ctor) cargs
+                  hd' <- liftSC4 scReduceRecursor rc crec c cargs'
+                         >>= liftSC1 betaNormalize
+                  t' <- mrApplyAll hd' args
+                  normCompTerm t'
+             _ -> throwMRFailure (MalformedComp t)
 
     -- Always unfold record selectors applied to record values (after scWhnf)
     (asRecordSelector -> Just (r, fld), args) ->
@@ -612,10 +615,8 @@ mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
 
 -- | Match a term as a static list of eliminators for an Eithers type
 matchEitherElims :: Term -> Maybe [EitherElim]
-matchEitherElims (asCtor ->
-                  Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
-matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
-                                  [asSpecM -> Just (ev, _), tp, f, rest])) =
+matchEitherElims (asGlobalApply "Prelude.FunsTo_Nil" -> Just [_]) = Just []
+matchEitherElims (asGlobalApply "Prelude.FunsTo_Cons" -> Just [asSpecM -> Just (ev, _), tp, f, rest]) =
   ((Type tp, CompFunTerm ev f):) <$>
   matchEitherElims rest
 matchEitherElims _ = Nothing

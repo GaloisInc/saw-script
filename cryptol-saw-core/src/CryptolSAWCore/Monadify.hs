@@ -106,6 +106,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Text as Text
 import Control.Monad (forM_, unless)
 import Control.Monad.Cont (Cont, cont, runCont)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -114,6 +115,7 @@ import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
 import Control.Monad.Trans (MonadTrans(..))
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Maybe (isJust)
 import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
@@ -341,8 +343,7 @@ isBaseType _ = True
 
 -- | Convert a SAW core 'Term' to a monadification kind, if possible
 monadifyKind :: Term -> Maybe SomeKindRepr
-monadifyKind (asDataType -> Just (num, []))
-  | primName num == "Cryptol.Num" = Just $ SomeKindRepr MKNumRepr
+monadifyKind (asGlobalApply "Cryptol.Num" -> Just []) = Just $ SomeKindRepr MKNumRepr
 monadifyKind (asSort -> Just s) | s == mkSort 0 = Just $ SomeKindRepr MKTypeRepr
 monadifyKind _ = Nothing
 
@@ -545,20 +546,12 @@ monadifyTpExpr ctx (asPairType -> Just (tp1, tp2)) =
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
 -}
-{- FIXME: do we ever need this?
-monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
-  | primName eq_pn == "Prelude.Eq" =
-  , isJust (monadifyKind k_trm) =
+monadifyTpExpr ctx (asGlobalApply "Prelude.Eq" -> Just [k_trm, tp1, tp2])
+  | isJust (monadifyKind k_trm) =
+    SomeTpExpr MKTypeRepr $
     -- NOTE: technically this is a Prop and not a sort 0, but it doesn't matter
     MTyIndesc $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
                                                monadifyTypeArgType ctx tp2]
--}
-monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
-  -- NOTE: this case only recognizes data types whose arguments are all types
-  -- and/or Nums
-  SomeTpExpr MKTypeRepr $
-  MTyIndesc $ dataTypeOpenTerm (primName pn) (map (someTpExprVal .
-                                                   monadifyTpExpr ctx) args)
 monadifyTpExpr _ (asBitvectorType -> Just w) =
   SomeTpExpr MKTypeRepr $ MTyBV w
 monadifyTpExpr ctx (asVectorType -> Just (asNat -> Just n, a)) =
@@ -588,11 +581,9 @@ monadifyType ctx (asApplyAll -> (f, args))
 -}
 
 -- Num cases
-monadifyTpExpr _ (asCtor -> Just (pn, []))
-  | primName pn == "Cryptol.TCInf"
+monadifyTpExpr _ (asGlobalApply "Cryptol.TCInf" -> Just [])
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
-monadifyTpExpr _ (asCtor -> Just (pn, [asNat -> Just n]))
-  | primName pn == "Cryptol.TCNum"
+monadifyTpExpr _ (asGlobalApply "Cryptol.TCNum" -> Just [asNat -> Just n])
   = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
   | Just op <- monadifyNumBinOp f
@@ -831,15 +822,21 @@ mkSemiPureGlobalDefTerm glob params_p =
    then applyOpenTermMulti (globalDefOpenTerm glob) [evTypeTerm ?specMEvType]
    else globalDefOpenTerm glob)
 
--- | Build a 'MonTerm' from a constructor with the given 'PrimName'
-mkCtorArgMonTerm :: HasSpecMEvType => PrimName Term -> ArgMonTerm
-mkCtorArgMonTerm pn
-  | not (isFirstOrderType (primType pn)) =
-    failArgMonTerm (monadifyType [] $ primType pn)
+-- | Build a 'MonTerm' from a constructor with the given 'ExtCns'
+mkCtorArgMonTerm :: HasSpecMEvType => ExtCns Term -> ArgMonTerm
+mkCtorArgMonTerm ec
+  | not (isFirstOrderType (ecType ec)) =
+    failArgMonTerm (monadifyType [] $ ecType ec)
     ("monadification failed: cannot handle constructor "
-     ++ show (primName pn) ++ " with higher-order type")
-mkCtorArgMonTerm pn =
-  fromSemiPureTermFun (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
+     ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with higher-order type")
+mkCtorArgMonTerm ec =
+  case ecName ec of
+    ModuleIdentifier ident ->
+      fromSemiPureTermFun (monadifyType [] $ ecType ec) (ctorOpenTerm ident)
+    ImportedName{} ->
+      failArgMonTerm (monadifyType [] $ ecType ec)
+      ("monadification failed: cannot handle constructor "
+       ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with non-ident name")
 
 
 ----------------------------------------------------------------------
@@ -1191,8 +1188,10 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asTupleValue -> Just []) =
   return $ ArgMonTerm $ fromSemiPureTerm MTyUnit unitOpenTerm
-monadifyTerm' _ (asCtor -> Just (pn, args)) =
-  monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
+{-
+monadifyTerm' _ (asCtor -> Just (ec, args)) =
+  monadifyApply (ArgMonTerm $ mkCtorArgMonTerm ec) args
+-}
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
   (Map.lookup (globalDefName glob) <$> monStMonTable <$> ask) >>= \case
   Just macro ->
@@ -1286,8 +1285,7 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
         [dataTypeOpenTerm "Cryptol.Num" [],
          numExprVal n, numExprVal m] in
   case ts of
-    [(asDataType -> Just (num, []))]
-      | primName num == "Cryptol.Num" ->
+    [(asGlobalApply "Cryptol.Num" -> Just [])] ->
         return $ ArgMonTerm $
         mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqS" True
     _ ->

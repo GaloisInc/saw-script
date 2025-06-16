@@ -35,7 +35,6 @@ module SAWCore.Term.Functor
   , FieldName
   , LocalName
   , ExtCns(..)
-  , PrimName(..)
   , VarIndex
   , NameInfo(..)
   , toShortName
@@ -196,18 +195,10 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | An inductively-defined type, applied to parameters and type indices
-  | DataTypeApp !(PrimName e) ![e] ![e]
-
-    -- | An application of a constructor to its arguments, i.e., an element of
-    -- an inductively-defined type; the parameters (of the inductive type to
-    -- which this constructor belongs) and indices are kept separate
-  | CtorApp !(PrimName e) ![e] ![e]
-
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
     --   type of the motive function.
-  | RecursorType !(PrimName e) ![e] !e !e
+  | RecursorType !(ExtCns e) ![e] !e !e
 
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
@@ -258,12 +249,12 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 --  types of the parameters, motive and eliminator functions.
 data CompiledRecursor e =
   CompiledRecursor
-  { recursorDataType  :: PrimName e
+  { recursorDataType  :: ExtCns e
   , recursorParams    :: [e]
   , recursorMotive    :: e
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
-  , recursorCtorOrder :: [PrimName e]
+  , recursorCtorOrder :: [ExtCns e]
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -287,11 +278,6 @@ alistAllFields _ _ = Nothing
 zipPair :: (x -> y -> z) -> (x,x) -> (y,y) -> (z,z)
 zipPair f (x1,x2) (y1,y2) = (f x1 y1, f x2 y2)
 
-zipPrimName :: (x -> y -> z) -> PrimName x -> PrimName y -> Maybe (PrimName z)
-zipPrimName f (PrimName v1 ident x) (PrimName v2 _ y)
-  | v1 == v2 = Just (PrimName v1 ident (f x y))
-  | otherwise = Nothing
-
 zipExtCns :: (x -> y -> z) -> ExtCns x -> ExtCns y -> Maybe (ExtCns z)
 zipExtCns f (EC v1 nmi x) (EC v2 _ y)
   | v1 == v2 = Just (EC v1 nmi (f x y))
@@ -300,8 +286,8 @@ zipExtCns f (EC v1 nmi x) (EC v2 _ y)
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
 zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
   | Map.keysSet es1 == Map.keysSet es2
-  = do d <- zipPrimName f d1 d2
-       ord <- sequence (zipWith (zipPrimName f) ord1 ord2)
+  = do d <- zipExtCns f d1 d2
+       ord <- sequence (zipWith (zipExtCns f) ord1 ord2)
        pure $ CompiledRecursor
               d
               (zipWith f ps1 ps2)
@@ -326,15 +312,8 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (CtorApp cx psx lx) (CtorApp cy psy ly) =
-      do c <- zipPrimName f cx cy
-         Just $ CtorApp c (zipWith f psx psy) (zipWith f lx ly)
-    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly) =
-      do d <- zipPrimName f dx dy
-         Just $ DataTypeApp d (zipWith f psx psy) (zipWith f lx ly)
-
     go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
-      do d <- zipPrimName f d1 d2
+      do d <- zipExtCns f d1 d2
          Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
 
     go (Recursor rec1) (Recursor rec2) =
@@ -571,10 +550,6 @@ termToPat t =
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
-      FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
-      FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
