@@ -4,7 +4,7 @@ m <- mir_load_module "test.linked-mir.json";
 
 let thing = mir_find_adt m "test::Thing" [];
 
-let spec = do {
+let get_thing_spec = do {
     mir_execute_func [];
     mir_return (mir_struct_value thing [
         mir_tuple_value [],
@@ -13,4 +13,11 @@ let spec = do {
     ]);
 };
 
-mir_verify m "test::get_thing" [] false spec z3;
+get_thing_ov <- mir_verify m "test::get_thing" [] false get_thing_spec z3;
+
+let get_thing_b_spec = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ 1 : [32] }});
+};
+
+mir_verify m "test::get_thing_b" [get_thing_ov] false get_thing_b_spec z3;
