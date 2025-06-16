@@ -338,6 +338,7 @@ The following MIR types do _not_ correspond to Cryptol types:
 - `mir_f32`
 - `mir_f64`
 - `mir_ref` and `mir_ref_mut`
+- `mir_raw_ptr_const` and `mir_raw_ptr_mut`
 - `mir_slice`
 - `mir_str`
 
