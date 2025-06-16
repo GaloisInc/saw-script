@@ -171,9 +171,9 @@ evalTermF cfg lam recEval tf env =
                                         Nothing ->
                                           panic "evalTermF" ["Constant not found: " <> str]
                                         Just (ResolvedCtor ctor) ->
-                                          pure $ ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
                                         Just (ResolvedDataType dt) ->
-                                          pure $ dtValue ec' (dtNumParams dt) (dtNumIndices dt)
+                                          dtValue ec' (dtNumParams dt) (dtNumIndices dt)
                                         Just (ResolvedDef d) ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -285,25 +285,33 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: ExtCns (TValue l) -> Int -> Int -> Value l
-    ctorValue ec = go [] []
-      where
-        go :: [Thunk l] -> [Thunk l] -> Int -> Int -> Value l
-        go params args i j
-          | i > 0 = VFun "_" (\x -> pure $ go (x : params) args (i-1) j)
-          | j > 0 = VFun "_" (\x -> pure $ go params (x : args) i (j-1))
-          | otherwise = VCtorApp ec (reverse params) (reverse args)
+    ctorValue :: ExtCns (TValue l) -> Int -> Int -> MValue l
+    ctorValue ec i j =
+      vFunList (replicate i "_") $ \params ->
+      vFunList (replicate j "_") $ \args ->
+      pure $ VCtorApp ec params args
 
-    dtValue :: ExtCns (TValue l) -> Int -> Int -> Value l
-    dtValue ec = go [] []
-      where
-        go :: [Value l] -> [Value l] -> Int -> Int -> Value l
-        go params idxs i j
-          | i > 0 = VFun "_" (\x -> force x >>= \v -> pure $ go (v : params) idxs (i-1) j)
-          | j > 0 = VFun "_" (\x -> force x >>= \v -> pure $ go params (v : idxs) i (j-1))
-          | otherwise = TValue $ VDataType ec (reverse params) (reverse idxs)
+    dtValue :: ExtCns (TValue l) -> Int -> Int -> MValue l
+    dtValue ec i j =
+      vStrictFunList (replicate i "_") $ \params ->
+      vStrictFunList (replicate j "_") $ \idxs ->
+      pure $ TValue $ VDataType ec params idxs
 
---   | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
+-- | Create a 'Value' for a lazy multi-argument function.
+vFunList :: forall l. VMonad l => [LocalName] -> ([Thunk l] -> MValue l) -> MValue l
+vFunList names k = go [] names
+  where
+    go :: [Thunk l] -> [LocalName] -> MValue l
+    go args [] = k (reverse args)
+    go args (n : ns) = pure $ VFun n (\x -> go (x : args) ns)
+
+-- | Create a 'Value' for a strict multi-argument function.
+vStrictFunList :: forall l. VMonad l => [LocalName] -> ([Value l] -> MValue l) -> MValue l
+vStrictFunList names k = go [] names
+  where
+    go :: [Value l] -> [LocalName] -> MValue l
+    go args [] = k (reverse args)
+    go args (n : ns) = pure $ VFun n (\x -> force x >>= \v -> go (v : args) ns)
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
