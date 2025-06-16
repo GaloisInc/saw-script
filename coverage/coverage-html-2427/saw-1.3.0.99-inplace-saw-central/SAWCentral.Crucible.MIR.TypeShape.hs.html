@@ -1,0 +1,460 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    2 </span>{-# LANGUAGE KindSignatures #-}
+<span class="lineno">    3 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    4 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    5 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    6 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">    7 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    8 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">    9 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>-- | The 'TypeShape' data type and related utilities.
+<span class="lineno">   12 </span>module SAWCentral.Crucible.MIR.TypeShape
+<span class="lineno">   13 </span>  ( TypeShape(..)
+<span class="lineno">   14 </span>  , FieldShape(..)
+<span class="lineno">   15 </span>  , VariantShape(..)
+<span class="lineno">   16 </span>  , tyToShape
+<span class="lineno">   17 </span>  , tyToShapeEq
+<span class="lineno">   18 </span>  , shapeType
+<span class="lineno">   19 </span>  , fieldShapeType
+<span class="lineno">   20 </span>  , variantShapeType
+<span class="lineno">   21 </span>  , shapeMirTy
+<span class="lineno">   22 </span>  , fieldShapeMirTy
+<span class="lineno">   23 </span>  , shapeToTerm
+<span class="lineno">   24 </span>  , IsBVShape(..)
+<span class="lineno">   25 </span>  , testBVShape
+<span class="lineno">   26 </span>  , IsRefShape(..)
+<span class="lineno">   27 </span>  , testRefShape
+<span class="lineno">   28 </span>  , sliceShapeParts
+<span class="lineno">   29 </span>  ) where
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import Control.Lens ((^.), (^..), each)
+<span class="lineno">   32 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   33 </span>import Data.Functor.Const (Const(..))
+<span class="lineno">   34 </span>import qualified Data.Map as Map
+<span class="lineno">   35 </span>import Data.Parameterized.Classes (ShowF)
+<span class="lineno">   36 </span>import Data.Parameterized.Context (pattern Empty, pattern (:&gt;), Assignment)
+<span class="lineno">   37 </span>import Data.Parameterized.Some
+<span class="lineno">   38 </span>import Data.Parameterized.TH.GADT
+<span class="lineno">   39 </span>import Data.Parameterized.TraversableFC
+<span class="lineno">   40 </span>import GHC.Stack (HasCallStack)
+<span class="lineno">   41 </span>import qualified Prettyprinter as PP
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import Lang.Crucible.Types
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>import Mir.Intrinsics
+<span class="lineno">   46 </span>import qualified Mir.Mir as M
+<span class="lineno">   47 </span>import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
+<span class="lineno">   48 </span>                   , isUnsized, reprTransparentFieldTy )
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>import qualified SAWCore.SharedTerm as SAW
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- | TypeShape is used to classify MIR `Ty`s and their corresponding
+<span class="lineno">   53 </span>-- CrucibleTypes into a few common cases.  We don't use `Ty` directly because
+<span class="lineno">   54 </span>-- there are some `Ty`s that have identical structure (such as TyRef vs.
+<span class="lineno">   55 </span>-- TyRawPtr) or similar enough structure that we'd rather write only one case
+<span class="lineno">   56 </span>-- (such as `u8` vs `i8` vs `i32`, all primitives/BaseTypes).  And we don't use
+<span class="lineno">   57 </span>-- TypeRepr directly because it's lacking information in some cases.
+<span class="lineno">   58 </span>--
+<span class="lineno">   59 </span>-- In each constructor, the first `M.Ty` is the overall MIR type (e.g., for
+<span class="lineno">   60 </span>-- ArrayShape, this is the TyArray type).  The overall `TypeRepr tp` isn't
+<span class="lineno">   61 </span>-- stored directly, but can be computed with `shapeType`.
+<span class="lineno">   62 </span>data TypeShape (tp :: CrucibleType) where
+<span class="lineno">   63 </span>    UnitShape :: M.Ty -&gt; TypeShape UnitType
+<span class="lineno">   64 </span>    PrimShape :: M.Ty -&gt; BaseTypeRepr btp -&gt; TypeShape (BaseToType btp)
+<span class="lineno">   65 </span>    TupleShape :: M.Ty -&gt; [M.Ty] -&gt; Assignment FieldShape ctx -&gt; TypeShape (StructType ctx)
+<span class="lineno">   66 </span>    ArrayShape :: M.Ty -&gt; M.Ty -&gt; TypeShape tp -&gt; TypeShape (MirVectorType tp)
+<span class="lineno">   67 </span>    StructShape :: M.Ty -&gt; [M.Ty] -&gt; Assignment FieldShape ctx -&gt; TypeShape (StructType ctx)
+<span class="lineno">   68 </span>    TransparentShape :: M.Ty -&gt; TypeShape tp -&gt; TypeShape tp
+<span class="lineno">   69 </span>    -- | Note that RefShape contains only a TypeRepr for the pointee type, not
+<span class="lineno">   70 </span>    -- a TypeShape.  None of our operations need to recurse inside pointers,
+<span class="lineno">   71 </span>    -- and also this saves us from some infinite recursion.
+<span class="lineno">   72 </span>    RefShape :: M.Ty
+<span class="lineno">   73 </span>             -- ^ The reference type
+<span class="lineno">   74 </span>             -&gt; M.Ty
+<span class="lineno">   75 </span>             -- ^ The pointee type
+<span class="lineno">   76 </span>             -&gt; M.Mutability
+<span class="lineno">   77 </span>             -- ^ Is the reference mutable or immutable?
+<span class="lineno">   78 </span>             -&gt; TypeRepr tp
+<span class="lineno">   79 </span>             -- ^ The Crucible representation of the pointee type
+<span class="lineno">   80 </span>             -&gt; TypeShape MirReferenceType
+<span class="lineno">   81 </span>    -- | A shape for a slice reference of type @&amp;[T]@ or @&amp;str@, which is
+<span class="lineno">   82 </span>    -- represented in @crucible-mir@ as a 'MirSlice', i.e., a 'StructType'
+<span class="lineno">   83 </span>    -- where:
+<span class="lineno">   84 </span>    --
+<span class="lineno">   85 </span>    -- * The first type in the struct is a reference to the element type.
+<span class="lineno">   86 </span>    --   If the slice reference has type @&amp;[T]@, then the element type is @T@.
+<span class="lineno">   87 </span>    --   If the slice reference has type @&amp;str@, then the element type is @u8@.
+<span class="lineno">   88 </span>    --
+<span class="lineno">   89 </span>    -- * The second type in the struct is the length of the slice.
+<span class="lineno">   90 </span>    --
+<span class="lineno">   91 </span>    -- The @crucible-mir@ representations for tuples and slices are almost, but
+<span class="lineno">   92 </span>    -- not quite, the same, as tuples can wrap their fields in 'MaybeType's (see
+<span class="lineno">   93 </span>    -- 'FieldShape') but slices never do this. Nevertheless, many places in the
+<span class="lineno">   94 </span>    -- code effectively treat tuples and slices identically (modulo 'MaybeType's).
+<span class="lineno">   95 </span>    --
+<span class="lineno">   96 </span>    -- To make it easier to recurse on the 'TypeShape's for the slice's
+<span class="lineno">   97 </span>    -- reference and length types, we provide the 'sliceShapeParts' function.
+<span class="lineno">   98 </span>    SliceShape :: M.Ty
+<span class="lineno">   99 </span>               -- ^ The type of the slice reference (either @&amp;[T]@ or @&amp;str@).
+<span class="lineno">  100 </span>               -&gt; M.Ty
+<span class="lineno">  101 </span>               -- ^ The element type (either @T@ or @u8@).
+<span class="lineno">  102 </span>               -&gt; M.Mutability
+<span class="lineno">  103 </span>               -- ^ Is the reference mutable or immutable?
+<span class="lineno">  104 </span>               -&gt; TypeRepr tp
+<span class="lineno">  105 </span>               -- ^ The Crucible representation of the element type.
+<span class="lineno">  106 </span>               -&gt; TypeShape MirSlice
+<span class="lineno">  107 </span>    -- | A shape for an enum type.
+<span class="lineno">  108 </span>    EnumShape :: M.Ty
+<span class="lineno">  109 </span>              -- ^ The overall enum type.
+<span class="lineno">  110 </span>              -&gt; [[M.Ty]]
+<span class="lineno">  111 </span>              -- ^ The field types in each of the enum's variants.
+<span class="lineno">  112 </span>              -&gt; Assignment VariantShape variantsCtx
+<span class="lineno">  113 </span>              -- ^ The shapes of the enum type's variants.
+<span class="lineno">  114 </span>              -&gt; M.Ty
+<span class="lineno">  115 </span>              -- ^ The discriminant type.
+<span class="lineno">  116 </span>              -&gt; TypeShape discrTp
+<span class="lineno">  117 </span>              -- ^ The shape of the discriminant type.
+<span class="lineno">  118 </span>              -&gt; TypeShape (RustEnumType discrTp variantsCtx)
+<span class="lineno">  119 </span>    -- | Note that 'FnPtrShape' contains only 'TypeRepr's for the argument and
+<span class="lineno">  120 </span>    -- result types, not 'TypeShape's, as none of our operations need to recurse
+<span class="lineno">  121 </span>    -- inside them.
+<span class="lineno">  122 </span>    FnPtrShape :: M.Ty -&gt; CtxRepr args -&gt; TypeRepr ret
+<span class="lineno">  123 </span>               -&gt; TypeShape (FunctionHandleType args ret)
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>-- TODO: Improve?
+<span class="lineno">  126 </span>instance <span class="decl"><span class="nottickedoff">PP.Pretty (TypeShape tp)</span></span> where
+<span class="lineno">  127 </span>  <span class="decl"><span class="nottickedoff">pretty = PP.viaShow</span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Show (TypeShape tp)</span></span></span></span></span></span>
+<span class="lineno">  130 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ShowF TypeShape</span></span></span></span></span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>-- | The TypeShape of a struct field, which might have a MaybeType wrapper to
+<span class="lineno">  133 </span>-- allow for partial initialization.
+<span class="lineno">  134 </span>data FieldShape (tp :: CrucibleType) where
+<span class="lineno">  135 </span>    OptField :: TypeShape tp -&gt; FieldShape (MaybeType tp)
+<span class="lineno">  136 </span>    ReqField :: TypeShape tp -&gt; FieldShape tp
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>-- TODO: Improve?
+<span class="lineno">  139 </span>instance <span class="decl"><span class="nottickedoff">PP.Pretty (FieldShape tp)</span></span> where
+<span class="lineno">  140 </span>  <span class="decl"><span class="nottickedoff">pretty = PP.viaShow</span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Show (FieldShape tp)</span></span></span></span></span></span>
+<span class="lineno">  143 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ShowF FieldShape</span></span></span></span></span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>-- | The 'TypeShape' of an enum variant, which consists of some number of field
+<span class="lineno">  146 </span>-- types.
+<span class="lineno">  147 </span>--
+<span class="lineno">  148 </span>-- This is indexed by a 'StructType', but that is simply an artifact of the
+<span class="lineno">  149 </span>-- particular way that @crucible-mir@ encodes enum types. Despite the use of
+<span class="lineno">  150 </span>-- 'StructType' as a type index, we only use 'VariantShape' for enums, not
+<span class="lineno">  151 </span>-- structs.
+<span class="lineno">  152 </span>data VariantShape (tp :: CrucibleType) where
+<span class="lineno">  153 </span>    VariantShape :: Assignment FieldShape ctx
+<span class="lineno">  154 </span>                 -- ^ The shapes of the variant's field types.
+<span class="lineno">  155 </span>                 -&gt; VariantShape (StructType ctx)
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>-- TODO: Improve?
+<span class="lineno">  158 </span>instance <span class="decl"><span class="nottickedoff">PP.Pretty (VariantShape tp)</span></span> where
+<span class="lineno">  159 </span>  <span class="decl"><span class="nottickedoff">pretty = PP.viaShow</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Show (VariantShape tp)</span></span></span></span></span></span>
+<span class="lineno">  162 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ShowF VariantShape</span></span></span></span></span></span>
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>-- | Return the `TypeShape` of `ty`.
+<span class="lineno">  165 </span>--
+<span class="lineno">  166 </span>-- It is guaranteed that the `tp :: CrucibleType` index of the resulting
+<span class="lineno">  167 </span>-- `TypeShape` matches that returned by `tyToRepr`.
+<span class="lineno">  168 </span>tyToShape :: M.Collection -&gt; M.Ty -&gt; Some TypeShape
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">tyToShape col = go</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">go :: M.Ty -&gt; Some TypeShape</span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">go ty = case ty of</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="istickedoff">M.TyBool -&gt; goPrim ty</span>
+<span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff">M.TyChar -&gt; <span class="nottickedoff">goPrim ty</span></span>
+<span class="lineno">  175 </span><span class="spaces">        </span><span class="istickedoff">M.TyInt _ -&gt; goPrim ty</span>
+<span class="lineno">  176 </span><span class="spaces">        </span><span class="istickedoff">M.TyUint _ -&gt; goPrim ty</span>
+<span class="lineno">  177 </span><span class="spaces">        </span><span class="istickedoff">M.TyTuple [] -&gt; <span class="nottickedoff">goUnit ty</span></span>
+<span class="lineno">  178 </span><span class="spaces">        </span><span class="istickedoff">M.TyTuple tys -&gt; goTuple <span class="nottickedoff">ty</span> tys</span>
+<span class="lineno">  179 </span><span class="spaces">        </span><span class="istickedoff">M.TyClosure tys -&gt; <span class="nottickedoff">goTuple ty tys</span></span>
+<span class="lineno">  180 </span><span class="spaces">        </span><span class="istickedoff">M.TyFnDef _ -&gt; <span class="nottickedoff">goUnit ty</span></span>
+<span class="lineno">  181 </span><span class="spaces">        </span><span class="istickedoff">M.TyArray ty' _ | Some shp &lt;- go ty' -&gt; Some $ ArrayShape ty ty' shp</span>
+<span class="lineno">  182 </span><span class="spaces">        </span><span class="istickedoff">M.TyAdt nm _ _ -&gt; case Map.lookup nm (col ^. M.adts) of</span>
+<span class="lineno">  183 </span><span class="spaces">            </span><span class="istickedoff">Just adt | Just ty' &lt;- reprTransparentFieldTy <span class="nottickedoff">col</span> adt -&gt;</span>
+<span class="lineno">  184 </span><span class="spaces">                </span><span class="istickedoff">mapSome (TransparentShape ty) $ go ty'</span>
+<span class="lineno">  185 </span><span class="spaces">            </span><span class="istickedoff">Just (M.Adt _ kind vs _ _ _ _) -&gt;</span>
+<span class="lineno">  186 </span><span class="spaces">              </span><span class="istickedoff">case kind of</span>
+<span class="lineno">  187 </span><span class="spaces">                </span><span class="istickedoff">M.Struct</span>
+<span class="lineno">  188 </span><span class="spaces">                  </span><span class="istickedoff">|  [v] &lt;- vs</span>
+<span class="lineno">  189 </span><span class="spaces">                  </span><span class="istickedoff">-&gt; goStruct ty (variantFieldTys v)</span>
+<span class="lineno">  190 </span><span class="spaces">                  </span><span class="istickedoff">|  <span class="nottickedoff">otherwise</span></span>
+<span class="lineno">  191 </span><span class="spaces">                  </span><span class="istickedoff">-&gt; <span class="nottickedoff">error $ &quot;tyToShape: Unexpected struct with multiple variants: &quot;</span></span>
+<span class="lineno">  192 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">++ show (PP.pretty vs)</span></span>
+<span class="lineno">  193 </span><span class="spaces">                </span><span class="istickedoff">M.Enum discrTy -&gt; goEnum ty discrTy vs</span>
+<span class="lineno">  194 </span><span class="spaces">                </span><span class="istickedoff">M.Union -&gt; <span class="nottickedoff">error &quot;tyToShape: Union types NYI&quot;</span></span>
+<span class="lineno">  195 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;tyToShape: bad adt: &quot; ++ show ty</span></span>
+<span class="lineno">  196 </span><span class="spaces">        </span><span class="istickedoff">M.TyRef ty' mutbl -&gt; goRef ty ty' mutbl</span>
+<span class="lineno">  197 </span><span class="spaces">        </span><span class="istickedoff">M.TyRawPtr ty' mutbl -&gt; goRef ty ty' mutbl</span>
+<span class="lineno">  198 </span><span class="spaces">        </span><span class="istickedoff">M.TyFnPtr sig -&gt; <span class="nottickedoff">goFnPtr ty sig</span></span>
+<span class="lineno">  199 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;tyToShape: &quot; ++ show ty ++ &quot; NYI&quot;</span></span>
+<span class="lineno">  200 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">goPrim :: M.Ty -&gt; Some TypeShape</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">goPrim ty | Some tpr &lt;- tyToRepr <span class="nottickedoff">col</span> ty, AsBaseType btpr &lt;- asBaseType tpr =</span>
+<span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">Some $ PrimShape ty btpr</span>
+<span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">goPrim ty | Some tpr &lt;- <span class="nottickedoff">tyToRepr col ty</span> =</span>
+<span class="lineno">  205 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">error $ &quot;tyToShape: type &quot; ++ show ty ++ &quot; produced non-primitive type &quot; ++ show tpr</span></span>
+<span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">goUnit :: M.Ty -&gt; Some TypeShape</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goUnit ty = Some $ UnitShape ty</span></span>
+<span class="lineno">  209 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">goTuple :: M.Ty -&gt; [M.Ty] -&gt; Some TypeShape</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">goTuple ty tys | Some flds &lt;- loop tys Empty = Some $ TupleShape <span class="nottickedoff">ty</span> <span class="nottickedoff">tys</span> flds</span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  213 </span><span class="spaces">        </span><span class="istickedoff">loop :: forall ctx. [M.Ty] -&gt; Assignment FieldShape ctx -&gt; Some (Assignment FieldShape)</span>
+<span class="lineno">  214 </span><span class="spaces">        </span><span class="istickedoff">loop [] flds = Some flds</span>
+<span class="lineno">  215 </span><span class="spaces">        </span><span class="istickedoff">loop (ty':tys') flds | Some fld &lt;- go ty' = loop tys' (flds :&gt; OptField fld)</span>
+<span class="lineno">  216 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">goStruct :: M.Ty -&gt; [M.Ty] -&gt; Some TypeShape</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">goStruct ty tys | Some flds &lt;- goFields tys = Some $ StructShape ty <span class="nottickedoff">tys</span> flds</span>
+<span class="lineno">  219 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">-- The first Ty is the overall enum type, and the second Ty is the</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">-- discriminant type.</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">goEnum :: M.Ty -&gt; M.Ty -&gt; [M.Variant] -&gt; Some TypeShape</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">goEnum ty discrTy vs</span>
+<span class="lineno">  224 </span><span class="spaces">        </span><span class="istickedoff">| Some discrShp &lt;- go discrTy</span>
+<span class="lineno">  225 </span><span class="spaces">        </span><span class="istickedoff">, Some variants &lt;- loop vs Empty</span>
+<span class="lineno">  226 </span><span class="spaces">        </span><span class="istickedoff">= Some $ EnumShape ty variantTys variants discrTy discrShp</span>
+<span class="lineno">  227 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  228 </span><span class="spaces">        </span><span class="istickedoff">variantTys = map variantFieldTys vs</span>
+<span class="lineno">  229 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  230 </span><span class="spaces">        </span><span class="istickedoff">loop ::</span>
+<span class="lineno">  231 </span><span class="spaces">          </span><span class="istickedoff">forall ctx.</span>
+<span class="lineno">  232 </span><span class="spaces">          </span><span class="istickedoff">[M.Variant] -&gt;</span>
+<span class="lineno">  233 </span><span class="spaces">          </span><span class="istickedoff">Assignment VariantShape ctx -&gt;</span>
+<span class="lineno">  234 </span><span class="spaces">          </span><span class="istickedoff">Some (Assignment VariantShape)</span>
+<span class="lineno">  235 </span><span class="spaces">        </span><span class="istickedoff">loop [] variants = Some variants</span>
+<span class="lineno">  236 </span><span class="spaces">        </span><span class="istickedoff">loop (v':vs') variants</span>
+<span class="lineno">  237 </span><span class="spaces">          </span><span class="istickedoff">| Some variant &lt;- goVariant v'</span>
+<span class="lineno">  238 </span><span class="spaces">          </span><span class="istickedoff">= loop vs' (variants :&gt; variant)</span>
+<span class="lineno">  239 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">-- Process a single Variant in an enum type.</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">goVariant :: M.Variant -&gt; Some VariantShape</span>
+<span class="lineno">  242 </span><span class="spaces">    </span><span class="istickedoff">goVariant v</span>
+<span class="lineno">  243 </span><span class="spaces">        </span><span class="istickedoff">| Some flds &lt;- goFields tys</span>
+<span class="lineno">  244 </span><span class="spaces">        </span><span class="istickedoff">= Some $ VariantShape flds</span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">tys = variantFieldTys v</span>
+<span class="lineno">  247 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="istickedoff">goFields :: [M.Ty] -&gt; Some (Assignment FieldShape)</span>
+<span class="lineno">  249 </span><span class="spaces">    </span><span class="istickedoff">goFields tys = loop tys Empty</span>
+<span class="lineno">  250 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  251 </span><span class="spaces">        </span><span class="istickedoff">loop :: forall ctx. [M.Ty] -&gt; Assignment FieldShape ctx -&gt; Some (Assignment FieldShape)</span>
+<span class="lineno">  252 </span><span class="spaces">        </span><span class="istickedoff">loop [] flds = Some flds</span>
+<span class="lineno">  253 </span><span class="spaces">        </span><span class="istickedoff">loop (ty':tys') flds | Some fld &lt;- goField ty' = loop tys' (flds :&gt; fld)</span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">goField :: M.Ty -&gt; Some FieldShape</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">goField ty | Some shp &lt;- go ty = case canInitialize col ty of</span>
+<span class="lineno">  257 </span><span class="spaces">        </span><span class="istickedoff">True -&gt; Some $ ReqField shp</span>
+<span class="lineno">  258 </span><span class="spaces">        </span><span class="istickedoff">False -&gt; Some $ OptField shp</span>
+<span class="lineno">  259 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">goRef :: M.Ty -&gt; M.Ty -&gt; M.Mutability -&gt; Some TypeShape</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">goRef ty ty' mutbl</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="istickedoff">| M.TySlice slicedTy &lt;- ty'</span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff">, Some tpr &lt;- tyToRepr <span class="nottickedoff">col</span> slicedTy</span>
+<span class="lineno">  264 </span><span class="spaces">      </span><span class="istickedoff">= Some $ SliceShape ty slicedTy <span class="nottickedoff">mutbl</span> tpr</span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">| M.TyStr &lt;- ty'</span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff">= Some $ SliceShape ty (M.TyUint M.B8) <span class="nottickedoff">mutbl</span> (BVRepr (knownNat @8))</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">goRef ty ty' _ | <span class="tickonlyfalse">isUnsized ty'</span> = <span class="nottickedoff">error $</span></span>
+<span class="lineno">  268 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;tyToShape: fat pointer &quot; ++ show ty ++ &quot; NYI&quot;</span></span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">goRef ty ty' mutbl | Some tpr &lt;- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr</span>
+<span class="lineno">  270 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">goFnPtr :: M.Ty -&gt; M.FnSig -&gt; Some TypeShape</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goFnPtr ty (M.FnSig args ret _abi _spread) =</span></span>
+<span class="lineno">  273 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tyListToCtx col args $ \argsr  -&gt;</span></span>
+<span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tyToReprCont col ret $ \retr -&gt;</span></span>
+<span class="lineno">  275 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Some (FnPtrShape ty argsr retr)</span></span>
+<span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">-- Retrieve the field types in a variant. This used for both struct and enum</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">-- variants.</span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="istickedoff">variantFieldTys :: M.Variant -&gt; [M.Ty]</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">variantFieldTys v = v ^.. M.vfields . each . M.fty</span></span>
+<span class="lineno">  281 </span>
+<span class="lineno">  282 </span>-- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
+<span class="lineno">  283 </span>-- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
+<span class="lineno">  284 </span>-- `tyToRepr ty`.
+<span class="lineno">  285 </span>tyToShapeEq :: HasCallStack =&gt; M.Collection -&gt; M.Ty -&gt; TypeRepr tp -&gt; TypeShape tp
+<span class="lineno">  286 </span><span class="decl"><span class="istickedoff">tyToShapeEq col ty tpr | Some shp &lt;- tyToShape col ty =</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">case testEquality (shapeType shp) tpr of</span>
+<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">Just Refl -&gt; shp</span>
+<span class="lineno">  289 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;tyToShapeEq: type &quot; ++ show ty ++</span></span>
+<span class="lineno">  290 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot; does not have representation &quot; ++ show tpr ++</span></span>
+<span class="lineno">  291 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot; (got &quot; ++ show (shapeType shp) ++ &quot; instead)&quot;</span></span></span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>shapeType :: TypeShape tp -&gt; TypeRepr tp
+<span class="lineno">  294 </span><span class="decl"><span class="istickedoff">shapeType = go</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">go :: forall tp. TypeShape tp -&gt; TypeRepr tp</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">go (UnitShape _) = UnitRepr</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">go (PrimShape _ btpr) = baseToType btpr</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">go (StructShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds</span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">go (EnumShape _ _ variantTys _ discrShp) =</span>
+<span class="lineno">  303 </span><span class="spaces">      </span><span class="istickedoff">RustEnumRepr (shapeType discrShp) (fmapFC variantShapeType variantTys)</span>
+<span class="lineno">  304 </span><span class="spaces">    </span><span class="istickedoff">go (TransparentShape _ shp) = go shp</span>
+<span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">go (RefShape _ _ _ _) = MirReferenceRepr</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">go (SliceShape _ _ _ _) = MirSliceRepr</span>
+<span class="lineno">  307 </span><span class="spaces">    </span><span class="istickedoff">go (FnPtrShape _ args ret) = <span class="nottickedoff">FunctionHandleRepr args ret</span></span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>fieldShapeType :: FieldShape tp -&gt; TypeRepr tp
+<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">fieldShapeType (ReqField shp) = shapeType shp</span>
+<span class="lineno">  311 </span><span class="spaces"></span><span class="istickedoff">fieldShapeType (OptField shp) = MaybeRepr $ shapeType shp</span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>variantShapeType :: VariantShape tp -&gt; TypeRepr tp
+<span class="lineno">  314 </span><span class="decl"><span class="istickedoff">variantShapeType (VariantShape flds) =</span>
+<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">StructRepr $ fmapFC fieldShapeType flds</span></span>
+<span class="lineno">  316 </span>
+<span class="lineno">  317 </span>shapeMirTy :: TypeShape tp -&gt; M.Ty
+<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">shapeMirTy (UnitShape ty) = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  319 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (PrimShape ty _) = ty</span>
+<span class="lineno">  320 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (TupleShape ty _ _) = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  321 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (ArrayShape ty _ _) = ty</span>
+<span class="lineno">  322 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (StructShape ty _ _) = ty</span>
+<span class="lineno">  323 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (EnumShape ty _ _ _ _) = ty</span>
+<span class="lineno">  324 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (TransparentShape ty _) = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  325 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (RefShape ty _ _ _) = ty</span>
+<span class="lineno">  326 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (SliceShape ty _ _ _) = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  327 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (FnPtrShape ty _ _) = <span class="nottickedoff">ty</span></span></span>
+<span class="lineno">  328 </span>
+<span class="lineno">  329 </span>fieldShapeMirTy :: FieldShape tp -&gt; M.Ty
+<span class="lineno">  330 </span><span class="decl"><span class="nottickedoff">fieldShapeMirTy (ReqField shp) = shapeMirTy shp</span>
+<span class="lineno">  331 </span><span class="spaces"></span><span class="nottickedoff">fieldShapeMirTy (OptField shp) = shapeMirTy shp</span></span>
+<span class="lineno">  332 </span>
+<span class="lineno">  333 </span>shapeToTerm :: forall tp m.
+<span class="lineno">  334 </span>    (MonadIO m, MonadFail m) =&gt;
+<span class="lineno">  335 </span>    SAW.SharedContext -&gt;
+<span class="lineno">  336 </span>    TypeShape tp -&gt;
+<span class="lineno">  337 </span>    m SAW.Term
+<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">shapeToTerm sc = go</span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">go :: forall tp'. TypeShape tp' -&gt; m SAW.Term</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">go (UnitShape _) = <span class="nottickedoff">liftIO $ SAW.scUnitType sc</span></span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">go (PrimShape _ BaseBoolRepr) = <span class="nottickedoff">liftIO $ SAW.scBoolType sc</span></span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)</span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">go (TupleShape _ _ flds) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  345 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tys &lt;- toListFC getConst &lt;$&gt; traverseFC (\x -&gt; Const &lt;$&gt; goField x) flds</span></span>
+<span class="lineno">  346 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SAW.scTupleType sc tys</span></span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayShape (M.TyArray _ n) _ shp) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  348 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- go shp</span></span>
+<span class="lineno">  349 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">n' &lt;- liftIO $ SAW.scNat sc (fromIntegral n)</span></span>
+<span class="lineno">  350 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SAW.scVecType sc n' ty</span></span>
+<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">go shp = <span class="nottickedoff">fail $ &quot;shapeToTerm: unsupported type &quot; ++ show (shapeType shp)</span></span>
+<span class="lineno">  352 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff">goField :: forall tp'. FieldShape tp' -&gt; m SAW.Term</span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goField (OptField shp) = go shp</span></span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goField (ReqField shp) = go shp</span></span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>-- | A witness that a 'TypeShape' is equal to a 'PrimShape' that characterizes
+<span class="lineno">  358 </span>-- a bitvector.
+<span class="lineno">  359 </span>data IsBVShape (tp :: CrucibleType) where
+<span class="lineno">  360 </span>  IsBVShape :: (1 &lt;= w)
+<span class="lineno">  361 </span>            =&gt; M.Ty
+<span class="lineno">  362 </span>            -&gt; NatRepr w
+<span class="lineno">  363 </span>            -&gt; IsBVShape (BVType w)
+<span class="lineno">  364 </span>
+<span class="lineno">  365 </span>-- | Check that a 'TypeShape' is equal to a 'PrimShape' that characterizes a
+<span class="lineno">  366 </span>-- bitvector. If so, return 'Just' a witness of that equality. Otherwise, return
+<span class="lineno">  367 </span>-- 'Nothing'.
+<span class="lineno">  368 </span>testBVShape :: TypeShape tp -&gt; Maybe (IsBVShape tp)
+<span class="lineno">  369 </span><span class="decl"><span class="istickedoff">testBVShape shp =</span>
+<span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">case shp of</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">PrimShape ty (BaseBVRepr w)</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff">-&gt; Just $ IsBVShape ty w</span>
+<span class="lineno">  373 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>-- | A witness that a 'TypeShape' is equal to a 'RefShape'.
+<span class="lineno">  376 </span>data IsRefShape (tp :: CrucibleType) where
+<span class="lineno">  377 </span>  IsRefShape :: M.Ty
+<span class="lineno">  378 </span>             -- ^ The reference type
+<span class="lineno">  379 </span>             -&gt; M.Ty
+<span class="lineno">  380 </span>             -- ^ The pointee type
+<span class="lineno">  381 </span>             -&gt; M.Mutability
+<span class="lineno">  382 </span>             -- ^ Is the reference mutable or immutable?
+<span class="lineno">  383 </span>             -&gt; TypeRepr tp
+<span class="lineno">  384 </span>             -- ^ The Crucible representation of the pointee type
+<span class="lineno">  385 </span>             -&gt; IsRefShape MirReferenceType
+<span class="lineno">  386 </span>
+<span class="lineno">  387 </span>-- | Check that a 'TypeShape' is equal to a 'RefShape'. If so, return 'Just' a
+<span class="lineno">  388 </span>-- witness of that equality. Otherwise, return 'Nothing'.
+<span class="lineno">  389 </span>testRefShape :: TypeShape tp -&gt; Maybe (IsRefShape tp)
+<span class="lineno">  390 </span><span class="decl"><span class="istickedoff">testRefShape shp =</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">case shp of</span>
+<span class="lineno">  392 </span><span class="spaces">    </span><span class="istickedoff">RefShape ty ty' mut shp'</span>
+<span class="lineno">  393 </span><span class="spaces">      </span><span class="istickedoff">-&gt; Just $ IsRefShape <span class="nottickedoff">ty</span> ty' <span class="nottickedoff">mut</span> shp'</span>
+<span class="lineno">  394 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>-- | Construct the 'TypeShape's for a slice's reference and length types.
+<span class="lineno">  397 </span>sliceShapeParts ::
+<span class="lineno">  398 </span>    M.Ty -&gt;
+<span class="lineno">  399 </span>    M.Mutability -&gt;
+<span class="lineno">  400 </span>    TypeRepr tp -&gt;
+<span class="lineno">  401 </span>    (TypeShape MirReferenceType, TypeShape UsizeType)
+<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">sliceShapeParts referentTy refMutbl referentTpr =</span>
+<span class="lineno">  403 </span><span class="spaces">    </span><span class="nottickedoff">( RefShape refTy referentTy refMutbl referentTpr</span>
+<span class="lineno">  404 </span><span class="spaces">    </span><span class="nottickedoff">, PrimShape usizeTy BaseUsizeRepr</span>
+<span class="lineno">  405 </span><span class="spaces">    </span><span class="nottickedoff">)</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  407 </span><span class="spaces">    </span><span class="nottickedoff">-- We use a ref (of the same mutability as `ty`) when possible, to</span>
+<span class="lineno">  408 </span><span class="spaces">    </span><span class="nottickedoff">-- avoid unnecessary clobbering.</span>
+<span class="lineno">  409 </span><span class="spaces">    </span><span class="nottickedoff">refTy = M.TyRef referentTy refMutbl</span>
+<span class="lineno">  410 </span><span class="spaces">    </span><span class="nottickedoff">usizeTy = M.TyUint M.USize</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>$(pure [])
+<span class="lineno">  413 </span>
+<span class="lineno">  414 </span>instance TestEquality TypeShape where
+<span class="lineno">  415 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  417 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|TypeShape|]</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  418 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  419 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|BaseTypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  420 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  421 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|TypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  422 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|CtxRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  423 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  424 </span>
+<span class="lineno">  425 </span>instance TestEquality VariantShape where
+<span class="lineno">  426 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span>
+<span class="lineno">  428 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|VariantShape|]</span></span></span>
+<span class="lineno">  429 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span>
+<span class="lineno">  430 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span>
+<span class="lineno">  431 </span>
+<span class="lineno">  432 </span>instance TestEquality FieldShape where
+<span class="lineno">  433 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno">  434 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span>
+<span class="lineno">  435 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|FieldShape|]</span></span></span></span></span></span></span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span>
+<span class="lineno">  437 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span>
+
+</pre>
+</body>
+</html>
