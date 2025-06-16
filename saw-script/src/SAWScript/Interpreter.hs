@@ -902,15 +902,6 @@ instance FromValue a => FromValue [a] where
 instance IsValue a => IsValue (IO a) where
     toValue action = toValue (io action)
 
-instance IsValue a => IsValue (Maybe a) where
-  toValue (Just x) = VMaybe . Just $ toValue x
-  toValue Nothing = VMaybe Nothing
-
-instance FromValue a => FromValue (Maybe a) where
-  fromValue (VMaybe (Just v)) = Just $ fromValue v
-  fromValue (VMaybe Nothing) = Nothing
-  fromValue _ = error "fromValue Maybe"
-
 instance IsValue a => IsValue (TopLevel a) where
     toValue action = VTopLevel (fmap toValue action)
 

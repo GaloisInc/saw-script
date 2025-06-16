@@ -282,7 +282,6 @@ data Value
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
-  | VMaybe (Maybe Value)
   | VRecord (Map SS.Name Value)
   | VLambda (Value -> TopLevel Value)
   | VTerm TypedTerm
@@ -444,8 +443,6 @@ showsPrecValue opts nenv p v =
     VInteger n -> shows n
     VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
-    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
-    VMaybe Nothing -> showString "Nothing"
     VRecord m ->
       PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
         where
