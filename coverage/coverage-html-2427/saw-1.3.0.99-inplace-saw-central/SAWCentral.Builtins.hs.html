@@ -174,9 +174,9 @@ span.spaces    { background: white }
 <span class="lineno">  155 </span>
 <span class="lineno">  156 </span>showPrim :: SV.Value -&gt; TopLevel Text
 <span class="lineno">  157 </span><span class="decl"><span class="istickedoff">showPrim v = do</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- fmap <span class="nottickedoff">rwPPOpts</span> getTopLevelRW</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- fmap rwPPOpts getTopLevelRW</span>
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
-<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">return $ Text.pack $ SV.showsPrecValue <span class="nottickedoff">opts</span> <span class="nottickedoff">nenv</span> <span class="nottickedoff">0</span> v &quot;&quot;</span></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">return $ Text.pack $ SV.showsPrecValue opts nenv <span class="nottickedoff">0</span> v &quot;&quot;</span></span>
 <span class="lineno">  161 </span>
 <span class="lineno">  162 </span>definePrim :: Text -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno">  163 </span><span class="decl"><span class="nottickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
@@ -1061,7 +1061,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1042 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return res</span></span>
 <span class="lineno"> 1043 </span><span class="spaces">  </span><span class="istickedoff">let stats = solverStats solver_name (sequentSharedSize sqt)</span>
 <span class="lineno"> 1044 </span><span class="spaces">  </span><span class="istickedoff">case mb of</span>
-<span class="lineno"> 1045 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; return (<span class="nottickedoff">stats</span>, SolveSuccess (SolverEvidence stats sqt))</span>
+<span class="lineno"> 1045 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; return (stats, SolveSuccess (SolverEvidence stats sqt))</span>
 <span class="lineno"> 1046 </span><span class="spaces">    </span><span class="istickedoff">Just a  -&gt; return (stats, SolveCounterexample a)</span></span>
 <span class="lineno"> 1047 </span>
 <span class="lineno"> 1048 </span>wrapProver ::
@@ -1169,7 +1169,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1150 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1151 </span>
 <span class="lineno"> 1152 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1153 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1153 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1154 </span>
 <span class="lineno"> 1155 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1156 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1189,7 +1189,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1170 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1171 </span>
 <span class="lineno"> 1172 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1173 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1173 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1174 </span>
 <span class="lineno"> 1175 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1176 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1279,7 +1279,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1260 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1261 </span>
 <span class="lineno"> 1262 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1263 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1263 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1264 </span>
 <span class="lineno"> 1265 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1266 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1331,7 +1331,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1312 </span><span class="spaces">             </span><span class="istickedoff">, goalTags = mempty</span>
 <span class="lineno"> 1313 </span><span class="spaces">             </span><span class="istickedoff">}</span>
 <span class="lineno"> 1314 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- getTopLevelPPOpts</span>
-<span class="lineno"> 1315 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- SV.runProofScript script prop goal <span class="nottickedoff">Nothing</span> <span class="nottickedoff">(Text.pack nm)</span> <span class="nottickedoff">True</span> False</span>
+<span class="lineno"> 1315 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- SV.runProofScript script prop goal <span class="nottickedoff">Nothing</span> <span class="nottickedoff">(Text.pack nm)</span> True False</span>
 <span class="lineno"> 1316 </span><span class="spaces">  </span><span class="istickedoff">let failProof pst =</span>
 <span class="lineno"> 1317 </span><span class="spaces">         </span><span class="istickedoff">fail $ &quot;prove: &quot; ++ show (length (psGoals pst)) ++ &quot; unsolved subgoal(s)\n&quot;</span>
 <span class="lineno"> 1318 </span><span class="spaces">                          </span><span class="istickedoff">++ SV.showsProofResult opts res &quot;&quot;</span>
@@ -1576,10 +1576,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1557 </span><span class="spaces">                </span><span class="istickedoff">, goalSequent = propToSequent prop</span>
 <span class="lineno"> 1558 </span><span class="spaces">                </span><span class="istickedoff">, goalTags = <span class="nottickedoff">mempty</span></span>
 <span class="lineno"> 1559 </span><span class="spaces">                </span><span class="istickedoff">}</span>
-<span class="lineno"> 1560 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- SV.runProofScript script <span class="nottickedoff">prop</span> goal <span class="nottickedoff">Nothing</span> <span class="nottickedoff">&quot;sat&quot;</span> <span class="nottickedoff">False</span> <span class="nottickedoff">False</span></span>
+<span class="lineno"> 1560 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- SV.runProofScript script prop goal <span class="nottickedoff">Nothing</span> <span class="nottickedoff">&quot;sat&quot;</span> <span class="nottickedoff">False</span> False</span>
 <span class="lineno"> 1561 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1562 </span><span class="spaces">       </span><span class="istickedoff">InvalidProof stats cex _ -&gt; return (SV.Sat <span class="nottickedoff">stats</span> cex)</span>
-<span class="lineno"> 1563 </span><span class="spaces">       </span><span class="istickedoff">ValidProof stats _thm -&gt; <span class="nottickedoff">return (SV.Unsat stats)</span></span>
+<span class="lineno"> 1563 </span><span class="spaces">       </span><span class="istickedoff">ValidProof stats _thm -&gt; return (SV.Unsat <span class="nottickedoff">stats</span>)</span>
 <span class="lineno"> 1564 </span><span class="spaces">       </span><span class="istickedoff">UnfinishedProof _ -&gt; <span class="nottickedoff">return SV.SatUnknown</span></span></span>
 <span class="lineno"> 1565 </span>
 <span class="lineno"> 1566 </span>satPrintPrim ::
@@ -1822,8 +1822,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1803 </span>exitPrim :: Integer -&gt; IO ()
 <span class="lineno"> 1804 </span><span class="decl"><span class="istickedoff">exitPrim code = Exit.exitWith exitCode</span>
 <span class="lineno"> 1805 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1806 </span><span class="spaces">    </span><span class="istickedoff">exitCode = if <span class="tickonlyfalse">code /= 0</span></span>
-<span class="lineno"> 1807 </span><span class="spaces">               </span><span class="istickedoff">then <span class="nottickedoff">Exit.ExitFailure (fromInteger code)</span></span>
+<span class="lineno"> 1806 </span><span class="spaces">    </span><span class="istickedoff">exitCode = if code /= 0</span>
+<span class="lineno"> 1807 </span><span class="spaces">               </span><span class="istickedoff">then Exit.ExitFailure (fromInteger code)</span>
 <span class="lineno"> 1808 </span><span class="spaces">               </span><span class="istickedoff">else Exit.ExitSuccess</span></span>
 <span class="lineno"> 1809 </span>
 <span class="lineno"> 1810 </span>-- Run the toplevel command.  Return a tuple containing
@@ -1848,7 +1848,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1829 </span><span class="spaces">  </span><span class="istickedoff">return r</span></span>
 <span class="lineno"> 1830 </span>
 <span class="lineno"> 1831 </span>failPrim :: Text -&gt; TopLevel SV.Value
-<span class="lineno"> 1832 </span><span class="decl"><span class="nottickedoff">failPrim msg = fail $ Text.unpack msg</span></span>
+<span class="lineno"> 1832 </span><span class="decl"><span class="istickedoff">failPrim msg = fail $ Text.unpack msg</span></span>
 <span class="lineno"> 1833 </span>
 <span class="lineno"> 1834 </span>failsPrim :: TopLevel SV.Value -&gt; TopLevel ()
 <span class="lineno"> 1835 </span><span class="decl"><span class="istickedoff">failsPrim m = do</span>
@@ -2035,17 +2035,17 @@ span.spaces    { background: white }
 <span class="lineno"> 2016 </span><span class="spaces">     </span><span class="nottickedoff">return (TypedTerm (TypedTermKind C.KNum) tm)</span></span>
 <span class="lineno"> 2017 </span>
 <span class="lineno"> 2018 </span>nthPrim :: [a] -&gt; Int -&gt; TopLevel a
-<span class="lineno"> 2019 </span><span class="decl"><span class="nottickedoff">nthPrim [] _ = fail &quot;nth: index too large&quot;</span>
-<span class="lineno"> 2020 </span><span class="spaces"></span><span class="nottickedoff">nthPrim (x : _) 0 = return x</span>
-<span class="lineno"> 2021 </span><span class="spaces"></span><span class="nottickedoff">nthPrim (_ : xs) i = nthPrim xs (i - 1)</span></span>
+<span class="lineno"> 2019 </span><span class="decl"><span class="istickedoff">nthPrim [] _ = <span class="nottickedoff">fail &quot;nth: index too large&quot;</span></span>
+<span class="lineno"> 2020 </span><span class="spaces"></span><span class="istickedoff">nthPrim (x : _) 0 = return x</span>
+<span class="lineno"> 2021 </span><span class="spaces"></span><span class="istickedoff">nthPrim (_ : xs) i = nthPrim xs (i - 1)</span></span>
 <span class="lineno"> 2022 </span>
 <span class="lineno"> 2023 </span>headPrim :: [a] -&gt; TopLevel a
-<span class="lineno"> 2024 </span><span class="decl"><span class="nottickedoff">headPrim [] = fail &quot;head: empty list&quot;</span>
-<span class="lineno"> 2025 </span><span class="spaces"></span><span class="nottickedoff">headPrim (x : _) = return x</span></span>
+<span class="lineno"> 2024 </span><span class="decl"><span class="istickedoff">headPrim [] = <span class="nottickedoff">fail &quot;head: empty list&quot;</span></span>
+<span class="lineno"> 2025 </span><span class="spaces"></span><span class="istickedoff">headPrim (x : _) = return x</span></span>
 <span class="lineno"> 2026 </span>
 <span class="lineno"> 2027 </span>tailPrim :: [a] -&gt; TopLevel [a]
-<span class="lineno"> 2028 </span><span class="decl"><span class="nottickedoff">tailPrim [] = fail &quot;tail: empty list&quot;</span>
-<span class="lineno"> 2029 </span><span class="spaces"></span><span class="nottickedoff">tailPrim (_ : xs) = return xs</span></span>
+<span class="lineno"> 2028 </span><span class="decl"><span class="istickedoff">tailPrim [] = <span class="nottickedoff">fail &quot;tail: empty list&quot;</span></span>
+<span class="lineno"> 2029 </span><span class="spaces"></span><span class="istickedoff">tailPrim (_ : xs) = return xs</span></span>
 <span class="lineno"> 2030 </span>
 <span class="lineno"> 2031 </span>parseCoreMod :: Text -&gt; Text -&gt; TopLevel Term
 <span class="lineno"> 2032 </span><span class="decl"><span class="istickedoff">parseCoreMod mnm_str input =</span>
@@ -2139,10 +2139,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2120 </span><span class="spaces">     </span><span class="nottickedoff">SV.returnTheoremProof thm'</span></span>
 <span class="lineno"> 2121 </span>
 <span class="lineno"> 2122 </span>get_opt :: Int -&gt; TopLevel Text
-<span class="lineno"> 2123 </span><span class="decl"><span class="nottickedoff">get_opt n = do</span>
-<span class="lineno"> 2124 </span><span class="spaces">  </span><span class="nottickedoff">prog &lt;- io $ System.Environment.getProgName</span>
-<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="nottickedoff">args &lt;- io $ System.Environment.getArgs</span>
-<span class="lineno"> 2126 </span><span class="spaces">  </span><span class="nottickedoff">nthPrim (map Text.pack $ prog : args) n</span></span>
+<span class="lineno"> 2123 </span><span class="decl"><span class="istickedoff">get_opt n = do</span>
+<span class="lineno"> 2124 </span><span class="spaces">  </span><span class="istickedoff">prog &lt;- io $ System.Environment.getProgName</span>
+<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- io $ System.Environment.getArgs</span>
+<span class="lineno"> 2126 </span><span class="spaces">  </span><span class="istickedoff">nthPrim (map Text.pack $ prog : <span class="nottickedoff">args</span>) n</span></span>
 <span class="lineno"> 2127 </span>
 <span class="lineno"> 2128 </span>cryptol_prims :: TopLevel CryptolModule
 <span class="lineno"> 2129 </span><span class="decl"><span class="nottickedoff">cryptol_prims = CryptolModule Map.empty &lt;$&gt; Map.fromList &lt;$&gt; traverse parsePrim prims</span>
@@ -2479,16 +2479,16 @@ span.spaces    { background: white }
 <span class="lineno"> 2460 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ Text.unpack $ &quot;Unknown path sat solver: &quot; &lt;&gt; nm</span></span>
 <span class="lineno"> 2461 </span>
 <span class="lineno"> 2462 </span>summarize_verification :: TopLevel ()
-<span class="lineno"> 2463 </span><span class="decl"><span class="nottickedoff">summarize_verification =</span>
-<span class="lineno"> 2464 </span><span class="spaces">  </span><span class="nottickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 2465 </span><span class="spaces">     </span><span class="nottickedoff">let jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2466 </span><span class="spaces">         </span><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2467 </span><span class="spaces">         </span><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
-<span class="lineno"> 2468 </span><span class="spaces">     </span><span class="nottickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2469 </span><span class="spaces">     </span><span class="nottickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
-<span class="lineno"> 2470 </span><span class="spaces">     </span><span class="nottickedoff">opts &lt;- getTopLevelPPOpts</span>
-<span class="lineno"> 2471 </span><span class="spaces">     </span><span class="nottickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
-<span class="lineno"> 2472 </span><span class="spaces">     </span><span class="nottickedoff">io $ putStrLn $ prettyVerificationSummary opts nenv summary</span></span>
+<span class="lineno"> 2463 </span><span class="decl"><span class="istickedoff">summarize_verification =</span>
+<span class="lineno"> 2464 </span><span class="spaces">  </span><span class="istickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
+<span class="lineno"> 2465 </span><span class="spaces">     </span><span class="istickedoff">let jspecs  = [ <span class="nottickedoff">s</span> | SV.VJVMMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2466 </span><span class="spaces">         </span><span class="istickedoff">lspecs  = [ <span class="nottickedoff">s</span> | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2467 </span><span class="spaces">         </span><span class="istickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
+<span class="lineno"> 2468 </span><span class="spaces">     </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
+<span class="lineno"> 2469 </span><span class="spaces">     </span><span class="istickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
+<span class="lineno"> 2470 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getTopLevelPPOpts</span>
+<span class="lineno"> 2471 </span><span class="spaces">     </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
+<span class="lineno"> 2472 </span><span class="spaces">     </span><span class="istickedoff">io $ putStrLn $ prettyVerificationSummary opts nenv summary</span></span>
 <span class="lineno"> 2473 </span>
 <span class="lineno"> 2474 </span>summarize_verification_json :: FilePath -&gt; TopLevel ()
 <span class="lineno"> 2475 </span><span class="decl"><span class="nottickedoff">summarize_verification_json fpath =</span>

@@ -131,9 +131,9 @@ span.spaces    { background: white }
 <span class="lineno">  112 </span>-- elements, such as the not-physically-present wildcard in a
 <span class="lineno">  113 </span>-- do-notation binding that doesn't bind anything.
 <span class="lineno">  114 </span>leadingPos :: Pos -&gt; Pos
-<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">leadingPos pos = case pos of</span>
-<span class="lineno">  116 </span><span class="spaces">   </span><span class="nottickedoff">Range f l1 c1 _l2 _c2 -&gt; Range f l1 c1 l1 c1</span>
-<span class="lineno">  117 </span><span class="spaces">   </span><span class="nottickedoff">_ -&gt; pos</span></span>
+<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">leadingPos pos = case pos of</span>
+<span class="lineno">  116 </span><span class="spaces">   </span><span class="istickedoff">Range f l1 c1 _l2 _c2 -&gt; Range f l1 c1 l1 c1</span>
+<span class="lineno">  117 </span><span class="spaces">   </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pos</span></span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>-- Paste together two positions.
 <span class="lineno">  120 </span>--
@@ -165,7 +165,7 @@ span.spaces    { background: white }
 <span class="lineno">  146 </span><span class="spaces"></span><span class="istickedoff">spanPos _ (PosInternal str) = <span class="nottickedoff">PosInternal str</span></span>
 <span class="lineno">  147 </span><span class="spaces"></span><span class="istickedoff">spanPos _ PosREPL = <span class="nottickedoff">PosREPL</span></span>
 <span class="lineno">  148 </span><span class="spaces"></span><span class="istickedoff">-- prefer anything else to unknown</span>
-<span class="lineno">  149 </span><span class="spaces"></span><span class="istickedoff">spanPos Unknown p = <span class="nottickedoff">p</span></span>
+<span class="lineno">  149 </span><span class="spaces"></span><span class="istickedoff">spanPos Unknown p = p</span>
 <span class="lineno">  150 </span><span class="spaces"></span><span class="istickedoff">spanPos p Unknown = p</span>
 <span class="lineno">  151 </span><span class="spaces"></span><span class="istickedoff">-- if it's the same file, keep it; otherwise give up</span>
 <span class="lineno">  152 </span><span class="spaces"></span><span class="istickedoff">spanPos (FileOnlyPos f) (FileOnlyPos f') | <span class="nottickedoff">f == f'</span> = <span class="nottickedoff">FileOnlyPos f</span></span>

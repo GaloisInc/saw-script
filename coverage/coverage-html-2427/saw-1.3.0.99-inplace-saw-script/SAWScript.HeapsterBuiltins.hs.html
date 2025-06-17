@@ -1187,146 +1187,145 @@ span.spaces    { background: white }
 <span class="lineno"> 1168 </span><span class="spaces">            </span><span class="nottickedoff">in io $ printOutLn opts Warn $ Text.unpack $ pref &lt;&gt; nm &lt;&gt; &quot;:\n&quot; &lt;&gt; msg_body &lt;&gt; &quot;\n&quot;</span>
 <span class="lineno"> 1169 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asLambda -&gt; Just (_, _, t)) = warnErrs nm t</span>
 <span class="lineno"> 1170 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asApp -&gt; Just (f, arg)) = warnErrs nm arg &gt;&gt; warnErrs nm f</span>
-<span class="lineno"> 1171 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asCtor -&gt; Just (_, args)) = mapM_ (warnErrs nm) args</span>
-<span class="lineno"> 1172 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecursorApp -&gt; Just (_, _, ixs, arg)) = mapM_ (warnErrs nm) (arg:ixs)</span>
-<span class="lineno"> 1173 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asTupleValue -&gt; Just ts) = mapM_ (warnErrs nm) ts</span>
-<span class="lineno"> 1174 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asTupleSelector -&gt; Just (t, _)) = warnErrs nm t</span>
-<span class="lineno"> 1175 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecordValue -&gt; Just ts) = mapM_ (warnErrs nm) ts</span>
-<span class="lineno"> 1176 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecordSelector -&gt; Just (t, _)) = warnErrs nm t</span>
-<span class="lineno"> 1177 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asArrayValue -&gt; Just (_, ts)) = mapM_ (warnErrs nm) ts</span>
-<span class="lineno"> 1178 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs _ _ = return ()</span></span>
+<span class="lineno"> 1171 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecursorApp -&gt; Just (_, _, ixs, arg)) = mapM_ (warnErrs nm) (arg:ixs)</span>
+<span class="lineno"> 1172 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asTupleValue -&gt; Just ts) = mapM_ (warnErrs nm) ts</span>
+<span class="lineno"> 1173 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asTupleSelector -&gt; Just (t, _)) = warnErrs nm t</span>
+<span class="lineno"> 1174 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecordValue -&gt; Just ts) = mapM_ (warnErrs nm) ts</span>
+<span class="lineno"> 1175 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asRecordSelector -&gt; Just (t, _)) = warnErrs nm t</span>
+<span class="lineno"> 1176 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs nm (asArrayValue -&gt; Just (_, ts)) = mapM_ (warnErrs nm) ts</span>
+<span class="lineno"> 1177 </span><span class="spaces">        </span><span class="nottickedoff">warnErrs _ _ = return ()</span></span>
+<span class="lineno"> 1178 </span>
 <span class="lineno"> 1179 </span>
-<span class="lineno"> 1180 </span>
-<span class="lineno"> 1181 </span>-- | Type-check a single function against a function permission
-<span class="lineno"> 1182 </span>heapster_typecheck_fun :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1183 </span>                          Text -&gt; Text -&gt; TopLevel ()
-<span class="lineno"> 1184 </span><span class="decl"><span class="nottickedoff">heapster_typecheck_fun bic opts henv fn_name perms_string =</span>
-<span class="lineno"> 1185 </span><span class="spaces">  </span><span class="nottickedoff">heapster_typecheck_mut_funs bic opts henv [(fn_name, perms_string)]</span></span>
-<span class="lineno"> 1186 </span>
-<span class="lineno"> 1187 </span>-- | Type-check a single function against a function permission and generate a
-<span class="lineno"> 1188 </span>-- SAW core specification with a potentially different name
-<span class="lineno"> 1189 </span>heapster_typecheck_fun_rename :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1190 </span>                                 Text -&gt; Text -&gt; Text -&gt; TopLevel ()
-<span class="lineno"> 1191 </span><span class="decl"><span class="nottickedoff">heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =</span>
-<span class="lineno"> 1192 </span><span class="spaces">  </span><span class="nottickedoff">heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,</span>
-<span class="lineno"> 1193 </span><span class="spaces">                                                     </span><span class="nottickedoff">perms_string)]</span></span>
-<span class="lineno"> 1194 </span>
-<span class="lineno"> 1195 </span>{-
-<span class="lineno"> 1196 </span>heapster_typecheck_fun_rs :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1197 </span>                             String -&gt; String -&gt; TopLevel ()
-<span class="lineno"> 1198 </span>heapster_typecheck_fun_rs bic opts henv fn_name perms_string =
-<span class="lineno"> 1199 </span>  heapster_typecheck_fun bic opts henv
-<span class="lineno"> 1200 </span>
-<span class="lineno"> 1201 </span>heapster_typecheck_fun_rename_rs :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1202 </span>                                    String -&gt; String -&gt; String -&gt; TopLevel ()
-<span class="lineno"> 1203 </span>heapster_typecheck_fun_rename_rs bic opts henv fn_name fn_name_to perms_string =
-<span class="lineno"> 1204 </span>  heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
-<span class="lineno"> 1205 </span>                                                     perms_string)]
-<span class="lineno"> 1206 </span>-}
-<span class="lineno"> 1207 </span>
-<span class="lineno"> 1208 </span>-- | Set the event type for the remaining Heapster translations
-<span class="lineno"> 1209 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
-<span class="lineno"> 1210 </span>heapster_set_event_type :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1211 </span>                           Text -&gt; TopLevel ()
-<span class="lineno"> 1212 </span><span class="decl"><span class="nottickedoff">heapster_set_event_type _bic _opts henv term_string =</span>
-<span class="lineno"> 1213 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno"> 1214 </span><span class="spaces">     </span><span class="nottickedoff">ev_tp &lt;-</span>
-<span class="lineno"> 1215 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ completeOpenTerm sc $ dataTypeOpenTerm &quot;SpecM.EvType&quot; []</span>
-<span class="lineno"> 1216 </span><span class="spaces">     </span><span class="nottickedoff">ev_id &lt;- parseAndInsDef henv &quot;HeapsterEv&quot; ev_tp (Text.unpack term_string)</span>
-<span class="lineno"> 1217 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env -&gt;</span>
-<span class="lineno"> 1218 </span><span class="spaces">       </span><span class="nottickedoff">env { permEnvEventType = EventType (globalOpenTerm ev_id) }</span></span>
-<span class="lineno"> 1219 </span>
-<span class="lineno"> 1220 </span>-- | Fetch the SAW core definition associated with a name
-<span class="lineno"> 1221 </span>heapsterFunTrans :: HeapsterEnv -&gt; Text -&gt; TopLevel Term
-<span class="lineno"> 1222 </span><span class="decl"><span class="nottickedoff">heapsterFunTrans henv fn_name =</span>
-<span class="lineno"> 1223 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno"> 1224 </span><span class="spaces">     </span><span class="nottickedoff">let saw_modname = heapsterEnvSAWModule henv</span>
-<span class="lineno"> 1225 </span><span class="spaces">     </span><span class="nottickedoff">fun_term &lt;-</span>
-<span class="lineno"> 1226 </span><span class="spaces">       </span><span class="nottickedoff">fmap (fromJust . defBody) $</span>
-<span class="lineno"> 1227 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ scRequireDef sc $ mkSafeIdent saw_modname (Text.unpack fn_name)</span>
-<span class="lineno"> 1228 </span><span class="spaces">     </span><span class="nottickedoff">bodies &lt;-</span>
-<span class="lineno"> 1229 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ scResolveName sc $ fn_name &lt;&gt; &quot;__bodies&quot;</span>
-<span class="lineno"> 1230 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ scUnfoldConstants sc bodies fun_term &gt;&gt;=</span>
-<span class="lineno"> 1231 </span><span class="spaces">              </span><span class="nottickedoff">sawLetMinimize sc &gt;&gt;= betaNormalize sc</span></span>
-<span class="lineno"> 1232 </span>
-<span class="lineno"> 1233 </span>-- | Fetch the SAW core definition associated with a name and print it
-<span class="lineno"> 1234 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
-<span class="lineno"> 1235 </span>heapster_print_fun_trans :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1236 </span>                            Text -&gt; TopLevel ()
-<span class="lineno"> 1237 </span><span class="decl"><span class="nottickedoff">heapster_print_fun_trans _bic _opts henv fn_name =</span>
-<span class="lineno"> 1238 </span><span class="spaces">  </span><span class="nottickedoff">do pp_opts &lt;- getTopLevelPPOpts</span>
-<span class="lineno"> 1239 </span><span class="spaces">     </span><span class="nottickedoff">fun_term &lt;- heapsterFunTrans henv fn_name</span>
-<span class="lineno"> 1240 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ putStrLn $ Pretty.scPrettyTerm pp_opts fun_term</span></span>
-<span class="lineno"> 1241 </span>
-<span class="lineno"> 1242 </span>-- | Export all definitions in the SAW core module associated with a Heapster
-<span class="lineno"> 1243 </span>-- environment to a Coq file with the given name
-<span class="lineno"> 1244 </span>heapster_export_coq :: HeapsterEnv -&gt; FilePath -&gt; TopLevel ()
-<span class="lineno"> 1245 </span><span class="decl"><span class="nottickedoff">heapster_export_coq henv filename =</span>
-<span class="lineno"> 1246 </span><span class="spaces">  </span><span class="nottickedoff">do let coq_trans_conf = coqTranslationConfiguration [] []</span>
-<span class="lineno"> 1247 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1248 </span><span class="spaces">     </span><span class="nottickedoff">mm &lt;- liftIO $ scGetModuleMap sc</span>
-<span class="lineno"> 1249 </span><span class="spaces">     </span><span class="nottickedoff">saw_mod &lt;- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv</span>
-<span class="lineno"> 1250 </span><span class="spaces">     </span><span class="nottickedoff">let coq_doc =</span>
-<span class="lineno"> 1251 </span><span class="spaces">           </span><span class="nottickedoff">vcat [preamble coq_trans_conf {</span>
-<span class="lineno"> 1252 </span><span class="spaces">                   </span><span class="nottickedoff">postPreamble =</span>
-<span class="lineno"> 1253 </span><span class="spaces">                       </span><span class="nottickedoff">&quot;From CryptolToCoq Require Import &quot; ++</span>
-<span class="lineno"> 1254 </span><span class="spaces">                       </span><span class="nottickedoff">&quot;SAWCorePrelude SpecMPrimitivesForSAWCore SAWCoreBitvectors.\n&quot; },</span>
-<span class="lineno"> 1255 </span><span class="spaces">                 </span><span class="nottickedoff">translateSAWModule coq_trans_conf mm saw_mod]</span>
-<span class="lineno"> 1256 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ writeFile filename (show coq_doc)</span></span>
-<span class="lineno"> 1257 </span>
-<span class="lineno"> 1258 </span>-- | Set the Hepaster debug level
-<span class="lineno"> 1259 </span>heapster_set_debug_level :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1260 </span>                            Int -&gt; TopLevel ()
-<span class="lineno"> 1261 </span><span class="decl"><span class="nottickedoff">heapster_set_debug_level _ _ env l =</span>
-<span class="lineno"> 1262 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)</span></span>
-<span class="lineno"> 1263 </span>
-<span class="lineno"> 1264 </span>-- | Turn on or off the translation checks in the Heapster-to-SAW translation
-<span class="lineno"> 1265 </span>heapster_set_translation_checks :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1266 </span>                                   Bool -&gt; TopLevel ()
-<span class="lineno"> 1267 </span><span class="decl"><span class="nottickedoff">heapster_set_translation_checks _ _ env f =</span>
-<span class="lineno"> 1268 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ writeIORef (heapsterEnvChecksFlag env) (ChecksFlag f)</span></span>
-<span class="lineno"> 1269 </span>
-<span class="lineno"> 1270 </span>-- | Parse a Rust type from an input string, translate it to a Heapster function
-<span class="lineno"> 1271 </span>-- permission, and print out that Heapster permission on stdout
-<span class="lineno"> 1272 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
-<span class="lineno"> 1273 </span>heapster_translate_rust_type :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
-<span class="lineno"> 1274 </span>                                Text -&gt; TopLevel ()
-<span class="lineno"> 1275 </span><span class="decl"><span class="nottickedoff">heapster_translate_rust_type _bic _opts henv perms_string =</span>
-<span class="lineno"> 1276 </span><span class="spaces">  </span><span class="nottickedoff">do env &lt;- liftIO $ readIORef $ heapsterEnvPermEnvRef henv</span>
-<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="nottickedoff">let w64 = (knownNat @64::NatRepr 64)</span>
-<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="nottickedoff">leq_proof &lt;- case decideLeq (knownNat @1) w64 of</span>
-<span class="lineno"> 1279 </span><span class="spaces">       </span><span class="nottickedoff">Left pf -&gt; return pf</span>
-<span class="lineno"> 1280 </span><span class="spaces">       </span><span class="nottickedoff">Right _ -&gt; fail &quot;LLVM arch width is 0!&quot;</span>
-<span class="lineno"> 1281 </span><span class="spaces">     </span><span class="nottickedoff">withKnownNat w64 $ withLeqProof leq_proof $ do</span>
-<span class="lineno"> 1282 </span><span class="spaces">        </span><span class="nottickedoff">Some3FunPerm fun_perm &lt;-</span>
-<span class="lineno"> 1283 </span><span class="spaces">          </span><span class="nottickedoff">parseSome3FunPermFromRust env w64 (Text.unpack perms_string)</span>
-<span class="lineno"> 1284 </span><span class="spaces">        </span><span class="nottickedoff">liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm</span></span>
-<span class="lineno"> 1285 </span>
-<span class="lineno"> 1286 </span>-- | Parse a Heapster function permission from a 'String' and print it to
-<span class="lineno"> 1287 </span>-- stdout, using a particular symbol in an LLVM module as the type of the
-<span class="lineno"> 1288 </span>-- function that the permission applies to
-<span class="lineno"> 1289 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
-<span class="lineno"> 1290 </span>heapster_parse_test :: BuiltinContext -&gt; Options -&gt; Some LLVMModule -&gt;
-<span class="lineno"> 1291 </span>                       Text -&gt; Text -&gt; TopLevel ()
-<span class="lineno"> 1292 </span><span class="decl"><span class="nottickedoff">heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =</span>
-<span class="lineno"> 1293 </span><span class="spaces">  </span><span class="nottickedoff">do let env = heapster_default_env -- FIXME: env should be an argument</span>
-<span class="lineno"> 1294 </span><span class="spaces">     </span><span class="nottickedoff">let _arch = llvmModuleArchRepr lm</span>
-<span class="lineno"> 1295 </span><span class="spaces">     </span><span class="nottickedoff">AnyCFG cfg &lt;-</span>
-<span class="lineno"> 1296 </span><span class="spaces">       </span><span class="nottickedoff">failOnNothing (&quot;Could not find symbol: &quot; &lt;&gt; fn_name) =&lt;&lt;</span>
-<span class="lineno"> 1297 </span><span class="spaces">         </span><span class="nottickedoff">io (lookupFunctionCFG lm fn_name)</span>
-<span class="lineno"> 1298 </span><span class="spaces">     </span><span class="nottickedoff">let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg</span>
-<span class="lineno"> 1299 </span><span class="spaces">     </span><span class="nottickedoff">let ret = handleReturnType $ cfgHandle cfg</span>
-<span class="lineno"> 1300 </span><span class="spaces">     </span><span class="nottickedoff">SomeFunPerm fun_perm &lt;- parseFunPermString &quot;permissions&quot; env args</span>
-<span class="lineno"> 1301 </span><span class="spaces">                                                </span><span class="nottickedoff">ret (Text.unpack perms_string)</span>
-<span class="lineno"> 1302 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm</span></span>
-<span class="lineno"> 1303 </span>
-<span class="lineno"> 1304 </span>-- | Dump the IDE information contained in a Heapster environment to a JSON file
-<span class="lineno"> 1305 </span>heapster_dump_ide_info :: HeapsterEnv -&gt; FilePath -&gt; TopLevel ()
-<span class="lineno"> 1306 </span><span class="decl"><span class="nottickedoff">heapster_dump_ide_info henv filename = do</span>
-<span class="lineno"> 1307 </span><span class="spaces">  </span><span class="nottickedoff">-- heapster_typecheck_mut_funs bic opts henv [(fnName, perms)]</span>
-<span class="lineno"> 1308 </span><span class="spaces">  </span><span class="nottickedoff">penv &lt;- io $ readIORef (heapsterEnvPermEnvRef henv)</span>
-<span class="lineno"> 1309 </span><span class="spaces">  </span><span class="nottickedoff">tcfgs &lt;- io $ readIORef (heapsterEnvTCFGs henv)</span>
-<span class="lineno"> 1310 </span><span class="spaces">  </span><span class="nottickedoff">io $ HIDE.printIDEInfo penv tcfgs filename emptyPPInfo</span></span>
+<span class="lineno"> 1180 </span>-- | Type-check a single function against a function permission
+<span class="lineno"> 1181 </span>heapster_typecheck_fun :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1182 </span>                          Text -&gt; Text -&gt; TopLevel ()
+<span class="lineno"> 1183 </span><span class="decl"><span class="nottickedoff">heapster_typecheck_fun bic opts henv fn_name perms_string =</span>
+<span class="lineno"> 1184 </span><span class="spaces">  </span><span class="nottickedoff">heapster_typecheck_mut_funs bic opts henv [(fn_name, perms_string)]</span></span>
+<span class="lineno"> 1185 </span>
+<span class="lineno"> 1186 </span>-- | Type-check a single function against a function permission and generate a
+<span class="lineno"> 1187 </span>-- SAW core specification with a potentially different name
+<span class="lineno"> 1188 </span>heapster_typecheck_fun_rename :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1189 </span>                                 Text -&gt; Text -&gt; Text -&gt; TopLevel ()
+<span class="lineno"> 1190 </span><span class="decl"><span class="nottickedoff">heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =</span>
+<span class="lineno"> 1191 </span><span class="spaces">  </span><span class="nottickedoff">heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,</span>
+<span class="lineno"> 1192 </span><span class="spaces">                                                     </span><span class="nottickedoff">perms_string)]</span></span>
+<span class="lineno"> 1193 </span>
+<span class="lineno"> 1194 </span>{-
+<span class="lineno"> 1195 </span>heapster_typecheck_fun_rs :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1196 </span>                             String -&gt; String -&gt; TopLevel ()
+<span class="lineno"> 1197 </span>heapster_typecheck_fun_rs bic opts henv fn_name perms_string =
+<span class="lineno"> 1198 </span>  heapster_typecheck_fun bic opts henv
+<span class="lineno"> 1199 </span>
+<span class="lineno"> 1200 </span>heapster_typecheck_fun_rename_rs :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1201 </span>                                    String -&gt; String -&gt; String -&gt; TopLevel ()
+<span class="lineno"> 1202 </span>heapster_typecheck_fun_rename_rs bic opts henv fn_name fn_name_to perms_string =
+<span class="lineno"> 1203 </span>  heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
+<span class="lineno"> 1204 </span>                                                     perms_string)]
+<span class="lineno"> 1205 </span>-}
+<span class="lineno"> 1206 </span>
+<span class="lineno"> 1207 </span>-- | Set the event type for the remaining Heapster translations
+<span class="lineno"> 1208 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
+<span class="lineno"> 1209 </span>heapster_set_event_type :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1210 </span>                           Text -&gt; TopLevel ()
+<span class="lineno"> 1211 </span><span class="decl"><span class="nottickedoff">heapster_set_event_type _bic _opts henv term_string =</span>
+<span class="lineno"> 1212 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno"> 1213 </span><span class="spaces">     </span><span class="nottickedoff">ev_tp &lt;-</span>
+<span class="lineno"> 1214 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ completeOpenTerm sc $ dataTypeOpenTerm &quot;SpecM.EvType&quot; []</span>
+<span class="lineno"> 1215 </span><span class="spaces">     </span><span class="nottickedoff">ev_id &lt;- parseAndInsDef henv &quot;HeapsterEv&quot; ev_tp (Text.unpack term_string)</span>
+<span class="lineno"> 1216 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env -&gt;</span>
+<span class="lineno"> 1217 </span><span class="spaces">       </span><span class="nottickedoff">env { permEnvEventType = EventType (globalOpenTerm ev_id) }</span></span>
+<span class="lineno"> 1218 </span>
+<span class="lineno"> 1219 </span>-- | Fetch the SAW core definition associated with a name
+<span class="lineno"> 1220 </span>heapsterFunTrans :: HeapsterEnv -&gt; Text -&gt; TopLevel Term
+<span class="lineno"> 1221 </span><span class="decl"><span class="nottickedoff">heapsterFunTrans henv fn_name =</span>
+<span class="lineno"> 1222 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno"> 1223 </span><span class="spaces">     </span><span class="nottickedoff">let saw_modname = heapsterEnvSAWModule henv</span>
+<span class="lineno"> 1224 </span><span class="spaces">     </span><span class="nottickedoff">fun_term &lt;-</span>
+<span class="lineno"> 1225 </span><span class="spaces">       </span><span class="nottickedoff">fmap (fromJust . defBody) $</span>
+<span class="lineno"> 1226 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ scRequireDef sc $ mkSafeIdent saw_modname (Text.unpack fn_name)</span>
+<span class="lineno"> 1227 </span><span class="spaces">     </span><span class="nottickedoff">bodies &lt;-</span>
+<span class="lineno"> 1228 </span><span class="spaces">       </span><span class="nottickedoff">liftIO $ scResolveName sc $ fn_name &lt;&gt; &quot;__bodies&quot;</span>
+<span class="lineno"> 1229 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ scUnfoldConstants sc bodies fun_term &gt;&gt;=</span>
+<span class="lineno"> 1230 </span><span class="spaces">              </span><span class="nottickedoff">sawLetMinimize sc &gt;&gt;= betaNormalize sc</span></span>
+<span class="lineno"> 1231 </span>
+<span class="lineno"> 1232 </span>-- | Fetch the SAW core definition associated with a name and print it
+<span class="lineno"> 1233 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
+<span class="lineno"> 1234 </span>heapster_print_fun_trans :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1235 </span>                            Text -&gt; TopLevel ()
+<span class="lineno"> 1236 </span><span class="decl"><span class="nottickedoff">heapster_print_fun_trans _bic _opts henv fn_name =</span>
+<span class="lineno"> 1237 </span><span class="spaces">  </span><span class="nottickedoff">do pp_opts &lt;- getTopLevelPPOpts</span>
+<span class="lineno"> 1238 </span><span class="spaces">     </span><span class="nottickedoff">fun_term &lt;- heapsterFunTrans henv fn_name</span>
+<span class="lineno"> 1239 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ putStrLn $ Pretty.scPrettyTerm pp_opts fun_term</span></span>
+<span class="lineno"> 1240 </span>
+<span class="lineno"> 1241 </span>-- | Export all definitions in the SAW core module associated with a Heapster
+<span class="lineno"> 1242 </span>-- environment to a Coq file with the given name
+<span class="lineno"> 1243 </span>heapster_export_coq :: HeapsterEnv -&gt; FilePath -&gt; TopLevel ()
+<span class="lineno"> 1244 </span><span class="decl"><span class="nottickedoff">heapster_export_coq henv filename =</span>
+<span class="lineno"> 1245 </span><span class="spaces">  </span><span class="nottickedoff">do let coq_trans_conf = coqTranslationConfiguration [] []</span>
+<span class="lineno"> 1246 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno"> 1247 </span><span class="spaces">     </span><span class="nottickedoff">mm &lt;- liftIO $ scGetModuleMap sc</span>
+<span class="lineno"> 1248 </span><span class="spaces">     </span><span class="nottickedoff">saw_mod &lt;- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv</span>
+<span class="lineno"> 1249 </span><span class="spaces">     </span><span class="nottickedoff">let coq_doc =</span>
+<span class="lineno"> 1250 </span><span class="spaces">           </span><span class="nottickedoff">vcat [preamble coq_trans_conf {</span>
+<span class="lineno"> 1251 </span><span class="spaces">                   </span><span class="nottickedoff">postPreamble =</span>
+<span class="lineno"> 1252 </span><span class="spaces">                       </span><span class="nottickedoff">&quot;From CryptolToCoq Require Import &quot; ++</span>
+<span class="lineno"> 1253 </span><span class="spaces">                       </span><span class="nottickedoff">&quot;SAWCorePrelude SpecMPrimitivesForSAWCore SAWCoreBitvectors.\n&quot; },</span>
+<span class="lineno"> 1254 </span><span class="spaces">                 </span><span class="nottickedoff">translateSAWModule coq_trans_conf mm saw_mod]</span>
+<span class="lineno"> 1255 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ writeFile filename (show coq_doc)</span></span>
+<span class="lineno"> 1256 </span>
+<span class="lineno"> 1257 </span>-- | Set the Hepaster debug level
+<span class="lineno"> 1258 </span>heapster_set_debug_level :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1259 </span>                            Int -&gt; TopLevel ()
+<span class="lineno"> 1260 </span><span class="decl"><span class="nottickedoff">heapster_set_debug_level _ _ env l =</span>
+<span class="lineno"> 1261 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)</span></span>
+<span class="lineno"> 1262 </span>
+<span class="lineno"> 1263 </span>-- | Turn on or off the translation checks in the Heapster-to-SAW translation
+<span class="lineno"> 1264 </span>heapster_set_translation_checks :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1265 </span>                                   Bool -&gt; TopLevel ()
+<span class="lineno"> 1266 </span><span class="decl"><span class="nottickedoff">heapster_set_translation_checks _ _ env f =</span>
+<span class="lineno"> 1267 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ writeIORef (heapsterEnvChecksFlag env) (ChecksFlag f)</span></span>
+<span class="lineno"> 1268 </span>
+<span class="lineno"> 1269 </span>-- | Parse a Rust type from an input string, translate it to a Heapster function
+<span class="lineno"> 1270 </span>-- permission, and print out that Heapster permission on stdout
+<span class="lineno"> 1271 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
+<span class="lineno"> 1272 </span>heapster_translate_rust_type :: BuiltinContext -&gt; Options -&gt; HeapsterEnv -&gt;
+<span class="lineno"> 1273 </span>                                Text -&gt; TopLevel ()
+<span class="lineno"> 1274 </span><span class="decl"><span class="nottickedoff">heapster_translate_rust_type _bic _opts henv perms_string =</span>
+<span class="lineno"> 1275 </span><span class="spaces">  </span><span class="nottickedoff">do env &lt;- liftIO $ readIORef $ heapsterEnvPermEnvRef henv</span>
+<span class="lineno"> 1276 </span><span class="spaces">     </span><span class="nottickedoff">let w64 = (knownNat @64::NatRepr 64)</span>
+<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="nottickedoff">leq_proof &lt;- case decideLeq (knownNat @1) w64 of</span>
+<span class="lineno"> 1278 </span><span class="spaces">       </span><span class="nottickedoff">Left pf -&gt; return pf</span>
+<span class="lineno"> 1279 </span><span class="spaces">       </span><span class="nottickedoff">Right _ -&gt; fail &quot;LLVM arch width is 0!&quot;</span>
+<span class="lineno"> 1280 </span><span class="spaces">     </span><span class="nottickedoff">withKnownNat w64 $ withLeqProof leq_proof $ do</span>
+<span class="lineno"> 1281 </span><span class="spaces">        </span><span class="nottickedoff">Some3FunPerm fun_perm &lt;-</span>
+<span class="lineno"> 1282 </span><span class="spaces">          </span><span class="nottickedoff">parseSome3FunPermFromRust env w64 (Text.unpack perms_string)</span>
+<span class="lineno"> 1283 </span><span class="spaces">        </span><span class="nottickedoff">liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm</span></span>
+<span class="lineno"> 1284 </span>
+<span class="lineno"> 1285 </span>-- | Parse a Heapster function permission from a 'String' and print it to
+<span class="lineno"> 1286 </span>-- stdout, using a particular symbol in an LLVM module as the type of the
+<span class="lineno"> 1287 </span>-- function that the permission applies to
+<span class="lineno"> 1288 </span>-- XXX why does this take the BuiltinContext and Options if it doesn't use them?
+<span class="lineno"> 1289 </span>heapster_parse_test :: BuiltinContext -&gt; Options -&gt; Some LLVMModule -&gt;
+<span class="lineno"> 1290 </span>                       Text -&gt; Text -&gt; TopLevel ()
+<span class="lineno"> 1291 </span><span class="decl"><span class="nottickedoff">heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =</span>
+<span class="lineno"> 1292 </span><span class="spaces">  </span><span class="nottickedoff">do let env = heapster_default_env -- FIXME: env should be an argument</span>
+<span class="lineno"> 1293 </span><span class="spaces">     </span><span class="nottickedoff">let _arch = llvmModuleArchRepr lm</span>
+<span class="lineno"> 1294 </span><span class="spaces">     </span><span class="nottickedoff">AnyCFG cfg &lt;-</span>
+<span class="lineno"> 1295 </span><span class="spaces">       </span><span class="nottickedoff">failOnNothing (&quot;Could not find symbol: &quot; &lt;&gt; fn_name) =&lt;&lt;</span>
+<span class="lineno"> 1296 </span><span class="spaces">         </span><span class="nottickedoff">io (lookupFunctionCFG lm fn_name)</span>
+<span class="lineno"> 1297 </span><span class="spaces">     </span><span class="nottickedoff">let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg</span>
+<span class="lineno"> 1298 </span><span class="spaces">     </span><span class="nottickedoff">let ret = handleReturnType $ cfgHandle cfg</span>
+<span class="lineno"> 1299 </span><span class="spaces">     </span><span class="nottickedoff">SomeFunPerm fun_perm &lt;- parseFunPermString &quot;permissions&quot; env args</span>
+<span class="lineno"> 1300 </span><span class="spaces">                                                </span><span class="nottickedoff">ret (Text.unpack perms_string)</span>
+<span class="lineno"> 1301 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm</span></span>
+<span class="lineno"> 1302 </span>
+<span class="lineno"> 1303 </span>-- | Dump the IDE information contained in a Heapster environment to a JSON file
+<span class="lineno"> 1304 </span>heapster_dump_ide_info :: HeapsterEnv -&gt; FilePath -&gt; TopLevel ()
+<span class="lineno"> 1305 </span><span class="decl"><span class="nottickedoff">heapster_dump_ide_info henv filename = do</span>
+<span class="lineno"> 1306 </span><span class="spaces">  </span><span class="nottickedoff">-- heapster_typecheck_mut_funs bic opts henv [(fnName, perms)]</span>
+<span class="lineno"> 1307 </span><span class="spaces">  </span><span class="nottickedoff">penv &lt;- io $ readIORef (heapsterEnvPermEnvRef henv)</span>
+<span class="lineno"> 1308 </span><span class="spaces">  </span><span class="nottickedoff">tcfgs &lt;- io $ readIORef (heapsterEnvTCFGs henv)</span>
+<span class="lineno"> 1309 </span><span class="spaces">  </span><span class="nottickedoff">io $ HIDE.printIDEInfo penv tcfgs filename emptyPPInfo</span></span>
 
 </pre>
 </body>

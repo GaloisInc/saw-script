@@ -42,7 +42,7 @@ span.spaces    { background: white }
 <span class="lineno">   23 </span> = SolverStats
 <span class="lineno">   24 </span>   { -- | The names of the solvers that proved this goal.  If verification was
 <span class="lineno">   25 </span>     --   skipped for some reason, this should be the empty set.
-<span class="lineno">   26 </span>     <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverStatsSolvers</span></span></span> :: Set Text
+<span class="lineno">   26 </span>     <span class="istickedoff"><span class="decl"><span class="istickedoff">solverStatsSolvers</span></span></span> :: Set Text
 <span class="lineno">   27 </span>     -- | The size of the term(s) that represent the proof obligations
 <span class="lineno">   28 </span>     --   involved in this verification goal.  Usually, this is the size
 <span class="lineno">   29 </span>     --   of the SAWCore term representing the goal, but it might also
@@ -55,10 +55,10 @@ span.spaces    { background: white }
 <span class="lineno">   36 </span><span class="decl"><span class="istickedoff">solverStats nm sz = SolverStats (Set.singleton nm) sz</span></span>
 <span class="lineno">   37 </span>
 <span class="lineno">   38 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Semigroup SolverStats</span></span></span></span> where
-<span class="lineno">   39 </span>  <span class="decl"><span class="nottickedoff">SolverStats xs n &lt;&gt; SolverStats ys m = SolverStats (mappend xs ys) (n+m)</span></span>
+<span class="lineno">   39 </span>  <span class="decl"><span class="istickedoff">SolverStats xs n &lt;&gt; SolverStats ys m = SolverStats (mappend xs ys) <span class="nottickedoff">(n+m)</span></span></span>
 <span class="lineno">   40 </span>
 <span class="lineno">   41 </span>instance <span class="decl"><span class="nottickedoff">Monoid SolverStats</span></span> where
-<span class="lineno">   42 </span>  <span class="decl"><span class="nottickedoff">mempty = SolverStats mempty 0</span></span>
+<span class="lineno">   42 </span>  <span class="decl"><span class="istickedoff">mempty = SolverStats mempty <span class="nottickedoff">0</span></span></span>
 <span class="lineno">   43 </span>  <span class="decl"><span class="nottickedoff">mappend = (&lt;&gt;)</span></span>
 <span class="lineno">   44 </span>
 <span class="lineno">   45 </span>

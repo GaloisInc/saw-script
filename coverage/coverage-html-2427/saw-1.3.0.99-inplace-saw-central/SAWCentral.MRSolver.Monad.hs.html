@@ -1380,7 +1380,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1361 </span><span class="spaces">  </span><span class="nottickedoff">(isGlobalDef &quot;SpecM.bindS&quot; -&gt; Just (),</span>
 <span class="lineno"> 1362 </span><span class="spaces">   </span><span class="nottickedoff">[_, _, _,</span>
 <span class="lineno"> 1363 </span><span class="spaces">    </span><span class="nottickedoff">(asApplyAll -&gt; (isGlobalDef &quot;CryptolM.assertFiniteS&quot; -&gt; Just (),</span>
-<span class="lineno"> 1364 </span><span class="spaces">                    </span><span class="nottickedoff">[_, (asCtor -&gt; Just (primName -&gt; &quot;Cryptol.TCNum&quot;, _))])),</span>
+<span class="lineno"> 1364 </span><span class="spaces">                    </span><span class="nottickedoff">[_, (asGlobalApply &quot;Cryptol.TCNum&quot; -&gt; Just [_])])),</span>
 <span class="lineno"> 1365 </span><span class="spaces">    </span><span class="nottickedoff">k]) -&gt;</span>
 <span class="lineno"> 1366 </span><span class="spaces">    </span><span class="nottickedoff">do pf &lt;- liftSC1 scGlobalDef &quot;Prelude.TrueI&quot;</span>
 <span class="lineno"> 1367 </span><span class="spaces">       </span><span class="nottickedoff">body &lt;- mrApplyAll k [pf]</span>

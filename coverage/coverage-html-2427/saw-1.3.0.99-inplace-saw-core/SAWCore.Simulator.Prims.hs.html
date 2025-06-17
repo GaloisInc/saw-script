@@ -96,8 +96,8 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span>import qualified Data.Vector as V
 <span class="lineno">   78 </span>import Numeric.Natural (Natural)
 <span class="lineno">   79 </span>
-<span class="lineno">   80 </span>import SAWCore.Panic (panic)
-<span class="lineno">   81 </span>import SAWCore.Term.Functor (Ident, primType, primName)
+<span class="lineno">   80 </span>import SAWCore.Name (ExtCns(..), Ident, NameInfo(..))
+<span class="lineno">   81 </span>import SAWCore.Panic (panic)
 <span class="lineno">   82 </span>import SAWCore.Simulator.Value
 <span class="lineno">   83 </span>import SAWCore.Prim
 <span class="lineno">   84 </span>import qualified SAWCore.Prim as Prim
@@ -138,8 +138,8 @@ span.spaces    { background: white }
 <span class="lineno">  119 </span>natFun :: VMonad l =&gt; (Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  120 </span><span class="decl"><span class="istickedoff">natFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat&quot;</span> r</span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure n</span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Zero&quot;) [] [])  = <span class="nottickedoff">pure 0</span></span>
-<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
+<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] [])  = pure 0</span>
+<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
 <span class="lineno">  124 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  125 </span>
 <span class="lineno">  126 </span>-- | A primitive that requires an integer argument
@@ -150,9 +150,9 @@ span.spaces    { background: white }
 <span class="lineno">  131 </span>
 <span class="lineno">  132 </span>-- | A primitive that requires a (Z n) argument
 <span class="lineno">  133 </span>intModFun :: VMonad l =&gt; (VInt l -&gt; Prim l) -&gt; Prim l
-<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">intModFun = PrimFilterFun &quot;expected IntMod&quot; r</span>
-<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">where r (VIntMod _ i) = pure i</span>
-<span class="lineno">  136 </span><span class="spaces">        </span><span class="nottickedoff">r _ = mzero</span></span>
+<span class="lineno">  134 </span><span class="decl"><span class="istickedoff">intModFun = PrimFilterFun <span class="nottickedoff">&quot;expected IntMod&quot;</span> r</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">where r (VIntMod _ i) = pure i</span>
+<span class="lineno">  136 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  137 </span>
 <span class="lineno">  138 </span>-- | A primitive that requires a type argument
 <span class="lineno">  139 </span>tvalFun :: VMonad l =&gt; (TValue l -&gt; Prim l) -&gt; Prim l
@@ -180,7 +180,7 @@ span.spaces    { background: white }
 <span class="lineno">  161 </span>  Unpack l -&gt; (Vector (Thunk l) -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  162 </span><span class="decl"><span class="istickedoff">vectorFun unpack = PrimFilterFun <span class="nottickedoff">&quot;expected vector&quot;</span> r</span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">where r (VVector xs) = pure xs</span>
-<span class="lineno">  164 </span><span class="spaces">        </span><span class="istickedoff">r (VWord w)    = <span class="nottickedoff">fmap (ready . VBool) &lt;$&gt; lift (unpack w)</span></span>
+<span class="lineno">  164 </span><span class="spaces">        </span><span class="istickedoff">r (VWord w)    = fmap (ready . VBool) &lt;$&gt; lift (unpack w)</span>
 <span class="lineno">  165 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  166 </span>
 <span class="lineno">  167 </span>------------------------------------------------------------
@@ -206,7 +206,7 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span>    -- Conditionals
 <span class="lineno">  188 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpMuxBool</span></span></span>  :: VBool l -&gt; VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  189 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpMuxWord</span></span></span>  :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  190 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpMuxInt</span></span></span>   :: VBool l -&gt; VInt l -&gt; VInt l -&gt; MInt l
+<span class="lineno">  190 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpMuxInt</span></span></span>   :: VBool l -&gt; VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  191 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpMuxArray</span></span></span> :: VBool l -&gt; VArray l -&gt; VArray l -&gt; MArray l
 <span class="lineno">  192 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpMuxExtra</span></span></span> :: TValue l -&gt; VBool l -&gt; Extra l -&gt; Extra l -&gt; EvalM l (Extra l)
 <span class="lineno">  193 </span>    -- Booleans
@@ -215,8 +215,8 @@ span.spaces    { background: white }
 <span class="lineno">  196 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpNot</span></span></span>    :: VBool l -&gt; MBool l
 <span class="lineno">  197 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpAnd</span></span></span>    :: VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  198 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpOr</span></span></span>     :: VBool l -&gt; VBool l -&gt; MBool l
-<span class="lineno">  199 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpXor</span></span></span>    :: VBool l -&gt; VBool l -&gt; MBool l
-<span class="lineno">  200 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBoolEq</span></span></span> :: VBool l -&gt; VBool l -&gt; MBool l
+<span class="lineno">  199 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpXor</span></span></span>    :: VBool l -&gt; VBool l -&gt; MBool l
+<span class="lineno">  200 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBoolEq</span></span></span> :: VBool l -&gt; VBool l -&gt; MBool l
 <span class="lineno">  201 </span>    -- Bitvector logical
 <span class="lineno">  202 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvNot</span></span></span>  :: VWord l -&gt; MWord l
 <span class="lineno">  203 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvAnd</span></span></span>  :: VWord l -&gt; VWord l -&gt; MWord l
@@ -228,14 +228,14 @@ span.spaces    { background: white }
 <span class="lineno">  209 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvSub</span></span></span>  :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  210 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvMul</span></span></span>  :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  211 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvUDiv</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  212 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvURem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
+<span class="lineno">  212 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvURem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  213 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvSDiv</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  214 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvSRem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  215 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvLg2</span></span></span>  :: VWord l -&gt; MWord l
+<span class="lineno">  214 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvSRem</span></span></span> :: VWord l -&gt; VWord l -&gt; MWord l
+<span class="lineno">  215 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvLg2</span></span></span>  :: VWord l -&gt; MWord l
 <span class="lineno">  216 </span>    -- Bitvector comparisons
 <span class="lineno">  217 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvEq</span></span></span>   :: VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  218 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvsle</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
-<span class="lineno">  219 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvslt</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
+<span class="lineno">  219 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvslt</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  220 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvule</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  221 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvult</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  222 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvsge</span></span></span>  :: VWord l -&gt; VWord l -&gt; MBool l
@@ -248,19 +248,19 @@ span.spaces    { background: white }
 <span class="lineno">  229 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvShlInt</span></span></span> :: VBool l -&gt; VWord l -&gt; Integer -&gt; MWord l
 <span class="lineno">  230 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvShrInt</span></span></span> :: VBool l -&gt; VWord l -&gt; Integer -&gt; MWord l
 <span class="lineno">  231 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvRol</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  232 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvRor</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
-<span class="lineno">  233 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShl</span></span></span>    :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
+<span class="lineno">  232 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvRor</span></span></span>    :: VWord l -&gt; VWord l -&gt; MWord l
+<span class="lineno">  233 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvShl</span></span></span>    :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  234 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvShr</span></span></span>    :: VBool l -&gt; VWord l -&gt; VWord l -&gt; MWord l
 <span class="lineno">  235 </span>    -- Bitvector misc
-<span class="lineno">  236 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvPopcount</span></span></span>           :: VWord l -&gt; MWord l
-<span class="lineno">  237 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvCountLeadingZeros</span></span></span>  :: VWord l -&gt; MWord l
-<span class="lineno">  238 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvCountTrailingZeros</span></span></span> :: VWord l -&gt; MWord l
+<span class="lineno">  236 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvPopcount</span></span></span>           :: VWord l -&gt; MWord l
+<span class="lineno">  237 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvCountLeadingZeros</span></span></span>  :: VWord l -&gt; MWord l
+<span class="lineno">  238 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpBvCountTrailingZeros</span></span></span> :: VWord l -&gt; MWord l
 <span class="lineno">  239 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpBvForall</span></span></span>             :: Natural -&gt; (VWord l -&gt; MBool l) -&gt; MBool l
 <span class="lineno">  240 </span>    -- Integer operations
 <span class="lineno">  241 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntAdd</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  242 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntSub</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  243 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntMul</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
-<span class="lineno">  244 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntDiv</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
+<span class="lineno">  244 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntDiv</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  245 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntMod</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  246 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpIntNeg</span></span></span> :: VInt l -&gt; MInt l
 <span class="lineno">  247 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntAbs</span></span></span> :: VInt l -&gt; MInt l
@@ -270,17 +270,17 @@ span.spaces    { background: white }
 <span class="lineno">  251 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntMin</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  252 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpIntMax</span></span></span> :: VInt l -&gt; VInt l -&gt; MInt l
 <span class="lineno">  253 </span>    -- Array operations
-<span class="lineno">  254 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayConstant</span></span></span> :: TValue l -&gt; TValue l -&gt; Value l -&gt; MArray l
-<span class="lineno">  255 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayLookup</span></span></span> :: VArray l -&gt; Value l -&gt; MValue l
-<span class="lineno">  256 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayUpdate</span></span></span> :: VArray l -&gt; Value l -&gt; Value l -&gt; MArray l
-<span class="lineno">  257 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayEq</span></span></span> :: VArray l -&gt; VArray l -&gt; MBool l
-<span class="lineno">  258 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayCopy</span></span></span> :: VArray l -&gt; VWord l -&gt; VArray l -&gt; VWord l -&gt; VWord l -&gt; MArray l
+<span class="lineno">  254 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayConstant</span></span></span> :: TValue l -&gt; TValue l -&gt; Value l -&gt; MArray l
+<span class="lineno">  255 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayLookup</span></span></span> :: VArray l -&gt; Value l -&gt; MValue l
+<span class="lineno">  256 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayUpdate</span></span></span> :: VArray l -&gt; Value l -&gt; Value l -&gt; MArray l
+<span class="lineno">  257 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayEq</span></span></span> :: VArray l -&gt; VArray l -&gt; MBool l
+<span class="lineno">  258 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayCopy</span></span></span> :: VArray l -&gt; VWord l -&gt; VArray l -&gt; VWord l -&gt; VWord l -&gt; MArray l
 <span class="lineno">  259 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArraySet</span></span></span> :: VArray l -&gt; VWord l -&gt; Value l -&gt; VWord l -&gt; MArray l
-<span class="lineno">  260 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bpArrayRangeEq</span></span></span> :: VArray l -&gt; VWord l -&gt; VArray l -&gt; VWord l -&gt; VWord l -&gt; MBool l
+<span class="lineno">  260 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bpArrayRangeEq</span></span></span> :: VArray l -&gt; VWord l -&gt; VArray l -&gt; VWord l -&gt; VWord l -&gt; MBool l
 <span class="lineno">  261 </span>  }
 <span class="lineno">  262 </span>
 <span class="lineno">  263 </span>bpBool :: VMonad l =&gt; BasePrims l -&gt; Bool -&gt; MBool l
-<span class="lineno">  264 </span><span class="decl"><span class="istickedoff">bpBool bp True = <span class="nottickedoff">return (bpTrue bp)</span></span>
+<span class="lineno">  264 </span><span class="decl"><span class="istickedoff">bpBool bp True = return (bpTrue bp)</span>
 <span class="lineno">  265 </span><span class="spaces"></span><span class="istickedoff">bpBool bp False = return (bpFalse bp)</span></span>
 <span class="lineno">  266 </span>
 <span class="lineno">  267 </span>-- | Given implementations of the base primitives, construct a table
@@ -298,37 +298,37 @@ span.spaces    { background: white }
 <span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.not&quot;   , boolFun (Prim . liftM VBool . bpNot bp))</span>
 <span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.and&quot;   , boolBinOp (bpAnd bp))</span>
 <span class="lineno">  281 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.or&quot;    , boolBinOp (bpOr bp))</span>
-<span class="lineno">  282 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.xor&quot;   , <span class="nottickedoff">boolBinOp (bpXor bp)</span>)</span>
-<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.boolEq&quot;, <span class="nottickedoff">boolBinOp (bpBoolEq bp)</span>)</span>
+<span class="lineno">  282 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.xor&quot;   , boolBinOp (bpXor bp))</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.boolEq&quot;, boolBinOp (bpBoolEq bp))</span>
 <span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">-- Bitwise</span>
 <span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAnd&quot; , wordBinOp (bpPack bp) (bpBvAnd bp))</span>
 <span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvOr&quot;  , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvOr  bp))</span>
 <span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvXor&quot; , wordBinOp (bpPack bp) (bpBvXor bp))</span>
-<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNot bp))</span>
+<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNot&quot; , wordUnOp  (bpPack bp) (bpBvNot bp))</span>
 <span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">-- Arithmetic</span>
 <span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvNeg&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvNeg bp))</span>
 <span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvAdd&quot; , wordBinOp (bpPack bp) (bpBvAdd bp))</span>
-<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSub&quot; , wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvSub bp))</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSub&quot; , wordBinOp (bpPack bp) (bpBvSub bp))</span>
 <span class="lineno">  293 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvMul&quot; , wordBinOp (bpPack bp) (bpBvMul bp))</span>
-<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvUDiv&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvUDiv bp))</span>
-<span class="lineno">  295 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvURem&quot;, <span class="nottickedoff">wordBinOp (bpPack bp) (bpBvURem bp)</span>)</span>
+<span class="lineno">  294 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvUDiv&quot;, wordBinOp (bpPack bp) (bpBvUDiv bp))</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvURem&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvURem bp))</span>
 <span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSDiv&quot;, <span class="nottickedoff">wordBinOp (bpPack bp) (bpBvSDiv bp)</span>)</span>
-<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSRem&quot;, <span class="nottickedoff">wordBinOp (bpPack bp) (bpBvSRem bp)</span>)</span>
-<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvLg2&quot; , <span class="nottickedoff">wordUnOp  (bpPack bp) (bpBvLg2  bp)</span>)</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSRem&quot;, wordBinOp <span class="nottickedoff">(bpPack bp)</span> (bpBvSRem bp))</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvLg2&quot; , wordUnOp  <span class="nottickedoff">(bpPack bp)</span> (bpBvLg2  bp))</span>
 <span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">-- Comparisons</span>
 <span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvEq&quot;  , wordBinRel (bpPack bp) (bpBvEq  bp))</span>
 <span class="lineno">  301 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvsle&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvsle bp)</span>)</span>
-<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvslt&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvslt bp)</span>)</span>
-<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvule&quot; , wordBinRel <span class="nottickedoff">(bpPack bp)</span> (bpBvule bp))</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvult&quot; , wordBinRel <span class="nottickedoff">(bpPack bp)</span> (bpBvult bp))</span>
+<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvslt&quot; , wordBinRel (bpPack bp) (bpBvslt bp))</span>
+<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvule&quot; , wordBinRel (bpPack bp) (bpBvule bp))</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvult&quot; , wordBinRel (bpPack bp) (bpBvult bp))</span>
 <span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvsge&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvsge bp)</span>)</span>
 <span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvsgt&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvsgt bp)</span>)</span>
 <span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvuge&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvuge bp)</span>)</span>
 <span class="lineno">  308 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvugt&quot; , <span class="nottickedoff">wordBinRel (bpPack bp) (bpBvugt bp)</span>)</span>
 <span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
-<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvPopcount&quot;, <span class="nottickedoff">wordUnOp (bpPack bp) (bpBvPopcount bp)</span>)</span>
-<span class="lineno">  311 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvCountLeadingZeros&quot;, <span class="nottickedoff">wordUnOp (bpPack bp) (bpBvCountLeadingZeros bp)</span>)</span>
-<span class="lineno">  312 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvCountTrailingZeros&quot;, <span class="nottickedoff">wordUnOp (bpPack bp) (bpBvCountTrailingZeros bp)</span>)</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvPopcount&quot;, wordUnOp <span class="nottickedoff">(bpPack bp)</span> (bpBvPopcount bp))</span>
+<span class="lineno">  311 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvCountLeadingZeros&quot;, wordUnOp <span class="nottickedoff">(bpPack bp)</span> (bpBvCountLeadingZeros bp))</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvCountTrailingZeros&quot;, wordUnOp <span class="nottickedoff">(bpPack bp)</span> (bpBvCountTrailingZeros bp))</span>
 <span class="lineno">  313 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvForall&quot;,</span>
 <span class="lineno">  314 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">natFun $ \n -&gt;</span></span>
 <span class="lineno">  315 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">strictFun $ \f -&gt;</span></span>
@@ -347,13 +347,13 @@ span.spaces    { background: white }
 <span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.widthNat&quot;, widthNatOp)</span>
 <span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natCase&quot;, natCaseOp)</span>
 <span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.equalNat&quot;, equalNatOp bp)</span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.ltNat&quot;, <span class="nottickedoff">ltNatOp bp</span>)</span>
+<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.ltNat&quot;, ltNatOp bp)</span>
 <span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
 <span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Integer&quot;, PrimValue (TValue VIntType))</span>
 <span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intAdd&quot;, intBinOp (bpIntAdd bp))</span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intSub&quot;, <span class="nottickedoff">intBinOp (bpIntSub bp)</span>)</span>
 <span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intMul&quot;, intBinOp (bpIntMul bp))</span>
-<span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intDiv&quot;, <span class="nottickedoff">intBinOp (bpIntDiv bp)</span>)</span>
+<span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intDiv&quot;, intBinOp (bpIntDiv bp))</span>
 <span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intMod&quot;, intBinOp (bpIntMod bp))</span>
 <span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intNeg&quot;, intUnOp  (bpIntNeg bp))</span>
 <span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intAbs&quot;, <span class="nottickedoff">intUnOp  (bpIntAbs bp)</span>)</span>
@@ -367,10 +367,10 @@ span.spaces    { background: white }
 <span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">-- Vectors</span>
 <span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Vec&quot;, vecTypeOp)</span>
 <span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.gen&quot;, genOp)</span>
-<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.head&quot;, <span class="nottickedoff">headOp bp</span>)</span>
-<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.tail&quot;, <span class="nottickedoff">tailOp bp</span>)</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.head&quot;, headOp bp)</span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.tail&quot;, tailOp bp)</span>
 <span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.atWithDefault&quot;, atWithDefaultOp bp)</span>
-<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.upd&quot;, <span class="nottickedoff">updOp bp</span>)</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.upd&quot;, updOp bp)</span>
 <span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.take&quot;, takeOp bp)</span>
 <span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.drop&quot;, dropOp bp)</span>
 <span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.append&quot;, appendOp bp)</span>
@@ -403,13 +403,13 @@ span.spaces    { background: white }
 <span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.iteDep&quot;, <span class="nottickedoff">iteDepOp bp</span>)</span>
 <span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">-- SMT Arrays</span>
 <span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Array&quot;, arrayTypeOp)</span>
-<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayConstant&quot;, <span class="nottickedoff">arrayConstantOp bp</span>)</span>
-<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayLookup&quot;, <span class="nottickedoff">arrayLookupOp bp</span>)</span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayUpdate&quot;, <span class="nottickedoff">arrayUpdateOp bp</span>)</span>
-<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayEq&quot;, <span class="nottickedoff">arrayEqOp bp</span>)</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayCopy&quot;, <span class="nottickedoff">arrayCopyOp bp</span>)</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayConstant&quot;, arrayConstantOp bp)</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayLookup&quot;, arrayLookupOp bp)</span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayUpdate&quot;, arrayUpdateOp bp)</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayEq&quot;, arrayEqOp bp)</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayCopy&quot;, arrayCopyOp bp)</span>
 <span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arraySet&quot;, <span class="nottickedoff">arraySetOp bp</span>)</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayRangeEq&quot;, <span class="nottickedoff">arrayRangeEqOp bp</span>)</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.arrayRangeEq&quot;, arrayRangeEqOp bp)</span>
 <span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  395 </span>
 <span class="lineno">  396 </span>
@@ -429,9 +429,9 @@ span.spaces    { background: white }
 <span class="lineno">  410 </span>
 <span class="lineno">  411 </span>toWord :: (HasCallStack, VMonad l, Show (Extra l))
 <span class="lineno">  412 </span>       =&gt; Pack l -&gt; Value l -&gt; MWord l
-<span class="lineno">  413 </span><span class="decl"><span class="nottickedoff">toWord _ (VWord w) = return w</span>
-<span class="lineno">  414 </span><span class="spaces"></span><span class="nottickedoff">toWord pack (VVector vv) = pack =&lt;&lt; V.mapM (liftM toBool . force) vv</span>
-<span class="lineno">  415 </span><span class="spaces"></span><span class="nottickedoff">toWord _ x = panic &quot;toWord&quot; [&quot;Not word or vector: &quot; &lt;&gt; Text.pack (show x)]</span></span>
+<span class="lineno">  413 </span><span class="decl"><span class="istickedoff">toWord _ (VWord w) = return w</span>
+<span class="lineno">  414 </span><span class="spaces"></span><span class="istickedoff">toWord pack (VVector vv) = <span class="nottickedoff">pack =&lt;&lt; V.mapM (liftM toBool . force) vv</span></span>
+<span class="lineno">  415 </span><span class="spaces"></span><span class="istickedoff">toWord _ x = <span class="nottickedoff">panic &quot;toWord&quot; [&quot;Not word or vector: &quot; &lt;&gt; Text.pack (show x)]</span></span></span>
 <span class="lineno">  416 </span>
 <span class="lineno">  417 </span>toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
 <span class="lineno">  418 </span>           =&gt; Value l -&gt; VWord l -&gt; MBool l
@@ -457,8 +457,8 @@ span.spaces    { background: white }
 <span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; err</span></span>
 <span class="lineno">  439 </span>
 <span class="lineno">  440 </span>toArray :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MArray l
-<span class="lineno">  441 </span><span class="decl"><span class="nottickedoff">toArray (VArray f) = return f</span>
-<span class="lineno">  442 </span><span class="spaces"></span><span class="nottickedoff">toArray x = panic &quot;toArray&quot; [&quot;Not array: &quot; &lt;&gt; Text.pack (show x)]</span></span>
+<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">toArray (VArray f) = return f</span>
+<span class="lineno">  442 </span><span class="spaces"></span><span class="istickedoff">toArray x = <span class="nottickedoff">panic &quot;toArray&quot; [&quot;Not array: &quot; &lt;&gt; Text.pack (show x)]</span></span></span>
 <span class="lineno">  443 </span>
 <span class="lineno">  444 </span>------------------------------------------------------------
 <span class="lineno">  445 </span>-- Standard operator types
@@ -478,7 +478,7 @@ span.spaces    { background: white }
 <span class="lineno">  459 </span>  Pack l -&gt; (VWord l -&gt; MWord l) -&gt; Prim l
 <span class="lineno">  460 </span><span class="decl"><span class="istickedoff">wordUnOp pack op =</span>
 <span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
-<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">wordFun <span class="nottickedoff">pack</span> $ \x -&gt;</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">wordFun pack $ \x -&gt;</span>
 <span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">Prim (VWord &lt;$&gt; op x)</span></span>
 <span class="lineno">  464 </span>
 <span class="lineno">  465 </span>-- op : (n : Nat) -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Vec n Bool;
@@ -569,8 +569,8 @@ span.spaces    { background: white }
 <span class="lineno">  550 </span>              (Either (Natural, Value l) Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  551 </span><span class="decl"><span class="istickedoff">natSizeFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat with a known size&quot;</span> r</span>
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure (Right n)</span>
-<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Zero&quot;) [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
-<span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (primName -&gt; &quot;Prelude.Succ&quot;) [] [x]) =</span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
+<span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) =</span>
 <span class="lineno">  555 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">lift (force x) &gt;&gt;= r &gt;&gt;= bimapM (const (szPr v)) (pure . succ)</span></span>
 <span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff">r v = <span class="nottickedoff">Left &lt;$&gt; szPr v</span></span>
 <span class="lineno">  557 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)</span></span></span>
@@ -706,7 +706,7 @@ span.spaces    { background: white }
 <span class="lineno">  687 </span>divModNatOp :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno">  688 </span><span class="decl"><span class="istickedoff">divModNatOp bp = binNatOp <span class="nottickedoff">bp</span> <span class="nottickedoff">max</span></span>
 <span class="lineno">  689 </span><span class="spaces">                 </span><span class="istickedoff">(\m n -&gt; let (q,r) = divMod m n in</span>
-<span class="lineno">  690 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, <span class="nottickedoff">ready $ vNat r</span>])</span>
+<span class="lineno">  690 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, ready $ vNat r])</span>
 <span class="lineno">  691 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">(\w x1 x2 -&gt; do q &lt;- VBVToNat w . VWord &lt;$&gt; bpBvUDiv bp x1 x2</span></span>
 <span class="lineno">  692 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">r &lt;- VBVToNat w . VWord &lt;$&gt; bpBvURem bp x1 x2</span></span>
 <span class="lineno">  693 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">pure $ vTuple [ready q, ready r])</span></span></span>
@@ -731,8 +731,8 @@ span.spaces    { background: white }
 <span class="lineno">  712 </span>
 <span class="lineno">  713 </span>-- ltNat :: Nat -&gt; Nat -&gt; Bool;
 <span class="lineno">  714 </span>ltNatOp :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno">  715 </span><span class="decl"><span class="nottickedoff">ltNatOp bp = binNatOp bp max (\i j -&gt; VBool &lt;$&gt; bpBool bp (i &lt; j))</span>
-<span class="lineno">  716 </span><span class="spaces">                             </span><span class="nottickedoff">(\_ x1 x2 -&gt; VBool &lt;$&gt; bpBvult bp x1 x2)</span></span>
+<span class="lineno">  715 </span><span class="decl"><span class="istickedoff">ltNatOp bp = binNatOp <span class="nottickedoff">bp</span> <span class="nottickedoff">max</span> (\i j -&gt; VBool &lt;$&gt; bpBool bp (i &lt; j))</span>
+<span class="lineno">  716 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">(\_ x1 x2 -&gt; VBool &lt;$&gt; bpBvult bp x1 x2)</span></span></span>
 <span class="lineno">  717 </span>
 <span class="lineno">  718 </span>-- natCase :: (p :: Nat -&gt; sort 0) -&gt; p Zero -&gt; ((n :: Nat) -&gt; p (Succ n)) -&gt; (n :: Nat) -&gt; p n;
 <span class="lineno">  719 </span>natCaseOp :: (VMonad l, Show (Extra l)) =&gt; Prim l
@@ -741,10 +741,10 @@ span.spaces    { background: white }
 <span class="lineno">  722 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \z -&gt;</span>
 <span class="lineno">  723 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \s -&gt;</span>
 <span class="lineno">  724 </span><span class="spaces">  </span><span class="istickedoff">natFun $ \n -&gt; Prim $</span>
-<span class="lineno">  725 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span></span>
-<span class="lineno">  726 </span><span class="spaces">    </span><span class="istickedoff">then <span class="nottickedoff">force z</span></span>
+<span class="lineno">  725 </span><span class="spaces">    </span><span class="istickedoff">if n == 0</span>
+<span class="lineno">  726 </span><span class="spaces">    </span><span class="istickedoff">then force z</span>
 <span class="lineno">  727 </span><span class="spaces">    </span><span class="istickedoff">else do s' &lt;- force s</span>
-<span class="lineno">  728 </span><span class="spaces">            </span><span class="istickedoff">apply s' <span class="nottickedoff">(ready (VNat (n - 1)))</span></span></span>
+<span class="lineno">  728 </span><span class="spaces">            </span><span class="istickedoff">apply s' (ready (VNat (n - 1)))</span></span>
 <span class="lineno">  729 </span>
 <span class="lineno">  730 </span>--------------------------------------------------------------------------------
 <span class="lineno">  731 </span>-- Strings
@@ -813,27 +813,27 @@ span.spaces    { background: white }
 <span class="lineno">  794 </span>
 <span class="lineno">  795 </span>-- head : (n : Nat) -&gt; (a : sort 0) -&gt; Vec (Succ n) a -&gt; a;
 <span class="lineno">  796 </span>headOp :: VMonad l =&gt; BasePrims l -&gt; Prim l
-<span class="lineno">  797 </span><span class="decl"><span class="nottickedoff">headOp bp =</span>
-<span class="lineno">  798 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno">  799 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno">  800 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \x -&gt;</span>
-<span class="lineno">  801 </span><span class="spaces">  </span><span class="nottickedoff">Prim $</span>
-<span class="lineno">  802 </span><span class="spaces">    </span><span class="nottickedoff">case x of</span>
-<span class="lineno">  803 </span><span class="spaces">      </span><span class="nottickedoff">VVector xv -&gt; force (V.head xv)</span>
-<span class="lineno">  804 </span><span class="spaces">      </span><span class="nottickedoff">VWord xw -&gt; VBool &lt;$&gt; bpBvAt bp xw 0</span>
-<span class="lineno">  805 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; panic &quot;headOp&quot; [&quot;expected vector&quot;]</span></span>
+<span class="lineno">  797 </span><span class="decl"><span class="istickedoff">headOp bp =</span>
+<span class="lineno">  798 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno">  800 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \x -&gt;</span>
+<span class="lineno">  801 </span><span class="spaces">  </span><span class="istickedoff">Prim $</span>
+<span class="lineno">  802 </span><span class="spaces">    </span><span class="istickedoff">case x of</span>
+<span class="lineno">  803 </span><span class="spaces">      </span><span class="istickedoff">VVector xv -&gt; force (V.head xv)</span>
+<span class="lineno">  804 </span><span class="spaces">      </span><span class="istickedoff">VWord xw -&gt; VBool &lt;$&gt; bpBvAt bp xw 0</span>
+<span class="lineno">  805 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;headOp&quot; [&quot;expected vector&quot;]</span></span></span>
 <span class="lineno">  806 </span>
 <span class="lineno">  807 </span>-- tail : (n : Nat) -&gt; (a : sort 0) -&gt; Vec (Succ n) a -&gt; Vec n a;
 <span class="lineno">  808 </span>tailOp :: VMonad l =&gt; BasePrims l -&gt; Prim l
-<span class="lineno">  809 </span><span class="decl"><span class="nottickedoff">tailOp bp =</span>
-<span class="lineno">  810 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno">  811 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno">  812 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \x -&gt;</span>
-<span class="lineno">  813 </span><span class="spaces">  </span><span class="nottickedoff">Prim $</span>
-<span class="lineno">  814 </span><span class="spaces">    </span><span class="nottickedoff">case x of</span>
-<span class="lineno">  815 </span><span class="spaces">      </span><span class="nottickedoff">VVector xv -&gt; pure (VVector (V.tail xv))</span>
-<span class="lineno">  816 </span><span class="spaces">      </span><span class="nottickedoff">VWord vw -&gt; VWord &lt;$&gt; bpBvSlice bp 1 (bpBvSize bp vw - 1) vw</span>
-<span class="lineno">  817 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; panic &quot;tailOp&quot; [&quot;expected vector&quot;]</span></span>
+<span class="lineno">  809 </span><span class="decl"><span class="istickedoff">tailOp bp =</span>
+<span class="lineno">  810 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno">  811 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno">  812 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \x -&gt;</span>
+<span class="lineno">  813 </span><span class="spaces">  </span><span class="istickedoff">Prim $</span>
+<span class="lineno">  814 </span><span class="spaces">    </span><span class="istickedoff">case x of</span>
+<span class="lineno">  815 </span><span class="spaces">      </span><span class="istickedoff">VVector xv -&gt; pure (VVector (V.tail xv))</span>
+<span class="lineno">  816 </span><span class="spaces">      </span><span class="istickedoff">VWord vw -&gt; VWord &lt;$&gt; bpBvSlice bp 1 (bpBvSize bp vw - 1) vw</span>
+<span class="lineno">  817 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;tailOp&quot; [&quot;expected vector&quot;]</span></span></span>
 <span class="lineno">  818 </span>
 <span class="lineno">  819 </span>-- atWithDefault :: (n :: Nat) -&gt; (a :: sort 0) -&gt; a -&gt; Vec n a -&gt; Nat -&gt; a;
 <span class="lineno">  820 </span>atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
@@ -882,33 +882,33 @@ span.spaces    { background: white }
 <span class="lineno">  863 </span>
 <span class="lineno">  864 </span>-- upd :: (n :: Nat) -&gt; (a :: sort 0) -&gt; Vec n a -&gt; Nat -&gt; a -&gt; Vec n a;
 <span class="lineno">  865 </span>updOp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno">  866 </span><span class="decl"><span class="nottickedoff">updOp bp =</span>
-<span class="lineno">  867 </span><span class="spaces">  </span><span class="nottickedoff">natFun $ \n -&gt;</span>
-<span class="lineno">  868 </span><span class="spaces">  </span><span class="nottickedoff">tvalFun $ \tp -&gt;</span>
-<span class="lineno">  869 </span><span class="spaces">  </span><span class="nottickedoff">vectorFun (bpUnpack bp) $ \xv -&gt;</span>
-<span class="lineno">  870 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \idx -&gt;</span>
-<span class="lineno">  871 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \y -&gt;</span>
-<span class="lineno">  872 </span><span class="spaces">  </span><span class="nottickedoff">PrimExcept $</span>
-<span class="lineno">  873 </span><span class="spaces">    </span><span class="nottickedoff">case idx of</span>
-<span class="lineno">  874 </span><span class="spaces">      </span><span class="nottickedoff">VNat i</span>
-<span class="lineno">  875 </span><span class="spaces">        </span><span class="nottickedoff">| toInteger i &lt; toInteger (V.length xv)</span>
-<span class="lineno">  876 </span><span class="spaces">           </span><span class="nottickedoff">-&gt; return (VVector (xv V.// [(fromIntegral i, y)]))</span>
-<span class="lineno">  877 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise                   -&gt; return (VVector xv)</span>
-<span class="lineno">  878 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat wsize (VWord w) | bpIsSymbolicEvaluator bp -&gt; lift $</span>
-<span class="lineno">  879 </span><span class="spaces">        </span><span class="nottickedoff">do let f i = do b &lt;- bpBvEq bp w =&lt;&lt; bpBvLit bp wsize (toInteger i)</span>
-<span class="lineno">  880 </span><span class="spaces">                        </span><span class="nottickedoff">if wsize &lt; 64 &amp;&amp; toInteger i &gt;= 2 ^ wsize</span>
-<span class="lineno">  881 </span><span class="spaces">                          </span><span class="nottickedoff">then return (xv V.! i)</span>
-<span class="lineno">  882 </span><span class="spaces">                          </span><span class="nottickedoff">else delay (lazyMuxValue bp tp b (force y) (force (xv V.! i)))</span>
-<span class="lineno">  883 </span><span class="spaces">           </span><span class="nottickedoff">yv &lt;- V.generateM (V.length xv) f</span>
-<span class="lineno">  884 </span><span class="spaces">           </span><span class="nottickedoff">return (VVector yv)</span>
-<span class="lineno">  885 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -&gt; lift $</span>
-<span class="lineno">  886 </span><span class="spaces">        </span><span class="nottickedoff">do let update i = return (VVector (xv V.// [(i, y)]))</span>
-<span class="lineno">  887 </span><span class="spaces">           </span><span class="nottickedoff">iv' &lt;- V.mapM (liftM toBool . force) iv</span>
-<span class="lineno">  888 </span><span class="spaces">           </span><span class="nottickedoff">selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral</span>
-<span class="lineno">  889 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  890 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat _ | bpIsSymbolicEvaluator bp -&gt; panic &quot;updOp&quot; [&quot;Got symbolic integer: TODO&quot;]</span>
-<span class="lineno">  891 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  892 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; throwE $ &quot;updOp: expected Nat, got &quot; &lt;&gt; Text.pack (show idx)</span></span>
+<span class="lineno">  866 </span><span class="decl"><span class="istickedoff">updOp bp =</span>
+<span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">natFun $ \n -&gt;</span>
+<span class="lineno">  868 </span><span class="spaces">  </span><span class="istickedoff">tvalFun $ \tp -&gt;</span>
+<span class="lineno">  869 </span><span class="spaces">  </span><span class="istickedoff">vectorFun (bpUnpack bp) $ \xv -&gt;</span>
+<span class="lineno">  870 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \idx -&gt;</span>
+<span class="lineno">  871 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \y -&gt;</span>
+<span class="lineno">  872 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
+<span class="lineno">  873 </span><span class="spaces">    </span><span class="istickedoff">case idx of</span>
+<span class="lineno">  874 </span><span class="spaces">      </span><span class="istickedoff">VNat i</span>
+<span class="lineno">  875 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">toInteger i &lt; toInteger (V.length xv)</span></span>
+<span class="lineno">  876 </span><span class="spaces">           </span><span class="istickedoff">-&gt; <span class="nottickedoff">return (VVector (xv V.// [(fromIntegral i, y)]))</span></span>
+<span class="lineno">  877 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                   -&gt; <span class="nottickedoff">return (VVector xv)</span></span>
+<span class="lineno">  878 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat wsize (VWord w) | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; lift $</span>
+<span class="lineno">  879 </span><span class="spaces">        </span><span class="istickedoff">do let f i = do b &lt;- bpBvEq bp w =&lt;&lt; bpBvLit bp wsize (toInteger i)</span>
+<span class="lineno">  880 </span><span class="spaces">                        </span><span class="istickedoff">if <span class="tickonlyfalse">wsize &lt; 64 &amp;&amp; toInteger i &gt;= 2 ^ wsize</span></span>
+<span class="lineno">  881 </span><span class="spaces">                          </span><span class="istickedoff">then <span class="nottickedoff">return (xv V.! i)</span></span>
+<span class="lineno">  882 </span><span class="spaces">                          </span><span class="istickedoff">else delay (lazyMuxValue bp tp b (force y) (force (xv V.! i)))</span>
+<span class="lineno">  883 </span><span class="spaces">           </span><span class="istickedoff">yv &lt;- V.generateM (V.length xv) f</span>
+<span class="lineno">  884 </span><span class="spaces">           </span><span class="istickedoff">return (VVector yv)</span>
+<span class="lineno">  885 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz (VVector iv) | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; lift $</span>
+<span class="lineno">  886 </span><span class="spaces">        </span><span class="istickedoff">do let update i = return (VVector (xv V.// [(i, y)]))</span>
+<span class="lineno">  887 </span><span class="spaces">           </span><span class="istickedoff">iv' &lt;- V.mapM (liftM toBool . force) iv</span>
+<span class="lineno">  888 </span><span class="spaces">           </span><span class="istickedoff">selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral</span>
+<span class="lineno">  889 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  890 </span><span class="spaces">      </span><span class="istickedoff">VIntToNat _ | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">panic &quot;updOp&quot; [&quot;Got symbolic integer: TODO&quot;]</span></span>
+<span class="lineno">  891 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  892 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;updOp: expected Nat, got &quot; &lt;&gt; Text.pack (show idx)</span></span></span>
 <span class="lineno">  893 </span>
 <span class="lineno">  894 </span>-- primitive EmptyVec :: (a :: sort 0) -&gt; Vec 0 a;
 <span class="lineno">  895 </span>emptyVec :: VMonad l =&gt; Prim l
@@ -923,7 +923,7 @@ span.spaces    { background: white }
 <span class="lineno">  904 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \v -&gt;</span>
 <span class="lineno">  905 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
 <span class="lineno">  906 </span><span class="spaces">    </span><span class="istickedoff">case v of</span>
-<span class="lineno">  907 </span><span class="spaces">      </span><span class="istickedoff">VVector vv -&gt; <span class="nottickedoff">return (VVector (V.take m vv))</span></span>
+<span class="lineno">  907 </span><span class="spaces">      </span><span class="istickedoff">VVector vv -&gt; return (VVector (V.take m vv))</span>
 <span class="lineno">  908 </span><span class="spaces">      </span><span class="istickedoff">VWord vw -&gt; lift (VWord &lt;$&gt; bpBvSlice bp 0 m vw)</span>
 <span class="lineno">  909 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;takeOp: &quot; &lt;&gt; Text.pack (show v)</span></span></span>
 <span class="lineno">  910 </span>
@@ -954,7 +954,7 @@ span.spaces    { background: white }
 <span class="lineno">  935 </span><span class="decl"><span class="istickedoff">appV bp xs ys =</span>
 <span class="lineno">  936 </span><span class="spaces">  </span><span class="istickedoff">case (xs, ys) of</span>
 <span class="lineno">  937 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, _) | V.null xv -&gt; return ys</span>
-<span class="lineno">  938 </span><span class="spaces">    </span><span class="istickedoff">(_, VVector yv) | <span class="tickonlyfalse">V.null yv</span> -&gt; <span class="nottickedoff">return xs</span></span>
+<span class="lineno">  938 </span><span class="spaces">    </span><span class="istickedoff">(_, VVector yv) | V.null yv -&gt; return xs</span>
 <span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VWord yw) -&gt; lift (VWord &lt;$&gt; bpBvJoin bp xw yw)</span>
 <span class="lineno">  940 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VVector yv) -&gt; return $ VVector ((V.++) xv yv)</span>
 <span class="lineno">  941 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VWord yw) -&gt; lift (liftM (\yv -&gt; VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw))</span>
@@ -1021,23 +1021,23 @@ span.spaces    { background: white }
 <span class="lineno"> 1002 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \e -&gt;</span>
 <span class="lineno"> 1003 </span><span class="spaces">  </span><span class="istickedoff">PrimExcept $</span>
 <span class="lineno"> 1004 </span><span class="spaces">  </span><span class="istickedoff">case e of</span>
-<span class="lineno"> 1005 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat _sz w | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt; <span class="nottickedoff">lift $</span></span>
-<span class="lineno"> 1006 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let loop acc [] = return acc</span></span>
-<span class="lineno"> 1007 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">loop acc (b:bs)</span></span>
-<span class="lineno"> 1008 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| Just False &lt;- bpAsBool bp b</span></span>
-<span class="lineno"> 1009 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= do sq &lt;- applyAll mul [ ready acc, ready acc ]</span></span>
+<span class="lineno"> 1005 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat _sz w | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt; lift $</span>
+<span class="lineno"> 1006 </span><span class="spaces">      </span><span class="istickedoff">do let loop acc [] = return acc</span>
+<span class="lineno"> 1007 </span><span class="spaces">             </span><span class="istickedoff">loop acc (b:bs)</span>
+<span class="lineno"> 1008 </span><span class="spaces">               </span><span class="istickedoff">| Just False &lt;- bpAsBool bp b</span>
+<span class="lineno"> 1009 </span><span class="spaces">               </span><span class="istickedoff">= <span class="nottickedoff">do sq &lt;- applyAll mul [ ready acc, ready acc ]</span></span>
 <span class="lineno"> 1010 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">loop sq bs</span></span>
-<span class="lineno"> 1011 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| Just True &lt;- bpAsBool bp b</span></span>
-<span class="lineno"> 1012 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= do sq   &lt;- applyAll mul [ ready acc, ready acc ]</span></span>
+<span class="lineno"> 1011 </span><span class="spaces">               </span><span class="istickedoff">| Just True &lt;- bpAsBool bp b</span>
+<span class="lineno"> 1012 </span><span class="spaces">               </span><span class="istickedoff">= <span class="nottickedoff">do sq   &lt;- applyAll mul [ ready acc, ready acc ]</span></span>
 <span class="lineno"> 1013 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">sq_x &lt;- applyAll mul [ ready sq, ready x ]</span></span>
 <span class="lineno"> 1014 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">loop sq_x bs</span></span>
-<span class="lineno"> 1015 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| otherwise</span></span>
-<span class="lineno"> 1016 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= do sq   &lt;- applyAll mul [ ready acc, ready acc ]</span></span>
-<span class="lineno"> 1017 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">sq_x &lt;- applyAll mul [ ready sq, ready x ]</span></span>
-<span class="lineno"> 1018 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">acc' &lt;- muxValue bp tp b sq_x sq</span></span>
-<span class="lineno"> 1019 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">loop acc' bs</span></span>
-<span class="lineno"> 1020 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno"> 1021 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">loop one . V.toList =&lt;&lt; toBits (bpUnpack bp) w</span></span>
+<span class="lineno"> 1015 </span><span class="spaces">               </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span></span>
+<span class="lineno"> 1016 </span><span class="spaces">               </span><span class="istickedoff">= do sq   &lt;- applyAll mul [ ready acc, ready acc ]</span>
+<span class="lineno"> 1017 </span><span class="spaces">                    </span><span class="istickedoff">sq_x &lt;- applyAll mul [ ready sq, ready x ]</span>
+<span class="lineno"> 1018 </span><span class="spaces">                    </span><span class="istickedoff">acc' &lt;- muxValue bp tp b sq_x sq</span>
+<span class="lineno"> 1019 </span><span class="spaces">                    </span><span class="istickedoff">loop acc' bs</span>
+<span class="lineno"> 1020 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1021 </span><span class="spaces">         </span><span class="istickedoff">loop one . V.toList =&lt;&lt; toBits (bpUnpack bp) w</span>
 <span class="lineno"> 1022 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1023 </span><span class="spaces">    </span><span class="istickedoff">-- This can't really be implemented, we should throw an unsupported exception</span>
 <span class="lineno"> 1024 </span><span class="spaces">    </span><span class="istickedoff">-- of some kind instead</span>
@@ -1111,15 +1111,15 @@ span.spaces    { background: white }
 <span class="lineno"> 1092 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">zb &lt;- toBool &lt;$&gt; force z</span></span>
 <span class="lineno"> 1093 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">VWord &lt;$&gt; shifter (bpMuxWord bp) (wordIntOp zb) xw bs</span></span>
 <span class="lineno"> 1094 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; throwE $ &quot;shiftOp: &quot; &lt;&gt; Text.pack (show xs)</span></span>
-<span class="lineno"> 1095 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz (VWord iw) | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt;</span>
-<span class="lineno"> 1096 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case xs of</span></span>
-<span class="lineno"> 1097 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">VVector xv -&gt; do</span></span>
+<span class="lineno"> 1095 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz (VWord iw) | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt;</span>
+<span class="lineno"> 1096 </span><span class="spaces">        </span><span class="istickedoff">case xs of</span>
+<span class="lineno"> 1097 </span><span class="spaces">          </span><span class="istickedoff">VVector xv -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1098 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">bs &lt;- lift (V.toList &lt;$&gt; bpUnpack bp iw)</span></span>
 <span class="lineno"> 1099 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">VVector &lt;$&gt; shifter (muxVector n tp) (\v i -&gt; return (vecOp z v i)) xv bs</span></span>
-<span class="lineno"> 1100 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">VWord xw -&gt; lift $ do</span></span>
-<span class="lineno"> 1101 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">zb &lt;- toBool &lt;$&gt; force z</span></span>
-<span class="lineno"> 1102 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">VWord &lt;$&gt; wordOp zb xw iw</span></span>
-<span class="lineno"> 1103 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; throwE $ &quot;shiftOp: &quot; &lt;&gt; Text.pack (show xs)</span></span>
+<span class="lineno"> 1100 </span><span class="spaces">          </span><span class="istickedoff">VWord xw -&gt; lift $ do</span>
+<span class="lineno"> 1101 </span><span class="spaces">            </span><span class="istickedoff">zb &lt;- toBool &lt;$&gt; force z</span>
+<span class="lineno"> 1102 </span><span class="spaces">            </span><span class="istickedoff">VWord &lt;$&gt; wordOp zb xw iw</span>
+<span class="lineno"> 1103 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwE $ &quot;shiftOp: &quot; &lt;&gt; Text.pack (show xs)</span></span>
 <span class="lineno"> 1104 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1105 </span><span class="spaces">      </span><span class="istickedoff">VIntToNat _i | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt;</span>
 <span class="lineno"> 1106 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;shiftOp&quot; [&quot;Got symbolic integer: TODO&quot;]</span></span>
@@ -1198,10 +1198,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1179 </span><span class="decl"><span class="istickedoff">rotateLOp bp = rotateOp bp vRotateL (bpBvRolInt bp) (bpBvRol bp)</span></span>
 <span class="lineno"> 1180 </span>
 <span class="lineno"> 1181 </span>rotateROp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1182 </span><span class="decl"><span class="istickedoff">rotateROp bp = rotateOp <span class="nottickedoff">bp</span> vRotateR (bpBvRorInt bp) <span class="nottickedoff">(bpBvRor bp)</span></span></span>
+<span class="lineno"> 1182 </span><span class="decl"><span class="istickedoff">rotateROp bp = rotateOp bp vRotateR (bpBvRorInt bp) (bpBvRor bp)</span></span>
 <span class="lineno"> 1183 </span>
 <span class="lineno"> 1184 </span>shiftLOp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1185 </span><span class="decl"><span class="istickedoff">shiftLOp bp = shiftOp <span class="nottickedoff">bp</span> <span class="nottickedoff">vShiftL</span> (bpBvShlInt bp) <span class="nottickedoff">(bpBvShl bp)</span></span></span>
+<span class="lineno"> 1185 </span><span class="decl"><span class="istickedoff">shiftLOp bp = shiftOp bp <span class="nottickedoff">vShiftL</span> (bpBvShlInt bp) (bpBvShl bp)</span></span>
 <span class="lineno"> 1186 </span>
 <span class="lineno"> 1187 </span>shiftROp :: (VMonadLazy l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno"> 1188 </span><span class="decl"><span class="istickedoff">shiftROp bp = shiftOp <span class="nottickedoff">bp</span> <span class="nottickedoff">vShiftR</span> (bpBvShrInt bp) <span class="nottickedoff">(bpBvShr bp)</span></span></span>
@@ -1359,7 +1359,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1340 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1341 </span><span class="spaces">    </span><span class="istickedoff">value VUnitType VUnit VUnit = <span class="nottickedoff">return VUnit</span></span>
 <span class="lineno"> 1342 </span><span class="spaces">    </span><span class="istickedoff">value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =</span>
-<span class="lineno"> 1343 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">VPair &lt;$&gt; thunk t1 x1 y1 &lt;*&gt; thunk t2 x2 y2</span></span>
+<span class="lineno"> 1343 </span><span class="spaces">      </span><span class="istickedoff">VPair &lt;$&gt; thunk t1 x1 y1 &lt;*&gt; thunk t2 x2 y2</span>
 <span class="lineno"> 1344 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1345 </span><span class="spaces">    </span><span class="istickedoff">value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =</span>
 <span class="lineno"> 1346 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let em1 = Map.fromList elems1</span></span>
@@ -1372,7 +1372,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1353 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VRecordValue &lt;$&gt; traverse build fs</span></span>
 <span class="lineno"> 1354 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1355 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)</span>
-<span class="lineno"> 1356 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">i == j</span> = <span class="nottickedoff">VCtorApp i ps &lt;$&gt; ctorArgs (primType i) ps xv yv</span></span>
+<span class="lineno"> 1356 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">i == j</span> = <span class="nottickedoff">VCtorApp i ps &lt;$&gt; ctorArgs (ecType i) ps xv yv</span></span>
 <span class="lineno"> 1357 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">unsupportedPrimitive &quot;muxValue&quot;</span></span>
 <span class="lineno"> 1358 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(&quot;cannot mux different data constructors &quot; &lt;&gt; show i &lt;&gt; &quot; &quot; &lt;&gt; show j)</span></span>
 <span class="lineno"> 1359 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1384,7 +1384,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1365 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1366 </span><span class="spaces">    </span><span class="istickedoff">value _ (VBool x)         (VBool y)         = VBool &lt;$&gt; bpMuxBool bp b x y</span>
 <span class="lineno"> 1367 </span><span class="spaces">    </span><span class="istickedoff">value _ (VWord x)         (VWord y)         = VWord &lt;$&gt; bpMuxWord bp b x y</span>
-<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="istickedoff">value _ (VInt x)          (VInt y)          = <span class="nottickedoff">VInt &lt;$&gt; bpMuxInt bp b x y</span></span>
+<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="istickedoff">value _ (VInt x)          (VInt y)          = VInt &lt;$&gt; bpMuxInt bp b x y</span>
 <span class="lineno"> 1369 </span><span class="spaces">    </span><span class="istickedoff">value _ (VArray x)        (VArray y)        = <span class="nottickedoff">VArray &lt;$&gt; bpMuxArray bp b x y</span></span>
 <span class="lineno"> 1370 </span><span class="spaces">    </span><span class="istickedoff">value _ (VIntMod n x)     (VIntMod _ y)     = <span class="nottickedoff">VIntMod n &lt;$&gt; bpMuxInt bp b x y</span></span>
 <span class="lineno"> 1371 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1488,60 +1488,60 @@ span.spaces    { background: white }
 <span class="lineno"> 1469 </span>
 <span class="lineno"> 1470 </span>-- arrayConstant :: (a b :: sort 0) -&gt; b -&gt; (Array a b);
 <span class="lineno"> 1471 </span>arrayConstantOp :: VMonad l =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1472 </span><span class="decl"><span class="nottickedoff">arrayConstantOp bp =</span>
-<span class="lineno"> 1473 </span><span class="spaces">  </span><span class="nottickedoff">tvalFun $ \a -&gt;</span>
-<span class="lineno"> 1474 </span><span class="spaces">  </span><span class="nottickedoff">tvalFun $ \b -&gt;</span>
-<span class="lineno"> 1475 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \e -&gt;</span>
-<span class="lineno"> 1476 </span><span class="spaces">    </span><span class="nottickedoff">Prim (VArray &lt;$&gt; bpArrayConstant bp a b e)</span></span>
+<span class="lineno"> 1472 </span><span class="decl"><span class="istickedoff">arrayConstantOp bp =</span>
+<span class="lineno"> 1473 </span><span class="spaces">  </span><span class="istickedoff">tvalFun $ \a -&gt;</span>
+<span class="lineno"> 1474 </span><span class="spaces">  </span><span class="istickedoff">tvalFun $ \b -&gt;</span>
+<span class="lineno"> 1475 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \e -&gt;</span>
+<span class="lineno"> 1476 </span><span class="spaces">    </span><span class="istickedoff">Prim (VArray &lt;$&gt; bpArrayConstant bp a <span class="nottickedoff">b</span> e)</span></span>
 <span class="lineno"> 1477 </span>
 <span class="lineno"> 1478 </span>-- arrayLookup :: (a b :: sort 0) -&gt; (Array a b) -&gt; a -&gt; b;
 <span class="lineno"> 1479 </span>arrayLookupOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1480 </span><span class="decl"><span class="nottickedoff">arrayLookupOp bp =</span>
-<span class="lineno"> 1481 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1482 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1483 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \f -&gt;</span>
-<span class="lineno"> 1484 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \i -&gt; Prim $</span>
-<span class="lineno"> 1485 </span><span class="spaces">    </span><span class="nottickedoff">do f' &lt;- toArray f</span>
-<span class="lineno"> 1486 </span><span class="spaces">       </span><span class="nottickedoff">bpArrayLookup bp f' i</span></span>
+<span class="lineno"> 1480 </span><span class="decl"><span class="istickedoff">arrayLookupOp bp =</span>
+<span class="lineno"> 1481 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1482 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1483 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \f -&gt;</span>
+<span class="lineno"> 1484 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \i -&gt; Prim $</span>
+<span class="lineno"> 1485 </span><span class="spaces">    </span><span class="istickedoff">do f' &lt;- toArray f</span>
+<span class="lineno"> 1486 </span><span class="spaces">       </span><span class="istickedoff">bpArrayLookup bp f' i</span></span>
 <span class="lineno"> 1487 </span>
 <span class="lineno"> 1488 </span>-- arrayUpdate :: (a b :: sort 0) -&gt; (Array a b) -&gt; a -&gt; b -&gt; (Array a b);
 <span class="lineno"> 1489 </span>arrayUpdateOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1490 </span><span class="decl"><span class="nottickedoff">arrayUpdateOp bp =</span>
-<span class="lineno"> 1491 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1492 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1493 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \f -&gt;</span>
-<span class="lineno"> 1494 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \i -&gt;</span>
-<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \e -&gt; Prim $</span>
-<span class="lineno"> 1496 </span><span class="spaces">    </span><span class="nottickedoff">do f' &lt;- toArray f</span>
-<span class="lineno"> 1497 </span><span class="spaces">       </span><span class="nottickedoff">VArray &lt;$&gt; bpArrayUpdate bp f' i e</span></span>
+<span class="lineno"> 1490 </span><span class="decl"><span class="istickedoff">arrayUpdateOp bp =</span>
+<span class="lineno"> 1491 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1492 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1493 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \f -&gt;</span>
+<span class="lineno"> 1494 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \i -&gt;</span>
+<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \e -&gt; Prim $</span>
+<span class="lineno"> 1496 </span><span class="spaces">    </span><span class="istickedoff">do f' &lt;- toArray f</span>
+<span class="lineno"> 1497 </span><span class="spaces">       </span><span class="istickedoff">VArray &lt;$&gt; bpArrayUpdate bp f' i e</span></span>
 <span class="lineno"> 1498 </span>
 <span class="lineno"> 1499 </span>-- arrayEq : (a b : sort 0) -&gt; (Array a b) -&gt; (Array a b) -&gt; Bool;
 <span class="lineno"> 1500 </span>arrayEqOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1501 </span><span class="decl"><span class="nottickedoff">arrayEqOp bp =</span>
-<span class="lineno"> 1502 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1503 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \x -&gt;</span>
-<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \y -&gt; Prim $</span>
-<span class="lineno"> 1506 </span><span class="spaces">    </span><span class="nottickedoff">do x' &lt;- toArray x</span>
-<span class="lineno"> 1507 </span><span class="spaces">       </span><span class="nottickedoff">y' &lt;- toArray y</span>
-<span class="lineno"> 1508 </span><span class="spaces">       </span><span class="nottickedoff">VBool &lt;$&gt; bpArrayEq bp x' y'</span></span>
+<span class="lineno"> 1501 </span><span class="decl"><span class="istickedoff">arrayEqOp bp =</span>
+<span class="lineno"> 1502 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1503 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \x -&gt;</span>
+<span class="lineno"> 1505 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \y -&gt; Prim $</span>
+<span class="lineno"> 1506 </span><span class="spaces">    </span><span class="istickedoff">do x' &lt;- toArray x</span>
+<span class="lineno"> 1507 </span><span class="spaces">       </span><span class="istickedoff">y' &lt;- toArray y</span>
+<span class="lineno"> 1508 </span><span class="spaces">       </span><span class="istickedoff">VBool &lt;$&gt; bpArrayEq bp x' y'</span></span>
 <span class="lineno"> 1509 </span>
 <span class="lineno"> 1510 </span>-- arrayCopy : (n : Nat) -&gt; (a : sort 0) -&gt; Array (Vec n Bool) a -&gt; Vec n Bool -&gt; Array (Vec n Bool) a -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Array (Vec n Bool) a;
 <span class="lineno"> 1511 </span>arrayCopyOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1512 </span><span class="decl"><span class="nottickedoff">arrayCopyOp bp =</span>
-<span class="lineno"> 1513 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1514 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1515 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \f -&gt;</span>
-<span class="lineno"> 1516 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \i -&gt;</span>
-<span class="lineno"> 1517 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \g -&gt;</span>
-<span class="lineno"> 1518 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \j -&gt;</span>
-<span class="lineno"> 1519 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \l -&gt; Prim $</span>
-<span class="lineno"> 1520 </span><span class="spaces">    </span><span class="nottickedoff">do f' &lt;- toArray f</span>
-<span class="lineno"> 1521 </span><span class="spaces">       </span><span class="nottickedoff">i' &lt;- toWord (bpPack bp) i</span>
-<span class="lineno"> 1522 </span><span class="spaces">       </span><span class="nottickedoff">g' &lt;- toArray g</span>
-<span class="lineno"> 1523 </span><span class="spaces">       </span><span class="nottickedoff">j' &lt;- toWord (bpPack bp) j</span>
-<span class="lineno"> 1524 </span><span class="spaces">       </span><span class="nottickedoff">l' &lt;- toWord (bpPack bp) l</span>
-<span class="lineno"> 1525 </span><span class="spaces">       </span><span class="nottickedoff">VArray &lt;$&gt; (bpArrayCopy bp) f' i' g' j' l'</span></span>
+<span class="lineno"> 1512 </span><span class="decl"><span class="istickedoff">arrayCopyOp bp =</span>
+<span class="lineno"> 1513 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1514 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1515 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \f -&gt;</span>
+<span class="lineno"> 1516 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \i -&gt;</span>
+<span class="lineno"> 1517 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \g -&gt;</span>
+<span class="lineno"> 1518 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \j -&gt;</span>
+<span class="lineno"> 1519 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \l -&gt; Prim $</span>
+<span class="lineno"> 1520 </span><span class="spaces">    </span><span class="istickedoff">do f' &lt;- toArray f</span>
+<span class="lineno"> 1521 </span><span class="spaces">       </span><span class="istickedoff">i' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> i</span>
+<span class="lineno"> 1522 </span><span class="spaces">       </span><span class="istickedoff">g' &lt;- toArray g</span>
+<span class="lineno"> 1523 </span><span class="spaces">       </span><span class="istickedoff">j' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> j</span>
+<span class="lineno"> 1524 </span><span class="spaces">       </span><span class="istickedoff">l' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> l</span>
+<span class="lineno"> 1525 </span><span class="spaces">       </span><span class="istickedoff">VArray &lt;$&gt; (bpArrayCopy bp) f' i' g' j' l'</span></span>
 <span class="lineno"> 1526 </span>
 <span class="lineno"> 1527 </span>-- arraySet : (n : Nat) -&gt; (a : sort 0) -&gt; Array (Vec n Bool) a -&gt; Vec n Bool -&gt; a -&gt; Vec n Bool -&gt; Array (Vec n Bool) a;
 <span class="lineno"> 1528 </span>arraySetOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
@@ -1559,20 +1559,20 @@ span.spaces    { background: white }
 <span class="lineno"> 1540 </span>
 <span class="lineno"> 1541 </span>-- arrayRangeEq : (n : Nat) -&gt; (a : sort 0) -&gt; Array (Vec n Bool) a -&gt; Vec n Bool -&gt; Array (Vec n Bool) a -&gt; Vec n Bool -&gt; Vec n Bool -&gt; Bool;
 <span class="lineno"> 1542 </span>arrayRangeEqOp :: (VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
-<span class="lineno"> 1543 </span><span class="decl"><span class="nottickedoff">arrayRangeEqOp bp =</span>
-<span class="lineno"> 1544 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1545 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
-<span class="lineno"> 1546 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \f -&gt;</span>
-<span class="lineno"> 1547 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \i -&gt;</span>
-<span class="lineno"> 1548 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \g -&gt;</span>
-<span class="lineno"> 1549 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \j -&gt;</span>
-<span class="lineno"> 1550 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \l -&gt; Prim $</span>
-<span class="lineno"> 1551 </span><span class="spaces">    </span><span class="nottickedoff">do f' &lt;- toArray f</span>
-<span class="lineno"> 1552 </span><span class="spaces">       </span><span class="nottickedoff">i' &lt;- toWord (bpPack bp) i</span>
-<span class="lineno"> 1553 </span><span class="spaces">       </span><span class="nottickedoff">g' &lt;- toArray g</span>
-<span class="lineno"> 1554 </span><span class="spaces">       </span><span class="nottickedoff">j' &lt;- toWord (bpPack bp) j</span>
-<span class="lineno"> 1555 </span><span class="spaces">       </span><span class="nottickedoff">l' &lt;- toWord (bpPack bp) l</span>
-<span class="lineno"> 1556 </span><span class="spaces">       </span><span class="nottickedoff">VBool &lt;$&gt; (bpArrayRangeEq bp) f' i' g' j' l'</span></span>
+<span class="lineno"> 1543 </span><span class="decl"><span class="istickedoff">arrayRangeEqOp bp =</span>
+<span class="lineno"> 1544 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1545 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
+<span class="lineno"> 1546 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \f -&gt;</span>
+<span class="lineno"> 1547 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \i -&gt;</span>
+<span class="lineno"> 1548 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \g -&gt;</span>
+<span class="lineno"> 1549 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \j -&gt;</span>
+<span class="lineno"> 1550 </span><span class="spaces">  </span><span class="istickedoff">strictFun $ \l -&gt; Prim $</span>
+<span class="lineno"> 1551 </span><span class="spaces">    </span><span class="istickedoff">do f' &lt;- toArray f</span>
+<span class="lineno"> 1552 </span><span class="spaces">       </span><span class="istickedoff">i' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> i</span>
+<span class="lineno"> 1553 </span><span class="spaces">       </span><span class="istickedoff">g' &lt;- toArray g</span>
+<span class="lineno"> 1554 </span><span class="spaces">       </span><span class="istickedoff">j' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> j</span>
+<span class="lineno"> 1555 </span><span class="spaces">       </span><span class="istickedoff">l' &lt;- toWord <span class="nottickedoff">(bpPack bp)</span> l</span>
+<span class="lineno"> 1556 </span><span class="spaces">       </span><span class="istickedoff">VBool &lt;$&gt; (bpArrayRangeEq bp) f' i' g' j' l'</span></span>
 
 </pre>
 </body>

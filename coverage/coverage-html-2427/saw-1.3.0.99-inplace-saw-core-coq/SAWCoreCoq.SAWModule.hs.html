@@ -84,144 +84,150 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  Ctor -&gt; m Coq.Constructor
 <span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">translateCtor inductiveParameters (Ctor {..}) = do</span>
 <span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">maybe_constructorName &lt;-</span>
-<span class="lineno">   68 </span><span class="spaces">    </span><span class="nottickedoff">liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ctorName</span>
-<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">let constructorName = case maybe_constructorName of</span>
-<span class="lineno">   70 </span><span class="spaces">        </span><span class="nottickedoff">Just n -&gt; identName n</span>
-<span class="lineno">   71 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; error &quot;translateCtor: unexpected translation for constructor&quot;</span>
-<span class="lineno">   72 </span><span class="spaces">  </span><span class="nottickedoff">constructorType &lt;-</span>
-<span class="lineno">   73 </span><span class="spaces">    </span><span class="nottickedoff">-- Unfortunately, `ctorType` qualifies the inductive type's name in the</span>
-<span class="lineno">   74 </span><span class="spaces">    </span><span class="nottickedoff">-- return type.</span>
-<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">-- dropModuleNameWithinCtor &lt;$&gt;</span>
-<span class="lineno">   76 </span><span class="spaces">    </span><span class="nottickedoff">-- Unfortunately, `ctorType` comes with the inductive parameters universally</span>
-<span class="lineno">   77 </span><span class="spaces">    </span><span class="nottickedoff">-- quantified.</span>
-<span class="lineno">   78 </span><span class="spaces">    </span><span class="nottickedoff">(\ t -&gt; iterate dropPi t !! length inductiveParameters) &lt;$&gt;</span>
-<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">(liftTermTranslationMonad (TermTranslation.translateTerm ctorType))</span>
-<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">return $ Coq.Constructor</span>
-<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">{ constructorName</span>
-<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">, constructorType</span>
-<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
-<span class="lineno">   84 </span>
-<span class="lineno">   85 </span>translateDataType :: ModuleTranslationMonad m =&gt; DataType -&gt; m Coq.Decl
-<span class="lineno">   86 </span>-- translateDataType (DataType {..})
-<span class="lineno">   87 </span>--   | trace (&quot;translateDataType: &quot; ++ show dtName) False = undefined
-<span class="lineno">   88 </span><span class="decl"><span class="nottickedoff">translateDataType (DataType {..}) =</span>
-<span class="lineno">   89 </span><span class="spaces">  </span><span class="nottickedoff">atDefSite &lt;$&gt; findSpecialTreatment dtName &gt;&gt;= \case</span>
-<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">DefPreserve            -&gt; translateNamed $ identName dtName</span>
-<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">DefRename   targetName -&gt; translateNamed $ targetName</span>
-<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">DefReplace  str        -&gt; return $ Coq.Snippet str</span>
-<span class="lineno">   93 </span><span class="spaces">  </span><span class="nottickedoff">DefSkip                -&gt; return $ skipped dtName</span>
-<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed :: ModuleTranslationMonad m =&gt; Coq.Ident -&gt; m Coq.Decl</span>
-<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed name = do</span>
-<span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">let inductiveName = name</span>
-<span class="lineno">   98 </span><span class="spaces">      </span><span class="nottickedoff">(inductiveParameters, inductiveIndices) &lt;-</span>
-<span class="lineno">   99 </span><span class="spaces">        </span><span class="nottickedoff">liftTermTranslationMonad $</span>
-<span class="lineno">  100 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtParams $ \ps -&gt;</span>
-<span class="lineno">  101 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtIndices $ \ixs -&gt;</span>
-<span class="lineno">  102 </span><span class="spaces">        </span><span class="nottickedoff">-- Translating the indices of a data type should never yield</span>
-<span class="lineno">  103 </span><span class="spaces">        </span><span class="nottickedoff">-- Inhabited constraints, so the result of calling</span>
-<span class="lineno">  104 </span><span class="spaces">        </span><span class="nottickedoff">-- `translateParams dtIndices` above should only return Binders and not</span>
-<span class="lineno">  105 </span><span class="spaces">        </span><span class="nottickedoff">-- any ImplicitBinders. Moreover, `translateParams` always returns</span>
-<span class="lineno">  106 </span><span class="spaces">        </span><span class="nottickedoff">-- Binders where the second field is `Just t`, where `t` is the type.</span>
-<span class="lineno">  107 </span><span class="spaces">        </span><span class="nottickedoff">let errorBecause msg = error $ &quot;translateDataType.translateNamed: &quot; ++ msg in</span>
-<span class="lineno">  108 </span><span class="spaces">        </span><span class="nottickedoff">let bs = map (\case Coq.Binder s (Just t) -&gt;</span>
-<span class="lineno">  109 </span><span class="spaces">                              </span><span class="nottickedoff">Coq.PiBinder (Just s) t</span>
-<span class="lineno">  110 </span><span class="spaces">                            </span><span class="nottickedoff">Coq.Binder _ Nothing -&gt;</span>
-<span class="lineno">  111 </span><span class="spaces">                              </span><span class="nottickedoff">errorBecause &quot;encountered a Binder without a Type&quot;</span>
-<span class="lineno">  112 </span><span class="spaces">                            </span><span class="nottickedoff">Coq.ImplicitBinder{} -&gt;</span>
-<span class="lineno">  113 </span><span class="spaces">                              </span><span class="nottickedoff">errorBecause &quot;encountered an implicit binder&quot;)</span>
-<span class="lineno">  114 </span><span class="spaces">                     </span><span class="nottickedoff">ixs in</span>
-<span class="lineno">  115 </span><span class="spaces">        </span><span class="nottickedoff">return (ps, bs)</span>
-<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">let inductiveSort = TermTranslation.translateSort dtSort</span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">inductiveConstructors &lt;- mapM (translateCtor inductiveParameters) dtCtors</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.InductiveDecl $ Coq.Inductive</span>
-<span class="lineno">  119 </span><span class="spaces">        </span><span class="nottickedoff">{ inductiveName</span>
-<span class="lineno">  120 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveParameters</span>
-<span class="lineno">  121 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveIndices</span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveSort</span>
-<span class="lineno">  123 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveConstructors</span>
-<span class="lineno">  124 </span><span class="spaces">        </span><span class="nottickedoff">}</span></span>
-<span class="lineno">  125 </span>
-<span class="lineno">  126 </span>-- translateModuleDecl :: ModuleTranslationMonad m =&gt; ModuleDecl -&gt; m Coq.Decl
-<span class="lineno">  127 </span>-- translateModuleDecl = \case
-<span class="lineno">  128 </span>--   TypeDecl dataType -&gt; translateDataType dataType
-<span class="lineno">  129 </span>--   DefDecl definition -&gt; translateDef definition
-<span class="lineno">  130 </span>
-<span class="lineno">  131 </span>_mapped :: Ident -&gt; Ident -&gt; Coq.Decl
-<span class="lineno">  132 </span><span class="decl"><span class="nottickedoff">_mapped sawIdent newIdent =</span>
-<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show sawIdent ++ &quot; is mapped to &quot; ++ show newIdent</span></span>
-<span class="lineno">  134 </span>
-<span class="lineno">  135 </span>skipped' :: NameInfo -&gt; Coq.Decl
-<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">skipped' nmi =</span>
-<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show (toAbsoluteName nmi) ++ &quot; was skipped&quot;</span></span>
-<span class="lineno">  138 </span>
-<span class="lineno">  139 </span>skipped :: Ident -&gt; Coq.Decl
-<span class="lineno">  140 </span><span class="decl"><span class="nottickedoff">skipped sawIdent =</span>
-<span class="lineno">  141 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show sawIdent ++ &quot; was skipped&quot;</span></span>
-<span class="lineno">  142 </span>
-<span class="lineno">  143 </span>translateDef :: ModuleTranslationMonad m =&gt; Def -&gt; m Coq.Decl
-<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">translateDef (Def {..}) = {- trace (&quot;translateDef &quot; ++ show defIdent) $ -} do</span>
-<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">specialTreatment &lt;- findSpecialTreatment' defNameInfo</span>
-<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">translateAccordingly (atDefSite specialTreatment)</span>
-<span class="lineno">  147 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  149 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly :: ModuleTranslationMonad m =&gt; DefSiteTreatment -&gt; m Coq.Decl</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly  DefPreserve           = translateNamed $ Text.unpack (toShortName defNameInfo)</span>
-<span class="lineno">  152 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly (DefRename targetName) = translateNamed $ targetName</span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str</span>
-<span class="lineno">  154 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly  DefSkip               = return $ skipped' defNameInfo</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="nottickedoff">case ctorNameInfo of</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="nottickedoff">ModuleIdentifier ident -&gt; liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ident</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="nottickedoff">ImportedName{} -&gt; pure Nothing</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="nottickedoff">let constructorName = case maybe_constructorName of</span>
+<span class="lineno">   72 </span><span class="spaces">        </span><span class="nottickedoff">Just n -&gt; identName n</span>
+<span class="lineno">   73 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; error &quot;translateCtor: unexpected translation for constructor&quot;</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">constructorType &lt;-</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">-- Unfortunately, `ctorType` qualifies the inductive type's name in the</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="nottickedoff">-- return type.</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="nottickedoff">-- dropModuleNameWithinCtor &lt;$&gt;</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="nottickedoff">-- Unfortunately, `ctorType` comes with the inductive parameters universally</span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">-- quantified.</span>
+<span class="lineno">   80 </span><span class="spaces">    </span><span class="nottickedoff">(\ t -&gt; iterate dropPi t !! length inductiveParameters) &lt;$&gt;</span>
+<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">(liftTermTranslationMonad (TermTranslation.translateTerm ctorType))</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="nottickedoff">return $ Coq.Constructor</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">{ constructorName</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="nottickedoff">, constructorType</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>translateDataType :: ModuleTranslationMonad m =&gt; DataType -&gt; m Coq.Decl
+<span class="lineno">   88 </span>-- translateDataType (DataType {..})
+<span class="lineno">   89 </span>--   | trace (&quot;translateDataType: &quot; ++ show dtName) False = undefined
+<span class="lineno">   90 </span><span class="decl"><span class="nottickedoff">translateDataType (DataType {..}) =</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">case dtNameInfo of</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="nottickedoff">ModuleIdentifier dtName -&gt;</span>
+<span class="lineno">   93 </span><span class="spaces">      </span><span class="nottickedoff">atDefSite &lt;$&gt; findSpecialTreatment dtName &gt;&gt;= \case</span>
+<span class="lineno">   94 </span><span class="spaces">      </span><span class="nottickedoff">DefPreserve            -&gt; translateNamed $ identName dtName</span>
+<span class="lineno">   95 </span><span class="spaces">      </span><span class="nottickedoff">DefRename   targetName -&gt; translateNamed $ targetName</span>
+<span class="lineno">   96 </span><span class="spaces">      </span><span class="nottickedoff">DefReplace  str        -&gt; return $ Coq.Snippet str</span>
+<span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">DefSkip                -&gt; return $ skipped dtName</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">ImportedName{} -&gt;</span>
+<span class="lineno">   99 </span><span class="spaces">      </span><span class="nottickedoff">translateNamed $ Text.unpack (toShortName dtNameInfo)</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed :: ModuleTranslationMonad m =&gt; Coq.Ident -&gt; m Coq.Decl</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed name = do</span>
+<span class="lineno">  103 </span><span class="spaces">      </span><span class="nottickedoff">let inductiveName = name</span>
+<span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">(inductiveParameters, inductiveIndices) &lt;-</span>
+<span class="lineno">  105 </span><span class="spaces">        </span><span class="nottickedoff">liftTermTranslationMonad $</span>
+<span class="lineno">  106 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtParams $ \ps -&gt;</span>
+<span class="lineno">  107 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtIndices $ \ixs -&gt;</span>
+<span class="lineno">  108 </span><span class="spaces">        </span><span class="nottickedoff">-- Translating the indices of a data type should never yield</span>
+<span class="lineno">  109 </span><span class="spaces">        </span><span class="nottickedoff">-- Inhabited constraints, so the result of calling</span>
+<span class="lineno">  110 </span><span class="spaces">        </span><span class="nottickedoff">-- `translateParams dtIndices` above should only return Binders and not</span>
+<span class="lineno">  111 </span><span class="spaces">        </span><span class="nottickedoff">-- any ImplicitBinders. Moreover, `translateParams` always returns</span>
+<span class="lineno">  112 </span><span class="spaces">        </span><span class="nottickedoff">-- Binders where the second field is `Just t`, where `t` is the type.</span>
+<span class="lineno">  113 </span><span class="spaces">        </span><span class="nottickedoff">let errorBecause msg = error $ &quot;translateDataType.translateNamed: &quot; ++ msg in</span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="nottickedoff">let bs = map (\case Coq.Binder s (Just t) -&gt;</span>
+<span class="lineno">  115 </span><span class="spaces">                              </span><span class="nottickedoff">Coq.PiBinder (Just s) t</span>
+<span class="lineno">  116 </span><span class="spaces">                            </span><span class="nottickedoff">Coq.Binder _ Nothing -&gt;</span>
+<span class="lineno">  117 </span><span class="spaces">                              </span><span class="nottickedoff">errorBecause &quot;encountered a Binder without a Type&quot;</span>
+<span class="lineno">  118 </span><span class="spaces">                            </span><span class="nottickedoff">Coq.ImplicitBinder{} -&gt;</span>
+<span class="lineno">  119 </span><span class="spaces">                              </span><span class="nottickedoff">errorBecause &quot;encountered an implicit binder&quot;)</span>
+<span class="lineno">  120 </span><span class="spaces">                     </span><span class="nottickedoff">ixs in</span>
+<span class="lineno">  121 </span><span class="spaces">        </span><span class="nottickedoff">return (ps, bs)</span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">let inductiveSort = TermTranslation.translateSort dtSort</span>
+<span class="lineno">  123 </span><span class="spaces">      </span><span class="nottickedoff">inductiveConstructors &lt;- mapM (translateCtor inductiveParameters) dtCtors</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.InductiveDecl $ Coq.Inductive</span>
+<span class="lineno">  125 </span><span class="spaces">        </span><span class="nottickedoff">{ inductiveName</span>
+<span class="lineno">  126 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveParameters</span>
+<span class="lineno">  127 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveIndices</span>
+<span class="lineno">  128 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveSort</span>
+<span class="lineno">  129 </span><span class="spaces">        </span><span class="nottickedoff">, inductiveConstructors</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>-- translateModuleDecl :: ModuleTranslationMonad m =&gt; ModuleDecl -&gt; m Coq.Decl
+<span class="lineno">  133 </span>-- translateModuleDecl = \case
+<span class="lineno">  134 </span>--   TypeDecl dataType -&gt; translateDataType dataType
+<span class="lineno">  135 </span>--   DefDecl definition -&gt; translateDef definition
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>_mapped :: Ident -&gt; Ident -&gt; Coq.Decl
+<span class="lineno">  138 </span><span class="decl"><span class="nottickedoff">_mapped sawIdent newIdent =</span>
+<span class="lineno">  139 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show sawIdent ++ &quot; is mapped to &quot; ++ show newIdent</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>skipped' :: NameInfo -&gt; Coq.Decl
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">skipped' nmi =</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show (toAbsoluteName nmi) ++ &quot; was skipped&quot;</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>skipped :: Ident -&gt; Coq.Decl
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">skipped sawIdent =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">Coq.Comment $ show sawIdent ++ &quot; was skipped&quot;</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>translateDef :: ModuleTranslationMonad m =&gt; Def -&gt; m Coq.Decl
+<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">translateDef (Def {..}) = {- trace (&quot;translateDef &quot; ++ show defIdent) $ -} do</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">specialTreatment &lt;- findSpecialTreatment' defNameInfo</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="nottickedoff">translateAccordingly (atDefSite specialTreatment)</span>
+<span class="lineno">  153 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">  155 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  156 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed :: ModuleTranslationMonad m =&gt; Coq.Ident -&gt; m Coq.Decl</span>
-<span class="lineno">  157 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed name = liftTermTranslationMonad (go defQualifier defBody)</span>
-<span class="lineno">  158 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  159 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
-<span class="lineno">  160 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  161 </span><span class="spaces">        </span><span class="nottickedoff">go :: TermTranslation.TermTranslationMonad m =&gt; DefQualifier -&gt; Maybe Term -&gt; m Coq.Decl</span>
-<span class="lineno">  162 </span><span class="spaces">        </span><span class="nottickedoff">go NoQualifier    Nothing     = error &quot;Terms should have a body (unless axiom/primitive)&quot;</span>
-<span class="lineno">  163 </span><span class="spaces">        </span><span class="nottickedoff">go NoQualifier    (Just body) = Coq.Definition</span>
-<span class="lineno">  164 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
-<span class="lineno">  165 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; pure []</span>
-<span class="lineno">  166 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; (Just &lt;$&gt; TermTranslation.translateTerm defType)</span>
-<span class="lineno">  167 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm body</span>
-<span class="lineno">  168 </span><span class="spaces">        </span><span class="nottickedoff">go AxiomQualifier _           = Coq.Axiom</span>
-<span class="lineno">  169 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
-<span class="lineno">  170 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm defType</span>
-<span class="lineno">  171 </span><span class="spaces">        </span><span class="nottickedoff">go PrimQualifier  _           = Coq.Axiom</span>
-<span class="lineno">  172 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
-<span class="lineno">  173 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm defType</span></span>
-<span class="lineno">  174 </span>
-<span class="lineno">  175 </span>liftTermTranslationMonad ::
-<span class="lineno">  176 </span>  (forall n. TermTranslation.TermTranslationMonad   n =&gt; n a) -&gt;
-<span class="lineno">  177 </span>  (forall m. ModuleTranslationMonad m =&gt; m a)
-<span class="lineno">  178 </span><span class="decl"><span class="nottickedoff">liftTermTranslationMonad n = do</span>
-<span class="lineno">  179 </span><span class="spaces">  </span><span class="nottickedoff">configuration &lt;- asks translationConfiguration</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="nottickedoff">(modname, mm) &lt;- asks otherConfiguration</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="nottickedoff">let r = TermTranslation.runTermTranslationMonad configuration modname mm [] [] n</span>
-<span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">case r of</span>
-<span class="lineno">  183 </span><span class="spaces">    </span><span class="nottickedoff">Left  e      -&gt; Except.throwError e</span>
-<span class="lineno">  184 </span><span class="spaces">    </span><span class="nottickedoff">Right (a, _) -&gt; do</span>
-<span class="lineno">  185 </span><span class="spaces">      </span><span class="nottickedoff">return a</span></span>
-<span class="lineno">  186 </span>
-<span class="lineno">  187 </span>translateDecl ::
-<span class="lineno">  188 </span>  M.TranslationConfiguration -&gt;
-<span class="lineno">  189 </span>  Maybe ModuleName -&gt;
-<span class="lineno">  190 </span>  ModuleMap -&gt;
-<span class="lineno">  191 </span>  ModuleDecl -&gt;
-<span class="lineno">  192 </span>  Doc ann
-<span class="lineno">  193 </span><span class="decl"><span class="nottickedoff">translateDecl configuration modname mm decl =</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="nottickedoff">case decl of</span>
-<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">TypeDecl td -&gt; do</span>
-<span class="lineno">  196 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDataType td) of</span>
-<span class="lineno">  197 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
-<span class="lineno">  198 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
-<span class="lineno">  199 </span><span class="spaces">  </span><span class="nottickedoff">DefDecl dd -&gt; do</span>
-<span class="lineno">  200 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDef dd) of</span>
-<span class="lineno">  201 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
-<span class="lineno">  202 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
-<span class="lineno">  203 </span><span class="spaces">  </span><span class="nottickedoff">InjectCodeDecl ns txt</span>
-<span class="lineno">  204 </span><span class="spaces">    </span><span class="nottickedoff">| ns == &quot;Coq&quot; -&gt; pretty txt</span>
-<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise   -&gt; mempty</span></span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly :: ModuleTranslationMonad m =&gt; DefSiteTreatment -&gt; m Coq.Decl</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly  DefPreserve           = translateNamed $ Text.unpack (toShortName defNameInfo)</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly (DefRename targetName) = translateNamed $ targetName</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="nottickedoff">translateAccordingly  DefSkip               = return $ skipped' defNameInfo</span>
+<span class="lineno">  161 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed :: ModuleTranslationMonad m =&gt; Coq.Ident -&gt; m Coq.Decl</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="nottickedoff">translateNamed name = liftTermTranslationMonad (go defQualifier defBody)</span>
+<span class="lineno">  164 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  165 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno">  166 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  167 </span><span class="spaces">        </span><span class="nottickedoff">go :: TermTranslation.TermTranslationMonad m =&gt; DefQualifier -&gt; Maybe Term -&gt; m Coq.Decl</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="nottickedoff">go NoQualifier    Nothing     = error &quot;Terms should have a body (unless axiom/primitive)&quot;</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="nottickedoff">go NoQualifier    (Just body) = Coq.Definition</span>
+<span class="lineno">  170 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
+<span class="lineno">  171 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; pure []</span>
+<span class="lineno">  172 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; (Just &lt;$&gt; TermTranslation.translateTerm defType)</span>
+<span class="lineno">  173 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm body</span>
+<span class="lineno">  174 </span><span class="spaces">        </span><span class="nottickedoff">go AxiomQualifier _           = Coq.Axiom</span>
+<span class="lineno">  175 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
+<span class="lineno">  176 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm defType</span>
+<span class="lineno">  177 </span><span class="spaces">        </span><span class="nottickedoff">go PrimQualifier  _           = Coq.Axiom</span>
+<span class="lineno">  178 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;$&gt; pure name</span>
+<span class="lineno">  179 </span><span class="spaces">                                        </span><span class="nottickedoff">&lt;*&gt; TermTranslation.translateTerm defType</span></span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>liftTermTranslationMonad ::
+<span class="lineno">  182 </span>  (forall n. TermTranslation.TermTranslationMonad   n =&gt; n a) -&gt;
+<span class="lineno">  183 </span>  (forall m. ModuleTranslationMonad m =&gt; m a)
+<span class="lineno">  184 </span><span class="decl"><span class="nottickedoff">liftTermTranslationMonad n = do</span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="nottickedoff">configuration &lt;- asks translationConfiguration</span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="nottickedoff">(modname, mm) &lt;- asks otherConfiguration</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="nottickedoff">let r = TermTranslation.runTermTranslationMonad configuration modname mm [] [] n</span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="nottickedoff">case r of</span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="nottickedoff">Left  e      -&gt; Except.throwError e</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="nottickedoff">Right (a, _) -&gt; do</span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="nottickedoff">return a</span></span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>translateDecl ::
+<span class="lineno">  194 </span>  M.TranslationConfiguration -&gt;
+<span class="lineno">  195 </span>  Maybe ModuleName -&gt;
+<span class="lineno">  196 </span>  ModuleMap -&gt;
+<span class="lineno">  197 </span>  ModuleDecl -&gt;
+<span class="lineno">  198 </span>  Doc ann
+<span class="lineno">  199 </span><span class="decl"><span class="nottickedoff">translateDecl configuration modname mm decl =</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="nottickedoff">case decl of</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="nottickedoff">TypeDecl td -&gt; do</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDataType td) of</span>
+<span class="lineno">  203 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
+<span class="lineno">  204 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="nottickedoff">DefDecl dd -&gt; do</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="nottickedoff">case runModuleTranslationMonad configuration modname mm (translateDef dd) of</span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; error $ show e</span>
+<span class="lineno">  208 </span><span class="spaces">      </span><span class="nottickedoff">Right (tdecl, _) -&gt; Coq.ppDecl tdecl</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">InjectCodeDecl ns txt</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="nottickedoff">| ns == &quot;Coq&quot; -&gt; pretty txt</span>
+<span class="lineno">  211 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise   -&gt; mempty</span></span>
 
 </pre>
 </body>

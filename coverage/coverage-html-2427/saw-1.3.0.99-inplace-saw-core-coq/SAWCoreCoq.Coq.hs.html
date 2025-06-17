@@ -125,7 +125,7 @@ span.spaces    { background: white }
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>-- | Extract out the 'String' name of a declaration in a SAW core module
 <span class="lineno">  108 </span>moduleDeclName :: ModuleDecl -&gt; Maybe String
-<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)</span>
+<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">moduleDeclName (TypeDecl (DataType { dtNameInfo })) = Just (Text.unpack (toShortName dtNameInfo))</span>
 <span class="lineno">  110 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName (DefDecl  (Def      { defNameInfo })) = Just (Text.unpack (toShortName defNameInfo))</span>
 <span class="lineno">  111 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName InjectCodeDecl{} = Nothing</span></span>
 

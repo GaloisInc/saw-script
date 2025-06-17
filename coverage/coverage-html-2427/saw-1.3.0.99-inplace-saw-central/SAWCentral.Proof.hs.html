@@ -935,39 +935,39 @@ span.spaces    { background: white }
 <span class="lineno">  916 </span>data TheoremDB =
 <span class="lineno">  917 </span>  TheoremDB
 <span class="lineno">  918 </span>  -- TODO, maybe this should be a summary or something simpler?
-<span class="lineno">  919 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">theoremMap</span></span></span> :: Map.Map TheoremNonce Theorem
+<span class="lineno">  919 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">theoremMap</span></span></span> :: Map.Map TheoremNonce Theorem
 <span class="lineno">  920 </span>  }
 <span class="lineno">  921 </span>
 <span class="lineno">  922 </span>emptyTheoremDB :: TheoremDB
-<span class="lineno">  923 </span><span class="decl"><span class="nottickedoff">emptyTheoremDB = TheoremDB mempty</span></span>
+<span class="lineno">  923 </span><span class="decl"><span class="istickedoff">emptyTheoremDB = TheoremDB mempty</span></span>
 <span class="lineno">  924 </span>
 <span class="lineno">  925 </span>recordTheorem :: TheoremDB -&gt; Theorem -&gt; TheoremDB
-<span class="lineno">  926 </span><span class="decl"><span class="nottickedoff">recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))</span></span>
+<span class="lineno">  926 </span><span class="decl"><span class="istickedoff">recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))</span></span>
 <span class="lineno">  927 </span>
 <span class="lineno">  928 </span>-- | Given a set of root values, find all the theorems in this database
 <span class="lineno">  929 </span>--   that are transitively used in the proofs of those theorems.
 <span class="lineno">  930 </span>--   This function will panic if any of the roots or reachable theorems
 <span class="lineno">  931 </span>--   are not found in the database.
 <span class="lineno">  932 </span>reachableTheorems :: TheoremDB -&gt; Set TheoremNonce -&gt; Map TheoremNonce Theorem
-<span class="lineno">  933 </span><span class="decl"><span class="nottickedoff">reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots</span>
-<span class="lineno">  934 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  935 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">  936 </span><span class="spaces">   </span><span class="nottickedoff">loop m visited curr</span>
-<span class="lineno">  937 </span><span class="spaces">     </span><span class="nottickedoff">| Just _ &lt;- Map.lookup curr visited = visited</span>
-<span class="lineno">  938 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  939 </span><span class="spaces">     </span><span class="nottickedoff">| Just thm &lt;- Map.lookup curr m =</span>
-<span class="lineno">  940 </span><span class="spaces">         </span><span class="nottickedoff">Set.foldl' (loop m)</span>
-<span class="lineno">  941 </span><span class="spaces">            </span><span class="nottickedoff">(Map.insert curr thm visited)</span>
-<span class="lineno">  942 </span><span class="spaces">            </span><span class="nottickedoff">(thmDepends thm)</span>
-<span class="lineno">  943 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  944 </span><span class="spaces">     </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno">  945 </span><span class="spaces">         </span><span class="nottickedoff">let curr' = Text.pack (show (indexValue curr))</span>
-<span class="lineno">  946 </span><span class="spaces">             </span><span class="nottickedoff">m' = map (\(k, _v) -&gt; Text.pack (show k)) $ Map.toList m</span>
-<span class="lineno">  947 </span><span class="spaces">         </span><span class="nottickedoff">in</span>
-<span class="lineno">  948 </span><span class="spaces">         </span><span class="nottickedoff">panic &quot;reachableTheorems&quot; [</span>
-<span class="lineno">  949 </span><span class="spaces">             </span><span class="nottickedoff">&quot;Could not find theorem with identifier: &quot; &lt;&gt; curr',</span>
-<span class="lineno">  950 </span><span class="spaces">             </span><span class="nottickedoff">&quot;Theorems in database: &quot; &lt;&gt; Text.intercalate &quot; &quot; m'</span>
-<span class="lineno">  951 </span><span class="spaces">         </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  933 </span><span class="decl"><span class="istickedoff">reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots</span>
+<span class="lineno">  934 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  935 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">  936 </span><span class="spaces">   </span><span class="istickedoff">loop m visited curr</span>
+<span class="lineno">  937 </span><span class="spaces">     </span><span class="istickedoff">| Just _ &lt;- Map.lookup curr visited = <span class="nottickedoff">visited</span></span>
+<span class="lineno">  938 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  939 </span><span class="spaces">     </span><span class="istickedoff">| Just thm &lt;- Map.lookup curr m =</span>
+<span class="lineno">  940 </span><span class="spaces">         </span><span class="istickedoff">Set.foldl' <span class="nottickedoff">(loop m)</span></span>
+<span class="lineno">  941 </span><span class="spaces">            </span><span class="istickedoff">(Map.insert curr thm visited)</span>
+<span class="lineno">  942 </span><span class="spaces">            </span><span class="istickedoff">(thmDepends thm)</span>
+<span class="lineno">  943 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  944 </span><span class="spaces">     </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno">  945 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let curr' = Text.pack (show (indexValue curr))</span></span>
+<span class="lineno">  946 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">m' = map (\(k, _v) -&gt; Text.pack (show k)) $ Map.toList m</span></span>
+<span class="lineno">  947 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  948 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">panic &quot;reachableTheorems&quot; [</span></span>
+<span class="lineno">  949 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Could not find theorem with identifier: &quot; &lt;&gt; curr',</span></span>
+<span class="lineno">  950 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Theorems in database: &quot; &lt;&gt; Text.intercalate &quot; &quot; m'</span></span>
+<span class="lineno">  951 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno">  952 </span>
 <span class="lineno">  953 </span>
 <span class="lineno">  954 </span>-- | Check that the purported theorem is valid.
@@ -1128,7 +1128,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1109 </span>
 <span class="lineno"> 1110 </span>-- | Retrieve any solver stats from the proved theorem.
 <span class="lineno"> 1111 </span>thmStats :: Theorem -&gt; SolverStats
-<span class="lineno"> 1112 </span><span class="decl"><span class="nottickedoff">thmStats Theorem{ _thmStats = stats } = stats</span></span>
+<span class="lineno"> 1112 </span><span class="decl"><span class="istickedoff">thmStats Theorem{ _thmStats = stats } = stats</span></span>
 <span class="lineno"> 1113 </span>
 <span class="lineno"> 1114 </span>-- | Retrive the evidence associated with this theorem.
 <span class="lineno"> 1115 </span>thmEvidence :: Theorem -&gt; Evidence
@@ -1153,14 +1153,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1134 </span>
 <span class="lineno"> 1135 </span>-- | Returns the set of theorem identifiers that this theorem depends on
 <span class="lineno"> 1136 </span>thmDepends :: Theorem -&gt; Set TheoremNonce
-<span class="lineno"> 1137 </span><span class="decl"><span class="nottickedoff">thmDepends Theorem { _thmDepends = s } = s</span></span>
+<span class="lineno"> 1137 </span><span class="decl"><span class="istickedoff">thmDepends Theorem { _thmDepends = s } = s</span></span>
 <span class="lineno"> 1138 </span>
 <span class="lineno"> 1139 </span>-- | Returns the amount of time elapsed during the proof of this theorem
 <span class="lineno"> 1140 </span>thmElapsedTime :: Theorem -&gt; NominalDiffTime
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">thmElapsedTime Theorem{ _thmElapsedTime = tm } = tm</span></span>
 <span class="lineno"> 1142 </span>
 <span class="lineno"> 1143 </span>thmSummary :: Theorem -&gt; TheoremSummary
-<span class="lineno"> 1144 </span><span class="decl"><span class="nottickedoff">thmSummary Theorem { _thmSummary = sy } = sy</span></span>
+<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">thmSummary Theorem { _thmSummary = sy } = sy</span></span>
 <span class="lineno"> 1145 </span>
 <span class="lineno"> 1146 </span>splitEvidence :: [Evidence] -&gt; IO Evidence
 <span class="lineno"> 1147 </span><span class="decl"><span class="nottickedoff">splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)</span>
@@ -1618,7 +1618,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1599 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt</span></span>
 <span class="lineno"> 1600 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">, prettySequent PPS.defaultOpts nenv sqt'</span></span>
 <span class="lineno"> 1601 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1602 </span><span class="spaces">           </span><span class="istickedoff">return (<span class="nottickedoff">mempty</span>, <span class="nottickedoff">ProvedTheorem stats</span>)</span>
+<span class="lineno"> 1602 </span><span class="spaces">           </span><span class="istickedoff">return (mempty, ProvedTheorem <span class="nottickedoff">stats</span>)</span>
 <span class="lineno"> 1603 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1604 </span><span class="spaces">      </span><span class="istickedoff">Admitted msg pos sqt' -&gt;</span>
 <span class="lineno"> 1605 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- sequentSubsumes <span class="nottickedoff">sc</span> sqt' sqt</span>
@@ -1817,7 +1817,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1798 </span>startProof :: ProofGoal -&gt; Pos -&gt; Maybe ProgramLoc -&gt; Text -&gt; IO ProofState
 <span class="lineno"> 1799 </span><span class="decl"><span class="istickedoff">startProof g pos ploc rsn =</span>
 <span class="lineno"> 1800 </span><span class="spaces">  </span><span class="istickedoff">do start &lt;- getCurrentTime</span>
-<span class="lineno"> 1801 </span><span class="spaces">     </span><span class="istickedoff">pure (ProofState [g] (<span class="nottickedoff">goalSequent g</span>,<span class="nottickedoff">pos</span>,<span class="nottickedoff">ploc</span>,<span class="nottickedoff">rsn</span>) <span class="nottickedoff">mempty</span> Nothing passthroughEvidence <span class="nottickedoff">start</span>)</span></span>
+<span class="lineno"> 1801 </span><span class="spaces">     </span><span class="istickedoff">pure (ProofState [g] (<span class="nottickedoff">goalSequent g</span>,<span class="nottickedoff">pos</span>,<span class="nottickedoff">ploc</span>,<span class="nottickedoff">rsn</span>) mempty Nothing passthroughEvidence <span class="nottickedoff">start</span>)</span></span>
 <span class="lineno"> 1802 </span>
 <span class="lineno"> 1803 </span>-- | Attempt to complete a proof by checking that all subgoals have been discharged,
 <span class="lineno"> 1804 </span>--   and validate the computed evidence to ensure that it supports the original
@@ -1862,18 +1862,18 @@ span.spaces    { background: white }
 <span class="lineno"> 1843 </span><span class="spaces">         </span><span class="istickedoff">let theorem =</span>
 <span class="lineno"> 1844 </span><span class="spaces">                   </span><span class="istickedoff">Theorem</span>
 <span class="lineno"> 1845 </span><span class="spaces">                   </span><span class="istickedoff">{ _thmProp = conclProp</span>
-<span class="lineno"> 1846 </span><span class="spaces">                   </span><span class="istickedoff">, _thmStats = <span class="nottickedoff">stats</span></span>
+<span class="lineno"> 1846 </span><span class="spaces">                   </span><span class="istickedoff">, _thmStats = stats</span>
 <span class="lineno"> 1847 </span><span class="spaces">                   </span><span class="istickedoff">, _thmEvidence = <span class="nottickedoff">e'</span></span>
 <span class="lineno"> 1848 </span><span class="spaces">                   </span><span class="istickedoff">, _thmLocation = <span class="nottickedoff">loc</span></span>
 <span class="lineno"> 1849 </span><span class="spaces">                   </span><span class="istickedoff">, _thmProgramLoc = <span class="nottickedoff">ploc</span></span>
 <span class="lineno"> 1850 </span><span class="spaces">                   </span><span class="istickedoff">, _thmReason = <span class="nottickedoff">rsn</span></span>
 <span class="lineno"> 1851 </span><span class="spaces">                   </span><span class="istickedoff">, _thmNonce = n</span>
-<span class="lineno"> 1852 </span><span class="spaces">                   </span><span class="istickedoff">, _thmDepends = <span class="nottickedoff">deps</span></span>
+<span class="lineno"> 1852 </span><span class="spaces">                   </span><span class="istickedoff">, _thmDepends = deps</span>
 <span class="lineno"> 1853 </span><span class="spaces">                   </span><span class="istickedoff">, _thmElapsedTime = <span class="nottickedoff">diffUTCTime end start</span></span>
-<span class="lineno"> 1854 </span><span class="spaces">                   </span><span class="istickedoff">, _thmSummary = <span class="nottickedoff">sy</span></span>
+<span class="lineno"> 1854 </span><span class="spaces">                   </span><span class="istickedoff">, _thmSummary = sy</span>
 <span class="lineno"> 1855 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 1856 </span><span class="spaces">         </span><span class="istickedoff">let <span class="nottickedoff">db' = if recordThm then recordTheorem db theorem else db</span></span>
-<span class="lineno"> 1857 </span><span class="spaces">         </span><span class="istickedoff">pure (ValidProof <span class="nottickedoff">stats</span> theorem, <span class="nottickedoff">db'</span>)</span>
+<span class="lineno"> 1856 </span><span class="spaces">         </span><span class="istickedoff">let db' = if <span class="tickonlytrue">recordThm</span> then recordTheorem db theorem else <span class="nottickedoff">db</span></span>
+<span class="lineno"> 1857 </span><span class="spaces">         </span><span class="istickedoff">pure (ValidProof <span class="nottickedoff">stats</span> theorem, db')</span>
 <span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff">_ : _ -&gt;</span>
 <span class="lineno"> 1859 </span><span class="spaces">         </span><span class="istickedoff">pure (UnfinishedProof ps, <span class="nottickedoff">db</span>)</span></span>
 <span class="lineno"> 1860 </span>
@@ -1914,7 +1914,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1895 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1896 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1897 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1898 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl <span class="nottickedoff">(stats &lt;&gt; stats')</span> <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1898 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1899 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1900 </span>
 <span class="lineno"> 1901 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -2010,7 +2010,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1991 </span><span class="spaces">                    </span><span class="istickedoff">do ec  &lt;- scFreshEC sc lnm tp'</span>
 <span class="lineno"> 1992 </span><span class="spaces">                       </span><span class="istickedoff">etm &lt;- scExtCns sc ec</span>
 <span class="lineno"> 1993 </span><span class="spaces">                       </span><span class="istickedoff">body' &lt;- instantiateVar sc 0 etm body</span>
-<span class="lineno"> 1994 </span><span class="spaces">                       </span><span class="istickedoff">processUnivAssert mmap ((ec,<span class="nottickedoff">fot</span>):vars) xs body'</span>
+<span class="lineno"> 1994 </span><span class="spaces">                       </span><span class="istickedoff">processUnivAssert mmap ((ec,fot):vars) xs body'</span>
 <span class="lineno"> 1995 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1996 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">termIsClosed body</span> -&gt;</span>
 <span class="lineno"> 1997 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
@@ -2340,7 +2340,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2321 </span><span class="decl"><span class="istickedoff">tacticSolve f = Tactic \gl -&gt;</span>
 <span class="lineno"> 2322 </span><span class="spaces">  </span><span class="istickedoff">do (stats, sres) &lt;- lift (f gl)</span>
 <span class="lineno"> 2323 </span><span class="spaces">     </span><span class="istickedoff">case sres of</span>
-<span class="lineno"> 2324 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, <span class="nottickedoff">stats</span>, [], leafEvidence e)</span>
+<span class="lineno"> 2324 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, stats, [], leafEvidence e)</span>
 <span class="lineno"> 2325 </span><span class="spaces">       </span><span class="istickedoff">SolveUnknown   -&gt; <span class="nottickedoff">return ((), stats, [gl], passthroughEvidence)</span></span>
 <span class="lineno"> 2326 </span><span class="spaces">       </span><span class="istickedoff">SolveCounterexample cex -&gt; throwError (stats, cex)</span></span>
 <span class="lineno"> 2327 </span>

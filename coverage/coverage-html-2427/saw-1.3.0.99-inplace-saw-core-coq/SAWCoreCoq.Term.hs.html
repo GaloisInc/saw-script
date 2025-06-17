@@ -417,26 +417,26 @@ span.spaces    { background: white }
 <span class="lineno">  398 </span><span class="spaces">      </span><span class="nottickedoff">Coq.App &lt;$&gt; pure (Coq.Var &quot;fst&quot;) &lt;*&gt; traverse translateTerm [t]</span>
 <span class="lineno">  399 </span><span class="spaces">    </span><span class="nottickedoff">PairRight t   -&gt;</span>
 <span class="lineno">  400 </span><span class="spaces">      </span><span class="nottickedoff">Coq.App &lt;$&gt; pure (Coq.Var &quot;snd&quot;) &lt;*&gt; traverse translateTerm [t]</span>
-<span class="lineno">  401 </span><span class="spaces">    </span><span class="nottickedoff">-- TODO: maybe have more customizable translation of data types</span>
-<span class="lineno">  402 </span><span class="spaces">    </span><span class="nottickedoff">DataTypeApp n is as -&gt; translateIdentWithArgs (primName n) (is ++ as)</span>
-<span class="lineno">  403 </span><span class="spaces">    </span><span class="nottickedoff">CtorApp n is as -&gt; translateIdentWithArgs (primName n) (is ++ as)</span>
-<span class="lineno">  404 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  405 </span><span class="spaces">    </span><span class="nottickedoff">RecursorType _d _params motive motiveTy -&gt;</span>
-<span class="lineno">  406 </span><span class="spaces">      </span><span class="nottickedoff">-- type of the motive looks like</span>
-<span class="lineno">  407 </span><span class="spaces">      </span><span class="nottickedoff">--      (ix1 : _) -&gt; ... -&gt; (ixn : _) -&gt; d ps ixs -&gt; sort</span>
-<span class="lineno">  408 </span><span class="spaces">      </span><span class="nottickedoff">-- to get the type of the recursor, we compute</span>
-<span class="lineno">  409 </span><span class="spaces">      </span><span class="nottickedoff">--      (ix1 : _) -&gt; ... -&gt; (ixn : _) -&gt; (x:d ps ixs) -&gt; motive ixs x</span>
-<span class="lineno">  410 </span><span class="spaces">      </span><span class="nottickedoff">let (bs, _srt) = asPiList motiveTy in</span>
-<span class="lineno">  411 </span><span class="spaces">      </span><span class="nottickedoff">translateBinders bs $ \bndrs -&gt;</span>
-<span class="lineno">  412 </span><span class="spaces">      </span><span class="nottickedoff">do let varsT = map (Coq.Var . bindTransIdent) bndrs</span>
-<span class="lineno">  413 </span><span class="spaces">         </span><span class="nottickedoff">let bindersT = concat $ map bindTransToPiBinder bndrs</span>
-<span class="lineno">  414 </span><span class="spaces">         </span><span class="nottickedoff">motiveT &lt;- translateTerm motive</span>
-<span class="lineno">  415 </span><span class="spaces">         </span><span class="nottickedoff">let bodyT = Coq.App motiveT varsT</span>
-<span class="lineno">  416 </span><span class="spaces">         </span><span class="nottickedoff">return $ Coq.Pi bindersT bodyT</span>
-<span class="lineno">  417 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  418 </span><span class="spaces">    </span><span class="nottickedoff">-- TODO: support this next!</span>
-<span class="lineno">  419 </span><span class="spaces">    </span><span class="nottickedoff">Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) -&gt;</span>
-<span class="lineno">  420 </span><span class="spaces">      </span><span class="nottickedoff">do maybe_d_trans &lt;- translateIdentToIdent (primName d)</span>
+<span class="lineno">  401 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="nottickedoff">RecursorType _d _params motive motiveTy -&gt;</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="nottickedoff">-- type of the motive looks like</span>
+<span class="lineno">  404 </span><span class="spaces">      </span><span class="nottickedoff">--      (ix1 : _) -&gt; ... -&gt; (ixn : _) -&gt; d ps ixs -&gt; sort</span>
+<span class="lineno">  405 </span><span class="spaces">      </span><span class="nottickedoff">-- to get the type of the recursor, we compute</span>
+<span class="lineno">  406 </span><span class="spaces">      </span><span class="nottickedoff">--      (ix1 : _) -&gt; ... -&gt; (ixn : _) -&gt; (x:d ps ixs) -&gt; motive ixs x</span>
+<span class="lineno">  407 </span><span class="spaces">      </span><span class="nottickedoff">let (bs, _srt) = asPiList motiveTy in</span>
+<span class="lineno">  408 </span><span class="spaces">      </span><span class="nottickedoff">translateBinders bs $ \bndrs -&gt;</span>
+<span class="lineno">  409 </span><span class="spaces">      </span><span class="nottickedoff">do let varsT = map (Coq.Var . bindTransIdent) bndrs</span>
+<span class="lineno">  410 </span><span class="spaces">         </span><span class="nottickedoff">let bindersT = concat $ map bindTransToPiBinder bndrs</span>
+<span class="lineno">  411 </span><span class="spaces">         </span><span class="nottickedoff">motiveT &lt;- translateTerm motive</span>
+<span class="lineno">  412 </span><span class="spaces">         </span><span class="nottickedoff">let bodyT = Coq.App motiveT varsT</span>
+<span class="lineno">  413 </span><span class="spaces">         </span><span class="nottickedoff">return $ Coq.Pi bindersT bodyT</span>
+<span class="lineno">  414 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  415 </span><span class="spaces">    </span><span class="nottickedoff">-- TODO: support this next!</span>
+<span class="lineno">  416 </span><span class="spaces">    </span><span class="nottickedoff">Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) -&gt;</span>
+<span class="lineno">  417 </span><span class="spaces">      </span><span class="nottickedoff">do maybe_d_trans &lt;-</span>
+<span class="lineno">  418 </span><span class="spaces">           </span><span class="nottickedoff">case ecName d of</span>
+<span class="lineno">  419 </span><span class="spaces">             </span><span class="nottickedoff">ModuleIdentifier ident -&gt; translateIdentToIdent ident</span>
+<span class="lineno">  420 </span><span class="spaces">             </span><span class="nottickedoff">ImportedName{} -&gt; pure Nothing</span>
 <span class="lineno">  421 </span><span class="spaces">         </span><span class="nottickedoff">rect_var &lt;- case maybe_d_trans of</span>
 <span class="lineno">  422 </span><span class="spaces">           </span><span class="nottickedoff">Just i -&gt; return $ Coq.ExplVar (show i ++ &quot;_rect&quot;)</span>
 <span class="lineno">  423 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt;</span>
@@ -444,7 +444,7 @@ span.spaces    { background: white }
 <span class="lineno">  425 </span><span class="spaces">                         </span><span class="nottickedoff">&quot; cannot be translated because the datatype &quot; ++</span>
 <span class="lineno">  426 </span><span class="spaces">                         </span><span class="nottickedoff">&quot;is mapped to an arbitrary Coq term&quot;)</span>
 <span class="lineno">  427 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  428 </span><span class="spaces">         </span><span class="nottickedoff">let fnd c = case Map.lookup (primVarIndex c) eliminators of</span>
+<span class="lineno">  428 </span><span class="spaces">         </span><span class="nottickedoff">let fnd c = case Map.lookup (ecVarIndex c) eliminators of</span>
 <span class="lineno">  429 </span><span class="spaces">                       </span><span class="nottickedoff">Just (e,_ety) -&gt; translateTerm e</span>
 <span class="lineno">  430 </span><span class="spaces">                       </span><span class="nottickedoff">Nothing -&gt; errorTermM</span>
 <span class="lineno">  431 </span><span class="spaces">                          </span><span class="nottickedoff">(&quot;Recursor eliminator missing eliminator for constructor &quot; ++ show c)</span>

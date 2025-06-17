@@ -357,11 +357,11 @@ span.spaces    { background: white }
 <span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">case pr of</span>
 <span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">ValidProof _ thm -&gt;</span>
-<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">applyValue vValid (toValue <span class="nottickedoff">thm</span>)</span>
-<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">InvalidProof _ pairs _pst -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let fov = FOVTuple (map snd pairs)</span></span>
-<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span></span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">applyValue vInvalid (toValue tt)</span></span>
+<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">applyValue vValid (toValue thm)</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">InvalidProof _ pairs _pst -&gt; do</span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff">let fov = FOVTuple (map snd pairs)</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">applyValue vInvalid (toValue tt)</span>
 <span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">UnfinishedProof _ -&gt; do</span>
 <span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc (FOVTuple [])</span>
 <span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff">applyValue vInvalid (toValue tt)</span></span>
@@ -371,18 +371,18 @@ span.spaces    { background: white }
 <span class="lineno">  352 </span>  Value {- ^ unsat case -} -&gt;
 <span class="lineno">  353 </span>  Value {- ^ sat/unknown case -} -&gt;
 <span class="lineno">  354 </span>  TopLevel Value
-<span class="lineno">  355 </span><span class="decl"><span class="nottickedoff">caseSatResultPrim sr vUnsat vSat = do</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">case sr of</span>
-<span class="lineno">  358 </span><span class="spaces">    </span><span class="nottickedoff">Unsat _ -&gt; return vUnsat</span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="nottickedoff">Sat _ pairs -&gt; do</span>
-<span class="lineno">  360 </span><span class="spaces">      </span><span class="nottickedoff">let fov = FOVTuple (map snd pairs)</span>
-<span class="lineno">  361 </span><span class="spaces">      </span><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
-<span class="lineno">  362 </span><span class="spaces">      </span><span class="nottickedoff">applyValue vSat (toValue tt)</span>
-<span class="lineno">  363 </span><span class="spaces">    </span><span class="nottickedoff">SatUnknown -&gt; do</span>
-<span class="lineno">  364 </span><span class="spaces">      </span><span class="nottickedoff">let fov = FOVTuple []</span>
-<span class="lineno">  365 </span><span class="spaces">      </span><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
-<span class="lineno">  366 </span><span class="spaces">      </span><span class="nottickedoff">applyValue vSat (toValue tt)</span></span>
+<span class="lineno">  355 </span><span class="decl"><span class="istickedoff">caseSatResultPrim sr vUnsat vSat = do</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">case sr of</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">Unsat _ -&gt; return vUnsat</span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">Sat _ pairs -&gt; do</span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="istickedoff">let fov = FOVTuple (map snd pairs)</span>
+<span class="lineno">  361 </span><span class="spaces">      </span><span class="istickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="istickedoff">applyValue vSat (toValue tt)</span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">SatUnknown -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let fov = FOVTuple []</span></span>
+<span class="lineno">  365 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tt &lt;- io $ typedTermOfFirstOrderValue sc fov</span></span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">applyValue vSat (toValue tt)</span></span></span>
 <span class="lineno">  367 </span>
 <span class="lineno">  368 </span>
 <span class="lineno">  369 </span>------------------------------------------------------------
@@ -640,7 +640,7 @@ span.spaces    { background: white }
 <span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ = <span class="nottickedoff">error &quot;fromValue Integer&quot;</span></span></span>
 <span class="lineno">  622 </span>
 <span class="lineno">  623 </span>instance IsValue Int where
-<span class="lineno">  624 </span>    <span class="decl"><span class="nottickedoff">toValue n = VInteger (toInteger n)</span></span>
+<span class="lineno">  624 </span>    <span class="decl"><span class="istickedoff">toValue n = VInteger (toInteger n)</span></span>
 <span class="lineno">  625 </span>
 <span class="lineno">  626 </span>instance FromValue Int where
 <span class="lineno">  627 </span>    <span class="decl"><span class="istickedoff">fromValue (VInteger n)</span>
@@ -767,8 +767,8 @@ span.spaces    { background: white }
 <span class="lineno">  748 </span>   <span class="decl"><span class="istickedoff">toValue r = VSatResult r</span></span>
 <span class="lineno">  749 </span>
 <span class="lineno">  750 </span>instance FromValue SatResult where
-<span class="lineno">  751 </span>   <span class="decl"><span class="nottickedoff">fromValue (VSatResult r) = r</span>
-<span class="lineno">  752 </span><span class="spaces">   </span><span class="nottickedoff">fromValue v = error $ &quot;fromValue SatResult: &quot; ++ show v</span></span>
+<span class="lineno">  751 </span>   <span class="decl"><span class="istickedoff">fromValue (VSatResult r) = r</span>
+<span class="lineno">  752 </span><span class="spaces">   </span><span class="istickedoff">fromValue v = <span class="nottickedoff">error $ &quot;fromValue SatResult: &quot; ++ show v</span></span></span>
 <span class="lineno">  753 </span>
 <span class="lineno">  754 </span>instance IsValue CMS.GhostGlobal where
 <span class="lineno">  755 </span>  <span class="decl"><span class="nottickedoff">toValue = VGhostVar</span></span>

@@ -287,7 +287,7 @@ span.spaces    { background: white }
 <span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">SS.PVar _pos x (Just ty) -&gt; do</span>
 <span class="lineno">  269 </span><span class="spaces">        </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">let s = fromMaybe <span class="nottickedoff">(SS.tMono ty)</span> ms</span>
-<span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff">liftIO $ extendEnv <span class="nottickedoff">sc</span> x s <span class="nottickedoff">Nothing</span> v env</span>
+<span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff">liftIO $ extendEnv sc x s <span class="nottickedoff">Nothing</span> v env</span>
 <span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">SS.PTuple _pos ps -&gt;</span>
 <span class="lineno">  273 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
 <span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VTuple vs -&gt; foldr (=&lt;&lt;) (pure env) (zipWith3 bindPatternEnv ps mss vs)</span></span>
@@ -726,7 +726,7 @@ span.spaces    { background: white }
 <span class="lineno">  707 </span><span class="spaces">       </span><span class="istickedoff">jvmTrans &lt;- CJ.mkInitialJVMContext <span class="nottickedoff">halloc</span></span>
 <span class="lineno">  708 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  709 </span><span class="spaces">       </span><span class="istickedoff">let rw0 = TopLevelRW</span>
-<span class="lineno">  710 </span><span class="spaces">                   </span><span class="istickedoff">{ rwValueInfo  = primValueEnv <span class="nottickedoff">opts</span> bic</span>
+<span class="lineno">  710 </span><span class="spaces">                   </span><span class="istickedoff">{ rwValueInfo  = primValueEnv opts bic</span>
 <span class="lineno">  711 </span><span class="spaces">                   </span><span class="istickedoff">, rwTypeInfo   = primNamedTypeEnv</span>
 <span class="lineno">  712 </span><span class="spaces">                   </span><span class="istickedoff">, rwDocs       = <span class="nottickedoff">primDocEnv</span></span>
 <span class="lineno">  713 </span><span class="spaces">                   </span><span class="istickedoff">, rwCryptol    = ce0</span>
@@ -735,11 +735,11 @@ span.spaces    { background: white }
 <span class="lineno">  716 </span><span class="spaces">                   </span><span class="istickedoff">, rwLocalEnv = []</span>
 <span class="lineno">  717 </span><span class="spaces">                   </span><span class="istickedoff">, rwMonadify   = <span class="nottickedoff">Monadify.defaultMonEnv</span></span>
 <span class="lineno">  718 </span><span class="spaces">                   </span><span class="istickedoff">, rwMRSolverEnv = <span class="nottickedoff">emptyMREnv</span></span>
-<span class="lineno">  719 </span><span class="spaces">                   </span><span class="istickedoff">, rwProofs     = <span class="nottickedoff">[]</span></span>
+<span class="lineno">  719 </span><span class="spaces">                   </span><span class="istickedoff">, rwProofs     = []</span>
 <span class="lineno">  720 </span><span class="spaces">                   </span><span class="istickedoff">, rwPPOpts     = PPS.defaultOpts</span>
 <span class="lineno">  721 </span><span class="spaces">                   </span><span class="istickedoff">, rwSharedContext = sc</span>
 <span class="lineno">  722 </span><span class="spaces">                   </span><span class="istickedoff">, rwSolverCache = mb_cache</span>
-<span class="lineno">  723 </span><span class="spaces">                   </span><span class="istickedoff">, rwTheoremDB = <span class="nottickedoff">emptyTheoremDB</span></span>
+<span class="lineno">  723 </span><span class="spaces">                   </span><span class="istickedoff">, rwTheoremDB = emptyTheoremDB</span>
 <span class="lineno">  724 </span><span class="spaces">                   </span><span class="istickedoff">, rwJVMTrans   = jvmTrans</span>
 <span class="lineno">  725 </span><span class="spaces">                   </span><span class="istickedoff">, rwPrimsAvail = defaultAvailable</span>
 <span class="lineno">  726 </span><span class="spaces">                   </span><span class="istickedoff">, rwSMTArrayMemoryModel = False</span>
@@ -1087,22 +1087,22 @@ span.spaces    { background: white }
 <span class="lineno"> 1068 </span><span class="spaces">  </span><span class="istickedoff">printOutLnTop Info (showsPrecValue opts nenv <span class="nottickedoff">0</span> v &quot;&quot;)</span></span>
 <span class="lineno"> 1069 </span>
 <span class="lineno"> 1070 </span>dump_file_AST :: BuiltinContext -&gt; Options -&gt; Text -&gt; IO ()
-<span class="lineno"> 1071 </span><span class="decl"><span class="nottickedoff">dump_file_AST _bic opts filetxt = do</span>
-<span class="lineno"> 1072 </span><span class="spaces">  </span><span class="nottickedoff">let file = Text.unpack filetxt</span>
-<span class="lineno"> 1073 </span><span class="spaces">  </span><span class="nottickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; mapM_ print) file</span></span>
+<span class="lineno"> 1071 </span><span class="decl"><span class="istickedoff">dump_file_AST _bic opts filetxt = do</span>
+<span class="lineno"> 1072 </span><span class="spaces">  </span><span class="istickedoff">let file = Text.unpack filetxt</span>
+<span class="lineno"> 1073 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; mapM_ print) file</span></span>
 <span class="lineno"> 1074 </span>
 <span class="lineno"> 1075 </span>parser_printer_roundtrip :: BuiltinContext -&gt; Options -&gt; Text -&gt; IO ()
-<span class="lineno"> 1076 </span><span class="decl"><span class="nottickedoff">parser_printer_roundtrip _bic opts filetxt = do</span>
-<span class="lineno"> 1077 </span><span class="spaces">  </span><span class="nottickedoff">let file = Text.unpack filetxt</span>
-<span class="lineno"> 1078 </span><span class="spaces">  </span><span class="nottickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; PP.putDoc . SS.prettyWholeModule) file</span></span>
+<span class="lineno"> 1076 </span><span class="decl"><span class="istickedoff">parser_printer_roundtrip _bic opts filetxt = do</span>
+<span class="lineno"> 1077 </span><span class="spaces">  </span><span class="istickedoff">let file = Text.unpack filetxt</span>
+<span class="lineno"> 1078 </span><span class="spaces">  </span><span class="istickedoff">(SAWScript.Import.loadFile opts &gt;=&gt; PP.putDoc . SS.prettyWholeModule) file</span></span>
 <span class="lineno"> 1079 </span>
 <span class="lineno"> 1080 </span>exec :: Text -&gt; [Text] -&gt; Text -&gt; IO Text
-<span class="lineno"> 1081 </span><span class="decl"><span class="nottickedoff">exec name args input = do</span>
-<span class="lineno"> 1082 </span><span class="spaces">  </span><span class="nottickedoff">let name' = Text.unpack name</span>
-<span class="lineno"> 1083 </span><span class="spaces">      </span><span class="nottickedoff">args' = map Text.unpack args</span>
-<span class="lineno"> 1084 </span><span class="spaces">      </span><span class="nottickedoff">input' = Text.unpack input</span>
-<span class="lineno"> 1085 </span><span class="spaces">  </span><span class="nottickedoff">output &lt;- readProcess name' args' input'</span>
-<span class="lineno"> 1086 </span><span class="spaces">  </span><span class="nottickedoff">return $ Text.pack output</span></span>
+<span class="lineno"> 1081 </span><span class="decl"><span class="istickedoff">exec name args input = do</span>
+<span class="lineno"> 1082 </span><span class="spaces">  </span><span class="istickedoff">let name' = Text.unpack name</span>
+<span class="lineno"> 1083 </span><span class="spaces">      </span><span class="istickedoff">args' = map Text.unpack args</span>
+<span class="lineno"> 1084 </span><span class="spaces">      </span><span class="istickedoff">input' = Text.unpack input</span>
+<span class="lineno"> 1085 </span><span class="spaces">  </span><span class="istickedoff">output &lt;- readProcess name' args' input'</span>
+<span class="lineno"> 1086 </span><span class="spaces">  </span><span class="istickedoff">return $ Text.pack output</span></span>
 <span class="lineno"> 1087 </span>
 <span class="lineno"> 1088 </span>------------------------------------------------------------
 <span class="lineno"> 1089 </span>-- Filename wrappers
@@ -1472,38 +1472,38 @@ span.spaces    { background: white }
 <span class="lineno"> 1453 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1454 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1455 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;run&quot;                 &quot;{a} TopLevel a -&gt; a&quot;</span>
-<span class="lineno"> 1456 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 (id :: TopLevel Value -&gt; TopLevel Value))</span></span>
-<span class="lineno"> 1457 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1456 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 (id :: TopLevel Value -&gt; TopLevel Value))</span>
+<span class="lineno"> 1457 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1458 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Evaluate a monadic TopLevel computation to produce a value.&quot; ]</span></span>
 <span class="lineno"> 1459 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1460 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;null&quot;                &quot;{a} [a] -&gt; Bool&quot;</span>
-<span class="lineno"> 1461 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal (null :: [Value] -&gt; Bool))</span></span>
-<span class="lineno"> 1462 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1461 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (null :: [Value] -&gt; Bool))</span>
+<span class="lineno"> 1462 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1463 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Test whether a list value is empty.&quot; ]</span></span>
 <span class="lineno"> 1464 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1465 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;nth&quot;                 &quot;{a} [a] -&gt; Int -&gt; a&quot;</span>
-<span class="lineno"> 1466 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal2 (nthPrim :: [Value] -&gt; Int -&gt; TopLevel Value))</span></span>
-<span class="lineno"> 1467 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1466 </span><span class="spaces">    </span><span class="istickedoff">(funVal2 (nthPrim :: [Value] -&gt; Int -&gt; TopLevel Value))</span>
+<span class="lineno"> 1467 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1468 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Look up the value at the given list position.&quot; ]</span></span>
 <span class="lineno"> 1469 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1470 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;head&quot;                &quot;{a} [a] -&gt; a&quot;</span>
-<span class="lineno"> 1471 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 (headPrim :: [Value] -&gt; TopLevel Value))</span></span>
+<span class="lineno"> 1471 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 (headPrim :: [Value] -&gt; TopLevel Value))</span>
 <span class="lineno"> 1472 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1473 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Get the first element from the list.&quot; ]</span></span>
 <span class="lineno"> 1474 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1475 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;tail&quot;                &quot;{a} [a] -&gt; [a]&quot;</span>
-<span class="lineno"> 1476 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 (tailPrim :: [Value] -&gt; TopLevel [Value]))</span></span>
+<span class="lineno"> 1476 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 (tailPrim :: [Value] -&gt; TopLevel [Value]))</span>
 <span class="lineno"> 1477 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1478 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Drop the first element from a list.&quot; ]</span></span>
 <span class="lineno"> 1479 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1480 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;concat&quot;              &quot;{a} [a] -&gt; [a] -&gt; [a]&quot;</span>
-<span class="lineno"> 1481 </span><span class="spaces">    </span><span class="istickedoff">(pureVal <span class="nottickedoff">((++) :: [Value] -&gt; [Value] -&gt; [Value])</span>)</span>
+<span class="lineno"> 1481 </span><span class="spaces">    </span><span class="istickedoff">(pureVal ((++) :: [Value] -&gt; [Value] -&gt; [Value]))</span>
 <span class="lineno"> 1482 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1483 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Concatenate two lists to yield a third.&quot; ]</span></span>
 <span class="lineno"> 1484 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1485 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;length&quot;              &quot;{a} [a] -&gt; Int&quot;</span>
-<span class="lineno"> 1486 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal (length :: [Value] -&gt; Int))</span></span>
-<span class="lineno"> 1487 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1486 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (length :: [Value] -&gt; Int))</span>
+<span class="lineno"> 1487 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1488 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Compute the length of a list.&quot; ]</span></span>
 <span class="lineno"> 1489 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1490 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;str_concat&quot;          &quot;String -&gt; String -&gt; String&quot;</span>
@@ -1512,8 +1512,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1493 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Concatenate two strings to yield a third.&quot; ]</span></span>
 <span class="lineno"> 1494 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1495 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;str_concats&quot;          &quot;[String] -&gt; String&quot;</span>
-<span class="lineno"> 1496 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal Text.concat)</span></span>
-<span class="lineno"> 1497 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1496 </span><span class="spaces">    </span><span class="istickedoff">(pureVal Text.concat)</span>
+<span class="lineno"> 1497 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1498 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Concatenate a list of strings together to yield a string.&quot; ]</span></span>
 <span class="lineno"> 1499 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1500 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;checkpoint&quot;          &quot;TopLevel (() -&gt; TopLevel ())&quot;</span>
@@ -1872,13 +1872,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1853 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Pretty-print the given term in SAWCore syntax up to a given depth.&quot; ]</span></span>
 <span class="lineno"> 1854 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1855 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;dump_file_AST&quot;       &quot;String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 1856 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal dump_file_AST)</span></span>
-<span class="lineno"> 1857 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1856 </span><span class="spaces">    </span><span class="istickedoff">(bicVal dump_file_AST)</span>
+<span class="lineno"> 1857 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Dump a pretty representation of the SAWScript AST for a file.&quot; ]</span></span>
 <span class="lineno"> 1859 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1860 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;parser_printer_roundtrip&quot;       &quot;String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 1861 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal parser_printer_roundtrip)</span></span>
-<span class="lineno"> 1862 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 1861 </span><span class="spaces">    </span><span class="istickedoff">(bicVal parser_printer_roundtrip)</span>
+<span class="lineno"> 1862 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 1863 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Parses the file as SAWScript and renders the resultant AST back to SAWScript concrete syntax.&quot; ]</span></span>
 <span class="lineno"> 1864 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1865 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;print_type&quot;          &quot;Term -&gt; TopLevel ()&quot;</span>
@@ -3443,8 +3443,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3424 </span><span class="spaces">    </span><span class="istickedoff">-- Some misc commands</span>
 <span class="lineno"> 3425 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3426 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;caseSatResult&quot;       &quot;{b} SatResult -&gt; b -&gt; (Term -&gt; b) -&gt; b&quot;</span>
-<span class="lineno"> 3427 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\_ _ -&gt; toValueCase caseSatResultPrim)</span></span>
-<span class="lineno"> 3428 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 3427 </span><span class="spaces">    </span><span class="istickedoff">(\_ _ -&gt; toValueCase caseSatResultPrim)</span>
+<span class="lineno"> 3428 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3429 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Branch on the result of SAT solving.&quot;</span></span>
 <span class="lineno"> 3430 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
 <span class="lineno"> 3431 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Usage: caseSatResult &lt;code to run if unsat&gt; &lt;code to run if sat&gt;.&quot;</span></span>
@@ -3482,8 +3482,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3463 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 3464 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3465 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;undefined&quot;           &quot;{a} a&quot;</span>
-<span class="lineno"> 3466 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\_ _ -&gt; error &quot;interpret: undefined&quot;)</span></span>
-<span class="lineno"> 3467 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 3466 </span><span class="spaces">    </span><span class="istickedoff">(\_ _ -&gt; error &quot;interpret: undefined&quot;)</span>
+<span class="lineno"> 3467 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3468 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;An undefined value of any type. Evaluating 'undefined' makes the&quot;</span></span>
 <span class="lineno"> 3469 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;program crash.&quot;</span></span>
 <span class="lineno"> 3470 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -3496,8 +3496,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3477 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 3478 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3479 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;fail&quot; &quot;{a} String -&gt; TopLevel a&quot;</span>
-<span class="lineno"> 3480 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\_ _ -&gt; toValue failPrim)</span></span>
-<span class="lineno"> 3481 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 3480 </span><span class="spaces">    </span><span class="istickedoff">(\_ _ -&gt; toValue failPrim)</span>
+<span class="lineno"> 3481 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3482 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Throw an exception in the top level monad.&quot; ]</span></span>
 <span class="lineno"> 3483 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3484 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;fails&quot;               &quot;{a} TopLevel a -&gt; TopLevel ()&quot;</span>
@@ -3522,8 +3522,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3503 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 3504 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3505 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;exec&quot;               &quot;String -&gt; [String] -&gt; String -&gt; TopLevel String&quot;</span>
-<span class="lineno"> 3506 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\_ _ -&gt; toValue exec)</span></span>
-<span class="lineno"> 3507 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 3506 </span><span class="spaces">    </span><span class="istickedoff">(\_ _ -&gt; toValue exec)</span>
+<span class="lineno"> 3507 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3508 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Execute an external process with the given executable&quot;</span></span>
 <span class="lineno"> 3509 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;name, arguments, and standard input. Returns standard&quot;</span></span>
 <span class="lineno"> 3510 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;output.&quot;</span></span>
@@ -3603,7 +3603,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3584 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 3585 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3586 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;get_opt&quot;            &quot;Int -&gt; String&quot;</span>
-<span class="lineno"> 3587 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 get_opt)</span></span>
+<span class="lineno"> 3587 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 get_opt)</span>
 <span class="lineno"> 3588 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3589 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Get the nth command-line argument as a String. Index 0 returns&quot;</span></span>
 <span class="lineno"> 3590 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the program name; other parameters are numbered starting at 1.&quot;</span></span>
@@ -5637,8 +5637,8 @@ span.spaces    { background: white }
 <span class="lineno"> 5618 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[&quot;Stop recording profiling information.&quot;]</span></span>
 <span class="lineno"> 5619 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 5620 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;summarize_verification&quot; &quot;TopLevel ()&quot;</span>
-<span class="lineno"> 5621 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal summarize_verification)</span></span>
-<span class="lineno"> 5622 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 5621 </span><span class="spaces">    </span><span class="istickedoff">(pureVal summarize_verification)</span>
+<span class="lineno"> 5622 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 5623 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print a human-readable summary of all verifications performed&quot;</span></span>
 <span class="lineno"> 5624 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;so far.&quot;</span></span>
 <span class="lineno"> 5625 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -5698,7 +5698,7 @@ span.spaces    { background: white }
 <span class="lineno"> 5679 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 5680 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
 <span class="lineno"> 5681 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 5682 </span><span class="spaces">    </span><span class="istickedoff">bicVal f opts bic = toValue (f <span class="nottickedoff">bic</span> <span class="nottickedoff">opts</span>)</span></span>
+<span class="lineno"> 5682 </span><span class="spaces">    </span><span class="istickedoff">bicVal f opts bic = toValue (f <span class="nottickedoff">bic</span> opts)</span></span>
 <span class="lineno"> 5683 </span>
 <span class="lineno"> 5684 </span>
 <span class="lineno"> 5685 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
@@ -5711,7 +5711,7 @@ span.spaces    { background: white }
 <span class="lineno"> 5692 </span>
 <span class="lineno"> 5693 </span>primValueEnv :: Options -&gt; BuiltinContext -&gt; Map SS.LName (PrimitiveLifecycle, SS.Schema, Value)
 <span class="lineno"> 5694 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = fmap extract primitives</span>
-<span class="lineno"> 5695 </span><span class="spaces">  </span><span class="istickedoff">where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) <span class="nottickedoff">opts</span> bic)</span></span>
+<span class="lineno"> 5695 </span><span class="spaces">  </span><span class="istickedoff">where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) opts bic)</span></span>
 <span class="lineno"> 5696 </span>
 <span class="lineno"> 5697 </span>-- | Map containing the formatted documentation string for each
 <span class="lineno"> 5698 </span>-- saw-script primitive.

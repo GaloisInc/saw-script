@@ -463,27 +463,27 @@ span.spaces    { background: white }
 <span class="lineno">  444 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
 <span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">VBool True -&gt; showString &quot;true&quot;</span>
 <span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">VBool False -&gt; showString &quot;false&quot;</span>
-<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">VString s -&gt; <span class="nottickedoff">shows s</span></span>
+<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">VString s -&gt; shows s</span>
 <span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">VInteger n -&gt; shows n</span>
 <span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">VArray vs -&gt; PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
-<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">VTuple vs -&gt; <span class="nottickedoff">showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs</span></span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">VTuple vs -&gt; showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv <span class="nottickedoff">0</span>) vs</span>
 <span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">VMaybe (Just v') -&gt; <span class="nottickedoff">showString &quot;(Just &quot; . showsPrecValue opts nenv 0 v' . showString &quot;)&quot;</span></span>
 <span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">VMaybe Nothing -&gt; <span class="nottickedoff">showString &quot;Nothing&quot;</span></span>
 <span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">VRecord m -&gt;</span>
-<span class="lineno">  454 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)</span></span>
+<span class="lineno">  454 </span><span class="spaces">      </span><span class="istickedoff">PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)</span>
 <span class="lineno">  455 </span><span class="spaces">        </span><span class="istickedoff">where</span>
-<span class="lineno">  456 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">showFld (n, fv) =</span></span>
-<span class="lineno">  457 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">showString (Text.unpack n) . showString &quot;=&quot; . showsPrecValue opts nenv 0 fv</span></span>
+<span class="lineno">  456 </span><span class="spaces">          </span><span class="istickedoff">showFld (n, fv) =</span>
+<span class="lineno">  457 </span><span class="spaces">            </span><span class="istickedoff">showString (Text.unpack n) . showString &quot;=&quot; . showsPrecValue <span class="nottickedoff">opts</span> <span class="nottickedoff">nenv</span> <span class="nottickedoff">0</span> fv</span>
 <span class="lineno">  458 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">VLambda {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;function&gt;&gt;&quot;</span></span>
+<span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">VLambda {} -&gt; showString &quot;&lt;&lt;function&gt;&gt;&quot;</span>
 <span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">VTerm t -&gt; showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))</span>
-<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">VType sig -&gt; <span class="nottickedoff">showString (pretty sig)</span></span>
-<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">VReturn {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;monadic&gt;&gt;&quot;</span></span>
+<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">VType sig -&gt; showString (pretty sig)</span>
+<span class="lineno">  462 </span><span class="spaces">    </span><span class="istickedoff">VReturn {} -&gt; showString &quot;&lt;&lt;monadic&gt;&gt;&quot;</span>
 <span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">VBind {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;monadic&gt;&gt;&quot;</span></span>
-<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">VTopLevel {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;TopLevel&gt;&gt;&quot;</span></span>
+<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">VTopLevel {} -&gt; showString &quot;&lt;&lt;TopLevel&gt;&gt;&quot;</span>
 <span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff">VSimpset ss -&gt; <span class="nottickedoff">showString (showSimpset opts ss)</span></span>
 <span class="lineno">  466 </span><span class="spaces">    </span><span class="istickedoff">VRefnset ss -&gt; <span class="nottickedoff">showString (showRefnset opts ss)</span></span>
-<span class="lineno">  467 </span><span class="spaces">    </span><span class="istickedoff">VProofScript {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;proof script&gt;&gt;&quot;</span></span>
+<span class="lineno">  467 </span><span class="spaces">    </span><span class="istickedoff">VProofScript {} -&gt; showString &quot;&lt;&lt;proof script&gt;&gt;&quot;</span>
 <span class="lineno">  468 </span><span class="spaces">    </span><span class="istickedoff">VTheorem thm -&gt;</span>
 <span class="lineno">  469 </span><span class="spaces">      </span><span class="istickedoff">showString &quot;Theorem &quot; .</span>
 <span class="lineno">  470 </span><span class="spaces">      </span><span class="istickedoff">showParen True (showString (prettyProp opts nenv (thmProp thm)))</span>
@@ -625,11 +625,11 @@ span.spaces    { background: white }
 <span class="lineno">  606 </span>
 <span class="lineno">  607 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">rwMonadify</span></span></span>   :: Monadify.MonadifyEnv
 <span class="lineno">  608 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">rwMRSolverEnv</span></span></span> :: MRSolver.MREnv
-<span class="lineno">  609 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">rwProofs</span></span></span>  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
+<span class="lineno">  609 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwProofs</span></span></span>  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
 <span class="lineno">  610 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwPPOpts</span></span></span>  :: PPS.Opts
 <span class="lineno">  611 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSharedContext</span></span></span> :: SharedContext
 <span class="lineno">  612 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwSolverCache</span></span></span> :: Maybe SolverCache
-<span class="lineno">  613 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">rwTheoremDB</span></span></span> :: TheoremDB
+<span class="lineno">  613 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwTheoremDB</span></span></span> :: TheoremDB
 <span class="lineno">  614 </span>
 <span class="lineno">  615 </span>  -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
 <span class="lineno">  616 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">rwJVMTrans</span></span></span> :: CJ.JVMContext
@@ -761,10 +761,10 @@ span.spaces    { background: white }
 <span class="lineno">  742 </span><span class="decl"><span class="istickedoff">getJavaCodebase = TopLevel_ (asks roJavaCodebase)</span></span>
 <span class="lineno">  743 </span>
 <span class="lineno">  744 </span>getTheoremDB :: TopLevel TheoremDB
-<span class="lineno">  745 </span><span class="decl"><span class="istickedoff">getTheoremDB = gets <span class="nottickedoff">rwTheoremDB</span></span></span>
+<span class="lineno">  745 </span><span class="decl"><span class="istickedoff">getTheoremDB = gets rwTheoremDB</span></span>
 <span class="lineno">  746 </span>
 <span class="lineno">  747 </span>putTheoremDB :: TheoremDB -&gt; TopLevel ()
-<span class="lineno">  748 </span><span class="decl"><span class="istickedoff">putTheoremDB db = modifyTopLevelRW (\tl -&gt; tl { rwTheoremDB = <span class="nottickedoff">db</span> })</span></span>
+<span class="lineno">  748 </span><span class="decl"><span class="istickedoff">putTheoremDB db = modifyTopLevelRW (\tl -&gt; tl { rwTheoremDB = db })</span></span>
 <span class="lineno">  749 </span>
 <span class="lineno">  750 </span>getOptions :: TopLevel Options
 <span class="lineno">  751 </span><span class="decl"><span class="istickedoff">getOptions = TopLevel_ (asks roOptions)</span></span>
@@ -802,10 +802,10 @@ span.spaces    { background: white }
 <span class="lineno">  783 </span>recordProof :: Value -&gt; TopLevel ()
 <span class="lineno">  784 </span><span class="decl"><span class="istickedoff">recordProof v =</span>
 <span class="lineno">  785 </span><span class="spaces">  </span><span class="istickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwProofs = <span class="nottickedoff">v : rwProofs rw</span> }</span></span>
+<span class="lineno">  786 </span><span class="spaces">     </span><span class="istickedoff">putTopLevelRW rw { rwProofs = v : rwProofs rw }</span></span>
 <span class="lineno">  787 </span>
 <span class="lineno">  788 </span>returnTheoremProof :: Theorem -&gt; TopLevel Theorem
-<span class="lineno">  789 </span><span class="decl"><span class="istickedoff">returnTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span> &gt;&gt; return thm</span></span>
+<span class="lineno">  789 </span><span class="decl"><span class="istickedoff">returnTheoremProof thm = recordProof (VTheorem thm) &gt;&gt; return thm</span></span>
 <span class="lineno">  790 </span>
 <span class="lineno">  791 </span>recordTheoremProof :: Theorem -&gt; TopLevel ()
 <span class="lineno">  792 </span><span class="decl"><span class="istickedoff">recordTheoremProof thm = recordProof <span class="nottickedoff">(VTheorem thm)</span></span></span>
@@ -989,8 +989,8 @@ span.spaces    { background: white }
 <span class="lineno">  970 </span><span class="spaces">         </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
 <span class="lineno">  971 </span><span class="spaces">            </span><span class="istickedoff">db &lt;- getTheoremDB</span>
 <span class="lineno">  972 </span><span class="spaces">            </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
-<span class="lineno">  973 </span><span class="spaces">            </span><span class="istickedoff">(thmResult, db') &lt;- io (finishProof sc <span class="nottickedoff">db</span> concl pstate <span class="nottickedoff">recordThm</span> useSequentGoals what4PushMuxOps)</span>
-<span class="lineno">  974 </span><span class="spaces">            </span><span class="istickedoff">putTheoremDB <span class="nottickedoff">db'</span></span>
+<span class="lineno">  973 </span><span class="spaces">            </span><span class="istickedoff">(thmResult, db') &lt;- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)</span>
+<span class="lineno">  974 </span><span class="spaces">            </span><span class="istickedoff">putTheoremDB db'</span>
 <span class="lineno">  975 </span><span class="spaces">            </span><span class="istickedoff">pure thmResult</span></span>
 <span class="lineno">  976 </span>
 <span class="lineno">  977 </span>

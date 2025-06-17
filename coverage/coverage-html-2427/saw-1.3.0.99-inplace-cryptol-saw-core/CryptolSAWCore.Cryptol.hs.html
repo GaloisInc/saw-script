@@ -2032,11 +2032,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2013 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 2014 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 2015 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2016 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (primName -&gt; &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2016 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
 <span class="lineno"> 2017 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
 <span class="lineno"> 2018 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
 <span class="lineno"> 2019 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2020 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (primName -&gt; &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
+<span class="lineno"> 2020 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ecName -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
 <span class="lineno"> 2021 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
 <span class="lineno"> 2022 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2023 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType _ _ _ -&gt; Nothing</span>
@@ -2097,11 +2097,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2078 </span><span class="spaces">    </span><span class="istickedoff">case v of</span>
 <span class="lineno"> 2079 </span><span class="spaces">      </span><span class="istickedoff">SC.VWord w -&gt; V.word <span class="nottickedoff">V.Concrete</span> (toInteger (width w)) (unsigned w)</span>
 <span class="lineno"> 2080 </span><span class="spaces">      </span><span class="istickedoff">SC.VVector xs</span>
-<span class="lineno"> 2081 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">TV.isTBit e</span> -&gt; V.VWord &lt;$&gt;</span>
+<span class="lineno"> 2081 </span><span class="spaces">        </span><span class="istickedoff">| TV.isTBit e -&gt; V.VWord &lt;$&gt;</span>
 <span class="lineno"> 2082 </span><span class="spaces">            </span><span class="istickedoff">V.bitmapWordVal <span class="nottickedoff">V.Concrete</span> (toInteger (Vector.length xs))</span>
 <span class="lineno"> 2083 </span><span class="spaces">                 </span><span class="istickedoff">(V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)</span>
-<span class="lineno"> 2084 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>   -&gt; <span class="nottickedoff">V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $</span></span>
-<span class="lineno"> 2085 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">map (\x -&gt; exportValue e (SC.runIdentity (force x))) (Vector.toList xs)</span></span>
+<span class="lineno"> 2084 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>   -&gt; V.mkSeq <span class="nottickedoff">V.Concrete</span> (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap <span class="nottickedoff">V.Concrete</span> $</span>
+<span class="lineno"> 2085 </span><span class="spaces">                            </span><span class="istickedoff">map (\x -&gt; exportValue e (SC.runIdentity (force x))) (Vector.toList xs)</span>
 <span class="lineno"> 2086 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;exportValue (on seq type &quot; ++ show ty ++ &quot;)&quot;</span></span>
 <span class="lineno"> 2087 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2088 </span><span class="spaces">  </span><span class="istickedoff">-- infinite streams</span>

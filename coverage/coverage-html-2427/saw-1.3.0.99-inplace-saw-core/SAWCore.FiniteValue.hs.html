@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>  | FOTArray FirstOrderType FirstOrderType
 <span class="lineno">   72 </span>  | FOTTuple [FirstOrderType]
 <span class="lineno">   73 </span>  | FOTRec (Map FieldName FirstOrderType)
-<span class="lineno">   74 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Generic</span></span></span></span>)
+<span class="lineno">   74 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
 <span class="lineno">   75 </span>
 <span class="lineno">   76 </span>-- | Values inhabiting those first-order types.
 <span class="lineno">   77 </span>-- NB: The JSON encoding of this type, used for saw-script solver result caching,
@@ -192,19 +192,19 @@ span.spaces    { background: white }
 <span class="lineno">  173 </span><span class="spaces">    </span><span class="nottickedoff">FTRec tm   -&gt; FOTRec (fmap toFirstOrderType tm)</span></span>
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>toFirstOrderValue :: FiniteValue -&gt; FirstOrderValue
-<span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">toFirstOrderValue fv =</span>
-<span class="lineno">  177 </span><span class="spaces">  </span><span class="nottickedoff">case fv of</span>
-<span class="lineno">  178 </span><span class="spaces">    </span><span class="nottickedoff">FVBit b    -&gt; FOVBit b</span>
-<span class="lineno">  179 </span><span class="spaces">    </span><span class="nottickedoff">FVWord w i -&gt; FOVWord w i</span>
-<span class="lineno">  180 </span><span class="spaces">    </span><span class="nottickedoff">FVVec t vs -&gt; FOVVec (toFirstOrderType t) (map toFirstOrderValue vs)</span>
-<span class="lineno">  181 </span><span class="spaces">    </span><span class="nottickedoff">FVTuple vs -&gt; FOVTuple (map toFirstOrderValue vs)</span>
-<span class="lineno">  182 </span><span class="spaces">    </span><span class="nottickedoff">FVRec vm   -&gt; FOVRec (fmap toFirstOrderValue vm)</span></span>
+<span class="lineno">  176 </span><span class="decl"><span class="istickedoff">toFirstOrderValue fv =</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">case fv of</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">FVBit b    -&gt; <span class="nottickedoff">FOVBit b</span></span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="istickedoff">FVWord w i -&gt; FOVWord w i</span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">FVVec t vs -&gt; <span class="nottickedoff">FOVVec (toFirstOrderType t) (map toFirstOrderValue vs)</span></span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">FVTuple vs -&gt; <span class="nottickedoff">FOVTuple (map toFirstOrderValue vs)</span></span>
+<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">FVRec vm   -&gt; <span class="nottickedoff">FOVRec (fmap toFirstOrderValue vm)</span></span></span>
 <span class="lineno">  183 </span>
 <span class="lineno">  184 </span>
 <span class="lineno">  185 </span>toFiniteType :: FirstOrderType -&gt; Maybe FiniteType
 <span class="lineno">  186 </span><span class="decl"><span class="istickedoff">toFiniteType FOTBit        = pure FTBit</span>
 <span class="lineno">  187 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTVec n t)  = FTVec n &lt;$&gt; toFiniteType t</span>
-<span class="lineno">  188 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTTuple ts) = <span class="nottickedoff">FTTuple &lt;$&gt; traverse toFiniteType ts</span></span>
+<span class="lineno">  188 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTTuple ts) = FTTuple &lt;$&gt; traverse toFiniteType ts</span>
 <span class="lineno">  189 </span><span class="spaces"></span><span class="istickedoff">toFiniteType (FOTRec fs)   = <span class="nottickedoff">FTRec   &lt;$&gt; traverse toFiniteType fs</span></span>
 <span class="lineno">  190 </span><span class="spaces"></span><span class="istickedoff">toFiniteType FOTInt{}      = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  191 </span><span class="spaces"></span><span class="istickedoff">toFiniteType FOTIntMod{}   = <span class="nottickedoff">Nothing</span></span>
@@ -291,17 +291,17 @@ span.spaces    { background: white }
 <span class="lineno">  272 </span>
 <span class="lineno">  273 </span>-- | Smart constructor
 <span class="lineno">  274 </span>fvVec :: FiniteType -&gt; [FiniteValue] -&gt; FiniteValue
-<span class="lineno">  275 </span><span class="decl"><span class="nottickedoff">fvVec t vs =</span>
-<span class="lineno">  276 </span><span class="spaces">  </span><span class="nottickedoff">case (t, traverse toBit vs) of</span>
-<span class="lineno">  277 </span><span class="spaces">    </span><span class="nottickedoff">(FTBit, Just bs) -&gt; FVWord (fromIntegral (length bs)) (fromBits bs)</span>
-<span class="lineno">  278 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; FVVec t vs</span>
-<span class="lineno">  279 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  280 </span><span class="spaces">    </span><span class="nottickedoff">toBit :: FiniteValue -&gt; Maybe Bool</span>
-<span class="lineno">  281 </span><span class="spaces">    </span><span class="nottickedoff">toBit (FVBit b) = Just b</span>
-<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">toBit _ = Nothing</span>
-<span class="lineno">  283 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  284 </span><span class="spaces">    </span><span class="nottickedoff">fromBits :: [Bool] -&gt; Integer</span>
-<span class="lineno">  285 </span><span class="spaces">    </span><span class="nottickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span>
+<span class="lineno">  275 </span><span class="decl"><span class="istickedoff">fvVec t vs =</span>
+<span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">case (t, traverse toBit vs) of</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">(FTBit, Just bs) -&gt; FVWord (fromIntegral (length bs)) (fromBits bs)</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">FVVec t vs</span></span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">toBit :: FiniteValue -&gt; Maybe Bool</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">toBit (FVBit b) = Just b</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">toBit _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  283 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">fromBits :: [Bool] -&gt; Integer</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span>
 <span class="lineno">  286 </span>
 <span class="lineno">  287 </span>-- | Smart constructor
 <span class="lineno">  288 </span>fovVec :: FirstOrderType -&gt; [FirstOrderValue] -&gt; FirstOrderValue
@@ -435,7 +435,7 @@ span.spaces    { background: white }
 <span class="lineno">  416 </span>scFirstOrderValue :: SharedContext -&gt; FirstOrderValue -&gt; IO Term
 <span class="lineno">  417 </span><span class="decl"><span class="istickedoff">scFirstOrderValue sc fv =</span>
 <span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">case fv of</span>
-<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">FOVBit b    -&gt; <span class="nottickedoff">scBool sc b</span></span>
+<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">FOVBit b    -&gt; scBool sc b</span>
 <span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">FOVInt i</span>
 <span class="lineno">  421 </span><span class="spaces">      </span><span class="istickedoff">| i &gt;= 0  -&gt; scNatToInt sc =&lt;&lt; scNat sc (fromInteger i)</span>
 <span class="lineno">  422 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">True</span>    -&gt; scIntNeg sc =&lt;&lt; scNatToInt sc =&lt;&lt; scNat sc (fromInteger (- i))</span>
@@ -475,25 +475,25 @@ span.spaces    { background: white }
 <span class="lineno">  456 </span>  | LittleEndian
 <span class="lineno">  457 </span>
 <span class="lineno">  458 </span>readFiniteValue' :: Endianness -&gt; FiniteType -&gt; S.StateT [Bool] Maybe FiniteValue
-<span class="lineno">  459 </span><span class="decl"><span class="nottickedoff">readFiniteValue' en ft =</span>
-<span class="lineno">  460 </span><span class="spaces">  </span><span class="nottickedoff">case ft of</span>
-<span class="lineno">  461 </span><span class="spaces">    </span><span class="nottickedoff">FTBit      -&gt; do bs &lt;- S.get</span>
-<span class="lineno">  462 </span><span class="spaces">                     </span><span class="nottickedoff">case bs of</span>
-<span class="lineno">  463 </span><span class="spaces">                       </span><span class="nottickedoff">[]      -&gt; S.lift Nothing</span>
-<span class="lineno">  464 </span><span class="spaces">                       </span><span class="nottickedoff">b : bs' -&gt; S.put bs' &gt;&gt; return (FVBit b)</span>
-<span class="lineno">  465 </span><span class="spaces">    </span><span class="nottickedoff">FTVec n t  -&gt; (fvVec t . fixup) &lt;$&gt; replicateM (fromIntegral n) (readFiniteValue' en t)</span>
-<span class="lineno">  466 </span><span class="spaces">                    </span><span class="nottickedoff">where fixup = case (t, en) of</span>
-<span class="lineno">  467 </span><span class="spaces">                                    </span><span class="nottickedoff">(FTBit, LittleEndian) -&gt; reverse</span>
-<span class="lineno">  468 </span><span class="spaces">                                    </span><span class="nottickedoff">_ -&gt; id</span>
-<span class="lineno">  469 </span><span class="spaces">    </span><span class="nottickedoff">FTTuple ts -&gt; FVTuple &lt;$&gt; traverse (readFiniteValue' en) ts</span>
-<span class="lineno">  470 </span><span class="spaces">    </span><span class="nottickedoff">FTRec tm   -&gt; FVRec &lt;$&gt; traverse (readFiniteValue' en) tm</span></span>
+<span class="lineno">  459 </span><span class="decl"><span class="istickedoff">readFiniteValue' en ft =</span>
+<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">case ft of</span>
+<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">FTBit      -&gt; do bs &lt;- S.get</span>
+<span class="lineno">  462 </span><span class="spaces">                     </span><span class="istickedoff">case bs of</span>
+<span class="lineno">  463 </span><span class="spaces">                       </span><span class="istickedoff">[]      -&gt; <span class="nottickedoff">S.lift Nothing</span></span>
+<span class="lineno">  464 </span><span class="spaces">                       </span><span class="istickedoff">b : bs' -&gt; S.put bs' &gt;&gt; return (FVBit b)</span>
+<span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff">FTVec n t  -&gt; (fvVec t . fixup) &lt;$&gt; replicateM (fromIntegral n) (readFiniteValue' <span class="nottickedoff">en</span> t)</span>
+<span class="lineno">  466 </span><span class="spaces">                    </span><span class="istickedoff">where fixup = case (t, en) of</span>
+<span class="lineno">  467 </span><span class="spaces">                                    </span><span class="istickedoff">(FTBit, LittleEndian) -&gt; <span class="nottickedoff">reverse</span></span>
+<span class="lineno">  468 </span><span class="spaces">                                    </span><span class="istickedoff">_ -&gt; id</span>
+<span class="lineno">  469 </span><span class="spaces">    </span><span class="istickedoff">FTTuple ts -&gt; <span class="nottickedoff">FVTuple &lt;$&gt; traverse (readFiniteValue' en) ts</span></span>
+<span class="lineno">  470 </span><span class="spaces">    </span><span class="istickedoff">FTRec tm   -&gt; <span class="nottickedoff">FVRec &lt;$&gt; traverse (readFiniteValue' en) tm</span></span></span>
 <span class="lineno">  471 </span>
 <span class="lineno">  472 </span>readFiniteValues :: [FiniteType] -&gt; [Bool] -&gt; Maybe [FiniteValue]
-<span class="lineno">  473 </span><span class="decl"><span class="nottickedoff">readFiniteValues ts bs = do</span>
-<span class="lineno">  474 </span><span class="spaces">  </span><span class="nottickedoff">(vs, rest) &lt;- S.runStateT (traverse (readFiniteValue' BigEndian) ts) bs</span>
-<span class="lineno">  475 </span><span class="spaces">  </span><span class="nottickedoff">case rest of</span>
-<span class="lineno">  476 </span><span class="spaces">    </span><span class="nottickedoff">[] -&gt; return vs</span>
-<span class="lineno">  477 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  473 </span><span class="decl"><span class="istickedoff">readFiniteValues ts bs = do</span>
+<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">(vs, rest) &lt;- S.runStateT (traverse (readFiniteValue' BigEndian) ts) bs</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">case rest of</span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; return vs</span>
+<span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  478 </span>
 <span class="lineno">  479 </span>readFiniteValuesLE :: [FiniteType] -&gt; [Bool] -&gt; Maybe [FiniteValue]
 <span class="lineno">  480 </span><span class="decl"><span class="nottickedoff">readFiniteValuesLE ts bs = do</span>

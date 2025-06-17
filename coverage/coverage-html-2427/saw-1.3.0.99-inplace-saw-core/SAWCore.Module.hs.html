@@ -46,13 +46,13 @@ span.spaces    { background: white }
 <span class="lineno">   27 </span>  , CtorArg(..)
 <span class="lineno">   28 </span>  , CtorArgStruct(..)
 <span class="lineno">   29 </span>  , Ctor(..)
-<span class="lineno">   30 </span>  , ctorNumParams
-<span class="lineno">   31 </span>  , ctorNumArgs
-<span class="lineno">   32 </span>  , ctorPrimName
+<span class="lineno">   30 </span>  , ctorExtCns
+<span class="lineno">   31 </span>  , ctorNumParams
+<span class="lineno">   32 </span>  , ctorNumArgs
 <span class="lineno">   33 </span>  , DataType(..)
-<span class="lineno">   34 </span>  , dtNumParams
-<span class="lineno">   35 </span>  , dtNumIndices
-<span class="lineno">   36 </span>  , dtPrimName
+<span class="lineno">   34 </span>  , dtExtCns
+<span class="lineno">   35 </span>  , dtNumParams
+<span class="lineno">   36 </span>  , dtNumIndices
 <span class="lineno">   37 </span>    -- * Modules
 <span class="lineno">   38 </span>  , Module
 <span class="lineno">   39 </span>  , ModuleDecl(..)
@@ -149,13 +149,13 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span>data Ctor =
 <span class="lineno">  131 </span>  forall d params ixs.
 <span class="lineno">  132 </span>  Ctor
-<span class="lineno">  133 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorName</span></span></span> :: !Ident
+<span class="lineno">  133 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorNameInfo</span></span></span> :: !NameInfo
 <span class="lineno">  134 </span>    -- ^ The name of this constructor
 <span class="lineno">  135 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorVarIndex</span></span></span> :: !VarIndex
 <span class="lineno">  136 </span>    -- ^ Unique var index for this constructor
 <span class="lineno">  137 </span>  , <span class="decl"><span class="nottickedoff">ctorArgStruct</span></span> :: CtorArgStruct d params ixs
 <span class="lineno">  138 </span>    -- ^ Arguments to the constructor
-<span class="lineno">  139 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctorDataType</span></span></span> :: !(PrimName Term)
+<span class="lineno">  139 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctorDataType</span></span></span> :: !(ExtCns Term)
 <span class="lineno">  140 </span>    -- ^ The datatype this constructor belongs to
 <span class="lineno">  141 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorType</span></span></span> :: Term
 <span class="lineno">  142 </span>    -- ^ Cached type of the constructor, which should always be equal to
@@ -208,20 +208,20 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">bindingsLength ctorArgs</span></span>
 <span class="lineno">  190 </span>
 <span class="lineno">  191 </span>-- | Compute the ExtCns that uniquely references a constructor
-<span class="lineno">  192 </span>ctorPrimName :: Ctor -&gt; PrimName Term
-<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">ctorPrimName ctor = PrimName (ctorVarIndex ctor) (ctorName ctor) (ctorType ctor)</span></span>
+<span class="lineno">  192 </span>ctorExtCns :: Ctor -&gt; ExtCns Term
+<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">ctorExtCns ctor = EC (ctorVarIndex ctor) (ctorNameInfo ctor) (ctorType ctor)</span></span>
 <span class="lineno">  194 </span>
 <span class="lineno">  195 </span>lift2 :: (a -&gt; b) -&gt; (b -&gt; b -&gt; c) -&gt; a -&gt; a -&gt; c
 <span class="lineno">  196 </span><span class="decl"><span class="nottickedoff">lift2 f h x y = h (f x) (f y)</span></span>
 <span class="lineno">  197 </span>
 <span class="lineno">  198 </span>instance <span class="decl"><span class="nottickedoff">Eq Ctor</span></span> where
-<span class="lineno">  199 </span>  <span class="decl"><span class="nottickedoff">(==) = lift2 ctorName (==)</span></span>
+<span class="lineno">  199 </span>  <span class="decl"><span class="nottickedoff">(==) = lift2 ctorExtCns (==)</span></span>
 <span class="lineno">  200 </span>
 <span class="lineno">  201 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Ctor</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  202 </span>  <span class="decl"><span class="nottickedoff">compare = lift2 ctorName compare</span></span>
+<span class="lineno">  202 </span>  <span class="decl"><span class="nottickedoff">compare = lift2 ctorExtCns compare</span></span>
 <span class="lineno">  203 </span>
 <span class="lineno">  204 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Ctor</span></span></span></span> where
-<span class="lineno">  205 </span>  <span class="decl"><span class="nottickedoff">show = show . ctorName</span></span>
+<span class="lineno">  205 </span>  <span class="decl"><span class="nottickedoff">show = show . toAbsoluteName . ctorNameInfo</span></span>
 <span class="lineno">  206 </span>
 <span class="lineno">  207 </span>
 <span class="lineno">  208 </span>-- Datatypes -------------------------------------------------------------------
@@ -229,7 +229,7 @@ span.spaces    { background: white }
 <span class="lineno">  210 </span>-- | An inductively-defined datatype
 <span class="lineno">  211 </span>data DataType =
 <span class="lineno">  212 </span>  DataType
-<span class="lineno">  213 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">dtName</span></span></span> :: Ident
+<span class="lineno">  213 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">dtNameInfo</span></span></span> :: NameInfo
 <span class="lineno">  214 </span>    -- ^ The name of this datatype
 <span class="lineno">  215 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">dtVarIndex</span></span></span> :: !VarIndex
 <span class="lineno">  216 </span>    -- ^ Unique var index for this data type
@@ -252,24 +252,24 @@ span.spaces    { background: white }
 <span class="lineno">  233 </span>
 <span class="lineno">  234 </span>-- | Return the number of parameters of a datatype
 <span class="lineno">  235 </span>dtNumParams :: DataType -&gt; Int
-<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">dtNumParams dt = length $ dtParams dt</span></span>
+<span class="lineno">  236 </span><span class="decl"><span class="istickedoff">dtNumParams dt = length $ dtParams dt</span></span>
 <span class="lineno">  237 </span>
 <span class="lineno">  238 </span>-- | Return the number of indices of a datatype
 <span class="lineno">  239 </span>dtNumIndices :: DataType -&gt; Int
-<span class="lineno">  240 </span><span class="decl"><span class="nottickedoff">dtNumIndices dt = length $ dtIndices dt</span></span>
+<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">dtNumIndices dt = length $ dtIndices dt</span></span>
 <span class="lineno">  241 </span>
 <span class="lineno">  242 </span>-- | Compute the ExtCns that uniquely references a datatype
-<span class="lineno">  243 </span>dtPrimName :: DataType -&gt; PrimName Term
-<span class="lineno">  244 </span><span class="decl"><span class="istickedoff">dtPrimName dt = PrimName (dtVarIndex dt) (dtName dt) (dtType dt)</span></span>
+<span class="lineno">  243 </span>dtExtCns :: DataType -&gt; ExtCns Term
+<span class="lineno">  244 </span><span class="decl"><span class="istickedoff">dtExtCns dt = EC (dtVarIndex dt) (dtNameInfo dt) (dtType dt)</span></span>
 <span class="lineno">  245 </span>
 <span class="lineno">  246 </span>instance <span class="decl"><span class="nottickedoff">Eq DataType</span></span> where
-<span class="lineno">  247 </span>  <span class="decl"><span class="nottickedoff">(==) = lift2 dtName (==)</span></span>
+<span class="lineno">  247 </span>  <span class="decl"><span class="nottickedoff">(==) = lift2 dtNameInfo (==)</span></span>
 <span class="lineno">  248 </span>
 <span class="lineno">  249 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord DataType</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  250 </span>  <span class="decl"><span class="nottickedoff">compare = lift2 dtName compare</span></span>
+<span class="lineno">  250 </span>  <span class="decl"><span class="nottickedoff">compare = lift2 dtNameInfo compare</span></span>
 <span class="lineno">  251 </span>
 <span class="lineno">  252 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show DataType</span></span></span></span> where
-<span class="lineno">  253 </span>  <span class="decl"><span class="nottickedoff">show = show . dtName</span></span>
+<span class="lineno">  253 </span>  <span class="decl"><span class="nottickedoff">show = show . dtNameInfo</span></span>
 <span class="lineno">  254 </span>
 <span class="lineno">  255 </span>
 <span class="lineno">  256 </span>-- Modules ---------------------------------------------------------------------
@@ -291,8 +291,8 @@ span.spaces    { background: white }
 <span class="lineno">  272 </span>
 <span class="lineno">  273 </span>-- | Get the 'NameInfo' for a 'ResolvedName'
 <span class="lineno">  274 </span>resolvedNameInfo :: ResolvedName -&gt; NameInfo
-<span class="lineno">  275 </span><span class="decl"><span class="istickedoff">resolvedNameInfo (ResolvedCtor ctor) = ModuleIdentifier (ctorName ctor)</span>
-<span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff">resolvedNameInfo (ResolvedDataType dt) = ModuleIdentifier (dtName dt)</span>
+<span class="lineno">  275 </span><span class="decl"><span class="istickedoff">resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor</span>
+<span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff">resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt</span>
 <span class="lineno">  277 </span><span class="spaces"></span><span class="istickedoff">resolvedNameInfo (ResolvedDef d) = defNameInfo d</span></span>
 <span class="lineno">  278 </span>
 <span class="lineno">  279 </span>-- | Get the type of a 'ResolvedName' as a 'Term'.

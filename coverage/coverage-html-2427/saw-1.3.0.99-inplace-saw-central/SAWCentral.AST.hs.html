@@ -125,7 +125,7 @@ span.spaces    { background: white }
 <span class="lineno">  106 </span>  <span class="istickedoff"><span class="decl"><span class="istickedoff">locatedPos</span></span></span> :: Pos     -- the position
 <span class="lineno">  107 </span>} deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
 <span class="lineno">  108 </span>
-<span class="lineno">  109 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (Located a)</span></span></span></span> where
+<span class="lineno">  109 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show (Located a)</span></span></span></span> where
 <span class="lineno">  110 </span>  <span class="decl"><span class="istickedoff">show (Located _ v p) = show v ++ &quot; (&quot; ++ show p ++ &quot;)&quot;</span></span>
 <span class="lineno">  111 </span>
 <span class="lineno">  112 </span>instance Positioned (Located a) where
@@ -147,11 +147,11 @@ span.spaces    { background: white }
 <span class="lineno">  128 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">iModule</span></span></span>    :: Either FilePath P.ModName
 <span class="lineno">  129 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iAs</span></span></span>        :: Maybe P.ModName
 <span class="lineno">  130 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iSpec</span></span></span>      :: Maybe P.ImportSpec
-<span class="lineno">  131 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">iPos</span></span></span>       :: Pos
-<span class="lineno">  132 </span>  } deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  131 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iPos</span></span></span>       :: Pos
+<span class="lineno">  132 </span>  } deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  133 </span>
 <span class="lineno">  134 </span>instance Positioned Import where
-<span class="lineno">  135 </span>  <span class="decl"><span class="nottickedoff">getPos = iPos</span></span>
+<span class="lineno">  135 </span>  <span class="decl"><span class="istickedoff">getPos = iPos</span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>data Expr
 <span class="lineno">  138 </span>  -- Constants
@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span>  | Let Pos DeclGroup Expr
 <span class="lineno">  159 </span>  | TSig Pos Expr Type
 <span class="lineno">  160 </span>  | IfThenElse Pos Expr Expr Expr
-<span class="lineno">  161 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  161 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  162 </span>
 <span class="lineno">  163 </span>instance Positioned Expr where
 <span class="lineno">  164 </span>  <span class="decl"><span class="istickedoff">getPos (Bool pos _) = <span class="nottickedoff">pos</span></span>
@@ -203,7 +203,7 @@ span.spaces    { background: white }
 <span class="lineno">  184 </span>  = PWild Pos (Maybe Type)
 <span class="lineno">  185 </span>  | PVar Pos LName (Maybe Type)
 <span class="lineno">  186 </span>  | PTuple Pos [Pattern]
-<span class="lineno">  187 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  187 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  188 </span>
 <span class="lineno">  189 </span>instance Positioned Pattern where
 <span class="lineno">  190 </span>  <span class="decl"><span class="istickedoff">getPos (PWild pos _) = <span class="nottickedoff">pos</span></span>
@@ -216,7 +216,7 @@ span.spaces    { background: white }
 <span class="lineno">  197 </span>  | StmtCode     Pos (Located Text)
 <span class="lineno">  198 </span>  | StmtImport   Pos Import
 <span class="lineno">  199 </span>  | StmtTypedef  Pos (Located Text) Type
-<span class="lineno">  200 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  200 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  201 </span>
 <span class="lineno">  202 </span>instance Positioned Stmt where
 <span class="lineno">  203 </span>  <span class="decl"><span class="istickedoff">getPos (StmtBind pos _ _)  = pos</span>
@@ -228,7 +228,7 @@ span.spaces    { background: white }
 <span class="lineno">  209 </span>data DeclGroup
 <span class="lineno">  210 </span>  = Recursive [Decl]
 <span class="lineno">  211 </span>  | NonRecursive Decl
-<span class="lineno">  212 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  212 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  213 </span>
 <span class="lineno">  214 </span>instance Positioned DeclGroup where
 <span class="lineno">  215 </span>  <span class="decl"><span class="nottickedoff">getPos (Recursive ds) = maxSpan ds</span>
@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span>
 <span class="lineno">  218 </span>data Decl
 <span class="lineno">  219 </span>  = Decl { <span class="istickedoff"><span class="decl"><span class="istickedoff">dPos</span></span></span> :: Pos, <span class="istickedoff"><span class="decl"><span class="istickedoff">dPat</span></span></span> :: Pattern, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">dType</span></span></span> :: Maybe Schema, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">dDef</span></span></span> :: Expr }
-<span class="lineno">  220 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  220 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  221 </span>
 <span class="lineno">  222 </span>instance Positioned Decl where
 <span class="lineno">  223 </span>  <span class="decl"><span class="istickedoff">getPos = dPos</span></span>
@@ -277,7 +277,7 @@ span.spaces    { background: white }
 <span class="lineno">  258 </span>  | TyRecord Pos (Map Name Type)
 <span class="lineno">  259 </span>  | TyVar Pos Name
 <span class="lineno">  260 </span>  | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
-<span class="lineno">  261 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  261 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  262 </span>
 <span class="lineno">  263 </span>instance Positioned Type where
 <span class="lineno">  264 </span>  <span class="decl"><span class="istickedoff">getPos (TyCon pos _ _) = pos</span>
@@ -303,7 +303,7 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span>  | LLVMSpecCon
 <span class="lineno">  285 </span>  | MIRSpecCon
 <span class="lineno">  286 </span>  | ContextCon Context
-<span class="lineno">  287 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  287 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  288 </span>
 <span class="lineno">  289 </span>data Schema = Forall [(Pos, Name)] Type
 <span class="lineno">  290 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
@@ -326,129 +326,129 @@ span.spaces    { background: white }
 <span class="lineno">  307 </span>-- Pretty Printing {{{
 <span class="lineno">  308 </span>
 <span class="lineno">  309 </span>prettyWholeModule :: [Stmt] -&gt; PP.Doc ann
-<span class="lineno">  310 </span><span class="decl"><span class="nottickedoff">prettyWholeModule = (PP.&lt;&gt; PP.line') . vcatWithSemi . map PP.pretty</span></span>
+<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">prettyWholeModule = (PP.&lt;&gt; PP.line') . vcatWithSemi . map PP.pretty</span></span>
 <span class="lineno">  311 </span>
 <span class="lineno">  312 </span>vcatWithSemi :: [PP.Doc ann] -&gt; PP.Doc ann
-<span class="lineno">  313 </span><span class="decl"><span class="nottickedoff">vcatWithSemi = PP.vcat . map (PP.&lt;&gt; PP.semi)</span></span>
+<span class="lineno">  313 </span><span class="decl"><span class="istickedoff">vcatWithSemi = PP.vcat . map (PP.&lt;&gt; PP.semi)</span></span>
 <span class="lineno">  314 </span>
 <span class="lineno">  315 </span>instance <span class="decl"><span class="nottickedoff">Pretty Expr</span></span> where
-<span class="lineno">  316 </span>  <span class="decl"><span class="nottickedoff">pretty expr0 = case expr0 of</span>
-<span class="lineno">  317 </span><span class="spaces">    </span><span class="nottickedoff">Bool _ b   -&gt; PP.viaShow b</span>
-<span class="lineno">  318 </span><span class="spaces">    </span><span class="nottickedoff">String _ s -&gt; PP.dquotes (PP.pretty s)</span>
-<span class="lineno">  319 </span><span class="spaces">    </span><span class="nottickedoff">Int _ i    -&gt; PP.pretty i</span>
-<span class="lineno">  320 </span><span class="spaces">    </span><span class="nottickedoff">Code ls    -&gt; PP.braces . PP.braces $ PP.pretty (getVal ls)</span>
-<span class="lineno">  321 </span><span class="spaces">    </span><span class="nottickedoff">CType (Located string _ _) -&gt; PP.braces . PP.pretty $ &quot;|&quot; &lt;&gt; string &lt;&gt; &quot;|&quot;</span>
-<span class="lineno">  322 </span><span class="spaces">    </span><span class="nottickedoff">Array _ xs -&gt; PP.list (map PP.pretty xs)</span>
-<span class="lineno">  323 </span><span class="spaces">    </span><span class="nottickedoff">Block _ stmts -&gt;</span>
-<span class="lineno">  324 </span><span class="spaces">      </span><span class="nottickedoff">&quot;do&quot; PP.&lt;+&gt; PP.lbrace PP.&lt;&gt; PP.line' PP.&lt;&gt;</span>
-<span class="lineno">  325 </span><span class="spaces">      </span><span class="nottickedoff">(PP.indent 3 $ (PP.align . vcatWithSemi . map PP.pretty $ stmts)) PP.&lt;&gt;</span>
-<span class="lineno">  326 </span><span class="spaces">      </span><span class="nottickedoff">PP.line' PP.&lt;&gt; PP.rbrace</span>
-<span class="lineno">  327 </span><span class="spaces">    </span><span class="nottickedoff">Tuple _ exprs -&gt; PP.tupled (map PP.pretty exprs)</span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">Record _ mapping -&gt;</span>
-<span class="lineno">  329 </span><span class="spaces">      </span><span class="nottickedoff">PP.braces . (PP.space PP.&lt;&gt;) . (PP.&lt;&gt; PP.space) . PP.align . PP.sep . PP.punctuate PP.comma $</span>
-<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">map (\(name, value) -&gt; PP.pretty name PP.&lt;+&gt; &quot;=&quot; PP.&lt;+&gt; PP.pretty value)</span>
-<span class="lineno">  331 </span><span class="spaces">      </span><span class="nottickedoff">(Map.assocs mapping)</span>
-<span class="lineno">  332 </span><span class="spaces">    </span><span class="nottickedoff">Index _ _ _ -&gt; error &quot;No concrete syntax for AST node 'Index'&quot;</span>
-<span class="lineno">  333 </span><span class="spaces">    </span><span class="nottickedoff">Lookup _ expr name -&gt; PP.pretty expr PP.&lt;&gt; PP.dot PP.&lt;&gt; PP.pretty name</span>
-<span class="lineno">  334 </span><span class="spaces">    </span><span class="nottickedoff">TLookup _ expr int -&gt; PP.pretty expr PP.&lt;&gt; PP.dot PP.&lt;&gt; PP.pretty int</span>
-<span class="lineno">  335 </span><span class="spaces">    </span><span class="nottickedoff">Var (Located name _ _) -&gt;</span>
-<span class="lineno">  336 </span><span class="spaces">      </span><span class="nottickedoff">PP.pretty name</span>
-<span class="lineno">  337 </span><span class="spaces">    </span><span class="nottickedoff">Function _ pat expr -&gt;</span>
-<span class="lineno">  338 </span><span class="spaces">      </span><span class="nottickedoff">&quot;\\&quot; PP.&lt;+&gt; PP.pretty pat PP.&lt;+&gt; &quot;-&gt;&quot; PP.&lt;+&gt; PP.pretty expr</span>
-<span class="lineno">  339 </span><span class="spaces">    </span><span class="nottickedoff">-- FIXME, use precedence to minimize parentheses</span>
-<span class="lineno">  340 </span><span class="spaces">    </span><span class="nottickedoff">Application _ f a -&gt; PP.parens (PP.pretty f PP.&lt;+&gt; PP.pretty a)</span>
-<span class="lineno">  341 </span><span class="spaces">    </span><span class="nottickedoff">Let _ (NonRecursive decl) expr -&gt;</span>
-<span class="lineno">  342 </span><span class="spaces">      </span><span class="nottickedoff">PP.fillSep</span>
-<span class="lineno">  343 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;let&quot; PP.&lt;+&gt; prettyDef decl</span>
-<span class="lineno">  344 </span><span class="spaces">      </span><span class="nottickedoff">, &quot;in&quot; PP.&lt;+&gt; PP.pretty expr</span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
-<span class="lineno">  346 </span><span class="spaces">    </span><span class="nottickedoff">Let _ (Recursive decls) expr -&gt;</span>
-<span class="lineno">  347 </span><span class="spaces">      </span><span class="nottickedoff">PP.fillSep</span>
-<span class="lineno">  348 </span><span class="spaces">      </span><span class="nottickedoff">[ &quot;let&quot; PP.&lt;+&gt;</span>
-<span class="lineno">  349 </span><span class="spaces">        </span><span class="nottickedoff">PP.cat (PP.punctuate</span>
-<span class="lineno">  350 </span><span class="spaces">                </span><span class="nottickedoff">(PP.fillSep [PP.emptyDoc, &quot;and&quot; PP.&lt;&gt; PP.space])</span>
-<span class="lineno">  351 </span><span class="spaces">                </span><span class="nottickedoff">(map prettyDef decls))</span>
-<span class="lineno">  352 </span><span class="spaces">      </span><span class="nottickedoff">, &quot;in&quot; PP.&lt;+&gt; PP.pretty expr</span>
-<span class="lineno">  353 </span><span class="spaces">      </span><span class="nottickedoff">]</span>
-<span class="lineno">  354 </span><span class="spaces">    </span><span class="nottickedoff">TSig _ expr typ -&gt; PP.parens $ PP.pretty expr PP.&lt;+&gt; PP.colon PP.&lt;+&gt; PPS.prettyPrec 0 typ</span>
-<span class="lineno">  355 </span><span class="spaces">    </span><span class="nottickedoff">IfThenElse _ e1 e2 e3 -&gt;</span>
-<span class="lineno">  356 </span><span class="spaces">      </span><span class="nottickedoff">&quot;if&quot; PP.&lt;+&gt; PP.pretty e1 PP.&lt;+&gt;</span>
-<span class="lineno">  357 </span><span class="spaces">      </span><span class="nottickedoff">&quot;then&quot; PP.&lt;+&gt; PP.pretty e2 PP.&lt;+&gt;</span>
-<span class="lineno">  358 </span><span class="spaces">      </span><span class="nottickedoff">&quot;else&quot; PP.&lt;+&gt; PP.pretty e3</span></span>
+<span class="lineno">  316 </span>  <span class="decl"><span class="istickedoff">pretty expr0 = case expr0 of</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">Bool _ b   -&gt; <span class="nottickedoff">PP.viaShow b</span></span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">String _ s -&gt; PP.dquotes (PP.pretty s)</span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">Int _ i    -&gt; PP.pretty i</span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">Code ls    -&gt; PP.braces . PP.braces $ PP.pretty (getVal ls)</span>
+<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">CType (Located string _ _) -&gt; <span class="nottickedoff">PP.braces . PP.pretty $ &quot;|&quot; &lt;&gt; string &lt;&gt; &quot;|&quot;</span></span>
+<span class="lineno">  322 </span><span class="spaces">    </span><span class="istickedoff">Array _ xs -&gt; <span class="nottickedoff">PP.list (map PP.pretty xs)</span></span>
+<span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">Block _ stmts -&gt;</span>
+<span class="lineno">  324 </span><span class="spaces">      </span><span class="istickedoff">&quot;do&quot; PP.&lt;+&gt; PP.lbrace PP.&lt;&gt; PP.line' PP.&lt;&gt;</span>
+<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">(PP.indent 3 $ (PP.align . vcatWithSemi . map PP.pretty $ stmts)) PP.&lt;&gt;</span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">PP.line' PP.&lt;&gt; PP.rbrace</span>
+<span class="lineno">  327 </span><span class="spaces">    </span><span class="istickedoff">Tuple _ exprs -&gt; PP.tupled (map PP.pretty exprs)</span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">Record _ mapping -&gt;</span>
+<span class="lineno">  329 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.braces . (PP.space PP.&lt;&gt;) . (PP.&lt;&gt; PP.space) . PP.align . PP.sep . PP.punctuate PP.comma $</span></span>
+<span class="lineno">  330 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">map (\(name, value) -&gt; PP.pretty name PP.&lt;+&gt; &quot;=&quot; PP.&lt;+&gt; PP.pretty value)</span></span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(Map.assocs mapping)</span></span>
+<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">Index _ _ _ -&gt; <span class="nottickedoff">error &quot;No concrete syntax for AST node 'Index'&quot;</span></span>
+<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">Lookup _ expr name -&gt; <span class="nottickedoff">PP.pretty expr PP.&lt;&gt; PP.dot PP.&lt;&gt; PP.pretty name</span></span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">TLookup _ expr int -&gt; <span class="nottickedoff">PP.pretty expr PP.&lt;&gt; PP.dot PP.&lt;&gt; PP.pretty int</span></span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">Var (Located name _ _) -&gt;</span>
+<span class="lineno">  336 </span><span class="spaces">      </span><span class="istickedoff">PP.pretty name</span>
+<span class="lineno">  337 </span><span class="spaces">    </span><span class="istickedoff">Function _ pat expr -&gt;</span>
+<span class="lineno">  338 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;\\&quot; PP.&lt;+&gt; PP.pretty pat PP.&lt;+&gt; &quot;-&gt;&quot; PP.&lt;+&gt; PP.pretty expr</span></span>
+<span class="lineno">  339 </span><span class="spaces">    </span><span class="istickedoff">-- FIXME, use precedence to minimize parentheses</span>
+<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">Application _ f a -&gt; PP.parens (PP.pretty f PP.&lt;+&gt; PP.pretty a)</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">Let _ (NonRecursive decl) expr -&gt;</span>
+<span class="lineno">  342 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.fillSep</span></span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;let&quot; PP.&lt;+&gt; prettyDef decl</span></span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;in&quot; PP.&lt;+&gt; PP.pretty expr</span></span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">Let _ (Recursive decls) expr -&gt;</span>
+<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">PP.fillSep</span></span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;let&quot; PP.&lt;+&gt;</span></span>
+<span class="lineno">  349 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.cat (PP.punctuate</span></span>
+<span class="lineno">  350 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">(PP.fillSep [PP.emptyDoc, &quot;and&quot; PP.&lt;&gt; PP.space])</span></span>
+<span class="lineno">  351 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">(map prettyDef decls))</span></span>
+<span class="lineno">  352 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;in&quot; PP.&lt;+&gt; PP.pretty expr</span></span>
+<span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff">TSig _ expr typ -&gt; <span class="nottickedoff">PP.parens $ PP.pretty expr PP.&lt;+&gt; PP.colon PP.&lt;+&gt; PPS.prettyPrec 0 typ</span></span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse _ e1 e2 e3 -&gt;</span>
+<span class="lineno">  356 </span><span class="spaces">      </span><span class="istickedoff">&quot;if&quot; PP.&lt;+&gt; PP.pretty e1 PP.&lt;+&gt;</span>
+<span class="lineno">  357 </span><span class="spaces">      </span><span class="istickedoff">&quot;then&quot; PP.&lt;+&gt; PP.pretty e2 PP.&lt;+&gt;</span>
+<span class="lineno">  358 </span><span class="spaces">      </span><span class="istickedoff">&quot;else&quot; PP.&lt;+&gt; PP.pretty e3</span></span>
 <span class="lineno">  359 </span>
 <span class="lineno">  360 </span>instance PPS.PrettyPrec Expr where
 <span class="lineno">  361 </span>  <span class="decl"><span class="nottickedoff">prettyPrec _ e = PP.pretty e</span></span>
 <span class="lineno">  362 </span>
 <span class="lineno">  363 </span>instance <span class="decl"><span class="nottickedoff">Pretty Pattern</span></span> where
-<span class="lineno">  364 </span>  <span class="decl"><span class="nottickedoff">pretty pat = case pat of</span>
-<span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">PWild _ mType -&gt;</span>
-<span class="lineno">  366 </span><span class="spaces">      </span><span class="nottickedoff">prettyMaybeTypedArg (&quot;_&quot;, mType)</span>
-<span class="lineno">  367 </span><span class="spaces">    </span><span class="nottickedoff">PVar _ (Located name _ _) mType -&gt;</span>
-<span class="lineno">  368 </span><span class="spaces">      </span><span class="nottickedoff">prettyMaybeTypedArg (name, mType)</span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">PTuple _ pats -&gt;</span>
-<span class="lineno">  370 </span><span class="spaces">      </span><span class="nottickedoff">PP.tupled (map PP.pretty pats)</span></span>
+<span class="lineno">  364 </span>  <span class="decl"><span class="istickedoff">pretty pat = case pat of</span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">PWild _ mType -&gt;</span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyMaybeTypedArg (&quot;_&quot;, mType)</span></span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">PVar _ (Located name _ _) mType -&gt;</span>
+<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff">prettyMaybeTypedArg (name, mType)</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">PTuple _ pats -&gt;</span>
+<span class="lineno">  370 </span><span class="spaces">      </span><span class="istickedoff">PP.tupled (map PP.pretty pats)</span></span>
 <span class="lineno">  371 </span>
 <span class="lineno">  372 </span>instance <span class="decl"><span class="nottickedoff">Pretty Stmt</span></span> where
-<span class="lineno">  373 </span>   <span class="decl"><span class="nottickedoff">pretty = \case</span>
-<span class="lineno">  374 </span><span class="spaces">      </span><span class="nottickedoff">StmtBind _ (PWild _ _ty) expr -&gt;</span>
-<span class="lineno">  375 </span><span class="spaces">         </span><span class="nottickedoff">PP.pretty expr</span>
-<span class="lineno">  376 </span><span class="spaces">      </span><span class="nottickedoff">StmtBind _ pat expr -&gt;</span>
-<span class="lineno">  377 </span><span class="spaces">         </span><span class="nottickedoff">PP.pretty pat PP.&lt;+&gt; &quot;&lt;-&quot; PP.&lt;+&gt; PP.align (PP.pretty expr)</span>
-<span class="lineno">  378 </span><span class="spaces">      </span><span class="nottickedoff">StmtLet _ (NonRecursive decl) -&gt;</span>
-<span class="lineno">  379 </span><span class="spaces">         </span><span class="nottickedoff">&quot;let&quot; PP.&lt;+&gt; prettyDef decl</span>
-<span class="lineno">  380 </span><span class="spaces">      </span><span class="nottickedoff">StmtLet _ (Recursive decls) -&gt;</span>
-<span class="lineno">  381 </span><span class="spaces">         </span><span class="nottickedoff">&quot;rec&quot; PP.&lt;+&gt;</span>
-<span class="lineno">  382 </span><span class="spaces">         </span><span class="nottickedoff">PP.cat (PP.punctuate</span>
-<span class="lineno">  383 </span><span class="spaces">            </span><span class="nottickedoff">(PP.fillSep [PP.emptyDoc, &quot;and&quot; PP.&lt;&gt; PP.space])</span>
-<span class="lineno">  384 </span><span class="spaces">            </span><span class="nottickedoff">(map prettyDef decls))</span>
-<span class="lineno">  385 </span><span class="spaces">      </span><span class="nottickedoff">StmtCode _ (Located code _ _) -&gt;</span>
-<span class="lineno">  386 </span><span class="spaces">         </span><span class="nottickedoff">&quot;let&quot; PP.&lt;+&gt;</span>
-<span class="lineno">  387 </span><span class="spaces">            </span><span class="nottickedoff">(PP.braces . PP.braces $ PP.pretty code)</span>
-<span class="lineno">  388 </span><span class="spaces">      </span><span class="nottickedoff">StmtImport _ Import{iModule,iAs,iSpec} -&gt;</span>
-<span class="lineno">  389 </span><span class="spaces">         </span><span class="nottickedoff">&quot;import&quot; PP.&lt;+&gt;</span>
-<span class="lineno">  390 </span><span class="spaces">         </span><span class="nottickedoff">(case iModule of</span>
-<span class="lineno">  391 </span><span class="spaces">            </span><span class="nottickedoff">Left filepath -&gt;</span>
-<span class="lineno">  392 </span><span class="spaces">               </span><span class="nottickedoff">PP.dquotes . PP.pretty $ filepath</span>
-<span class="lineno">  393 </span><span class="spaces">            </span><span class="nottickedoff">Right modName -&gt;</span>
-<span class="lineno">  394 </span><span class="spaces">               </span><span class="nottickedoff">ppModName modName) PP.&lt;&gt;</span>
-<span class="lineno">  395 </span><span class="spaces">         </span><span class="nottickedoff">(case iAs of</span>
-<span class="lineno">  396 </span><span class="spaces">            </span><span class="nottickedoff">Just modName -&gt;</span>
-<span class="lineno">  397 </span><span class="spaces">               </span><span class="nottickedoff">PP.space PP.&lt;&gt; &quot;as&quot; PP.&lt;+&gt; ppModName modName</span>
-<span class="lineno">  398 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; PP.emptyDoc) PP.&lt;&gt;</span>
-<span class="lineno">  399 </span><span class="spaces">         </span><span class="nottickedoff">(case iSpec of</span>
-<span class="lineno">  400 </span><span class="spaces">            </span><span class="nottickedoff">Just (P.Hiding names) -&gt;</span>
-<span class="lineno">  401 </span><span class="spaces">               </span><span class="nottickedoff">PP.space PP.&lt;&gt; &quot;hiding&quot; PP.&lt;+&gt; PP.tupled (map ppIdent names)</span>
-<span class="lineno">  402 </span><span class="spaces">            </span><span class="nottickedoff">Just (P.Only names) -&gt;</span>
-<span class="lineno">  403 </span><span class="spaces">               </span><span class="nottickedoff">PP.space PP.&lt;&gt; PP.tupled (map ppIdent names)</span>
-<span class="lineno">  404 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; PP.emptyDoc)</span>
-<span class="lineno">  405 </span><span class="spaces">      </span><span class="nottickedoff">StmtTypedef _ (Located name _ _) ty -&gt;</span>
-<span class="lineno">  406 </span><span class="spaces">         </span><span class="nottickedoff">&quot;typedef&quot; PP.&lt;+&gt; PP.pretty name PP.&lt;+&gt; PPS.prettyPrec 0 ty</span>
-<span class="lineno">  407 </span><span class="spaces">      </span><span class="nottickedoff">--expr -&gt; PP.cyan . PP.viaShow expr</span>
-<span class="lineno">  408 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  409 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
-<span class="lineno">  410 </span><span class="spaces">        </span><span class="nottickedoff">ppModName mn = PP.pretty (intercalate &quot;.&quot; (P.modNameChunks mn))</span>
-<span class="lineno">  411 </span><span class="spaces">        </span><span class="nottickedoff">ppIdent i = PP.pretty (P.identText i)</span></span>
+<span class="lineno">  373 </span>   <span class="decl"><span class="istickedoff">pretty = \case</span>
+<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">StmtBind _ (PWild _ _ty) expr -&gt;</span>
+<span class="lineno">  375 </span><span class="spaces">         </span><span class="istickedoff">PP.pretty expr</span>
+<span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">StmtBind _ pat expr -&gt;</span>
+<span class="lineno">  377 </span><span class="spaces">         </span><span class="istickedoff">PP.pretty pat PP.&lt;+&gt; &quot;&lt;-&quot; PP.&lt;+&gt; PP.align (PP.pretty expr)</span>
+<span class="lineno">  378 </span><span class="spaces">      </span><span class="istickedoff">StmtLet _ (NonRecursive decl) -&gt;</span>
+<span class="lineno">  379 </span><span class="spaces">         </span><span class="istickedoff">&quot;let&quot; PP.&lt;+&gt; prettyDef decl</span>
+<span class="lineno">  380 </span><span class="spaces">      </span><span class="istickedoff">StmtLet _ (Recursive decls) -&gt;</span>
+<span class="lineno">  381 </span><span class="spaces">         </span><span class="istickedoff">&quot;rec&quot; PP.&lt;+&gt;</span>
+<span class="lineno">  382 </span><span class="spaces">         </span><span class="istickedoff">PP.cat (PP.punctuate</span>
+<span class="lineno">  383 </span><span class="spaces">            </span><span class="istickedoff">(PP.fillSep [PP.emptyDoc, &quot;and&quot; PP.&lt;&gt; PP.space])</span>
+<span class="lineno">  384 </span><span class="spaces">            </span><span class="istickedoff">(map prettyDef decls))</span>
+<span class="lineno">  385 </span><span class="spaces">      </span><span class="istickedoff">StmtCode _ (Located code _ _) -&gt;</span>
+<span class="lineno">  386 </span><span class="spaces">         </span><span class="istickedoff">&quot;let&quot; PP.&lt;+&gt;</span>
+<span class="lineno">  387 </span><span class="spaces">            </span><span class="istickedoff">(PP.braces . PP.braces $ PP.pretty code)</span>
+<span class="lineno">  388 </span><span class="spaces">      </span><span class="istickedoff">StmtImport _ Import{iModule,iAs,iSpec} -&gt;</span>
+<span class="lineno">  389 </span><span class="spaces">         </span><span class="istickedoff">&quot;import&quot; PP.&lt;+&gt;</span>
+<span class="lineno">  390 </span><span class="spaces">         </span><span class="istickedoff">(case iModule of</span>
+<span class="lineno">  391 </span><span class="spaces">            </span><span class="istickedoff">Left filepath -&gt;</span>
+<span class="lineno">  392 </span><span class="spaces">               </span><span class="istickedoff">PP.dquotes . PP.pretty $ filepath</span>
+<span class="lineno">  393 </span><span class="spaces">            </span><span class="istickedoff">Right modName -&gt;</span>
+<span class="lineno">  394 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ppModName modName</span>) PP.&lt;&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">         </span><span class="istickedoff">(case iAs of</span>
+<span class="lineno">  396 </span><span class="spaces">            </span><span class="istickedoff">Just modName -&gt;</span>
+<span class="lineno">  397 </span><span class="spaces">               </span><span class="istickedoff">PP.space PP.&lt;&gt; &quot;as&quot; PP.&lt;+&gt; ppModName modName</span>
+<span class="lineno">  398 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; PP.emptyDoc) PP.&lt;&gt;</span>
+<span class="lineno">  399 </span><span class="spaces">         </span><span class="istickedoff">(case iSpec of</span>
+<span class="lineno">  400 </span><span class="spaces">            </span><span class="istickedoff">Just (P.Hiding names) -&gt;</span>
+<span class="lineno">  401 </span><span class="spaces">               </span><span class="istickedoff">PP.space PP.&lt;&gt; &quot;hiding&quot; PP.&lt;+&gt; PP.tupled (map ppIdent names)</span>
+<span class="lineno">  402 </span><span class="spaces">            </span><span class="istickedoff">Just (P.Only names) -&gt;</span>
+<span class="lineno">  403 </span><span class="spaces">               </span><span class="istickedoff">PP.space PP.&lt;&gt; PP.tupled (map ppIdent names)</span>
+<span class="lineno">  404 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">PP.emptyDoc</span>)</span>
+<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">StmtTypedef _ (Located name _ _) ty -&gt;</span>
+<span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff">&quot;typedef&quot; PP.&lt;+&gt; PP.pretty name PP.&lt;+&gt; PPS.prettyPrec <span class="nottickedoff">0</span> ty</span>
+<span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">--expr -&gt; PP.cyan . PP.viaShow expr</span>
+<span class="lineno">  408 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  409 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  410 </span><span class="spaces">        </span><span class="istickedoff">ppModName mn = PP.pretty (intercalate <span class="nottickedoff">&quot;.&quot;</span> (P.modNameChunks mn))</span>
+<span class="lineno">  411 </span><span class="spaces">        </span><span class="istickedoff">ppIdent i = PP.pretty (P.identText i)</span></span>
 <span class="lineno">  412 </span>        --ppName n = ppIdent (P.nameIdent n)
 <span class="lineno">  413 </span>
 <span class="lineno">  414 </span>prettyDef :: Decl -&gt; PP.Doc ann
-<span class="lineno">  415 </span><span class="decl"><span class="nottickedoff">prettyDef (Decl _ pat _ def) =</span>
-<span class="lineno">  416 </span><span class="spaces">   </span><span class="nottickedoff">PP.pretty pat PP.&lt;+&gt;</span>
-<span class="lineno">  417 </span><span class="spaces">   </span><span class="nottickedoff">let (args, body) = dissectLambda def</span>
-<span class="lineno">  418 </span><span class="spaces">   </span><span class="nottickedoff">in (if not (null args)</span>
-<span class="lineno">  419 </span><span class="spaces">          </span><span class="nottickedoff">then PP.hsep (map PP.pretty args) PP.&lt;&gt; PP.space</span>
-<span class="lineno">  420 </span><span class="spaces">          </span><span class="nottickedoff">else PP.emptyDoc) PP.&lt;&gt;</span>
-<span class="lineno">  421 </span><span class="spaces">      </span><span class="nottickedoff">&quot;=&quot; PP.&lt;+&gt; PP.pretty body</span></span>
+<span class="lineno">  415 </span><span class="decl"><span class="istickedoff">prettyDef (Decl _ pat _ def) =</span>
+<span class="lineno">  416 </span><span class="spaces">   </span><span class="istickedoff">PP.pretty pat PP.&lt;+&gt;</span>
+<span class="lineno">  417 </span><span class="spaces">   </span><span class="istickedoff">let (args, body) = dissectLambda def</span>
+<span class="lineno">  418 </span><span class="spaces">   </span><span class="istickedoff">in (if not (null args)</span>
+<span class="lineno">  419 </span><span class="spaces">          </span><span class="istickedoff">then PP.hsep (map PP.pretty args) PP.&lt;&gt; PP.space</span>
+<span class="lineno">  420 </span><span class="spaces">          </span><span class="istickedoff">else PP.emptyDoc) PP.&lt;&gt;</span>
+<span class="lineno">  421 </span><span class="spaces">      </span><span class="istickedoff">&quot;=&quot; PP.&lt;+&gt; PP.pretty body</span></span>
 <span class="lineno">  422 </span>
 <span class="lineno">  423 </span>prettyMaybeTypedArg :: (Name, Maybe Type) -&gt; PP.Doc ann
-<span class="lineno">  424 </span><span class="decl"><span class="nottickedoff">prettyMaybeTypedArg (name,Nothing) =</span>
-<span class="lineno">  425 </span><span class="spaces">   </span><span class="nottickedoff">PP.pretty name</span>
-<span class="lineno">  426 </span><span class="spaces"></span><span class="nottickedoff">prettyMaybeTypedArg (name,Just typ) =</span>
-<span class="lineno">  427 </span><span class="spaces">   </span><span class="nottickedoff">PP.parens $ PP.pretty name PP.&lt;+&gt; PP.colon PP.&lt;+&gt; PPS.prettyPrec 0 typ</span></span>
+<span class="lineno">  424 </span><span class="decl"><span class="istickedoff">prettyMaybeTypedArg (name,Nothing) =</span>
+<span class="lineno">  425 </span><span class="spaces">   </span><span class="istickedoff">PP.pretty name</span>
+<span class="lineno">  426 </span><span class="spaces"></span><span class="istickedoff">prettyMaybeTypedArg (name,Just typ) =</span>
+<span class="lineno">  427 </span><span class="spaces">   </span><span class="istickedoff"><span class="nottickedoff">PP.parens $ PP.pretty name PP.&lt;+&gt; PP.colon PP.&lt;+&gt; PPS.prettyPrec 0 typ</span></span></span>
 <span class="lineno">  428 </span>
 <span class="lineno">  429 </span>dissectLambda :: Expr -&gt; ([Pattern], Expr)
-<span class="lineno">  430 </span><span class="decl"><span class="nottickedoff">dissectLambda = \case</span>
-<span class="lineno">  431 </span><span class="spaces">  </span><span class="nottickedoff">Function _ pat (dissectLambda -&gt; (pats, expr)) -&gt; (pat : pats, expr)</span>
-<span class="lineno">  432 </span><span class="spaces">  </span><span class="nottickedoff">expr -&gt; ([], expr)</span></span>
+<span class="lineno">  430 </span><span class="decl"><span class="istickedoff">dissectLambda = \case</span>
+<span class="lineno">  431 </span><span class="spaces">  </span><span class="istickedoff">Function _ pat (dissectLambda -&gt; (pats, expr)) -&gt; (pat : pats, expr)</span>
+<span class="lineno">  432 </span><span class="spaces">  </span><span class="istickedoff">expr -&gt; ([], expr)</span></span>
 <span class="lineno">  433 </span>
 <span class="lineno">  434 </span>instance PPS.PrettyPrec Schema where
 <span class="lineno">  435 </span>  <span class="decl"><span class="istickedoff">prettyPrec _ (Forall ns t) = case ns of</span>

@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>import Numeric.Natural
 <span class="lineno">   41 </span>
 <span class="lineno">   42 </span>
-<span class="lineno">   43 </span>import SAWCore.Module (ModuleMap, dtPrimName)
+<span class="lineno">   43 </span>import SAWCore.Module (ModuleMap, dtExtCns)
 <span class="lineno">   44 </span>import SAWCore.Panic (panic)
 <span class="lineno">   45 </span>import SAWCore.Prim (BitVector(..))
 <span class="lineno">   46 </span>import qualified SAWCore.Prim as Prim
@@ -282,14 +282,14 @@ span.spaces    { background: white }
 <span class="lineno">  263 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scRecordType sc fs'</span></span>
 <span class="lineno">  264 </span><span class="spaces">      </span><span class="istickedoff">VDataType nm ps vs -&gt;</span>
 <span class="lineno">  265 </span><span class="spaces">        </span><span class="istickedoff">do nm' &lt;- traverse loop nm</span>
-<span class="lineno">  266 </span><span class="spaces">           </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackDataTypeParams (primType nm) (ps++vs)</span>
+<span class="lineno">  266 </span><span class="spaces">           </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackDataTypeParams (ecType nm) (ps++vs)</span>
 <span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">scDataTypeAppParams sc nm' ps' vs'</span>
 <span class="lineno">  268 </span><span class="spaces">      </span><span class="istickedoff">VPiType{} -&gt;</span>
 <span class="lineno">  269 </span><span class="spaces">        </span><span class="istickedoff">do (ecs, tm) &lt;- readBackPis tv</span>
 <span class="lineno">  270 </span><span class="spaces">           </span><span class="istickedoff">scGeneralizeExts sc ecs tm</span>
 <span class="lineno">  271 </span><span class="spaces">      </span><span class="istickedoff">VRecursorType d ps m mty -&gt;</span>
 <span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do d'   &lt;- traverse loop d</span></span>
-<span class="lineno">  273 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ps'  &lt;- readBackDataTypeParams (primType d) ps</span></span>
+<span class="lineno">  273 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ps'  &lt;- readBackDataTypeParams (ecType d) ps</span></span>
 <span class="lineno">  274 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">m'   &lt;- readBackValue sc cfg mty m</span></span>
 <span class="lineno">  275 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">mty' &lt;- loop mty</span></span>
 <span class="lineno">  276 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scFlatTermF sc (RecursorType d' ps' m' mty')</span></span>
@@ -443,7 +443,7 @@ span.spaces    { background: white }
 <span class="lineno">  424 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =</span>
 <span class="lineno">  426 </span><span class="spaces">      </span><span class="istickedoff">do cnm' &lt;- traverse (readBackTValue sc <span class="nottickedoff">cfg</span>) cnm</span>
-<span class="lineno">  427 </span><span class="spaces">         </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackCtorArgs <span class="nottickedoff">cnm</span> (primType cnm) (ps++vs)</span>
+<span class="lineno">  427 </span><span class="spaces">         </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackCtorArgs <span class="nottickedoff">cnm</span> (ecType cnm) (ps++vs)</span>
 <span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">scCtorAppParams sc cnm' ps' vs'</span>
 <span class="lineno">  429 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">loop (VRecordType fs) (VRecordValue vs) =</span>
@@ -1117,7 +1117,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1098 </span><span class="spaces">           </span><span class="nottickedoff">n0'  &lt;- scNat sc n0</span>
 <span class="lineno"> 1099 </span><span class="spaces">           </span><span class="nottickedoff">w'   &lt;- readBackValue sc cfg (VVecType n VBoolType) w</span>
 <span class="lineno"> 1100 </span><span class="spaces">           </span><span class="nottickedoff">dt   &lt;- scRequireDataType sc preludeNatIdent</span>
-<span class="lineno"> 1101 </span><span class="spaces">           </span><span class="nottickedoff">pn   &lt;- traverse (evalType cfg) (dtPrimName dt)</span>
+<span class="lineno"> 1101 </span><span class="spaces">           </span><span class="nottickedoff">pn   &lt;- traverse (evalType cfg) (dtExtCns dt)</span>
 <span class="lineno"> 1102 </span><span class="spaces">           </span><span class="nottickedoff">amt' &lt;- readBackValue sc cfg (VDataType pn [] []) amt</span>
 <span class="lineno"> 1103 </span><span class="spaces">           </span><span class="nottickedoff">tm   &lt;- tmOp sc n0' w' amt'</span>
 <span class="lineno"> 1104 </span><span class="spaces">           </span><span class="nottickedoff">pure (VWord (Left (n, tm)))</span></span>
@@ -1225,7 +1225,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1206 </span><span class="spaces">        </span><span class="istickedoff">do ref &lt;- liftIO (newIORef mempty)</span>
 <span class="lineno"> 1207 </span><span class="spaces">           </span><span class="istickedoff">stm &lt;- liftIO $ delay $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1208 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">natDT &lt;- scRequireDataType sc preludeNatIdent</span></span>
-<span class="lineno"> 1209 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">natPN &lt;- traverse (evalType cfg) (dtPrimName natDT)</span></span>
+<span class="lineno"> 1209 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">natPN &lt;- traverse (evalType cfg) (dtExtCns natDT)</span></span>
 <span class="lineno"> 1210 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- readBackTValue sc cfg ty</span></span>
 <span class="lineno"> 1211 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">ftm &lt;- readBackValue sc cfg (VPiType nm (VDataType natPN [] []) (VNondependentPi ty)) f</span></span>
 <span class="lineno"> 1212 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">scCtorApp sc (mkIdent preludeModuleName &quot;MkStream&quot;) [ty',ftm]</span></span>

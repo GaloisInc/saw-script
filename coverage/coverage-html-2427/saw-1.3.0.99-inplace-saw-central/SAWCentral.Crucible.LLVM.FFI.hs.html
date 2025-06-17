@@ -79,7 +79,7 @@ span.spaces    { background: white }
 <span class="lineno">   60 </span>import           Cryptol.Eval.Type
 <span class="lineno">   61 </span>import           Cryptol.TypeCheck.FFI.FFIType
 <span class="lineno">   62 </span>import           Cryptol.TypeCheck.Solver.InfNat
-<span class="lineno">   63 </span>import           Cryptol.TypeCheck.Type
+<span class="lineno">   63 </span>import qualified Cryptol.TypeCheck.Type               as Cry
 <span class="lineno">   64 </span>import           Cryptol.Utils.Ident                  as Cry
 <span class="lineno">   65 </span>import           Cryptol.Utils.PP                     (pretty)
 <span class="lineno">   66 </span>import           Cryptol.Utils.RecordMap
@@ -193,12 +193,12 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>-- | Given a list of type parameters and their actual values as terms, create a
 <span class="lineno">  176 </span>-- type environment binding them.
-<span class="lineno">  177 </span>buildTypeEnv :: Ctx =&gt; [TParam] -&gt; [Term] -&gt; LLVMCrucibleSetupM TypeEnv
+<span class="lineno">  177 </span>buildTypeEnv :: Ctx =&gt; [Cry.TParam] -&gt; [Term] -&gt; LLVMCrucibleSetupM TypeEnv
 <span class="lineno">  178 </span><span class="decl"><span class="istickedoff">buildTypeEnv [] [] = pure mempty</span>
 <span class="lineno">  179 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv (param:params) (argTerm:argTerms) =</span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">case asCtorParams argTerm of</span>
-<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">Just (primName -&gt; &quot;Cryptol.TCNum&quot;, [], [asNat -&gt; Just n]) -&gt;</span>
-<span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff">bindTypeVar (TVBound param) (Left (Nat (toInteger n))) &lt;$&gt;</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">case asGlobalApply &quot;Cryptol.TCNum&quot; argTerm of</span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">Just [asNat -&gt; Just n] -&gt;</span>
+<span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff">bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) &lt;$&gt;</span>
 <span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">buildTypeEnv params argTerms</span>
 <span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  185 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup $</span></span>
@@ -466,7 +466,7 @@ span.spaces    { background: white }
 <span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">llvm_precond =&lt;&lt; lio (openToTypedTerm precond)</span></span>
 <span class="lineno">  448 </span>
 <span class="lineno">  449 </span>-- | Type info for the 'FFIArray' type.
-<span class="lineno">  450 </span>arrayTypeInfo :: Ctx =&gt; TypeEnv -&gt; [Type] -&gt; FFIBasicType -&gt;
+<span class="lineno">  450 </span>arrayTypeInfo :: Ctx =&gt; TypeEnv -&gt; [Cry.Type] -&gt; FFIBasicType -&gt;
 <span class="lineno">  451 </span>  LLVMCrucibleSetupM FFITypeInfo
 <span class="lineno">  452 </span><span class="decl"><span class="istickedoff">arrayTypeInfo tenv lenTypes ffiBasicType = do</span>
 <span class="lineno">  453 </span><span class="spaces">  </span><span class="istickedoff">let lens :: Integral a =&gt; [a]</span>
