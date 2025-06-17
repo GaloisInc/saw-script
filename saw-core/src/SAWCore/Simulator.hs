@@ -223,11 +223,12 @@ evalTermF cfg lam recEval tf env =
              es  <- traverse f (recursorElims r)
              pure (VRecursor d ps m mty es)
 
-        RecursorApp rectm ixs arg ->
+        RecursorApp rectm _ixs ->
           do r <- recEval rectm
              case r of
                VRecursor d ps motive motiveTy ps_fs ->
-                 do argv <- recEval arg
+                 pure $ VFun "_" $ \arg_thunk ->
+                 do argv <- force arg_thunk
                     case evalConstructor argv of
                       Just (ctor, args)
                         | Just (elim,elimTy) <- Map.lookup (ctorVarIndex ctor) ps_fs
@@ -237,8 +238,8 @@ evalTermF cfg lam recEval tf env =
                               lam (ctorIotaTemplate ctor) allArgs
 
                         | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
-                      Nothing -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
-               _ -> simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)
+                      Nothing -> panic "evalTermF / RecursorApp" ["Expected constructor for datatype: " <> toAbsoluteName (ecName d)]
+               _ -> panic "evalTermF / RecursorApp" ["Expected recursor value"]
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps

@@ -19,3 +19,7 @@ module SAWCore.SAWCore
 import SAWCore.SharedTerm
 import SAWCore.Prelude
 import SAWCore.ExternalFormat
+
+import Language.Haskell.TH
+$(runIO (mkSharedContext >>= \sc ->
+          scLoadPreludeModule sc >> return []))

@@ -986,8 +986,8 @@ scWhnf sc t0 =
                                                                       error "scWhnf: field missing in record"
     go (ElimRecursor rec crec _ : xs)
                               (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
-    go xs                     (asRecursorApp ->
-                                Just (r, crec, ixs, arg))       = go (ElimRecursor r crec ixs : xs) arg
+    go (ElimApp x : xs)       (asRecursorApp ->
+                                Just (r, crec, ixs))            = go (ElimRecursor r crec ixs : xs) x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -1032,7 +1032,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor r _crec ixs) =
-      scFlatTermF sc (RecursorApp r ixs t)
+      do f <- scFlatTermF sc (RecursorApp r ixs)
+         scApply sc f t
 
     resolveConstant :: ExtCns Term -> IO ResolvedName
     resolveConstant ec =
@@ -1223,11 +1224,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                           (recursorParams rec)
                           (recursorMotive rec)
                           (recursorMotiveTy rec)
-        RecursorApp r ixs arg ->
+        RecursorApp r ixs ->
           do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
                Just (_d, _ps, motive, _motivety) ->
-                 lift $ scApplyAll sc motive (ixs ++ [arg])
+                 lift $ scApplyAll sc motive ixs
                _ -> fail "Expected recursor type in recursor application"
 
         RecordType elems ->

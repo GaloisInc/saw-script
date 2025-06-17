@@ -591,9 +591,8 @@ ctxRecursorAppM :: MonadTerm m =>
 ctxRecursorAppM recM ixsM argM =
   do app <- RecursorApp <$>
               (unCtxTermUnsafe <$> recM) <*>
-              (ctxTermsCtxToListUnsafe <$> ixsM) <*>
-              (unCtxTermUnsafe <$> argM)
-     CtxTerm <$> mkFlatTermF app
+              (ctxTermsCtxToListUnsafe <$> ixsM)
+     ctxApply (CtxTerm <$> mkFlatTermF app) argM
 
 --
 -- * Generalized Lifting and Substitution
