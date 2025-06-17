@@ -1074,57 +1074,58 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expe
 matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
   mccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
-  case (actual, expectedTy, expected, inCast) of
-    (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var, False) ->
-      assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
-    (MIRVal (RefShape {}) ref, _, MS.SetupVar var, True) ->
-      -- When we have a cast, the type inside the Crucible reference may be
-      -- different from the pointee type of the SetupValue in SAW after the
-      -- cast. Here, we are creating a MirPointer, so we want to use the
-      -- "true" type of the reference. This means pointeeTy and expectedTy are
-      -- wrong, so we ignore those and instead look up the pointee type from
-      -- the MirAllocSpec for this variable (i.e. the type given to the
-      -- mir_alloc that created it).
-      --
-      -- See Note [Raw pointer casts] in SAWCentral.Crucible.MIR.Setup.Value
-      -- for more info.
-      case Map.lookup var tyenv of
-        Just (Some ma) ->
-          assignVar cc md var $
-            Some (MirPointer (ma^.maType) (ma^.maPtrKind) (ma^.maMutbl) (ma^.maMirType) ref)
-        Nothing ->
-          panic "matchArg" ["No MirAllocSpec for SetupVar " <> Text.pack (show var)]
+  case (actual, expectedTy, expected) of
+    (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var)
+      | inCast ->
+        -- When we have a cast, the type inside the Crucible reference may be
+        -- different from the pointee type of the SetupValue in SAW after the
+        -- cast. Here, we are creating a MirPointer, so we want to use the
+        -- "true" type of the reference. This means pointeeTy and expectedTy are
+        -- wrong, so we ignore those and instead look up the pointee type from
+        -- the MirAllocSpec for this variable (i.e. the type given to the
+        -- mir_alloc that created it).
+        --
+        -- See Note [Raw pointer casts] in SAWCentral.Crucible.MIR.Setup.Value
+        -- for more info.
+        case Map.lookup var tyenv of
+          Just (Some ma) ->
+            assignVar cc md var $
+              Some (MirPointer (ma^.maType) (ma^.maPtrKind) (ma^.maMutbl) (ma^.maMirType) ref)
+          Nothing ->
+            panic "matchArg" ["No MirAllocSpec for SetupVar " <> Text.pack (show var)]
+      | otherwise ->
+        assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
 
-    (MIRVal (RefShape {}) _, _, MS.SetupCast _ v, _) ->
+    (MIRVal (RefShape {}) _, _, MS.SetupCast _ v) ->
       -- Ideally we would pass the "true" type of the underlying reference here,
       -- instead of passing along the post-cast types unchanged, but we don't
       -- know the true type until we get to a SetupVar.
       matchArg' opts sc cc cs prepost md actual expectedTy v True
 
     -- match arrays point-wise
-    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs, False)
+    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)
       | Mir.MirVector_Vector xs' <- xs
       , V.length xs' == length zs ->
         sequence_
-          [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+          [ matchArg' opts sc cc cs prepost md (MIRVal elemShp x) y z inCast
           | (x, z) <- zip (V.toList xs') zs ]
 
       | Mir.MirVector_PartialVector xs' <- xs
       , V.length xs' == length zs ->
         do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
            sequence_
-             [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+             [ matchArg' opts sc cc cs prepost md (MIRVal elemShp x) y z inCast
              | (x, z) <- zip (V.toList xs'') zs ]
 
     -- match the underlying, non-zero-sized field of a repr(transparent) struct
-    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs, False)
+    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs)
       | Just i <- Mir.findReprTransparentField col adt
       , Just y <- adt ^? Mir.adtvariants . ix 0 . Mir.vfields . ix i . Mir.fty
       , Just z <- zs ^? ix i ->
-        matchArg opts sc cc cs prepost md (MIRVal shp val) y z
+        matchArg' opts sc cc cs prepost md (MIRVal shp val) y z inCast
 
     -- match the fields of a struct point-wise
-    (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs, False) ->
+    (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs) ->
        do let variants = adt ^. Mir.adtvariants
           variant <-
             case variants of
@@ -1146,8 +1147,7 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
               Ctx.:> Crucible.RV actualDiscr
               Ctx.:> Crucible.RV variantAssn),
      _,
-     MS.SetupEnum enum_,
-     False) ->
+     MS.SetupEnum enum_) ->
         case enum_ of
           -- ...if the expected value is a specific enum variant, then we must:
           --
@@ -1205,7 +1205,11 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
           MirSetupEnumSymbolic adt expectedDiscr variantFlds -> do
             -- Ensure that the discriminant values match.
             let discrTp = shapeMirTy discrShp
-            matchArg opts sc cc cs prepost md (MIRVal discrShp actualDiscr) discrTp expectedDiscr
+            matchArg' opts sc cc cs prepost md
+              (MIRVal discrShp actualDiscr)
+              discrTp
+              expectedDiscr
+              inCast
 
             sequence_ @_ @_ @()
               [ case xPE of
@@ -1231,15 +1235,14 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
               ]
 
     -- match the fields of a tuple point-wise
-    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs, False) ->
+    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
       matchFields sym xsFldShps xs ys zs
 
     -- See Note [Matching slices in overrides]
     (MIRVal (SliceShape actualSliceRefTy actualElemTy actualMutbl actualElemTpr)
             (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
      Mir.TyRef _ _,
-     MS.SetupSlice slice,
-     False)
+     MS.SetupSlice slice)
        | -- Currently, all slice lengths must be concrete, so the case below
          -- should always succeed.
          Just actualSliceLenBV <- W4.asBV actualSliceLenSym -> do
@@ -1265,10 +1268,11 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
                let actualArrTpr = Mir.MirVectorRepr actualElemTpr
                let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
-               matchArg opts sc cc cs prepost md
+               matchArg' opts sc cc cs prepost md
                  (MIRVal actualArrRefShp actualArrRef)
                  expectedArrRefTy
                  expectedArrRef
+                 inCast
 
          actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
          case slice of
@@ -1301,7 +1305,7 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
              -- Match the reference values.
              matchSlice expectedArrRefTy expectedArrRef
 
-    (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name, False) -> do
+    (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
       static <- findStatic colState name
       Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
       let y = staticRefMux sym yGlobalVar
@@ -1311,14 +1315,14 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
           pred_ <- liftIO $
             Mir.mirRef_eqIO bak x y
           addAssert pred_ md =<< notEq
-    (_, _, MS.SetupGlobalInitializer () name, _) -> do
+    (_, _, MS.SetupGlobalInitializer () name) -> do
       static <- findStatic colState name
       let staticTy = static ^. Mir.sTy
       unless (checkCompatibleTys expectedTy staticTy) fail_
       staticInitMirVal <- findStaticInitializer cc static
       pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
       addAssert pred_ md =<< notEq
-    (_, _, MS.SetupMux () c t f, _) -> do
+    (_, _, MS.SetupMux () c t f) -> do
       cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
       withConditionalPred cPred $
         matchArg' opts sc cc cs prepost md actual expectedTy t inCast
@@ -1326,8 +1330,8 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
       withConditionalPred cNegPred $
         matchArg' opts sc cc cs prepost md actual expectedTy f inCast
 
-    (_, _, MS.SetupNull empty, _)      -> absurd empty
-    (_, _, MS.SetupUnion empty _ _, _) -> absurd empty
+    (_, _, MS.SetupNull empty)      -> absurd empty
+    (_, _, MS.SetupUnion empty _ _) -> absurd empty
 
     _ -> fail_
   where
@@ -1359,10 +1363,10 @@ matchArg' opts sc cc cs prepost md actual expectedTy expected inCast =
       sequence_
         [ case xFldShp of
             ReqField shp ->
-              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+              matchArg' opts sc cc cs prepost md (MIRVal shp x) y z inCast
             OptField shp -> do
               let x' = readMaybeType sym "field" (shapeType shp) x
-              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+              matchArg' opts sc cc cs prepost md (MIRVal shp x') y z inCast
         | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
             zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
                  ys
