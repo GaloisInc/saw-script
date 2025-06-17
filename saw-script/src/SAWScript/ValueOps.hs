@@ -21,8 +21,6 @@ module SAWScript.ValueOps (
     lookupValue,
     -- used by SAWScript.Interpreter
     tupleLookupValue,
-    -- used by SAWScript.Interpreter
-    applyValue,
     -- XXX apparently unused
     thenValue,
     -- used by SAWScript.Interpreter
@@ -103,12 +101,8 @@ tupleLookupValue (VTuple vs) i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
 
-applyValue :: Value -> Value -> TopLevel Value
-applyValue (VLambda f) x = f x
-applyValue _ _ = throwTopLevel "applyValue"
-
 thenValue :: SS.Pos -> Value -> Value -> Value
-thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
+thenValue pos v1 v2 = VBind pos v1 (VReturn v2)
 
 bindValue :: SS.Pos -> Value -> Value -> TopLevel Value
 bindValue pos v1 v2 = return (VBind pos v1 v2)

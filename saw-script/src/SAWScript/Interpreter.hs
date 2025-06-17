@@ -373,11 +373,20 @@ withStackTraceFrame str val =
         MIRSetupM (underReaderT (underStateT doTopLevel) m)
   in
   case val of
-    VLambda f ->
+    VLambda env pat e ->
+      -- This is gross. But, since this is the wrong way to do all
+      -- this anyway, with luck we'll be able to remove the lot before
+      -- much longer.
+      let info = "(stack trace thunk)"
+          wrap v2 =
+            withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env pat e) v2)
+      in
+      VBuiltin wrap
+    VBuiltin f ->
       let wrap x =
             withStackTraceFrame str `fmap` doTopLevel (f x)
       in
-      VLambda wrap
+      VBuiltin wrap
     VTopLevel m ->
       let m' =
             withStackTraceFrame str `fmap` doTopLevel m
@@ -414,6 +423,19 @@ withStackTraceFrame str val =
 
 ------------------------------------------------------------
 -- Interpreter core
+
+applyValue :: Text -> Value -> Value -> TopLevel Value
+applyValue v1info v1 v2 = case v1 of
+    VLambda env pat e ->
+        withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+    VBuiltin f ->
+        f v2
+    _ ->
+        panic "applyValue" [
+            "Called object is not a function",
+            "Value found: " <> Text.pack (show v1),
+            v1info
+        ]
 
 interpretExpr :: SS.Expr -> TopLevel Value
 interpretExpr expr =
@@ -474,19 +496,12 @@ interpretExpr expr =
                    ]
       SS.Function _ pat e -> do
           env <- getLocalEnv
-          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
-          return $ VLambda f
+          return $ VLambda env pat e
       SS.Application _ e1 e2 -> do
+          let v1info = "Expression: " <> PPS.pShowText e1
           v1 <- interpretExpr e1
           v2 <- interpretExpr e2
-          case v1 of
-            VLambda f -> f v2
-            _ ->
-                panic "interpretExpr" [
-                    "Called object is not a function",
-                    "Value found: " <> Text.pack (show v1),
-                    "Expression: " <> PPS.pShowText e1
-                ]
+          applyValue v1info v1 v2
       SS.Let _ dg e -> do
           env' <- interpretDeclGroup dg
           withLocalEnv env' (interpretExpr e)
@@ -512,8 +527,7 @@ interpretDecl env (SS.Decl _ pat mt expr) = do
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
-      SS.Function _ pat e -> VLambda f
-        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretExpr e)
+      SS.Function _ pat e -> VLambda env pat e
       SS.TSig _ e _ -> interpretFunction env e
       _ ->
         panic "interpretFunction" [
@@ -549,8 +563,8 @@ interpretStmts stmts =
           savepos <- pushPosition pos
           v1 <- interpretExpr e
           popPosition savepos
-          let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
-          bindValue pos v1 (VLambda f)
+          -- Caution re pos: see StmtLet
+          bindValue pos v1 (VLambda env pat (SS.Block pos ss))
       SS.StmtLet pos bs : ss ->
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
@@ -859,10 +873,10 @@ class FromValue a where
     fromValue :: Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue f = VLambda (\v -> return (toValue (f (fromValue v))))
+    toValue f = VBuiltin (\v -> return (toValue (f (fromValue v))))
 
 instance (IsValue a, FromValue b) => FromValue (a -> TopLevel b) where
-    fromValue (VLambda f) = \x -> fromValue <$> f (toValue x)
+    fromValue (VBuiltin f) = \x -> fromValue <$> f (toValue x)
     fromValue _ = error "fromValue (->)"
 
 instance FromValue Value where
@@ -912,7 +926,7 @@ instance FromValue a => FromValue (TopLevel a) where
       savepos <- pushPosition pos
       v1 <- fromValue m1
       popPosition savepos
-      m2 <- applyValue v2 v1
+      m2 <- applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
       fromValue m2
     fromValue v = error $ "fromValue TopLevel:" <> show v
 
@@ -930,7 +944,7 @@ instance FromValue a => FromValue (ProofScript a) where
       savepos <- lift $ lift $ pushPosition pos
       v1 <- unProofScript (fromValue m1)
       lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue v2 v1
+      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
       unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
 
@@ -945,7 +959,7 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
       savepos <- lift $ lift $ pushPosition pos
       v1 <- runLLVMCrucibleSetupM (fromValue m1)
       lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue v2 v1
+      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
       runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
@@ -959,7 +973,7 @@ instance FromValue a => FromValue (JVMSetupM a) where
       savepos <- lift $ lift $ pushPosition pos
       v1 <- runJVMSetupM (fromValue m1)
       lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue v2 v1
+      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
@@ -973,7 +987,7 @@ instance FromValue a => FromValue (MIRSetupM a) where
       savepos <- lift $ lift $ pushPosition pos
       v1 <- runMIRSetupM (fromValue m1)
       lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue v2 v1
+      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
       runMIRSetupM (fromValue m2)
     fromValue _ = error "fromValue MIRSetup"
 
@@ -1274,19 +1288,19 @@ toValueCase :: (FromValue b) =>
                (b -> Value -> Value -> TopLevel Value)
             -> Value
 toValueCase prim =
-  VLambda $ \b -> return $
-  VLambda $ \v1 -> return $
-  VLambda $ \v2 ->
+  VBuiltin $ \b -> return $
+  VBuiltin $ \v1 -> return $
+  VBuiltin $ \v2 ->
   prim (fromValue b) v1 v2
 
 toplevelSubshell :: Value
-toplevelSubshell = VLambda $ \_ ->
+toplevelSubshell = VBuiltin $ \_ ->
   do m <- roSubshell <$> ask
      env <- getLocalEnv
      return (VTopLevel (toValue <$> withLocalEnv env m))
 
 proofScriptSubshell :: Value
-proofScriptSubshell = VLambda $ \_ ->
+proofScriptSubshell = VBuiltin $ \_ ->
   do m <- roProofSubshell <$> ask
      env <- getLocalEnv
      return (VProofScript (toValue <$> withLocalEnvProof env m))
@@ -1294,10 +1308,10 @@ proofScriptSubshell = VLambda $ \_ ->
 forValue :: [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn (VArray [])
 forValue (x : xs) f =
-  do m1 <- applyValue f x
+  do m1 <- applyValue "(value was in a \"for\")" f x
      m2 <- forValue xs f
-     bindValue (SS.PosInternal "<for>") m1 (VLambda $ \v1 ->
-       bindValue (SS.PosInternal "<for>") m2 (VLambda $ \v2 ->
+     bindValue (SS.PosInternal "<for>") m1 (VBuiltin $ \v1 ->
+       bindValue (SS.PosInternal "<for>") m2 (VBuiltin $ \v2 ->
          return $ VReturn (VArray (v1 : fromValue v2))))
 
 caseProofResultPrim ::
@@ -1306,17 +1320,19 @@ caseProofResultPrim ::
   Value {- ^ invalid/unknown case -} ->
   TopLevel Value
 caseProofResultPrim pr vValid vInvalid = do
+  let infoValid = "(value was the valid case of caseProofResult)"
+  let infoInvalid = "(value was the invalid case of caseProofResult)"
   sc <- getSharedContext
   case pr of
     ValidProof _ thm ->
-      applyValue vValid (toValue thm)
+      applyValue infoValid vValid (toValue thm)
     InvalidProof _ pairs _pst -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue vInvalid (toValue tt)
+      applyValue infoInvalid vInvalid (toValue tt)
     UnfinishedProof _ -> do
       tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
-      applyValue vInvalid (toValue tt)
+      applyValue infoInvalid vInvalid (toValue tt)
 
 caseSatResultPrim ::
   SatResult ->
@@ -1324,17 +1340,18 @@ caseSatResultPrim ::
   Value {- ^ sat/unknown case -} ->
   TopLevel Value
 caseSatResultPrim sr vUnsat vSat = do
+  let info = "(value was the sat case of caseSatResult)"
   sc <- getSharedContext
   case sr of
     Unsat _ -> return vUnsat
     Sat _ pairs -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue vSat (toValue tt)
+      applyValue info vSat (toValue tt)
     SatUnknown -> do
       let fov = FOVTuple []
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue vSat (toValue tt)
+      applyValue info vSat (toValue tt)
 
 enable_safety_proofs :: TopLevel ()
 enable_safety_proofs = do
@@ -2005,7 +2022,7 @@ primitives = Map.fromList
     [ "A boolean value." ]
 
   , prim "for"                 "{m, a, b} [a] -> (a -> m b) -> m [b]"
-    (pureVal (VLambda . forValue))
+    (pureVal (VBuiltin . forValue))
     Current
     [ "Apply the given command in sequence to the given list. Return"
     , "the list containing the result returned by the command at each"
@@ -6221,16 +6238,16 @@ primitives = Map.fromList
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal1 f _ _ = VLambda $ \a -> fmap toValue (f (fromValue a))
+    funVal1 f _ _ = VBuiltin $ \a -> fmap toValue (f (fromValue a))
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
+    funVal2 f _ _ = VBuiltin $ \a -> return $ VBuiltin $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+    funVal3 f _ _ = VBuiltin $ \a -> return $ VBuiltin $ \b -> return $ VBuiltin $ \c ->
       fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>

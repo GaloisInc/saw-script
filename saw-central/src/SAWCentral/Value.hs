@@ -283,7 +283,8 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda (Value -> TopLevel Value)
+  | VLambda LocalEnv SS.Pattern SS.Expr
+  | VBuiltin (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
   | VReturn Value -- Returned value in unspecified monad
@@ -449,7 +450,13 @@ showsPrecValue opts nenv p v =
           showFld (n, fv) =
             showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
-    VLambda {} -> showString "<<function>>"
+    VLambda _env pat e ->
+      let pat' = PP.pretty pat
+          e' = PP.pretty e
+      in
+      shows $ PP.sep ["\\", pat', "->", e']
+
+    VBuiltin {} -> showString "<<builtin>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
