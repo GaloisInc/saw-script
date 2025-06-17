@@ -889,7 +889,7 @@ type, but it must be casted back to `*T` when it is actually dereferenced.
 Accordingly, SAW enforces that `mir_points_to` can only be used on a non-casted
 pointer, so that the value in the second argument matches the type passed to the
 `mir_alloc_raw_ptr` that created the raw pointer in the first argument.
-`mir_cast_raw_pointer` can be used, though, whenever some Rust signature is
+`mir_cast_raw_ptr` can be used, though, whenever some Rust signature is
 expecting a pointer whose static pointee type does not match its "true" type at
 runtime.
 
