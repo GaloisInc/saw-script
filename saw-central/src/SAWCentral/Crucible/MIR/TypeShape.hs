@@ -69,6 +69,12 @@ data TypeShape (tp :: CrucibleType) where
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
     -- a TypeShape.  None of our operations need to recurse inside pointers,
     -- and also this saves us from some infinite recursion.
+    --
+    -- If there are raw pointer casts involved, the pointee type, the pointee
+    -- type contained in the reference type, and the pointee 'TypeRepr' might
+    -- not reflect the actual pointee type of any Crucible reference that is
+    -- paired with this 'TypeShape'. See @Note [Raw pointer casts]@ in
+    -- "SAWCentral.Crucible.MIR.Setup.Value" for more info.
     RefShape :: M.Ty
              -- ^ The reference type
              -> M.Ty
