@@ -210,7 +210,7 @@ data TCError
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
   | NotFullyAppliedRec (ExtCns Term)
-  | BadRecursorApp Term [Term] Term
+  | BadRecursorApp Term [Term] Term Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
@@ -264,9 +264,13 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (BadRecursorApp r ixs arg) =
+  helper (BadRecursorApp r ixs motive motiveTy) =
       ppWithPos [ return "Type mismatch in recursor application"
-                , ishow (Unshared $ FTermF $ RecursorApp r ixs arg)
+                , ishow (Unshared $ FTermF $ RecursorApp r ixs)
+                , pure "motive:"
+                , ishow motive
+                , pure "motiveTy:"
+                , ishow motiveTy
                 ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
@@ -550,8 +554,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (Recursor rec) =
     inferRecursor rec
 
-  typeInfer (RecursorApp r ixs arg) =
-    inferRecursorApp r ixs arg
+  typeInfer (RecursorApp r ixs) =
+    inferRecursorApp r ixs
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -755,21 +759,37 @@ inferRecursor rec =
 inferRecursorApp ::
   SCTypedTerm   {- ^ recursor term -} ->
   [SCTypedTerm] {- ^ data type indices -} ->
-  SCTypedTerm   {- ^ recursor argument -} ->
   TCM Term
-inferRecursorApp r ixs arg =
+inferRecursorApp r ixs =
   do recty <- typeCheckWHNF (typedType r)
      case asRecursorType recty of
        Nothing -> throwTCError (ExpectedRecursor r)
        Just (_d, _ps, motive, motiveTy) -> do
 
+         -- liftIO $ putStrLn "inferRecursorApp"
+         -- liftIO $ print _d
+         -- liftIO $ putStrLn $ "motive: " ++ showTerm motive
+         -- liftIO $ putStrLn $ "motiveTy: " ++ showTerm motiveTy
          -- Apply the indices to the type of the motive
-         -- to check the types of the `ixs` and `arg`, and
+         -- to check the types of the `ixs`, and
          -- ensure that the result is fully applied
 
-         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) (typedVal arg)
-         _s <- ensureSort =<< foldM (applyPiTyped err) motiveTy (ixs ++ [arg])
+         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) motive motiveTy
+         motiveTy' <- foldM (applyPiTyped err) motiveTy ixs
+         --liftIO $ putStrLn $ "motiveTy': " ++ showTerm motiveTy'
 
-         -- return the type (p_ret ixs arg)
-         liftTCM scTypeCheckWHNF =<<
-           liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
+         -- motiveTy' should be a function type of one argument that returns a sort
+         (name, ty, s) <- maybe (throwTCError err) pure (asPi motiveTy')
+         _ <- ensureSort s
+
+         -- compute (p_ret ixs), which will be a term of type motiveTy'
+         p <- liftTCM scTypeCheckWHNF =<<
+           liftTCM scApplyAll motive (map typedVal ixs)
+         --liftIO $ putStrLn $ "p: " ++ showTerm p
+
+         -- convert p to a Pi type
+         p' <- liftTCM incVars 0 1 p
+         liftTCM scPi name ty =<<
+           liftTCM betaNormalize =<<
+           liftTCM scApply p' =<<
+           liftTCM scLocalVar 0
