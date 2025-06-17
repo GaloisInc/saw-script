@@ -1732,7 +1732,7 @@ containsCast (MS.SetupUnion empty _ _) = absurd empty
 containsCast (MS.SetupTuple () vs) = any containsCast vs
 containsCast (MS.SetupSlice slice) =
   case slice of
-    MirSetupSliceRaw ptr len -> containsCast ptr || containsCast len
+    MirSetupSliceRaw ptr _ -> containsCast ptr
     MirSetupSlice _ ref -> containsCast ref
     MirSetupSliceRange _ ref _ _ -> containsCast ref
 containsCast (MS.SetupEnum enum_) =
