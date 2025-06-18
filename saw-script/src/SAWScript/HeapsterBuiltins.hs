@@ -1168,7 +1168,7 @@ heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
             in io $ printOutLn opts Warn $ Text.unpack $ pref <> nm <> ":\n" <> msg_body <> "\n"
         warnErrs nm (asLambda -> Just (_, _, t)) = warnErrs nm t
         warnErrs nm (asApp -> Just (f, arg)) = warnErrs nm arg >> warnErrs nm f
-        warnErrs nm (asRecursorApp -> Just (_, _, ixs, arg)) = mapM_ (warnErrs nm) (arg:ixs)
+        warnErrs nm (asRecursorApp -> Just (_, _, ixs)) = mapM_ (warnErrs nm) ixs
         warnErrs nm (asTupleValue -> Just ts) = mapM_ (warnErrs nm) ts
         warnErrs nm (asTupleSelector -> Just (t, _)) = warnErrs nm t
         warnErrs nm (asRecordValue -> Just ts) = mapM_ (warnErrs nm) ts

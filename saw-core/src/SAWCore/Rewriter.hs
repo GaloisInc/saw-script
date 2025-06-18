@@ -459,8 +459,8 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asLocalVar -> Just i),
-      more)) ->
+     (R.asRecursorApp -> Just (rec, crec, _ixs),
+      (R.asLocalVar -> Just i) : more)) ->
       do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
          let ctxt2 = reverse (take i (reverse ctxt))
          -- The type @ti@ is in the de Bruijn context @ctxt1@.
@@ -626,7 +626,8 @@ asRecordRedex t =
 --   > RecursorApp rec _ n
 asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
 asNatIotaRedex t =
-  do (rec, crec, _, arg) <- R.asRecursorApp t
+  do (f, arg) <- R.asApp t
+     (rec, crec, _) <- R.asRecursorApp f
      n <- R.asNat arg
      return (rec, crec, n)
 
@@ -680,7 +681,7 @@ reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc (asNatIotaRedex -> Just (rec, crec, n)) =
   Just <$> scReduceNatRecursor sc rec crec n
-reduceSharedTerm sc (R.asRecursorApp -> Just (rec, crec, _, arg)) =
+reduceSharedTerm sc (R.asApp -> Just (R.asRecursorApp -> Just (rec, crec, _), arg)) =
   do let (f, args) = R.asApplyAll arg
      mm <- scGetModuleMap sc
      case R.asConstant f of

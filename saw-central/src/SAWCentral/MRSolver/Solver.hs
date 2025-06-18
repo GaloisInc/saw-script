@@ -462,7 +462,7 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
            mrApplyAll body args >>= normCompTerm
 
     -- Always unfold recursors applied to constructors
-    (asRecursorApp -> Just (rc, crec, _, arg), args)
+    (asRecursorApp -> Just (rc, crec, _), arg : args)
       | (asConstant -> Just c, cargs) <- asApplyAll arg ->
         do mm <- liftSC0 scGetModuleMap
            case lookupVarIndexInMap (ecVarIndex c) mm of

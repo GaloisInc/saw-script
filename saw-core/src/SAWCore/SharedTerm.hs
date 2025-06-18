@@ -986,8 +986,8 @@ scWhnf sc t0 =
                                                                       error "scWhnf: field missing in record"
     go (ElimRecursor rec crec _ : xs)
                               (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
-    go xs                     (asRecursorApp ->
-                                Just (r, crec, ixs, arg))       = go (ElimRecursor r crec ixs : xs) arg
+    go (ElimApp x : xs)       (asRecursorApp ->
+                                Just (r, crec, ixs))            = go (ElimRecursor r crec ixs : xs) x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -1032,7 +1032,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor r _crec ixs) =
-      scFlatTermF sc (RecursorApp r ixs t)
+      do f <- scFlatTermF sc (RecursorApp r ixs)
+         scApply sc f t
 
     resolveConstant :: ExtCns Term -> IO ResolvedName
     resolveConstant ec =
@@ -1223,11 +1224,22 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                           (recursorParams rec)
                           (recursorMotive rec)
                           (recursorMotiveTy rec)
-        RecursorApp r ixs arg ->
+        RecursorApp r ixs ->
           do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
                Just (_d, _ps, motive, _motivety) ->
-                 lift $ scApplyAll sc motive (ixs ++ [arg])
+                 do p <- lift $ scApplyAll sc motive ixs
+                    -- convert p to a Pi type
+                    case asLambda p of
+                      Just (x, ty, body) -> lift $ scPi sc x ty body
+                      Nothing ->
+                        do p_tp <- (liftIO . scWhnf sc) =<< memo p
+                           case asPi p_tp of
+                             Nothing -> panic "scTypeOf" ["Bad recursor type"]
+                             Just (x, ty, _s) ->
+                               do p' <- lift $ incVars sc 0 1 p
+                                  x0 <- lift $ scLocalVar sc 0
+                                  lift $ scLambda sc x ty =<< scApply sc p' x0
                _ -> fail "Expected recursor type in recursor application"
 
         RecordType elems ->
