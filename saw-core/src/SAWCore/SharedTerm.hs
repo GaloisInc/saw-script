@@ -1460,7 +1460,18 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
                Just (_d, _ps, motive, _motivety) ->
-                 lift $ scApplyAll sc motive ixs
+                 do p <- lift $ scApplyAll sc motive ixs
+                    -- convert p to a Pi type
+                    case asLambda p of
+                      Just (x, ty, body) -> lift $ scPi sc x ty body
+                      Nothing ->
+                        do p_tp <- (liftIO . scWhnf sc) =<< memo p
+                           case asPi p_tp of
+                             Nothing -> panic "scTypeOf" ["Bad recursor type"]
+                             Just (x, ty, _s) ->
+                               do p' <- lift $ incVars sc 0 1 p
+                                  x0 <- lift $ scLocalVar sc 0
+                                  lift $ scLambda sc x ty =<< scApply sc p' x0
                _ -> fail "Expected recursor type in recursor application"
 
         RecordType elems ->
