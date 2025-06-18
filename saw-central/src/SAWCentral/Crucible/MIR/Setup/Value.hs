@@ -91,7 +91,9 @@ type instance MS.XSetupSlice MIR = MirSetupSlice
 type instance MS.XSetupArray MIR = M.Ty
 type instance MS.XSetupElem MIR = ()
 type instance MS.XSetupField MIR = ()
-type instance MS.XSetupCast MIR = Void
+-- The 'M.Ty' represents the pointee type after the cast.
+-- See Note [Raw pointer casts].
+type instance MS.XSetupCast MIR = M.Ty
 type instance MS.XSetupUnion MIR = Void
 type instance MS.XSetupGlobalInitializer MIR = ()
 type instance MS.XSetupMux MIR = ()
@@ -398,4 +400,133 @@ assertion:
 formulations are equivalent.)
 
 Phew! Enums are surprisingly tricky.
+-}
+
+{-
+Note [Raw pointer casts]
+~~~~~~~~~~~~~~~~~~~~~~~~
+Rust and crucible-mir allow casting the pointee type of raw pointers to
+arbitrary types, as long as both the old and new pointer types have the same
+representation (e.g. the old and new pointee types are both Sized). But when a
+pointer is used to actually read from or write to some memory, the pointer's
+pointee type must match the actual type inside the memory allocation. In other
+words, a pointer to an allocation of type T can be passed around and stored as a
+pointer to any other type, as long as it is casted back to *T when it is
+actually used.
+
+However, in SAW, this means we need the ability to describe a pointer which
+points to an allocation of a different type, because this memory layout may
+appear as the precondition or postcondition of a function, even if no Rust code
+actually dereferences that pointer without casting it back.
+
+We use mir_cast_raw_ptr/SetupCast to handle this mismatch between the static
+pointee type of the pointer and the type of the allocation it is actually
+pointing to. Since the purpose of SetupCast is basically to circumvent SAW's
+SetupValue type system for raw pointers' pointee types, typeOfSetupValue on a
+SetupCast naturally returns TyRawPtr with the post-cast pointee type. But as a
+consequence, for raw pointers, the Mir.Ty/TypeShape inside SAW may not always be
+correct with respect to the actual type inside the Crucible allocation. This is
+tricky to deal with, so here is some analysis about which types are "right" and
+"wrong".
+
+Since mir_alloc_raw_ptr returns a SetupVar directly, no cast can happen here,
+and the MirAllocSpec created by it will always have the same pointee type as was
+actually given to mir_alloc_raw_ptr. If this mir_alloc_raw_ptr is in the
+precondition section, then the MirAllocSpec will always have the "right" pointee
+type, because the Crucible allocation will be created by SAW according to the
+MirAllocSpec. This happens in doAlloc, which returns a MirPointer containing the
+Crucible MirReferenceMux, and here the pointee type stored in the MirPointer
+will also be the "right" one with respect to the MirReferenceMux, because it is
+obtained from the MirAllocSpec.
+
+But if the mir_alloc_raw_ptr is in the postcondition, Crucible is the one that
+is creating the allocation, as part of symbolic execution. Then at the end of
+execution, SAW matches on it against the type that it thinks it should be (in
+matchArg). For instance, if the pointer is the return value, then SAW will match
+against the return type of the Rust function from the MIR. But if the function
+is returning a casted pointer, this return type will be "wrong" with respect to
+the type inside the Crucible reference. matchArg pairs these together in a
+MirPointer, and we would like to keep the invariant that the MirPointer's
+pointee type is always "right". Therefore, if a cast is involved, we don't want
+to look at the "expected" type given to matchArg. The only other place we might
+get a type from is the pointee type in the MirAllocSpec, i.e. the type given to
+mir_alloc_raw_ptr, so we look at that. But since we are in the postcondition, we
+have no guarantee that that type is "right" either.
+
+Fundamentally, pointer casting introduces some level of type unsafety, so we
+just have to trust the user that the type they mir_alloc'd is the "right" type
+(unless we want to actually inspect the Crucible MirReferenceMux from SAW, which
+I'm not sure we want to do, and even then we only get back a Crucible TypeRepr,
+not a MIR Ty). If there is no mir_points_to for that pointer, that is the best
+we can do, but that's probably fine, since the pointee type is not that
+important if the pointee is unspecified. (If the verification result is then
+used as an override in a function that does use that pointer, the verification
+of that function will fail.) But if there is a mir_points_to, we can cross-check
+it with the type of the right hand side of mir_points_to. Since there would be a
+Crucible error if the mir_points_to RHS is the wrong type (because the
+Mir.readMirRefIO in learnPointsTo wouldn't find any MirReference with that type
+in the mux tree), we can assume that if the poststate verification succeeds, the
+mir_points_to RHS has the "right" type. Finally, it is possible that the user
+still mir_alloc'd a pointer of the "wrong" type, and used mir_cast_raw_ptr when
+passing it to mir_points_to. So we must check that mir_points_to does not
+contain any casts on the left hand side. Once we do that, we know that the type
+passed to mir_alloc is "right".
+
+On the other hand, we cannot in general guarantee that the pointee type of a
+pointer in a MIRVal always matches with the Crucible reference in the MIRVal.
+For instance, a MIRVal is created when SAW receives the return value of a
+function back from Crucible as a RegValue. That is paired with a TypeShape
+derived from the declared return type of the Rust function in the MIR. There is
+no way of telling from the MIR signature that that type might be "wrong" with
+respect to the actual type of the allocation. So if the function returns a
+casted pointer, the resulting MIRVal will have mismatched pointee types.
+
+In summary:
+
+- In a MirPointsTo, the pointee type of the left hand side always matches the
+  type of the right hand side.
+
+- In a MirAllocSpec, the pointee type always matches the type which will be
+  stored in the MirReferenceMux (except in the case of a postcondition
+  mir_alloc_raw_ptr with no mir_points_to, in which case we assume that the user
+  supplied the right type).
+
+- In a MirPointer, the pointee type always matches the type stored in the
+  MirReferenceMux.
+
+- In general, the pointee type of a pointer MIRVal does not necessarily match
+  the type stored in the MirReferenceMux.
+
+With these invariants, we can make sure that when we create, read, or write
+Crucible references from SAW, the TypeRepr's we pass are always "right".
+
+The only place we create references is the call to Mir.newMirRefIO in doAlloc.
+The TypeRepr we pass is obtained from a MirAllocSpec, which always has the
+"right" type, so this call is correctly typed.
+
+The only place we read references is the call to Mir.readMirRefIO in
+learnPointsTo. The TypeRepr and MirReferenceMux we pass to it are both derived
+from the MIRVal returned from calling resolveSetupValueMIR on the left hand side
+of a mir_points_to. resolveSetupValueMIR calls resolveSetupVal, which creates a
+MIRVal from a MirPointer. Let's say that a data type containing both a pointee
+type and a MirReferenceMux is "consistent" if the pointee type matches the type
+stored in the MirReferenceMux. Since all MirPointer's are consistent, the MIRVal
+resolved from the SetupVar is consistent too. And since there is no SetupCast on
+the LHS of any mir_points_to, the MIRVal resolved from the overall LHS
+SetupValue is also consistent. Hence the Mir.readMirRefIO call is correctly
+typed.
+
+We write to references with Mir.writeMirRefIO in doAlloc and doPointsTo. In
+doAlloc, the MirReferenceMux we pass is the one we just got from
+Mir.newMirRefIO, and the TypeRepr we pass is the same one we just passed to
+Mir.newMirRefIO, so this call is correctly typed. (The CrucibleType type
+parameter in writeMirRefIO guarantees that the pointee RegValue we are writing
+always matches the TypeRepr we passed.) In doPointsTo, we obtain the TypeRepr
+and MirReferenceMux from the MIRVal returned by calling resolveSetupVal on the
+left hand side of a mir_points_to. By the same reasoning as above, the MIRVal is
+consistent, so the writeMirRefIO call is correctly typed.
+
+All of the above only applies to SAW, not crux-mir-comp, but there's no way of
+constructing a SetupCast in crux-mir-comp yet, so we don't have to worry about
+this for now...
 -}

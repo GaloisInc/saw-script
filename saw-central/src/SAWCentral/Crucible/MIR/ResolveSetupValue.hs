@@ -41,6 +41,8 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , getEnumVariantDiscr
   , testDiscriminantIsBV
   , variantIntIndex
+    -- * Casts
+  , containsCast
     -- * Types of errors
   , MIRTypeOfError(..)
   ) where
@@ -223,6 +225,7 @@ data MIRTypeOfError
   | MIRStrSliceNonU8Array Mir.Ty
   | MIRMuxNonBoolCondition Mir.Ty
   | MIRMuxDifferentBranchTypes Mir.Ty Mir.Ty
+  | MIRCastNonRawPtr Mir.Ty
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -276,6 +279,12 @@ instance Show MIRTypeOfError where
     [ "Mismatch in mux branch types:"
     , "True  branch type: " ++ show (PP.pretty tTy)
     , "False branch type: " ++ show (PP.pretty fTy)
+    ]
+  show (MIRCastNonRawPtr ty) =
+    unlines
+    [ "Casting only works on raw pointers"
+    , "Expected a raw pointer (*const T or *mut T), but got"
+    , show (PP.pretty ty)
     ]
 
 staticNotFoundErr :: Mir.DefId -> String
@@ -344,6 +353,13 @@ typeOfSetupValue mcc env nameEnv val =
       unless (checkCompatibleTys tTy fTy) $
         X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
       pure tTy
+    MS.SetupCast newPointeeTy oldPtr -> do
+      -- Make sure the cast is valid
+      oldPtrTy <- typeOfSetupValue mcc env nameEnv oldPtr
+      case oldPtrTy of
+        Mir.TyRawPtr _ mutbl ->
+          pure $ Mir.TyRawPtr newPointeeTy mutbl
+        _ -> X.throwM $ MIRCastNonRawPtr oldPtrTy
 
     MS.SetupElem _ _ _ ->
       panic "MIRSetup (in typeOfSetupValue)" ["elems not yet implemented"]
@@ -351,7 +367,6 @@ typeOfSetupValue mcc env nameEnv val =
       panic "MIRSetup (in typeOfSetupValue)" ["fields not yet implemented"]
 
     MS.SetupNull empty                -> absurd empty
-    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
   where
     cs = mcc ^. mccRustModule . Mir.rmCS
@@ -651,7 +666,20 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       (Mir.MirVector_Vector vals')
     MS.SetupElem _ _ _                -> panic "resolveSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
-    MS.SetupCast empty _              -> absurd empty
+    MS.SetupCast newPointeeTy oldPtrSetupVal -> do
+      MIRVal oldShp ref <- resolveSetupVal mcc env tyenv nameEnv oldPtrSetupVal
+      case oldShp of
+        RefShape (Mir.TyRawPtr _ _) _ mutbl _ -> do
+          let newPtrTy = Mir.TyRawPtr newPointeeTy mutbl
+          Some newPointeeTpr <- pure $ Mir.tyToRepr col newPointeeTy
+          -- Due to the cast, here the type in the RefShape does not necessarily
+          -- match the actual type that the ref is pointing to!
+          --
+          -- See Note [Raw pointer casts] in SAWCentral.Crucible.MIR.Setup.Value
+          -- for more info.
+          pure $ MIRVal (RefShape newPtrTy newPointeeTy mutbl newPointeeTpr) ref
+        _ ->
+          X.throwM $ MIRCastNonRawPtr $ shapeMirTy oldShp
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobal () name -> do
       static <- findStatic cs name
@@ -1691,3 +1719,29 @@ variantIntIndex adtNm variantIdx variantsSize =
           "Index: " <> Text.pack (show variantIdx),
           "Number of variants: " <> Text.pack (show variantsSize)
       ]
+
+-- | Check if there is a 'SetupCast' somewhere in a 'SetupValue'.
+containsCast :: SetupValue -> Bool
+containsCast (MS.SetupVar _) = False
+containsCast (MS.SetupTerm _) = False
+containsCast (MS.SetupNull empty) = absurd empty
+containsCast (MS.SetupStruct _ vs) = any containsCast vs
+containsCast (MS.SetupArray _ vs) = any containsCast vs
+containsCast (MS.SetupElem () v _) = containsCast v
+containsCast (MS.SetupField () v _) = containsCast v
+containsCast (MS.SetupCast _ _) = True
+containsCast (MS.SetupUnion empty _ _) = absurd empty
+containsCast (MS.SetupTuple () vs) = any containsCast vs
+containsCast (MS.SetupSlice slice) =
+  case slice of
+    MirSetupSliceRaw ptr _ -> containsCast ptr
+    MirSetupSlice _ ref -> containsCast ref
+    MirSetupSliceRange _ ref _ _ -> containsCast ref
+containsCast (MS.SetupEnum enum_) =
+  case enum_ of
+    MirSetupEnumVariant _ _ _ vs -> any containsCast vs
+    MirSetupEnumSymbolic _ disc vss ->
+      containsCast disc || any (any containsCast) vss
+containsCast (MS.SetupGlobal () _) = False
+containsCast (MS.SetupGlobalInitializer () _) = False
+containsCast (MS.SetupMux () _ vt vf) = containsCast vt || containsCast vf

@@ -1,0 +1,31 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let Stuff = mir_find_adt m "test::Stuff" [];
+
+let mk_stuff_spec = do {
+    p <- mir_alloc_raw_ptr_const mir_u8;
+    mir_execute_func [p];
+    mir_return (mir_struct_value Stuff [mir_cast_raw_ptr p mir_i32]);
+};
+
+mk_stuff_ov <- mir_verify m "test::mk_stuff" [] false mk_stuff_spec z3;
+
+let do_stuff_spec = do {
+    x <- mir_fresh_var "x" mir_u8;
+    p <- mir_alloc_raw_ptr_const mir_u8;
+    mir_points_to p (mir_term x);
+    mir_execute_func [mir_struct_value Stuff [mir_cast_raw_ptr p mir_i32]];
+    mir_return (mir_term {{ x + 1 }});
+};
+
+do_stuff_ov <- mir_verify m "test::do_stuff" [] false do_stuff_spec z3;
+
+let weird_add_spec = do {
+    x <- mir_fresh_var "x" mir_u8;
+    mir_execute_func [mir_term x];
+    mir_return (mir_term {{ x + 1 }});
+};
+
+mir_verify m "test::weird_add" [mk_stuff_ov, do_stuff_ov] false weird_add_spec z3;

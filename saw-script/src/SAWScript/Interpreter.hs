@@ -4719,6 +4719,20 @@ primitives = Map.fromList
     , "it appears (i.e., before or after `mir_execute_func`)."
     ]
 
+  , prim "mir_cast_raw_ptr" "MIRValue -> MIRType -> MIRValue"
+    (pureVal mir_cast_raw_ptr)
+    Experimental
+    [ "Given a raw pointer, return a raw pointer to the same memory location"
+    , "and with the same mutability, but with the given type as the pointee"
+    , "type instead."
+    , ""
+    , "Note that this only changes the pointee type as statically tracked by"
+    , "SAWScript. It does not allow you to reinterpret the value pointed to as"
+    , "a type other than what it was originally allocated as with"
+    , "mir_alloc_raw_ptr. Therefore, it cannot be used in the first argument to"
+    , "mir_points_to."
+    ]
+
   , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
     (funVal3 mir_enum_value)
     Experimental

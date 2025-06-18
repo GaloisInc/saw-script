@@ -234,11 +234,11 @@ ppSetupValue setupval = case setupval of
   SetupCast x v ->
     case (ext, x) of
       (LLVMExt, tp) ->
-        PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
+        ppCast v tp
       (JVMExt, empty) ->
         absurd empty
-      (MIRExt, empty) ->
-        absurd empty
+      (MIRExt, ty) ->
+        ppCast v ty
   SetupGlobal _ nm -> PP.pretty ("global(" <> nm <> ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" <> nm <> ")")
   SetupMux x c t f ->
@@ -286,6 +286,9 @@ ppSetupValue setupval = case setupval of
     ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
       ppSetupValue arr <> "[" <> PP.pretty start <>
       ".." <> PP.pretty end <> "]"
+
+    ppCast :: Show ty => SetupValue ext -> ty -> PP.Doc ann
+    ppCast v ty = PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show ty)
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
