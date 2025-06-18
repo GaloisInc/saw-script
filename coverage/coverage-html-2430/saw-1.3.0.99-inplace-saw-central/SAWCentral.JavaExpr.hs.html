@@ -1,0 +1,399 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.JavaExpr
+<span class="lineno">    3 </span>Description : Data structures for Java expressions and types.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : atomb
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE CPP #-}
+<span class="lineno">    9 </span>{-# LANGUAGE DeriveFunctor #-}
+<span class="lineno">   10 </span>{-# LANGUAGE DeriveFoldable #-}
+<span class="lineno">   11 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">   12 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">   13 </span>{-# LANGUAGE TypeSynonymInstances #-}
+<span class="lineno">   14 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   15 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   16 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   17 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>module SAWCentral.JavaExpr
+<span class="lineno">   20 </span>  (-- * Java Expressions
+<span class="lineno">   21 </span>    JavaExprF(..)
+<span class="lineno">   22 </span>  , JavaExpr
+<span class="lineno">   23 </span>  , thisJavaExpr
+<span class="lineno">   24 </span>  , returnJavaExpr
+<span class="lineno">   25 </span>  , asJavaExpr
+<span class="lineno">   26 </span>  , ppJavaExpr
+<span class="lineno">   27 </span>  , jeVarName
+<span class="lineno">   28 </span>  , exprType
+<span class="lineno">   29 </span>  , exprDepth
+<span class="lineno">   30 </span>  , isScalarExpr
+<span class="lineno">   31 </span>  , isReturnExpr
+<span class="lineno">   32 </span>  , containsReturn
+<span class="lineno">   33 </span>  , isArg
+<span class="lineno">   34 </span>  , maxArg
+<span class="lineno">   35 </span>  , isRefJavaExpr
+<span class="lineno">   36 </span>  , isClassJavaExpr
+<span class="lineno">   37 </span>    -- * Logic expressions
+<span class="lineno">   38 </span>  , LogicExpr(..)
+<span class="lineno">   39 </span>  , logicExprJavaExprs
+<span class="lineno">   40 </span>  , useLogicExpr
+<span class="lineno">   41 </span>  , scJavaValue
+<span class="lineno">   42 </span>    -- * Mixed expressions
+<span class="lineno">   43 </span>  , MixedExpr(..)
+<span class="lineno">   44 </span>    -- * Actual type
+<span class="lineno">   45 </span>  , JavaActualType(..)
+<span class="lineno">   46 </span>  , jssTypeOfActual
+<span class="lineno">   47 </span>  , javaTypeToActual
+<span class="lineno">   48 </span>  , isActualRef
+<span class="lineno">   49 </span>  , actualTypeCompatible
+<span class="lineno">   50 </span>  , narrowTypeOfActual
+<span class="lineno">   51 </span>  , cryptolTypeOfActual
+<span class="lineno">   52 </span>  , typeOfLogicExpr
+<span class="lineno">   53 </span>  , ppActualType
+<span class="lineno">   54 </span>  , parseJavaExpr
+<span class="lineno">   55 </span>  , MethodLocation (..)
+<span class="lineno">   56 </span>  , JavaType(..)
+<span class="lineno">   57 </span>  ) where
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>-- Imports {{{2
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>#if !MIN_VERSION_base(4,8,0)
+<span class="lineno">   62 </span>import Control.Applicative
+<span class="lineno">   63 </span>#endif
+<span class="lineno">   64 </span>import Control.Monad.Trans
+<span class="lineno">   65 </span>import Control.Monad.Trans.Except
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>import Language.JVM.Common (ppFldId)
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>import Data.List (intercalate)
+<span class="lineno">   70 </span>import Data.List.Split
+<span class="lineno">   71 </span>import Data.Text (Text)
+<span class="lineno">   72 </span>import qualified Data.Text as Text
+<span class="lineno">   73 </span>import qualified Data.Vector as V
+<span class="lineno">   74 </span>import Text.Read hiding (lift)
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>import Lang.JVM.Codebase as JSS
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>import CryptolSAWCore.Cryptol
+<span class="lineno">   79 </span>import SAWCore.Name (toShortName)
+<span class="lineno">   80 </span>import SAWCore.Recognizer
+<span class="lineno">   81 </span>import SAWCore.SharedTerm
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>import qualified SAWCentral.CongruenceClosure as CC
+<span class="lineno">   84 </span>import SAWCentral.Position
+<span class="lineno">   85 </span>import SAWCentral.Utils
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>import qualified Cryptol.TypeCheck.AST as Cryptol
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>data MethodLocation
+<span class="lineno">   90 </span>   = PC Integer
+<span class="lineno">   91 </span>   | LineOffset Integer
+<span class="lineno">   92 </span>   | LineExact Integer
+<span class="lineno">   93 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- JavaExpr {{{1
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>data JavaExprF v
+<span class="lineno">   98 </span>  = ReturnVal JSS.Type
+<span class="lineno">   99 </span>  | Local String JSS.LocalVariableIndex JSS.Type
+<span class="lineno">  100 </span>  | InstanceField v JSS.FieldId
+<span class="lineno">  101 </span>  | StaticField JSS.FieldId
+<span class="lineno">  102 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">CC.Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">CC.Traversable</span></span></span></span></span></span></span></span>)
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>instance CC.EqFoldable JavaExprF where
+<span class="lineno">  105 </span>  <span class="decl"><span class="nottickedoff">fequal (ReturnVal _) (ReturnVal _) = True</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">fequal (Local _ i _)(Local _ j _) = i == j</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">fequal (InstanceField xr xf) (InstanceField yr yf) = xf == yf &amp;&amp; (xr == yr)</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">fequal (StaticField xf) (StaticField yf) = xf == yf</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="nottickedoff">fequal _ _ = False</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>instance CC.OrdFoldable JavaExprF where
+<span class="lineno">  112 </span>  <span class="decl"><span class="nottickedoff">ReturnVal _ `fcompare` ReturnVal _  = EQ</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">ReturnVal _ `fcompare` _            = LT</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">_           `fcompare` ReturnVal _  = GT</span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">Local _ i _ `fcompare` Local _ i' _ = i `compare` i'</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">Local _ _ _ `fcompare` _           = LT</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">_           `fcompare` Local _ _ _ = GT</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="nottickedoff">InstanceField r1 f1 `fcompare` InstanceField r2 f2 =</span>
+<span class="lineno">  119 </span><span class="spaces">        </span><span class="nottickedoff">case r1 `compare` r2 of</span>
+<span class="lineno">  120 </span><span class="spaces">          </span><span class="nottickedoff">EQ -&gt; f1 `compare` f2</span>
+<span class="lineno">  121 </span><span class="spaces">          </span><span class="nottickedoff">r  -&gt; r</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">StaticField f1 `fcompare` StaticField f2 = f1 `compare` f2</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">StaticField _ `fcompare` _ = GT</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">_ `fcompare` StaticField _ = LT</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>instance <span class="decl"><span class="nottickedoff">CC.ShowFoldable JavaExprF</span></span> where
+<span class="lineno">  127 </span>  <span class="decl"><span class="nottickedoff">fshow (ReturnVal _) = &quot;return&quot;</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">fshow (Local nm _ _) = nm</span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="nottickedoff">fshow (InstanceField r f) = show r ++ &quot;.&quot; ++ JSS.fieldIdName f</span>
+<span class="lineno">  130 </span><span class="spaces">  </span><span class="nottickedoff">fshow (StaticField f) = ppFldId f</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>-- | Typechecked JavaExpr
+<span class="lineno">  133 </span>type JavaExpr = CC.Term JavaExprF
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>thisJavaExpr :: JSS.Class -&gt; JavaExpr
+<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">thisJavaExpr cl = CC.Term (Local &quot;this&quot; 0 (JSS.ClassType (JSS.className cl)))</span></span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>returnJavaExpr :: JSS.Method -&gt; Maybe (JavaExpr)
+<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">returnJavaExpr meth =</span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">(CC.Term . ReturnVal) &lt;$&gt; JSS.methodReturnType meth</span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>isReturnExpr :: JavaExpr -&gt; Bool
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">isReturnExpr (CC.Term (ReturnVal _)) = True</span>
+<span class="lineno">  144 </span><span class="spaces"></span><span class="nottickedoff">isReturnExpr _ = False</span></span>
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>containsReturn :: JavaExpr -&gt; Bool
+<span class="lineno">  147 </span><span class="decl"><span class="nottickedoff">containsReturn (CC.Term e) =</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">case e of</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">ReturnVal _ -&gt; True</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="nottickedoff">InstanceField e' _ -&gt; containsReturn e'</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; False</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Pretty print a Java expression.
+<span class="lineno">  154 </span>ppJavaExpr :: JavaExpr -&gt; String
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">ppJavaExpr (CC.Term exprF) =</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="nottickedoff">case exprF of</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="nottickedoff">ReturnVal _ -&gt; &quot;return&quot;</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="nottickedoff">Local nm _ _ -&gt; nm</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="nottickedoff">InstanceField r f -&gt; ppJavaExpr r ++ &quot;.&quot; ++ JSS.fieldIdName f</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="nottickedoff">StaticField f -&gt; ppFldId f</span></span>
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>-- | Turn a Java expression into a valid SAWCore variable name.
+<span class="lineno">  163 </span>jeVarName :: JavaExpr -&gt; String
+<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">jeVarName = map dotToUnderscore . ppJavaExpr</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">where dotToUnderscore '.' = '_'</span>
+<span class="lineno">  166 </span><span class="spaces">        </span><span class="nottickedoff">dotToUnderscore c = c</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>asJavaExpr :: Term -&gt; Maybe String
+<span class="lineno">  169 </span><span class="decl"><span class="nottickedoff">asJavaExpr (asExtCns -&gt; Just ec) = Just (Text.unpack (toShortName (ecName ec))) -- TODO?</span>
+<span class="lineno">  170 </span><span class="spaces"></span><span class="nottickedoff">asJavaExpr _ = Nothing</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>isRefJavaExpr :: JavaExpr -&gt; Bool
+<span class="lineno">  173 </span><span class="decl"><span class="nottickedoff">isRefJavaExpr = JSS.isRefType . exprType</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>isClassJavaExpr :: JavaExpr -&gt; Bool
+<span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">isClassJavaExpr = isClassType . exprType</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="nottickedoff">where isClassType (JSS.ClassType _) = True</span>
+<span class="lineno">  178 </span><span class="spaces">        </span><span class="nottickedoff">isClassType _ = False</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>maxArg :: JSS.Method -&gt; Int
+<span class="lineno">  181 </span><span class="decl"><span class="nottickedoff">maxArg meth = length (JSS.methodParameterTypes meth) - 1</span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>isArg :: JSS.Method -&gt; JavaExpr -&gt; Bool
+<span class="lineno">  184 </span><span class="decl"><span class="nottickedoff">isArg meth (CC.Term (Local _ idx _)) =</span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="nottickedoff">idx &lt;= JSS.localIndexOfParameter meth (maxArg meth)</span>
+<span class="lineno">  186 </span><span class="spaces"></span><span class="nottickedoff">isArg _ _ = False</span></span>
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>exprType :: JavaExpr -&gt; JSS.Type
+<span class="lineno">  189 </span><span class="decl"><span class="nottickedoff">exprType (CC.Term (ReturnVal ty)) = ty</span>
+<span class="lineno">  190 </span><span class="spaces"></span><span class="nottickedoff">exprType (CC.Term (Local _ _ ty)) = ty</span>
+<span class="lineno">  191 </span><span class="spaces"></span><span class="nottickedoff">exprType (CC.Term (InstanceField _ f)) = JSS.fieldIdType f</span>
+<span class="lineno">  192 </span><span class="spaces"></span><span class="nottickedoff">exprType (CC.Term (StaticField f)) = JSS.fieldIdType f</span></span>
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>exprDepth :: JavaExpr -&gt; Int
+<span class="lineno">  195 </span><span class="decl"><span class="nottickedoff">exprDepth (CC.Term (InstanceField e _)) = 1 + exprDepth e</span>
+<span class="lineno">  196 </span><span class="spaces"></span><span class="nottickedoff">exprDepth _ = 1</span></span>
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>isScalarExpr :: JavaExpr -&gt; Bool
+<span class="lineno">  199 </span><span class="decl"><span class="nottickedoff">isScalarExpr = JSS.isPrimitiveType . exprType</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>-- LogicExpr {{{1
+<span class="lineno">  202 </span>
+<span class="lineno">  203 </span>data LogicExpr =
+<span class="lineno">  204 </span>  LogicExpr { -- | A term, possibly function type, which does _not_
+<span class="lineno">  205 </span>              -- contain any external constant subexpressions.
+<span class="lineno">  206 </span>              <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_leTerm</span></span></span> :: Term
+<span class="lineno">  207 </span>              -- | The Java expressions, if any, that the term should
+<span class="lineno">  208 </span>              -- be applied to
+<span class="lineno">  209 </span>            , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leJavaArgs</span></span></span> :: [JavaExpr]
+<span class="lineno">  210 </span>            }
+<span class="lineno">  211 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>scJavaValue :: SharedContext -&gt; Term -&gt; Text -&gt; IO Term
+<span class="lineno">  214 </span><span class="decl"><span class="nottickedoff">scJavaValue sc ty name = do</span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="nottickedoff">scFreshGlobal sc name ty</span></span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>-- | Return java expressions in logic expression.
+<span class="lineno">  218 </span>logicExprJavaExprs :: LogicExpr -&gt; [JavaExpr]
+<span class="lineno">  219 </span><span class="decl"><span class="nottickedoff">logicExprJavaExprs = leJavaArgs</span></span>
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>useLogicExpr :: SharedContext -&gt; LogicExpr -&gt; [Term] -&gt; IO Term
+<span class="lineno">  222 </span><span class="decl"><span class="nottickedoff">useLogicExpr sc (LogicExpr t _) args = scApplyAll sc t args</span></span>
+<span class="lineno">  223 </span>
+<span class="lineno">  224 </span>-- | Return type of a typed expression.
+<span class="lineno">  225 </span>typeOfLogicExpr :: SharedContext -&gt; LogicExpr -&gt; IO Term
+<span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">typeOfLogicExpr sc (LogicExpr t _) = scTypeOf sc t</span></span>
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>-- MixedExpr {{{1
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>-- | A logic or Java expression.
+<span class="lineno">  231 </span>data MixedExpr
+<span class="lineno">  232 </span>  = LE LogicExpr
+<span class="lineno">  233 </span>  | JE JavaExpr
+<span class="lineno">  234 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>-- | Identifies concrete type of a Java expression.
+<span class="lineno">  237 </span>data JavaActualType
+<span class="lineno">  238 </span>  = ClassInstance JSS.Class
+<span class="lineno">  239 </span>  -- TODO: eventually change JSS.Type to JavaActualType, for more flexibility
+<span class="lineno">  240 </span>  | ArrayInstance Int JSS.Type
+<span class="lineno">  241 </span>  | PrimitiveType JSS.Type
+<span class="lineno">  242 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>instance <span class="decl"><span class="nottickedoff">Eq JavaActualType</span></span> where
+<span class="lineno">  245 </span>  <span class="decl"><span class="nottickedoff">ClassInstance c1 == ClassInstance c2 = JSS.className c1 == JSS.className c2</span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="nottickedoff">ArrayInstance l1 tp1 == ArrayInstance l2 tp2 = l1 == l2 &amp;&amp; tp1 == tp2</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">PrimitiveType tp1 == PrimitiveType tp2 = tp1 == tp2</span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">_ == _ = False</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>-- | Returns true if this represents a reference.
+<span class="lineno">  251 </span>isActualRef :: JavaActualType -&gt; Bool
+<span class="lineno">  252 </span><span class="decl"><span class="nottickedoff">isActualRef ClassInstance{} = True</span>
+<span class="lineno">  253 </span><span class="spaces"></span><span class="nottickedoff">isActualRef ArrayInstance{} = True</span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="nottickedoff">isActualRef PrimitiveType{} = False</span></span>
+<span class="lineno">  255 </span>
+<span class="lineno">  256 </span>-- | Check whether a Type and a JavaActualType are compatible.
+<span class="lineno">  257 </span>actualTypeCompatible :: JSS.Type -&gt; JavaActualType -&gt; Bool
+<span class="lineno">  258 </span><span class="decl"><span class="nottickedoff">actualTypeCompatible ty aty = jssTypeOfActual aty == ty</span></span>
+<span class="lineno">  259 </span>
+<span class="lineno">  260 </span>-- | Returns Java symbolic simulator type that actual type represents.
+<span class="lineno">  261 </span>jssTypeOfActual :: JavaActualType -&gt; JSS.Type
+<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">jssTypeOfActual (ClassInstance x) = JSS.ClassType (JSS.className x)</span>
+<span class="lineno">  263 </span><span class="spaces"></span><span class="nottickedoff">jssTypeOfActual (ArrayInstance _ tp) = JSS.ArrayType tp</span>
+<span class="lineno">  264 </span><span class="spaces"></span><span class="nottickedoff">jssTypeOfActual (PrimitiveType tp) = tp</span></span>
+<span class="lineno">  265 </span>
+<span class="lineno">  266 </span>javaTypeToActual :: JSS.Type -&gt; Maybe JavaActualType
+<span class="lineno">  267 </span><span class="decl"><span class="nottickedoff">javaTypeToActual tp</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="nottickedoff">| JSS.isPrimitiveType tp = Just (PrimitiveType tp)</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>narrowTypeOfActual :: SharedContext -&gt; JavaActualType -&gt; IO (Maybe Term)
+<span class="lineno">  272 </span><span class="decl"><span class="nottickedoff">narrowTypeOfActual sc at =</span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="nottickedoff">case cryptolTypeOfActual at of</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return Nothing</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="nottickedoff">Just cty -&gt;</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- importType sc emptyEnv cty</span>
+<span class="lineno">  277 </span><span class="spaces">         </span><span class="nottickedoff">return (Just t)</span></span>
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>cryptolTypeOfActual :: JavaActualType -&gt; Maybe Cryptol.Type
+<span class="lineno">  280 </span><span class="decl"><span class="nottickedoff">cryptolTypeOfActual ty =</span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">case ty of</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">ClassInstance _ -&gt; Nothing</span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="nottickedoff">ArrayInstance l tp -&gt;</span>
+<span class="lineno">  284 </span><span class="spaces">      </span><span class="nottickedoff">do at &lt;- javaTypeToActual tp</span>
+<span class="lineno">  285 </span><span class="spaces">         </span><span class="nottickedoff">ct &lt;- cryptolTypeOfActual at</span>
+<span class="lineno">  286 </span><span class="spaces">         </span><span class="nottickedoff">Just (Cryptol.tSeq (Cryptol.tNum l) ct)</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="nottickedoff">PrimitiveType pt -&gt;</span>
+<span class="lineno">  288 </span><span class="spaces">      </span><span class="nottickedoff">case pt of</span>
+<span class="lineno">  289 </span><span class="spaces">        </span><span class="nottickedoff">JSS.BooleanType -&gt; Just $ Cryptol.tBit</span>
+<span class="lineno">  290 </span><span class="spaces">        </span><span class="nottickedoff">JSS.ByteType    -&gt; Just $ Cryptol.tWord (Cryptol.tNum (8 :: Integer))</span>
+<span class="lineno">  291 </span><span class="spaces">        </span><span class="nottickedoff">JSS.CharType    -&gt; Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))</span>
+<span class="lineno">  292 </span><span class="spaces">        </span><span class="nottickedoff">JSS.ShortType   -&gt; Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))</span>
+<span class="lineno">  293 </span><span class="spaces">        </span><span class="nottickedoff">JSS.IntType     -&gt; Just $ Cryptol.tWord (Cryptol.tNum (32 :: Integer))</span>
+<span class="lineno">  294 </span><span class="spaces">        </span><span class="nottickedoff">JSS.LongType    -&gt; Just $ Cryptol.tWord (Cryptol.tNum (64 :: Integer))</span>
+<span class="lineno">  295 </span><span class="spaces">        </span><span class="nottickedoff">JSS.ArrayType _ -&gt; Nothing</span>
+<span class="lineno">  296 </span><span class="spaces">        </span><span class="nottickedoff">JSS.ClassType _ -&gt; Nothing</span>
+<span class="lineno">  297 </span><span class="spaces">        </span><span class="nottickedoff">JSS.DoubleType  -&gt; Nothing</span>
+<span class="lineno">  298 </span><span class="spaces">        </span><span class="nottickedoff">JSS.FloatType   -&gt; Nothing</span></span>
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>ppActualType :: JavaActualType -&gt; String
+<span class="lineno">  301 </span><span class="decl"><span class="nottickedoff">ppActualType (ClassInstance x) = JSS.slashesToDots (JSS.unClassName (JSS.className x))</span>
+<span class="lineno">  302 </span><span class="spaces"></span><span class="nottickedoff">ppActualType (ArrayInstance l tp) = show tp ++ &quot;[&quot; ++ show l ++ &quot;]&quot;</span>
+<span class="lineno">  303 </span><span class="spaces"></span><span class="nottickedoff">ppActualType (PrimitiveType tp) = show tp</span></span>
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>parseJavaExpr :: JSS.Codebase -&gt; JSS.Class -&gt; JSS.Method -&gt; String
+<span class="lineno">  306 </span>              -&gt; ExceptT String IO JavaExpr
+<span class="lineno">  307 </span><span class="decl"><span class="nottickedoff">parseJavaExpr cb cls meth estr = parseParts eparts</span>
+<span class="lineno">  308 </span><span class="spaces">  </span><span class="nottickedoff">where parseParts :: [String] -&gt; ExceptT String IO JavaExpr</span>
+<span class="lineno">  309 </span><span class="spaces">        </span><span class="nottickedoff">parseParts [] = throwE &quot;empty Java expression&quot;</span>
+<span class="lineno">  310 </span><span class="spaces">        </span><span class="nottickedoff">parseParts [s] =</span>
+<span class="lineno">  311 </span><span class="spaces">          </span><span class="nottickedoff">case s of</span>
+<span class="lineno">  312 </span><span class="spaces">            </span><span class="nottickedoff">&quot;this&quot; | JSS.methodIsStatic meth -&gt; throwE $</span>
+<span class="lineno">  313 </span><span class="spaces">                     </span><span class="nottickedoff">&quot;can't use 'this' in static method &quot; ++</span>
+<span class="lineno">  314 </span><span class="spaces">                     </span><span class="nottickedoff">JSS.methodName meth</span>
+<span class="lineno">  315 </span><span class="spaces">                   </span><span class="nottickedoff">| otherwise -&gt; return $ thisJavaExpr cls</span>
+<span class="lineno">  316 </span><span class="spaces">            </span><span class="nottickedoff">&quot;return&quot; -&gt; case returnJavaExpr meth of</span>
+<span class="lineno">  317 </span><span class="spaces">                          </span><span class="nottickedoff">Just e -&gt; return e</span>
+<span class="lineno">  318 </span><span class="spaces">                          </span><span class="nottickedoff">Nothing -&gt; throwE $</span>
+<span class="lineno">  319 </span><span class="spaces">                            </span><span class="nottickedoff">&quot;no return value for &quot; ++ methodName meth</span>
+<span class="lineno">  320 </span><span class="spaces">            </span><span class="nottickedoff">('a':'r':'g':'s':'[':rest) -&gt; do</span>
+<span class="lineno">  321 </span><span class="spaces">              </span><span class="nottickedoff">let num = fst (break (==']') rest)</span>
+<span class="lineno">  322 </span><span class="spaces">              </span><span class="nottickedoff">case readMaybe num of</span>
+<span class="lineno">  323 </span><span class="spaces">                </span><span class="nottickedoff">Just (n :: Int) -&gt; do</span>
+<span class="lineno">  324 </span><span class="spaces">                  </span><span class="nottickedoff">let i = localIndexOfParameter meth n</span>
+<span class="lineno">  325 </span><span class="spaces">                      </span><span class="nottickedoff">mlv = lookupLocalVariableByIdx meth 0 i</span>
+<span class="lineno">  326 </span><span class="spaces">                      </span><span class="nottickedoff">paramTypes = V.fromList .</span>
+<span class="lineno">  327 </span><span class="spaces">                                   </span><span class="nottickedoff">methodKeyParameterTypes .</span>
+<span class="lineno">  328 </span><span class="spaces">                                   </span><span class="nottickedoff">methodKey $</span>
+<span class="lineno">  329 </span><span class="spaces">                                   </span><span class="nottickedoff">meth</span>
+<span class="lineno">  330 </span><span class="spaces">                  </span><span class="nottickedoff">case mlv of</span>
+<span class="lineno">  331 </span><span class="spaces">                    </span><span class="nottickedoff">Nothing</span>
+<span class="lineno">  332 </span><span class="spaces">                      </span><span class="nottickedoff">| n &lt; V.length paramTypes -&gt;</span>
+<span class="lineno">  333 </span><span class="spaces">                        </span><span class="nottickedoff">return $ CC.Term $ Local s i $ paramTypes V.! (fromIntegral n)</span>
+<span class="lineno">  334 </span><span class="spaces">                      </span><span class="nottickedoff">| otherwise -&gt; throwE $</span>
+<span class="lineno">  335 </span><span class="spaces">                          </span><span class="nottickedoff">&quot;(zero-based) local variable index &quot; ++ show i ++</span>
+<span class="lineno">  336 </span><span class="spaces">                          </span><span class="nottickedoff">&quot; for parameter &quot; ++ show n ++ &quot; doesn't exist&quot;</span>
+<span class="lineno">  337 </span><span class="spaces">                    </span><span class="nottickedoff">Just lv -&gt; return $ CC.Term $ Local s i $ localType lv</span>
+<span class="lineno">  338 </span><span class="spaces">                </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;bad Java expression syntax: &quot; ++ s</span>
+<span class="lineno">  339 </span><span class="spaces">            </span><span class="nottickedoff">_ | hasDebugInfo meth -&gt; do</span>
+<span class="lineno">  340 </span><span class="spaces">                  </span><span class="nottickedoff">let mlv = lookupLocalVariableByName meth 0 s</span>
+<span class="lineno">  341 </span><span class="spaces">                  </span><span class="nottickedoff">case mlv of</span>
+<span class="lineno">  342 </span><span class="spaces">                    </span><span class="nottickedoff">Nothing -&gt; throwE $ &quot;can't parse expression: &quot; ++ estr</span>
+<span class="lineno">  343 </span><span class="spaces">                    </span><span class="nottickedoff">Just lv -&gt; return $ CC.Term $ Local s i ty</span>
+<span class="lineno">  344 </span><span class="spaces">                      </span><span class="nottickedoff">where i = JSS.localIdx lv</span>
+<span class="lineno">  345 </span><span class="spaces">                            </span><span class="nottickedoff">ty = JSS.localType lv</span>
+<span class="lineno">  346 </span><span class="spaces">              </span><span class="nottickedoff">| otherwise -&gt; throwE $</span>
+<span class="lineno">  347 </span><span class="spaces">                  </span><span class="nottickedoff">&quot;variable &quot; ++ s ++</span>
+<span class="lineno">  348 </span><span class="spaces">                  </span><span class="nottickedoff">&quot; referenced by name, but no debug info available&quot;</span>
+<span class="lineno">  349 </span><span class="spaces">        </span><span class="nottickedoff">parseParts (fname:rest) = do</span>
+<span class="lineno">  350 </span><span class="spaces">          </span><span class="nottickedoff">let cname = JSS.mkClassName (intercalate &quot;/&quot; (reverse rest))</span>
+<span class="lineno">  351 </span><span class="spaces">          </span><span class="nottickedoff">mc &lt;- lift $ tryLookupClass cb cname</span>
+<span class="lineno">  352 </span><span class="spaces">          </span><span class="nottickedoff">case (filter ((== fname) . fieldName) . filter fieldIsStatic . classFields) &lt;$&gt; mc of</span>
+<span class="lineno">  353 </span><span class="spaces">            </span><span class="nottickedoff">Just [fld] -&gt; do</span>
+<span class="lineno">  354 </span><span class="spaces">              </span><span class="nottickedoff">let fid = FieldId cname fname (fieldType fld)</span>
+<span class="lineno">  355 </span><span class="spaces">              </span><span class="nottickedoff">return $ CC.Term $ StaticField fid</span>
+<span class="lineno">  356 </span><span class="spaces">            </span><span class="nottickedoff">_ -&gt; do</span>
+<span class="lineno">  357 </span><span class="spaces">              </span><span class="nottickedoff">e &lt;- parseParts rest</span>
+<span class="lineno">  358 </span><span class="spaces">              </span><span class="nottickedoff">let jt = exprType e</span>
+<span class="lineno">  359 </span><span class="spaces">                  </span><span class="nottickedoff">pos = PosInternal &quot;FIXME&quot; -- TODO</span>
+<span class="lineno">  360 </span><span class="spaces">              </span><span class="nottickedoff">fid &lt;- findField cb pos jt fname</span>
+<span class="lineno">  361 </span><span class="spaces">              </span><span class="nottickedoff">return $ CC.Term $ InstanceField e fid</span>
+<span class="lineno">  362 </span><span class="spaces">        </span><span class="nottickedoff">eparts = reverse $ splitOn &quot;.&quot; estr</span></span>
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>-- | Adapted from type 'JavaType' in Java.sawcore.
+<span class="lineno">  365 </span>data JavaType
+<span class="lineno">  366 </span>  = JavaBoolean
+<span class="lineno">  367 </span>  | JavaByte
+<span class="lineno">  368 </span>  | JavaChar
+<span class="lineno">  369 </span>  | JavaShort
+<span class="lineno">  370 </span>  | JavaInt
+<span class="lineno">  371 </span>  | JavaLong
+<span class="lineno">  372 </span>  | JavaFloat
+<span class="lineno">  373 </span>  | JavaDouble
+<span class="lineno">  374 </span>  | JavaArray Int JavaType
+<span class="lineno">  375 </span>  | JavaClass Text
+<span class="lineno">  376 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+
+</pre>
+</body>
+</html>
