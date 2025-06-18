@@ -8,9 +8,7 @@
 
 * Theorem:
 ~~~~
-  let { x@1 = True
-      }
-   in EqTrue (ecEq Bool PEqBit x@1 x@1)
+  EqTrue (ecEq Bool PEqBit True True)
 ~~~~
 
 # Solvers Used
@@ -24,9 +22,7 @@
 
 * Theorem:
 ~~~~
-  let { x@1 = True
-      }
-   in EqTrue (ecEq Bool PEqBit x@1 x@1)
+  EqTrue (ecEq Bool PEqBit True True)
 ~~~~
 
 # Solvers Used

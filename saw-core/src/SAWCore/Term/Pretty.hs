@@ -561,6 +561,7 @@ shouldMemoizeTerm t =
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False
     FTermF ExtCns{} -> False
+    Constant{} -> False
     LocalVar{} -> False
     _ -> True
 
