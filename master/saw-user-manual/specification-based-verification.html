@@ -81,7 +81,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#structure-of-a-specification">Structure of a Specification</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#creating-fresh-variables">Creating Fresh Variables</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#the-setupvalue-and-jvmvalue-types">The SetupValue and JVMValue Types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-setupvalue-jvmvalue-and-mirvalue-types">The SetupValue, JVMValue, and MIRValue Types</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#cryptol-type-correspondence">Cryptol type correspondence</a></li>
 </ul>
 </li>
@@ -390,8 +390,8 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> from
 the post state (i.e., after <code class="docutils literal notranslate"><span class="pre">llvm_execute_func</span></code>).</p>
 </section>
-<section id="the-setupvalue-and-jvmvalue-types">
-<h2>The SetupValue and JVMValue Types<a class="headerlink" href="#the-setupvalue-and-jvmvalue-types" title="Link to this heading"></a></h2>
+<section id="the-setupvalue-jvmvalue-and-mirvalue-types">
+<h2>The SetupValue, JVMValue, and MIRValue Types<a class="headerlink" href="#the-setupvalue-jvmvalue-and-mirvalue-types" title="Link to this heading"></a></h2>
 <p>Many specifications require reasoning about both pure values and about
 the configuration of the heap. The <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> type corresponds to
 values that can occur during symbolic execution, which includes both
@@ -481,6 +481,7 @@ to <code class="docutils literal notranslate"><span class="pre">&lt;ty_i&gt;</sp
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_f32</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_f64</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_ref</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_ref_mut</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_raw_ptr_const</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_raw_ptr_mut</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_slice</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_str</span></code></p></li>
 </ul>
@@ -953,17 +954,38 @@ value.</p>
 <h3>MIR heap values<a class="headerlink" href="#mir-heap-values" title="Link to this heading"></a></h3>
 <p>MIR verification has a single <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> command:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">mir_points_to</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code> takes two <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code>
-arguments, the first of which must be a reference or pointer, and states that
-the memory specified by that reference or pointer should contain the value given
-in the second argument (which may be any type of <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_points_to</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code> takes two <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>
+arguments, the first of which must be a reference or raw pointer, and states
+that the memory specified by that reference or raw pointer should contain the
+value given in the second argument (which may be any type of <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>).</p></li>
 </ul>
 <p>As a convenience, SAW also provides:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">SetupValue</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span> <span class="pre">:</span> <span class="pre">SetupValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_ref_of_mut</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
 </ul>
-<p>which combine <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single operation.</p>
+<p>which combine <code class="docutils literal notranslate"><span class="pre">mir_alloc</span></code>/<code class="docutils literal notranslate"><span class="pre">mir_alloc_mut</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> into a single
+operation.</p>
+<p>Some low-level Rust code involves casting raw pointers, resulting in raw
+pointers which point to values of a different type than what the raw pointer’s
+static type claims. This can be modeled in SAW using the <code class="docutils literal notranslate"><span class="pre">mir_cast_raw_ptr</span></code>
+command:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_cast_raw_ptr</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRType</span></code> takes a raw pointer and a
+type, and returns a raw pointer to the same memory location and with the same
+mutability as the given pointer, but with the given type as the static pointee
+type instead.</p></li>
+</ul>
+<p>Unlike in the LLVM backend, this does <em>not</em> allow for reinterpretation of
+memory. If a raw pointer points to an allocation that is actually of type <code class="docutils literal notranslate"><span class="pre">T</span></code>,
+the pointer can be cast and passed around and stored as a pointer to another
+type, but it must be casted back to <code class="docutils literal notranslate"><span class="pre">*T</span></code> when it is actually dereferenced.
+Accordingly, SAW enforces that <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> can only be used on a non-casted
+pointer, so that the value in the second argument matches the type passed to the
+<code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr</span></code> that created the raw pointer in the first argument.
+<code class="docutils literal notranslate"><span class="pre">mir_cast_raw_ptr</span></code> can be used, though, whenever some Rust signature is
+expecting a pointer whose static pointee type does not match its “true” type at
+runtime.</p>
 </section>
 </section>
 <section id="working-with-compound-types">

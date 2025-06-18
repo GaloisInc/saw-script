@@ -246,7 +246,7 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run `llvm_fresh_var` from
 the post state (i.e., after `llvm_execute_func`).
 
-## The SetupValue and JVMValue Types
+## The SetupValue, JVMValue, and MIRValue Types
 
 Many specifications require reasoning about both pure values and about
 the configuration of the heap. The `SetupValue` type corresponds to
@@ -338,6 +338,7 @@ The following MIR types do _not_ correspond to Cryptol types:
 - `mir_f32`
 - `mir_f64`
 - `mir_ref` and `mir_ref_mut`
+- `mir_raw_ptr_const` and `mir_raw_ptr_mut`
 - `mir_slice`
 - `mir_str`
 
@@ -858,17 +859,39 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `SetupValue`
-arguments, the first of which must be a reference or pointer, and states that
-the memory specified by that reference or pointer should contain the value given
-in the second argument (which may be any type of `SetupValue`).
+- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `MIRValue`
+  arguments, the first of which must be a reference or raw pointer, and states
+  that the memory specified by that reference or raw pointer should contain the
+  value given in the second argument (which may be any type of `MIRValue`).
 
 As a convenience, SAW also provides:
 
-- `mir_ref_of : SetupValue -> MIRSetup SetupValue`
-- `mir_ref_of_mut : SetupValue -> MIRSetup SetupValue`
+- `mir_ref_of : MIRValue -> MIRSetup MIRValue`
+- `mir_ref_of_mut : MIRValue -> MIRSetup MIRValue`
 
-which combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to` into a single operation.
+which combine `mir_alloc`/`mir_alloc_mut` and `mir_points_to` into a single
+operation.
+
+Some low-level Rust code involves casting raw pointers, resulting in raw
+pointers which point to values of a different type than what the raw pointer's
+static type claims. This can be modeled in SAW using the `mir_cast_raw_ptr`
+command:
+
+- `mir_cast_raw_ptr : MIRValue -> MIRType -> MIRType` takes a raw pointer and a
+  type, and returns a raw pointer to the same memory location and with the same
+  mutability as the given pointer, but with the given type as the static pointee
+  type instead.
+
+Unlike in the LLVM backend, this does *not* allow for reinterpretation of
+memory. If a raw pointer points to an allocation that is actually of type `T`,
+the pointer can be cast and passed around and stored as a pointer to another
+type, but it must be casted back to `*T` when it is actually dereferenced.
+Accordingly, SAW enforces that `mir_points_to` can only be used on a non-casted
+pointer, so that the value in the second argument matches the type passed to the
+`mir_alloc_raw_ptr` that created the raw pointer in the first argument.
+`mir_cast_raw_ptr` can be used, though, whenever some Rust signature is
+expecting a pointer whose static pointee type does not match its "true" type at
+runtime.
 
 ## Working with Compound Types
 
