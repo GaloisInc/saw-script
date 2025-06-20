@@ -1732,6 +1732,12 @@ scOpaqueConstant ::
 scOpaqueConstant sc nmi ty =
   do i <- scRegisterName sc nmi
      let ec = EC i nmi ty
+     scInsDefInMap sc $
+       Def { defNameInfo = nmi,
+             defVarIndex = i,
+             defQualifier = NoQualifier,
+             defType = ty,
+             defBody = Nothing }
      scTermF sc (Constant ec)
 
 -- | Create a function application term from a global identifier and a list of
