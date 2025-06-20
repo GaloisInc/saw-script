@@ -9,7 +9,22 @@ Portability : portable
 
 module Language.Coq.AST where
 
-type Ident = String
+import Data.String (IsString(..))
+
+newtype Ident = Ident String
+  deriving (Eq, Ord)
+
+instance Show Ident where
+  show (Ident s) = show s
+
+instance IsString Ident where
+  fromString s = Ident s
+
+newtype ModuleName = ModuleName String
+  deriving (Eq, Ord)
+
+instance Show ModuleName where
+  show (ModuleName s) = show s
 
 data Sort
   = Prop
