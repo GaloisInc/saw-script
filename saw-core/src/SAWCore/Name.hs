@@ -235,8 +235,11 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
 
 type VarIndex = Int
 
--- | An external constant with a name.
--- Names are not necessarily unique, but the var index should be.
+-- | A global name with a unique ID and a type. We maintain a global
+-- invariant that the 'VarIndex' and the 'NameInfo' must be in a
+-- strict one-to-one correspondence: Each 'VarIndex' is paired with a
+-- unique 'NameInfo', and each 'NameInfo' is paired with a unique
+-- 'VarIndex'.
 data ExtCns e =
   EC
   { ecVarIndex :: !VarIndex
@@ -245,12 +248,17 @@ data ExtCns e =
   }
   deriving (Show, Functor, Foldable, Traversable)
 
+-- | Because of the global uniqueness invariant, comparing the
+-- 'VarIndex' is sufficient to ensure equality of names.
 instance Eq (ExtCns e) where
   x == y = ecVarIndex x == ecVarIndex y
 
 instance Ord (ExtCns e) where
   compare x y = compare (ecVarIndex x) (ecVarIndex y)
 
+-- | For hashing, we consider only the 'NameInfo' and not the
+-- 'VarIndex'; this gives a stable hash value for a particular name,
+-- even if the unique IDs are assigned differently from run to run.
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecName ec)
 
