@@ -252,7 +252,7 @@ instance Ord (ExtCns e) where
   compare x y = compare (ecVarIndex x) (ecVarIndex y)
 
 instance Hashable (ExtCns e) where
-  hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
+  hashWithSalt x ec = hashWithSalt x (ecName ec)
 
 
 scFreshNameURI :: Text -> VarIndex -> URI
