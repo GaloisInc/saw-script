@@ -1,0 +1,1027 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    5 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">    6 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    7 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">    8 </span>{-# LANGUAGE DeriveAnyClass #-}
+<span class="lineno">    9 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">   10 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">   11 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">   12 </span>{-# LANGUAGE KindSignatures #-}
+<span class="lineno">   13 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   14 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">   15 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   16 </span>{-# LANGUAGE UndecidableInstances #-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>{- |
+<span class="lineno">   19 </span>Module      : SAWCentral.MRSolver.SMT
+<span class="lineno">   20 </span>Copyright   : Galois, Inc. 2022
+<span class="lineno">   21 </span>License     : BSD3
+<span class="lineno">   22 </span>Maintainer  : westbrook@galois.com
+<span class="lineno">   23 </span>Stability   : experimental
+<span class="lineno">   24 </span>Portability : non-portable (language extensions)
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>This module implements the interface between Mr. Solver and an SMT solver,
+<span class="lineno">   27 </span>namely 'mrProvable' and 'mrProveEq'.
+<span class="lineno">   28 </span>-}
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>module SAWCentral.MRSolver.SMT where
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>import Data.Maybe
+<span class="lineno">   33 </span>import qualified Data.Text as Text
+<span class="lineno">   34 </span>import Data.Text (Text)
+<span class="lineno">   35 </span>import qualified Data.Vector as V
+<span class="lineno">   36 </span>import Numeric.Natural (Natural)
+<span class="lineno">   37 </span>import Control.Monad (MonadPlus(..), (&gt;=&gt;), (&lt;=&lt;), when, unless, foldM)
+<span class="lineno">   38 </span>import Control.Monad.Catch (throwM, catch)
+<span class="lineno">   39 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   40 </span>import Control.Monad.Trans.Class (MonadTrans(..))
+<span class="lineno">   41 </span>import Control.Monad.Trans.Maybe
+<span class="lineno">   42 </span>import GHC.Generics
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>import Data.Map (Map)
+<span class="lineno">   45 </span>import qualified Data.Map as Map
+<span class="lineno">   46 </span>import qualified Data.Set as Set
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>import Prettyprinter
+<span class="lineno">   49 </span>import Data.Reflection
+<span class="lineno">   50 </span>import Data.Parameterized.BoolRepr
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>import qualified SAWSupport.Pretty as PPS (render)
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>import SAWCore.Term.Functor
+<span class="lineno">   55 </span>import SAWCore.Term.Pretty
+<span class="lineno">   56 </span>import SAWCore.SharedTerm
+<span class="lineno">   57 </span>import SAWCore.Recognizer
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>import SAWCore.Module (Def(..))
+<span class="lineno">   60 </span>import SAWCore.Prim (widthNat, EvalError(..))
+<span class="lineno">   61 </span>import qualified SAWCore.Prim as Prim
+<span class="lineno">   62 </span>import SAWCore.Simulator (SimulatorConfig, evalSharedTerm)
+<span class="lineno">   63 </span>import SAWCore.Simulator.Value
+<span class="lineno">   64 </span>import SAWCore.Simulator.TermModel
+<span class="lineno">   65 </span>import SAWCore.Simulator.Prims
+<span class="lineno">   66 </span>import SAWCore.FiniteValue
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>import SAWCentral.Panic
+<span class="lineno">   69 </span>import SAWCentral.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>import SAWCentral.MRSolver.Term
+<span class="lineno">   72 </span>import SAWCentral.MRSolver.Monad
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>----------------------------------------------------------------------
+<span class="lineno">   76 </span>-- * Normalizing terms for SMT
+<span class="lineno">   77 </span>----------------------------------------------------------------------
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>type TmPrim = Prim TermModel
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- | Convert a vec value to a 'Term'
+<span class="lineno">   82 </span>vecValToTerm :: SharedContext -&gt; SimulatorConfig TermModel -&gt;
+<span class="lineno">   83 </span>                TValue TermModel -&gt; Value TermModel -&gt; IO (Maybe Term)
+<span class="lineno">   84 </span><span class="decl"><span class="nottickedoff">vecValToTerm sc cfg tp (VVector vs) =</span>
+<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">do let ?recordEC = \_ec -&gt; return ()</span>
+<span class="lineno">   86 </span><span class="spaces">     </span><span class="nottickedoff">tp' &lt;- readBackTValue sc cfg tp</span>
+<span class="lineno">   87 </span><span class="spaces">     </span><span class="nottickedoff">vs' &lt;- traverse (readBackValue sc cfg tp &lt;=&lt; force) (V.toList vs)</span>
+<span class="lineno">   88 </span><span class="spaces">     </span><span class="nottickedoff">Just &lt;$&gt; scVectorReduced sc tp' vs'</span>
+<span class="lineno">   89 </span><span class="spaces"></span><span class="nottickedoff">vecValToTerm _ _ _ (VExtra (VExtraTerm _tp tm)) = return $ Just tm</span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="nottickedoff">vecValToTerm _ _ _ _ = return $ Nothing</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>-- | A primitive function that expects a term of the form @gen n a f@ and the
+<span class="lineno">   93 </span>-- function argument @f@ to the supplied function
+<span class="lineno">   94 </span>primGenVec :: SharedContext -&gt; SimulatorConfig TermModel -&gt;
+<span class="lineno">   95 </span>              TValue TermModel -&gt; (Term -&gt; TmPrim) -&gt; TmPrim
+<span class="lineno">   96 </span><span class="decl"><span class="nottickedoff">primGenVec sc cfg tp =</span>
+<span class="lineno">   97 </span><span class="spaces">  </span><span class="nottickedoff">PrimFilterFun &quot;primGenVec&quot; $ \v -&gt; lift (vecValToTerm sc cfg tp v) &gt;&gt;= \case</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">(Just (asGenVecTerm -&gt; Just (_, _, f_m))) -&gt; lift $ f_m sc</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; mzero</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>-- | Convert a Boolean value to a 'Term'
+<span class="lineno">  102 </span>boolValToTerm :: SharedContext -&gt; Value TermModel -&gt; IO Term
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">boolValToTerm _ (VBool (Left tm)) = return tm</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="nottickedoff">boolValToTerm sc (VBool (Right b)) = scBool sc b</span>
+<span class="lineno">  105 </span><span class="spaces"></span><span class="nottickedoff">boolValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm</span>
+<span class="lineno">  106 </span><span class="spaces"></span><span class="nottickedoff">boolValToTerm _ v = error (&quot;boolValToTerm: unexpected value: &quot; ++ show v)</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>-- | Convert a bitvector value to a 'Term'
+<span class="lineno">  109 </span>bvValToTerm :: SharedContext -&gt; Value TermModel -&gt; IO Term
+<span class="lineno">  110 </span><span class="decl"><span class="nottickedoff">bvValToTerm _ (VWord (Left (_,tm))) = return tm</span>
+<span class="lineno">  111 </span><span class="spaces"></span><span class="nottickedoff">bvValToTerm sc (VWord (Right bv)) =</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)</span>
+<span class="lineno">  113 </span><span class="spaces"></span><span class="nottickedoff">bvValToTerm sc (VVector vs) =</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">do vs' &lt;- traverse (boolValToTerm sc &lt;=&lt; force) (V.toList vs)</span>
+<span class="lineno">  115 </span><span class="spaces">     </span><span class="nottickedoff">bool_tp &lt;- scBoolType sc</span>
+<span class="lineno">  116 </span><span class="spaces">     </span><span class="nottickedoff">scVectorReduced sc bool_tp vs'</span>
+<span class="lineno">  117 </span><span class="spaces"></span><span class="nottickedoff">bvValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm</span>
+<span class="lineno">  118 </span><span class="spaces"></span><span class="nottickedoff">bvValToTerm _ v = error (&quot;bvValToTerm: unexpected value: &quot; ++ show v)</span></span>
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>-- | Convert a natural number value to a 'Term'
+<span class="lineno">  121 </span>natValToTerm :: SharedContext -&gt; Value TermModel -&gt; IO Term
+<span class="lineno">  122 </span><span class="decl"><span class="nottickedoff">natValToTerm sc (VNat n) = scNat sc n</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="nottickedoff">natValToTerm sc (VBVToNat w bv_val) =</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">do bv_tm &lt;- bvValToTerm sc bv_val</span>
+<span class="lineno">  125 </span><span class="spaces">     </span><span class="nottickedoff">scBvToNat sc (fromIntegral w) bv_tm</span>
+<span class="lineno">  126 </span><span class="spaces"></span><span class="nottickedoff">natValToTerm _ (VExtra (VExtraTerm _ n)) = return n</span>
+<span class="lineno">  127 </span><span class="spaces"></span><span class="nottickedoff">natValToTerm _ v = error (&quot;natValToTerm: unexpected value: &quot; ++ show v)</span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>-- | A primitive function that expects a 'Term' of type @Nat@
+<span class="lineno">  130 </span>primNatTermFun :: SharedContext -&gt; (Term -&gt; TmPrim) -&gt; TmPrim
+<span class="lineno">  131 </span><span class="decl"><span class="nottickedoff">primNatTermFun sc =</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">PrimFilterFun &quot;primNatTermFun&quot; $ \v -&gt; lift (natValToTerm sc v)</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | A primitive that returns a global as a term
+<span class="lineno">  135 </span>primGlobal :: SharedContext -&gt; Ident -&gt; TmPrim
+<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">primGlobal sc glob =</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">Prim $ do tp &lt;- scTypeOfIdent sc glob</span>
+<span class="lineno">  138 </span><span class="spaces">            </span><span class="nottickedoff">tp_tp &lt;- scTypeOf sc tp &gt;&gt;= scWhnf sc</span>
+<span class="lineno">  139 </span><span class="spaces">            </span><span class="nottickedoff">s &lt;- case asSort tp_tp of</span>
+<span class="lineno">  140 </span><span class="spaces">              </span><span class="nottickedoff">Just s -&gt; return s</span>
+<span class="lineno">  141 </span><span class="spaces">              </span><span class="nottickedoff">Nothing -&gt; fail &quot;primGlobal: expected sort&quot;</span>
+<span class="lineno">  142 </span><span class="spaces">            </span><span class="nottickedoff">VExtra &lt;$&gt; VExtraTerm (VTyTerm s tp) &lt;$&gt; scGlobalDef sc glob</span></span>
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>-- | A primitive that unfolds a global
+<span class="lineno">  145 </span>primUnfold :: SharedContext -&gt; SimulatorConfig TermModel -&gt; Ident -&gt; TmPrim
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">primUnfold sc cfg glob =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">Prim $ evalSharedTerm cfg =&lt;&lt; fmap (fromJust . defBody) (scRequireDef sc glob)</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>mkReflProof :: SharedContext -&gt; Bool -&gt; IO TmValue
+<span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">mkReflProof sc b =</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">do b_trm &lt;- scBool sc b</span>
+<span class="lineno">  152 </span><span class="spaces">     </span><span class="nottickedoff">bool_tp &lt;- scBoolType sc</span>
+<span class="lineno">  153 </span><span class="spaces">     </span><span class="nottickedoff">refl_trm &lt;- scCtorApp sc &quot;Prelude.Refl&quot; [bool_tp, b_trm]</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="nottickedoff">eq_tp &lt;- scDataTypeApp sc &quot;Prelude.Eq&quot; [bool_tp, b_trm, b_trm]</span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="nottickedoff">return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm</span></span>
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>mkDummyProofValue :: Text -&gt; IO (Thunk TermModel)
+<span class="lineno">  158 </span><span class="decl"><span class="nottickedoff">mkDummyProofValue op =</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">delay $ return $ panic op [&quot;Unexpected evaluation of proof object&quot;]</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>iteWithProofOp :: SharedContext -&gt; SimulatorConfig TermModel -&gt; TmPrim
+<span class="lineno">  162 </span><span class="decl"><span class="nottickedoff">iteWithProofOp sc cfg =</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">tvalFun $ \tp -&gt;</span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="nottickedoff">boolFun $ \b_val -&gt;</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \x_fun -&gt;</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">strictFun $ \y_fun -&gt;</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="nottickedoff">Prim $</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="nottickedoff">case b_val of</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="nottickedoff">Right b -&gt; mkReflProof sc b &gt;&gt;= apply x_fun . ready</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="nottickedoff">Left b_trm -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">      </span><span class="nottickedoff">do let ?recordEC = \_ec -&gt; return ()</span>
+<span class="lineno">  172 </span><span class="spaces">         </span><span class="nottickedoff">eq_true &lt;- mkDummyProofValue &quot;iteWithProofOp / true&quot;</span>
+<span class="lineno">  173 </span><span class="spaces">         </span><span class="nottickedoff">x &lt;- apply x_fun eq_true</span>
+<span class="lineno">  174 </span><span class="spaces">         </span><span class="nottickedoff">x_trm &lt;- readBackValue sc cfg tp x</span>
+<span class="lineno">  175 </span><span class="spaces">         </span><span class="nottickedoff">eq_false &lt;- mkDummyProofValue &quot;iteWithProofOp / false&quot;</span>
+<span class="lineno">  176 </span><span class="spaces">         </span><span class="nottickedoff">y &lt;- apply y_fun eq_false</span>
+<span class="lineno">  177 </span><span class="spaces">         </span><span class="nottickedoff">y_trm &lt;- readBackValue sc cfg tp y</span>
+<span class="lineno">  178 </span><span class="spaces">         </span><span class="nottickedoff">tp_trm &lt;- readBackTValue sc cfg tp</span>
+<span class="lineno">  179 </span><span class="spaces">         </span><span class="nottickedoff">ite_trm &lt;- scIte sc tp_trm b_trm x_trm y_trm</span>
+<span class="lineno">  180 </span><span class="spaces">         </span><span class="nottickedoff">return $ VExtra $ VExtraTerm tp ite_trm</span></span>
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>-- | Implementations of primitives for normalizing Mr Solver terms
+<span class="lineno">  183 </span>-- FIXME: eventually we need to add the current event type to this list
+<span class="lineno">  184 </span>smtNormPrims :: SharedContext -&gt; SimulatorConfig TermModel -&gt;
+<span class="lineno">  185 </span>                Map Ident TmPrim -&gt; Map Ident TmPrim
+<span class="lineno">  186 </span><span class="decl"><span class="nottickedoff">smtNormPrims sc cfg = Map.union $ Map.fromList</span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="nottickedoff">[</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="nottickedoff">-- Override the usual behavior of @gen@, @genWithProof@, and @VoidEv@ so</span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="nottickedoff">-- they are not evaluated or unfolded</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;Prelude.gen&quot;, primGlobal sc &quot;Prelude.gen&quot;),</span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;Prelude.genWithProof&quot;, primGlobal sc &quot;Prelude.genWithProof&quot;),</span>
+<span class="lineno">  192 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;SpecM.VoidEv&quot;, primGlobal sc &quot;SpecM.VoidEv&quot;),</span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;SpecM.SpecM&quot;, primGlobal sc &quot;SpecM.SpecM&quot;),</span>
+<span class="lineno">  194 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">-- Normalize an application of @atwithDefault@ to a @gen@ term into an</span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="nottickedoff">-- application of the body of the gen term to the index. Note that this</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="nottickedoff">-- implicitly assumes that the index is always in bounds, MR solver always</span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="nottickedoff">-- checks that before it creates an indexing term.</span>
+<span class="lineno">  199 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;Prelude.atWithDefault&quot;,</span>
+<span class="lineno">  200 </span><span class="spaces">     </span><span class="nottickedoff">PrimFun $ \_len -&gt; tvalFun $ \a -&gt; PrimFun $ \_errVal -&gt;</span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="nottickedoff">primGenVec sc cfg a $ \f -&gt; primNatTermFun sc $ \ix -&gt;</span>
+<span class="lineno">  202 </span><span class="spaces">      </span><span class="nottickedoff">Prim (do tm &lt;- scApplyBeta sc f ix</span>
+<span class="lineno">  203 </span><span class="spaces">               </span><span class="nottickedoff">tm' &lt;- smtNorm sc tm</span>
+<span class="lineno">  204 </span><span class="spaces">               </span><span class="nottickedoff">return $ VExtra $ VExtraTerm a tm')</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">),</span>
+<span class="lineno">  206 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="nottickedoff">-- Normalize an application of @atWithProof@ to a @gen@ term by applying the</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="nottickedoff">-- function of the @gen@ to the index</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;Prelude.atWithProof&quot;,</span>
+<span class="lineno">  210 </span><span class="spaces">     </span><span class="nottickedoff">PrimFun $ \_len -&gt; tvalFun $ \a -&gt; primGenVec sc cfg a $ \f -&gt;</span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">primNatTermFun sc $ \ix -&gt; PrimFun $ \_pf -&gt;</span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="nottickedoff">Prim (do tm &lt;- scApplyBeta sc f ix</span>
+<span class="lineno">  213 </span><span class="spaces">               </span><span class="nottickedoff">tm' &lt;- smtNorm sc tm</span>
+<span class="lineno">  214 </span><span class="spaces">               </span><span class="nottickedoff">return $ VExtra $ VExtraTerm a tm')</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">),</span>
+<span class="lineno">  216 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="nottickedoff">-- Override iteWithProof so it unfolds to a normal ite with dummy proof objects</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="nottickedoff">(&quot;Prelude.iteWithProof&quot;, iteWithProofOp sc cfg)</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>-- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
+<span class="lineno">  222 </span>-- debug output. This is used to re-enter the normalizer from inside the
+<span class="lineno">  223 </span>-- primitives.
+<span class="lineno">  224 </span>smtNorm :: SharedContext -&gt; Term -&gt; IO Term
+<span class="lineno">  225 </span><span class="decl"><span class="nottickedoff">smtNorm sc t =</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="nottickedoff">scGetModuleMap sc &gt;&gt;= \modmap -&gt;</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">normalizeSharedTerm' sc modmap (smtNormPrims sc) Map.empty Set.empty t</span></span>
+<span class="lineno">  228 </span>
+<span class="lineno">  229 </span>-- | Normalize a 'Term' using some Mr Solver specific primitives
+<span class="lineno">  230 </span>mrNormTerm :: Term -&gt; MRM t Term
+<span class="lineno">  231 </span><span class="decl"><span class="nottickedoff">mrNormTerm t =</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPrint 2 &quot;Normalizing term:&quot; &gt;&gt;</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtx 2 t &gt;&gt;</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">liftSC1 smtNorm t</span></span>
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>-- | Normalize an open term by wrapping it in lambdas, normalizing, and then
+<span class="lineno">  237 </span>-- removing those lambdas
+<span class="lineno">  238 </span>mrNormOpenTerm :: Term -&gt; MRM t Term
+<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">mrNormOpenTerm body =</span>
+<span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">do length_ctx &lt;- mrVarCtxLength &lt;$&gt; mrUVars</span>
+<span class="lineno">  241 </span><span class="spaces">     </span><span class="nottickedoff">fun_term &lt;- lambdaUVarsM body</span>
+<span class="lineno">  242 </span><span class="spaces">     </span><span class="nottickedoff">normed_fun &lt;- mrNormTerm fun_term</span>
+<span class="lineno">  243 </span><span class="spaces">     </span><span class="nottickedoff">return (peel_lambdas length_ctx normed_fun)</span>
+<span class="lineno">  244 </span><span class="spaces">       </span><span class="nottickedoff">where</span>
+<span class="lineno">  245 </span><span class="spaces">         </span><span class="nottickedoff">peel_lambdas :: Int -&gt; Term -&gt; Term</span>
+<span class="lineno">  246 </span><span class="spaces">         </span><span class="nottickedoff">peel_lambdas 0 t = t</span>
+<span class="lineno">  247 </span><span class="spaces">         </span><span class="nottickedoff">peel_lambdas i (asLambda -&gt; Just (_, _, t)) = peel_lambdas (i-1) t</span>
+<span class="lineno">  248 </span><span class="spaces">         </span><span class="nottickedoff">peel_lambdas _ _ = error &quot;mrNormOpenTerm: unexpected non-lambda term!&quot;</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>
+<span class="lineno">  251 </span>----------------------------------------------------------------------
+<span class="lineno">  252 </span>-- * Checking Provability with SMT
+<span class="lineno">  253 </span>----------------------------------------------------------------------
+<span class="lineno">  254 </span>
+<span class="lineno">  255 </span>-- | Test if a closed Boolean term is \&quot;provable\&quot;, i.e., its negation is
+<span class="lineno">  256 </span>-- unsatisfiable, using an SMT solver. By \&quot;closed\&quot; we mean that it contains no
+<span class="lineno">  257 </span>-- uvars or 'MRVar's.
+<span class="lineno">  258 </span>--
+<span class="lineno">  259 </span>-- FIXME: use the timeout!
+<span class="lineno">  260 </span>mrProvableRaw :: Term -&gt; MRM t Bool
+<span class="lineno">  261 </span><span class="decl"><span class="nottickedoff">mrProvableRaw prop_term =</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- mrSC</span>
+<span class="lineno">  263 </span><span class="spaces">     </span><span class="nottickedoff">prop &lt;- liftSC1 termToProp prop_term</span>
+<span class="lineno">  264 </span><span class="spaces">     </span><span class="nottickedoff">unints &lt;- Set.map ecVarIndex &lt;$&gt; getAllExtSet &lt;$&gt; liftSC1 propToTerm prop</span>
+<span class="lineno">  265 </span><span class="spaces">     </span><span class="nottickedoff">nenv &lt;- liftIO (scGetNamingEnv sc)</span>
+<span class="lineno">  266 </span><span class="spaces">     </span><span class="nottickedoff">opts &lt;- mrPPOpts</span>
+<span class="lineno">  267 </span><span class="spaces">     </span><span class="nottickedoff">mrDebugPrint 2 (&quot;Calling SMT solver with proposition: &quot; ++</span>
+<span class="lineno">  268 </span><span class="spaces">                     </span><span class="nottickedoff">prettyProp opts nenv prop)</span>
+<span class="lineno">  269 </span><span class="spaces">     </span><span class="nottickedoff">-- If there are any saw-core `error`s in the term, this will throw a</span>
+<span class="lineno">  270 </span><span class="spaces">     </span><span class="nottickedoff">-- Haskell error - in this case we want to just return False, not stop</span>
+<span class="lineno">  271 </span><span class="spaces">     </span><span class="nottickedoff">-- execution</span>
+<span class="lineno">  272 </span><span class="spaces">     </span><span class="nottickedoff">smt_res &lt;-</span>
+<span class="lineno">  273 </span><span class="spaces">       </span><span class="nottickedoff">(Right &lt;$&gt; mrAskSMT unints (propToSequent prop))</span>
+<span class="lineno">  274 </span><span class="spaces">         </span><span class="nottickedoff">`catch` \case</span>
+<span class="lineno">  275 </span><span class="spaces">           </span><span class="nottickedoff">UserError msg -&gt; return $ Left msg</span>
+<span class="lineno">  276 </span><span class="spaces">           </span><span class="nottickedoff">e -&gt; throwM e</span>
+<span class="lineno">  277 </span><span class="spaces">     </span><span class="nottickedoff">case smt_res of</span>
+<span class="lineno">  278 </span><span class="spaces">       </span><span class="nottickedoff">Left msg -&gt;</span>
+<span class="lineno">  279 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 2 (&quot;SMT solver encountered a saw-core error term: &quot; ++ msg)</span>
+<span class="lineno">  280 </span><span class="spaces">           </span><span class="nottickedoff">&gt;&gt; return False</span>
+<span class="lineno">  281 </span><span class="spaces">       </span><span class="nottickedoff">Right (stats, SolveUnknown) -&gt;</span>
+<span class="lineno">  282 </span><span class="spaces">          </span><span class="nottickedoff">mrDebugPrint 2 &quot;SMT solver response: unknown&quot; &gt;&gt;</span>
+<span class="lineno">  283 </span><span class="spaces">          </span><span class="nottickedoff">recordUsedSolver stats prop_term &gt;&gt; return False</span>
+<span class="lineno">  284 </span><span class="spaces">       </span><span class="nottickedoff">Right (stats, SolveCounterexample cex) -&gt;</span>
+<span class="lineno">  285 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 2 &quot;SMT solver response: not provable&quot; &gt;&gt;</span>
+<span class="lineno">  286 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 3 (&quot;Counterexample:&quot; ++ concatMap (\(x,v) -&gt;</span>
+<span class="lineno">  287 </span><span class="spaces">           </span><span class="nottickedoff">&quot;\n - &quot; ++ show (ppName $ ecName x) ++</span>
+<span class="lineno">  288 </span><span class="spaces">           </span><span class="nottickedoff">&quot; = &quot; ++ PPS.render opts (ppFirstOrderValue opts v)) cex) &gt;&gt;</span>
+<span class="lineno">  289 </span><span class="spaces">         </span><span class="nottickedoff">recordUsedSolver stats prop_term &gt;&gt; return False</span>
+<span class="lineno">  290 </span><span class="spaces">       </span><span class="nottickedoff">Right (stats, SolveSuccess _) -&gt;</span>
+<span class="lineno">  291 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 2 &quot;SMT solver response: provable&quot; &gt;&gt;</span>
+<span class="lineno">  292 </span><span class="spaces">         </span><span class="nottickedoff">recordUsedSolver stats prop_term &gt;&gt; return True</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>-- | Test if a Boolean term over the current uvars is provable given the current
+<span class="lineno">  295 </span>-- assumptions
+<span class="lineno">  296 </span>mrProvable :: Term -&gt; MRM t Bool
+<span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">mrProvable (asBool -&gt; Just b) = return b</span>
+<span class="lineno">  298 </span><span class="spaces"></span><span class="nottickedoff">mrProvable bool_tm =</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="nottickedoff">do mrUVars &gt;&gt;= mrDebugPPPrefix 3 &quot;mrProvable uvars:&quot;</span>
+<span class="lineno">  300 </span><span class="spaces">     </span><span class="nottickedoff">assumps &lt;- mrAssumptions</span>
+<span class="lineno">  301 </span><span class="spaces">     </span><span class="nottickedoff">prop &lt;- liftSC2 scImplies assumps bool_tm &gt;&gt;= liftSC1 scEqTrue</span>
+<span class="lineno">  302 </span><span class="spaces">     </span><span class="nottickedoff">prop_inst &lt;- instantiateUVarsM instUVar prop &gt;&gt;= mrSubstLowerEVars</span>
+<span class="lineno">  303 </span><span class="spaces">     </span><span class="nottickedoff">mrNormTerm prop_inst &gt;&gt;= mrProvableRaw</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">where -- | Create a new global variable of the given name and type</span>
+<span class="lineno">  305 </span><span class="spaces">        </span><span class="nottickedoff">instUVar :: LocalName -&gt; Term -&gt; MRM t Term</span>
+<span class="lineno">  306 </span><span class="spaces">        </span><span class="nottickedoff">instUVar nm =</span>
+<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">liftSC1 scWhnf &gt;=&gt; liftSC2 scFreshEC nm &gt;=&gt; liftSC1 scExtCns</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>
+<span class="lineno">  310 </span>----------------------------------------------------------------------
+<span class="lineno">  311 </span>-- * Unifying BVVec and Vec Lengths
+<span class="lineno">  312 </span>----------------------------------------------------------------------
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>-- | The length of a vector, given as either ...
+<span class="lineno">  315 </span>data VecLength = ConstBVVecLen Natural Natural
+<span class="lineno">  316 </span>               | ConstNatVecLen Natural Natural
+<span class="lineno">  317 </span>               | SymBVVecLen Natural Term
+<span class="lineno">  318 </span>               | SymNatVecLen Term
+<span class="lineno">  319 </span>               deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">TermLike</span></span>)
+<span class="lineno">  320 </span>
+<span class="lineno">  321 </span>instance PrettyInCtx VecLength where
+<span class="lineno">  322 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx (ConstBVVecLen n len) =</span>
+<span class="lineno">  323 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;ConstBVVecLen&quot;, prettyInCtx n, prettyInCtx len]</span>
+<span class="lineno">  324 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (ConstNatVecLen n len) =</span>
+<span class="lineno">  325 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;ConstNatVecLen&quot;, prettyInCtx n, prettyInCtx len]</span>
+<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (SymBVVecLen n len) =</span>
+<span class="lineno">  327 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;SymBVVecLen&quot;, prettyInCtx n, parens &lt;$&gt; prettyInCtx len]</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (SymNatVecLen len) =</span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;SymNatVecLen&quot;, parens &lt;$&gt; prettyInCtx len]</span></span>
+<span class="lineno">  330 </span>
+<span class="lineno">  331 </span>-- | Convert a natural number expression to a 'VecLength'
+<span class="lineno">  332 </span>asVecLen :: Term -&gt; VecLength
+<span class="lineno">  333 </span><span class="decl"><span class="nottickedoff">asVecLen (asBvToNatKnownW -&gt; Just (n, len))</span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="nottickedoff">| Just len' &lt;- asUnsignedConcreteBv len = ConstBVVecLen n len'</span>
+<span class="lineno">  335 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = SymBVVecLen n len</span>
+<span class="lineno">  336 </span><span class="spaces"></span><span class="nottickedoff">asVecLen (asUnsignedConcreteBvToNat -&gt; Just len) =</span>
+<span class="lineno">  337 </span><span class="spaces">  </span><span class="nottickedoff">ConstNatVecLen (widthNat len) len</span>
+<span class="lineno">  338 </span><span class="spaces"></span><span class="nottickedoff">asVecLen len = SymNatVecLen len</span></span>
+<span class="lineno">  339 </span>
+<span class="lineno">  340 </span>-- | Recognize a @BVVec@, @Vec@, or @mseq (TCNum ...)@ vector with length
+<span class="lineno">  341 </span>-- represented as a 'VecLength'
+<span class="lineno">  342 </span>asVecTypeWithLen :: Recognizer Term (VecLength, Term)
+<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">asVecTypeWithLen (asApplyAll -&gt; (isGlobalDef &quot;Prelude.BVVec&quot; -&gt; Just (),</span>
+<span class="lineno">  344 </span><span class="spaces">                                 </span><span class="nottickedoff">[asNat -&gt; Just n, len, a]))</span>
+<span class="lineno">  345 </span><span class="spaces">  </span><span class="nottickedoff">| Just len' &lt;- asUnsignedConcreteBv len = Just (ConstBVVecLen n len', a)</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Just (SymBVVecLen n len, a)</span>
+<span class="lineno">  347 </span><span class="spaces"></span><span class="nottickedoff">asVecTypeWithLen (asVectorType -&gt; Just (len, a)) = Just (asVecLen len, a)</span>
+<span class="lineno">  348 </span><span class="spaces"></span><span class="nottickedoff">asVecTypeWithLen (asApplyAll -&gt; (isGlobalDef &quot;SpecM.mseq&quot; -&gt; Just (),</span>
+<span class="lineno">  349 </span><span class="spaces">                                 </span><span class="nottickedoff">[_, asNum -&gt; Just (Left len), a])) =</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">Just (asVecLen len, a)</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="nottickedoff">asVecTypeWithLen _ = Nothing</span></span>
+<span class="lineno">  352 </span>
+<span class="lineno">  353 </span>-- | Convert a 'VecLength' into either a 'Term' of bitvector type with the given
+<span class="lineno">  354 </span>-- 'Natural' bit-width if the 'VecLength' has an associated bit-width, or into a
+<span class="lineno">  355 </span>-- 'Term' of nat type otherwise
+<span class="lineno">  356 </span>mrVecLenAsBVOrNatTerm :: VecLength -&gt; MRM t (Either (Natural, Term) Term)
+<span class="lineno">  357 </span><span class="decl"><span class="nottickedoff">mrVecLenAsBVOrNatTerm (ConstBVVecLen n len) =</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">(Left . (n,)) &lt;$&gt; liftSC2 scBvLit n (fromIntegral len)</span>
+<span class="lineno">  359 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAsBVOrNatTerm (ConstNatVecLen n len) =</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="nottickedoff">(Left . (n,)) &lt;$&gt; liftSC2 scBvLit n (fromIntegral len)</span>
+<span class="lineno">  361 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAsBVOrNatTerm (SymBVVecLen n len) =</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">return $ Left (n, len)</span>
+<span class="lineno">  363 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAsBVOrNatTerm (SymNatVecLen len) =</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">return $ Right len</span></span>
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>-- | Get the type of an index bounded by a 'VecLength'
+<span class="lineno">  367 </span>mrVecLenIxType :: VecLength -&gt; MRM t Term
+<span class="lineno">  368 </span><span class="decl"><span class="nottickedoff">mrVecLenIxType vlen = mrVecLenAsBVOrNatTerm vlen &gt;&gt;= \case</span>
+<span class="lineno">  369 </span><span class="spaces">  </span><span class="nottickedoff">Left (n, _) -&gt; liftSC1 scBitvector n</span>
+<span class="lineno">  370 </span><span class="spaces">  </span><span class="nottickedoff">Right _ -&gt; liftSC0 scNatType</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>-- | Construct the proposition that the given 'Term' of type 'mrVecLenIxType'
+<span class="lineno">  373 </span>-- is less than the given 'VecLength'
+<span class="lineno">  374 </span>mrVecLenIxBound :: VecLength -&gt; Term -&gt; MRM t Term
+<span class="lineno">  375 </span><span class="decl"><span class="nottickedoff">mrVecLenIxBound vlen ix = mrVecLenAsBVOrNatTerm vlen &gt;&gt;= \case</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="nottickedoff">Left (n, len) -&gt; liftSC1 scNat n &gt;&gt;= \n' -&gt;</span>
+<span class="lineno">  377 </span><span class="spaces">                   </span><span class="nottickedoff">liftSC2 scGlobalApply &quot;Prelude.bvult&quot; [n', ix, len]</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="nottickedoff">Right len -&gt; liftSC2 scGlobalApply &quot;Prelude.ltNat&quot; [ix, len]</span></span>
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>-- | Test if two vector lengths are equal, and if so, generalize them to use the
+<span class="lineno">  381 </span>-- same index type as returned by 'mrVecLenIxType'
+<span class="lineno">  382 </span>mrVecLenUnify :: VecLength -&gt; VecLength -&gt; MRM t (Maybe (VecLength, VecLength))
+<span class="lineno">  383 </span><span class="decl"><span class="nottickedoff">mrVecLenUnify (ConstBVVecLen n1 len1) (ConstBVVecLen n2 len2)</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">| n1 == n2 &amp;&amp; len1 == len2</span>
+<span class="lineno">  385 </span><span class="spaces">  </span><span class="nottickedoff">= return $ Just (ConstBVVecLen n1 len1, ConstBVVecLen n2 len2)</span>
+<span class="lineno">  386 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify (ConstBVVecLen n1 len1) (ConstNatVecLen n2 len2)</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">| n2 &lt; n1 &amp;&amp; len1 == len2</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">= return $ Just (ConstBVVecLen n1 len1, ConstNatVecLen n1 len2)</span>
+<span class="lineno">  389 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify (ConstNatVecLen n1 len1) (ConstBVVecLen n2 len2)</span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="nottickedoff">| n1 &lt; n2 &amp;&amp; len1 == len2</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="nottickedoff">= return $ Just (ConstNatVecLen n2 len1, ConstBVVecLen n2 len2)</span>
+<span class="lineno">  392 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify (ConstNatVecLen n1 len1) (ConstNatVecLen n2 len2)</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">| len1 == len2, nMax &lt;- max n1 n2</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">= return $ Just (ConstNatVecLen nMax len1, ConstNatVecLen nMax len2)</span>
+<span class="lineno">  395 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify vlen1@(SymBVVecLen n1 len1) vlen2@(SymBVVecLen n2 len2)</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">| n1 == n2</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">= mrProveEq len1 len2 &gt;&gt;= \case</span>
+<span class="lineno">  398 </span><span class="spaces">      </span><span class="nottickedoff">True -&gt; return $ Just (vlen1, vlen2)</span>
+<span class="lineno">  399 </span><span class="spaces">      </span><span class="nottickedoff">False -&gt; return Nothing</span>
+<span class="lineno">  400 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify (SymNatVecLen len1) (SymNatVecLen len2) =</span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="nottickedoff">mrProveEq len1 len2 &gt;&gt;= \case</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="nottickedoff">True -&gt; return $ Just (SymNatVecLen len1, SymNatVecLen len2)</span>
+<span class="lineno">  403 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; return Nothing</span>
+<span class="lineno">  404 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenUnify _ _ = return Nothing</span></span>
+<span class="lineno">  405 </span>
+<span class="lineno">  406 </span>-- | Given a vector length, element type, and generating function, return the
+<span class="lineno">  407 </span>-- associated vector formed using the appropritate @gen@ function
+<span class="lineno">  408 </span>mrVecLenGen :: VecLength -&gt; Term -&gt; Term -&gt; MRM t Term
+<span class="lineno">  409 </span><span class="decl"><span class="nottickedoff">mrVecLenGen (ConstBVVecLen n len) tp f =</span>
+<span class="lineno">  410 </span><span class="spaces">  </span><span class="nottickedoff">do n_tm &lt;- liftSC1 scNat n</span>
+<span class="lineno">  411 </span><span class="spaces">     </span><span class="nottickedoff">len_tm &lt;- liftSC2 scBvLit n (fromIntegral len)</span>
+<span class="lineno">  412 </span><span class="spaces">     </span><span class="nottickedoff">mrApplyGlobal &quot;Prelude.genBVVecNoPf&quot; [n_tm, len_tm, tp, f]</span>
+<span class="lineno">  413 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenGen (ConstNatVecLen n len) tp f =</span>
+<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">do n_tm &lt;- liftSC1 scNat n</span>
+<span class="lineno">  415 </span><span class="spaces">     </span><span class="nottickedoff">len_tm &lt;- liftSC1 scNat len</span>
+<span class="lineno">  416 </span><span class="spaces">     </span><span class="nottickedoff">nat_tp &lt;- liftSC0 scNatType</span>
+<span class="lineno">  417 </span><span class="spaces">     </span><span class="nottickedoff">f' &lt;- mrLambdaLift1 (&quot;ix&quot;, nat_tp) f $ \x f' -&gt;</span>
+<span class="lineno">  418 </span><span class="spaces">        </span><span class="nottickedoff">liftSC2 scBvNat n_tm x &gt;&gt;= mrApply f'</span>
+<span class="lineno">  419 </span><span class="spaces">     </span><span class="nottickedoff">mrApplyGlobal &quot;Prelude.gen&quot; [len_tm, tp, f']</span>
+<span class="lineno">  420 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenGen (SymBVVecLen n len) tp f =</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="nottickedoff">do n_tm &lt;- liftSC1 scNat n</span>
+<span class="lineno">  422 </span><span class="spaces">     </span><span class="nottickedoff">mrApplyGlobal &quot;Prelude.genBVVecNoPf&quot; [n_tm, len, tp, f]</span>
+<span class="lineno">  423 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenGen (SymNatVecLen len) tp f =</span>
+<span class="lineno">  424 </span><span class="spaces">  </span><span class="nottickedoff">do mrApplyGlobal &quot;Prelude.gen&quot; [len, tp, f]</span></span>
+<span class="lineno">  425 </span>
+<span class="lineno">  426 </span>-- | Given a vector length, element type, vector of that length and type, and an
+<span class="lineno">  427 </span>-- index of type 'mrVecLenIxType', index into the vector
+<span class="lineno">  428 </span>mrVecLenAt :: VecLength -&gt; Term -&gt; Term -&gt; Term -&gt; MRM t Term
+<span class="lineno">  429 </span><span class="decl"><span class="nottickedoff">mrVecLenAt (ConstBVVecLen n len) tp v ix =</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">do n_tm &lt;- liftSC1 scNat n</span>
+<span class="lineno">  431 </span><span class="spaces">     </span><span class="nottickedoff">len_tm &lt;- liftSC2 scBvLit n (fromIntegral len)</span>
+<span class="lineno">  432 </span><span class="spaces">     </span><span class="nottickedoff">mrAtBVVec n_tm len_tm tp v ix</span>
+<span class="lineno">  433 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAt (ConstNatVecLen n len) tp v ix =</span>
+<span class="lineno">  434 </span><span class="spaces">  </span><span class="nottickedoff">do len_tm &lt;- liftSC1 scNat len</span>
+<span class="lineno">  435 </span><span class="spaces">     </span><span class="nottickedoff">ix' &lt;- liftSC2 scBvToNat n ix</span>
+<span class="lineno">  436 </span><span class="spaces">     </span><span class="nottickedoff">mrAtVec len_tm tp v ix'</span>
+<span class="lineno">  437 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAt (SymBVVecLen n len) tp v ix =</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">do n_tm &lt;- liftSC1 scNat n</span>
+<span class="lineno">  439 </span><span class="spaces">     </span><span class="nottickedoff">mrAtBVVec n_tm len tp v ix</span>
+<span class="lineno">  440 </span><span class="spaces"></span><span class="nottickedoff">mrVecLenAt (SymNatVecLen len) tp v ix =</span>
+<span class="lineno">  441 </span><span class="spaces">  </span><span class="nottickedoff">do mrAtVec len tp v ix</span></span>
+<span class="lineno">  442 </span>
+<span class="lineno">  443 </span>
+<span class="lineno">  444 </span>----------------------------------------------------------------------
+<span class="lineno">  445 </span>-- * SMT-Friendly Representations
+<span class="lineno">  446 </span>----------------------------------------------------------------------
+<span class="lineno">  447 </span>
+<span class="lineno">  448 </span>-- | A representation of some subset of the elements of a type @tp@ as elements
+<span class="lineno">  449 </span>-- of some other type @tp_r@. The idea is that the type @tp_r@ is easier to
+<span class="lineno">  450 </span>-- represent in SMT solvers.
+<span class="lineno">  451 </span>--
+<span class="lineno">  452 </span>-- This is captured formally with a function @r@ from elements of the
+<span class="lineno">  453 </span>-- representation type @tp_r@ to the elements of type @tp@ that they represent
+<span class="lineno">  454 </span>-- along with an equivalence relation @eq_r@ on @tp_r@ such that @r@ is
+<span class="lineno">  455 </span>-- injective when viewed as a morphism from @eq_r@ to the natural equivalence
+<span class="lineno">  456 </span>-- relation @equiv@ of @tp@. In more detail, this means that @eq_r@ holds
+<span class="lineno">  457 </span>-- between two inputs to @r@ iff @equiv@ holds between their outputs. Note that
+<span class="lineno">  458 </span>-- an injective representation need not be surjective, meaning there could be
+<span class="lineno">  459 </span>-- elements of @tp@ that it cannot represent.
+<span class="lineno">  460 </span>data InjectiveRepr
+<span class="lineno">  461 </span>     -- | The identity representation of @(tp,equiv)@ by itself. Only applies to
+<span class="lineno">  462 </span>     -- non-vector types, as vectors should be represented by one of the vector
+<span class="lineno">  463 </span>     -- representations.
+<span class="lineno">  464 </span>  = InjReprId
+<span class="lineno">  465 </span>    -- | A representation of a numeric type (@Num@, @Nat@, or @Vec n Bool@) by
+<span class="lineno">  466 </span>    -- another numeric type defined as the composition of one or more injective
+<span class="lineno">  467 </span>    -- numeric representations. NOTE: we do not expect numeric representations
+<span class="lineno">  468 </span>    -- to occur inside other representations like those for pairs and vectors
+<span class="lineno">  469 </span>  | InjReprNum [InjNumRepr]
+<span class="lineno">  470 </span>    -- | A representation of the pair type @tp1 * tp2@ by @tp_r1 * tp_r2@ using
+<span class="lineno">  471 </span>    -- representations of @tp1@ and @tp2@
+<span class="lineno">  472 </span>  | InjReprPair InjectiveRepr InjectiveRepr
+<span class="lineno">  473 </span>    -- | A representation of the vector type @Vec len tp@ by the functional type
+<span class="lineno">  474 </span>    -- @tp_len -&gt; tp_r@ from indices to elements of the representation type
+<span class="lineno">  475 </span>    -- @tp_r@ of @tp@, given a representation of @tp@ by @tp_r@, where the index
+<span class="lineno">  476 </span>    -- type @tp_len@ is determined by the 'VecLength'
+<span class="lineno">  477 </span>  | InjReprVec VecLength Term InjectiveRepr
+<span class="lineno">  478 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">TermLike</span></span>)
+<span class="lineno">  479 </span>
+<span class="lineno">  480 </span>-- | A representation of a numeric type (@Num@, @Nat@, or @Vec n Bool@) by
+<span class="lineno">  481 </span>-- another numeric type defined as an injective function
+<span class="lineno">  482 </span>data InjNumRepr
+<span class="lineno">  483 </span>     -- | The @TCNum@ constructor as a representation of @Num@ by @Nat@
+<span class="lineno">  484 </span>  = InjNatToNum
+<span class="lineno">  485 </span>    -- | The @bvToNat@ function as a representation of @Nat@ by @Vec n Bool@
+<span class="lineno">  486 </span>  | InjBVToNat Natural
+<span class="lineno">  487 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">TermLike</span></span>)
+<span class="lineno">  488 </span>
+<span class="lineno">  489 </span>instance PrettyInCtx InjectiveRepr where
+<span class="lineno">  490 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx InjReprId = return &quot;InjReprId&quot;</span>
+<span class="lineno">  491 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (InjReprNum steps) =</span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;InjReprNum&quot;, list &lt;$&gt; mapM prettyInCtx steps]</span>
+<span class="lineno">  493 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (InjReprPair r1 r2) =</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;InjReprPair&quot;, parens &lt;$&gt; prettyInCtx r1,</span>
+<span class="lineno">  495 </span><span class="spaces">                                         </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx r2]</span>
+<span class="lineno">  496 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (InjReprVec n tp repr) =</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;InjReprVec&quot;, parens &lt;$&gt; prettyInCtx n,</span>
+<span class="lineno">  498 </span><span class="spaces">                                        </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx tp,</span>
+<span class="lineno">  499 </span><span class="spaces">                                        </span><span class="nottickedoff">parens &lt;$&gt; prettyInCtx repr]</span></span>
+<span class="lineno">  500 </span>
+<span class="lineno">  501 </span>instance PrettyInCtx InjNumRepr where
+<span class="lineno">  502 </span>  <span class="decl"><span class="nottickedoff">prettyInCtx InjNatToNum = return &quot;InjNatToNum&quot;</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">prettyInCtx (InjBVToNat n) =</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="nottickedoff">prettyAppList [return &quot;InjBVToNat&quot;, prettyInCtx n]</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>-- | Smart constructor for pair representations, that combines a pair of
+<span class="lineno">  507 </span>-- identity representations into an identity representation on the pair type
+<span class="lineno">  508 </span>injReprPair :: InjectiveRepr -&gt; InjectiveRepr -&gt; InjectiveRepr
+<span class="lineno">  509 </span><span class="decl"><span class="nottickedoff">injReprPair InjReprId InjReprId = InjReprId</span>
+<span class="lineno">  510 </span><span class="spaces"></span><span class="nottickedoff">injReprPair repr1 repr2 = InjReprPair repr1 repr2</span></span>
+<span class="lineno">  511 </span>
+<span class="lineno">  512 </span>-- | Test if there is a non-identity numeric representation from the first to
+<span class="lineno">  513 </span>-- the second type
+<span class="lineno">  514 </span>findNumRepr :: Term -&gt; Term -&gt; Maybe InjectiveRepr
+<span class="lineno">  515 </span><span class="decl"><span class="nottickedoff">findNumRepr (asBitvectorType -&gt; Just n) (asNumType -&gt; Just ()) =</span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">Just $ InjReprNum [InjBVToNat n, InjNatToNum]</span>
+<span class="lineno">  517 </span><span class="spaces"></span><span class="nottickedoff">findNumRepr (asBitvectorType -&gt; Just n) (asNatType -&gt; Just ()) =</span>
+<span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">Just $ InjReprNum [InjBVToNat n]</span>
+<span class="lineno">  519 </span><span class="spaces"></span><span class="nottickedoff">findNumRepr (asNatType -&gt; Just ()) (asNumType -&gt; Just ()) =</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">Just $ InjReprNum [InjNatToNum]</span>
+<span class="lineno">  521 </span><span class="spaces"></span><span class="nottickedoff">findNumRepr _ _ = Nothing</span></span>
+<span class="lineno">  522 </span>
+<span class="lineno">  523 </span>-- | Compose two injective representations, assuming that they do compose, i.e.,
+<span class="lineno">  524 </span>-- that the output type of the first equals the input type of the second
+<span class="lineno">  525 </span>injReprComp :: InjectiveRepr -&gt; InjectiveRepr -&gt; InjectiveRepr
+<span class="lineno">  526 </span><span class="decl"><span class="nottickedoff">injReprComp InjReprId r = r</span>
+<span class="lineno">  527 </span><span class="spaces"></span><span class="nottickedoff">injReprComp r InjReprId = r</span>
+<span class="lineno">  528 </span><span class="spaces"></span><span class="nottickedoff">injReprComp (InjReprNum steps1) (InjReprNum steps2) =</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">InjReprNum (steps1 ++ steps2)</span>
+<span class="lineno">  530 </span><span class="spaces"></span><span class="nottickedoff">injReprComp (InjReprPair r1_l r1_r) (InjReprPair r2_l r2_r) =</span>
+<span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">InjReprPair (injReprComp r1_l r2_l) (injReprComp r1_r r2_r)</span>
+<span class="lineno">  532 </span><span class="spaces"></span><span class="nottickedoff">injReprComp r1 r2 =</span>
+<span class="lineno">  533 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;injReprComp&quot; [</span>
+<span class="lineno">  534 </span><span class="spaces">      </span><span class="nottickedoff">&quot;Representations do not compose: &quot; &lt;&gt;</span>
+<span class="lineno">  535 </span><span class="spaces">          </span><span class="nottickedoff">Text.pack (show r1) &lt;&gt; &quot; and &quot; &lt;&gt; Text.pack (show r2)</span>
+<span class="lineno">  536 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  537 </span>
+<span class="lineno">  538 </span>-- | Apply a 'InjectiveRepr' to convert an element of the representation type
+<span class="lineno">  539 </span>-- @tp_r@ to the type @tp@ that it represents
+<span class="lineno">  540 </span>mrApplyRepr :: InjectiveRepr -&gt; Term -&gt; MRM t Term
+<span class="lineno">  541 </span><span class="decl"><span class="nottickedoff">mrApplyRepr InjReprId t = return t</span>
+<span class="lineno">  542 </span><span class="spaces"></span><span class="nottickedoff">mrApplyRepr (InjReprNum steps) t_top = foldM applyStep t_top steps where</span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">applyStep t InjNatToNum = liftSC2 scCtorApp &quot;Cryptol.TCNum&quot; [t]</span>
+<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">applyStep t (InjBVToNat n) = liftSC2 scBvToNat n t</span>
+<span class="lineno">  545 </span><span class="spaces"></span><span class="nottickedoff">mrApplyRepr (InjReprPair repr1 repr2) t =</span>
+<span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">do t1 &lt;- mrApplyRepr repr1 =&lt;&lt; doTermProj t TermProjLeft</span>
+<span class="lineno">  547 </span><span class="spaces">     </span><span class="nottickedoff">t2 &lt;- mrApplyRepr repr2 =&lt;&lt; doTermProj t TermProjRight</span>
+<span class="lineno">  548 </span><span class="spaces">     </span><span class="nottickedoff">liftSC2 scPairValueReduced t1 t2</span>
+<span class="lineno">  549 </span><span class="spaces"></span><span class="nottickedoff">mrApplyRepr (InjReprVec vlen tp repr) t =</span>
+<span class="lineno">  550 </span><span class="spaces">  </span><span class="nottickedoff">do ix_tp &lt;- mrVecLenIxType vlen</span>
+<span class="lineno">  551 </span><span class="spaces">     </span><span class="nottickedoff">f &lt;- mrLambdaLift1 (&quot;ix&quot;, ix_tp) (repr, t) $ \x (repr', t') -&gt;</span>
+<span class="lineno">  552 </span><span class="spaces">       </span><span class="nottickedoff">mrApplyRepr repr' =&lt;&lt; mrApply t' x</span>
+<span class="lineno">  553 </span><span class="spaces">     </span><span class="nottickedoff">mrVecLenGen vlen tp f</span></span>
+<span class="lineno">  554 </span>
+<span class="lineno">  555 </span>newtype MaybeTerm b = MaybeTerm { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unMaybeTerm</span></span></span> :: If b Term () }
+<span class="lineno">  556 </span>
+<span class="lineno">  557 </span>-- | Apply a monadic 'Term' operation to a 'MaybeTerm'
+<span class="lineno">  558 </span>mapMaybeTermM :: Monad m =&gt; BoolRepr b -&gt; (Term -&gt; m Term) -&gt; MaybeTerm b -&gt;
+<span class="lineno">  559 </span>                 m (MaybeTerm b)
+<span class="lineno">  560 </span><span class="decl"><span class="nottickedoff">mapMaybeTermM TrueRepr f (MaybeTerm t) = MaybeTerm &lt;$&gt; f t</span>
+<span class="lineno">  561 </span><span class="spaces"></span><span class="nottickedoff">mapMaybeTermM FalseRepr _ _ = return $ MaybeTerm ()</span></span>
+<span class="lineno">  562 </span>
+<span class="lineno">  563 </span>-- | Apply a binary monadic 'Term' operation to a 'MaybeTerm'
+<span class="lineno">  564 </span>map2MaybeTermM :: Monad m =&gt; BoolRepr b -&gt; (Term -&gt; Term -&gt; m Term) -&gt;
+<span class="lineno">  565 </span>                  MaybeTerm b -&gt; MaybeTerm b -&gt; m (MaybeTerm b)
+<span class="lineno">  566 </span><span class="decl"><span class="nottickedoff">map2MaybeTermM TrueRepr f (MaybeTerm t1) (MaybeTerm t2) = MaybeTerm &lt;$&gt; f t1 t2</span>
+<span class="lineno">  567 </span><span class="spaces"></span><span class="nottickedoff">map2MaybeTermM FalseRepr _ _ _ = return $ MaybeTerm ()</span></span>
+<span class="lineno">  568 </span>
+<span class="lineno">  569 </span>instance Given (BoolRepr b) =&gt; TermLike (MaybeTerm b) where
+<span class="lineno">  570 </span>  <span class="decl"><span class="nottickedoff">mapTermLike = mapMaybeTermM given</span></span>
+<span class="lineno">  571 </span>
+<span class="lineno">  572 </span>-- | Construct an injective representation for a type @tp@ and an optional term
+<span class="lineno">  573 </span>-- @tm@ of that type, returning the representation type @tp_r@, the optional
+<span class="lineno">  574 </span>-- term @tm_r@ that represents @tm@, and the representation itself. If there is
+<span class="lineno">  575 </span>-- a choice, choose the representation that works best for SMT solvers.
+<span class="lineno">  576 </span>mkInjRepr :: BoolRepr b -&gt; Term -&gt; MaybeTerm b -&gt;
+<span class="lineno">  577 </span>             MRM t (Term, MaybeTerm b, InjectiveRepr)
+<span class="lineno">  578 </span><span class="decl"><span class="nottickedoff">mkInjRepr TrueRepr _ (MaybeTerm (asNum -&gt; Just (Left t))) =</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">do nat_tp &lt;- liftSC0 scNatType</span>
+<span class="lineno">  580 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r, tm_r, r) &lt;- mkInjRepr TrueRepr nat_tp (MaybeTerm t)</span>
+<span class="lineno">  581 </span><span class="spaces">     </span><span class="nottickedoff">return (tp_r, tm_r, injReprComp r (InjReprNum [InjNatToNum]))</span>
+<span class="lineno">  582 </span><span class="spaces"></span><span class="nottickedoff">mkInjRepr TrueRepr _ (MaybeTerm (asBvToNatKnownW -&gt; Just (n, t))) =</span>
+<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">do bv_tp &lt;- liftSC1 scBitvector n</span>
+<span class="lineno">  584 </span><span class="spaces">     </span><span class="nottickedoff">return (bv_tp, MaybeTerm t, InjReprNum [InjBVToNat n])</span>
+<span class="lineno">  585 </span><span class="spaces"></span><span class="nottickedoff">mkInjRepr b (asPairType -&gt; Just (tp1, tp2)) t =</span>
+<span class="lineno">  586 </span><span class="spaces">  </span><span class="nottickedoff">do tm1 &lt;- mapMaybeTermM b (flip doTermProj TermProjLeft) t</span>
+<span class="lineno">  587 </span><span class="spaces">     </span><span class="nottickedoff">tm2 &lt;- mapMaybeTermM b (flip doTermProj TermProjRight) t</span>
+<span class="lineno">  588 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r1, tm_r1, r1) &lt;- mkInjRepr b tp1 tm1</span>
+<span class="lineno">  589 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r2, tm_r2, r2) &lt;- mkInjRepr b tp2 tm2</span>
+<span class="lineno">  590 </span><span class="spaces">     </span><span class="nottickedoff">tp_r &lt;- liftSC2 scPairType tp_r1 tp_r2</span>
+<span class="lineno">  591 </span><span class="spaces">     </span><span class="nottickedoff">tm_r &lt;- map2MaybeTermM b (liftSC2 scPairValueReduced) tm_r1 tm_r2</span>
+<span class="lineno">  592 </span><span class="spaces">     </span><span class="nottickedoff">return (tp_r, tm_r, InjReprPair r1 r2)</span>
+<span class="lineno">  593 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  594 </span><span class="spaces"></span><span class="nottickedoff">mkInjRepr b (asVecTypeWithLen -&gt; Just (vlen, tp@(asBoolType -&gt; Nothing))) tm =</span>
+<span class="lineno">  595 </span><span class="spaces">  </span><span class="nottickedoff">do ix_tp &lt;- mrVecLenIxType vlen</span>
+<span class="lineno">  596 </span><span class="spaces">     </span><span class="nottickedoff">-- NOTE: these return values from mkInjRepr all have ix free</span>
+<span class="lineno">  597 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r', tm_r', r') &lt;-</span>
+<span class="lineno">  598 </span><span class="spaces">       </span><span class="nottickedoff">give b $</span>
+<span class="lineno">  599 </span><span class="spaces">       </span><span class="nottickedoff">withUVarLift &quot;ix&quot; (Type ix_tp) (vlen,tp,tm) $ \ix (vlen',tp',tm') -&gt;</span>
+<span class="lineno">  600 </span><span class="spaces">       </span><span class="nottickedoff">do tm_elem &lt;-</span>
+<span class="lineno">  601 </span><span class="spaces">            </span><span class="nottickedoff">mapMaybeTermM b (\tm'' -&gt; mrVecLenAt vlen' tp' tm'' ix) tm'</span>
+<span class="lineno">  602 </span><span class="spaces">          </span><span class="nottickedoff">mkInjRepr b tp' tm_elem</span>
+<span class="lineno">  603 </span><span class="spaces">     </span><span class="nottickedoff">-- r' should not have ix free, so it should be ok to substitute an error</span>
+<span class="lineno">  604 </span><span class="spaces">     </span><span class="nottickedoff">-- term for ix...</span>
+<span class="lineno">  605 </span><span class="spaces">     </span><span class="nottickedoff">r &lt;- substTermLike 0 [error</span>
+<span class="lineno">  606 </span><span class="spaces">                           </span><span class="nottickedoff">&quot;mkInjRepr: unexpected free ix variable in repr&quot;] r'</span>
+<span class="lineno">  607 </span><span class="spaces">     </span><span class="nottickedoff">tp_r &lt;- liftSC3 scPi &quot;ix&quot; ix_tp tp_r'</span>
+<span class="lineno">  608 </span><span class="spaces">     </span><span class="nottickedoff">tm_r &lt;- mapMaybeTermM b (liftSC3 scLambda &quot;ix&quot; ix_tp) tm_r'</span>
+<span class="lineno">  609 </span><span class="spaces">     </span><span class="nottickedoff">return (tp_r, tm_r, InjReprVec vlen tp r)</span>
+<span class="lineno">  610 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  611 </span><span class="spaces"></span><span class="nottickedoff">mkInjRepr _ tp tm = return (tp, tm, InjReprId)</span></span>
+<span class="lineno">  612 </span>
+<span class="lineno">  613 </span>
+<span class="lineno">  614 </span>-- | Specialization of 'mkInjRepr' with no element of the represented type
+<span class="lineno">  615 </span>mkInjReprType :: Term -&gt; MRM t (Term, InjectiveRepr)
+<span class="lineno">  616 </span><span class="decl"><span class="nottickedoff">mkInjReprType tp =</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="nottickedoff">(\(tp_r,_,repr) -&gt; (tp_r,repr)) &lt;$&gt; mkInjRepr FalseRepr tp (MaybeTerm ())</span></span>
+<span class="lineno">  618 </span>
+<span class="lineno">  619 </span>-- | Specialization of 'mkInjRepr' with an element of the represented type
+<span class="lineno">  620 </span>mkInjReprTerm :: Term -&gt; Term -&gt; MRM t (Term, Term, InjectiveRepr)
+<span class="lineno">  621 </span><span class="decl"><span class="nottickedoff">mkInjReprTerm tp trm =</span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="nottickedoff">(\(tp_r, tm, repr) -&gt; (tp_r, unMaybeTerm tm, repr)) &lt;$&gt;</span>
+<span class="lineno">  623 </span><span class="spaces">  </span><span class="nottickedoff">mkInjRepr TrueRepr tp (MaybeTerm trm)</span></span>
+<span class="lineno">  624 </span>
+<span class="lineno">  625 </span>
+<span class="lineno">  626 </span>-- | Given two representations @r1@ and @r2@ along with their representation
+<span class="lineno">  627 </span>-- types @tp_r1@ and @tp_r2, try to unify their representation types, yielding
+<span class="lineno">  628 </span>-- new versions of those representations. That is, try to find a common type
+<span class="lineno">  629 </span>-- @tp_r@ and representations @r1'@ and @r2'@ such that the following picture
+<span class="lineno">  630 </span>-- holds:
+<span class="lineno">  631 </span>--
+<span class="lineno">  632 </span>-- &gt;   tp1      tp2
+<span class="lineno">  633 </span>-- &gt;    ^        ^
+<span class="lineno">  634 </span>-- &gt; r1 |        | r2
+<span class="lineno">  635 </span>-- &gt;  tp_r1    tp_r2
+<span class="lineno">  636 </span>-- &gt;    ^        ^
+<span class="lineno">  637 </span>-- &gt; r1' \      / r2'
+<span class="lineno">  638 </span>-- &gt;      \    /
+<span class="lineno">  639 </span>-- &gt;       tp_r
+<span class="lineno">  640 </span>--
+<span class="lineno">  641 </span>injUnifyReprTypes :: Term -&gt; InjectiveRepr -&gt; Term -&gt; InjectiveRepr -&gt;
+<span class="lineno">  642 </span>                     MaybeT (MRM t) (Term, InjectiveRepr, InjectiveRepr)
+<span class="lineno">  643 </span>
+<span class="lineno">  644 </span>-- If there is a numeric coercion from one side to the other, use it to unify
+<span class="lineno">  645 </span>-- the two input representations
+<span class="lineno">  646 </span><span class="decl"><span class="nottickedoff">injUnifyReprTypes tp1 r1 tp2 r2</span>
+<span class="lineno">  647 </span><span class="spaces">  </span><span class="nottickedoff">| Just r2' &lt;- findNumRepr tp1 tp2</span>
+<span class="lineno">  648 </span><span class="spaces">  </span><span class="nottickedoff">= return (tp1, r1, injReprComp r2' r2)</span>
+<span class="lineno">  649 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes tp1 r1 tp2 r2</span>
+<span class="lineno">  650 </span><span class="spaces">  </span><span class="nottickedoff">| Just r1' &lt;- findNumRepr tp2 tp1</span>
+<span class="lineno">  651 </span><span class="spaces">  </span><span class="nottickedoff">= return (tp2, injReprComp r1' r1, r2)</span>
+<span class="lineno">  652 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  653 </span><span class="spaces"></span><span class="nottickedoff">-- If both representations are the identity, make sure the repr types are equal</span>
+<span class="lineno">  654 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes tp1 InjReprId tp2 InjReprId =</span>
+<span class="lineno">  655 </span><span class="spaces">  </span><span class="nottickedoff">do tps_eq &lt;- lift $ mrConvertible tp1 tp2</span>
+<span class="lineno">  656 </span><span class="spaces">     </span><span class="nottickedoff">if tps_eq then return (tp1, InjReprId, InjReprId)</span>
+<span class="lineno">  657 </span><span class="spaces">       </span><span class="nottickedoff">else mzero</span>
+<span class="lineno">  658 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  659 </span><span class="spaces"></span><span class="nottickedoff">-- For pair representations, unify the two sides, treating an identity</span>
+<span class="lineno">  660 </span><span class="spaces"></span><span class="nottickedoff">-- representation as a pair of identity representations</span>
+<span class="lineno">  661 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes tp1 (InjReprPair r1l r1r) tp2 (InjReprPair r2l r2r)</span>
+<span class="lineno">  662 </span><span class="spaces">  </span><span class="nottickedoff">| Just (tp1l, tp1r) &lt;- asPairType tp1</span>
+<span class="lineno">  663 </span><span class="spaces">  </span><span class="nottickedoff">, Just (tp2l, tp2r) &lt;- asPairType tp2 =</span>
+<span class="lineno">  664 </span><span class="spaces">    </span><span class="nottickedoff">do (tp_r_l, r1l', r2l') &lt;- injUnifyReprTypes tp1l r1l tp2l r2l</span>
+<span class="lineno">  665 </span><span class="spaces">       </span><span class="nottickedoff">(tp_r_r, r1r', r2r') &lt;- injUnifyReprTypes tp1r r1r tp2r r2r</span>
+<span class="lineno">  666 </span><span class="spaces">       </span><span class="nottickedoff">tp_r &lt;- lift $ liftSC2 scPairType tp_r_l tp_r_r</span>
+<span class="lineno">  667 </span><span class="spaces">       </span><span class="nottickedoff">return (tp_r, InjReprPair r1l' r1r', InjReprPair r2l' r2r')</span>
+<span class="lineno">  668 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes tp1 InjReprId tp2 r2</span>
+<span class="lineno">  669 </span><span class="spaces">  </span><span class="nottickedoff">| isJust (asPairType tp1)</span>
+<span class="lineno">  670 </span><span class="spaces">  </span><span class="nottickedoff">= injUnifyReprTypes tp1 (InjReprPair InjReprId InjReprId) tp2 r2</span>
+<span class="lineno">  671 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes tp1 r1 tp2 InjReprId</span>
+<span class="lineno">  672 </span><span class="spaces">  </span><span class="nottickedoff">| isJust (asPairType tp2)</span>
+<span class="lineno">  673 </span><span class="spaces">  </span><span class="nottickedoff">= injUnifyReprTypes tp1 r1 tp2 (InjReprPair InjReprId InjReprId)</span>
+<span class="lineno">  674 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  675 </span><span class="spaces"></span><span class="nottickedoff">-- For vector types, check that the lengths are equal and unify the element</span>
+<span class="lineno">  676 </span><span class="spaces"></span><span class="nottickedoff">-- representations. Note that if either side uses a natural number length</span>
+<span class="lineno">  677 </span><span class="spaces"></span><span class="nottickedoff">-- instead of a bitvector length, both sides will need to, since we don't</span>
+<span class="lineno">  678 </span><span class="spaces"></span><span class="nottickedoff">-- currently have representation that can cast from a bitvector length to an</span>
+<span class="lineno">  679 </span><span class="spaces"></span><span class="nottickedoff">-- equal natural number length</span>
+<span class="lineno">  680 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes _ (InjReprVec len1 tp1 r1) _ (InjReprVec len2 tp2 r2) =</span>
+<span class="lineno">  681 </span><span class="spaces">  </span><span class="nottickedoff">do (len1', len2') &lt;- MaybeT $ mrVecLenUnify len1 len2</span>
+<span class="lineno">  682 </span><span class="spaces">     </span><span class="nottickedoff">ix_tp &lt;- lift $ mrVecLenIxType len1'</span>
+<span class="lineno">  683 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r, r1', r2') &lt;- injUnifyReprTypes tp1 r1 tp2 r2</span>
+<span class="lineno">  684 </span><span class="spaces">     </span><span class="nottickedoff">tp_r_fun &lt;- lift $ mrArrowType &quot;ix&quot; ix_tp tp_r</span>
+<span class="lineno">  685 </span><span class="spaces">     </span><span class="nottickedoff">return (tp_r_fun, InjReprVec len1' tp1 r1', InjReprVec len2' tp2 r2')</span>
+<span class="lineno">  686 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  687 </span><span class="spaces"></span><span class="nottickedoff">injUnifyReprTypes _ _ _ _ = mzero</span></span>
+<span class="lineno">  688 </span>
+<span class="lineno">  689 </span>
+<span class="lineno">  690 </span>-- | Given two types @tp1@ and @tp2@, try to find a common type @tp@ that
+<span class="lineno">  691 </span>-- injectively represents both of them. Pictorially, the result looks like this:
+<span class="lineno">  692 </span>--
+<span class="lineno">  693 </span>-- &gt;  tp1      tp2
+<span class="lineno">  694 </span>-- &gt;   ^        ^
+<span class="lineno">  695 </span>-- &gt; r1 \      / r2
+<span class="lineno">  696 </span>-- &gt;     \    /
+<span class="lineno">  697 </span>-- &gt;       tp
+<span class="lineno">  698 </span>--
+<span class="lineno">  699 </span>-- where @r1@ and @r2@ are injective representations. The representations should
+<span class="lineno">  700 </span>-- be maximal, meaning that they represent as much of @tp1@ and @tp2@ as
+<span class="lineno">  701 </span>-- possible. If there is such a @tp@, return it along with the representations
+<span class="lineno">  702 </span>-- @r1@ and @r2@. Otherwise, return 'Nothing', meaning the unification failed.
+<span class="lineno">  703 </span>injUnifyTypes :: Term -&gt; Term -&gt;
+<span class="lineno">  704 </span>                 MRM t (Maybe (Term, InjectiveRepr, InjectiveRepr))
+<span class="lineno">  705 </span><span class="decl"><span class="nottickedoff">injUnifyTypes tp1 tp2 =</span>
+<span class="lineno">  706 </span><span class="spaces">  </span><span class="nottickedoff">do (tp_r1, r1) &lt;- mkInjReprType tp1</span>
+<span class="lineno">  707 </span><span class="spaces">     </span><span class="nottickedoff">(tp_r2, r2) &lt;- mkInjReprType tp2</span>
+<span class="lineno">  708 </span><span class="spaces">     </span><span class="nottickedoff">runMaybeT $ injUnifyReprTypes tp_r1 r1 tp_r2 r2</span></span>
+<span class="lineno">  709 </span>
+<span class="lineno">  710 </span>
+<span class="lineno">  711 </span>-- | Use one injective representations @r1@ to restrict the domain of another
+<span class="lineno">  712 </span>-- injective representation @r2@, yielding an injective representation with the
+<span class="lineno">  713 </span>-- same representation type as @r1@ and the same type being represented as @r2@.
+<span class="lineno">  714 </span>-- Pictorially this looks like this:
+<span class="lineno">  715 </span>--
+<span class="lineno">  716 </span>-- &gt;  tp1           tp2
+<span class="lineno">  717 </span>-- &gt;   ^            ^
+<span class="lineno">  718 </span>-- &gt;    \          / r2
+<span class="lineno">  719 </span>-- &gt; r1  \        /
+<span class="lineno">  720 </span>-- &gt;      \    tpr2
+<span class="lineno">  721 </span>-- &gt;       \    ^
+<span class="lineno">  722 </span>-- &gt;        \  / r2''
+<span class="lineno">  723 </span>-- &gt;        tpr1
+<span class="lineno">  724 </span>--
+<span class="lineno">  725 </span>-- The return value is the composition of @r2''@ and @r2@. It is an error if
+<span class="lineno">  726 </span>-- this diagram does not exist.
+<span class="lineno">  727 </span>injReprRestrict :: Term -&gt; InjectiveRepr -&gt; Term -&gt; InjectiveRepr -&gt;
+<span class="lineno">  728 </span>                   MRM t InjectiveRepr
+<span class="lineno">  729 </span>
+<span class="lineno">  730 </span>-- If tp1 and tp2 are numeric types with a representation from tp1 to tp2, we
+<span class="lineno">  731 </span>-- can pre-compose that representation with r2
+<span class="lineno">  732 </span><span class="decl"><span class="nottickedoff">injReprRestrict tp1 _ tp2 r2</span>
+<span class="lineno">  733 </span><span class="spaces">  </span><span class="nottickedoff">| Just r2'' &lt;- findNumRepr tp1 tp2</span>
+<span class="lineno">  734 </span><span class="spaces">  </span><span class="nottickedoff">= return $ injReprComp r2'' r2</span>
+<span class="lineno">  735 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  736 </span><span class="spaces"></span><span class="nottickedoff">-- In all other cases, the only repr that pre-composes with r2 is the identity</span>
+<span class="lineno">  737 </span><span class="spaces"></span><span class="nottickedoff">-- repr, so we just return r2</span>
+<span class="lineno">  738 </span><span class="spaces"></span><span class="nottickedoff">injReprRestrict _ _ _ r2 = return r2</span></span>
+<span class="lineno">  739 </span>
+<span class="lineno">  740 </span>
+<span class="lineno">  741 </span>-- | Take in a type @tp_r1@, a term @tm1@ of type @tp_r1@, an injective
+<span class="lineno">  742 </span>-- representation @r1@ with @tp_r1@ as its representation type, and a type @tp2@
+<span class="lineno">  743 </span>-- with an element @tm2@, and try to find a type @tp_r'@ and a term @tm'@ of
+<span class="lineno">  744 </span>-- type @tp_r'@ that represents both @r1 tm1@ and @tm2@ using representations
+<span class="lineno">  745 </span>-- @r1'@ and @r2'@, repsectively. That is, @r1'@ should represent @tp1@ and
+<span class="lineno">  746 </span>-- @r2'@ should represent @tp2@, both with the same representation type @tp_r'@,
+<span class="lineno">  747 </span>-- and should satisfy
+<span class="lineno">  748 </span>--
+<span class="lineno">  749 </span>-- &gt; r1' tm' = r1 tm1    and    r2' tm' = tm2
+<span class="lineno">  750 </span>--
+<span class="lineno">  751 </span>-- In pictures the result should look like this:
+<span class="lineno">  752 </span>--
+<span class="lineno">  753 </span>-- &gt;    r1 tm1      tm2::tp2
+<span class="lineno">  754 </span>-- &gt;      ^            ^
+<span class="lineno">  755 </span>-- &gt;   r1 |           /
+<span class="lineno">  756 </span>-- &gt;      |          /
+<span class="lineno">  757 </span>-- &gt;  tm1::tp_r1    / r2'
+<span class="lineno">  758 </span>-- &gt;       ^       /
+<span class="lineno">  759 </span>-- &gt;   r1'' \     /
+<span class="lineno">  760 </span>-- &gt;         \   /
+<span class="lineno">  761 </span>-- &gt;       tm'::tp_r'
+<span class="lineno">  762 </span>--
+<span class="lineno">  763 </span>-- where @r1'@ is the composition of @r1''@ and @r1@.
+<span class="lineno">  764 </span>injUnifyRepr :: Term -&gt; Term -&gt; InjectiveRepr -&gt; Term -&gt; Term -&gt;
+<span class="lineno">  765 </span>                MRM t (Maybe (Term, Term, InjectiveRepr, InjectiveRepr))
+<span class="lineno">  766 </span>
+<span class="lineno">  767 </span>-- If there is a numeric repr r2 from tp_r1 to tp2, then that's our r2',
+<span class="lineno">  768 </span>-- assuming that r2 tm1 = tm2
+<span class="lineno">  769 </span><span class="decl"><span class="nottickedoff">injUnifyRepr tp_r1 tm1 r1 tp2 tm2</span>
+<span class="lineno">  770 </span><span class="spaces">  </span><span class="nottickedoff">| Just r2 &lt;- findNumRepr tp_r1 tp2 =</span>
+<span class="lineno">  771 </span><span class="spaces">    </span><span class="nottickedoff">do r2_tm1 &lt;- mrApplyRepr r2 tm1</span>
+<span class="lineno">  772 </span><span class="spaces">       </span><span class="nottickedoff">eq_p &lt;- mrProveEq r2_tm1 tm2</span>
+<span class="lineno">  773 </span><span class="spaces">       </span><span class="nottickedoff">if eq_p then</span>
+<span class="lineno">  774 </span><span class="spaces">         </span><span class="nottickedoff">return (Just (tp_r1, tm1, r1, r2))</span>
+<span class="lineno">  775 </span><span class="spaces">         </span><span class="nottickedoff">else return Nothing</span>
+<span class="lineno">  776 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  777 </span><span class="spaces"></span><span class="nottickedoff">-- If there is a numeric repr r1'' from tp2 to tp_r1, then we pre-compose that</span>
+<span class="lineno">  778 </span><span class="spaces"></span><span class="nottickedoff">-- with r1 and use the identity for r2', assuming r1'' tm2 = tm1</span>
+<span class="lineno">  779 </span><span class="spaces"></span><span class="nottickedoff">injUnifyRepr tp_r1 tm1 r1 tp2 tm2</span>
+<span class="lineno">  780 </span><span class="spaces">  </span><span class="nottickedoff">| Just r1'' &lt;- findNumRepr tp2 tp_r1 =</span>
+<span class="lineno">  781 </span><span class="spaces">    </span><span class="nottickedoff">do r1_tm2 &lt;- mrApplyRepr r1'' tm2</span>
+<span class="lineno">  782 </span><span class="spaces">       </span><span class="nottickedoff">eq_p &lt;- mrProveEq tm1 r1_tm2</span>
+<span class="lineno">  783 </span><span class="spaces">       </span><span class="nottickedoff">if eq_p then</span>
+<span class="lineno">  784 </span><span class="spaces">         </span><span class="nottickedoff">return (Just (tp2, tm2, injReprComp r1'' r1, InjReprId))</span>
+<span class="lineno">  785 </span><span class="spaces">         </span><span class="nottickedoff">else return Nothing</span>
+<span class="lineno">  786 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  787 </span><span class="spaces"></span><span class="nottickedoff">-- Otherwise, build a representation r2 for tm2, check that its representation</span>
+<span class="lineno">  788 </span><span class="spaces"></span><span class="nottickedoff">-- type equals tp_r1, and check that r1 tm1 is related to tm2</span>
+<span class="lineno">  789 </span><span class="spaces"></span><span class="nottickedoff">injUnifyRepr tp_r1 tm1 r1 tp2 tm2 =</span>
+<span class="lineno">  790 </span><span class="spaces">  </span><span class="nottickedoff">do (tp_r2, _, r2) &lt;- mkInjReprTerm tp2 tm2</span>
+<span class="lineno">  791 </span><span class="spaces">     </span><span class="nottickedoff">tps_eq &lt;- mrConvertible tp_r1 tp_r2</span>
+<span class="lineno">  792 </span><span class="spaces">     </span><span class="nottickedoff">if not tps_eq then return Nothing else</span>
+<span class="lineno">  793 </span><span class="spaces">       </span><span class="nottickedoff">do r1_tm1 &lt;- mrApplyRepr r1 tm1</span>
+<span class="lineno">  794 </span><span class="spaces">          </span><span class="nottickedoff">rel &lt;- mrProveEq r1_tm1 tm2</span>
+<span class="lineno">  795 </span><span class="spaces">          </span><span class="nottickedoff">if rel then return (Just (tp_r1, tm1, r1, r2)) else</span>
+<span class="lineno">  796 </span><span class="spaces">            </span><span class="nottickedoff">return Nothing</span></span>
+<span class="lineno">  797 </span>
+<span class="lineno">  798 </span>
+<span class="lineno">  799 </span>----------------------------------------------------------------------
+<span class="lineno">  800 </span>-- * Checking Equality with SMT
+<span class="lineno">  801 </span>----------------------------------------------------------------------
+<span class="lineno">  802 </span>
+<span class="lineno">  803 </span>-- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
+<span class="lineno">  804 </span>-- 'scEq' except that it works on open terms.
+<span class="lineno">  805 </span>mrEq :: Term -&gt; Term -&gt; MRM t Term
+<span class="lineno">  806 </span><span class="decl"><span class="nottickedoff">mrEq t1 t2 = mrTypeOf t1 &gt;&gt;= \case</span>
+<span class="lineno">  807 </span><span class="spaces">  </span><span class="nottickedoff">(asSimpleEq -&gt; Just eqf) -&gt; liftSC2 eqf t1 t2</span>
+<span class="lineno">  808 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error &quot;mrEq: unsupported type&quot;</span></span>
+<span class="lineno">  809 </span>
+<span class="lineno">  810 </span>-- | Recognize a nat, bool, integer, bitvector, or num type as the function
+<span class="lineno">  811 </span>-- which builds a boolean 'Term' stating that two terms of that type are equal 
+<span class="lineno">  812 </span>asSimpleEq :: Recognizer Term (SharedContext -&gt; Term -&gt; Term -&gt; IO Term)
+<span class="lineno">  813 </span><span class="decl"><span class="nottickedoff">asSimpleEq (asNatType -&gt; Just _) = Just $ scEqualNat</span>
+<span class="lineno">  814 </span><span class="spaces"></span><span class="nottickedoff">asSimpleEq (asBoolType -&gt; Just _) = Just $ scBoolEq</span>
+<span class="lineno">  815 </span><span class="spaces"></span><span class="nottickedoff">asSimpleEq (asIntegerType -&gt; Just _) = Just $ scIntEq</span>
+<span class="lineno">  816 </span><span class="spaces"></span><span class="nottickedoff">asSimpleEq (asSymBitvectorType -&gt; Just n) = Just $ flip scBvEq n</span>
+<span class="lineno">  817 </span><span class="spaces"></span><span class="nottickedoff">asSimpleEq (asNumType -&gt; Just ()) = Just $ \sc t1 t2 -&gt;</span>
+<span class="lineno">  818 </span><span class="spaces">  </span><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.tcEqual&quot; [t1, t2]</span>
+<span class="lineno">  819 </span><span class="spaces"></span><span class="nottickedoff">asSimpleEq _ = Nothing</span></span>
+<span class="lineno">  820 </span>
+<span class="lineno">  821 </span>-- | A 'Term' in an extended context of universal variables, which are listed
+<span class="lineno">  822 </span>-- \&quot;outside in\&quot;, meaning the highest deBruijn index comes first
+<span class="lineno">  823 </span>data TermInCtx = TermInCtx [(LocalName,Term)] Term
+<span class="lineno">  824 </span>
+<span class="lineno">  825 </span>-- | Lift a binary operation on 'Term's to one on 'TermInCtx's
+<span class="lineno">  826 </span>liftTermInCtx2 :: (SharedContext -&gt; Term -&gt; Term -&gt; IO Term) -&gt;
+<span class="lineno">  827 </span>                   TermInCtx -&gt; TermInCtx -&gt; MRM t TermInCtx
+<span class="lineno">  828 </span><span class="decl"><span class="nottickedoff">liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =</span>
+<span class="lineno">  829 </span><span class="spaces">  </span><span class="nottickedoff">do</span>
+<span class="lineno">  830 </span><span class="spaces">    </span><span class="nottickedoff">-- Insert the variables in ctx2 into the context of t1 starting at index 0,</span>
+<span class="lineno">  831 </span><span class="spaces">    </span><span class="nottickedoff">-- by lifting its variables starting at 0 by length ctx2</span>
+<span class="lineno">  832 </span><span class="spaces">    </span><span class="nottickedoff">t1' &lt;- liftTermLike 0 (length ctx2) t1</span>
+<span class="lineno">  833 </span><span class="spaces">    </span><span class="nottickedoff">-- Insert the variables in ctx1 into the context of t1 starting at index</span>
+<span class="lineno">  834 </span><span class="spaces">    </span><span class="nottickedoff">-- length ctx2, by lifting its variables starting at length ctx2 by length</span>
+<span class="lineno">  835 </span><span class="spaces">    </span><span class="nottickedoff">-- ctx1</span>
+<span class="lineno">  836 </span><span class="spaces">    </span><span class="nottickedoff">t2' &lt;- liftTermLike (length ctx2) (length ctx1) t2</span>
+<span class="lineno">  837 </span><span class="spaces">    </span><span class="nottickedoff">TermInCtx (ctx1++ctx2) &lt;$&gt; liftSC2 op t1' t2'</span></span>
+<span class="lineno">  838 </span>
+<span class="lineno">  839 </span>-- | Extend the context of a 'TermInCtx' with additional universal variables
+<span class="lineno">  840 </span>-- bound \&quot;outside\&quot; the 'TermInCtx'
+<span class="lineno">  841 </span>extTermInCtx :: [(LocalName,Term)] -&gt; TermInCtx -&gt; TermInCtx
+<span class="lineno">  842 </span><span class="decl"><span class="nottickedoff">extTermInCtx ctx (TermInCtx ctx' t) = TermInCtx (ctx++ctx') t</span></span>
+<span class="lineno">  843 </span>
+<span class="lineno">  844 </span>-- | Run an 'MRM t' computation in the context of a 'TermInCtx', passing in the
+<span class="lineno">  845 </span>-- 'Term'
+<span class="lineno">  846 </span>withTermInCtx :: TermInCtx -&gt; (Term -&gt; MRM t a) -&gt; MRM t a
+<span class="lineno">  847 </span><span class="decl"><span class="nottickedoff">withTermInCtx (TermInCtx [] tm) f = f tm</span>
+<span class="lineno">  848 </span><span class="spaces"></span><span class="nottickedoff">withTermInCtx (TermInCtx ((nm,tp):ctx) tm) f =</span>
+<span class="lineno">  849 </span><span class="spaces">  </span><span class="nottickedoff">withUVar nm (Type tp) $ const $ withTermInCtx (TermInCtx ctx tm) f</span></span>
+<span class="lineno">  850 </span>
+<span class="lineno">  851 </span>-- | Prove that two terms are equal, returning true on success and instantiating
+<span class="lineno">  852 </span>-- evars if necessary - the same as @mrProveRel Nothing@
+<span class="lineno">  853 </span>mrProveEq :: Term -&gt; Term -&gt; MRM t Bool
+<span class="lineno">  854 </span><span class="decl"><span class="nottickedoff">mrProveEq = mrProveRel Nothing</span></span>
+<span class="lineno">  855 </span>
+<span class="lineno">  856 </span>-- | Prove that two terms are equal, throwing an error if this is not possible
+<span class="lineno">  857 </span>-- and instantiating evars if necessary - the same as @mrAssertProveRel Nothing@
+<span class="lineno">  858 </span>mrAssertProveEq :: Term -&gt; Term -&gt; MRM t ()
+<span class="lineno">  859 </span><span class="decl"><span class="nottickedoff">mrAssertProveEq = mrAssertProveRel Nothing</span></span>
+<span class="lineno">  860 </span>
+<span class="lineno">  861 </span>-- | A relation over two terms, the second and fourth arguments, and their
+<span class="lineno">  862 </span>-- respective types, the first and third arguments
+<span class="lineno">  863 </span>type MRRel t a = Term -&gt; Term -&gt; Term -&gt; Term -&gt; MRM t a
+<span class="lineno">  864 </span>
+<span class="lineno">  865 </span>-- | Prove that two terms are related via a relation, if given, on terms of
+<span class="lineno">  866 </span>-- SpecFun type (as in 'isSpecFunType') or via equality otherwise, returning
+<span class="lineno">  867 </span>-- false if this is not possible and instantiating evars if necessary
+<span class="lineno">  868 </span>mrProveRel :: Maybe (MRRel t ()) -&gt; Term -&gt; Term -&gt; MRM t Bool
+<span class="lineno">  869 </span><span class="decl"><span class="nottickedoff">mrProveRel piRel t1 t2 = mrProveRelH piRel t1 t2 &gt;&gt;= \case</span>
+<span class="lineno">  870 </span><span class="spaces">  </span><span class="nottickedoff">Left err -&gt; mrDebugPPPrefix 2 &quot;mrProveRel Failure:&quot; err &gt;&gt; return False</span>
+<span class="lineno">  871 </span><span class="spaces">  </span><span class="nottickedoff">Right res -&gt; do</span>
+<span class="lineno">  872 </span><span class="spaces">    </span><span class="nottickedoff">mrDebugPrint 2 $ &quot;mrProveRel: &quot; ++ if res then &quot;Success&quot; else &quot;Failure&quot;</span>
+<span class="lineno">  873 </span><span class="spaces">    </span><span class="nottickedoff">return res</span></span>
+<span class="lineno">  874 </span>
+<span class="lineno">  875 </span>-- | Prove that two terms are related via a relation, if given, on terms of
+<span class="lineno">  876 </span>-- SpecFun type (as in 'isSpecFunType') or via equality otherwise, throwing an
+<span class="lineno">  877 </span>-- error if this is not possible and instantiating evars if necessary
+<span class="lineno">  878 </span>mrAssertProveRel :: Maybe (MRRel t ()) -&gt; Term -&gt; Term -&gt; MRM t ()
+<span class="lineno">  879 </span><span class="decl"><span class="nottickedoff">mrAssertProveRel piRel t1 t2 = mrProveRelH piRel t1 t2 &gt;&gt;= \case</span>
+<span class="lineno">  880 </span><span class="spaces">  </span><span class="nottickedoff">Left err -&gt; throwMRFailure (MRFailureCtx (FailCtxProveRel t1 t2) err)</span>
+<span class="lineno">  881 </span><span class="spaces">  </span><span class="nottickedoff">Right success -&gt; unless success $ throwMRFailure (TermsNotEq t1 t2)</span></span>
+<span class="lineno">  882 </span>
+<span class="lineno">  883 </span>-- | The implementation of 'mrProveRel' and 'mrAssertProveRel'
+<span class="lineno">  884 </span>mrProveRelH :: Maybe (MRRel t ()) -&gt; Term -&gt; Term -&gt; MRM t (Either MRFailure Bool)
+<span class="lineno">  885 </span><span class="decl"><span class="nottickedoff">mrProveRelH piRel t1 t2 =</span>
+<span class="lineno">  886 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefixSep 2 &quot;mrProveRel&quot; t1 &quot;~=&quot; t2</span>
+<span class="lineno">  887 </span><span class="spaces">     </span><span class="nottickedoff">tp1 &lt;- mrTypeOf t1 &gt;&gt;= mrSubstEVars</span>
+<span class="lineno">  888 </span><span class="spaces">     </span><span class="nottickedoff">tp2 &lt;- mrTypeOf t2 &gt;&gt;= mrSubstEVars</span>
+<span class="lineno">  889 </span><span class="spaces">     </span><span class="nottickedoff">ts_eq &lt;- mrConvertible t1 t2</span>
+<span class="lineno">  890 </span><span class="spaces">     </span><span class="nottickedoff">if ts_eq then return $ Right True</span>
+<span class="lineno">  891 </span><span class="spaces">     </span><span class="nottickedoff">else mrRelTerm piRel tp1 t1 tp2 t2 &gt;&gt;=</span>
+<span class="lineno">  892 </span><span class="spaces">          </span><span class="nottickedoff">mapM (\cond_in_ctx -&gt; withTermInCtx cond_in_ctx mrProvable)</span></span>
+<span class="lineno">  893 </span>
+<span class="lineno">  894 </span>-- | The main workhorse for 'mrProveRel' and 'mrProveRel': build a Boolean term
+<span class="lineno">  895 </span>-- over zero or more universally quantified variables expressing that the two
+<span class="lineno">  896 </span>-- given terms of the two given types are related
+<span class="lineno">  897 </span>mrRelTerm :: Maybe (MRRel t ()) -&gt; MRRel t (Either MRFailure TermInCtx)
+<span class="lineno">  898 </span><span class="decl"><span class="nottickedoff">mrRelTerm piRel tp1 t1 tp2 t2 =</span>
+<span class="lineno">  899 </span><span class="spaces">  </span><span class="nottickedoff">do varmap &lt;- mrVars</span>
+<span class="lineno">  900 </span><span class="spaces">     </span><span class="nottickedoff">tp1' &lt;- liftSC1 scWhnf tp1</span>
+<span class="lineno">  901 </span><span class="spaces">     </span><span class="nottickedoff">tp2' &lt;- liftSC1 scWhnf tp2</span>
+<span class="lineno">  902 </span><span class="spaces">     </span><span class="nottickedoff">mrRelTerm' varmap piRel tp1' t1 tp2' t2</span></span>
+<span class="lineno">  903 </span>
+<span class="lineno">  904 </span>-- | The body of 'mrRelTerm'
+<span class="lineno">  905 </span>-- NOTE: Don't call this function recursively, call 'mrRelTerm'
+<span class="lineno">  906 </span>mrRelTerm' :: Map MRVar MRVarInfo -&gt; Maybe (MRRel t ()) -&gt;
+<span class="lineno">  907 </span>              MRRel t (Either MRFailure TermInCtx)
+<span class="lineno">  908 </span>
+<span class="lineno">  909 </span>-- If t1 is an instantiated evar, substitute and recurse
+<span class="lineno">  910 </span><span class="decl"><span class="nottickedoff">mrRelTerm' var_map piRel tp1 (asEVarApp var_map -&gt; Just (_, _, args, Just f)) tp2 t2 =</span>
+<span class="lineno">  911 </span><span class="spaces">  </span><span class="nottickedoff">mrApplyAll f args &gt;&gt;= \t1' -&gt; mrRelTerm piRel tp1 t1' tp2 t2</span>
+<span class="lineno">  912 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  913 </span><span class="spaces"></span><span class="nottickedoff">-- If t1 is an uninstantiated evar, ensure the types are equal and instantiate</span>
+<span class="lineno">  914 </span><span class="spaces"></span><span class="nottickedoff">-- it with t2</span>
+<span class="lineno">  915 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' var_map _ tp1 (asEVarApp var_map -&gt; Just (evar, _, args, Nothing)) tp2 t2 =</span>
+<span class="lineno">  916 </span><span class="spaces">  </span><span class="nottickedoff">do tps_are_eq &lt;- mrConvertible tp1 tp2</span>
+<span class="lineno">  917 </span><span class="spaces">     </span><span class="nottickedoff">unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))</span>
+<span class="lineno">  918 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- mrSubstEVars t2</span>
+<span class="lineno">  919 </span><span class="spaces">     </span><span class="nottickedoff">success &lt;- mrTrySetAppliedEVar evar args t2'</span>
+<span class="lineno">  920 </span><span class="spaces">     </span><span class="nottickedoff">when success $</span>
+<span class="lineno">  921 </span><span class="spaces">       </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;setting evar&quot; evar &quot;to&quot; t2</span>
+<span class="lineno">  922 </span><span class="spaces">     </span><span class="nottickedoff">Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC1 scBool success</span>
+<span class="lineno">  923 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  924 </span><span class="spaces"></span><span class="nottickedoff">-- If t2 is an instantiated evar, substitute and recurse</span>
+<span class="lineno">  925 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' var_map piRel tp1 t1 tp2 (asEVarApp var_map -&gt; Just (_, _, args, Just f)) =</span>
+<span class="lineno">  926 </span><span class="spaces">  </span><span class="nottickedoff">mrApplyAll f args &gt;&gt;= \t2' -&gt; mrRelTerm piRel tp1 t1 tp2 t2'</span>
+<span class="lineno">  927 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  928 </span><span class="spaces"></span><span class="nottickedoff">-- If t2 is an uninstantiated evar, ensure the types are equal and instantiate</span>
+<span class="lineno">  929 </span><span class="spaces"></span><span class="nottickedoff">-- it with t1</span>
+<span class="lineno">  930 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' var_map _ tp1 t1 tp2 (asEVarApp var_map -&gt; Just (evar, _, args, Nothing)) =</span>
+<span class="lineno">  931 </span><span class="spaces">  </span><span class="nottickedoff">do tps_are_eq &lt;- mrConvertible tp1 tp2</span>
+<span class="lineno">  932 </span><span class="spaces">     </span><span class="nottickedoff">unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))</span>
+<span class="lineno">  933 </span><span class="spaces">     </span><span class="nottickedoff">t1' &lt;- mrSubstEVars t1</span>
+<span class="lineno">  934 </span><span class="spaces">     </span><span class="nottickedoff">success &lt;- mrTrySetAppliedEVar evar args t1'</span>
+<span class="lineno">  935 </span><span class="spaces">     </span><span class="nottickedoff">when success $</span>
+<span class="lineno">  936 </span><span class="spaces">       </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;setting evar&quot; evar &quot;to&quot; t1</span>
+<span class="lineno">  937 </span><span class="spaces">     </span><span class="nottickedoff">Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC1 scBool success</span>
+<span class="lineno">  938 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  939 </span><span class="spaces"></span><span class="nottickedoff">-- For unit types, always return true</span>
+<span class="lineno">  940 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ _ (asTupleType -&gt; Just []) _ (asTupleType -&gt; Just []) _ =</span>
+<span class="lineno">  941 </span><span class="spaces">  </span><span class="nottickedoff">Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC1 scBool True</span>
+<span class="lineno">  942 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  943 </span><span class="spaces"></span><span class="nottickedoff">-- For nat, bool, integer, bitvector, or num type types, use asSimpleEq</span>
+<span class="lineno">  944 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ _ tp1@(asSimpleEq -&gt; Just eqf) t1 tp2 t2 =</span>
+<span class="lineno">  945 </span><span class="spaces">  </span><span class="nottickedoff">do tps_are_eq &lt;- mrConvertible tp1 tp2</span>
+<span class="lineno">  946 </span><span class="spaces">     </span><span class="nottickedoff">unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))</span>
+<span class="lineno">  947 </span><span class="spaces">     </span><span class="nottickedoff">t1' &lt;- mrSubstEVars t1</span>
+<span class="lineno">  948 </span><span class="spaces">     </span><span class="nottickedoff">t2' &lt;- mrSubstEVars t2</span>
+<span class="lineno">  949 </span><span class="spaces">     </span><span class="nottickedoff">Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC2 eqf t1' t2'</span>
+<span class="lineno">  950 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  951 </span><span class="spaces"></span><span class="nottickedoff">-- For BVVec types, prove all projections are related by quantifying over an</span>
+<span class="lineno">  952 </span><span class="spaces"></span><span class="nottickedoff">-- index variable and proving the projections at that index are related</span>
+<span class="lineno">  953 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ piRel tp1@(asVecTypeWithLen -&gt; Just (vlen1, tpA1)) t1</span>
+<span class="lineno">  954 </span><span class="spaces">                   </span><span class="nottickedoff">tp2@(asVecTypeWithLen -&gt; Just (vlen2, tpA2)) t2 =</span>
+<span class="lineno">  955 </span><span class="spaces">  </span><span class="nottickedoff">mrVecLenUnify vlen1 vlen2 &gt;&gt;= \case</span>
+<span class="lineno">  956 </span><span class="spaces">    </span><span class="nottickedoff">Just (vlen1', vlen2') -&gt;</span>
+<span class="lineno">  957 </span><span class="spaces">      </span><span class="nottickedoff">mrVecLenIxType vlen1' &gt;&gt;= \ix_tp -&gt;</span>
+<span class="lineno">  958 </span><span class="spaces">      </span><span class="nottickedoff">withUVarLift &quot;ix&quot; (Type ix_tp) (vlen1',vlen2',tpA1,tpA2,t1,t2) $</span>
+<span class="lineno">  959 </span><span class="spaces">      </span><span class="nottickedoff">\ix (vlen1'',vlen2'',tpA1',tpA2',t1',t2') -&gt;</span>
+<span class="lineno">  960 </span><span class="spaces">      </span><span class="nottickedoff">do ix_bound &lt;- mrVecLenIxBound vlen1'' ix</span>
+<span class="lineno">  961 </span><span class="spaces">         </span><span class="nottickedoff">t1_prj &lt;- mrVecLenAt vlen1'' tpA1' t1' ix</span>
+<span class="lineno">  962 </span><span class="spaces">         </span><span class="nottickedoff">t2_prj &lt;- mrVecLenAt vlen2'' tpA2' t2' ix</span>
+<span class="lineno">  963 </span><span class="spaces">         </span><span class="nottickedoff">mrRelTerm piRel tpA1' t1_prj tpA2' t2_prj &gt;&gt;= mapM (\cond -&gt;</span>
+<span class="lineno">  964 </span><span class="spaces">          </span><span class="nottickedoff">extTermInCtx [(&quot;ix&quot;,ix_tp)] &lt;$&gt;</span>
+<span class="lineno">  965 </span><span class="spaces">            </span><span class="nottickedoff">liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond)</span>
+<span class="lineno">  966 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; throwMRFailure (TypesNotEq (Type tp1) (Type tp2))</span>
+<span class="lineno">  967 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  968 </span><span class="spaces"></span><span class="nottickedoff">-- For pair types, prove both the left and right projections are related</span>
+<span class="lineno">  969 </span><span class="spaces"></span><span class="nottickedoff">-- FIXME: Don't re-associate tuples</span>
+<span class="lineno">  970 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ piRel (asPairType -&gt; Just (asPairType -&gt; Just (tp1a, tp1b), tp1c)) t1</span>
+<span class="lineno">  971 </span><span class="spaces">                   </span><span class="nottickedoff">tp2 t2 =</span>
+<span class="lineno">  972 </span><span class="spaces">  </span><span class="nottickedoff">do tp1' &lt;- liftSC2 scPairType tp1a =&lt;&lt; liftSC2 scPairType tp1b tp1c</span>
+<span class="lineno">  973 </span><span class="spaces">     </span><span class="nottickedoff">mrRelTerm piRel tp1' t1 tp2 t2</span>
+<span class="lineno">  974 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ piRel tp1 t1</span>
+<span class="lineno">  975 </span><span class="spaces">                   </span><span class="nottickedoff">(asPairType -&gt; Just (asPairType -&gt; Just (tp2a, tp2b), tp2c)) t2 =</span>
+<span class="lineno">  976 </span><span class="spaces">  </span><span class="nottickedoff">do tp2' &lt;- liftSC2 scPairType tp2a =&lt;&lt; liftSC2 scPairType tp2b tp2c</span>
+<span class="lineno">  977 </span><span class="spaces">     </span><span class="nottickedoff">mrRelTerm piRel tp1 t1 tp2' t2</span>
+<span class="lineno">  978 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ piRel (asPairType -&gt; Just (tpL1, tpR1)) t1</span>
+<span class="lineno">  979 </span><span class="spaces">                   </span><span class="nottickedoff">(asPairType -&gt; Just (tpL2, tpR2)) t2 =</span>
+<span class="lineno">  980 </span><span class="spaces">  </span><span class="nottickedoff">do t1L &lt;- liftSC1 scPairLeft t1</span>
+<span class="lineno">  981 </span><span class="spaces">     </span><span class="nottickedoff">t2L &lt;- liftSC1 scPairLeft t2</span>
+<span class="lineno">  982 </span><span class="spaces">     </span><span class="nottickedoff">t1R &lt;- liftSC1 scPairRight t1</span>
+<span class="lineno">  983 </span><span class="spaces">     </span><span class="nottickedoff">t2R &lt;- liftSC1 scPairRight t2</span>
+<span class="lineno">  984 </span><span class="spaces">     </span><span class="nottickedoff">mb_condL &lt;- mrRelTerm piRel tpL1 t1L tpL2 t2L</span>
+<span class="lineno">  985 </span><span class="spaces">     </span><span class="nottickedoff">mb_condR &lt;- mrRelTerm piRel tpR1 t1R tpR2 t2R</span>
+<span class="lineno">  986 </span><span class="spaces">     </span><span class="nottickedoff">sequence $ liftTermInCtx2 scAnd &lt;$&gt; mb_condL &lt;*&gt; mb_condR</span>
+<span class="lineno">  987 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  988 </span><span class="spaces"></span><span class="nottickedoff">mrRelTerm' _ piRel tp1 t1 tp2 t2 =</span>
+<span class="lineno">  989 </span><span class="spaces">  </span><span class="nottickedoff">mrSC &gt;&gt;= \sc -&gt;</span>
+<span class="lineno">  990 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (isSpecFunType sc tp1) &gt;&gt;= \tp1_is_specFun -&gt;</span>
+<span class="lineno">  991 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (isSpecFunType sc tp2) &gt;&gt;= \tp2_is_specFun -&gt;</span>
+<span class="lineno">  992 </span><span class="spaces">  </span><span class="nottickedoff">case piRel of</span>
+<span class="lineno">  993 </span><span class="spaces">    </span><span class="nottickedoff">-- If given a relation, on terms of SpecFun type return True iff the</span>
+<span class="lineno">  994 </span><span class="spaces">    </span><span class="nottickedoff">-- relation returns without raising a 'MRFailure'</span>
+<span class="lineno">  995 </span><span class="spaces">    </span><span class="nottickedoff">Just piRel' | tp1_is_specFun, tp2_is_specFun -&gt;</span>
+<span class="lineno">  996 </span><span class="spaces">      </span><span class="nottickedoff">(piRel' tp1 t1 tp2 t2 &gt;&gt; Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC1 scBool True)</span>
+<span class="lineno">  997 </span><span class="spaces">        </span><span class="nottickedoff">`catchFailure` \err -&gt; return $ Left err</span>
+<span class="lineno">  998 </span><span class="spaces">    </span><span class="nottickedoff">-- Otherwise, return True iff the terms are convertible</span>
+<span class="lineno">  999 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do</span>
+<span class="lineno"> 1000 </span><span class="spaces">      </span><span class="nottickedoff">tps_are_eq &lt;- mrConvertible tp1 tp2</span>
+<span class="lineno"> 1001 </span><span class="spaces">      </span><span class="nottickedoff">unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))</span>
+<span class="lineno"> 1002 </span><span class="spaces">      </span><span class="nottickedoff">tms_are_eq &lt;- mrConvertible t1 t2</span>
+<span class="lineno"> 1003 </span><span class="spaces">      </span><span class="nottickedoff">if tms_are_eq then Right &lt;$&gt; TermInCtx [] &lt;$&gt; liftSC1 scBool True</span>
+<span class="lineno"> 1004 </span><span class="spaces">                    </span><span class="nottickedoff">else return $ Left $ TermsNotEq t1 t2</span></span>
+
+</pre>
+</body>
+</html>
