@@ -32,7 +32,7 @@ module SAWCore.Simulator
 
 import Prelude hiding (mapM)
 
-import Control.Monad (liftM)
+import Control.Monad (liftM, void)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.Monad.Fix (MonadFix(mfix))
@@ -506,28 +506,28 @@ mkMemoClosed cfg t =
     subterms = fmap fst $ IMap.filter ((== emptyBitSet) . snd) $ State.execState (go t) IMap.empty
 
     go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
-    go (Unshared tf) = freesTermF <$> traverse go tf
+    go (Unshared tf) = termf tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) =
       do memo <- State.get
          case IMap.lookup i memo of
            Just (_, b) -> pure b
            Nothing ->
-             do -- if tf is a defined constant, traverse the definition body
-                case getBody tf of
-                  Just rhs -> go rhs >> pure ()
-                  Nothing -> pure ()
-                b <- freesTermF <$> traverse go tf
+             do b <- termf tf
                 State.modify (IMap.insert i (tf, b))
                 pure b
 
-    getBody :: TermF t -> Maybe Term
-    getBody tf =
-      case tf of
-        Constant nm ->
-          case requireNameInMap nm (simModMap cfg) of
-            ResolvedDef d -> defBody d
-            _ -> Nothing
-        _ -> Nothing
+    termf :: TermF Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
+    termf tf =
+      do -- if tf is a defined constant, traverse the definition body and type
+         case tf of
+           Constant nm ->
+             do let r = requireNameInMap nm (simModMap cfg)
+                void $ go (resolvedNameType r)
+                case r of
+                  ResolvedDef (defBody -> Just body) -> void $ go body
+                  _ -> pure ()
+           _ -> pure ()
+         freesTermF <$> traverse go tf
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
