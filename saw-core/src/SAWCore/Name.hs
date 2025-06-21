@@ -36,8 +36,10 @@ module SAWCore.Name
   , moduleIdentToURI
   , nameURI
   , nameAliases
-    -- * ExtCns
+    -- * Name
   , VarIndex
+  , Name(..)
+    -- * ExtCns
   , ExtCns(..)
   , scFreshNameURI
     -- * Display Name Environments
@@ -231,9 +233,37 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
        }
 
 
--- External Constants ----------------------------------------------------------
+-- Global Names ----------------------------------------------------------------
 
 type VarIndex = Int
+
+-- | A global name with a unique ID. We maintain a global invariant
+-- that the 'VarIndex' and the 'NameInfo' must be in a strict
+-- one-to-one correspondence: Each 'VarIndex' is paired with a unique
+-- 'NameInfo', and each 'NameInfo' is paired with a unique 'VarIndex'.
+data Name =
+  Name
+  { nameIndex :: !VarIndex
+  , nameInfo :: !NameInfo
+  }
+  deriving (Show)
+
+-- | Because of the global uniqueness invariant, comparing the
+-- 'VarIndex' is sufficient to ensure equality of names.
+instance Eq Name where
+  x == y = nameIndex x == nameIndex y
+
+instance Ord Name where
+  compare x y = compare (nameIndex x) (nameIndex y)
+
+-- | For hashing, we consider only the 'NameInfo' and not the
+-- 'VarIndex'; this gives a stable hash value for a particular name,
+-- even if the unique IDs are assigned differently from run to run.
+instance Hashable Name where
+  hashWithSalt x nm = hashWithSalt x (nameInfo nm)
+
+
+-- External Constants ----------------------------------------------------------
 
 -- | A global name with a unique ID and a type. We maintain a global
 -- invariant that the 'VarIndex' and the 'NameInfo' must be in a
