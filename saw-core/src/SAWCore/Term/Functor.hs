@@ -198,7 +198,7 @@ data FlatTermF e
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
     --   type of the motive function.
-  | RecursorType !(ExtCns e) ![e] !e !e
+  | RecursorType !Name ![e] !e !e
 
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
@@ -249,12 +249,12 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 --  types of the parameters, motive and eliminator functions.
 data CompiledRecursor e =
   CompiledRecursor
-  { recursorDataType  :: ExtCns e
+  { recursorDataType  :: Name
   , recursorParams    :: [e]
   , recursorMotive    :: e
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
-  , recursorCtorOrder :: [ExtCns e]
+  , recursorCtorOrder :: [Name]
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -283,11 +283,16 @@ zipExtCns f (EC v1 nmi x) (EC v2 _ y)
   | v1 == v2 = Just (EC v1 nmi (f x y))
   | otherwise = Nothing
 
+zipName :: Name -> Name -> Maybe Name
+zipName x y
+  | x == y = Just x
+  | otherwise = Nothing
+
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
 zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
   | Map.keysSet es1 == Map.keysSet es2
-  = do d <- zipExtCns f d1 d2
-       ord <- sequence (zipWith (zipExtCns f) ord1 ord2)
+  = do d <- zipName d1 d2
+       ord <- sequence (zipWith zipName ord1 ord2)
        pure $ CompiledRecursor
               d
               (zipWith f ps1 ps2)
@@ -313,7 +318,7 @@ zipWithFlatTermF f = go
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
     go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
-      do d <- zipExtCns f d1 d2
+      do d <- zipName d1 d2
          Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
 
     go (Recursor rec1) (Recursor rec2) =
@@ -363,9 +368,8 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e)
-      -- ^ A global constant identified by its name and type.
-      -- The type is always a closed term.
+    | Constant !Name
+      -- ^ A global constant identified by its name.
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
 instance (e ~ Term) => Eq (TermF e) where
@@ -525,7 +529,7 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1) (Constant x2) = ecVarIndex x1 == ecVarIndex x2
+    termf (Constant x1) (Constant x2) = x1 == x2
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
@@ -546,7 +550,7 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec               -> Net.Atom (toShortName (ecName ec))
+      Constant nm               -> Net.Atom (toShortName (nameInfo nm))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var

@@ -41,6 +41,7 @@ import Numeric.Natural
 
 
 import SAWCore.Module (ModuleMap, dtExtCns)
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
 import qualified SAWCore.Prim as Prim
@@ -101,9 +102,9 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
          reflectTerm sc cfg tyv tm
 
     primHandler cfg ec _msg env tp =
-      do ec'  <- traverse (readBackTValue sc cfg) ec
+      do let nm = Name (ecVarIndex ec) (ecName ec)
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scTermF sc (Constant ec')
+         prim <- scTermF sc (Constant nm)
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 
@@ -184,9 +185,9 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
 
     primHandler cfg ec _msg env tp =
       do let ?recordEC = \_ec -> return ()
-         ec'  <- traverse (readBackTValue sc cfg) ec
+         let nm = Name (ecVarIndex ec) (ecName ec)
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scTermF sc (Constant ec')
+         prim <- scTermF sc (Constant nm)
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 
@@ -262,14 +263,14 @@ readBackTValue sc cfg = loop
         do fs' <- traverse (traverse loop) fs
            scRecordType sc fs'
       VDataType nm ps vs ->
-        do nm' <- traverse loop nm
+        do let nm' = Name (ecVarIndex nm) (ecName nm)
            (ps',vs') <- splitAt (length ps) <$> readBackDataTypeParams (ecType nm) (ps++vs)
            scDataTypeAppParams sc nm' ps' vs'
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
       VRecursorType d ps m mty ->
-        do d'   <- traverse loop d
+        do let d' = Name (ecVarIndex d) (ecName d)
            ps'  <- readBackDataTypeParams (ecType d) ps
            m'   <- readBackValue sc cfg mty m
            mty' <- loop mty
@@ -423,9 +424,9 @@ readBackValue sc cfg = loop
          scVectorReduced sc tp' vs'
 
     loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
-      do cnm' <- traverse (readBackTValue sc cfg) cnm
+      do let nm = Name (ecVarIndex cnm) (ecName cnm)
          (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (ecType cnm) (ps++vs)
-         scCtorAppParams sc cnm' ps' vs'
+         scCtorAppParams sc nm ps' vs'
 
     loop (VRecordType fs) (VRecordValue vs) =
       do let fm = Map.fromList fs

@@ -61,6 +61,8 @@ import SAWCore.Module
   , dtNumParams
   , findCtorInMap
   , lookupVarIndexInMap
+  , resolvedNameType
+  , requireNameInMap
   , Ctor(..)
   , Def(..)
   , DefQualifier(..)
@@ -162,24 +164,23 @@ evalTermF cfg lam recEval tf env =
                                   return $ TValue $ VPiType nm v body
 
     LocalVar i              -> force (fst (env !! i))
-    Constant ec             -> do ec' <- traverse evalType ec
-                                  let str = toAbsoluteName (ecName ec')
+    Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
+                                  ty' <- evalType (resolvedNameType r)
+                                  let ec' = EC (nameIndex nm) (nameInfo nm) ty'
                                   case simConstant cfg tf ec' of
                                     Just override -> override
                                     Nothing ->
-                                      case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
-                                        Nothing ->
-                                          panic "evalTermF" ["Constant not found: " <> str]
-                                        Just (ResolvedCtor ctor) ->
+                                      case r of
+                                        ResolvedCtor ctor ->
                                           ctorValue ec' (ctorNumParams ctor) (ctorNumArgs ctor)
-                                        Just (ResolvedDataType dt) ->
+                                        ResolvedDataType dt ->
                                           dtValue ec' (dtNumParams dt) (dtNumIndices dt)
-                                        Just (ResolvedDef d) ->
+                                        ResolvedDef d ->
                                           case defBody d of
                                             Just t -> recEval t
                                             Nothing ->
                                               case defQualifier d of
-                                                NoQualifier -> simNeutral cfg env (NeutralConstant ec)
+                                                NoQualifier -> simNeutral cfg env (NeutralConstant nm)
                                                 PrimQualifier -> simPrimitive cfg ec'
                                                 AxiomQualifier -> simPrimitive cfg ec'
 
@@ -206,17 +207,20 @@ evalTermF cfg lam recEval tf env =
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
 
         RecursorType d ps m mtp ->
-          TValue <$> (VRecursorType <$>
-            traverse evalType d <*>
-            mapM recEval ps <*>
-            recEval m <*>
-            (evalType mtp))
+          do dty <- evalType (resolvedNameType (requireNameInMap d (simModMap cfg)))
+             TValue <$> (VRecursorType <$>
+               pure (EC (nameIndex d) (nameInfo d) dty) <*>
+               mapM recEval ps <*>
+               recEval m <*>
+               (evalType mtp))
 
         Recursor r ->
           do let f (e,ety) = do v  <- recEvalDelay e
                                 ty <- evalType ety
                                 pure (v,ty)
-             d   <- traverse evalType (recursorDataType r)
+             let dname = recursorDataType r
+             dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
+             let d = EC (nameIndex dname) (nameInfo dname) dty
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
              mty <- evalType (recursorMotiveTy r)
@@ -519,9 +523,9 @@ mkMemoClosed cfg t =
     getBody :: TermF t -> Maybe Term
     getBody tf =
       case tf of
-        Constant ec ->
-          case lookupVarIndexInMap (ecVarIndex ec) (simModMap cfg) of
-            Just (ResolvedDef (defBody -> Just rhs)) -> Just rhs
+        Constant nm ->
+          case requireNameInMap nm (simModMap cfg) of
+            ResolvedDef d -> defBody d
             _ -> Nothing
         _ -> Nothing
 

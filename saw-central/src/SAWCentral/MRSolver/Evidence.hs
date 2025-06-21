@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -37,6 +38,7 @@ import qualified Data.Set as Set
 
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
 
+import SAWCore.Module (ModuleMap)
 import SAWCore.Term.Functor
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
@@ -115,7 +117,7 @@ data FunAssump t = FunAssump {
 -- where @ann@ is the given argument and @rhs@ is either
 -- @OpaqueFunAssump g [c1,...,cl]@ if @t2@ is @g c1 ... cl@,
 -- or @RewriteFunAssump t2@ otherwise
-asFunAssump :: Maybe t -> Recognizer Term (FunAssump t)
+asFunAssump :: (?mm :: ModuleMap) => Maybe t -> Recognizer Term (FunAssump t)
 asFunAssump ann (asRefinesS -> Just (RefinesS args
                                      (asGlobalDef -> Just "SpecM.VoidEv")
                                      _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))

@@ -81,7 +81,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import SAWCore.Cache
 import SAWCore.Conversion
 import SAWCore.Module
-  ( ctorExtCns
+  ( ctorName
   , ctorNumParams
   , lookupVarIndexInMap
   , Ctor(..)
@@ -89,6 +89,7 @@ import SAWCore.Module
   , Def(..)
   , ResolvedName(..)
   )
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
@@ -411,15 +412,15 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
-    (unwrapTermF -> Constant ec) ->
-      do mres <- lookupVarIndexInMap (ecVarIndex ec) <$> scGetModuleMap sc
+    (unwrapTermF -> Constant nm) ->
+      do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
          case mres of
            Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
            _ -> pure Nothing
     (R.asEq -> Just (_, x, y)) -> eqRule x y
     (R.asEqTrue -> Just body) -> ruleOfProp sc body ann
-    (R.asApplyAll -> (R.asConstant -> Just ec, args)) ->
-      do mres <- lookupVarIndexInMap (ecVarIndex ec) <$> scGetModuleMap sc
+    (R.asApplyAll -> (R.asConstant -> Just nm, args)) ->
+      do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
          case mres of
            Just (ResolvedDef (defBody -> Just body)) ->
              do app <- scApplyAllBeta sc body args
@@ -475,7 +476,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
                   params2 <- traverse (incVars sc 0 nargs) params1
                   args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
-                  c <- scCtorAppParams sc (ctorExtCns ctor) params2 args
+                  c <- scCtorAppParams sc (ctorName ctor) params2 args
                   -- Build the list of types of the new context.
                   let ctxt' = ctxt1 ++ argTs ++ ctxt2
                   -- Define function to adjust indices on a term from
@@ -493,7 +494,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc rec' crec' (ctorExtCns ctor) args'
+                  rhs1 <- scReduceRecursor sc rec' crec' (ctorName ctor) args'
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
@@ -503,9 +504,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          let d = recursorDataType crec
          mm <- scGetModuleMap sc
          dt <-
-           case lookupVarIndexInMap (ecVarIndex d) mm of
+           case lookupVarIndexInMap (nameIndex d) mm of
              Just (ResolvedDataType dt) -> pure dt
-             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> toAbsoluteName (ecName d)]
+             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> toAbsoluteName (nameInfo d)]
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing
@@ -686,7 +687,7 @@ reduceSharedTerm sc (R.asRecursorApp -> Just (rec, crec, _, arg)) =
      case R.asConstant f of
        Nothing -> pure Nothing
        Just c ->
-         case lookupVarIndexInMap (ecVarIndex c) mm of
+         case lookupVarIndexInMap (nameIndex c) mm of
            Just (ResolvedCtor ctor) ->
              Just <$> scReduceRecursor sc rec crec c (drop (ctorNumParams ctor) args)
            _ -> pure Nothing

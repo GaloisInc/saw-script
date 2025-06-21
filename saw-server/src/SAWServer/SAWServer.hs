@@ -48,7 +48,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
-import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
+import SAWCore.SharedTerm (mkSharedContext, scLoadModule, scGetModuleMap)
 import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
@@ -216,6 +216,7 @@ initialState readFileFn =
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
+     mm <- scGetModuleMap sc
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
      jcb <- JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
@@ -251,7 +252,7 @@ initialState readFileFn =
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = []
                 , rwLocalEnv = []
-                , rwMonadify = defaultMonEnv
+                , rwMonadify = let ?mm = mm in defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache

@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -57,7 +58,7 @@ import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
 import SAWCore.SCTypeCheck
 import SAWCore.SharedTerm
-import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
+import SAWCore.Module (ModuleMap, Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 
@@ -1008,16 +1009,20 @@ mrVarInfo var = Map.lookup var <$> mrVars
 
 -- | Convert an 'ExtCns' to a 'FunName'
 extCnsToFunName :: ExtCns Term -> MRM t FunName
-extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
-  Just (EVarInfo _ _) -> return $ EVarFunName var
-  Just (CallVarInfo _) -> return $ CallSName var
-  Nothing
-    | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
-      return $ GlobalName glob []
-  _ -> error "extCnsToFunName: unreachable"
+extCnsToFunName ec =
+  do let var = MRVar ec
+     mm <- liftSC0 scGetModuleMap
+     let ?mm = mm
+     mrVarInfo var >>= \case
+       Just (EVarInfo _ _) -> return $ EVarFunName var
+       Just (CallVarInfo _) -> return $ CallSName var
+       Nothing
+         | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
+           return $ GlobalName glob []
+       _ -> error "extCnsToFunName: unreachable"
 
 -- | Get the 'FunName' of a global definition
-mrGlobalDef :: Ident -> MRM t FunName
+mrGlobalDef :: (?mm :: ModuleMap) => Ident -> MRM t FunName
 mrGlobalDef ident = asTypedGlobalDef <$> liftSC1 scGlobalDef ident >>= \case
   Just glob -> return $ GlobalName glob []
   _ -> error $ "mrGlobalDef: could not get GlobalDef of: " ++ show ident
@@ -1051,7 +1056,7 @@ mrFunBody f args = mrFunNameBody f >>= \case
 -- | Get the body of a function @f@ applied to some arguments, as per
 -- 'mrFunBody', and also return whether its body recursively calls itself, as
 -- per 'mrCallsFun'
-mrFunBodyRecInfo :: FunName -> [Term] -> MRM t (Maybe (Term, Bool))
+mrFunBodyRecInfo :: (?mm :: ModuleMap) => FunName -> [Term] -> MRM t (Maybe (Term, Bool))
 mrFunBodyRecInfo f args =
   mrFunNameBody f >>= \case
   Just body -> do
@@ -1062,7 +1067,7 @@ mrFunBodyRecInfo f args =
 
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
 -- to a given function @f@ again
-mrCallsFun :: FunName -> Term -> MRM t Bool
+mrCallsFun :: (?mm :: ModuleMap) => FunName -> Term -> MRM t Bool
 mrCallsFun f = flip memoFixTermFunAccum Set.empty $ \recurse seen t ->
   let onFunName g = mrFunNameBody g >>= \case
         _ | f == g -> return True

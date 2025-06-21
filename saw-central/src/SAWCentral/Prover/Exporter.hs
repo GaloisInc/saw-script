@@ -532,6 +532,8 @@ writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
   (cm, _) <- loadCryptolModule sc primOpts env inputFile
   cry_env <- mkCryEnv env
+  mm <- scGetModuleMap sc
+  let ?mm = mm
   cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
   let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
