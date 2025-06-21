@@ -112,7 +112,7 @@ import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 
 -- pkg: pretty-show
-import Text.Show.Pretty -- FIXME: debugging
+import Text.Show.Pretty (ppShow) -- FIXME: debugging
 
 debug :: Bool
 debug = True
@@ -361,20 +361,17 @@ getNamingEnvLog env =
     namingEnvFromImport (vis, imprt) =
       do
       when debug $ do
-        putStrLn $ unwords ["\nLOG: addImportToEnv",show vis, show imprt]
+        putStrLn $ unwords ["\nLOG: namingEnvFromImport",show vis, show imprt]
         putStr "ifc= "; ppIfaceNames ifc
           -- no D::D2::d2 but do I really expect this?
-        print $ ppListX "nameEnv0 names: " (Set.toList (MN.namingEnvNames nameEnv0))
+        putStrLn "- LOG: nameEnv0:"; print (pp nameEnv0)
           -- FIXME: ?
-        print $ ppListX "nameEnv1 names: " (Set.toList (MN.namingEnvNames nameEnv1))
+        putStrLn "- LOG: nameEnv1:"; print (pp nameEnv1)
           -- FIXME: Aha, has D::D2 but not D::D2::d2
-        -- print $ ppListX "lmNamingEnv: "
-        --        (Set.toList (MN.namingEnvNames (ME.lmNamingEnv lm)))
-        --   -- appears to be whats in scope in the module, thus, not useful.
-        print $ ppListX "subModNames: "
+        print $ ppListX "- LOG: subModNames: "
                (Set.toList submodNames)
           -- appears to be whats in scope in the module, thus, not useful.
-        putStrLn ""
+        putStrLn "LOG: [end namingEnvFromImport]\n"
       return nameEnv1
 
       -- FIXME: UGH/HUH: no module (ModuleG ) accessible (?) scope, rather
@@ -594,8 +591,10 @@ loadCryptolModule sc primOpts env path = do
        )
 
     writeFile (path ++ ".ast-ld1") (ppShow m)
-    writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
-    writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
+    ME.logModuleEnv (path ++ ".ld.modenv") modEnv''
+
+    -- writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
+    -- writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
      -- NOTE: these three are all identical and look good ^.
      -- NOTE: "d2" is different as it is Qual, all else is UnQual.
 
@@ -792,7 +791,9 @@ importModule sc env src as vis imps = do
                        , ")"
                        ]
     case src of
-      Left fp -> writeFile (fp ++ ".ast-im") (ppShow m)
+      Left fp -> do
+                 writeFile (fp ++ ".ast-im") (ppShow m)
+                 ME.logModuleEnv (fp ++ ".im.modenv") modEnv'
       Right _ -> return ()
 
   -- Regenerate SharedTerm environment.
@@ -817,8 +818,9 @@ importModule sc env src as vis imps = do
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   when debug $ do
-    putStrLn $ ppShow $ ppListX "newTermEnv="        (Map.keys newTermEnv)
+    putStrLn $ ppShow $ ppListX "newTermEnv=" (Map.keys newTermEnv)
      -- OK: has D::D2::d2
+
   return $
     updateFFITypes m
       env { eImports   = (vis, P.Import { T.iModule= T.mName m
@@ -894,8 +896,9 @@ resolveIdentifier ::
 resolveIdentifier env nm =
   do
   when debug $ do
-    putStrLn $ unwords [ "LOG: resolveIdentifier .. ", show nm]
-    print $ ppListX "namingEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
+    putStrLn $ unwords [ "LOG: resolveIdentifier:", show nm]
+    putStrLn "- LOG: nameEnv:"
+    print (pp nameEnv)
   case splitOn (pack "::") nm of
     []  -> pure Nothing
            -- FIXME: shouldn't this be error?
@@ -925,10 +928,11 @@ parseTypedTerm ::
 parseTypedTerm sc env input = do
   let modEnv = eModuleEnv env
 
-  when debug $ do
-    putStrLn $ unwords ["\nLOG: parseTypedTerm...:"]
   -- Parse
   pexpr <- ioParseExpr input
+  when debug $ do
+    putStrLn $ unwords ["\nLOG: parseTypedTerm:"]
+    putStrLn $ " pexpr= " ++ show pexpr
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
 
@@ -939,14 +943,17 @@ parseTypedTerm sc env input = do
     -- let nameEnv = getNamingEnv env       -- FIXME:MT:restore
     nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
     when debug $ do
-      MM.io $ print $ ppListX "  nameEnv names: " (Set.toList (MN.namingEnvNames nameEnv))
+      MM.io $ print $ pp nameEnv
         -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
         -- FIXME: NOTE: if load:   has D::D2::d2
         -- but in both cases, we get Value not in scope in next line:
 
-    re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
-      -- FIXME: NOTE: this ^ where we get Value not in scope.
-    when debug $ MM.io $ putStrLn "point 1"
+    let npe' = MR.rename npe
+    -- MM.io $ print npe'  (FIXME: HUH?)
+    when debug $ MM.io $ putStrLn "- LOG parseTypedTerm: point 0"
+    re <- MM.interactive (MB.rename interactiveName nameEnv npe')
+      -- FIXME: NOTE: this ^ where we get Value not in scope.    :HIA:
+    when debug $ MM.io $ putStrLn "- LOG parseTypedTerm: point 1"
 
     -- Infer types
     let ifDecls = getAllIfaceDecls modEnv
