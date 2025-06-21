@@ -36,6 +36,7 @@ import GHC.Stack
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
 
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
 import SAWCore.SharedTerm
@@ -120,7 +121,7 @@ data NeutralTerm
       [Term] -- indices for the inductive type
       NeutralTerm -- argument being elminated
   | NeutralConstant -- A constant value with no definition
-      (ExtCns Term)
+      Name
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -384,8 +385,8 @@ neutralToTerm = loop
     Unshared (FTermF (RecursorApp r ixs (loop x)))
   loop (NeutralRecursor r ixs x) =
     Unshared (FTermF (RecursorApp (loop r) ixs x))
-  loop (NeutralConstant ec) =
-    Unshared (Constant ec)
+  loop (NeutralConstant nm) =
+    Unshared (Constant nm)
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -407,8 +408,8 @@ neutralToSharedTerm sc = loop
   loop (NeutralRecursorArg r ixs nt) =
     do tm <- loop nt
        scFlatTermF sc (RecursorApp r ixs tm)
-  loop (NeutralConstant ec) =
-    do scTermF sc (Constant ec)
+  loop (NeutralConstant nm) =
+    do scTermF sc (Constant nm)
 
 ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
 ppNeutral opts = ppTerm opts . neutralToTerm

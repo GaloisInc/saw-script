@@ -60,6 +60,7 @@ module SAWCore.SharedTerm
   , scDefTerm
   , scFreshGlobal
   , scFreshEC
+  , scFreshName
   , scExtCns
   , scGlobalDef
   , scRegisterGlobal
@@ -311,10 +312,10 @@ import SAWCore.Change
 import SAWCore.Module
   ( beginDataType
   , completeDataType
-  , dtExtCns
+  , dtName
   , dtNameInfo
   , ctorNumParams
-  , ctorExtCns
+  , ctorName
   , emptyModuleMap
   , moduleIsLoaded
   , moduleName
@@ -329,6 +330,7 @@ import SAWCore.Module
   , insImportInMap
   , resolvedNameType
   , resolveNameInMap
+  , requireNameInMap
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -482,6 +484,15 @@ scShowTerm sc opts t =
   do env <- readIORef (scDisplayNameEnv sc)
      pure (showTermWithNames opts env t)
 
+-- | Create a global variable with the given identifier (which may be "_").
+scFreshName :: SharedContext -> Text -> IO Name
+scFreshName sc x =
+  do i <- scFreshVarIndex sc
+     let uri = scFreshNameURI x i
+     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
+     scRegisterNameWithIndex sc i nmi
+     pure (Name i nmi)
+
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
@@ -534,7 +545,7 @@ scApply sc f = scTermF sc . App f
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scDataTypeAppParams :: SharedContext
-                    -> ExtCns Term -- ^ The data type
+                    -> Name -- ^ The data type
                     -> [Term] -- ^ The parameters
                     -> [Term] -- ^ The arguments
                     -> IO Term
@@ -550,7 +561,7 @@ scDataTypeApp sc d_id args = scGlobalApply sc d_id args
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scCtorAppParams :: SharedContext
-                -> ExtCns Term  -- ^ The constructor name
+                -> Name  -- ^ The constructor name
                 -> [Term] -- ^ The parameters
                 -> [Term] -- ^ The arguments
                 -> IO Term
@@ -611,8 +622,8 @@ scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      i <- scRegisterName sc nmi
-     let ec = EC i nmi def_tp
-     t <- scTermF sc (Constant ec)
+     let nm = Name i nmi
+     t <- scTermF sc (Constant nm)
      scRegisterGlobal sc ident t
      scInsDefInMap sc $
                   Def { defNameInfo = nmi,
@@ -665,25 +676,25 @@ scBeginDataType ::
   [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
   [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
-  IO (ExtCns Term)
-scBeginDataType sc dtName dtParams dtIndices dtSort =
-  do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtName)
+  IO Name
+scBeginDataType sc dtIdent dtParams dtIndices dtSort =
+  do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
-     let dtNameInfo = ModuleIdentifier dtName
+     let dtNameInfo = ModuleIdentifier dtIdent
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
-     scRegisterGlobal sc dtName =<< scTermF sc (Constant (dtExtCns dt))
-     pure $ EC dtVarIndex (ModuleIdentifier dtName) dtType
+     scRegisterGlobal sc dtIdent =<< scTermF sc (Constant (dtName dt))
+     pure $ Name dtVarIndex (ModuleIdentifier dtIdent)
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
-scCompleteDataType sc dtName ctors =
+scCompleteDataType sc dtIdent ctors =
   do e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
-       case completeDataType dtName ctors mm of
+       case completeDataType dtIdent ctors mm of
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
@@ -691,7 +702,7 @@ scCompleteDataType sc dtName ctors =
        case ctorNameInfo ctor of
          ModuleIdentifier ident ->
            -- register constructor in scGlobalEnv if it has an Ident name
-           scRegisterGlobal sc ident =<< scTermF sc (Constant (ctorExtCns ctor))
+           scRegisterGlobal sc ident =<< scTermF sc (Constant (ctorName ctor))
          ImportedName{} ->
            pure ()
 
@@ -799,7 +810,7 @@ allowedElimSort dt s =
 -- as 'scBuildCtor' is called during construction of the 'DataType'.
 scBuildCtor ::
   SharedContext ->
-  ExtCns Term {- ^ data type -} ->
+  Name {- ^ data type -} ->
   Ident {- ^ constructor name -} ->
   CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
   IO Ctor
@@ -864,26 +875,26 @@ scBuildCtor sc d c arg_struct =
 -- 'ctxCtorElimType' function for more details.
 scRecursorElimTypes ::
   SharedContext ->
-  ExtCns Term ->
+  Name ->
   [Term] ->
   Term ->
-  IO [(ExtCns Term, Term)]
+  IO [(Name, Term)]
 scRecursorElimTypes sc d params p_ret =
   do mm <- scGetModuleMap sc
-     case lookupVarIndexInMap (ecVarIndex d) mm of
+     case lookupVarIndexInMap (nameIndex d) mm of
        Just (ResolvedDataType dt) ->
          do forM (dtCtors dt) $ \ctor ->
               do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-                 return (ctorExtCns ctor, elim_type)
+                 return (ctorName ctor, elim_type)
        _ ->
-         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (ecName d)]
+         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
 
 
 -- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
 -- given @d@, @params@, and the sort @s@
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  scShCtxM sc $ mkPRetTp (dtExtCns dt) (dtParams dt) (dtIndices dt) params s
+  scShCtxM sc $ mkPRetTp (dtName dt) (dtParams dt) (dtIndices dt) params s
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
@@ -903,18 +914,18 @@ scReduceRecursor ::
   SharedContext ->
   Term {- ^ recusor term -} ->
   CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
-  ExtCns Term {- ^ constructor name -} ->
+  Name {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
 scReduceRecursor sc r crec c args =
-  do mres <- lookupVarIndexInMap (ecVarIndex c) <$> scGetModuleMap sc
+  do mres <- lookupVarIndexInMap (nameIndex c) <$> scGetModuleMap sc
      case mres of
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
          ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
        _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (ecName c)]
+         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
 -- | Reduce an application of a recursor to a concrete nat value.
 --   The given recursor value is assumed to be correctly-typed
@@ -1003,7 +1014,7 @@ scWhnf sc t0 =
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
                                                                      foldM reapply t' xs
-    go xs                     t@(asConstant -> Just ec)         = do r <- resolveConstant ec
+    go xs                     t@(asConstant -> Just nm)         = do r <- resolveConstant nm
                                                                      case r of
                                                                        ResolvedDef d ->
                                                                          case defBody d of
@@ -1014,7 +1025,7 @@ scWhnf sc t0 =
                                                                            Nothing -> foldM reapply t xs
                                                                            Just (rec, crec, args, xs') ->
                                                                              do let args' = drop (ctorNumParams ctor) args
-                                                                                scReduceRecursor sc rec crec ec args' >>= go xs'
+                                                                                scReduceRecursor sc rec crec nm args' >>= go xs'
                                                                        ResolvedDataType _ ->
                                                                          foldM reapply t xs
 
@@ -1034,12 +1045,8 @@ scWhnf sc t0 =
     reapply t (ElimRecursor r _crec ixs) =
       scFlatTermF sc (RecursorApp r ixs t)
 
-    resolveConstant :: ExtCns Term -> IO ResolvedName
-    resolveConstant ec =
-      do mm <- scGetModuleMap sc
-         case lookupVarIndexInMap (ecVarIndex ec) mm of
-           Just r -> pure r
-           Nothing -> panic "scWhnf" ["Constant not found: " <> toAbsoluteName (ecName ec)]
+    resolveConstant :: Name -> IO ResolvedName
+    resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
     asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], [WHNFElim])
@@ -1075,16 +1082,16 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
 
        goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
 
-       goF _c (Constant ecx) (Constant ecy) | ecVarIndex ecx == ecVarIndex ecy = pure True
-       goF c (Constant ecx) y
+       goF _c (Constant nx) (Constant ny) | nameIndex nx == nameIndex ny = pure True
+       goF c (Constant nx) y
            | unfoldConst =
-             do mx <- scFindDefBody sc (ecVarIndex ecx)
+             do mx <- scFindDefBody sc (nameIndex nx)
                 case mx of
                   Just x -> join (goF c <$> whnf c x <*> return y)
                   Nothing -> pure False
-       goF c x (Constant ecy)
+       goF c x (Constant ny)
            | unfoldConst =
-             do my <- scFindDefBody sc (ecVarIndex ecy)
+             do my <- scFindDefBody sc (nameIndex ny)
                 case my of
                   Just y -> join (goF c <$> return x <*> whnf c y)
                   Nothing -> pure False
@@ -1189,7 +1196,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant ec -> return (ecType ec)
+        Constant nm ->
+          do mm <- liftIO $ scGetModuleMap sc
+             case lookupVarIndexInMap (nameIndex nm) mm of
+               Just r -> pure $ resolvedNameType r
+               _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
@@ -1474,7 +1485,7 @@ scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType))
+scDefTerm sc Def{..} = scTermF sc (Constant (Name defVarIndex defNameInfo))
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
@@ -1483,7 +1494,7 @@ scDefTerm sc Def{..} = scTermF sc (Constant (EC defVarIndex defNameInfo defType)
 scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
 scApplyCtor sc ctor args =
   let (params, args') = splitAt (ctorNumParams ctor) args
-  in scCtorAppParams sc (ctorExtCns ctor) params args'
+  in scCtorAppParams sc (ctorName ctor) params args'
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
@@ -1676,14 +1687,14 @@ scConstant sc name rhs ty =
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
-     ec <- scFreshEC sc name ty'
+     nm <- scFreshName sc name
      scInsDefInMap sc $
-       Def { defNameInfo = ecName ec,
-             defVarIndex = ecVarIndex ec,
+       Def { defNameInfo = nameInfo nm,
+             defVarIndex = nameIndex nm,
              defQualifier = NoQualifier,
              defType = ty',
              defBody = Just rhs' }
-     t <- scTermF sc (Constant ec)
+     t <- scTermF sc (Constant nm)
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1709,14 +1720,14 @@ scConstant' sc nmi rhs ty =
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
      i <- scRegisterName sc nmi
-     let ec = EC i nmi ty'
+     let nm = Name i nmi
      scInsDefInMap sc $
-       Def { defNameInfo = ecName ec,
-             defVarIndex = ecVarIndex ec,
+       Def { defNameInfo = nmi,
+             defVarIndex = i,
              defQualifier = NoQualifier,
              defType = ty',
              defBody = Just rhs' }
-     t <- scTermF sc (Constant ec)
+     t <- scTermF sc (Constant nm)
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1731,8 +1742,14 @@ scOpaqueConstant ::
   IO Term
 scOpaqueConstant sc nmi ty =
   do i <- scRegisterName sc nmi
-     let ec = EC i nmi ty
-     scTermF sc (Constant ec)
+     let nm = Name i nmi
+     scInsDefInMap sc $
+       Def { defNameInfo = nmi,
+             defVarIndex = i,
+             defQualifier = NoQualifier,
+             defType = ty,
+             defBody = Nothing }
+     scTermF sc (Constant nm)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
@@ -2569,7 +2586,7 @@ getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
 
-getConstantSet :: Term -> Map VarIndex (NameInfo, Term)
+getConstantSet :: Term -> Map VarIndex NameInfo
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
   where
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
@@ -2579,7 +2596,7 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 
     termf acc@(idxs, names) tf =
       case tf of
-        Constant (EC vidx n ty) -> (idxs, Map.insert vidx (n, ty) names)
+        Constant (Name vidx n) -> (idxs, Map.insert vidx n names)
         _ -> foldl' go acc tf
 
 -- | Instantiate some of the external constants.
@@ -2772,16 +2789,16 @@ scUnfoldConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _)
+          Constant (Name idx _)
             | Set.member idx names == b
             , Just rhs <- getRhs idx    -> go rhs
             | otherwise                 -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC ecidx _ _)
-            | Set.member ecidx names == b
-            , Just rhs <- getRhs ecidx    -> go rhs
+          Constant (Name nmidx _)
+            | Set.member nmidx names == b
+            , Just rhs <- getRhs nmidx    -> go rhs
             | otherwise                   -> return t
           _ -> scTermF sc =<< traverse go tf
   go t0
@@ -2812,11 +2829,11 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) | Just rhs <- getRhs idx -> unfold t idx rhs
+          Constant (Name idx _) | Just rhs <- getRhs idx -> unfold t idx rhs
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC ecidx _ _) | Just rhs <- getRhs ecidx -> unfold t ecidx rhs
+          Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
           _ -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2836,16 +2853,16 @@ scUnfoldConstantSet' sc b names t0 = do
   let go :: Term -> ChangeT IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _)
+          Constant (Name idx _)
             | Set.member idx names == b
             , Just rhs <- getRhs idx    -> taint (go rhs)
             | otherwise                 -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
-          Constant (EC ecidx _ _)
-            | Set.member ecidx names == b
-            , Just rhs <- getRhs ecidx    -> taint (go rhs)
+          Constant (Name nmidx _)
+            | Set.member nmidx names == b
+            , Just rhs <- getRhs nmidx    -> taint (go rhs)
             | otherwise                   -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)

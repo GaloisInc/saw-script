@@ -73,7 +73,7 @@ import Lang.Crucible.CFG.Expr
 import qualified Lang.Crucible.CFG.Expr as Expr
 import Lang.Crucible.CFG.Core
 
-import SAWCore.Name
+import SAWCore.Name hiding (Name)
 import SAWCore.OpenTerm
 import SAWCore.Term.Functor hiding (Constant)
 import SAWCore.SharedTerm hiding (Constant)

@@ -27,11 +27,12 @@ module SAWCore.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
-  , ctorExtCns
+  , ctorName
   , ctorNumParams
   , ctorNumArgs
   , DataType(..)
   , dtExtCns
+  , dtName
   , dtNumParams
   , dtNumIndices
     -- * Modules
@@ -45,6 +46,7 @@ module SAWCore.Module
   , resolveName
   , resolveNameInMap
   , lookupVarIndexInMap
+  , requireNameInMap
   , findDataType
   , insImport
   , beginDataType
@@ -136,7 +138,7 @@ data Ctor =
     -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct d params ixs
     -- ^ Arguments to the constructor
-  , ctorDataType :: !(ExtCns Term)
+  , ctorDataType :: !Name
     -- ^ The datatype this constructor belongs to
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
@@ -188,18 +190,18 @@ ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
 
--- | Compute the ExtCns that uniquely references a constructor
-ctorExtCns :: Ctor -> ExtCns Term
-ctorExtCns ctor = EC (ctorVarIndex ctor) (ctorNameInfo ctor) (ctorType ctor)
+-- | Compute the 'Name' that uniquely references a constructor
+ctorName :: Ctor -> Name
+ctorName ctor = Name (ctorVarIndex ctor) (ctorNameInfo ctor)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
 instance Eq Ctor where
-  (==) = lift2 ctorExtCns (==)
+  (==) = lift2 ctorName (==)
 
 instance Ord Ctor where
-  compare = lift2 ctorExtCns compare
+  compare = lift2 ctorName compare
 
 instance Show Ctor where
   show = show . toAbsoluteName . ctorNameInfo
@@ -243,11 +245,15 @@ dtNumIndices dt = length $ dtIndices dt
 dtExtCns :: DataType -> ExtCns Term
 dtExtCns dt = EC (dtVarIndex dt) (dtNameInfo dt) (dtType dt)
 
+-- | Compute the 'Name' that uniquely references a datatype
+dtName :: DataType -> Name
+dtName dt = Name (dtVarIndex dt) (dtNameInfo dt)
+
 instance Eq DataType where
-  (==) = lift2 dtNameInfo (==)
+  (==) = lift2 dtName (==)
 
 instance Ord DataType where
-  compare = lift2 dtNameInfo compare
+  compare = lift2 dtName compare
 
 instance Show DataType where
   show = show . dtNameInfo
@@ -458,6 +464,12 @@ findModule mnm mm =
 
 lookupVarIndexInMap :: VarIndex -> ModuleMap -> Maybe ResolvedName
 lookupVarIndexInMap vi mm = IntMap.lookup vi (mmIndexMap mm)
+
+requireNameInMap :: Name -> ModuleMap -> ResolvedName
+requireNameInMap nm mm =
+  case lookupVarIndexInMap (nameIndex nm) mm of
+    Just r -> r
+    Nothing -> panic "requireNameInMap" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
 
 resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
 resolveNameInMap mm i =

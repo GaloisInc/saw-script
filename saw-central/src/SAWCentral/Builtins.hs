@@ -77,6 +77,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
+import SAWCore.Module (ModuleMap)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -551,7 +552,7 @@ printGoalConsts =
   execTactic $ tacticId $ \goal ->
   do let cs = sequentConstantSet (goalSequent goal)
      mapM_ (printOutLnTop Info) $
-       [ show nm | (_,(nm,_)) <- Map.toList cs ]
+       [ show nm | (_, nm) <- Map.toList cs ]
 
 printGoalSize :: ProofScript ()
 printGoalSize =
@@ -2245,7 +2246,9 @@ mrSolverNormalizeAndPrintArgs ::
   SharedContext -> Maybe PPS.Doc ->
   TypedTerm -> TypedTerm -> TopLevel (Term, Term)
 mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
-  do m1 <- ttTerm <$> ensureMonadicTerm sc tt1
+  do mm <- io $ scGetModuleMap sc
+     let ?mm = mm
+     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
      m2 <- ttTerm <$> ensureMonadicTerm sc tt2
      m1' <- io $ collapseEta <$> betaNormalize sc m1
      m2' <- io $ collapseEta <$> betaNormalize sc m2
@@ -2265,7 +2268,7 @@ mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
         -- Pretty-print the name of the top-level function call, followed by
         -- "..." if it is given any arguments, or just "..." if there is no
         -- top-level call
-        ppTmHead :: Term -> PPS.Doc
+        ppTmHead :: (?mm :: ModuleMap) => Term -> PPS.Doc
         ppTmHead (asLambdaList -> (_,
                   asApplyAll -> (t@(
                   Prover.asProjAll -> (
@@ -2330,6 +2333,9 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
 -- | Add a proved refinement theorem to a given refinement set
 addrefn :: Theorem -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
 addrefn thm rs =
+  getSharedContext >>= \sc ->
+  io (scGetModuleMap sc) >>= \mm ->
+  let ?mm = mm in
   case Prover.asFunAssump (Just (thmNonce thm)) (unProp $ thmProp thm) of
     Nothing -> fail "addrefn: theorem is not a refinement"
     Just fassump -> pure (Prover.addFunAssump fassump rs)

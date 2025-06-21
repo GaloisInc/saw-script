@@ -96,6 +96,7 @@ import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 
 import qualified CryptolSAWCore.Cryptol as C
+import SAWCore.Name
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
@@ -455,7 +456,7 @@ buildOutputRelationTheorem bthms bc = do
   implication <- io $ scImplies sc initRelation relationRes
 
   -- Unfold LHS/RHS constants to reveal opportunities for simplification
-  let vs = map ecVarIndex $ mapMaybe asConstant [lhs, rhs]
+  let vs = map nameIndex $ mapMaybe asConstant [lhs, rhs]
   implication_unfolded <-
     io $ scUnfoldConstants sc vs implication >>= betaNormalize sc
 
@@ -760,7 +761,7 @@ replaceConstantTerm constant constantRetType term = do
 
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
-constantName (Constant e) = return $ toShortName $ ecName e
+constantName (Constant e) = return $ toShortName $ nameInfo e
 constantName tf = do
   sc <- getSharedContext
   term <- io $ scTermF sc tf

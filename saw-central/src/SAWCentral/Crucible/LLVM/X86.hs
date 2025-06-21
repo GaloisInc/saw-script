@@ -72,7 +72,7 @@ import Data.Parameterized.Context hiding (view, zipWithM)
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-import SAWCore.Name (toShortName)
+import SAWCore.Name (Name(..), toShortName)
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
@@ -669,8 +669,8 @@ scAsFixConstant :: SharedContext -> Term -> IO (Maybe Term)
 scAsFixConstant sc t =
   do mm <- scGetModuleMap sc
      case asConstant t of
-       Just ec ->
-         case lookupVarIndexInMap (ecVarIndex ec) mm of
+       Just nm ->
+         case lookupVarIndexInMap (nameIndex nm) mm of
            Just (ResolvedDef (defBody -> Just body)) ->
              case asApplyAll body of
                (isGlobalDef "Prelude.fix" -> Just (), [_, f]) -> pure (Just f)

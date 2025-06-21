@@ -48,8 +48,9 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( ctorExtCns
+  ( ctorName
   , dtExtCns
+  , dtName
   , emptyModule
   , findDataTypeInMap
   , resolveNameInMap
@@ -114,12 +115,12 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
-         do c <- traverse typeInferComplete (ctorExtCns ctor)
-            t <- typeInferComplete (Constant c)
+         do let c = ctorName ctor
+            t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedDataType dt)) ->
-         do c <- traverse typeInferComplete (dtExtCns dt)
-            t <- typeInferComplete (Constant c)
+         do let c = dtName dt
+            t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scDefTerm d
@@ -416,8 +417,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
 
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
-  let dtName = mkIdent mnm nm
-  pn <- liftTCM scBeginDataType dtName dtParams dtIndices dtSort
+  let dtIdent = mkIdent mnm nm
+  pn <- liftTCM scBeginDataType dtIdent dtParams dtIndices dtSort
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
@@ -451,7 +452,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
-  liftTCM scCompleteDataType dtName ctors
+  liftTCM scCompleteDataType dtIdent ctors
 
 
 -- | Typecheck a module and, on success, insert it into the current context

@@ -404,7 +404,7 @@ ppFlatTermF prec tf =
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         nm <- ppExtCns d
+         nm <- ppBestName d
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
              (params_pp ++ [motive_pp])
@@ -413,10 +413,10 @@ ppFlatTermF prec tf =
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
-         nm <- ppExtCns d
-         f_pps <- forM ctorOrder $ \ec ->
-                    do cnm <- ppExtCns ec
-                       case Map.lookup (ecVarIndex ec) fs_pp of
+         nm <- ppBestName d
+         f_pps <- forM ctorOrder $ \c ->
+                    do cnm <- ppBestName c
+                       case Map.lookup (nameIndex c) fs_pp of
                          Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
                          Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
          return $
@@ -471,6 +471,15 @@ ppExtCns ec =
        Just alias -> pure $ pretty alias
        Nothing -> pure $ ppName (ecName ec)
 
+-- | Pretty-print a 'Name', using the best unambiguous alias from the
+-- naming environment.
+ppBestName :: Name -> PPM PPS.Doc
+ppBestName nm =
+  do ne <- asks ppNamingEnv
+     case bestDisplayName ne (nameIndex nm) of
+       Just alias -> pure $ pretty alias
+       Nothing -> pure $ ppName (nameInfo nm)
+
 ppName :: NameInfo -> PPS.Doc
 ppName (ModuleIdentifier i) = ppIdent i
 ppName (ImportedName absName _) = pretty (render absName)
@@ -488,7 +497,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = annotate PPS.LocalVarStyle <$> pretty <$> varLookupM x
-ppTermF _ (Constant ec) = annotate PPS.ConstantStyle <$> ppExtCns ec
+ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
 
 
 -- | Internal function to recursively pretty-print a term

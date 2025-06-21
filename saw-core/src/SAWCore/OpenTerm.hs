@@ -124,8 +124,8 @@ import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
-  ( ctorExtCns
-  , dtExtCns
+  ( ctorName
+  , dtName
   )
 import SAWCore.Recognizer
 
@@ -347,7 +347,7 @@ ctorOpenTerm c all_args = applyOpenTermMulti ctor_open_term all_args
          ctor <- case maybe_ctor of
                    Just ctor -> pure ctor
                    Nothing -> throwTCError $ NoSuchCtor (ModuleIdentifier c)
-         typeInferComplete $ Constant (ctorExtCns ctor)
+         typeInferComplete (Constant (ctorName ctor) :: TermF Term)
 
 -- | Build an 'OpenTerm' for a datatype applied to its arguments
 dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
@@ -359,7 +359,7 @@ dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
          dt <- case maybe_dt of
                  Just dt -> pure dt
                  Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier d)
-         typeInferComplete $ Constant (dtExtCns dt)
+         typeInferComplete (Constant (dtName dt) :: TermF Term)
 
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm

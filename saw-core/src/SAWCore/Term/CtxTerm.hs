@@ -79,6 +79,7 @@ import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
+import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 
@@ -97,7 +98,7 @@ data Typ (a :: Type)
 -- | An identifier for a datatype that is statically associated with Haskell
 -- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
 -- we simplify datatypes to arbitrary Haskell types.
-newtype DataIdent d = DataIdent (ExtCns Term)
+newtype DataIdent d = DataIdent Name
   -- Invariant, the type of datatypes is always a closed term
 
 -- | Append a list of types to a context, i.e., "invert" the list of types,
@@ -556,7 +557,7 @@ ctxCtorAppM _d c paramsM argsM =
   ctxApplyMultiInv (ctxApplyMultiInv t paramsM) argsM
   where
     t :: m (CtxTerm ctx (InvArrows params (InvArrows args d)))
-    t = CtxTerm <$> mkTermF (Constant c)
+    t = CtxTerm <$> mkTermF (Constant (Name (ecVarIndex c) (ecName c)))
 
 -- | Abstract an inside-out type list using Haskell arrows. Used only
 -- to define 'ctxDataTypeM' and 'ctxCtorAppM'.
@@ -767,7 +768,7 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
-ctxCtorType :: MonadTerm m => ExtCns Term -> CtorArgStruct d params ixs -> m Term
+ctxCtorType :: MonadTerm m => Name -> CtorArgStruct d params ixs -> m Term
 ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
@@ -805,7 +806,7 @@ ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
 mkPRetTp :: MonadTerm m =>
-  ExtCns Term ->
+  Name ->
   [(LocalName, Term)] ->
   [(LocalName, Term)] ->
   [Term] ->
@@ -957,7 +958,7 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
 mkCtorElimTypeFun :: MonadTerm m =>
-  ExtCns Term {- ^ data type -} ->
+  Name {- ^ data type -} ->
   ExtCns Term {- ^ constructor type -} ->
   CtorArgStruct d params ixs ->
   m ([Term] -> Term -> m Term)
@@ -1222,7 +1223,7 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
 mkCtorArgStruct ::
-  ExtCns Term ->
+  Name ->
   Bindings CtxTerm EmptyCtx params ->
   Bindings CtxTerm (CtxInv params) ixs ->
   Term ->

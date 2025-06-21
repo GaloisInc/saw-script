@@ -66,13 +66,15 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.Conversion (natConversions)
 import SAWCore.Module
-  ( ctorExtCns
-  , dtExtCns
+  ( ctorName
+  , dtName
   , lookupVarIndexInMap
+  , resolvedNameType
   , Ctor(..)
   , DataType(..)
   , ResolvedName(..)
   )
+import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
@@ -182,6 +184,7 @@ data TCError
   | EmptyVectorLit
   | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
+  | NoSuchConstant NameInfo
   | NotFullyAppliedRec (ExtCns Term)
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
@@ -253,6 +256,8 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such data type: " ++ show d)]
   helper (NoSuchCtor c) =
     ppWithPos [ return ("No such constructor: " ++ show c) ]
+  helper (NoSuchConstant c) =
+    ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
   helper (BadConstType n rty ty) =
@@ -421,14 +426,17 @@ instance TypeInfer (TermF Term) where
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
        let a_tptrm = SCTypedTerm a (typedType a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
-  typeInfer (Constant ec) =
-    -- NOTE: this special case is to prevent us from re-type-checking the
-    -- definition of each constant, as we assume it was type-checked when it was
-    -- created
-    return $ ecType ec
+  typeInfer (Constant nm) = typeInferConstant nm
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
     SCTypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf)
+
+typeInferConstant :: Name -> TCM Term
+typeInferConstant nm =
+  do mm <- liftTCM scGetModuleMap
+     case lookupVarIndexInMap (nameIndex nm) mm of
+       Just r -> pure (resolvedNameType r)
+       Nothing -> throwTCError $ NoSuchConstant (nameInfo nm)
 
 -- Type inference for FlatTermF Term dispatches to that for FlatTermF SCTypedTerm,
 -- with special cases for primitives and constants to avoid re-type-checking
@@ -467,9 +475,7 @@ instance TypeInfer (TermF SCTypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant (EC _ _ (SCTypedTerm req_tp req_tp_sort))) =
-    do void (ensureSort req_tp_sort)
-       pure req_tp
+  typeInfer (Constant nm) = typeInferConstant nm
 
   typeInferComplete tf =
     SCTypedTerm <$> liftTCM scTermF (fmap typedVal tf)
@@ -605,7 +611,7 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  ExtCns SCTypedTerm {- ^ data type name -} ->
+  Name           {- ^ data type name -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
@@ -613,9 +619,9 @@ inferRecursorType ::
 inferRecursorType d params motive motiveTy =
   do mm <- liftTCM scGetModuleMap
      dt <-
-       case lookupVarIndexInMap (ecVarIndex d) mm of
+       case lookupVarIndexInMap (nameIndex d) mm of
          Just (ResolvedDataType dt) -> pure dt
-         _ -> throwTCError $ NoSuchDataType (ecName d)
+         _ -> throwTCError $ NoSuchDataType (nameInfo d)
 
      let mk_err str =
            MalformedRecursor
@@ -661,9 +667,9 @@ compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
-     d <- traverse typeInferComplete (dtExtCns dt)
+     let d = dtName dt
      let ctorVarIxs = map ctorVarIndex (dtCtors dt)
-     ctorOrder <- traverse (traverse typeInferComplete) (map ctorExtCns (dtCtors dt))
+     let ctorOrder = map ctorName (dtCtors dt)
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
      let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
      let mk_err str =
@@ -680,10 +686,10 @@ compileRecursor dt params motive cs_fs =
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
      elims_tps <-
-       liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)
+       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
 
      forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup (ecVarIndex c) elims of
+       case Map.lookup (nameIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp

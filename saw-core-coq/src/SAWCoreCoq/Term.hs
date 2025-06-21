@@ -52,7 +52,8 @@ import qualified Data.BitVector.Sized                          as BV
 import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
-import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), lookupVarIndexInMap)
+import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), requireNameInMap, resolvedNameType)
+import           SAWCore.Name (Name(..))
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
@@ -326,14 +327,14 @@ translateIdent i = translateIdentWithArgs i []
 -- constant is an 'ImportedName', however, then it might not have a
 -- Coq definition already, so add a definition of it to the top-level
 -- translation state.
-translateConstant :: TermTranslationMonad m => ExtCns Term -> m Coq.Term
-translateConstant ec
-  | ModuleIdentifier ident <- ecName ec = translateIdent ident
-translateConstant ec =
+translateConstant :: TermTranslationMonad m => Name -> m Coq.Term
+translateConstant nm
+  | ModuleIdentifier ident <- nameInfo nm = translateIdent ident
+translateConstant nm =
   do -- First, apply the constant renaming to get the name for this constant
      configuration <- asks translationConfiguration
      -- TODO short name seems wrong
-     let nm_str = Text.unpack $ toShortName $ ecName ec
+     let nm_str = Text.unpack $ toShortName $ nameInfo nm
      let renamed =
            escapeIdent $ fromMaybe nm_str $
            lookup nm_str $ constantRenaming configuration
@@ -346,20 +347,21 @@ translateConstant ec =
 
      -- Add the definition if we aren't skipping it
      mm <- asks (view sawModuleMap . otherConfiguration)
+     let resolved = requireNameInMap nm mm
      let maybe_body =
-           case lookupVarIndexInMap (ecVarIndex ec) mm of
-             Just (ResolvedDef d) -> defBody d
+           case resolved of
+             ResolvedDef d -> defBody d
              _ -> Nothing
      case maybe_body of
        _ | skip_def -> return ()
        Just body ->
          -- If the definition has a body, add it as a definition
          do b <- withTopTranslationState $ translateTermLet body
-            tp <- withTopTranslationState $ translateTermLet (ecType ec)
+            tp <- withTopTranslationState $ translateTermLet (resolvedNameType resolved)
             modify $ over topLevelDeclarations $ (mkDefinition renamed b tp :)
        Nothing ->
          -- If not, add it as a Coq Variable declaration
-         do tp <- withTopTranslationState $ translateTermLet (ecType ec)
+         do tp <- withTopTranslationState $ translateTermLet (resolvedNameType resolved)
             modify (over topLevelDeclarations (Coq.Variable renamed tp :))
 
      -- Finally, return the constant as a Coq variable
@@ -415,7 +417,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     -- TODO: support this next!
     Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
       do maybe_d_trans <-
-           case ecName d of
+           case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing
          rect_var <- case maybe_d_trans of
@@ -425,7 +427,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
 
-         let fnd c = case Map.lookup (ecVarIndex c) eliminators of
+         let fnd c = case Map.lookup (nameIndex c) eliminators of
                        Just (e,_ety) -> translateTerm e
                        Nothing -> errorTermM
                           ("Recursor eliminator missing eliminator for constructor " ++ show c)
@@ -454,7 +456,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    ExtCns ec -> translateConstant ec
+    ExtCns ec -> translateConstant (Name (ecVarIndex ec) (ecName ec))
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).

@@ -80,6 +80,7 @@ import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
+import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.Prelude.Constants
 
@@ -120,16 +121,16 @@ asFTermF :: Recognizer Term (FlatTermF Term)
 asFTermF (unwrapTermF -> FTermF ftf) = return ftf
 asFTermF _ = Nothing
 
-asModuleIdentifier :: Recognizer (ExtCns e) Ident
-asModuleIdentifier (EC _ nmi _) =
-  case nmi of
+asModuleIdentifier :: Recognizer Name Ident
+asModuleIdentifier nm =
+  case nameInfo nm of
     ModuleIdentifier ident -> Just ident
     _ -> Nothing
 
 asGlobalDef :: Recognizer Term Ident
 asGlobalDef t =
   case unwrapTermF t of
-    Constant ec -> asModuleIdentifier ec
+    Constant nm -> asModuleIdentifier nm
     _ -> Nothing
 
 isGlobalDef :: Ident -> Recognizer Term ()
@@ -248,7 +249,7 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
-asRecursorType :: Recognizer Term (ExtCns Term, [Term], Term, Term)
+asRecursorType :: Recognizer Term (Name, [Term], Term, Term)
 asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
      return (d,ps,motive,motive_ty)
@@ -339,8 +340,8 @@ asLocalVar :: Recognizer Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = Nothing
 
-asConstant :: Recognizer Term (ExtCns Term)
-asConstant (unwrapTermF -> Constant ec) = pure ec
+asConstant :: Recognizer Term Name
+asConstant (unwrapTermF -> Constant nm) = pure nm
 asConstant _ = Nothing
 
 asExtCns :: Recognizer Term (ExtCns Term)
@@ -377,7 +378,7 @@ asBoolType = isGlobalDef "Prelude.Bool"
 
 asNatType :: Recognizer Term ()
 asNatType (asConstant -> Just o)
-  | ecName o == ModuleIdentifier preludeNatIdent = return ()
+  | nameInfo o == ModuleIdentifier preludeNatIdent = pure ()
 asNatType _ = Nothing
 
 asIntegerType :: Recognizer Term ()

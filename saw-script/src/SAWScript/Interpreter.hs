@@ -706,6 +706,7 @@ buildTopLevelEnv proxy opts =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
+       mm <- scGetModuleMap sc
        let rw0 = TopLevelRW
                    { rwValueInfo  = primValueEnv opts bic
                    , rwTypeInfo   = primNamedTypeEnv
@@ -714,7 +715,7 @@ buildTopLevelEnv proxy opts =
                    , rwPosition = SS.Unknown
                    , rwStackTrace = []
                    , rwLocalEnv = []
-                   , rwMonadify   = Monadify.defaultMonEnv
+                   , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts

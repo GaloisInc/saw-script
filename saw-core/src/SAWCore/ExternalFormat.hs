@@ -100,8 +100,12 @@ scWriteExternal t0 =
        do (m, nms, lns, x) <- State.get
           State.put (Map.insert i x m, nms, lns, x+1)
           return x
-    stashName :: ExtCns Int -> WriteM ()
+    stashName :: Name -> WriteM ()
     stashName ec =
+       do (m, nms, lns, x) <- State.get
+          State.put (m, Map.insert (nameIndex ec) (nameInfo ec) nms, lns, x)
+    stashEC :: ExtCns Int -> WriteM ()
+    stashEC ec =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (ecVarIndex ec) (ecName ec) nms, lns, x)
 
@@ -131,9 +135,9 @@ scWriteExternal t0 =
         Lambda s t e   -> pure $ unwords ["Lam", Text.unpack s, show t, show e]
         Pi s t e       -> pure $ unwords ["Pi", Text.unpack s, show t, show e]
         LocalVar i     -> pure $ unwords ["Var", show i]
-        Constant ec    ->
-            do stashName ec
-               pure $ unwords ["Constant", show (ecVarIndex ec), show (ecType ec)]
+        Constant nm    ->
+            do stashName nm
+               pure $ unwords ["Constant", show (nameIndex nm)]
         FTermF ftf     ->
           case ftf of
             UnitValue           -> pure $ unwords ["Unit"]
@@ -146,18 +150,18 @@ scWriteExternal t0 =
             RecursorType d ps motive motive_ty ->
               do stashName d
                  pure $ unwords
-                     (["RecursorType", show (ecVarIndex d), show (ecType d)] ++
+                     (["RecursorType", show (nameIndex d)] ++
                       map show ps ++
                       [argsep, show motive, show motive_ty])
             Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
-                      (["Recursor" , show (ecVarIndex d), show (ecType d)] ++
+                      (["Recursor" , show (nameIndex d)] ++
                        map show ps ++
                        [ argsep, show motive, show motive_ty
                        , show (Map.toList cs_fs)
-                       , show (map (\ec -> (ecVarIndex ec, ecType ec)) ctorOrder)
+                       , show (map nameIndex ctorOrder)
                        ])
             RecursorApp r ixs e -> pure $
               unwords (["RecursorApp", show r] ++
@@ -175,7 +179,7 @@ scWriteExternal t0 =
                                             map show (V.toList v))
             StringLit s         -> pure $ unwords ["String", show s]
             ExtCns ec ->
-               do stashName ec
+               do stashEC ec
                   pure $ unwords ["ExtCns",show (ecVarIndex ec), show (ecType ec)]
 
 
@@ -232,10 +236,36 @@ scReadExternal sc input =
                        pure (c, (e',ty')))
          pure (Map.fromList elims)
 
-    readCtorList :: String -> ReadM [ExtCns Term]
+    readCtorList :: String -> ReadM [Name]
     readCtorList str =
-      do (ls :: [(VarIndex,Int)]) <- readM str
-         forM ls (\(vi,i) -> readEC' vi =<< getTerm i)
+      do (ls :: [VarIndex]) <- readM str
+         mapM readName' ls
+
+    readName' :: VarIndex -> ReadM Name
+    readName' vi =
+      do (ts, nms, vs) <- State.get
+         nmi <- case Map.lookup vi nms of
+                  Just nmi -> pure nmi
+                  Nothing -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
+         case nmi of
+           ModuleIdentifier ident ->
+             lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
+               Just vi' -> pure (Name vi' nmi)
+               Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
+           ImportedName uri _aliases ->
+             lift (scResolveNameByURI sc uri) >>= \case
+               Just vi' -> pure (Name vi' nmi)
+               Nothing -> case Map.lookup vi vs of
+                 Just vi' -> pure $ Name vi' nmi
+                 Nothing ->
+                   do vi' <- lift $ scRegisterName sc nmi
+                      State.put (ts, nms, Map.insert vi vi' vs)
+                      pure $ Name vi' nmi
+
+    readName :: String -> ReadM Name
+    readName i =
+      do vi <- readM i
+         readName' vi
 
     readEC' :: VarIndex -> Term -> ReadM (ExtCns Term)
     readEC' vi t' =
@@ -271,8 +301,8 @@ scReadExternal sc input =
         ["Lam", x, t, e]    -> Lambda (Text.pack x) <$> readIdx t <*> readIdx e
         ["Pi", s, t, e]     -> Pi (Text.pack s) <$> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
-        ["Constant",i,t]    -> Constant <$> readEC i t
-        ["ConstantOpaque",i,t]  -> Constant <$> readEC i t
+        ["Constant",i]      -> Constant <$> readName i
+        ["ConstantOpaque",i]  -> Constant <$> readName i
         ["Unit"]            -> pure $ FTermF UnitValue
         ["UnitT"]           -> pure $ FTermF UnitType
         ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)
@@ -280,20 +310,20 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ("RecursorType" : i : t :
+        ("RecursorType" : i :
          (separateArgs ->
           Just (ps, [motive,motive_ty]))) ->
             do tp <- RecursorType <$>
-                       readEC i t <*>
+                       readName i <*>
                        traverse readIdx ps <*>
                        readIdx motive <*>
                        readIdx motive_ty
                pure (FTermF tp)
-        ("Recursor" : i : t :
+        ("Recursor" : i :
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder]))) ->
             do rec <- CompiledRecursor <$>
-                        readEC i t <*>
+                        readName i <*>
                         traverse readIdx ps <*>
                         readIdx motive <*>
                         readIdx motiveTy <*>

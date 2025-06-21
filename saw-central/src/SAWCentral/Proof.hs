@@ -621,7 +621,7 @@ focusOnHyp i sqt =
       (hs1,h:hs2) -> Just (HypFocusedSequent (FB hs1 h hs2) gs)
       (_  , [])   -> Nothing
 
-sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term)
+sequentConstantSet :: Sequent -> Map VarIndex NameInfo
 sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
   where
     RawSequent hs gs = sequentToRawSequent sqt

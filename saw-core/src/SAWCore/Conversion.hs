@@ -116,6 +116,7 @@ import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWCore.Name
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
@@ -388,7 +389,7 @@ mkTupleSelector i t
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = panic "mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
 
-mkCtor :: ExtCns Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
+mkCtor :: Name -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
   foldl mkApp (mkTermF (Constant i)) (paramsB ++ argsB)
 
