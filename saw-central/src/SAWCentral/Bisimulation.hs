@@ -163,6 +163,11 @@ scRelation rel relLhs relRhs = do
   sc <- getSharedContext
   io $ scApplyAll sc (ttTerm rel) [relLhs, relRhs]
 
+
+-- | Import a Cryptol type and define a fresh variable of that type.
+importEC :: SharedContext -> Text.Text -> C.Type -> IO (ExtCns Term)
+importEC sc name t = scFreshEC sc name =<< C.importType sc C.emptyEnv t
+
 -- | Build the COMPOSITION SIDE CONDITION for 'bc' and 'bt'.  See the
 -- documentation at the top of this file for information on the COMPOSITION SIDE
 -- CONDITION.
@@ -182,14 +187,18 @@ buildCompositionSideCondition bc innerBt = do
   sc <- getSharedContext
   let outerBt = bcTheorem bc
 
-  lhsOuterState <- io $ scLocalVar sc 0        -- g_lhs_s
-  rhsOuterState <- io $ scLocalVar sc 1        -- g_rhs_s
+  inputEC <- io $ importEC sc "input" (bcInputType bc)
+  lhsOuterStateEC <- io $ importEC sc "lhsState" (bisimTheoremLhsStateType outerBt)
+  rhsOuterStateEC <- io $ importEC sc "rhsState" (bisimTheoremRhsStateType outerBt)
+
+  lhsOuterState <- io $ scExtCns sc lhsOuterStateEC  -- g_lhs_s
+  rhsOuterState <- io $ scExtCns sc rhsOuterStateEC  -- g_rhs_s
 
   -- NOTE: Although not used in the final formula, we need to capture the input
   -- to the outer functions because the extracted inner function applications
   -- depend on it.  Therefore, it is necessary to match the expected form of the
   -- inner ExtCns that this function instantiates.
-  input    <- io $ scLocalVar sc 2        -- in
+  input    <- io $ scExtCns sc inputEC  -- in
 
   -- Locate inner function calls on each side and replace their arguments with
   -- 'ExtCns's
@@ -228,12 +237,8 @@ buildCompositionSideCondition bc innerBt = do
   -- Theorem to prove. Note that the 'input' is ultimately unused (see NOTE on
   -- 'input' at the top of this function).
   -- forall g_lhs_s g_rhs_s. g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
-  args <- io $ mapM
-    (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
-    [ ("input", bcInputType bc)
-    , ("rhsState", bisimTheoremRhsStateType outerBt)
-    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
-  theorem <- io $ scLambdaList sc args implication
+  let args = [inputEC, rhsOuterStateEC, lhsOuterStateEC]
+  theorem <- io $ scAbstractExts sc args implication
   io $ mkTypedTerm sc theorem
 
 -- | Extract the state from the 'App' within a bisimulation side. Fails if 'app'
@@ -423,9 +428,13 @@ buildOutputRelationTheorem bthms bc = do
 
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
-  lhsState <- io $ scLocalVar sc 0        -- s1
-  rhsState <- io $ scLocalVar sc 1        -- s2
-  input <- io $ scLocalVar sc 2           -- in
+  lhsStateEC <- io $ importEC sc "lhsState" (bisimTheoremLhsStateType outerBt)
+  rhsStateEC <- io $ importEC sc "rhsState" (bisimTheoremRhsStateType outerBt)
+  inputEC <- io $ importEC sc "input" (bcInputType bc)
+
+  lhsState <- io $ scExtCns sc lhsStateEC  -- s1
+  rhsState <- io $ scExtCns sc rhsStateEC  -- s2
+  input <- io $ scExtCns sc inputEC        -- in
 
   -- LHS/RHS constants
   let lhs = ttTerm (bisimTheoremLhs outerBt)
@@ -466,12 +475,8 @@ buildOutputRelationTheorem bthms bc = do
   -- Function to prove
   -- forall s1 s2 in out1 out2.
   --   srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))
-  args <- io $ mapM
-    (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
-    [ ("input", bcInputType bc)
-    , ("rhsState", bisimTheoremRhsStateType outerBt)
-    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
-  theorem <- io $ scLambdaList sc args implication'
+  let args = [inputEC, rhsStateEC, lhsStateEC]
+  theorem <- io $ scAbstractExts sc args implication'
 
   tt <- io $ mkTypedTerm sc theorem
 
@@ -486,10 +491,15 @@ buildStateRelationTheorem bc = do
 
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
-  lhsState <- io $ scLocalVar sc 0        -- s1
-  rhsState <- io $ scLocalVar sc 1        -- s2
-  initLhsOutput <- io $ scLocalVar sc 2   -- out1
-  initRhsOutput <- io $ scLocalVar sc 3   -- out2
+  lhsStateEC <- io $ importEC sc "lhsState" (bisimTheoremLhsStateType outerBt)
+  rhsStateEC <- io $ importEC sc "rhsState" (bisimTheoremRhsStateType outerBt)
+  initLhsOutputEC <- io $ importEC sc "initLhsOutput" (bisimTheoremOutputType outerBt)
+  initRhsOutputEC <- io $ importEC sc "initRhsOutput" (bisimTheoremOutputType outerBt)
+
+  lhsState <- io $ scExtCns sc lhsStateEC           -- s1
+  rhsState <- io $ scExtCns sc rhsStateEC           -- s2
+  initLhsOutput <- io $ scExtCns sc initLhsOutputEC -- out1
+  initRhsOutput <- io $ scExtCns sc initRhsOutputEC -- out2
 
   -- LHS/RHS initial outputs
   lhsTuple <- io $ scTuple sc [lhsState, initLhsOutput]  -- (s1, out1)
@@ -512,13 +522,8 @@ buildStateRelationTheorem bc = do
   -- Function to prove
   -- forall s1 s2 in out1 out2.
   --   orel (s1, out1) (s2, out2) -> srel s1 s2
-  args <- io $ mapM
-    (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
-    [ ("initRhsOutput", bisimTheoremOutputType outerBt)
-    , ("initLhsOutput", bisimTheoremOutputType outerBt)
-    , ("rhsState", bisimTheoremRhsStateType outerBt)
-    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
-  theorem <- io $ scLambdaList sc args implication
+  let args = [initRhsOutputEC, initLhsOutputEC, rhsStateEC, lhsStateEC]
+  theorem <- io $ scAbstractExts sc args implication
 
   io $ mkTypedTerm sc theorem
 
