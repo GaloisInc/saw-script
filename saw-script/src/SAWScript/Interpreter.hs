@@ -1107,6 +1107,12 @@ primitives = Map.fromList
     , "    let x = e"
     ]
 
+  -- FIXME:MT: undo?
+  , prim "focus"             "String -> TopLevel ()"
+    (pureVal focus_module)
+    Current
+    [ "Focus on one module (as in cryptol)."]
+
   , prim "true"                "Bool"
     (pureVal True)
     Current

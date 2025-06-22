@@ -38,11 +38,12 @@ module CryptolSAWCore.CryptolEnv
   , mkCryEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , setFocusModule    -- FIXME:MT: keep?
   )
   where
 
 --import qualified Control.Exception as X
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString,readFile)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -307,6 +308,22 @@ ioParseResult :: Either P.ParseError a -> IO a
 ioParseResult res = case res of
   Right a -> return a
   Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e) -- X.throwIO (ParseError e)
+
+
+-- setFocusModule --------------------------------------------------------------
+
+setFocusModule :: String -> ME.ModuleEnv -> IO ME.ModuleEnv
+setFocusModule modNm me0 =
+  case P.parseImpName modNm of
+    Nothing      -> error $ "focus, cannot parse module name: " ++ modNm
+    Just impName -> do
+          let ?fileReader = Data.ByteString.readFile
+          (impName',me1)
+             <- liftModuleM me0 (MB.renameImpNameInCurrentEnv impName)
+          case ME.focusModule impName' me1 of
+            Just me2 -> return me2
+            Nothing  -> panic "setFocusModule:"
+                          ["cannot find" <> Text.pack (show modNm)]
 
 
 -- Rename ----------------------------------------------------------------------

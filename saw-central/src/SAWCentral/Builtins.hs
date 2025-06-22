@@ -2208,6 +2208,16 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
+focus_module :: String -> TopLevel ()
+focus_module modName =
+  do rw <- getTopLevelRW
+     let ce = rwCryptol rw
+     let me = CEnv.eModuleEnv ce
+     me' <- io $ CEnv.setFocusModule modName me
+     let ce' = ce { CEnv.eModuleEnv = me' }
+     let rw' = rw { rwCryptol = ce' }
+     putTopLevelRW rw'
+
 cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm =
   do rw <- getTopLevelRW
