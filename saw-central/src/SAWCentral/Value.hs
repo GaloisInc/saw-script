@@ -1325,7 +1325,7 @@ instance IsValue CryptolModule where
 
 instance FromValue CryptolModule where
     fromValue (VCryptolModule m) = m
-    fromValue _ = error "fromValue ModuleEnv"
+    fromValue _ = error "fromValue CryptolModule"
 
 instance IsValue JSS.Class where
     toValue c = VJavaClass c
