@@ -942,8 +942,9 @@ parseTypedTerm sc env input = do
     -- Resolve names
     -- let nameEnv = getNamingEnv env       -- FIXME:MT:restore
     nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
-    when debug $ do
-      MM.io $ print $ pp nameEnv
+    when debug $ MM.io $ do
+      putStrLn "- LOG: nameEnv:"
+      print $ pp nameEnv
         -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
         -- FIXME: NOTE: if load:   has D::D2::d2
         -- but in both cases, we get Value not in scope in next line:
