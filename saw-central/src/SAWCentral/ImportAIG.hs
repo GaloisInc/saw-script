@@ -26,7 +26,6 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
-import Data.Text (Text)
 import qualified Data.Vector as V
 import Prettyprinter
 
@@ -127,16 +126,11 @@ networkAsSharedTerms ntk sc inputTerms outputLits = do
   traverse (viewFinish <=< evalFn) outputLits
 
 -- | Create vector for each input literal from expected types.
-bitblastVarsAsInputLits :: SharedContext -> [Term] -> ExceptT String IO (V.Vector Term)
+bitblastVarsAsInputLits :: SharedContext -> [ExtCns Term] -> ExceptT String IO (V.Vector Term)
 bitblastVarsAsInputLits sc args = do
-  let n = length args
-  let mkLocalVar :: Int -> Term -> IO Term
-      mkLocalVar i _tp = scLocalVar sc idx
-          -- Earlier arguments have a higher deBruijn index.
-          where idx = (n - i - 1)
-  inputs <- liftIO $ zipWithM mkLocalVar [0..] args
+  inputs <- liftIO $ mapM (scExtCns sc) args
   fmap snd $ runTypeParser V.empty $ do
-    zipWithM_ (bitblastSharedTerm sc) inputs args
+    zipWithM_ (bitblastSharedTerm sc) inputs (map ecType args)
 
 withReadAiger :: (AIG.IsAIG l g) =>
                  AIG.Proxy l g
@@ -154,12 +148,12 @@ translateNetwork :: AIG.IsAIG l g
                  -> SharedContext    -- ^ Context to build in term.
                  -> g x              -- ^ Network to bitblast
                  -> [l x]            -- ^ Outputs for network.
-                 -> [(Text, Term)]   -- ^ Expected types
+                 -> [ExtCns Term]    -- ^ Expected types
                  -> Term             -- ^ Expected output type.
                  -> ExceptT String IO Term
 translateNetwork opts sc ntk outputLits args resultType = do
   lift $ printOutLn opts Debug "inputTerms"
-  inputTerms <- bitblastVarsAsInputLits sc (snd <$> args)
+  inputTerms <- bitblastVarsAsInputLits sc args
   -- Check number of inputs to network matches expected inputs.
   do let expectedInputCount = V.length inputTerms
      aigCount <- liftIO $ AIG.inputCount ntk
@@ -176,7 +170,7 @@ translateNetwork opts sc ntk outputLits args resultType = do
   (res,rargs) <- runTypeParser outputVars $ parseAIGResultType sc resultType
   unless (V.null rargs) $
     throwE "AIG contains more outputs than expected."
-  lift $ scLambdaList sc args res
+  lift $ scAbstractExts sc args res
 
 loadAIG :: (AIG.IsAIG l g) => AIG.Proxy l g  -> FilePath -> IO (Either String (AIG.Network l g))
 loadAIG p f = do
@@ -198,8 +192,9 @@ readAIG proxy opts sc f =
     let outLen = length outputLits
     inType <- scBitvector sc (fromIntegral inLen)
     outType <- scBitvector sc (fromIntegral outLen)
+    args <- mapM (\(x, t) -> scFreshEC sc x t) [("x", inType)]
     fmap (fmap (\t -> (inLen, outLen, t))) $ runExceptT $
-      translateNetwork opts sc ntk outputLits [("x", inType)] outType
+      translateNetwork opts sc ntk outputLits args outType
 
 -- | Check that the input and output counts of the given
 --   networks are equal.
