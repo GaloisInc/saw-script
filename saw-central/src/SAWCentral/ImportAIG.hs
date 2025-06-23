@@ -192,9 +192,9 @@ readAIG proxy opts sc f =
     let outLen = length outputLits
     inType <- scBitvector sc (fromIntegral inLen)
     outType <- scBitvector sc (fromIntegral outLen)
-    args <- mapM (\(x, t) -> scFreshEC sc x t) [("x", inType)]
+    arg <- scFreshEC sc "x" inType
     fmap (fmap (\t -> (inLen, outLen, t))) $ runExceptT $
-      translateNetwork opts sc ntk outputLits args outType
+      translateNetwork opts sc ntk outputLits [arg] outType
 
 -- | Check that the input and output counts of the given
 --   networks are equal.
