@@ -2794,7 +2794,7 @@ scGeneralizeTerms sc args body =
     toEC t =
       case asExtCns t of
         Just ec -> pure ec
-        Nothing -> fail "scAbstractTerms: expected ExtCns"
+        Nothing -> fail "scGeneralizeTerms: expected ExtCns"
 
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
