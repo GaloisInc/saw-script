@@ -369,59 +369,58 @@ span.spaces    { background: white }
 <span class="lineno">  350 </span><span class="spaces">       </span><span class="nottickedoff">let inNodes = [ node | SBVInput _ node &lt;- inputs ]</span>
 <span class="lineno">  351 </span><span class="spaces">       </span><span class="nottickedoff">unless (typSizes inTyp == inSizes) (fail &quot;parseSBVPgm: input size mismatch&quot;)</span>
 <span class="lineno">  352 </span><span class="spaces">       </span><span class="nottickedoff">inputType &lt;- scTyp sc inTyp</span>
-<span class="lineno">  353 </span><span class="spaces">       </span><span class="nottickedoff">inputEC &lt;- scFreshEC sc &quot;x&quot; inputType</span>
-<span class="lineno">  354 </span><span class="spaces">       </span><span class="nottickedoff">inputVar &lt;- scExtCns sc inputEC</span>
-<span class="lineno">  355 </span><span class="spaces">       </span><span class="nottickedoff">inputTerms &lt;- splitInputs sc inTyp inputVar</span>
-<span class="lineno">  356 </span><span class="spaces">       </span><span class="nottickedoff">let nodes0 = Map.fromList (zip inNodes inputTerms)</span>
-<span class="lineno">  357 </span><span class="spaces">       </span><span class="nottickedoff">nodes &lt;- foldM (parseSBVAssign opts sc unint) nodes0 assigns</span>
-<span class="lineno">  358 </span><span class="spaces">       </span><span class="nottickedoff">outputTerms &lt;- mapM (parseSBV sc nodes) outputs</span>
-<span class="lineno">  359 </span><span class="spaces">       </span><span class="nottickedoff">outputTerm &lt;- combineOutputs sc outTyp outputTerms</span>
-<span class="lineno">  360 </span><span class="spaces">       </span><span class="nottickedoff">scAbstractExts sc [inputEC] outputTerm</span></span>
-<span class="lineno">  361 </span>
-<span class="lineno">  362 </span>----------------------------------------------------------------------
-<span class="lineno">  363 </span>-- New SharedContext operations; should eventually move to SharedTerm.hs.
-<span class="lineno">  364 </span>
-<span class="lineno">  365 </span>-- | bv1ToBool : Vec 1 Bool -&gt; Bool
-<span class="lineno">  366 </span>-- bv1ToBool x = bvAt 1 Bool 1 x (bv 1 0)
-<span class="lineno">  367 </span>scBv1ToBool :: SharedContext -&gt; Term -&gt; IO Term
-<span class="lineno">  368 </span><span class="decl"><span class="nottickedoff">scBv1ToBool sc x =</span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">do n0 &lt;- scNat sc 0</span>
-<span class="lineno">  370 </span><span class="spaces">       </span><span class="nottickedoff">n1 &lt;- scNat sc 1</span>
-<span class="lineno">  371 </span><span class="spaces">       </span><span class="nottickedoff">b &lt;- scBoolType sc</span>
-<span class="lineno">  372 </span><span class="spaces">       </span><span class="nottickedoff">bv &lt;- scBvNat sc n1 n0</span>
-<span class="lineno">  373 </span><span class="spaces">       </span><span class="nottickedoff">scBvAt sc n1 b n1 x bv</span></span>
-<span class="lineno">  374 </span>
-<span class="lineno">  375 </span>-- | boolToBv1 :: Bool -&gt; Vec 1 Bool
-<span class="lineno">  376 </span>scBoolToBv1 :: SharedContext -&gt; Term -&gt; IO Term
-<span class="lineno">  377 </span><span class="decl"><span class="nottickedoff">scBoolToBv1 sc x =</span>
-<span class="lineno">  378 </span><span class="spaces">    </span><span class="nottickedoff">do b &lt;- scBoolType sc</span>
-<span class="lineno">  379 </span><span class="spaces">       </span><span class="nottickedoff">scSingle sc b x</span></span>
-<span class="lineno">  380 </span>
-<span class="lineno">  381 </span>-- see if it's the same error
-<span class="lineno">  382 </span>scMultiMux :: SharedContext -&gt; Natural -&gt; Term
-<span class="lineno">  383 </span>           -&gt; Term -&gt; [Term] -&gt; IO Term
-<span class="lineno">  384 </span><span class="decl"><span class="nottickedoff">scMultiMux sc iSize e i args = do</span>
-<span class="lineno">  385 </span><span class="spaces">    </span><span class="nottickedoff">vec &lt;- scVector sc e args</span>
-<span class="lineno">  386 </span><span class="spaces">    </span><span class="nottickedoff">w &lt;- scNat sc iSize</span>
-<span class="lineno">  387 </span><span class="spaces">    </span><span class="nottickedoff">m &lt;- scNat sc (fromIntegral (length args))</span>
-<span class="lineno">  388 </span><span class="spaces">    </span><span class="nottickedoff">scBvAt sc m e w vec i</span></span>
-<span class="lineno">  389 </span>
-<span class="lineno">  390 </span>scAppendAll :: SharedContext -&gt; [(Term, Integer)] -&gt; IO Term
-<span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">scAppendAll _ [] = error &quot;scAppendAll: unimplemented&quot;</span>
-<span class="lineno">  392 </span><span class="spaces"></span><span class="nottickedoff">scAppendAll _ [(x, _)] = return x</span>
-<span class="lineno">  393 </span><span class="spaces"></span><span class="nottickedoff">scAppendAll sc ((x, size1) : xs) =</span>
-<span class="lineno">  394 </span><span class="spaces">    </span><span class="nottickedoff">do let size2 = sum (map snd xs)</span>
-<span class="lineno">  395 </span><span class="spaces">       </span><span class="nottickedoff">b &lt;- scBoolType sc</span>
-<span class="lineno">  396 </span><span class="spaces">       </span><span class="nottickedoff">s1 &lt;- scNat sc (fromInteger size1)</span>
-<span class="lineno">  397 </span><span class="spaces">       </span><span class="nottickedoff">s2 &lt;- scNat sc (fromInteger size2)</span>
-<span class="lineno">  398 </span><span class="spaces">       </span><span class="nottickedoff">y &lt;- scAppendAll sc xs</span>
-<span class="lineno">  399 </span><span class="spaces">       </span><span class="nottickedoff">scAppend sc s1 s2 b x y</span></span>
-<span class="lineno">  400 </span>
-<span class="lineno">  401 </span>typOf :: SBV.SBVPgm -&gt; Typ
-<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">typOf (SBV.SBVPgm (_, irtype, _, _, _, _)) = parseIRType irtype</span></span>
-<span class="lineno">  403 </span>
-<span class="lineno">  404 </span>loadSBV :: FilePath -&gt; IO SBV.SBVPgm
-<span class="lineno">  405 </span><span class="decl"><span class="nottickedoff">loadSBV = SBV.loadSBV</span></span>
+<span class="lineno">  353 </span><span class="spaces">       </span><span class="nottickedoff">inputVar &lt;- scFreshGlobal sc &quot;x&quot; inputType</span>
+<span class="lineno">  354 </span><span class="spaces">       </span><span class="nottickedoff">inputTerms &lt;- splitInputs sc inTyp inputVar</span>
+<span class="lineno">  355 </span><span class="spaces">       </span><span class="nottickedoff">let nodes0 = Map.fromList (zip inNodes inputTerms)</span>
+<span class="lineno">  356 </span><span class="spaces">       </span><span class="nottickedoff">nodes &lt;- foldM (parseSBVAssign opts sc unint) nodes0 assigns</span>
+<span class="lineno">  357 </span><span class="spaces">       </span><span class="nottickedoff">outputTerms &lt;- mapM (parseSBV sc nodes) outputs</span>
+<span class="lineno">  358 </span><span class="spaces">       </span><span class="nottickedoff">outputTerm &lt;- combineOutputs sc outTyp outputTerms</span>
+<span class="lineno">  359 </span><span class="spaces">       </span><span class="nottickedoff">scAbstractTerms sc [inputVar] outputTerm</span></span>
+<span class="lineno">  360 </span>
+<span class="lineno">  361 </span>----------------------------------------------------------------------
+<span class="lineno">  362 </span>-- New SharedContext operations; should eventually move to SharedTerm.hs.
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>-- | bv1ToBool : Vec 1 Bool -&gt; Bool
+<span class="lineno">  365 </span>-- bv1ToBool x = bvAt 1 Bool 1 x (bv 1 0)
+<span class="lineno">  366 </span>scBv1ToBool :: SharedContext -&gt; Term -&gt; IO Term
+<span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">scBv1ToBool sc x =</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="nottickedoff">do n0 &lt;- scNat sc 0</span>
+<span class="lineno">  369 </span><span class="spaces">       </span><span class="nottickedoff">n1 &lt;- scNat sc 1</span>
+<span class="lineno">  370 </span><span class="spaces">       </span><span class="nottickedoff">b &lt;- scBoolType sc</span>
+<span class="lineno">  371 </span><span class="spaces">       </span><span class="nottickedoff">bv &lt;- scBvNat sc n1 n0</span>
+<span class="lineno">  372 </span><span class="spaces">       </span><span class="nottickedoff">scBvAt sc n1 b n1 x bv</span></span>
+<span class="lineno">  373 </span>
+<span class="lineno">  374 </span>-- | boolToBv1 :: Bool -&gt; Vec 1 Bool
+<span class="lineno">  375 </span>scBoolToBv1 :: SharedContext -&gt; Term -&gt; IO Term
+<span class="lineno">  376 </span><span class="decl"><span class="nottickedoff">scBoolToBv1 sc x =</span>
+<span class="lineno">  377 </span><span class="spaces">    </span><span class="nottickedoff">do b &lt;- scBoolType sc</span>
+<span class="lineno">  378 </span><span class="spaces">       </span><span class="nottickedoff">scSingle sc b x</span></span>
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>-- see if it's the same error
+<span class="lineno">  381 </span>scMultiMux :: SharedContext -&gt; Natural -&gt; Term
+<span class="lineno">  382 </span>           -&gt; Term -&gt; [Term] -&gt; IO Term
+<span class="lineno">  383 </span><span class="decl"><span class="nottickedoff">scMultiMux sc iSize e i args = do</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="nottickedoff">vec &lt;- scVector sc e args</span>
+<span class="lineno">  385 </span><span class="spaces">    </span><span class="nottickedoff">w &lt;- scNat sc iSize</span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="nottickedoff">m &lt;- scNat sc (fromIntegral (length args))</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="nottickedoff">scBvAt sc m e w vec i</span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>scAppendAll :: SharedContext -&gt; [(Term, Integer)] -&gt; IO Term
+<span class="lineno">  390 </span><span class="decl"><span class="nottickedoff">scAppendAll _ [] = error &quot;scAppendAll: unimplemented&quot;</span>
+<span class="lineno">  391 </span><span class="spaces"></span><span class="nottickedoff">scAppendAll _ [(x, _)] = return x</span>
+<span class="lineno">  392 </span><span class="spaces"></span><span class="nottickedoff">scAppendAll sc ((x, size1) : xs) =</span>
+<span class="lineno">  393 </span><span class="spaces">    </span><span class="nottickedoff">do let size2 = sum (map snd xs)</span>
+<span class="lineno">  394 </span><span class="spaces">       </span><span class="nottickedoff">b &lt;- scBoolType sc</span>
+<span class="lineno">  395 </span><span class="spaces">       </span><span class="nottickedoff">s1 &lt;- scNat sc (fromInteger size1)</span>
+<span class="lineno">  396 </span><span class="spaces">       </span><span class="nottickedoff">s2 &lt;- scNat sc (fromInteger size2)</span>
+<span class="lineno">  397 </span><span class="spaces">       </span><span class="nottickedoff">y &lt;- scAppendAll sc xs</span>
+<span class="lineno">  398 </span><span class="spaces">       </span><span class="nottickedoff">scAppend sc s1 s2 b x y</span></span>
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>typOf :: SBV.SBVPgm -&gt; Typ
+<span class="lineno">  401 </span><span class="decl"><span class="nottickedoff">typOf (SBV.SBVPgm (_, irtype, _, _, _, _)) = parseIRType irtype</span></span>
+<span class="lineno">  402 </span>
+<span class="lineno">  403 </span>loadSBV :: FilePath -&gt; IO SBV.SBVPgm
+<span class="lineno">  404 </span><span class="decl"><span class="nottickedoff">loadSBV = SBV.loadSBV</span></span>
 
 </pre>
 </body>

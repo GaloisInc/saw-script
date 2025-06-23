@@ -211,9 +211,9 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span><span class="spaces">    </span><span class="istickedoff">let outLen = length outputLits</span>
 <span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff">inType &lt;- scBitvector sc (fromIntegral inLen)</span>
 <span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff">outType &lt;- scBitvector sc (fromIntegral outLen)</span>
-<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">args &lt;- mapM (\(x, t) -&gt; scFreshEC sc x t) [(&quot;x&quot;, inType)]</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">arg &lt;- scFreshEC sc &quot;x&quot; inType</span>
 <span class="lineno">  196 </span><span class="spaces">    </span><span class="istickedoff">fmap (fmap (\t -&gt; (inLen, outLen, t))) $ runExceptT $</span>
-<span class="lineno">  197 </span><span class="spaces">      </span><span class="istickedoff">translateNetwork opts sc ntk outputLits args outType</span></span>
+<span class="lineno">  197 </span><span class="spaces">      </span><span class="istickedoff">translateNetwork opts sc ntk outputLits [arg] outType</span></span>
 <span class="lineno">  198 </span>
 <span class="lineno">  199 </span>-- | Check that the input and output counts of the given
 <span class="lineno">  200 </span>--   networks are equal.
