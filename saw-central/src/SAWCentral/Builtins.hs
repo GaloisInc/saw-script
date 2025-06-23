@@ -1378,10 +1378,10 @@ proveByBVInduction script t =
                    bvult <- scGlobalDef sc "Prelude.bvult"
                    islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, tsz, tsz_shft]
 
-                   tinner <- scPi sc "_" islt =<< incVars sc 0 1 tbody
+                   tinner <- scFun sc islt tbody
                    thyp   <- scPiList sc [ ("i_" <> nm, z) | (nm,z) <- pis ] tinner
 
-                   touter <- scPi sc "_" thyp =<< incVars sc 0 1 tbody
+                   touter <- scFun sc thyp tbody
                    scPiList sc pis touter
 
             -- The "motive" we will pass to the 'Nat_complete_induction' principle.
@@ -1395,7 +1395,7 @@ proveByBVInduction script t =
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
                    tbody  <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- right element
-                   t2     <- scPi sc "_" teq =<< incVars sc 0 1 tbody
+                   t2     <- scFun sc teq tbody
                    t3     <- scPiList sc pis t2
                    scLambda sc "inductionVar" natty t3
 
