@@ -1,0 +1,144 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE CPP #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DoAndIfThenElse #-}
+<span class="lineno">    3 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    4 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    5 </span>-- |
+<span class="lineno">    6 </span>-- Module      :  SAWCore.Testing.Random
+<span class="lineno">    7 </span>-- Copyright   :  (c) 2013-2015 Galois, Inc.
+<span class="lineno">    8 </span>-- License     :  BSD3
+<span class="lineno">    9 </span>-- Maintainer  :  jhendrix@galois.com, conathan@galois.com
+<span class="lineno">   10 </span>-- Stability   :  experimental
+<span class="lineno">   11 </span>-- Portability :  portable
+<span class="lineno">   12 </span>--
+<span class="lineno">   13 </span>-- This module generates random values for 'FiniteValue.FiniteType' types.
+<span class="lineno">   14 </span>--
+<span class="lineno">   15 </span>-- Based on 'Cryptol.Testing.Random'.
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>module SAWCore.Testing.Random where
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>import SAWCore.FiniteValue
+<span class="lineno">   20 </span>  ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import SAWCore.Module (ModuleMap)
+<span class="lineno">   23 </span>import SAWCore.SATQuery
+<span class="lineno">   24 </span>import SAWCore.SharedTerm
+<span class="lineno">   25 </span>  ( scGetModuleMap, SharedContext, Term
+<span class="lineno">   26 </span>  , ExtCns(..), scInstantiateExt
+<span class="lineno">   27 </span>  )
+<span class="lineno">   28 </span>import SAWCore.Simulator.Concrete (evalSharedTerm) -- , CValue)
+<span class="lineno">   29 </span>import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>#if !MIN_VERSION_base(4,8,0)
+<span class="lineno">   33 </span>import Control.Applicative ((&lt;$&gt;), Applicative)
+<span class="lineno">   34 </span>import Data.Traversable (traverse)
+<span class="lineno">   35 </span>#endif
+<span class="lineno">   36 </span>import qualified Control.Monad.Fail as F
+<span class="lineno">   37 </span>import Control.Monad.Random
+<span class="lineno">   38 </span>import Data.Functor.Compose (Compose(..))
+<span class="lineno">   39 </span>import qualified Data.Map as Map
+<span class="lineno">   40 </span>import qualified Data.Set as Set
+<span class="lineno">   41 </span>import System.Random.TF (newTFGen, TFGen)
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>randomFirstOrderValue :: (Applicative m, Functor m, MonadRandom m) =&gt;
+<span class="lineno">   46 </span>  FirstOrderType -&gt; Compose Maybe m FirstOrderValue
+<span class="lineno">   47 </span><span class="decl"><span class="istickedoff">randomFirstOrderValue FOTBit =</span>
+<span class="lineno">   48 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">Compose (Just (FOVBit &lt;$&gt; getRandom))</span></span>
+<span class="lineno">   49 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue FOTInt =</span>
+<span class="lineno">   50 </span><span class="spaces">  </span><span class="istickedoff">Compose (Just (FOVInt &lt;$&gt; randomInt))</span>
+<span class="lineno">   51 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTIntMod m) =</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">Compose (Just (FOVIntMod m &lt;$&gt; getRandomR (0, toInteger m - 1)))</span></span>
+<span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTVec n FOTBit) =</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">Compose (Just (FOVWord n &lt;$&gt; getRandomR (0, 2^n - 1)))</span>
+<span class="lineno">   55 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTVec n t) =</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">FOVVec t &lt;$&gt; replicateM (fromIntegral n) (randomFirstOrderValue t)</span></span>
+<span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTTuple ts) =</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">FOVTuple &lt;$&gt; traverse randomFirstOrderValue ts</span>
+<span class="lineno">   59 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTRec fs) =</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">FOVRec &lt;$&gt; traverse randomFirstOrderValue fs</span></span>
+<span class="lineno">   61 </span><span class="spaces"></span><span class="istickedoff">randomFirstOrderValue (FOTArray _ _) = <span class="nottickedoff">Compose Nothing</span></span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- TODO this is really a hack
+<span class="lineno">   65 </span>randomInt :: MonadRandom m =&gt; m Integer
+<span class="lineno">   66 </span><span class="decl"><span class="istickedoff">randomInt = getRandomR (-10^(6::Int), 10^(6::Int))</span></span>
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>execTest ::
+<span class="lineno">   71 </span>  (F.MonadFail m, MonadRandom m, MonadIO m) =&gt;
+<span class="lineno">   72 </span>  SharedContext -&gt;
+<span class="lineno">   73 </span>  ModuleMap -&gt;
+<span class="lineno">   74 </span>  Map.Map (ExtCns Term) (m FirstOrderValue) -&gt;
+<span class="lineno">   75 </span>  Term -&gt;
+<span class="lineno">   76 </span>  m (Maybe [(ExtCns Term, FirstOrderValue)])
+<span class="lineno">   77 </span><span class="decl"><span class="istickedoff">execTest sc mmap vars tm =</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">do testVec &lt;- sequence vars</span>
+<span class="lineno">   79 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO $</span>
+<span class="lineno">   80 </span><span class="spaces">             </span><span class="istickedoff">do argMap0 &lt;- traverse (scFirstOrderValue sc) testVec</span>
+<span class="lineno">   81 </span><span class="spaces">                </span><span class="istickedoff">let argMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- Map.toList argMap0 ]</span>
+<span class="lineno">   82 </span><span class="spaces">                </span><span class="istickedoff">scInstantiateExt sc argMap tm</span>
+<span class="lineno">   83 </span><span class="spaces">     </span><span class="istickedoff">case evalSharedTerm mmap Map.empty <span class="nottickedoff">Map.empty</span> tm' of</span>
+<span class="lineno">   84 </span><span class="spaces">       </span><span class="istickedoff">-- satisfaible, return counterexample</span>
+<span class="lineno">   85 </span><span class="spaces">       </span><span class="istickedoff">VBool True  -&gt; <span class="nottickedoff">return (Just (Map.toList testVec))</span></span>
+<span class="lineno">   86 </span><span class="spaces">       </span><span class="istickedoff">-- not satisfied by this test vector</span>
+<span class="lineno">   87 </span><span class="spaces">       </span><span class="istickedoff">VBool False -&gt; return Nothing</span>
+<span class="lineno">   88 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;execTest: expected boolean result from random testing&quot;</span></span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>prepareSATQuery ::
+<span class="lineno">   91 </span>  (MonadRandom m, F.MonadFail m, MonadIO m) =&gt;
+<span class="lineno">   92 </span>  SharedContext -&gt;
+<span class="lineno">   93 </span>  SATQuery -&gt;
+<span class="lineno">   94 </span>  IO (m (Maybe [(ExtCns Term, FirstOrderValue)]))
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">prepareSATQuery sc satq</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">Set.null (satUninterp satq)</span> =</span>
+<span class="lineno">   97 </span><span class="spaces">       </span><span class="istickedoff">do varmap &lt;- traverse prepareVar (satVariables satq)</span>
+<span class="lineno">   98 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
+<span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff">mmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  100 </span><span class="spaces">          </span><span class="istickedoff">return (execTest sc mmap varmap t)</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">fail &quot;Random testing cannot handle uninterpreted functions&quot;</span></span>
+<span class="lineno">  102 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  103 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">  104 </span><span class="spaces">   </span><span class="istickedoff">prepareVar fot =</span>
+<span class="lineno">  105 </span><span class="spaces">     </span><span class="istickedoff">case randomFirstOrderValue fot of</span>
+<span class="lineno">  106 </span><span class="spaces">       </span><span class="istickedoff">Compose (Just v) -&gt; pure v</span>
+<span class="lineno">  107 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail (&quot;Cannot randomly test argument of type: &quot; ++ show fot)</span></span></span>
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>runManyTests ::
+<span class="lineno">  110 </span>  RandT TFGen IO (Maybe [(ExtCns Term, FirstOrderValue)]) -&gt;
+<span class="lineno">  111 </span>  Integer -&gt;
+<span class="lineno">  112 </span>  IO (Maybe [(ExtCns Term, FirstOrderValue)])
+<span class="lineno">  113 </span><span class="decl"><span class="istickedoff">runManyTests m numtests = evalRandT (loop numtests) =&lt;&lt; newTFGen</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">loop n</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">| n &gt; 0 =</span>
+<span class="lineno">  117 </span><span class="spaces">          </span><span class="istickedoff">m &gt;&gt;= \case</span>
+<span class="lineno">  118 </span><span class="spaces">            </span><span class="istickedoff">Nothing  -&gt; loop (n-1)</span>
+<span class="lineno">  119 </span><span class="spaces">            </span><span class="istickedoff">Just cex -&gt; <span class="nottickedoff">return (Just cex)</span></span>
+<span class="lineno">  120 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = return Nothing</span></span>
+
+</pre>
+</body>
+</html>
