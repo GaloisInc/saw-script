@@ -77,7 +77,7 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>import SAWCore.Term.Pretty
 <span class="lineno">   59 </span>import SAWCore.SCTypeCheck
 <span class="lineno">   60 </span>import SAWCore.SharedTerm
-<span class="lineno">   61 </span>import SAWCore.Module (ModuleMap, Def(..), ResolvedName(..), lookupVarIndexInMap)
+<span class="lineno">   61 </span>import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 <span class="lineno">   62 </span>import SAWCore.Recognizer
 <span class="lineno">   63 </span>import CryptolSAWCore.Monadify
 <span class="lineno">   64 </span>
@@ -1040,444 +1040,442 @@ span.spaces    { background: white }
 <span class="lineno"> 1021 </span><span class="spaces">           </span><span class="nottickedoff">return $ GlobalName glob []</span>
 <span class="lineno"> 1022 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; error &quot;extCnsToFunName: unreachable&quot;</span></span>
 <span class="lineno"> 1023 </span>
-<span class="lineno"> 1024 </span>-- | Get the 'FunName' of a global definition
-<span class="lineno"> 1025 </span>mrGlobalDef :: (?mm :: ModuleMap) =&gt; Ident -&gt; MRM t FunName
-<span class="lineno"> 1026 </span><span class="decl"><span class="nottickedoff">mrGlobalDef ident = asTypedGlobalDef &lt;$&gt; liftSC1 scGlobalDef ident &gt;&gt;= \case</span>
-<span class="lineno"> 1027 </span><span class="spaces">  </span><span class="nottickedoff">Just glob -&gt; return $ GlobalName glob []</span>
-<span class="lineno"> 1028 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error $ &quot;mrGlobalDef: could not get GlobalDef of: &quot; ++ show ident</span></span>
+<span class="lineno"> 1024 </span>-- | Get the body of a global definition, raising an 'error' if none is found
+<span class="lineno"> 1025 </span>mrGlobalDefBody :: Ident -&gt; MRM t Term
+<span class="lineno"> 1026 </span><span class="decl"><span class="nottickedoff">mrGlobalDefBody ident = liftSC1 scFindDef ident &gt;&gt;= \case</span>
+<span class="lineno"> 1027 </span><span class="spaces">  </span><span class="nottickedoff">Just (defBody -&gt; Just body) -&gt; pure body</span>
+<span class="lineno"> 1028 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error $ &quot;mrGlobalDefBody: global has no definition: &quot; ++ show ident</span></span>
 <span class="lineno"> 1029 </span>
-<span class="lineno"> 1030 </span>-- | Get the body of a global definition, raising an 'error' if none is found
-<span class="lineno"> 1031 </span>mrGlobalDefBody :: Ident -&gt; MRM t Term
-<span class="lineno"> 1032 </span><span class="decl"><span class="nottickedoff">mrGlobalDefBody ident = liftSC1 scFindDef ident &gt;&gt;= \case</span>
-<span class="lineno"> 1033 </span><span class="spaces">  </span><span class="nottickedoff">Just (defBody -&gt; Just body) -&gt; pure body</span>
-<span class="lineno"> 1034 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error $ &quot;mrGlobalDefBody: global has no definition: &quot; ++ show ident</span></span>
-<span class="lineno"> 1035 </span>
-<span class="lineno"> 1036 </span>-- | Get the body of a function @f@ if it has one
-<span class="lineno"> 1037 </span>mrFunNameBody :: FunName -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1038 </span><span class="decl"><span class="nottickedoff">mrFunNameBody (CallSName var) =</span>
-<span class="lineno"> 1039 </span><span class="spaces">  </span><span class="nottickedoff">mrVarInfo var &gt;&gt;= \case</span>
-<span class="lineno"> 1040 </span><span class="spaces">  </span><span class="nottickedoff">Just (CallVarInfo body) -&gt; return $ Just body</span>
-<span class="lineno"> 1041 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error &quot;mrFunBody: unknown letrec var&quot;</span>
-<span class="lineno"> 1042 </span><span class="spaces"></span><span class="nottickedoff">mrFunNameBody (GlobalName glob projs) =</span>
-<span class="lineno"> 1043 </span><span class="spaces">  </span><span class="nottickedoff">do mm &lt;- liftSC0 scGetModuleMap</span>
-<span class="lineno"> 1044 </span><span class="spaces">     </span><span class="nottickedoff">case lookupVarIndexInMap (globalDefIndex glob) mm of</span>
-<span class="lineno"> 1045 </span><span class="spaces">       </span><span class="nottickedoff">Just (ResolvedDef (defBody -&gt; Just body)) -&gt;</span>
-<span class="lineno"> 1046 </span><span class="spaces">         </span><span class="nottickedoff">Just &lt;$&gt; foldM doTermProj body projs</span>
-<span class="lineno"> 1047 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; pure Nothing</span>
-<span class="lineno"> 1048 </span><span class="spaces"></span><span class="nottickedoff">mrFunNameBody (EVarFunName _) = return Nothing</span></span>
+<span class="lineno"> 1030 </span>-- | Get the body of a function @f@ if it has one
+<span class="lineno"> 1031 </span>mrFunNameBody :: FunName -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1032 </span><span class="decl"><span class="nottickedoff">mrFunNameBody (CallSName var) =</span>
+<span class="lineno"> 1033 </span><span class="spaces">  </span><span class="nottickedoff">mrVarInfo var &gt;&gt;= \case</span>
+<span class="lineno"> 1034 </span><span class="spaces">  </span><span class="nottickedoff">Just (CallVarInfo body) -&gt; return $ Just body</span>
+<span class="lineno"> 1035 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; error &quot;mrFunBody: unknown letrec var&quot;</span>
+<span class="lineno"> 1036 </span><span class="spaces"></span><span class="nottickedoff">mrFunNameBody (GlobalName glob projs) =</span>
+<span class="lineno"> 1037 </span><span class="spaces">  </span><span class="nottickedoff">do mm &lt;- liftSC0 scGetModuleMap</span>
+<span class="lineno"> 1038 </span><span class="spaces">     </span><span class="nottickedoff">case lookupVarIndexInMap (globalDefIndex glob) mm of</span>
+<span class="lineno"> 1039 </span><span class="spaces">       </span><span class="nottickedoff">Just (ResolvedDef (defBody -&gt; Just body)) -&gt;</span>
+<span class="lineno"> 1040 </span><span class="spaces">         </span><span class="nottickedoff">Just &lt;$&gt; foldM doTermProj body projs</span>
+<span class="lineno"> 1041 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; pure Nothing</span>
+<span class="lineno"> 1042 </span><span class="spaces"></span><span class="nottickedoff">mrFunNameBody (EVarFunName _) = return Nothing</span></span>
+<span class="lineno"> 1043 </span>
+<span class="lineno"> 1044 </span>-- | Get the body of a function @f@ applied to some arguments, if possible
+<span class="lineno"> 1045 </span>mrFunBody :: FunName -&gt; [Term] -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1046 </span><span class="decl"><span class="nottickedoff">mrFunBody f args = mrFunNameBody f &gt;&gt;= \case</span>
+<span class="lineno"> 1047 </span><span class="spaces">  </span><span class="nottickedoff">Just body -&gt; Just &lt;$&gt; mrApplyAll body args</span>
+<span class="lineno"> 1048 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; return Nothing</span></span>
 <span class="lineno"> 1049 </span>
-<span class="lineno"> 1050 </span>-- | Get the body of a function @f@ applied to some arguments, if possible
-<span class="lineno"> 1051 </span>mrFunBody :: FunName -&gt; [Term] -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1052 </span><span class="decl"><span class="nottickedoff">mrFunBody f args = mrFunNameBody f &gt;&gt;= \case</span>
-<span class="lineno"> 1053 </span><span class="spaces">  </span><span class="nottickedoff">Just body -&gt; Just &lt;$&gt; mrApplyAll body args</span>
-<span class="lineno"> 1054 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; return Nothing</span></span>
-<span class="lineno"> 1055 </span>
-<span class="lineno"> 1056 </span>-- | Get the body of a function @f@ applied to some arguments, as per
-<span class="lineno"> 1057 </span>-- 'mrFunBody', and also return whether its body recursively calls itself, as
-<span class="lineno"> 1058 </span>-- per 'mrCallsFun'
-<span class="lineno"> 1059 </span>mrFunBodyRecInfo :: (?mm :: ModuleMap) =&gt; FunName -&gt; [Term] -&gt; MRM t (Maybe (Term, Bool))
-<span class="lineno"> 1060 </span><span class="decl"><span class="nottickedoff">mrFunBodyRecInfo f args =</span>
-<span class="lineno"> 1061 </span><span class="spaces">  </span><span class="nottickedoff">mrFunNameBody f &gt;&gt;= \case</span>
-<span class="lineno"> 1062 </span><span class="spaces">  </span><span class="nottickedoff">Just body -&gt; do</span>
-<span class="lineno"> 1063 </span><span class="spaces">    </span><span class="nottickedoff">body_applied &lt;- mrApplyAll body args</span>
-<span class="lineno"> 1064 </span><span class="spaces">    </span><span class="nottickedoff">is_recursive &lt;- mrCallsFun f body</span>
-<span class="lineno"> 1065 </span><span class="spaces">    </span><span class="nottickedoff">return $ Just (body_applied, is_recursive)</span>
-<span class="lineno"> 1066 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; return Nothing</span></span>
-<span class="lineno"> 1067 </span>
-<span class="lineno"> 1068 </span>-- | Test if a 'Term' contains, after possibly unfolding some functions, a call
-<span class="lineno"> 1069 </span>-- to a given function @f@ again
-<span class="lineno"> 1070 </span>mrCallsFun :: (?mm :: ModuleMap) =&gt; FunName -&gt; Term -&gt; MRM t Bool
-<span class="lineno"> 1071 </span><span class="decl"><span class="nottickedoff">mrCallsFun f = flip memoFixTermFunAccum Set.empty $ \recurse seen t -&gt;</span>
-<span class="lineno"> 1072 </span><span class="spaces">  </span><span class="nottickedoff">let onFunName g = mrFunNameBody g &gt;&gt;= \case</span>
-<span class="lineno"> 1073 </span><span class="spaces">        </span><span class="nottickedoff">_ | f == g -&gt; return True</span>
-<span class="lineno"> 1074 </span><span class="spaces">        </span><span class="nottickedoff">Just body | Set.notMember g seen -&gt; recurse (Set.insert g seen) body</span>
-<span class="lineno"> 1075 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; return False</span>
-<span class="lineno"> 1076 </span><span class="spaces">  </span><span class="nottickedoff">in case t of</span>
-<span class="lineno"> 1077 </span><span class="spaces">  </span><span class="nottickedoff">(asExtCns -&gt; Just ec) -&gt; extCnsToFunName ec &gt;&gt;= onFunName</span>
-<span class="lineno"> 1078 </span><span class="spaces">  </span><span class="nottickedoff">(asGlobalFunName -&gt; Just g) -&gt; onFunName g</span>
-<span class="lineno"> 1079 </span><span class="spaces">  </span><span class="nottickedoff">(unwrapTermF -&gt; tf) -&gt;</span>
-<span class="lineno"> 1080 </span><span class="spaces">    </span><span class="nottickedoff">foldM (\b t' -&gt; if b then return b else recurse seen t') False tf</span></span>
-<span class="lineno"> 1081 </span>
-<span class="lineno"> 1082 </span>
+<span class="lineno"> 1050 </span>-- | Get the body of a function @f@ applied to some arguments, as per
+<span class="lineno"> 1051 </span>-- 'mrFunBody', and also return whether its body recursively calls itself, as
+<span class="lineno"> 1052 </span>-- per 'mrCallsFun'
+<span class="lineno"> 1053 </span>mrFunBodyRecInfo :: FunName -&gt; [Term] -&gt; MRM t (Maybe (Term, Bool))
+<span class="lineno"> 1054 </span><span class="decl"><span class="nottickedoff">mrFunBodyRecInfo f args =</span>
+<span class="lineno"> 1055 </span><span class="spaces">  </span><span class="nottickedoff">mrFunNameBody f &gt;&gt;= \case</span>
+<span class="lineno"> 1056 </span><span class="spaces">  </span><span class="nottickedoff">Just body -&gt; do</span>
+<span class="lineno"> 1057 </span><span class="spaces">    </span><span class="nottickedoff">body_applied &lt;- mrApplyAll body args</span>
+<span class="lineno"> 1058 </span><span class="spaces">    </span><span class="nottickedoff">is_recursive &lt;- mrCallsFun f body</span>
+<span class="lineno"> 1059 </span><span class="spaces">    </span><span class="nottickedoff">return $ Just (body_applied, is_recursive)</span>
+<span class="lineno"> 1060 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; return Nothing</span></span>
+<span class="lineno"> 1061 </span>
+<span class="lineno"> 1062 </span>-- | Test if a 'Term' contains, after possibly unfolding some functions, a call
+<span class="lineno"> 1063 </span>-- to a given function @f@ again
+<span class="lineno"> 1064 </span>mrCallsFun :: FunName -&gt; Term -&gt; MRM t Bool
+<span class="lineno"> 1065 </span><span class="decl"><span class="nottickedoff">mrCallsFun f t0 =</span>
+<span class="lineno"> 1066 </span><span class="spaces">  </span><span class="nottickedoff">do mm &lt;- liftSC0 scGetModuleMap</span>
+<span class="lineno"> 1067 </span><span class="spaces">     </span><span class="nottickedoff">let ?mm = mm</span>
+<span class="lineno"> 1068 </span><span class="spaces">     </span><span class="nottickedoff">let fn recurse seen t =</span>
+<span class="lineno"> 1069 </span><span class="spaces">           </span><span class="nottickedoff">let onFunName g = mrFunNameBody g &gt;&gt;= \case</span>
+<span class="lineno"> 1070 </span><span class="spaces">                 </span><span class="nottickedoff">_ | f == g -&gt; return True</span>
+<span class="lineno"> 1071 </span><span class="spaces">                 </span><span class="nottickedoff">Just body | Set.notMember g seen -&gt; recurse (Set.insert g seen) body</span>
+<span class="lineno"> 1072 </span><span class="spaces">                 </span><span class="nottickedoff">_ -&gt; return False</span>
+<span class="lineno"> 1073 </span><span class="spaces">           </span><span class="nottickedoff">in case t of</span>
+<span class="lineno"> 1074 </span><span class="spaces">           </span><span class="nottickedoff">(asExtCns -&gt; Just ec) -&gt; extCnsToFunName ec &gt;&gt;= onFunName</span>
+<span class="lineno"> 1075 </span><span class="spaces">           </span><span class="nottickedoff">(asGlobalFunName -&gt; Just g) -&gt; onFunName g</span>
+<span class="lineno"> 1076 </span><span class="spaces">           </span><span class="nottickedoff">(unwrapTermF -&gt; tf) -&gt;</span>
+<span class="lineno"> 1077 </span><span class="spaces">             </span><span class="nottickedoff">foldM (\b t' -&gt; if b then return b else recurse seen t') False tf</span>
+<span class="lineno"> 1078 </span><span class="spaces">     </span><span class="nottickedoff">memoFixTermFunAccum fn Set.empty t0</span></span>
+<span class="lineno"> 1079 </span>
+<span class="lineno"> 1080 </span>
+<span class="lineno"> 1081 </span>----------------------------------------------------------------------
+<span class="lineno"> 1082 </span>-- * Monadic Operations on Mr. Solver State
 <span class="lineno"> 1083 </span>----------------------------------------------------------------------
-<span class="lineno"> 1084 </span>-- * Monadic Operations on Mr. Solver State
-<span class="lineno"> 1085 </span>----------------------------------------------------------------------
-<span class="lineno"> 1086 </span>
-<span class="lineno"> 1087 </span>-- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
-<span class="lineno"> 1088 </span>-- free uvars
-<span class="lineno"> 1089 </span>mrFreshVarCl :: LocalName -&gt; Term -&gt; MRM t MRVar
-<span class="lineno"> 1090 </span><span class="decl"><span class="nottickedoff">mrFreshVarCl nm tp = MRVar &lt;$&gt; liftSC2 scFreshEC nm tp</span></span>
-<span class="lineno"> 1091 </span>
-<span class="lineno"> 1092 </span>-- | Make a fresh 'MRVar' of type @(u1:tp1) -&gt; ... (un:tpn) -&gt; tp@, where the
-<span class="lineno"> 1093 </span>-- @ui@ are all the current uvars
-<span class="lineno"> 1094 </span>mrFreshVar :: LocalName -&gt; Term -&gt; MRM t MRVar
-<span class="lineno"> 1095 </span><span class="decl"><span class="nottickedoff">mrFreshVar nm tp = piUVarsM tp &gt;&gt;= mrFreshVarCl nm</span></span>
-<span class="lineno"> 1096 </span>
-<span class="lineno"> 1097 </span>-- | Set the info associated with an 'MRVar', assuming it has not been set
-<span class="lineno"> 1098 </span>mrSetVarInfo :: MRVar -&gt; MRVarInfo -&gt; MRM t ()
-<span class="lineno"> 1099 </span><span class="decl"><span class="nottickedoff">mrSetVarInfo var info =</span>
-<span class="lineno"> 1100 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM 3 (prettyWithCtx emptyMRVarCtx $</span>
-<span class="lineno"> 1101 </span><span class="spaces">                     </span><span class="nottickedoff">prettyPrefixSep &quot;mrSetVarInfo&quot; var &quot;=&quot; info) &gt;&gt;</span>
-<span class="lineno"> 1102 </span><span class="spaces">  </span><span class="nottickedoff">(modify $ \st -&gt;</span>
-<span class="lineno"> 1103 </span><span class="spaces">   </span><span class="nottickedoff">st { mrsVars =</span>
-<span class="lineno"> 1104 </span><span class="spaces">          </span><span class="nottickedoff">Map.alter (\case</span>
-<span class="lineno"> 1105 </span><span class="spaces">                        </span><span class="nottickedoff">Just _ -&gt; error &quot;mrSetVarInfo&quot;</span>
-<span class="lineno"> 1106 </span><span class="spaces">                        </span><span class="nottickedoff">Nothing -&gt; Just info)</span>
-<span class="lineno"> 1107 </span><span class="spaces">          </span><span class="nottickedoff">var (mrsVars st) })</span></span>
-<span class="lineno"> 1108 </span>
-<span class="lineno"> 1109 </span>-- | Make a fresh existential variable of the given type, abstracting out all
-<span class="lineno"> 1110 </span>-- the current uvars and returning the new evar applied to all current uvars
-<span class="lineno"> 1111 </span>mrFreshEVar :: LocalName -&gt; Type -&gt; MRM t Term
-<span class="lineno"> 1112 </span><span class="decl"><span class="nottickedoff">mrFreshEVar nm (Type tp) =</span>
-<span class="lineno"> 1113 </span><span class="spaces">  </span><span class="nottickedoff">do var &lt;- mrFreshVar nm tp</span>
-<span class="lineno"> 1114 </span><span class="spaces">     </span><span class="nottickedoff">ctx_len &lt;- mrVarCtxLength &lt;$&gt; mrUVars</span>
-<span class="lineno"> 1115 </span><span class="spaces">     </span><span class="nottickedoff">mrSetVarInfo var (EVarInfo ctx_len Nothing)</span>
-<span class="lineno"> 1116 </span><span class="spaces">     </span><span class="nottickedoff">mrVarTerm var</span></span>
-<span class="lineno"> 1117 </span>
-<span class="lineno"> 1118 </span>-- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
-<span class="lineno"> 1119 </span>-- Return the new evars all applied to the current uvars.
-<span class="lineno"> 1120 </span>mrFreshEVars :: MRVarCtx -&gt; MRM t [Term]
-<span class="lineno"> 1121 </span><span class="decl"><span class="nottickedoff">mrFreshEVars = helper [] . mrVarCtxOuterToInner where</span>
-<span class="lineno"> 1122 </span><span class="spaces">  </span><span class="nottickedoff">-- Return fresh evars for the suffix of a context of variable names and types,</span>
-<span class="lineno"> 1123 </span><span class="spaces">  </span><span class="nottickedoff">-- where the supplied Terms are evars that have already been generated for the</span>
-<span class="lineno"> 1124 </span><span class="spaces">  </span><span class="nottickedoff">-- earlier part of the context, and so must be substituted into the remaining</span>
-<span class="lineno"> 1125 </span><span class="spaces">  </span><span class="nottickedoff">-- types in the context. Since we want to make fresh evars for the oldest</span>
-<span class="lineno"> 1126 </span><span class="spaces">  </span><span class="nottickedoff">-- variables first, the second argument must be in outer-to-inner order.</span>
-<span class="lineno"> 1127 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [Term] -&gt; [(LocalName,Term)] -&gt; MRM t [Term]</span>
-<span class="lineno"> 1128 </span><span class="spaces">  </span><span class="nottickedoff">helper evars [] = return evars</span>
-<span class="lineno"> 1129 </span><span class="spaces">  </span><span class="nottickedoff">helper evars ((nm,tp):ctx) =</span>
-<span class="lineno"> 1130 </span><span class="spaces">    </span><span class="nottickedoff">do evar &lt;- substTerm 0 evars tp &gt;&gt;= mrFreshEVar nm . Type</span>
-<span class="lineno"> 1131 </span><span class="spaces">       </span><span class="nottickedoff">helper (evar:evars) ctx</span></span>
-<span class="lineno"> 1132 </span>
-<span class="lineno"> 1133 </span>-- | Set the value of an evar to a closed term
-<span class="lineno"> 1134 </span>mrSetEVarClosed :: MRVar -&gt; Term -&gt; MRM t ()
-<span class="lineno"> 1135 </span><span class="decl"><span class="nottickedoff">mrSetEVarClosed var val =</span>
-<span class="lineno"> 1136 </span><span class="spaces">  </span><span class="nottickedoff">do val_tp &lt;- mrTypeOf val</span>
-<span class="lineno"> 1137 </span><span class="spaces">     </span><span class="nottickedoff">-- NOTE: need to instantiate any evars in the type of var, to ensure the</span>
-<span class="lineno"> 1138 </span><span class="spaces">     </span><span class="nottickedoff">-- following subtyping check will succeed</span>
-<span class="lineno"> 1139 </span><span class="spaces">     </span><span class="nottickedoff">var_tp &lt;- mrSubstEVars $ mrVarType var</span>
-<span class="lineno"> 1140 </span><span class="spaces">     </span><span class="nottickedoff">-- FIXME: catch subtyping errors and report them as being evar failures</span>
-<span class="lineno"> 1141 </span><span class="spaces">     </span><span class="nottickedoff">eith_err &lt;-</span>
-<span class="lineno"> 1142 </span><span class="spaces">       </span><span class="nottickedoff">liftSC2 (runTCM $ checkSubtype (SCTypedTerm val val_tp) var_tp) Nothing []</span>
-<span class="lineno"> 1143 </span><span class="spaces">     </span><span class="nottickedoff">case eith_err of</span>
-<span class="lineno"> 1144 </span><span class="spaces">       </span><span class="nottickedoff">Left _ -&gt;</span>
-<span class="lineno"> 1145 </span><span class="spaces">         </span><span class="nottickedoff">error (&quot;mrSetEVarClosed: incorrect instantiation for evar &quot; ++</span>
-<span class="lineno"> 1146 </span><span class="spaces">                </span><span class="nottickedoff">showMRVar var ++</span>
-<span class="lineno"> 1147 </span><span class="spaces">                </span><span class="nottickedoff">&quot;\nexpected type:\n&quot; ++ showTerm var_tp ++</span>
-<span class="lineno"> 1148 </span><span class="spaces">                </span><span class="nottickedoff">&quot;\nactual type:\n&quot; ++ showTerm val_tp)</span>
-<span class="lineno"> 1149 </span><span class="spaces">       </span><span class="nottickedoff">Right _ -&gt; return ()</span>
-<span class="lineno"> 1150 </span><span class="spaces">     </span><span class="nottickedoff">modify $ \st -&gt;</span>
-<span class="lineno"> 1151 </span><span class="spaces">       </span><span class="nottickedoff">st { mrsVars =</span>
-<span class="lineno"> 1152 </span><span class="spaces">            </span><span class="nottickedoff">Map.alter</span>
-<span class="lineno"> 1153 </span><span class="spaces">            </span><span class="nottickedoff">(\case</span>
-<span class="lineno"> 1154 </span><span class="spaces">                </span><span class="nottickedoff">Just (EVarInfo clen Nothing) -&gt; Just $ EVarInfo clen (Just val)</span>
-<span class="lineno"> 1155 </span><span class="spaces">                </span><span class="nottickedoff">Just (EVarInfo _ (Just _)) -&gt;</span>
-<span class="lineno"> 1156 </span><span class="spaces">                  </span><span class="nottickedoff">error &quot;Setting existential variable: variable already set!&quot;</span>
-<span class="lineno"> 1157 </span><span class="spaces">                </span><span class="nottickedoff">_ -&gt; error &quot;Setting existential variable: not an evar!&quot;)</span>
-<span class="lineno"> 1158 </span><span class="spaces">            </span><span class="nottickedoff">var (mrsVars st) }</span></span>
-<span class="lineno"> 1159 </span>
-<span class="lineno"> 1160 </span>
-<span class="lineno"> 1161 </span>-- | Try to set the value of the application @X e1 .. en@ of evar @X@ to an
-<span class="lineno"> 1162 </span>-- expression @e@ by trying to set @X@ to @\ x1 ... xn -&gt; e@. This only works if
-<span class="lineno"> 1163 </span>-- each free uvar @xi@ in @e@ is one of the arguments @ej@ to @X@ (though it
-<span class="lineno"> 1164 </span>-- need not be the case that @i=j@). Return whether this succeeded.
-<span class="lineno"> 1165 </span>mrTrySetAppliedEVar :: MRVar -&gt; [Term] -&gt; Term -&gt; MRM t Bool
-<span class="lineno"> 1166 </span><span class="decl"><span class="nottickedoff">mrTrySetAppliedEVar evar args t =</span>
-<span class="lineno"> 1167 </span><span class="spaces">  </span><span class="nottickedoff">-- Get the first N argument variables of the type of evar, where N is the</span>
-<span class="lineno"> 1168 </span><span class="spaces">  </span><span class="nottickedoff">-- length of args; note that evar can have more than N arguments if t is a</span>
-<span class="lineno"> 1169 </span><span class="spaces">  </span><span class="nottickedoff">-- higher-order term</span>
-<span class="lineno"> 1170 </span><span class="spaces">  </span><span class="nottickedoff">let (take (length args) -&gt; evar_vars, _) = asPiList (mrVarType evar) in</span>
-<span class="lineno"> 1171 </span><span class="spaces">  </span><span class="nottickedoff">-- Get all the free variables of t</span>
-<span class="lineno"> 1172 </span><span class="spaces">  </span><span class="nottickedoff">let free_vars = bitSetElems (looseVars t) in</span>
-<span class="lineno"> 1173 </span><span class="spaces">  </span><span class="nottickedoff">-- For each free var of t, find an arg equal to it</span>
-<span class="lineno"> 1174 </span><span class="spaces">  </span><span class="nottickedoff">case mapM (\i -&gt; findIndex (\case</span>
-<span class="lineno"> 1175 </span><span class="spaces">                                 </span><span class="nottickedoff">(asLocalVar -&gt; Just j) -&gt; i == j</span>
-<span class="lineno"> 1176 </span><span class="spaces">                                 </span><span class="nottickedoff">_ -&gt; False) args) free_vars of</span>
-<span class="lineno"> 1177 </span><span class="spaces">    </span><span class="nottickedoff">Just fv_arg_ixs</span>
-<span class="lineno"> 1178 </span><span class="spaces">      </span><span class="nottickedoff">-- Check to make sure we have the right number of args</span>
-<span class="lineno"> 1179 </span><span class="spaces">      </span><span class="nottickedoff">| length args == length evar_vars -&gt; do</span>
-<span class="lineno"> 1180 </span><span class="spaces">          </span><span class="nottickedoff">-- Build a list of the input vars x1 ... xn as terms, noting that the</span>
-<span class="lineno"> 1181 </span><span class="spaces">          </span><span class="nottickedoff">-- first variable is the least recently bound and so has the highest</span>
-<span class="lineno"> 1182 </span><span class="spaces">          </span><span class="nottickedoff">-- deBruijn index</span>
-<span class="lineno"> 1183 </span><span class="spaces">          </span><span class="nottickedoff">let arg_ixs = reverse [0 .. length args - 1]</span>
-<span class="lineno"> 1184 </span><span class="spaces">          </span><span class="nottickedoff">arg_vars &lt;- mapM (liftSC1 scLocalVar) arg_ixs</span>
-<span class="lineno"> 1185 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1186 </span><span class="spaces">          </span><span class="nottickedoff">-- For each free variable of t, we substitute the corresponding</span>
-<span class="lineno"> 1187 </span><span class="spaces">          </span><span class="nottickedoff">-- variable xi, substituting error terms for the variables that are</span>
-<span class="lineno"> 1188 </span><span class="spaces">          </span><span class="nottickedoff">-- not free (since we have nothing else to substitute for them)</span>
-<span class="lineno"> 1189 </span><span class="spaces">          </span><span class="nottickedoff">let var_map = zip free_vars fv_arg_ixs</span>
-<span class="lineno"> 1190 </span><span class="spaces">          </span><span class="nottickedoff">let subst_vars = if free_vars == [] then [] else</span>
-<span class="lineno"> 1191 </span><span class="spaces">                             </span><span class="nottickedoff">[0 .. maximum free_vars]</span>
-<span class="lineno"> 1192 </span><span class="spaces">          </span><span class="nottickedoff">let subst = flip map subst_vars $ \i -&gt;</span>
-<span class="lineno"> 1193 </span><span class="spaces">                </span><span class="nottickedoff">maybe (error</span>
-<span class="lineno"> 1194 </span><span class="spaces">                       </span><span class="nottickedoff">(&quot;mrTrySetAppliedEVar: unexpected free variable &quot;</span>
-<span class="lineno"> 1195 </span><span class="spaces">                        </span><span class="nottickedoff">++ show i ++ &quot; in term\n&quot; ++ showTerm t))</span>
-<span class="lineno"> 1196 </span><span class="spaces">                </span><span class="nottickedoff">(arg_vars !!) (lookup i var_map)</span>
-<span class="lineno"> 1197 </span><span class="spaces">          </span><span class="nottickedoff">body &lt;- substTerm 0 subst t</span>
-<span class="lineno"> 1198 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1199 </span><span class="spaces">          </span><span class="nottickedoff">-- Now instantiate evar to \x1 ... xn -&gt; body</span>
-<span class="lineno"> 1200 </span><span class="spaces">          </span><span class="nottickedoff">evar_inst &lt;- liftSC2 scLambdaList evar_vars body</span>
-<span class="lineno"> 1201 </span><span class="spaces">          </span><span class="nottickedoff">mrSetEVarClosed evar evar_inst</span>
-<span class="lineno"> 1202 </span><span class="spaces">          </span><span class="nottickedoff">return True</span>
-<span class="lineno"> 1203 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1204 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return False</span></span>
-<span class="lineno"> 1205 </span>
-<span class="lineno"> 1206 </span>
-<span class="lineno"> 1207 </span>-- | Replace all evars in a 'Term' with their instantiations when they have one
-<span class="lineno"> 1208 </span>mrSubstEVars :: Term -&gt; MRM t Term
-<span class="lineno"> 1209 </span><span class="decl"><span class="nottickedoff">mrSubstEVars = memoFixTermFun $ \recurse t -&gt;</span>
-<span class="lineno"> 1210 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- mrVars</span>
-<span class="lineno"> 1211 </span><span class="spaces">     </span><span class="nottickedoff">case t of</span>
-<span class="lineno"> 1212 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
-<span class="lineno"> 1213 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
-<span class="lineno"> 1214 </span><span class="spaces">         </span><span class="nottickedoff">mrApplyAll t' args &gt;&gt;= recurse</span>
-<span class="lineno"> 1215 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
-<span class="lineno"> 1216 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
-<span class="lineno"> 1217 </span>
-<span class="lineno"> 1218 </span>-- | Replace all evars in a 'Term' with their instantiations when they have one
-<span class="lineno"> 1219 </span>-- and \&quot;lower\&quot; those that do not. Lowering an evar in this context means
-<span class="lineno"> 1220 </span>-- replacing each occurrence @X x1 .. xn@ of an evar @X@ applied to its context
-<span class="lineno"> 1221 </span>-- of uvars with a fresh 'ExtCns' variable @Y@. This must be done after
-<span class="lineno"> 1222 </span>-- 'instantiateUVarsM' has replaced all uvars with fresh 'ExtCns' variables,
-<span class="lineno"> 1223 </span>-- which ensures that @X x1 .. xn@ is actually a closed, top-level term since
-<span class="lineno"> 1224 </span>-- each @xi@ is now an 'ExtCns'. This is necessary so @X x1 .. xn@ can be
-<span class="lineno"> 1225 </span>-- replaced by an 'ExtCns' @Y@, which is always closed. The idea of lowering is
-<span class="lineno"> 1226 </span>-- that @X@ should always occur applied to these same values, so really we can
-<span class="lineno"> 1227 </span>-- just treat the entire expression @X x1 .. xn@ as a single unknown value,
-<span class="lineno"> 1228 </span>-- rather than worrying about how @X@ depends on its inputs.
-<span class="lineno"> 1229 </span>mrSubstLowerEVars :: Term -&gt; MRM t Term
-<span class="lineno"> 1230 </span><span class="decl"><span class="nottickedoff">mrSubstLowerEVars t_top =</span>
-<span class="lineno"> 1231 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- mrVars</span>
-<span class="lineno"> 1232 </span><span class="spaces">     </span><span class="nottickedoff">lower_map &lt;- liftIO $ newIORef Map.empty</span>
-<span class="lineno"> 1233 </span><span class="spaces">     </span><span class="nottickedoff">flip memoFixTermFun t_top $ \recurse t -&gt;</span>
-<span class="lineno"> 1234 </span><span class="spaces">       </span><span class="nottickedoff">case t of</span>
-<span class="lineno"> 1235 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
-<span class="lineno"> 1236 </span><span class="spaces">         </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
-<span class="lineno"> 1237 </span><span class="spaces">           </span><span class="nottickedoff">mrApplyAll t' args &gt;&gt;= recurse</span>
-<span class="lineno"> 1238 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is an uninstantiated evar, look up or create its lowering as a</span>
-<span class="lineno"> 1239 </span><span class="spaces">         </span><span class="nottickedoff">-- variable, making sure it is applied to evars for its arguments</span>
-<span class="lineno"> 1240 </span><span class="spaces">         </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (evar, clen, args, Nothing)) -&gt;</span>
-<span class="lineno"> 1241 </span><span class="spaces">           </span><span class="nottickedoff">do let (cargs, args') = splitAt clen args</span>
-<span class="lineno"> 1242 </span><span class="spaces">              </span><span class="nottickedoff">let my_panic :: () -&gt; a</span>
-<span class="lineno"> 1243 </span><span class="spaces">                  </span><span class="nottickedoff">my_panic () =</span>
-<span class="lineno"> 1244 </span><span class="spaces">                    </span><span class="nottickedoff">panic &quot;mrSubstLowerEVars&quot;</span>
-<span class="lineno"> 1245 </span><span class="spaces">                    </span><span class="nottickedoff">[&quot;Unexpected evar application: &quot; &lt;&gt; T.pack (show t)]</span>
-<span class="lineno"> 1246 </span><span class="spaces">              </span><span class="nottickedoff">let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs</span>
-<span class="lineno"> 1247 </span><span class="spaces">              </span><span class="nottickedoff">t' &lt;- (Map.lookup evar &lt;$&gt; liftIO (readIORef lower_map)) &gt;&gt;= \case</span>
-<span class="lineno"> 1248 </span><span class="spaces">                </span><span class="nottickedoff">Just (y, cargs_expected) -&gt;</span>
-<span class="lineno"> 1249 </span><span class="spaces">                  </span><span class="nottickedoff">if cargs_ec == cargs_expected then return y else my_panic ()</span>
-<span class="lineno"> 1250 </span><span class="spaces">                </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1251 </span><span class="spaces">                  </span><span class="nottickedoff">do y_tp &lt;- mrPiApplyAll (mrVarType evar) cargs</span>
-<span class="lineno"> 1252 </span><span class="spaces">                     </span><span class="nottickedoff">y &lt;- liftSC2 scFreshGlobal (T.pack $ showMRVar evar) y_tp</span>
-<span class="lineno"> 1253 </span><span class="spaces">                     </span><span class="nottickedoff">liftIO $ modifyIORef' lower_map $</span>
-<span class="lineno"> 1254 </span><span class="spaces">                       </span><span class="nottickedoff">Map.insert evar (y,cargs_ec)</span>
-<span class="lineno"> 1255 </span><span class="spaces">                     </span><span class="nottickedoff">return y</span>
-<span class="lineno"> 1256 </span><span class="spaces">              </span><span class="nottickedoff">mrApplyAll t' args' &gt;&gt;= recurse</span>
-<span class="lineno"> 1257 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
-<span class="lineno"> 1258 </span><span class="spaces">         </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
-<span class="lineno"> 1259 </span>
-<span class="lineno"> 1260 </span>-- | Replace all evars in a 'Term' with their instantiations, returning
-<span class="lineno"> 1261 </span>-- 'Nothing' if we hit an uninstantiated evar
-<span class="lineno"> 1262 </span>mrSubstEVarsStrict :: Term -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1263 </span><span class="decl"><span class="nottickedoff">mrSubstEVarsStrict top_t =</span>
-<span class="lineno"> 1264 </span><span class="spaces">  </span><span class="nottickedoff">runMaybeT $ flip memoFixTermFun top_t $ \recurse t -&gt;</span>
-<span class="lineno"> 1265 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- lift mrVars</span>
-<span class="lineno"> 1266 </span><span class="spaces">     </span><span class="nottickedoff">case t of</span>
-<span class="lineno"> 1267 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
-<span class="lineno"> 1268 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
-<span class="lineno"> 1269 </span><span class="spaces">         </span><span class="nottickedoff">lift (mrApplyAll t' args) &gt;&gt;= recurse</span>
-<span class="lineno"> 1270 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an uninstantiated evar, return Nothing</span>
-<span class="lineno"> 1271 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, _, Nothing)) -&gt;</span>
-<span class="lineno"> 1272 </span><span class="spaces">         </span><span class="nottickedoff">mzero</span>
-<span class="lineno"> 1273 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
-<span class="lineno"> 1274 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
-<span class="lineno"> 1275 </span>
-<span class="lineno"> 1276 </span>-- | Makes 'mrSubstEVarsStrict' be marked as used
-<span class="lineno"> 1277 </span>_mrSubstEVarsStrict :: Term -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1278 </span><span class="decl"><span class="nottickedoff">_mrSubstEVarsStrict = mrSubstEVarsStrict</span></span>
-<span class="lineno"> 1279 </span>
-<span class="lineno"> 1280 </span>-- | Get the 'CoIndHyp' for a pair of 'FunName's, if there is one
-<span class="lineno"> 1281 </span>mrGetCoIndHyp :: FunName -&gt; FunName -&gt; MRM t (Maybe CoIndHyp)
-<span class="lineno"> 1282 </span><span class="decl"><span class="nottickedoff">mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) &lt;$&gt; mrCoIndHyps</span></span>
-<span class="lineno"> 1283 </span>
-<span class="lineno"> 1284 </span>-- | Run a compuation under an additional co-inductive assumption
-<span class="lineno"> 1285 </span>withCoIndHyp :: CoIndHyp -&gt; MRM t a -&gt; MRM t a
-<span class="lineno"> 1286 </span><span class="decl"><span class="nottickedoff">withCoIndHyp hyp m =</span>
-<span class="lineno"> 1287 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPInCtxM 2 (prettyWithCtx emptyMRVarCtx $</span>
-<span class="lineno"> 1288 </span><span class="spaces">                        </span><span class="nottickedoff">prettyPrefix &quot;withCoIndHyp&quot; hyp)</span>
-<span class="lineno"> 1289 </span><span class="spaces">     </span><span class="nottickedoff">hyps' &lt;- Map.insert (coIndHypLHSFun hyp,</span>
-<span class="lineno"> 1290 </span><span class="spaces">                          </span><span class="nottickedoff">coIndHypRHSFun hyp) hyp &lt;$&gt; mrCoIndHyps</span>
-<span class="lineno"> 1291 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriCoIndHyps = hyps' }) m</span></span>
-<span class="lineno"> 1292 </span>
-<span class="lineno"> 1293 </span>-- | Generate fresh evars for the context of a 'CoIndHyp' and
-<span class="lineno"> 1294 </span>-- substitute them into its arguments and right-hand side
-<span class="lineno"> 1295 </span>instantiateCoIndHyp :: CoIndHyp -&gt; MRM t ([Term], [Term])
-<span class="lineno"> 1296 </span><span class="decl"><span class="nottickedoff">instantiateCoIndHyp (CoIndHyp {..}) =</span>
-<span class="lineno"> 1297 </span><span class="spaces">  </span><span class="nottickedoff">do evars &lt;- mrFreshEVars coIndHypCtx</span>
-<span class="lineno"> 1298 </span><span class="spaces">     </span><span class="nottickedoff">lhs &lt;- substTermLike 0 evars coIndHypLHS</span>
-<span class="lineno"> 1299 </span><span class="spaces">     </span><span class="nottickedoff">rhs &lt;- substTermLike 0 evars coIndHypRHS</span>
-<span class="lineno"> 1300 </span><span class="spaces">     </span><span class="nottickedoff">return (lhs, rhs)</span></span>
-<span class="lineno"> 1301 </span>
-<span class="lineno"> 1302 </span>-- | Apply the invariants of a 'CoIndHyp' to their respective arguments,
-<span class="lineno"> 1303 </span>-- yielding @Bool@ conditions, using the constant @True@ value when an
-<span class="lineno"> 1304 </span>-- invariant is absent
-<span class="lineno"> 1305 </span>applyCoIndHypInvariants :: CoIndHyp -&gt; MRM t (Term, Term)
-<span class="lineno"> 1306 </span><span class="decl"><span class="nottickedoff">applyCoIndHypInvariants hyp =</span>
-<span class="lineno"> 1307 </span><span class="spaces">  </span><span class="nottickedoff">let apply_invariant :: Maybe Term -&gt; [Term] -&gt; MRM t Term</span>
-<span class="lineno"> 1308 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant (Just (asLambdaList -&gt; (vars, phi))) args</span>
-<span class="lineno"> 1309 </span><span class="spaces">        </span><span class="nottickedoff">| length vars == length args</span>
-<span class="lineno"> 1310 </span><span class="spaces">          </span><span class="nottickedoff">-- NOTE: applying to a list of arguments == substituting the reverse</span>
-<span class="lineno"> 1311 </span><span class="spaces">          </span><span class="nottickedoff">-- of that list, because the first argument corresponds to the</span>
-<span class="lineno"> 1312 </span><span class="spaces">          </span><span class="nottickedoff">-- greatest deBruijn index</span>
-<span class="lineno"> 1313 </span><span class="spaces">        </span><span class="nottickedoff">= substTerm 0 (reverse args) phi</span>
-<span class="lineno"> 1314 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant (Just _) _ =</span>
-<span class="lineno"> 1315 </span><span class="spaces">        </span><span class="nottickedoff">error &quot;applyCoIndHypInvariants: wrong number of arguments for invariant!&quot;</span>
-<span class="lineno"> 1316 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant Nothing _ = liftSC1 scBool True in</span>
-<span class="lineno"> 1317 </span><span class="spaces">  </span><span class="nottickedoff">do invar1 &lt;- apply_invariant (coIndHypInvariantLHS hyp) (coIndHypLHS hyp)</span>
-<span class="lineno"> 1318 </span><span class="spaces">     </span><span class="nottickedoff">invar2 &lt;- apply_invariant (coIndHypInvariantRHS hyp) (coIndHypRHS hyp)</span>
-<span class="lineno"> 1319 </span><span class="spaces">     </span><span class="nottickedoff">return (invar1, invar2)</span></span>
-<span class="lineno"> 1320 </span>
-<span class="lineno"> 1321 </span>-- | Look up the 'FunAssump' for a 'FunName', if there is one
-<span class="lineno"> 1322 </span>mrGetFunAssump :: FunName -&gt; MRM t (Maybe (FunAssump t))
-<span class="lineno"> 1323 </span><span class="decl"><span class="nottickedoff">mrGetFunAssump nm = lookupFunAssump nm &lt;$&gt; mrRefnset</span></span>
-<span class="lineno"> 1324 </span>
-<span class="lineno"> 1325 </span>-- | Run a computation under the additional assumption that a named function
-<span class="lineno"> 1326 </span>-- applied to a list of arguments refines a given right-hand side, all of which
-<span class="lineno"> 1327 </span>-- are 'Term's that can have the current uvars free
-<span class="lineno"> 1328 </span>withFunAssump :: FunName -&gt; [Term] -&gt; Term -&gt; MRM t a -&gt; MRM t a
-<span class="lineno"> 1329 </span><span class="decl"><span class="nottickedoff">withFunAssump fname args rhs m =</span>
-<span class="lineno"> 1330 </span><span class="spaces">  </span><span class="nottickedoff">do k &lt;- mkCompFunReturn &lt;$&gt; mrFunOutType fname args</span>
-<span class="lineno"> 1331 </span><span class="spaces">     </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;withFunAssump&quot; (FunBind fname args k)</span>
-<span class="lineno"> 1332 </span><span class="spaces">                                     </span><span class="nottickedoff">&quot;|=&quot; rhs</span>
-<span class="lineno"> 1333 </span><span class="spaces">     </span><span class="nottickedoff">ctx &lt;- mrUVars</span>
-<span class="lineno"> 1334 </span><span class="spaces">     </span><span class="nottickedoff">rs &lt;- mrRefnset</span>
-<span class="lineno"> 1335 </span><span class="spaces">     </span><span class="nottickedoff">let assump = FunAssump ctx fname args (RewriteFunAssump rhs) Nothing</span>
-<span class="lineno"> 1336 </span><span class="spaces">     </span><span class="nottickedoff">let rs' = addFunAssump assump rs</span>
-<span class="lineno"> 1337 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriRefnset = rs' }) m</span></span>
-<span class="lineno"> 1338 </span>
-<span class="lineno"> 1339 </span>-- | Get the invariant hint associated with a function name, by unfolding the
-<span class="lineno"> 1340 </span>-- name and checking if its body has the form
+<span class="lineno"> 1084 </span>
+<span class="lineno"> 1085 </span>-- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
+<span class="lineno"> 1086 </span>-- free uvars
+<span class="lineno"> 1087 </span>mrFreshVarCl :: LocalName -&gt; Term -&gt; MRM t MRVar
+<span class="lineno"> 1088 </span><span class="decl"><span class="nottickedoff">mrFreshVarCl nm tp = MRVar &lt;$&gt; liftSC2 scFreshEC nm tp</span></span>
+<span class="lineno"> 1089 </span>
+<span class="lineno"> 1090 </span>-- | Make a fresh 'MRVar' of type @(u1:tp1) -&gt; ... (un:tpn) -&gt; tp@, where the
+<span class="lineno"> 1091 </span>-- @ui@ are all the current uvars
+<span class="lineno"> 1092 </span>mrFreshVar :: LocalName -&gt; Term -&gt; MRM t MRVar
+<span class="lineno"> 1093 </span><span class="decl"><span class="nottickedoff">mrFreshVar nm tp = piUVarsM tp &gt;&gt;= mrFreshVarCl nm</span></span>
+<span class="lineno"> 1094 </span>
+<span class="lineno"> 1095 </span>-- | Set the info associated with an 'MRVar', assuming it has not been set
+<span class="lineno"> 1096 </span>mrSetVarInfo :: MRVar -&gt; MRVarInfo -&gt; MRM t ()
+<span class="lineno"> 1097 </span><span class="decl"><span class="nottickedoff">mrSetVarInfo var info =</span>
+<span class="lineno"> 1098 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM 3 (prettyWithCtx emptyMRVarCtx $</span>
+<span class="lineno"> 1099 </span><span class="spaces">                     </span><span class="nottickedoff">prettyPrefixSep &quot;mrSetVarInfo&quot; var &quot;=&quot; info) &gt;&gt;</span>
+<span class="lineno"> 1100 </span><span class="spaces">  </span><span class="nottickedoff">(modify $ \st -&gt;</span>
+<span class="lineno"> 1101 </span><span class="spaces">   </span><span class="nottickedoff">st { mrsVars =</span>
+<span class="lineno"> 1102 </span><span class="spaces">          </span><span class="nottickedoff">Map.alter (\case</span>
+<span class="lineno"> 1103 </span><span class="spaces">                        </span><span class="nottickedoff">Just _ -&gt; error &quot;mrSetVarInfo&quot;</span>
+<span class="lineno"> 1104 </span><span class="spaces">                        </span><span class="nottickedoff">Nothing -&gt; Just info)</span>
+<span class="lineno"> 1105 </span><span class="spaces">          </span><span class="nottickedoff">var (mrsVars st) })</span></span>
+<span class="lineno"> 1106 </span>
+<span class="lineno"> 1107 </span>-- | Make a fresh existential variable of the given type, abstracting out all
+<span class="lineno"> 1108 </span>-- the current uvars and returning the new evar applied to all current uvars
+<span class="lineno"> 1109 </span>mrFreshEVar :: LocalName -&gt; Type -&gt; MRM t Term
+<span class="lineno"> 1110 </span><span class="decl"><span class="nottickedoff">mrFreshEVar nm (Type tp) =</span>
+<span class="lineno"> 1111 </span><span class="spaces">  </span><span class="nottickedoff">do var &lt;- mrFreshVar nm tp</span>
+<span class="lineno"> 1112 </span><span class="spaces">     </span><span class="nottickedoff">ctx_len &lt;- mrVarCtxLength &lt;$&gt; mrUVars</span>
+<span class="lineno"> 1113 </span><span class="spaces">     </span><span class="nottickedoff">mrSetVarInfo var (EVarInfo ctx_len Nothing)</span>
+<span class="lineno"> 1114 </span><span class="spaces">     </span><span class="nottickedoff">mrVarTerm var</span></span>
+<span class="lineno"> 1115 </span>
+<span class="lineno"> 1116 </span>-- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
+<span class="lineno"> 1117 </span>-- Return the new evars all applied to the current uvars.
+<span class="lineno"> 1118 </span>mrFreshEVars :: MRVarCtx -&gt; MRM t [Term]
+<span class="lineno"> 1119 </span><span class="decl"><span class="nottickedoff">mrFreshEVars = helper [] . mrVarCtxOuterToInner where</span>
+<span class="lineno"> 1120 </span><span class="spaces">  </span><span class="nottickedoff">-- Return fresh evars for the suffix of a context of variable names and types,</span>
+<span class="lineno"> 1121 </span><span class="spaces">  </span><span class="nottickedoff">-- where the supplied Terms are evars that have already been generated for the</span>
+<span class="lineno"> 1122 </span><span class="spaces">  </span><span class="nottickedoff">-- earlier part of the context, and so must be substituted into the remaining</span>
+<span class="lineno"> 1123 </span><span class="spaces">  </span><span class="nottickedoff">-- types in the context. Since we want to make fresh evars for the oldest</span>
+<span class="lineno"> 1124 </span><span class="spaces">  </span><span class="nottickedoff">-- variables first, the second argument must be in outer-to-inner order.</span>
+<span class="lineno"> 1125 </span><span class="spaces">  </span><span class="nottickedoff">helper :: [Term] -&gt; [(LocalName,Term)] -&gt; MRM t [Term]</span>
+<span class="lineno"> 1126 </span><span class="spaces">  </span><span class="nottickedoff">helper evars [] = return evars</span>
+<span class="lineno"> 1127 </span><span class="spaces">  </span><span class="nottickedoff">helper evars ((nm,tp):ctx) =</span>
+<span class="lineno"> 1128 </span><span class="spaces">    </span><span class="nottickedoff">do evar &lt;- substTerm 0 evars tp &gt;&gt;= mrFreshEVar nm . Type</span>
+<span class="lineno"> 1129 </span><span class="spaces">       </span><span class="nottickedoff">helper (evar:evars) ctx</span></span>
+<span class="lineno"> 1130 </span>
+<span class="lineno"> 1131 </span>-- | Set the value of an evar to a closed term
+<span class="lineno"> 1132 </span>mrSetEVarClosed :: MRVar -&gt; Term -&gt; MRM t ()
+<span class="lineno"> 1133 </span><span class="decl"><span class="nottickedoff">mrSetEVarClosed var val =</span>
+<span class="lineno"> 1134 </span><span class="spaces">  </span><span class="nottickedoff">do val_tp &lt;- mrTypeOf val</span>
+<span class="lineno"> 1135 </span><span class="spaces">     </span><span class="nottickedoff">-- NOTE: need to instantiate any evars in the type of var, to ensure the</span>
+<span class="lineno"> 1136 </span><span class="spaces">     </span><span class="nottickedoff">-- following subtyping check will succeed</span>
+<span class="lineno"> 1137 </span><span class="spaces">     </span><span class="nottickedoff">var_tp &lt;- mrSubstEVars $ mrVarType var</span>
+<span class="lineno"> 1138 </span><span class="spaces">     </span><span class="nottickedoff">-- FIXME: catch subtyping errors and report them as being evar failures</span>
+<span class="lineno"> 1139 </span><span class="spaces">     </span><span class="nottickedoff">eith_err &lt;-</span>
+<span class="lineno"> 1140 </span><span class="spaces">       </span><span class="nottickedoff">liftSC2 (runTCM $ checkSubtype (SCTypedTerm val val_tp) var_tp) Nothing []</span>
+<span class="lineno"> 1141 </span><span class="spaces">     </span><span class="nottickedoff">case eith_err of</span>
+<span class="lineno"> 1142 </span><span class="spaces">       </span><span class="nottickedoff">Left _ -&gt;</span>
+<span class="lineno"> 1143 </span><span class="spaces">         </span><span class="nottickedoff">error (&quot;mrSetEVarClosed: incorrect instantiation for evar &quot; ++</span>
+<span class="lineno"> 1144 </span><span class="spaces">                </span><span class="nottickedoff">showMRVar var ++</span>
+<span class="lineno"> 1145 </span><span class="spaces">                </span><span class="nottickedoff">&quot;\nexpected type:\n&quot; ++ showTerm var_tp ++</span>
+<span class="lineno"> 1146 </span><span class="spaces">                </span><span class="nottickedoff">&quot;\nactual type:\n&quot; ++ showTerm val_tp)</span>
+<span class="lineno"> 1147 </span><span class="spaces">       </span><span class="nottickedoff">Right _ -&gt; return ()</span>
+<span class="lineno"> 1148 </span><span class="spaces">     </span><span class="nottickedoff">modify $ \st -&gt;</span>
+<span class="lineno"> 1149 </span><span class="spaces">       </span><span class="nottickedoff">st { mrsVars =</span>
+<span class="lineno"> 1150 </span><span class="spaces">            </span><span class="nottickedoff">Map.alter</span>
+<span class="lineno"> 1151 </span><span class="spaces">            </span><span class="nottickedoff">(\case</span>
+<span class="lineno"> 1152 </span><span class="spaces">                </span><span class="nottickedoff">Just (EVarInfo clen Nothing) -&gt; Just $ EVarInfo clen (Just val)</span>
+<span class="lineno"> 1153 </span><span class="spaces">                </span><span class="nottickedoff">Just (EVarInfo _ (Just _)) -&gt;</span>
+<span class="lineno"> 1154 </span><span class="spaces">                  </span><span class="nottickedoff">error &quot;Setting existential variable: variable already set!&quot;</span>
+<span class="lineno"> 1155 </span><span class="spaces">                </span><span class="nottickedoff">_ -&gt; error &quot;Setting existential variable: not an evar!&quot;)</span>
+<span class="lineno"> 1156 </span><span class="spaces">            </span><span class="nottickedoff">var (mrsVars st) }</span></span>
+<span class="lineno"> 1157 </span>
+<span class="lineno"> 1158 </span>
+<span class="lineno"> 1159 </span>-- | Try to set the value of the application @X e1 .. en@ of evar @X@ to an
+<span class="lineno"> 1160 </span>-- expression @e@ by trying to set @X@ to @\ x1 ... xn -&gt; e@. This only works if
+<span class="lineno"> 1161 </span>-- each free uvar @xi@ in @e@ is one of the arguments @ej@ to @X@ (though it
+<span class="lineno"> 1162 </span>-- need not be the case that @i=j@). Return whether this succeeded.
+<span class="lineno"> 1163 </span>mrTrySetAppliedEVar :: MRVar -&gt; [Term] -&gt; Term -&gt; MRM t Bool
+<span class="lineno"> 1164 </span><span class="decl"><span class="nottickedoff">mrTrySetAppliedEVar evar args t =</span>
+<span class="lineno"> 1165 </span><span class="spaces">  </span><span class="nottickedoff">-- Get the first N argument variables of the type of evar, where N is the</span>
+<span class="lineno"> 1166 </span><span class="spaces">  </span><span class="nottickedoff">-- length of args; note that evar can have more than N arguments if t is a</span>
+<span class="lineno"> 1167 </span><span class="spaces">  </span><span class="nottickedoff">-- higher-order term</span>
+<span class="lineno"> 1168 </span><span class="spaces">  </span><span class="nottickedoff">let (take (length args) -&gt; evar_vars, _) = asPiList (mrVarType evar) in</span>
+<span class="lineno"> 1169 </span><span class="spaces">  </span><span class="nottickedoff">-- Get all the free variables of t</span>
+<span class="lineno"> 1170 </span><span class="spaces">  </span><span class="nottickedoff">let free_vars = bitSetElems (looseVars t) in</span>
+<span class="lineno"> 1171 </span><span class="spaces">  </span><span class="nottickedoff">-- For each free var of t, find an arg equal to it</span>
+<span class="lineno"> 1172 </span><span class="spaces">  </span><span class="nottickedoff">case mapM (\i -&gt; findIndex (\case</span>
+<span class="lineno"> 1173 </span><span class="spaces">                                 </span><span class="nottickedoff">(asLocalVar -&gt; Just j) -&gt; i == j</span>
+<span class="lineno"> 1174 </span><span class="spaces">                                 </span><span class="nottickedoff">_ -&gt; False) args) free_vars of</span>
+<span class="lineno"> 1175 </span><span class="spaces">    </span><span class="nottickedoff">Just fv_arg_ixs</span>
+<span class="lineno"> 1176 </span><span class="spaces">      </span><span class="nottickedoff">-- Check to make sure we have the right number of args</span>
+<span class="lineno"> 1177 </span><span class="spaces">      </span><span class="nottickedoff">| length args == length evar_vars -&gt; do</span>
+<span class="lineno"> 1178 </span><span class="spaces">          </span><span class="nottickedoff">-- Build a list of the input vars x1 ... xn as terms, noting that the</span>
+<span class="lineno"> 1179 </span><span class="spaces">          </span><span class="nottickedoff">-- first variable is the least recently bound and so has the highest</span>
+<span class="lineno"> 1180 </span><span class="spaces">          </span><span class="nottickedoff">-- deBruijn index</span>
+<span class="lineno"> 1181 </span><span class="spaces">          </span><span class="nottickedoff">let arg_ixs = reverse [0 .. length args - 1]</span>
+<span class="lineno"> 1182 </span><span class="spaces">          </span><span class="nottickedoff">arg_vars &lt;- mapM (liftSC1 scLocalVar) arg_ixs</span>
+<span class="lineno"> 1183 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1184 </span><span class="spaces">          </span><span class="nottickedoff">-- For each free variable of t, we substitute the corresponding</span>
+<span class="lineno"> 1185 </span><span class="spaces">          </span><span class="nottickedoff">-- variable xi, substituting error terms for the variables that are</span>
+<span class="lineno"> 1186 </span><span class="spaces">          </span><span class="nottickedoff">-- not free (since we have nothing else to substitute for them)</span>
+<span class="lineno"> 1187 </span><span class="spaces">          </span><span class="nottickedoff">let var_map = zip free_vars fv_arg_ixs</span>
+<span class="lineno"> 1188 </span><span class="spaces">          </span><span class="nottickedoff">let subst_vars = if free_vars == [] then [] else</span>
+<span class="lineno"> 1189 </span><span class="spaces">                             </span><span class="nottickedoff">[0 .. maximum free_vars]</span>
+<span class="lineno"> 1190 </span><span class="spaces">          </span><span class="nottickedoff">let subst = flip map subst_vars $ \i -&gt;</span>
+<span class="lineno"> 1191 </span><span class="spaces">                </span><span class="nottickedoff">maybe (error</span>
+<span class="lineno"> 1192 </span><span class="spaces">                       </span><span class="nottickedoff">(&quot;mrTrySetAppliedEVar: unexpected free variable &quot;</span>
+<span class="lineno"> 1193 </span><span class="spaces">                        </span><span class="nottickedoff">++ show i ++ &quot; in term\n&quot; ++ showTerm t))</span>
+<span class="lineno"> 1194 </span><span class="spaces">                </span><span class="nottickedoff">(arg_vars !!) (lookup i var_map)</span>
+<span class="lineno"> 1195 </span><span class="spaces">          </span><span class="nottickedoff">body &lt;- substTerm 0 subst t</span>
+<span class="lineno"> 1196 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1197 </span><span class="spaces">          </span><span class="nottickedoff">-- Now instantiate evar to \x1 ... xn -&gt; body</span>
+<span class="lineno"> 1198 </span><span class="spaces">          </span><span class="nottickedoff">evar_inst &lt;- liftSC2 scLambdaList evar_vars body</span>
+<span class="lineno"> 1199 </span><span class="spaces">          </span><span class="nottickedoff">mrSetEVarClosed evar evar_inst</span>
+<span class="lineno"> 1200 </span><span class="spaces">          </span><span class="nottickedoff">return True</span>
+<span class="lineno"> 1201 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1202 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return False</span></span>
+<span class="lineno"> 1203 </span>
+<span class="lineno"> 1204 </span>
+<span class="lineno"> 1205 </span>-- | Replace all evars in a 'Term' with their instantiations when they have one
+<span class="lineno"> 1206 </span>mrSubstEVars :: Term -&gt; MRM t Term
+<span class="lineno"> 1207 </span><span class="decl"><span class="nottickedoff">mrSubstEVars = memoFixTermFun $ \recurse t -&gt;</span>
+<span class="lineno"> 1208 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- mrVars</span>
+<span class="lineno"> 1209 </span><span class="spaces">     </span><span class="nottickedoff">case t of</span>
+<span class="lineno"> 1210 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
+<span class="lineno"> 1211 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
+<span class="lineno"> 1212 </span><span class="spaces">         </span><span class="nottickedoff">mrApplyAll t' args &gt;&gt;= recurse</span>
+<span class="lineno"> 1213 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
+<span class="lineno"> 1214 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
+<span class="lineno"> 1215 </span>
+<span class="lineno"> 1216 </span>-- | Replace all evars in a 'Term' with their instantiations when they have one
+<span class="lineno"> 1217 </span>-- and \&quot;lower\&quot; those that do not. Lowering an evar in this context means
+<span class="lineno"> 1218 </span>-- replacing each occurrence @X x1 .. xn@ of an evar @X@ applied to its context
+<span class="lineno"> 1219 </span>-- of uvars with a fresh 'ExtCns' variable @Y@. This must be done after
+<span class="lineno"> 1220 </span>-- 'instantiateUVarsM' has replaced all uvars with fresh 'ExtCns' variables,
+<span class="lineno"> 1221 </span>-- which ensures that @X x1 .. xn@ is actually a closed, top-level term since
+<span class="lineno"> 1222 </span>-- each @xi@ is now an 'ExtCns'. This is necessary so @X x1 .. xn@ can be
+<span class="lineno"> 1223 </span>-- replaced by an 'ExtCns' @Y@, which is always closed. The idea of lowering is
+<span class="lineno"> 1224 </span>-- that @X@ should always occur applied to these same values, so really we can
+<span class="lineno"> 1225 </span>-- just treat the entire expression @X x1 .. xn@ as a single unknown value,
+<span class="lineno"> 1226 </span>-- rather than worrying about how @X@ depends on its inputs.
+<span class="lineno"> 1227 </span>mrSubstLowerEVars :: Term -&gt; MRM t Term
+<span class="lineno"> 1228 </span><span class="decl"><span class="nottickedoff">mrSubstLowerEVars t_top =</span>
+<span class="lineno"> 1229 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- mrVars</span>
+<span class="lineno"> 1230 </span><span class="spaces">     </span><span class="nottickedoff">lower_map &lt;- liftIO $ newIORef Map.empty</span>
+<span class="lineno"> 1231 </span><span class="spaces">     </span><span class="nottickedoff">flip memoFixTermFun t_top $ \recurse t -&gt;</span>
+<span class="lineno"> 1232 </span><span class="spaces">       </span><span class="nottickedoff">case t of</span>
+<span class="lineno"> 1233 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
+<span class="lineno"> 1234 </span><span class="spaces">         </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
+<span class="lineno"> 1235 </span><span class="spaces">           </span><span class="nottickedoff">mrApplyAll t' args &gt;&gt;= recurse</span>
+<span class="lineno"> 1236 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is an uninstantiated evar, look up or create its lowering as a</span>
+<span class="lineno"> 1237 </span><span class="spaces">         </span><span class="nottickedoff">-- variable, making sure it is applied to evars for its arguments</span>
+<span class="lineno"> 1238 </span><span class="spaces">         </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (evar, clen, args, Nothing)) -&gt;</span>
+<span class="lineno"> 1239 </span><span class="spaces">           </span><span class="nottickedoff">do let (cargs, args') = splitAt clen args</span>
+<span class="lineno"> 1240 </span><span class="spaces">              </span><span class="nottickedoff">let my_panic :: () -&gt; a</span>
+<span class="lineno"> 1241 </span><span class="spaces">                  </span><span class="nottickedoff">my_panic () =</span>
+<span class="lineno"> 1242 </span><span class="spaces">                    </span><span class="nottickedoff">panic &quot;mrSubstLowerEVars&quot;</span>
+<span class="lineno"> 1243 </span><span class="spaces">                    </span><span class="nottickedoff">[&quot;Unexpected evar application: &quot; &lt;&gt; T.pack (show t)]</span>
+<span class="lineno"> 1244 </span><span class="spaces">              </span><span class="nottickedoff">let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs</span>
+<span class="lineno"> 1245 </span><span class="spaces">              </span><span class="nottickedoff">t' &lt;- (Map.lookup evar &lt;$&gt; liftIO (readIORef lower_map)) &gt;&gt;= \case</span>
+<span class="lineno"> 1246 </span><span class="spaces">                </span><span class="nottickedoff">Just (y, cargs_expected) -&gt;</span>
+<span class="lineno"> 1247 </span><span class="spaces">                  </span><span class="nottickedoff">if cargs_ec == cargs_expected then return y else my_panic ()</span>
+<span class="lineno"> 1248 </span><span class="spaces">                </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1249 </span><span class="spaces">                  </span><span class="nottickedoff">do y_tp &lt;- mrPiApplyAll (mrVarType evar) cargs</span>
+<span class="lineno"> 1250 </span><span class="spaces">                     </span><span class="nottickedoff">y &lt;- liftSC2 scFreshGlobal (T.pack $ showMRVar evar) y_tp</span>
+<span class="lineno"> 1251 </span><span class="spaces">                     </span><span class="nottickedoff">liftIO $ modifyIORef' lower_map $</span>
+<span class="lineno"> 1252 </span><span class="spaces">                       </span><span class="nottickedoff">Map.insert evar (y,cargs_ec)</span>
+<span class="lineno"> 1253 </span><span class="spaces">                     </span><span class="nottickedoff">return y</span>
+<span class="lineno"> 1254 </span><span class="spaces">              </span><span class="nottickedoff">mrApplyAll t' args' &gt;&gt;= recurse</span>
+<span class="lineno"> 1255 </span><span class="spaces">         </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
+<span class="lineno"> 1256 </span><span class="spaces">         </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
+<span class="lineno"> 1257 </span>
+<span class="lineno"> 1258 </span>-- | Replace all evars in a 'Term' with their instantiations, returning
+<span class="lineno"> 1259 </span>-- 'Nothing' if we hit an uninstantiated evar
+<span class="lineno"> 1260 </span>mrSubstEVarsStrict :: Term -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1261 </span><span class="decl"><span class="nottickedoff">mrSubstEVarsStrict top_t =</span>
+<span class="lineno"> 1262 </span><span class="spaces">  </span><span class="nottickedoff">runMaybeT $ flip memoFixTermFun top_t $ \recurse t -&gt;</span>
+<span class="lineno"> 1263 </span><span class="spaces">  </span><span class="nottickedoff">do var_map &lt;- lift mrVars</span>
+<span class="lineno"> 1264 </span><span class="spaces">     </span><span class="nottickedoff">case t of</span>
+<span class="lineno"> 1265 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an instantiated evar, recurse on its instantiation</span>
+<span class="lineno"> 1266 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, args, Just t')) -&gt;</span>
+<span class="lineno"> 1267 </span><span class="spaces">         </span><span class="nottickedoff">lift (mrApplyAll t' args) &gt;&gt;= recurse</span>
+<span class="lineno"> 1268 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is an uninstantiated evar, return Nothing</span>
+<span class="lineno"> 1269 </span><span class="spaces">       </span><span class="nottickedoff">(asEVarApp var_map -&gt; Just (_, _, _, Nothing)) -&gt;</span>
+<span class="lineno"> 1270 </span><span class="spaces">         </span><span class="nottickedoff">mzero</span>
+<span class="lineno"> 1271 </span><span class="spaces">       </span><span class="nottickedoff">-- If t is anything else, recurse on its immediate subterms</span>
+<span class="lineno"> 1272 </span><span class="spaces">       </span><span class="nottickedoff">_ -&gt; traverseSubterms recurse t</span></span>
+<span class="lineno"> 1273 </span>
+<span class="lineno"> 1274 </span>-- | Makes 'mrSubstEVarsStrict' be marked as used
+<span class="lineno"> 1275 </span>_mrSubstEVarsStrict :: Term -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1276 </span><span class="decl"><span class="nottickedoff">_mrSubstEVarsStrict = mrSubstEVarsStrict</span></span>
+<span class="lineno"> 1277 </span>
+<span class="lineno"> 1278 </span>-- | Get the 'CoIndHyp' for a pair of 'FunName's, if there is one
+<span class="lineno"> 1279 </span>mrGetCoIndHyp :: FunName -&gt; FunName -&gt; MRM t (Maybe CoIndHyp)
+<span class="lineno"> 1280 </span><span class="decl"><span class="nottickedoff">mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) &lt;$&gt; mrCoIndHyps</span></span>
+<span class="lineno"> 1281 </span>
+<span class="lineno"> 1282 </span>-- | Run a compuation under an additional co-inductive assumption
+<span class="lineno"> 1283 </span>withCoIndHyp :: CoIndHyp -&gt; MRM t a -&gt; MRM t a
+<span class="lineno"> 1284 </span><span class="decl"><span class="nottickedoff">withCoIndHyp hyp m =</span>
+<span class="lineno"> 1285 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPInCtxM 2 (prettyWithCtx emptyMRVarCtx $</span>
+<span class="lineno"> 1286 </span><span class="spaces">                        </span><span class="nottickedoff">prettyPrefix &quot;withCoIndHyp&quot; hyp)</span>
+<span class="lineno"> 1287 </span><span class="spaces">     </span><span class="nottickedoff">hyps' &lt;- Map.insert (coIndHypLHSFun hyp,</span>
+<span class="lineno"> 1288 </span><span class="spaces">                          </span><span class="nottickedoff">coIndHypRHSFun hyp) hyp &lt;$&gt; mrCoIndHyps</span>
+<span class="lineno"> 1289 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriCoIndHyps = hyps' }) m</span></span>
+<span class="lineno"> 1290 </span>
+<span class="lineno"> 1291 </span>-- | Generate fresh evars for the context of a 'CoIndHyp' and
+<span class="lineno"> 1292 </span>-- substitute them into its arguments and right-hand side
+<span class="lineno"> 1293 </span>instantiateCoIndHyp :: CoIndHyp -&gt; MRM t ([Term], [Term])
+<span class="lineno"> 1294 </span><span class="decl"><span class="nottickedoff">instantiateCoIndHyp (CoIndHyp {..}) =</span>
+<span class="lineno"> 1295 </span><span class="spaces">  </span><span class="nottickedoff">do evars &lt;- mrFreshEVars coIndHypCtx</span>
+<span class="lineno"> 1296 </span><span class="spaces">     </span><span class="nottickedoff">lhs &lt;- substTermLike 0 evars coIndHypLHS</span>
+<span class="lineno"> 1297 </span><span class="spaces">     </span><span class="nottickedoff">rhs &lt;- substTermLike 0 evars coIndHypRHS</span>
+<span class="lineno"> 1298 </span><span class="spaces">     </span><span class="nottickedoff">return (lhs, rhs)</span></span>
+<span class="lineno"> 1299 </span>
+<span class="lineno"> 1300 </span>-- | Apply the invariants of a 'CoIndHyp' to their respective arguments,
+<span class="lineno"> 1301 </span>-- yielding @Bool@ conditions, using the constant @True@ value when an
+<span class="lineno"> 1302 </span>-- invariant is absent
+<span class="lineno"> 1303 </span>applyCoIndHypInvariants :: CoIndHyp -&gt; MRM t (Term, Term)
+<span class="lineno"> 1304 </span><span class="decl"><span class="nottickedoff">applyCoIndHypInvariants hyp =</span>
+<span class="lineno"> 1305 </span><span class="spaces">  </span><span class="nottickedoff">let apply_invariant :: Maybe Term -&gt; [Term] -&gt; MRM t Term</span>
+<span class="lineno"> 1306 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant (Just (asLambdaList -&gt; (vars, phi))) args</span>
+<span class="lineno"> 1307 </span><span class="spaces">        </span><span class="nottickedoff">| length vars == length args</span>
+<span class="lineno"> 1308 </span><span class="spaces">          </span><span class="nottickedoff">-- NOTE: applying to a list of arguments == substituting the reverse</span>
+<span class="lineno"> 1309 </span><span class="spaces">          </span><span class="nottickedoff">-- of that list, because the first argument corresponds to the</span>
+<span class="lineno"> 1310 </span><span class="spaces">          </span><span class="nottickedoff">-- greatest deBruijn index</span>
+<span class="lineno"> 1311 </span><span class="spaces">        </span><span class="nottickedoff">= substTerm 0 (reverse args) phi</span>
+<span class="lineno"> 1312 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant (Just _) _ =</span>
+<span class="lineno"> 1313 </span><span class="spaces">        </span><span class="nottickedoff">error &quot;applyCoIndHypInvariants: wrong number of arguments for invariant!&quot;</span>
+<span class="lineno"> 1314 </span><span class="spaces">      </span><span class="nottickedoff">apply_invariant Nothing _ = liftSC1 scBool True in</span>
+<span class="lineno"> 1315 </span><span class="spaces">  </span><span class="nottickedoff">do invar1 &lt;- apply_invariant (coIndHypInvariantLHS hyp) (coIndHypLHS hyp)</span>
+<span class="lineno"> 1316 </span><span class="spaces">     </span><span class="nottickedoff">invar2 &lt;- apply_invariant (coIndHypInvariantRHS hyp) (coIndHypRHS hyp)</span>
+<span class="lineno"> 1317 </span><span class="spaces">     </span><span class="nottickedoff">return (invar1, invar2)</span></span>
+<span class="lineno"> 1318 </span>
+<span class="lineno"> 1319 </span>-- | Look up the 'FunAssump' for a 'FunName', if there is one
+<span class="lineno"> 1320 </span>mrGetFunAssump :: FunName -&gt; MRM t (Maybe (FunAssump t))
+<span class="lineno"> 1321 </span><span class="decl"><span class="nottickedoff">mrGetFunAssump nm = lookupFunAssump nm &lt;$&gt; mrRefnset</span></span>
+<span class="lineno"> 1322 </span>
+<span class="lineno"> 1323 </span>-- | Run a computation under the additional assumption that a named function
+<span class="lineno"> 1324 </span>-- applied to a list of arguments refines a given right-hand side, all of which
+<span class="lineno"> 1325 </span>-- are 'Term's that can have the current uvars free
+<span class="lineno"> 1326 </span>withFunAssump :: FunName -&gt; [Term] -&gt; Term -&gt; MRM t a -&gt; MRM t a
+<span class="lineno"> 1327 </span><span class="decl"><span class="nottickedoff">withFunAssump fname args rhs m =</span>
+<span class="lineno"> 1328 </span><span class="spaces">  </span><span class="nottickedoff">do k &lt;- mkCompFunReturn &lt;$&gt; mrFunOutType fname args</span>
+<span class="lineno"> 1329 </span><span class="spaces">     </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;withFunAssump&quot; (FunBind fname args k)</span>
+<span class="lineno"> 1330 </span><span class="spaces">                                     </span><span class="nottickedoff">&quot;|=&quot; rhs</span>
+<span class="lineno"> 1331 </span><span class="spaces">     </span><span class="nottickedoff">ctx &lt;- mrUVars</span>
+<span class="lineno"> 1332 </span><span class="spaces">     </span><span class="nottickedoff">rs &lt;- mrRefnset</span>
+<span class="lineno"> 1333 </span><span class="spaces">     </span><span class="nottickedoff">let assump = FunAssump ctx fname args (RewriteFunAssump rhs) Nothing</span>
+<span class="lineno"> 1334 </span><span class="spaces">     </span><span class="nottickedoff">let rs' = addFunAssump assump rs</span>
+<span class="lineno"> 1335 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriRefnset = rs' }) m</span></span>
+<span class="lineno"> 1336 </span>
+<span class="lineno"> 1337 </span>-- | Get the invariant hint associated with a function name, by unfolding the
+<span class="lineno"> 1338 </span>-- name and checking if its body has the form
+<span class="lineno"> 1339 </span>--
+<span class="lineno"> 1340 </span>-- &gt; \ x1 ... xn -&gt; invariantHint a phi m
 <span class="lineno"> 1341 </span>--
-<span class="lineno"> 1342 </span>-- &gt; \ x1 ... xn -&gt; invariantHint a phi m
-<span class="lineno"> 1343 </span>--
-<span class="lineno"> 1344 </span>-- If so, return @\ x1 ... xn -&gt; phi@ as a term with the @xi@ variables free.
-<span class="lineno"> 1345 </span>-- Otherwise, return 'Nothing'. Note that this function will also look past
-<span class="lineno"> 1346 </span>-- any initial @bindS ... (assertFiniteS ...)@ applications.
-<span class="lineno"> 1347 </span>mrGetInvariant :: FunName -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1348 </span><span class="decl"><span class="nottickedoff">mrGetInvariant nm =</span>
-<span class="lineno"> 1349 </span><span class="spaces">  </span><span class="nottickedoff">mrFunNameBody nm &gt;&gt;= \case</span>
-<span class="lineno"> 1350 </span><span class="spaces">    </span><span class="nottickedoff">Just body -&gt; mrGetInvariantBody body</span>
-<span class="lineno"> 1351 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return Nothing</span></span>
-<span class="lineno"> 1352 </span>
-<span class="lineno"> 1353 </span>-- | The main loop of 'mrGetInvariant', which operates on a function body
-<span class="lineno"> 1354 </span>mrGetInvariantBody :: Term -&gt; MRM t (Maybe Term)
-<span class="lineno"> 1355 </span><span class="decl"><span class="nottickedoff">mrGetInvariantBody tm = case asApplyAll tm of</span>
-<span class="lineno"> 1356 </span><span class="spaces">  </span><span class="nottickedoff">-- go inside any top-level lambdas</span>
-<span class="lineno"> 1357 </span><span class="spaces">  </span><span class="nottickedoff">(asLambda -&gt; Just (nm, tp, body), []) -&gt;</span>
-<span class="lineno"> 1358 </span><span class="spaces">    </span><span class="nottickedoff">do body' &lt;- liftSC1 betaNormalize body</span>
-<span class="lineno"> 1359 </span><span class="spaces">       </span><span class="nottickedoff">mb_phi &lt;- mrGetInvariantBody body'</span>
-<span class="lineno"> 1360 </span><span class="spaces">       </span><span class="nottickedoff">liftSC3 scLambda nm tp `mapM` mb_phi</span>
-<span class="lineno"> 1361 </span><span class="spaces">  </span><span class="nottickedoff">-- always beta-reduce</span>
-<span class="lineno"> 1362 </span><span class="spaces">  </span><span class="nottickedoff">(f@(asLambda -&gt; Just _), args) -&gt;</span>
-<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="nottickedoff">do tm' &lt;- mrApplyAll f args</span>
-<span class="lineno"> 1364 </span><span class="spaces">       </span><span class="nottickedoff">mrGetInvariantBody tm'</span>
-<span class="lineno"> 1365 </span><span class="spaces">  </span><span class="nottickedoff">-- go inside any top-level applications of of bindS ... (assertFiniteS ...)</span>
-<span class="lineno"> 1366 </span><span class="spaces">  </span><span class="nottickedoff">(isGlobalDef &quot;SpecM.bindS&quot; -&gt; Just (),</span>
-<span class="lineno"> 1367 </span><span class="spaces">   </span><span class="nottickedoff">[_, _, _,</span>
-<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="nottickedoff">(asApplyAll -&gt; (isGlobalDef &quot;CryptolM.assertFiniteS&quot; -&gt; Just (),</span>
-<span class="lineno"> 1369 </span><span class="spaces">                    </span><span class="nottickedoff">[_, (asGlobalApply &quot;Cryptol.TCNum&quot; -&gt; Just [_])])),</span>
-<span class="lineno"> 1370 </span><span class="spaces">    </span><span class="nottickedoff">k]) -&gt;</span>
-<span class="lineno"> 1371 </span><span class="spaces">    </span><span class="nottickedoff">do pf &lt;- liftSC1 scGlobalDef &quot;Prelude.TrueI&quot;</span>
-<span class="lineno"> 1372 </span><span class="spaces">       </span><span class="nottickedoff">body &lt;- mrApplyAll k [pf]</span>
-<span class="lineno"> 1373 </span><span class="spaces">       </span><span class="nottickedoff">mrGetInvariantBody body</span>
-<span class="lineno"> 1374 </span><span class="spaces">  </span><span class="nottickedoff">-- otherwise, return Just iff there is a top-level invariant hint</span>
-<span class="lineno"> 1375 </span><span class="spaces">  </span><span class="nottickedoff">(isGlobalDef &quot;SpecM.invariantHint&quot; -&gt; Just (),</span>
-<span class="lineno"> 1376 </span><span class="spaces">   </span><span class="nottickedoff">[_, phi, _]) -&gt; return $ Just phi</span>
-<span class="lineno"> 1377 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; return Nothing</span></span>
-<span class="lineno"> 1378 </span>
-<span class="lineno"> 1379 </span>-- | Add an assumption of type @Bool@ to the current path condition while
-<span class="lineno"> 1380 </span>-- executing a sub-computation
-<span class="lineno"> 1381 </span>withAssumption :: Term -&gt; MRM t a -&gt; MRM t a
-<span class="lineno"> 1382 </span><span class="decl"><span class="nottickedoff">withAssumption phi m =</span>
-<span class="lineno"> 1383 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefix 1 &quot;withAssumption&quot; phi</span>
-<span class="lineno"> 1384 </span><span class="spaces">     </span><span class="nottickedoff">assumps &lt;- mrAssumptions</span>
-<span class="lineno"> 1385 </span><span class="spaces">     </span><span class="nottickedoff">assumps' &lt;- liftSC2 scAnd phi assumps</span>
-<span class="lineno"> 1386 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriAssumptions = assumps' }) m</span></span>
-<span class="lineno"> 1387 </span>
-<span class="lineno"> 1388 </span>-- | Remove any existing assumptions and replace them with a Boolean term
-<span class="lineno"> 1389 </span>withOnlyAssumption :: Term -&gt; MRM t a -&gt; MRM t a
-<span class="lineno"> 1390 </span><span class="decl"><span class="nottickedoff">withOnlyAssumption phi m =</span>
-<span class="lineno"> 1391 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefix 1 &quot;withOnlyAssumption&quot; phi</span>
-<span class="lineno"> 1392 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriAssumptions = phi }) m</span></span>
-<span class="lineno"> 1393 </span>
-<span class="lineno"> 1394 </span>-- | Add a 'DataTypeAssump' to the current context while executing a
-<span class="lineno"> 1395 </span>-- sub-computations
-<span class="lineno"> 1396 </span>withDataTypeAssump :: Term -&gt; DataTypeAssump -&gt; MRM t a -&gt; MRM t a
-<span class="lineno"> 1397 </span><span class="decl"><span class="nottickedoff">withDataTypeAssump x assump m =</span>
-<span class="lineno"> 1398 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefixSep 1 &quot;withDataTypeAssump&quot; x &quot;==&quot; assump</span>
-<span class="lineno"> 1399 </span><span class="spaces">     </span><span class="nottickedoff">dataTypeAssumps' &lt;- HashMap.insert x assump &lt;$&gt; mrDataTypeAssumps</span>
-<span class="lineno"> 1400 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriDataTypeAssumps = dataTypeAssumps' }) m</span></span>
-<span class="lineno"> 1401 </span>
-<span class="lineno"> 1402 </span>-- | Get the 'DataTypeAssump' associated to the given term, if one exists
-<span class="lineno"> 1403 </span>mrGetDataTypeAssump :: Term -&gt; MRM t (Maybe DataTypeAssump)
-<span class="lineno"> 1404 </span><span class="decl"><span class="nottickedoff">mrGetDataTypeAssump x = HashMap.lookup x &lt;$&gt; mrDataTypeAssumps</span></span>
-<span class="lineno"> 1405 </span>
-<span class="lineno"> 1406 </span>-- | Record a use of an SMT solver (for tracking 'SolverStats' and 'MRSolverEvidence')
-<span class="lineno"> 1407 </span>recordUsedSolver :: SolverStats -&gt; Term -&gt; MRM t ()
-<span class="lineno"> 1408 </span><span class="decl"><span class="nottickedoff">recordUsedSolver stats prop =</span>
-<span class="lineno"> 1409 </span><span class="spaces">  </span><span class="nottickedoff">modify $ \st -&gt; st { mrsSolverStats = stats &lt;&gt; mrsSolverStats st,</span>
-<span class="lineno"> 1410 </span><span class="spaces">                       </span><span class="nottickedoff">mrsEvidence = MREUsedSolver stats prop : mrsEvidence st }</span></span>
-<span class="lineno"> 1411 </span>
-<span class="lineno"> 1412 </span>-- | Record a use of a 'FunAssump' (for 'MRSolverEvidence')
-<span class="lineno"> 1413 </span>recordUsedFunAssump :: FunAssump t -&gt; MRM t ()
-<span class="lineno"> 1414 </span><span class="decl"><span class="nottickedoff">recordUsedFunAssump (fassumpAnnotation -&gt; Just t) =</span>
-<span class="lineno"> 1415 </span><span class="spaces">  </span><span class="nottickedoff">modify $ \st -&gt; st { mrsEvidence = MREUsedFunAssump t : mrsEvidence st }</span>
-<span class="lineno"> 1416 </span><span class="spaces"></span><span class="nottickedoff">recordUsedFunAssump _ = return ()</span></span>
-<span class="lineno"> 1417 </span>
-<span class="lineno"> 1418 </span>
+<span class="lineno"> 1342 </span>-- If so, return @\ x1 ... xn -&gt; phi@ as a term with the @xi@ variables free.
+<span class="lineno"> 1343 </span>-- Otherwise, return 'Nothing'. Note that this function will also look past
+<span class="lineno"> 1344 </span>-- any initial @bindS ... (assertFiniteS ...)@ applications.
+<span class="lineno"> 1345 </span>mrGetInvariant :: FunName -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1346 </span><span class="decl"><span class="nottickedoff">mrGetInvariant nm =</span>
+<span class="lineno"> 1347 </span><span class="spaces">  </span><span class="nottickedoff">mrFunNameBody nm &gt;&gt;= \case</span>
+<span class="lineno"> 1348 </span><span class="spaces">    </span><span class="nottickedoff">Just body -&gt; mrGetInvariantBody body</span>
+<span class="lineno"> 1349 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return Nothing</span></span>
+<span class="lineno"> 1350 </span>
+<span class="lineno"> 1351 </span>-- | The main loop of 'mrGetInvariant', which operates on a function body
+<span class="lineno"> 1352 </span>mrGetInvariantBody :: Term -&gt; MRM t (Maybe Term)
+<span class="lineno"> 1353 </span><span class="decl"><span class="nottickedoff">mrGetInvariantBody tm = case asApplyAll tm of</span>
+<span class="lineno"> 1354 </span><span class="spaces">  </span><span class="nottickedoff">-- go inside any top-level lambdas</span>
+<span class="lineno"> 1355 </span><span class="spaces">  </span><span class="nottickedoff">(asLambda -&gt; Just (nm, tp, body), []) -&gt;</span>
+<span class="lineno"> 1356 </span><span class="spaces">    </span><span class="nottickedoff">do body' &lt;- liftSC1 betaNormalize body</span>
+<span class="lineno"> 1357 </span><span class="spaces">       </span><span class="nottickedoff">mb_phi &lt;- mrGetInvariantBody body'</span>
+<span class="lineno"> 1358 </span><span class="spaces">       </span><span class="nottickedoff">liftSC3 scLambda nm tp `mapM` mb_phi</span>
+<span class="lineno"> 1359 </span><span class="spaces">  </span><span class="nottickedoff">-- always beta-reduce</span>
+<span class="lineno"> 1360 </span><span class="spaces">  </span><span class="nottickedoff">(f@(asLambda -&gt; Just _), args) -&gt;</span>
+<span class="lineno"> 1361 </span><span class="spaces">    </span><span class="nottickedoff">do tm' &lt;- mrApplyAll f args</span>
+<span class="lineno"> 1362 </span><span class="spaces">       </span><span class="nottickedoff">mrGetInvariantBody tm'</span>
+<span class="lineno"> 1363 </span><span class="spaces">  </span><span class="nottickedoff">-- go inside any top-level applications of of bindS ... (assertFiniteS ...)</span>
+<span class="lineno"> 1364 </span><span class="spaces">  </span><span class="nottickedoff">(isGlobalDef &quot;SpecM.bindS&quot; -&gt; Just (),</span>
+<span class="lineno"> 1365 </span><span class="spaces">   </span><span class="nottickedoff">[_, _, _,</span>
+<span class="lineno"> 1366 </span><span class="spaces">    </span><span class="nottickedoff">(asApplyAll -&gt; (isGlobalDef &quot;CryptolM.assertFiniteS&quot; -&gt; Just (),</span>
+<span class="lineno"> 1367 </span><span class="spaces">                    </span><span class="nottickedoff">[_, (asGlobalApply &quot;Cryptol.TCNum&quot; -&gt; Just [_])])),</span>
+<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="nottickedoff">k]) -&gt;</span>
+<span class="lineno"> 1369 </span><span class="spaces">    </span><span class="nottickedoff">do pf &lt;- liftSC1 scGlobalDef &quot;Prelude.TrueI&quot;</span>
+<span class="lineno"> 1370 </span><span class="spaces">       </span><span class="nottickedoff">body &lt;- mrApplyAll k [pf]</span>
+<span class="lineno"> 1371 </span><span class="spaces">       </span><span class="nottickedoff">mrGetInvariantBody body</span>
+<span class="lineno"> 1372 </span><span class="spaces">  </span><span class="nottickedoff">-- otherwise, return Just iff there is a top-level invariant hint</span>
+<span class="lineno"> 1373 </span><span class="spaces">  </span><span class="nottickedoff">(isGlobalDef &quot;SpecM.invariantHint&quot; -&gt; Just (),</span>
+<span class="lineno"> 1374 </span><span class="spaces">   </span><span class="nottickedoff">[_, phi, _]) -&gt; return $ Just phi</span>
+<span class="lineno"> 1375 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; return Nothing</span></span>
+<span class="lineno"> 1376 </span>
+<span class="lineno"> 1377 </span>-- | Add an assumption of type @Bool@ to the current path condition while
+<span class="lineno"> 1378 </span>-- executing a sub-computation
+<span class="lineno"> 1379 </span>withAssumption :: Term -&gt; MRM t a -&gt; MRM t a
+<span class="lineno"> 1380 </span><span class="decl"><span class="nottickedoff">withAssumption phi m =</span>
+<span class="lineno"> 1381 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefix 1 &quot;withAssumption&quot; phi</span>
+<span class="lineno"> 1382 </span><span class="spaces">     </span><span class="nottickedoff">assumps &lt;- mrAssumptions</span>
+<span class="lineno"> 1383 </span><span class="spaces">     </span><span class="nottickedoff">assumps' &lt;- liftSC2 scAnd phi assumps</span>
+<span class="lineno"> 1384 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriAssumptions = assumps' }) m</span></span>
+<span class="lineno"> 1385 </span>
+<span class="lineno"> 1386 </span>-- | Remove any existing assumptions and replace them with a Boolean term
+<span class="lineno"> 1387 </span>withOnlyAssumption :: Term -&gt; MRM t a -&gt; MRM t a
+<span class="lineno"> 1388 </span><span class="decl"><span class="nottickedoff">withOnlyAssumption phi m =</span>
+<span class="lineno"> 1389 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefix 1 &quot;withOnlyAssumption&quot; phi</span>
+<span class="lineno"> 1390 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriAssumptions = phi }) m</span></span>
+<span class="lineno"> 1391 </span>
+<span class="lineno"> 1392 </span>-- | Add a 'DataTypeAssump' to the current context while executing a
+<span class="lineno"> 1393 </span>-- sub-computations
+<span class="lineno"> 1394 </span>withDataTypeAssump :: Term -&gt; DataTypeAssump -&gt; MRM t a -&gt; MRM t a
+<span class="lineno"> 1395 </span><span class="decl"><span class="nottickedoff">withDataTypeAssump x assump m =</span>
+<span class="lineno"> 1396 </span><span class="spaces">  </span><span class="nottickedoff">do mrDebugPPPrefixSep 1 &quot;withDataTypeAssump&quot; x &quot;==&quot; assump</span>
+<span class="lineno"> 1397 </span><span class="spaces">     </span><span class="nottickedoff">dataTypeAssumps' &lt;- HashMap.insert x assump &lt;$&gt; mrDataTypeAssumps</span>
+<span class="lineno"> 1398 </span><span class="spaces">     </span><span class="nottickedoff">local (\info -&gt; info { mriDataTypeAssumps = dataTypeAssumps' }) m</span></span>
+<span class="lineno"> 1399 </span>
+<span class="lineno"> 1400 </span>-- | Get the 'DataTypeAssump' associated to the given term, if one exists
+<span class="lineno"> 1401 </span>mrGetDataTypeAssump :: Term -&gt; MRM t (Maybe DataTypeAssump)
+<span class="lineno"> 1402 </span><span class="decl"><span class="nottickedoff">mrGetDataTypeAssump x = HashMap.lookup x &lt;$&gt; mrDataTypeAssumps</span></span>
+<span class="lineno"> 1403 </span>
+<span class="lineno"> 1404 </span>-- | Record a use of an SMT solver (for tracking 'SolverStats' and 'MRSolverEvidence')
+<span class="lineno"> 1405 </span>recordUsedSolver :: SolverStats -&gt; Term -&gt; MRM t ()
+<span class="lineno"> 1406 </span><span class="decl"><span class="nottickedoff">recordUsedSolver stats prop =</span>
+<span class="lineno"> 1407 </span><span class="spaces">  </span><span class="nottickedoff">modify $ \st -&gt; st { mrsSolverStats = stats &lt;&gt; mrsSolverStats st,</span>
+<span class="lineno"> 1408 </span><span class="spaces">                       </span><span class="nottickedoff">mrsEvidence = MREUsedSolver stats prop : mrsEvidence st }</span></span>
+<span class="lineno"> 1409 </span>
+<span class="lineno"> 1410 </span>-- | Record a use of a 'FunAssump' (for 'MRSolverEvidence')
+<span class="lineno"> 1411 </span>recordUsedFunAssump :: FunAssump t -&gt; MRM t ()
+<span class="lineno"> 1412 </span><span class="decl"><span class="nottickedoff">recordUsedFunAssump (fassumpAnnotation -&gt; Just t) =</span>
+<span class="lineno"> 1413 </span><span class="spaces">  </span><span class="nottickedoff">modify $ \st -&gt; st { mrsEvidence = MREUsedFunAssump t : mrsEvidence st }</span>
+<span class="lineno"> 1414 </span><span class="spaces"></span><span class="nottickedoff">recordUsedFunAssump _ = return ()</span></span>
+<span class="lineno"> 1415 </span>
+<span class="lineno"> 1416 </span>
+<span class="lineno"> 1417 </span>----------------------------------------------------------------------
+<span class="lineno"> 1418 </span>-- * Functions for Debug Output
 <span class="lineno"> 1419 </span>----------------------------------------------------------------------
-<span class="lineno"> 1420 </span>-- * Functions for Debug Output
-<span class="lineno"> 1421 </span>----------------------------------------------------------------------
-<span class="lineno"> 1422 </span>
-<span class="lineno"> 1423 </span>-- | Print a 'String' to 'stderr' if the debug level is at least the supplied
-<span class="lineno"> 1424 </span>-- 'Int'
-<span class="lineno"> 1425 </span>mrDebugPrint :: Int -&gt; String -&gt; MRM t ()
-<span class="lineno"> 1426 </span><span class="decl"><span class="nottickedoff">mrDebugPrint i str =</span>
-<span class="lineno"> 1427 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugLevel &gt;&gt;= \lvl -&gt;</span>
-<span class="lineno"> 1428 </span><span class="spaces">  </span><span class="nottickedoff">if lvl &gt;= i then liftIO (hPutStrLn stderr str) else return ()</span></span>
-<span class="lineno"> 1429 </span>
-<span class="lineno"> 1430 </span>-- | Print a document to 'stderr' if the debug level is at least the supplied
-<span class="lineno"> 1431 </span>-- 'Int'
-<span class="lineno"> 1432 </span>mrDebugPretty :: Int -&gt; PPS.Doc -&gt; MRM t ()
-<span class="lineno"> 1433 </span><span class="decl"><span class="nottickedoff">mrDebugPretty i pp =</span>
-<span class="lineno"> 1434 </span><span class="spaces">  </span><span class="nottickedoff">mrPPOpts &gt;&gt;= \opts -&gt;</span>
-<span class="lineno"> 1435 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPrint i (PPS.render opts pp)</span></span>
-<span class="lineno"> 1436 </span>
-<span class="lineno"> 1437 </span>-- | Print to 'stderr' the result of running a 'PPInCtxM' computation in the
-<span class="lineno"> 1438 </span>-- current context and with the current 'PPOpts' if the current debug level is
-<span class="lineno"> 1439 </span>-- at least the supplied 'Int'
-<span class="lineno"> 1440 </span>mrDebugPPInCtxM :: Int -&gt; PPInCtxM PPS.Doc -&gt; MRM t ()
-<span class="lineno"> 1441 </span><span class="decl"><span class="nottickedoff">mrDebugPPInCtxM i m = mrDebugPretty i =&lt;&lt; mrPPInCtxM m</span></span>
-<span class="lineno"> 1442 </span>
-<span class="lineno"> 1443 </span>-- | Pretty-print an object to 'stderr' in the current context and with the
-<span class="lineno"> 1444 </span>-- current 'PPOpts' if the current debug level is at least the supplied 'Int'
-<span class="lineno"> 1445 </span>mrDebugPPInCtx :: PrettyInCtx a =&gt; Int -&gt; a -&gt; MRM t ()
-<span class="lineno"> 1446 </span><span class="decl"><span class="nottickedoff">mrDebugPPInCtx i a = mrDebugPretty i =&lt;&lt; mrPPInCtx a</span></span>
-<span class="lineno"> 1447 </span>
-<span class="lineno"> 1448 </span>-- | Pretty-print the result of 'prettyPrefix' to 'stderr' in the
-<span class="lineno"> 1449 </span>-- current context and with the current 'PPOpts' if the debug level is at least
-<span class="lineno"> 1450 </span>-- the 'Int' provided
-<span class="lineno"> 1451 </span>mrDebugPPPrefix :: PrettyInCtx a =&gt; Int -&gt; String -&gt; a -&gt; MRM t ()
-<span class="lineno"> 1452 </span><span class="decl"><span class="nottickedoff">mrDebugPPPrefix i pre a =</span>
-<span class="lineno"> 1453 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM i $ group &lt;$&gt; nest 2 &lt;$&gt; prettyPrefix pre a</span></span>
-<span class="lineno"> 1454 </span>
-<span class="lineno"> 1455 </span>-- | Pretty-print the result of 'prettyPrefixSep' to 'stderr' in the current
-<span class="lineno"> 1456 </span>-- context and with the current 'PPOpts' if the debug level is at least the
-<span class="lineno"> 1457 </span>-- 'Int' provided
-<span class="lineno"> 1458 </span>mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =&gt;
-<span class="lineno"> 1459 </span>                      Int -&gt; String -&gt; a -&gt; String -&gt; b -&gt; MRM t ()
-<span class="lineno"> 1460 </span><span class="decl"><span class="nottickedoff">mrDebugPPPrefixSep i pre a1 sp a2 =</span>
-<span class="lineno"> 1461 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM i $ group &lt;$&gt; nest 2 &lt;$&gt; prettyPrefixSep pre a1 sp a2</span></span>
+<span class="lineno"> 1420 </span>
+<span class="lineno"> 1421 </span>-- | Print a 'String' to 'stderr' if the debug level is at least the supplied
+<span class="lineno"> 1422 </span>-- 'Int'
+<span class="lineno"> 1423 </span>mrDebugPrint :: Int -&gt; String -&gt; MRM t ()
+<span class="lineno"> 1424 </span><span class="decl"><span class="nottickedoff">mrDebugPrint i str =</span>
+<span class="lineno"> 1425 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugLevel &gt;&gt;= \lvl -&gt;</span>
+<span class="lineno"> 1426 </span><span class="spaces">  </span><span class="nottickedoff">if lvl &gt;= i then liftIO (hPutStrLn stderr str) else return ()</span></span>
+<span class="lineno"> 1427 </span>
+<span class="lineno"> 1428 </span>-- | Print a document to 'stderr' if the debug level is at least the supplied
+<span class="lineno"> 1429 </span>-- 'Int'
+<span class="lineno"> 1430 </span>mrDebugPretty :: Int -&gt; PPS.Doc -&gt; MRM t ()
+<span class="lineno"> 1431 </span><span class="decl"><span class="nottickedoff">mrDebugPretty i pp =</span>
+<span class="lineno"> 1432 </span><span class="spaces">  </span><span class="nottickedoff">mrPPOpts &gt;&gt;= \opts -&gt;</span>
+<span class="lineno"> 1433 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPrint i (PPS.render opts pp)</span></span>
+<span class="lineno"> 1434 </span>
+<span class="lineno"> 1435 </span>-- | Print to 'stderr' the result of running a 'PPInCtxM' computation in the
+<span class="lineno"> 1436 </span>-- current context and with the current 'PPOpts' if the current debug level is
+<span class="lineno"> 1437 </span>-- at least the supplied 'Int'
+<span class="lineno"> 1438 </span>mrDebugPPInCtxM :: Int -&gt; PPInCtxM PPS.Doc -&gt; MRM t ()
+<span class="lineno"> 1439 </span><span class="decl"><span class="nottickedoff">mrDebugPPInCtxM i m = mrDebugPretty i =&lt;&lt; mrPPInCtxM m</span></span>
+<span class="lineno"> 1440 </span>
+<span class="lineno"> 1441 </span>-- | Pretty-print an object to 'stderr' in the current context and with the
+<span class="lineno"> 1442 </span>-- current 'PPOpts' if the current debug level is at least the supplied 'Int'
+<span class="lineno"> 1443 </span>mrDebugPPInCtx :: PrettyInCtx a =&gt; Int -&gt; a -&gt; MRM t ()
+<span class="lineno"> 1444 </span><span class="decl"><span class="nottickedoff">mrDebugPPInCtx i a = mrDebugPretty i =&lt;&lt; mrPPInCtx a</span></span>
+<span class="lineno"> 1445 </span>
+<span class="lineno"> 1446 </span>-- | Pretty-print the result of 'prettyPrefix' to 'stderr' in the
+<span class="lineno"> 1447 </span>-- current context and with the current 'PPOpts' if the debug level is at least
+<span class="lineno"> 1448 </span>-- the 'Int' provided
+<span class="lineno"> 1449 </span>mrDebugPPPrefix :: PrettyInCtx a =&gt; Int -&gt; String -&gt; a -&gt; MRM t ()
+<span class="lineno"> 1450 </span><span class="decl"><span class="nottickedoff">mrDebugPPPrefix i pre a =</span>
+<span class="lineno"> 1451 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM i $ group &lt;$&gt; nest 2 &lt;$&gt; prettyPrefix pre a</span></span>
+<span class="lineno"> 1452 </span>
+<span class="lineno"> 1453 </span>-- | Pretty-print the result of 'prettyPrefixSep' to 'stderr' in the current
+<span class="lineno"> 1454 </span>-- context and with the current 'PPOpts' if the debug level is at least the
+<span class="lineno"> 1455 </span>-- 'Int' provided
+<span class="lineno"> 1456 </span>mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =&gt;
+<span class="lineno"> 1457 </span>                      Int -&gt; String -&gt; a -&gt; String -&gt; b -&gt; MRM t ()
+<span class="lineno"> 1458 </span><span class="decl"><span class="nottickedoff">mrDebugPPPrefixSep i pre a1 sp a2 =</span>
+<span class="lineno"> 1459 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPInCtxM i $ group &lt;$&gt; nest 2 &lt;$&gt; prettyPrefixSep pre a1 sp a2</span></span>
 
 </pre>
 </body>
