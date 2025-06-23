@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -46,6 +47,7 @@ import Data.Text (Text, unpack)
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
+import SAWCore.Module (ModuleMap)
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
@@ -98,13 +100,13 @@ data FunName
   deriving (Eq, Ord, Show)
 
 -- | Recognize a 'Term' as (possibly a projection of) a global name
-asTypedGlobalProj :: Recognizer Term (GlobalDef, [TermProj])
+asTypedGlobalProj :: (?mm :: ModuleMap) => Recognizer Term (GlobalDef, [TermProj])
 asTypedGlobalProj (asProjAll -> ((asTypedGlobalDef -> Just glob), projs)) =
   Just (glob, projs)
 asTypedGlobalProj _ = Nothing
 
 -- | Recognize a 'Term' as (possibly a projection of) a global name
-asGlobalFunName :: Recognizer Term FunName
+asGlobalFunName :: (?mm :: ModuleMap) => Recognizer Term FunName
 asGlobalFunName (asTypedGlobalProj -> Just (glob, projs)) =
   Just $ GlobalName glob projs
 asGlobalFunName _ = Nothing

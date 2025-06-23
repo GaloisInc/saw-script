@@ -758,7 +758,7 @@ resolveSAWPred cc tm = do
      (_,tm') <- rewriteSharedTerm sc ss tm
 
      checkBooleanType sc tm'
-     
+
      mx <- case getAllExts tm' of
              -- concretely evaluate if it is a closed term
              [] -> do modmap <- scGetModuleMap sc
@@ -772,7 +772,7 @@ resolveSAWPred cc tm = do
            do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
               (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
               (_,tm''') <- rewriteSharedTerm sc ss tm''
-              if not (any (\(name, _) -> not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then
+              if all isPreludeName (Map.elems $ getConstantSet tm''') then
                 do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
                    return p
               else bindSAWTerm sym st W4.BaseBoolRepr tm'
@@ -804,7 +804,7 @@ resolveSAWSymBV cc w tm =
               cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
               (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
               (_,tm''') <- rewriteSharedTerm sc ss tm''
-              if not (any (\(name, _) -> not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then
+              if all isPreludeName (Map.elems $ getConstantSet tm''') then
                 do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
                    case valueToSymExpr x of
                      Just (Some y)

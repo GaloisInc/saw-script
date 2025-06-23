@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
@@ -134,6 +135,7 @@ import qualified Data.Text as Text
 import Data.Set (Set)
 
 import SAWCore.Module (Def(..), ResolvedName(..), ctorNumParams, lookupVarIndexInMap)
+import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
@@ -188,8 +190,8 @@ mrApplyMFixBodies defs_tm fun_tms =
      let mbody =
            case asConstant defs_tm of
              Nothing -> Nothing
-             Just ec ->
-               case lookupVarIndexInMap (ecVarIndex ec) mm of
+             Just nm ->
+               case lookupVarIndexInMap (nameIndex nm) mm of
                  Just (ResolvedDef d) -> defBody d
                  _ -> Nothing
      case mbody of
@@ -253,6 +255,8 @@ normComp (CompBind m f) =
      normBind norm f
 normComp (CompTerm t) =
   (>>) (mrDebugPPPrefix 3 "normCompTerm:" t) $
+  liftSC0 scGetModuleMap >>= \mm ->
+  let ?mm = mm in
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
     (f@(asLambda -> Just _), args@(_:_)) ->
@@ -288,8 +292,8 @@ normComp (CompTerm t) =
                   -- Always unfold: is_bvult, is_bvule
                   (tpf@(asGlobalDef -> Just ident), args)
                     | ident `elem` ["Prelude.is_bvult", "Prelude.is_bvule"]
-                    , Just ec <- asConstant tpf ->
-                      do body <- requireDefBody ident ec
+                    , Just nm <- asConstant tpf ->
+                      do body <- requireDefBody ident nm
                          mrApplyAll body args
                   _ -> return tp
          return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm ev f) mayb
@@ -457,15 +461,14 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
          "Cryptol.Num_rec", "SpecM.invariantHint",
          "SpecM.assumingS", "SpecM.assertingS", "SpecM.forNatLtThenSBody",
          "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM"]
-      , Just ec <- asConstant f ->
-        do body <- requireDefBody ident ec
+      , Just nm <- asConstant f ->
+        do body <- requireDefBody ident nm
            mrApplyAll body args >>= normCompTerm
 
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
       | (asConstant -> Just c, cargs) <- asApplyAll arg ->
-        do mm <- liftSC0 scGetModuleMap
-           case lookupVarIndexInMap (ecVarIndex c) mm of
+        do case lookupVarIndexInMap (nameIndex c) mm of
              Just (ResolvedCtor ctor) ->
                do let cargs' = drop (ctorNumParams ctor) cargs
                   hd' <- liftSC4 scReduceRecursor rc crec c cargs'
@@ -495,10 +498,10 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     _ -> throwMRFailure (MalformedComp t)
 
 
-requireDefBody :: Ident -> ExtCns e -> MRM t Term
-requireDefBody ident ec =
+requireDefBody :: Ident -> Name -> MRM t Term
+requireDefBody ident nm =
   do mm <- liftSC0 scGetModuleMap
-     case lookupVarIndexInMap (ecVarIndex ec) mm of
+     case lookupVarIndexInMap (nameIndex nm) mm of
        Just (ResolvedDef (defBody -> Just t)) -> pure t
        _ -> panic "normComp" ["Missing definition for constant " <> identText ident]
 
@@ -1069,6 +1072,8 @@ mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
 
 mrRefines' m1@(FunBind f1 args1 k1)
            m2@(FunBind f2 args2 k2) =
+  liftSC0 scGetModuleMap >>= \mm ->
+  let ?mm = mm in
   mrFunOutType f1 args1 >>= mapM mrNormOpenTerm >>= \(_, tp1) ->
   mrFunOutType f2 args2 >>= mapM mrNormOpenTerm >>= \(_, tp2) ->
   injUnifyTypes tp1 tp2 >>= \mb_convs ->
@@ -1183,6 +1188,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
 
   -- Otherwise, see if we can unfold f1
   Nothing ->
+    liftSC0 scGetModuleMap >>= \mm ->
+    let ?mm = mm in
     mrFunBodyRecInfo f1 args1 >>= \case
 
     -- If f1 unfolds and is not recursive in itself, unfold it and recurse
@@ -1195,6 +1202,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
     _ -> mrRefines'' m1 m2
 
 mrRefines' m1 m2@(FunBind f2 args2 k2) =
+  liftSC0 scGetModuleMap >>= \mm ->
+  let ?mm = mm in
   mrFunBodyRecInfo f2 args2 >>= \case
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse

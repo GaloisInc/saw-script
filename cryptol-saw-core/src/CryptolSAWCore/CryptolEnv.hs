@@ -61,7 +61,7 @@ import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 import CryptolSAWCore.Panic
-import SAWCore.Name (ecName)
+import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
 import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars)
 import SAWCore.Term.Pretty (showTerm)
@@ -473,7 +473,7 @@ updateFFITypes m env = env { eFFITypes = eFFITypes' }
     case Map.lookup nm (eTermEnv env) of
       Just tm ->
         case asConstant tm of
-          Just ec -> ecName ec
+          Just n -> nameInfo n
           Nothing ->
             panic "updateFFITypes" [
                 "SAWCore term of Cryptol name is not Constant",

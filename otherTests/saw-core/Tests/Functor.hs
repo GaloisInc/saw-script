@@ -16,6 +16,7 @@ import Data.Hashable
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import SAWCore.Name
 import SAWCore.Term.Functor
 
 
@@ -59,13 +60,12 @@ lnFoo = "foo"
 lnBar = "bar"
 
 -- | An external constant
-ecFoo :: ExtCns Term
-ecFoo = EC {
-    ecVarIndex = 0,
-    ecName = ModuleIdentifier "Foo.Module",
-    ecType = Unshared $ FTermF UnitType
+nmFoo :: Name
+nmFoo = Name {
+    nameIndex = 0,
+    nameInfo = ModuleIdentifier "Foo.Module"
  }
- 
+
 -- | Test in the Either monad so we can use do-notation. (It might be
 --   better to accumulate a list of all the terms that fail, if they
 --   do, rather than detecting one at a time.  However, that requires
@@ -187,7 +187,7 @@ instance TestIt Term where
         testOne depth' $ Pi lnBar t localvar
         testTwo depth' EQ (Lambda lnFoo t t) (Lambda lnBar t t)
         testTwo depth' EQ (Pi lnFoo t t) (Pi lnBar t t)
-        testTwo depth' EQ (Constant ecFoo) (Constant ecFoo)
+        testTwo depth' EQ (Constant nmFoo) (Constant nmFoo)
 
   testTwo depth comp t1 t2 = do
       -- check that they compare as expected

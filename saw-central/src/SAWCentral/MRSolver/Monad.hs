@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -1008,19 +1009,17 @@ mrVarInfo var = Map.lookup var <$> mrVars
 
 -- | Convert an 'ExtCns' to a 'FunName'
 extCnsToFunName :: ExtCns Term -> MRM t FunName
-extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
-  Just (EVarInfo _ _) -> return $ EVarFunName var
-  Just (CallVarInfo _) -> return $ CallSName var
-  Nothing
-    | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
-      return $ GlobalName glob []
-  _ -> error "extCnsToFunName: unreachable"
-
--- | Get the 'FunName' of a global definition
-mrGlobalDef :: Ident -> MRM t FunName
-mrGlobalDef ident = asTypedGlobalDef <$> liftSC1 scGlobalDef ident >>= \case
-  Just glob -> return $ GlobalName glob []
-  _ -> error $ "mrGlobalDef: could not get GlobalDef of: " ++ show ident
+extCnsToFunName ec =
+  do let var = MRVar ec
+     mm <- liftSC0 scGetModuleMap
+     let ?mm = mm
+     mrVarInfo var >>= \case
+       Just (EVarInfo _ _) -> return $ EVarFunName var
+       Just (CallVarInfo _) -> return $ CallSName var
+       Nothing
+         | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
+           return $ GlobalName glob []
+       _ -> error "extCnsToFunName: unreachable"
 
 -- | Get the body of a global definition, raising an 'error' if none is found
 mrGlobalDefBody :: Ident -> MRM t Term
@@ -1063,16 +1062,20 @@ mrFunBodyRecInfo f args =
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
 -- to a given function @f@ again
 mrCallsFun :: FunName -> Term -> MRM t Bool
-mrCallsFun f = flip memoFixTermFunAccum Set.empty $ \recurse seen t ->
-  let onFunName g = mrFunNameBody g >>= \case
-        _ | f == g -> return True
-        Just body | Set.notMember g seen -> recurse (Set.insert g seen) body
-        _ -> return False
-  in case t of
-  (asExtCns -> Just ec) -> extCnsToFunName ec >>= onFunName
-  (asGlobalFunName -> Just g) -> onFunName g
-  (unwrapTermF -> tf) ->
-    foldM (\b t' -> if b then return b else recurse seen t') False tf
+mrCallsFun f t0 =
+  do mm <- liftSC0 scGetModuleMap
+     let ?mm = mm
+     let fn recurse seen t =
+           let onFunName g = mrFunNameBody g >>= \case
+                 _ | f == g -> return True
+                 Just body | Set.notMember g seen -> recurse (Set.insert g seen) body
+                 _ -> return False
+           in case t of
+           (asExtCns -> Just ec) -> extCnsToFunName ec >>= onFunName
+           (asGlobalFunName -> Just g) -> onFunName g
+           (unwrapTermF -> tf) ->
+             foldM (\b t' -> if b then return b else recurse seen t') False tf
+     memoFixTermFunAccum fn Set.empty t0
 
 
 ----------------------------------------------------------------------
