@@ -2813,7 +2813,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2794 </span><span class="spaces">    </span><span class="nottickedoff">toEC t =</span>
 <span class="lineno"> 2795 </span><span class="spaces">      </span><span class="nottickedoff">case asExtCns t of</span>
 <span class="lineno"> 2796 </span><span class="spaces">        </span><span class="nottickedoff">Just ec -&gt; pure ec</span>
-<span class="lineno"> 2797 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; fail &quot;scAbstractTerms: expected ExtCns&quot;</span></span>
+<span class="lineno"> 2797 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; fail &quot;scGeneralizeTerms: expected ExtCns&quot;</span></span>
 <span class="lineno"> 2798 </span>
 <span class="lineno"> 2799 </span>scUnfoldConstants :: SharedContext -&gt; [VarIndex] -&gt; Term -&gt; IO Term
 <span class="lineno"> 2800 </span><span class="decl"><span class="istickedoff">scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0</span></span>
