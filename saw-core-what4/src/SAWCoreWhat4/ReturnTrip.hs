@@ -35,7 +35,6 @@ import           Control.Lens
 import           Control.Monad
 import qualified Data.BitVector.Sized as BV
 import           Data.IORef
-import           Data.List (elemIndex)
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -505,13 +504,13 @@ evaluateExpr :: forall n st tp fs.
   B.IdxCache n SAWExpr ->
   B.Expr n tp ->
   IO SC.Term
-evaluateExpr sym st sc cache = f []
+evaluateExpr sym st sc cache = f Map.empty
   where
     -- Evaluate the element, and expect the result to have the same type.
-    f :: [Maybe SolverSymbol] -> B.Expr n tp' -> IO SC.Term
+    f :: Map SolverSymbol SC.Term -> B.Expr n tp' -> IO SC.Term
     f env elt = termOfSAWExpr sym sc =<< eval env elt
 
-    eval :: [Maybe SolverSymbol] -> B.Expr n tp' -> IO (SAWExpr tp')
+    eval :: Map SolverSymbol SC.Term -> B.Expr n tp' -> IO (SAWExpr tp')
     eval env elt = B.idxCacheEval cache elt (go env elt)
 
     realFail :: IO a
@@ -529,7 +528,7 @@ evaluateExpr sym st sc cache = f []
     unimplemented :: String -> IO a
     unimplemented x = unsupported sym $ "SAW backend: not implemented: " ++ x
 
-    go :: [Maybe SolverSymbol] -> B.Expr n tp' -> IO (SAWExpr tp')
+    go :: Map SolverSymbol SC.Term -> B.Expr n tp' -> IO (SAWExpr tp')
 
     go _ (B.BoolExpr b _) = SAWExpr <$> SC.scBool sc b
 
@@ -554,9 +553,9 @@ evaluateExpr sym st sc cache = f []
         B.LatchVarKind ->
           unsupported sym "SAW backend does not support latch variables"
         B.QuantifierVarKind -> do
-          case elemIndex (Just $ B.bvarName bv) env of
+          case Map.lookup (B.bvarName bv) env of
             Nothing -> unsupported sym $ "unbound quantifier variable " <> nm
-            Just idx -> SAWExpr <$> SC.scLocalVar sc idx
+            Just t -> pure (SAWExpr t)
             where nm = Text.unpack $ solverSymbolAsText $ B.bvarName bv
 
     go env (B.NonceAppExpr p) =
@@ -569,9 +568,10 @@ evaluateExpr sym st sc cache = f []
             BaseBVRepr wrepr -> do
               w <- SC.scNat sc $ natValue wrepr
               ty <- SC.scVecType sc w =<< SC.scBoolType sc
+              x <- SC.scFreshGlobal sc nm ty
               SAWExpr <$>
                 (SC.scBvForall sc w
-                 =<< SC.scLambda sc nm ty =<< f (Just (B.bvarName bvar):env) body)
+                 =<< SC.scAbstractTerms sc [x] =<< f (Map.insert (B.bvarName bvar) x env) body)
               where nm = solverSymbolAsText $ B.bvarName bvar
             _ -> unsupported sym "SAW backend only supports universal quantifiers over bitvectors"
         B.Exists{} ->
@@ -936,7 +936,7 @@ evaluateExpr sym st sc cache = f []
 
     -- returns the logical negation of the result of 'go'
     -- negations are pushed inside conjunctions and less-than-or-equal
-    goNeg :: [Maybe SolverSymbol] -> B.Expr n BaseBoolType -> IO (SAWExpr BaseBoolType)
+    goNeg :: Map SolverSymbol SC.Term -> B.Expr n BaseBoolType -> IO (SAWExpr BaseBoolType)
     goNeg env expr =
       case expr of
         -- negation of (x /\ y) becomes (~x \/ ~y)
@@ -952,7 +952,7 @@ evaluateExpr sym st sc cache = f []
 
     -- returns the logical negation of the result of 'go'
     -- negations are pushed inside less-than-or-equal
-    goNegAtom :: [Maybe SolverSymbol] -> B.Expr n BaseBoolType -> IO (SAWExpr BaseBoolType)
+    goNegAtom :: Map SolverSymbol SC.Term -> B.Expr n BaseBoolType -> IO (SAWExpr BaseBoolType)
     goNegAtom env expr =
       case expr of
         -- negation of (x <= y) becomes (y < x)
