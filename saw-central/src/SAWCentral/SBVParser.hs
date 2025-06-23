@@ -350,13 +350,14 @@ parseSBVPgm opts sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warning
        let inNodes = [ node | SBVInput _ node <- inputs ]
        unless (typSizes inTyp == inSizes) (fail "parseSBVPgm: input size mismatch")
        inputType <- scTyp sc inTyp
-       inputVar <- scLocalVar sc 0
+       inputEC <- scFreshEC sc "x" inputType
+       inputVar <- scExtCns sc inputEC
        inputTerms <- splitInputs sc inTyp inputVar
        let nodes0 = Map.fromList (zip inNodes inputTerms)
        nodes <- foldM (parseSBVAssign opts sc unint) nodes0 assigns
        outputTerms <- mapM (parseSBV sc nodes) outputs
        outputTerm <- combineOutputs sc outTyp outputTerms
-       scLambda sc "x" inputType outputTerm
+       scAbstractExts sc [inputEC] outputTerm
 
 ----------------------------------------------------------------------
 -- New SharedContext operations; should eventually move to SharedTerm.hs.
