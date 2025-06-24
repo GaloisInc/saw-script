@@ -1,0 +1,77 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase    #-}
+<span class="lineno">    2 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>module SAWScript.AutoMatch.JVM where
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>import qualified Language.JVM.Parser as JVM
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>--import SAWCentral.Builtins
+<span class="lineno">    9 </span>--import SAWCentral.Options
+<span class="lineno">   10 </span>import SAWScript.AutoMatch.Declaration
+<span class="lineno">   11 </span>import SAWScript.AutoMatch.Interaction
+<span class="lineno">   12 </span>import SAWScript.AutoMatch.Util
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import Control.Monad
+<span class="lineno">   15 </span>import Control.Monad.Free
+<span class="lineno">   16 </span>import Data.Either
+<span class="lineno">   17 </span>import qualified Data.Text as Text
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>-- | Parse a Java class into a list of declarations
+<span class="lineno">   20 </span>--   Yields an Interaction so that we can talk to the user about what went wrong
+<span class="lineno">   21 </span>getDeclsJVM :: JVM.Class -&gt; IO (Interaction (Maybe [Decl]))
+<span class="lineno">   22 </span><span class="decl"><span class="nottickedoff">getDeclsJVM cls = return $ do</span>
+<span class="lineno">   23 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   24 </span><span class="spaces">   </span><span class="nottickedoff">let (untranslateable, translations) =</span>
+<span class="lineno">   25 </span><span class="spaces">         </span><span class="nottickedoff">partitionEithers . for (JVM.classMethods cls) $ \method -&gt;</span>
+<span class="lineno">   26 </span><span class="spaces">            </span><span class="nottickedoff">maybe (Left $ JVM.methodName method) Right $ do</span>
+<span class="lineno">   27 </span><span class="spaces">               </span><span class="nottickedoff">returnType &lt;- jssTypeToStdType =&lt;&lt; JVM.methodReturnType method</span>
+<span class="lineno">   28 </span><span class="spaces">               </span><span class="nottickedoff">argTypes &lt;- mapM jssTypeToStdType $ JVM.methodParameterTypes method</span>
+<span class="lineno">   29 </span><span class="spaces">               </span><span class="nottickedoff">let argIndices = map (JVM.localIndexOfParameter method) [0 .. length argTypes - 1]</span>
+<span class="lineno">   30 </span><span class="spaces">               </span><span class="nottickedoff">tableEntries &lt;- forM argIndices $ JVM.lookupLocalVariableByIdx method 0</span>
+<span class="lineno">   31 </span><span class="spaces">               </span><span class="nottickedoff">let getname name = Text.pack $ JVM.localName name</span>
+<span class="lineno">   32 </span><span class="spaces">                   </span><span class="nottickedoff">args = zipWith Arg (map getname tableEntries) argTypes</span>
+<span class="lineno">   33 </span><span class="spaces">               </span><span class="nottickedoff">return $ Decl (Text.pack $ JVM.methodName method) returnType args</span>
+<span class="lineno">   34 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   35 </span><span class="spaces">   </span><span class="nottickedoff">when (not . null $ untranslateable) $ do</span>
+<span class="lineno">   36 </span><span class="spaces">      </span><span class="nottickedoff">separator ThinSep</span>
+<span class="lineno">   37 </span><span class="spaces">      </span><span class="nottickedoff">liftF . flip Warning () $ &quot;No translation for the following signatures in &quot; ++ JVM.unClassName (JVM.className cls) ++ &quot;.class:&quot;</span>
+<span class="lineno">   38 </span><span class="spaces">      </span><span class="nottickedoff">bulleted $ map ((&quot;'&quot; ++) . (++ &quot;'&quot;)) untranslateable</span>
+<span class="lineno">   39 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   40 </span><span class="spaces">   </span><span class="nottickedoff">return $ Just translations</span>
+<span class="lineno">   41 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   42 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">   43 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   44 </span><span class="spaces">      </span><span class="nottickedoff">jssTypeToStdType = \case</span>
+<span class="lineno">   45 </span><span class="spaces">         </span><span class="nottickedoff">JVM.ArrayType _    -&gt; Nothing -- TODO: Handle array types</span>
+<span class="lineno">   46 </span><span class="spaces">         </span><span class="nottickedoff">JVM.BooleanType    -&gt; Just $ TCon (TC TCBit) []</span>
+<span class="lineno">   47 </span><span class="spaces">         </span><span class="nottickedoff">JVM.ByteType       -&gt; Just $ bitSeqType 8</span>
+<span class="lineno">   48 </span><span class="spaces">         </span><span class="nottickedoff">JVM.CharType       -&gt; Just $ bitSeqType 16 -- TODO: Not sure about this equivalence</span>
+<span class="lineno">   49 </span><span class="spaces">         </span><span class="nottickedoff">JVM.ClassType _str -&gt; Nothing -- TODO: Support classes as records?</span>
+<span class="lineno">   50 </span><span class="spaces">         </span><span class="nottickedoff">JVM.DoubleType     -&gt; Nothing -- We don't support floating point types</span>
+<span class="lineno">   51 </span><span class="spaces">         </span><span class="nottickedoff">JVM.FloatType      -&gt; Nothing -- We don't support floating point types</span>
+<span class="lineno">   52 </span><span class="spaces">         </span><span class="nottickedoff">JVM.IntType        -&gt; Just $ bitSeqType 32</span>
+<span class="lineno">   53 </span><span class="spaces">         </span><span class="nottickedoff">JVM.LongType       -&gt; Just $ bitSeqType 64</span>
+<span class="lineno">   54 </span><span class="spaces">         </span><span class="nottickedoff">JVM.ShortType      -&gt; Just $ bitSeqType 16</span></span>
+
+</pre>
+</body>
+</html>
