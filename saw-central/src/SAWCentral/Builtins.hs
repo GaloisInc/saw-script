@@ -1350,16 +1350,22 @@ proveByBVInduction script t =
 
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
-            toNat  <- io $ scGlobalDef sc "Prelude.bvToNat"
+            toNat <- io $ scGlobalDef sc "Prelude.bvToNat"
+            vars  <- io $ mapM (scExtCns sc) pis
+            innerVars <-
+              io $ sequence $
+              [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
+            t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
+            tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
+            tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
+            inner_t1 <- io $ scApplyAllBeta sc (ttTerm t) innerVars
+            innersz  <- io $ scTupleSelector sc inner_t1 1 2 -- left element
 
             -- The result type of the theorem.
             --
             --   (x : Vec w Bool) -> p x
             thmResult <- io $
-                do vars <- mapM (scExtCns sc) pis
-                   t1   <- scApplyAllBeta sc (ttTerm t) vars
-                   t2   <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
-                   t3   <- scGeneralizeExts sc pis t2
+                do t3   <- scGeneralizeExts sc pis tbody
                    _    <- scTypeCheckError sc t3 -- sanity check
                    return t3
 
@@ -1369,19 +1375,11 @@ proveByBVInduction script t =
             --
             --   ((x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
             thmHyp <- io $
-                do vars  <- mapM (scExtCns sc) pis
-                   t1    <- scApplyAllBeta sc (ttTerm t) vars
-                   tsz   <- scTupleSelector sc t1 1 2 -- left element
-                   tbody <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
-                   ivars <- sequence [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
-                   i_t1  <- scApplyAllBeta sc (ttTerm t) ivars
-                   i_tsz <- scTupleSelector sc i_t1 1 2 -- left element
-
-                   bvult <- scGlobalDef sc "Prelude.bvult"
-                   islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, i_tsz, tsz]
+                do bvult <- scGlobalDef sc "Prelude.bvult"
+                   islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, innersz, tsz]
 
                    tinner <- scFun sc islt tbody
-                   thyp   <- scGeneralizeTerms sc ivars tinner
+                   thyp   <- scGeneralizeTerms sc innerVars tinner
 
                    touter <- scFun sc thyp tbody
                    scGeneralizeExts sc pis touter
@@ -1390,13 +1388,9 @@ proveByBVInduction script t =
             --
             --      (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
             indMotive <- io $
-                do vars   <- mapM (scExtCns sc) pis
-                   indVar <- scFreshGlobal sc "inductionVar" natty
-                   t1     <- scApplyAllBeta sc (ttTerm t) vars
-                   tsz    <- scTupleSelector sc t1 1 2 -- left element
+                do indVar <- scFreshGlobal sc "inductionVar" natty
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
-                   tbody  <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- right element
                    t2     <- scFun sc teq tbody
                    t3     <- scGeneralizeTerms sc vars t2
                    scAbstractTerms sc [indVar] t3
@@ -1423,16 +1417,11 @@ proveByBVInduction script t =
                                 do m <- scFreshGlobal sc "m" natty
                                    lt <- scGlobalApply sc "Prelude.IsLtNat" [m, nVar]
                                    scGeneralizeTerms sc [m] =<< scFun sc lt =<< scApplyBeta sc indMotive m
-                   vars    <- mapM (scExtCns sc) pis
 
-                   innerVars <- sequence [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
 
-                   outersz <- do t1   <- scApplyAllBeta sc (ttTerm t) vars
-                                 scTupleSelector sc t1 1 2 -- left element
+                   let outersz = tsz
                    natoutersz <- scApplyAll sc toNat [wt, outersz]
 
-                   innersz <- do t1   <- scApplyAllBeta sc (ttTerm t) innerVars
-                                 scTupleSelector sc t1 1 2 -- left element
                    natinnersz <- scApplyAll sc toNat [wt, innersz]
 
                    succinnersz <- scCtorApp sc "Prelude.Succ" [natinnersz]
@@ -1459,10 +1448,7 @@ proveByBVInduction script t =
             -- \ (x : Vec x Bool) ->
             --    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))
             indApp <- io $
-                do vars   <- mapM (scExtCns sc) pis
-                   varH   <- scFreshGlobal sc "Hind" thmHyp
-                   t1     <- scApplyAllBeta sc (ttTerm t) vars
-                   tsz    <- scTupleSelector sc t1 1 2 -- left element
+                do varH   <- scFreshGlobal sc "Hind" thmHyp
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    trefl  <- scCtorApp sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
