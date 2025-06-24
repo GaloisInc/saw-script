@@ -18,6 +18,16 @@ extract_exe() {
   $IS_WIN || chmod +x "$2/$name"
 }
 
+# Extract a subset of the compiled binaries into a location that will be
+# included in a binary distribution. Currently, this subset consists of the
+# following binaries:
+#
+# * saw and saw-remote-api: The main focus of the SAW bindist.
+# * crux-mir-comp: While the connection to SAW is a bit looser, it is
+#   nevertheless useful to build and bundle it alongside SAW.
+# * cryptol: It is convenient to know exactly what Cryptol features are included
+#   in a given SAW release, and having a standalone Cryptol executable allows
+#   one to test it in isolation.
 setup_dist_bins() {
   if $IS_WIN; then
     is_exe "dist/bin" "saw" && return
@@ -26,6 +36,7 @@ setup_dist_bins() {
     extract_exe "saw-remote-api" "dist/bin"
   fi
   extract_exe "saw" "dist/bin"
+  extract_exe "crux-mir-comp" "dist/bin"
   extract_exe "cryptol" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
@@ -79,7 +90,7 @@ haddock() {
   # currently demands --internal in place of --haddock-internal.)
   #
   # (Every component you want docs for needs to be listed explicitly,
-  # not just every package.)  
+  # not just every package.)
   #
   # We use --haddock-internal because the point of generating the
   # haddocks for SAW (which doesn't have an external-facing library

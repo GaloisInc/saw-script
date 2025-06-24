@@ -34,6 +34,11 @@ The most notable changes are:
   - the crux-mir-comp test suite is now called `crux-mir-comp-tests`
     rather than just `test`.
 
+SAW binary distributions now include the `crux-mir-comp` tool under `bin/`.
+`crux-mir-comp` is a [Crux](https://tools.galois.com/saw/crux/what-is-crux)
+frontend for MIR in the style of `crux-mir`, but extended with the ability to
+support compositional verification using techniques similar to SAW.
+
 ## New Features
 
 * SAW now supports importing Cryptol code that uses enums.
