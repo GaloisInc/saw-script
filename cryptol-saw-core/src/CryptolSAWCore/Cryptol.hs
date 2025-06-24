@@ -2383,7 +2383,7 @@ genCodeForEnum sc env nt ctors =
             -- all uses are direct under the 'Pi'
             -- N.B.: scFun's aren't included in De Bruijn's!
       altFuncTypes <- mkAltFuncTypes b
-      scPiAbstractExts sc tyParamsECs
+      scGeneralizeExts sc tyParamsECs
         =<< scPi sc "b" sort0
         =<< scFunAll sc altFuncTypes
         =<< scFun sc sumTy_applied b
