@@ -46,10 +46,13 @@ import SAWCentral.Yosys.Cell
 --------------------------------------------------------------------------------
 -- ** Building a network graph from a Yosys module
 
+-- | A 'Netgraph' represents the data dependencies between 'Cell's in
+-- a module. The graph has 'Text' keys which are the cell instance
+-- names.
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
   , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], Text, [Text])
-  -- , _netgraphVertexFromKey :: Bitrep -> Maybe Graph.Vertex
+  -- , _netgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
@@ -65,8 +68,7 @@ moduleNetgraph m =
 
     cellDeps :: Cell [Bitrep] -> [Text]
     cellDeps c
-      | c ^. cellType == CellTypeDff = []
-      | c ^. cellType == CellTypeFf = []
+      | cellIsRegister c = []
       | otherwise =
         Set.toAscList $ Set.fromList $
         Maybe.mapMaybe (flip Map.lookup sources) $

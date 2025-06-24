@@ -25,8 +25,8 @@ import Control.Exception (throw)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
 
@@ -42,30 +42,29 @@ import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Netgraph
 
--- | Find all of the flip-flop cells in a network graph.
-findDffs ::
-  Netgraph ->
-  Map Text (Cell [Bitrep])
-findDffs ng =
-  Map.fromList
-  . filter (\(_, c) -> c ^. cellType `elem` [CellTypeDff, CellTypeFf])
-  . fmap (\v -> let (n, nm, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
-  . Graph.vertices
-  $ ng ^. netgraphGraph
-
--- ^ A SAWCore translation of an HDL module alongside some type information that is useful to keep around.
+-- | A SAWCore translation of an HDL module alongside some type
+-- information that is useful to keep around.
 data YosysSequential = YosysSequential
-  { _yosysSequentialTerm :: SC.TypedTerm -- ^ The "raw" SAWCore term derived from the module, which includes a __state__ field in the input and output.
-  , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each state field name to a SAWCore and Cryptol type.
-  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each input to a SAWCore and Cryptol type.
-  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each output to a SAWCore and Cryptol type.
-  , _yosysSequentialInputWidths :: Map Text Natural -- ^ A mapping from each input to a width.
-  , _yosysSequentialOutputWidths :: Map Text Natural -- ^ A mapping from each output to a width.
-  , _yosysSequentialStateWidths :: Map Text Natural -- ^ A mapping from each state field to a width.
+  { _yosysSequentialTerm :: SC.TypedTerm
+    -- ^ The "raw" SAWCore term derived from the module, which
+    -- includes a __state__ field in the input and output.
+  , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
+    -- ^ A mapping from each state field name to a SAWCore and Cryptol type.
+  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
+    -- ^ A mapping from each input to a SAWCore and Cryptol type.
+  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+    -- ^ A mapping from each output to a SAWCore and Cryptol type.
+  , _yosysSequentialInputWidths :: Map Text Natural
+    -- ^ A mapping from each input to a width.
+  , _yosysSequentialOutputWidths :: Map Text Natural
+    -- ^ A mapping from each output to a width.
+  , _yosysSequentialStateWidths :: Map Text Natural
+    -- ^ A mapping from each state field to a width.
   }
 makeLenses ''YosysSequential
 
--- | Add a record-typed field named __states__ to the given mapping of field names to types.
+-- | Add a record-typed field named __states__ to the given mapping of
+-- field names to types.
 insertStateField ::
   MonadIO m =>
   SC.SharedContext ->
@@ -86,8 +85,20 @@ convertModuleInline ::
 convertModuleInline sc m = do
   let ng = moduleNetgraph m
 
+  let netnames =
+        Map.fromList
+        [ (n ^. netnameBits, t)
+        | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
+
+  let bestName t c =
+        fromMaybe (cellIdentifier t) $
+        do bs <- Map.lookup "Q" (c ^. cellConnections)
+           Map.lookup bs netnames
+
   -- construct SAWCore and Cryptol types
-  let dffs = findDffs ng
+  let dffs =
+        Map.fromList
+        [ (bestName t c, c) | (t, c) <- Map.assocs (m ^. moduleCells), cellIsRegister c ]
 
   stateWidths <- forM dffs $ \c ->
     case Map.lookup "Q" $ c ^. cellConnections of
@@ -179,8 +190,9 @@ convertModuleInline sc m = do
     , _yosysSequentialStateWidths = stateWidths
     }
 
--- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
--- | The resulting term has a parameter for the initial state, the resulting Cryptol types does not.
+-- | Given a SAWCore term with an explicit state, iterate the term the
+-- given number of times. The resulting term has a parameter for the
+-- initial state, the resulting Cryptol types does not.
 composeYosysSequentialHelper ::
   forall m.
   MonadIO m =>
@@ -260,8 +272,9 @@ composeYosysSequentialHelper sc s n = do
 
   pure (res, cty)
 
--- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
--- | Accessing the initial state produces an error.
+-- | Given a SAWCore term with an explicit state, iterate the term the
+-- given number of times. Accessing the initial state produces an
+-- error.
 composeYosysSequential ::
   forall m.
   MonadIO m =>
@@ -277,8 +290,9 @@ composeYosysSequential sc s n = do
   res <- liftIO $ SC.scApply sc t initialState
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res
 
--- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
--- | The resulting term has a parameter for the initial state.
+-- | Given a SAWCore term with an explicit state, iterate the term the
+-- given number of times. The resulting term has a parameter for the
+-- initial state.
 composeYosysSequentialWithState ::
   forall m.
   MonadIO m =>
