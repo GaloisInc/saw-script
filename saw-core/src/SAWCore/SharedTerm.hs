@@ -244,6 +244,8 @@ module SAWCore.SharedTerm
    , scOpenTerm
    , scCloseTerm
    , scLambdaBody
+  , scAsLambda
+  , scAsPi
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
@@ -2941,3 +2943,19 @@ scLambdaBody :: SharedContext -> Term -> IO Term
 scLambdaBody sc (asLambda -> Just (nm, tp, body)) =
   scOpenTerm sc nm tp 0 body >>= scLambdaBody sc . snd
 scLambdaBody _sc t = return t
+
+-- | Deconstruct a lambda term into a bound variable and a body, using
+-- a fresh 'ExtCns' for the bound variable.
+scAsLambda :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
+scAsLambda sc t =
+  case asLambda t of
+    Nothing -> pure Nothing
+    Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
+
+-- | Deconstruct a pi term into a bound variable and a body, using
+-- a fresh 'ExtCns' for the bound variable.
+scAsPi :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
+scAsPi sc t =
+  case asPi t of
+    Nothing -> pure Nothing
+    Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
