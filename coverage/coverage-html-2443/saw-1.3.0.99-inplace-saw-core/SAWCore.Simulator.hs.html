@@ -644,7 +644,7 @@ span.spaces    { background: white }
 <span class="lineno">  625 </span><span class="spaces">    </span><span class="istickedoff">recEval (t@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf }) =</span>
 <span class="lineno">  626 </span><span class="spaces">      </span><span class="istickedoff">case IMap.lookup i memo of</span>
 <span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; force x</span>
-<span class="lineno">  628 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> lam recEval tf env</span>
+<span class="lineno">  628 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; evalTermF <span class="nottickedoff">cfg</span> <span class="nottickedoff">lam</span> recEval tf env</span>
 <span class="lineno">  629 </span><span class="spaces">      </span><span class="istickedoff">where memo = if termIsClosed t then memoClosed else memoLocal</span></span>
 <span class="lineno">  630 </span>
 <span class="lineno">  631 </span>{-# SPECIALIZE evalOpen ::

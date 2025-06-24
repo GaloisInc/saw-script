@@ -833,7 +833,7 @@ span.spaces    { background: white }
 <span class="lineno">  814 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- importSchema sc env sch</span>
 <span class="lineno">  815 </span><span class="spaces">         </span><span class="istickedoff">e &lt;- importExpr sc env expr</span>
 <span class="lineno">  816 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  817 </span><span class="spaces">         </span><span class="istickedoff">scConstant' sc nmi e t</span>
+<span class="lineno">  817 </span><span class="spaces">         </span><span class="istickedoff">scConstant' sc nmi e <span class="nottickedoff">t</span></span>
 <span class="lineno">  818 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">-- lookup primitive in the extra primitive lookup table</span>
 <span class="lineno">  820 </span><span class="spaces">  </span><span class="istickedoff">| Just nm &lt;- <span class="nottickedoff">C.asPrim n</span>, Just t &lt;- <span class="nottickedoff">Map.lookup nm (envPrims env)</span> = <span class="nottickedoff">return t</span></span>
