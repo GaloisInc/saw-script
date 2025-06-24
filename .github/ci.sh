@@ -79,7 +79,7 @@ haddock() {
   # currently demands --internal in place of --haddock-internal.)
   #
   # (Every component you want docs for needs to be listed explicitly,
-  # not just every package.)  
+  # not just every package.)
   #
   # We use --haddock-internal because the point of generating the
   # haddocks for SAW (which doesn't have an external-facing library
