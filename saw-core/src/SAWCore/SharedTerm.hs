@@ -252,7 +252,6 @@ module SAWCore.SharedTerm
   , getAllExtSet
   , getConstantSet
   , scInstantiateExt
-  , scPiAbstractExts
   , scAbstractExts
   , scAbstractTerms
   , scAbstractExtsEtaCollapse
@@ -2702,35 +2701,6 @@ scAbstractTerms sc args body =
       case asExtCns t of
         Just ec -> pure ec
         Nothing -> fail "scAbstractTerms: expected ExtCns"
-
--- | Abstract over the given list of external constants by wrapping
---   the given term with lambdas and replacing the external constant
---   occurrences with the appropriate local variables.
-scPiAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
-scPiAbstractExts _ [] x = return x
-scPiAbstractExts sc exts x = loop (zip (inits exts) exts)
-  where
-    -- each pair contains a single ExtCns and a list of all
-    -- the ExtCns values that appear before it in the original list.
-    loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
-
-    -- special case: outermost variable, no need to abstract
-    -- inside the type of ec
-    loop (([],ec):ecs) =
-      do tm' <- loop ecs
-         scPi sc (toShortName (ecName ec)) (ecType ec) tm'
-
-    -- ordinary case. We need to abstract over all the ExtCns in @begin@
-    -- before apply scLambda.  This ensures any dependencies between the
-    -- types are handled correctly.
-    loop ((begin,ec):ecs) =
-      do tm' <- loop ecs
-         tp' <- scExtsToLocals sc begin (ecType ec)
-         scPi sc (toShortName (ecName ec)) tp' tm'
-
-    -- base case, convert all the exts in the body of x into deBruijn variables
-    loop [] = scExtsToLocals sc exts x
-
 
 -- | Abstract over the given list of external constants by wrapping
 --   the given term with lambdas and replacing the external constant
