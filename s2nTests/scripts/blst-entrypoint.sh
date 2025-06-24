@@ -11,7 +11,8 @@ cp /saw-bin/abc bin/abc
 cp /saw-bin/yices bin/yices
 # Z3 4.8.14 has been known to nondeterministically time out with the BLST
 # proofs, so fall back to 4.8.8 instead. See #1772.
-cp /saw-bin/z3-4.8.8 bin/z3
+#cp /saw-bin/z3-4.8.8 bin/z3
+cp /saw-bin/z3 bin/z3
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec

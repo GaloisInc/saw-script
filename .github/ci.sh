@@ -199,8 +199,8 @@ zip_dist_with_solvers() {
   # back to 4.8.8 (a version known to work with the AWSLC and BLST proofs)
   # where necessary. See #1772.
   cp "$BIN/z3"         dist/bin/
-  cp "$BIN/z3-4.8.8"   dist/bin/
-  cp "$BIN/z3-4.8.14"  dist/bin/
+  # cp "$BIN/z3-4.8.8"   dist/bin/
+  # cp "$BIN/z3-4.8.14"  dist/bin/
   cp -r dist "$sname"
   tar -cvzf "$sname".tar.gz "$sname"
 }
