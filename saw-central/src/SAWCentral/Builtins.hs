@@ -1356,10 +1356,10 @@ proveByBVInduction script t =
             --
             --   (x : Vec w Bool) -> p x
             thmResult <- io $
-                do vars <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
+                do vars <- mapM (scExtCns sc) pis
                    t1   <- scApplyAllBeta sc (ttTerm t) vars
                    t2   <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
-                   t3   <- scPiList sc pis t2
+                   t3   <- scGeneralizeExts sc pis t2
                    _    <- scTypeCheckError sc t3 -- sanity check
                    return t3
 
@@ -1369,35 +1369,37 @@ proveByBVInduction script t =
             --
             --   ((x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
             thmHyp <- io $
-                do vars  <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
+                do vars  <- mapM (scExtCns sc) pis
                    t1    <- scApplyAllBeta sc (ttTerm t) vars
                    tsz   <- scTupleSelector sc t1 1 2 -- left element
                    tbody <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
-                   tsz_shft   <- incVars sc 0 (length pis) tsz
+                   ivars <- sequence [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
+                   i_t1  <- scApplyAllBeta sc (ttTerm t) ivars
+                   i_tsz <- scTupleSelector sc i_t1 1 2 -- left element
 
                    bvult <- scGlobalDef sc "Prelude.bvult"
-                   islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, tsz, tsz_shft]
+                   islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, i_tsz, tsz]
 
                    tinner <- scFun sc islt tbody
-                   thyp   <- scPiList sc [ ("i_" <> nm, z) | (nm,z) <- pis ] tinner
+                   thyp   <- scGeneralizeTerms sc ivars tinner
 
                    touter <- scFun sc thyp tbody
-                   scPiList sc pis touter
+                   scGeneralizeExts sc pis touter
 
             -- The "motive" we will pass to the 'Nat_complete_induction' principle.
             --
             --      (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
             indMotive <- io $
-                do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
-                   indVar <- scLocalVar sc (length pis)
+                do vars   <- mapM (scExtCns sc) pis
+                   indVar <- scFreshGlobal sc "inductionVar" natty
                    t1     <- scApplyAllBeta sc (ttTerm t) vars
                    tsz    <- scTupleSelector sc t1 1 2 -- left element
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
                    tbody  <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- right element
                    t2     <- scFun sc teq tbody
-                   t3     <- scPiList sc pis t2
-                   scLambda sc "inductionVar" natty t3
+                   t3     <- scGeneralizeTerms sc vars t2
+                   scAbstractTerms sc [indVar] t3
 
             -- This is the most complicated part of building the induction schema. Here we provide
             -- the proof term required by 'Nat_complete_induction' that shows how to reduce our
@@ -1415,21 +1417,15 @@ proveByBVInduction script t =
             --                 y (IsLeNat_base (bvToNat w y)))
 
             indHypProof <- io $
-                do hEC  <- scFreshEC sc "H" thmHyp
-                   hVar <- scExtCns sc hEC
-                   nEC  <- scFreshEC sc "n" natty
-                   nVar <- scExtCns sc nEC
-                   hindEC <- scFreshEC sc "Hind" =<<
-                                do var0 <- scLocalVar sc 0
-                                   var1 <- scLocalVar sc 1
-                                   lt   <- scGlobalApply sc "Prelude.IsLtNat" [var0, nVar]
-                                   scPi sc "m" natty =<< scPi sc "_" lt =<< scApplyBeta sc indMotive var1
-                   hindVar <- scExtCns sc hindEC
-                   varECs <- mapM (uncurry (scFreshEC sc)) pis
-                   vars   <- mapM (scExtCns sc) varECs
+                do hVar    <- scFreshGlobal sc "H" thmHyp
+                   nVar    <- scFreshGlobal sc "n" natty
+                   hindVar <- scFreshGlobal sc "Hind" =<<
+                                do m <- scFreshGlobal sc "m" natty
+                                   lt <- scGlobalApply sc "Prelude.IsLtNat" [m, nVar]
+                                   scGeneralizeTerms sc [m] =<< scFun sc lt =<< scApplyBeta sc indMotive m
+                   vars    <- mapM (scExtCns sc) pis
 
-                   innerVarECs <- mapM (uncurry (scFreshEC sc)) [ ("i_" <> nm, z) | (nm,z) <- pis ]
-                   innerVars   <- mapM (scExtCns sc) innerVarECs
+                   innerVars <- sequence [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
 
                    outersz <- do t1   <- scApplyAllBeta sc (ttTerm t) vars
                                  scTupleSelector sc t1 1 2 -- left element
@@ -1441,23 +1437,21 @@ proveByBVInduction script t =
 
                    succinnersz <- scCtorApp sc "Prelude.Succ" [natinnersz]
 
-                   bvltEC  <- scFreshEC sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
-                   bvltVar <- scExtCns sc bvltEC
+                   bvltVar <- scFreshGlobal sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
 
-                   leEC    <- scFreshEC sc "Hle" =<<
+                   leVar   <- scFreshGlobal sc "Hle" =<<
                                  scDataTypeApp sc "Prelude.IsLeNat" [natoutersz, nVar]
-                   leVar   <- scExtCns sc leEC
 
                    refl_inner <- scCtorApp sc "Prelude.IsLeNat_base" [natinnersz]
 
                    prf     <- do hyx <- scGlobalApply sc "Prelude.bvultToIsLtNat" [wt,innersz,outersz,bvltVar]
                                  scGlobalApply sc "Prelude.IsLeNat_transitive" [succinnersz, natoutersz, nVar, hyx, leVar]
                    inner   <- do body <- scApplyAll sc hindVar ([natinnersz,prf]++innerVars++[refl_inner])
-                                 scAbstractExts sc (innerVarECs ++ [bvltEC]) body
+                                 scAbstractTerms sc (innerVars ++ [bvltVar]) body
 
                    body <- scApplyAll sc hVar (vars ++ [inner])
 
-                   scAbstractExts sc ([hEC, nEC, hindEC] ++ varECs ++ [leEC]) body
+                   scAbstractTerms sc ([hVar, nVar, hindVar] ++ vars ++ [leVar]) body
 
             -- Now we put all the pieces together
             --
@@ -1465,16 +1459,15 @@ proveByBVInduction script t =
             -- \ (x : Vec x Bool) ->
             --    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))
             indApp <- io $
-                do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
-                   varH   <- scLocalVar sc (length pis)
+                do vars   <- mapM (scExtCns sc) pis
+                   varH   <- scFreshGlobal sc "Hind" thmHyp
                    t1     <- scApplyAllBeta sc (ttTerm t) vars
                    tsz    <- scTupleSelector sc t1 1 2 -- left element
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    trefl  <- scCtorApp sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
                    ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
-                   ind'   <- scLambdaList sc pis ind
-                   ind''  <- scLambda sc "Hind" thmHyp ind'
+                   ind''  <- scAbstractTerms sc (varH : vars) ind
 
                    _tp    <- scTypeCheckError sc ind'' -- sanity check
                    return ind''
@@ -1501,8 +1494,8 @@ proveByBVInduction script t =
   -- and the width of the bitvector we are doing induction on.
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
-       case asPi ty' of
-         Just (nm,tp,body) -> checkInductionScheme sc opts ((nm,tp):pis) body
+       scAsPi sc ty' >>= \case
+         Just (ec, body) -> checkInductionScheme sc opts (ec : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->
