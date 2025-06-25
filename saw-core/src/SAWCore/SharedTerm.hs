@@ -245,7 +245,9 @@ module SAWCore.SharedTerm
    , scCloseTerm
    , scLambdaBody
   , scAsLambda
+  , scAsLambdaList
   , scAsPi
+  , scAsPiList
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
@@ -2952,6 +2954,23 @@ scAsLambda sc t =
     Nothing -> pure Nothing
     Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
 
+-- | Deconstruct a nested lambda term with 0 or more binders into a
+-- list of bound variables and a body, using a fresh 'ExtCns' for each
+-- bound variable.
+scAsLambdaList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
+scAsLambdaList sc = loop [] []
+  where
+    loop ecs vs t =
+      case asLambda t of
+        Nothing ->
+          do t' <- instantiateVarList sc 0 vs t
+             pure (reverse ecs, t')
+        Just (nm, tp, body) ->
+          do tp' <- instantiateVarList sc 0 vs tp
+             ec  <- scFreshEC sc nm tp'
+             v   <- scExtCns sc ec
+             loop (ec : ecs) (v : vs) body
+
 -- | Deconstruct a pi term into a bound variable and a body, using
 -- a fresh 'ExtCns' for the bound variable.
 scAsPi :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
@@ -2959,3 +2978,20 @@ scAsPi sc t =
   case asPi t of
     Nothing -> pure Nothing
     Just (nm, tp, body) -> Just <$> scOpenTerm sc nm tp 0 body
+
+-- | Deconstruct a nested pi term with 0 or more binders into a list
+-- of bound variables and a body, using a fresh 'ExtCns' for each
+-- bound variable.
+scAsPiList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
+scAsPiList sc = loop [] []
+  where
+    loop ecs vs t =
+      case asPi t of
+        Nothing ->
+          do t' <- instantiateVarList sc 0 vs t
+             pure (reverse ecs, t')
+        Just (nm, tp, body) ->
+          do tp' <- instantiateVarList sc 0 vs tp
+             ec  <- scFreshEC sc nm tp'
+             v   <- scExtCns sc ec
+             loop (ec : ecs) (v : vs) body
