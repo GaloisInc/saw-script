@@ -63,7 +63,6 @@ module SAWCore.SharedTerm
   , scFreshName
   , scExtCns
   , scGlobalDef
-  , scRegisterGlobal
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
   , scDataTypeAppParams
@@ -403,6 +402,12 @@ data SharedContext = SharedContext
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   }
+-- Invariant: scGlobalEnv is a cache with one entry for every global
+-- declaration in the 'ModuleMap' whose name is a 'ModuleIdentifier'.
+-- Each map entry points to a 'Constant' term with the same 'Ident'.
+-- It exists only to save one map lookup when building terms: Without
+-- it we would first have to look up the Ident by URI in scURIEnv, and
+-- then do another lookup for hash-consing the Constant term.
 
 data SharedContextCheckpoint =
   SCC
@@ -518,6 +523,9 @@ scGlobalDef sc ident =
        Nothing -> fail ("Could not find global: " ++ show ident)
        Just t -> pure t
 
+-- | Internal function to register an 'Ident' with a 'Term' (which
+-- must be a 'Constant' term with the same 'Ident') in the
+-- 'scGlobalEnv' map of the 'SharedContext'. Not exported.
 scRegisterGlobal :: SharedContext -> Ident -> Term -> IO ()
 scRegisterGlobal sc ident t =
   do dup <- atomicModifyIORef' (scGlobalEnv sc) f
