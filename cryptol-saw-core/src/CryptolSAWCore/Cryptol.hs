@@ -249,7 +249,7 @@ importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
     C.KType       -> scISort sc (mkSort 0)
-    C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
+    C.KNum        -> scGlobalApply sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
 
@@ -1699,7 +1699,7 @@ proveEq sc env t1 t2
            n2' <- importType sc env n2
            a1' <- importType sc env a1
            a2' <- importType sc env a2
-           num <- scDataTypeApp sc "Cryptol.Num" []
+           num <- scGlobalApply sc "Cryptol.Num" []
            nEq <- if n1 == n2
                   then scCtorApp sc "Prelude.Refl" [num, n1']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
@@ -1710,7 +1710,7 @@ proveEq sc env t1 t2
       (C.tIsIntMod -> Just n1, C.tIsIntMod -> Just n2) ->
         do n1' <- importType sc env n1
            n2' <- importType sc env n2
-           num <- scDataTypeApp sc "Cryptol.Num" []
+           num <- scGlobalApply sc "Cryptol.Num" []
            nEq <- if n1 == n2
                   then scCtorApp sc "Prelude.Refl" [num, n1']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
@@ -2273,7 +2273,7 @@ genCodeForEnum sc env nt ctors =
   -------------------------------------------------------------
   -- Definitions to access needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
-  scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
+  scListSort     <- scGlobalApply sc "Prelude.ListSort" []
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
   let scLS_Cons s ls   = scCtorApp     sc "Prelude.LS_Cons" [s,ls]

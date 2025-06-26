@@ -151,7 +151,7 @@ mkReflProof sc b =
   do b_trm <- scBool sc b
      bool_tp <- scBoolType sc
      refl_trm <- scCtorApp sc "Prelude.Refl" [bool_tp, b_trm]
-     eq_tp <- scDataTypeApp sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
+     eq_tp <- scGlobalApply sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
      return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm
 
 mkDummyProofValue :: Text -> IO (Thunk TermModel)

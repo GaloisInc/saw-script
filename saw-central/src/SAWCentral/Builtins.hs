@@ -1390,7 +1390,7 @@ proveByBVInduction script t =
             indMotive <- io $
                 do indVar <- scFreshGlobal sc "inductionVar" natty
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
-                   teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
+                   teq    <- scGlobalApply sc "Prelude.IsLeNat" [tsz', indVar]
                    t2     <- scFun sc teq tbody
                    t3     <- scGeneralizeTerms sc vars t2
                    scAbstractTerms sc [indVar] t3
@@ -1429,7 +1429,7 @@ proveByBVInduction script t =
                    bvltVar <- scFreshGlobal sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
 
                    leVar   <- scFreshGlobal sc "Hle" =<<
-                                 scDataTypeApp sc "Prelude.IsLeNat" [natoutersz, nVar]
+                                 scGlobalApply sc "Prelude.IsLeNat" [natoutersz, nVar]
 
                    refl_inner <- scCtorApp sc "Prelude.IsLeNat_base" [natinnersz]
 

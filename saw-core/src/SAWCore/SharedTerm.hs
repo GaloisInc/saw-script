@@ -67,7 +67,6 @@ module SAWCore.SharedTerm
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
   , scDataTypeAppParams
-  , scDataTypeApp
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
@@ -557,11 +556,6 @@ scDataTypeAppParams :: SharedContext
 scDataTypeAppParams sc d params args =
   do t <- scTermF sc (Constant d)
      scApplyAll sc t (params ++ args)
-
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
-scDataTypeApp sc d_id args = scGlobalApply sc d_id args
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
