@@ -1210,7 +1210,7 @@ mkStreamOp sc cfg =
                      natPN <- traverse (evalType cfg) (dtExtCns natDT)
                      ty' <- readBackTValue sc cfg ty
                      ftm <- readBackValue sc cfg (VPiType nm (VDataType natPN [] []) (VNondependentPi ty)) f
-                     scCtorApp sc (mkIdent preludeModuleName "MkStream") [ty',ftm]
+                     scGlobalApply sc (mkIdent preludeModuleName "MkStream") [ty',ftm]
            return (VExtra (VExtraStream ty fn ref stm))
 
       _ -> throwE "expected function value"

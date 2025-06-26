@@ -731,7 +731,7 @@ mrUnitType = Type <$> liftSC0 scUnitType
 
 -- | Build a constructor application in Mr. Monad
 mrCtorApp :: Ident -> [Term] -> MRM t Term
-mrCtorApp = liftSC2 scCtorApp
+mrCtorApp = liftSC2 scGlobalApply
 
 -- | Build a 'Term' for a global in Mr. Monad
 mrGlobalTerm :: Ident -> MRM t Term

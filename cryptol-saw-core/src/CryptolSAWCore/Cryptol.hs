@@ -337,8 +337,8 @@ importType sc env ty =
       case tcon of
         C.TC tc ->
           case tc of
-            C.TCNum n    -> scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger n)]
-            C.TCInf      -> scCtorApp sc "Cryptol.TCInf" []
+            C.TCNum n    -> scGlobalApply sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger n)]
+            C.TCInf      -> scGlobalApply sc "Cryptol.TCInf" []
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
@@ -1691,7 +1691,7 @@ proveEq sc env t1 t2
   | t1 == t2 =
     do s <- scSort sc (mkSort 0)
        t' <- importType sc env t1
-       scCtorApp sc "Prelude.Refl" [s, t']
+       scGlobalApply sc "Prelude.Refl" [s, t']
   | otherwise =
     case (tNoUser t1, tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
@@ -1701,7 +1701,7 @@ proveEq sc env t1 t2
            a2' <- importType sc env a2
            num <- scGlobalApply sc "Cryptol.Num" []
            nEq <- if n1 == n2
-                  then scCtorApp sc "Prelude.Refl" [num, n1']
+                  then scGlobalApply sc "Prelude.Refl" [num, n1']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
            aEq <- proveEq sc env a1 a2
            if a1 == a2
@@ -1712,7 +1712,7 @@ proveEq sc env t1 t2
            n2' <- importType sc env n2
            num <- scGlobalApply sc "Cryptol.Num" []
            nEq <- if n1 == n2
-                  then scCtorApp sc "Prelude.Refl" [num, n1']
+                  then scGlobalApply sc "Prelude.Refl" [num, n1']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
            scGlobalApply sc "Cryptol.IntModNum_cong" [n1', n2', nEq]
       (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
@@ -2274,16 +2274,16 @@ genCodeForEnum sc env nt ctors =
   -- Definitions to access needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scGlobalApply sc "Prelude.ListSort" []
-  scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
+  scLS_Nil       <- scGlobalApply sc "Prelude.LS_Nil"  []
 
-  let scLS_Cons s ls   = scCtorApp     sc "Prelude.LS_Cons" [s,ls]
+  let scLS_Cons s ls   = scGlobalApply sc "Prelude.LS_Cons" [s,ls]
 
       scEithersV ls    = scGlobalApply sc "Prelude.EithersV" [ls]
       sc_eithersV b ls = scGlobalApply sc "Prelude.eithersV" [b,ls]
 
      -- to create values of the Either type:
-      scLeft  a b x    = scCtorApp     sc "Prelude.Left"  [a,b,x]
-      scRight a b x    = scCtorApp     sc "Prelude.Right" [a,b,x]
+      scLeft  a b x    = scGlobalApply sc "Prelude.Left"  [a,b,x]
+      scRight a b x    = scGlobalApply sc "Prelude.Right" [a,b,x]
 
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
@@ -2293,9 +2293,9 @@ genCodeForEnum sc env nt ctors =
       scMakeFunsTo :: Term -> [(Term,Term)] -> IO Term
       scMakeFunsTo b tvs =
         do
-        scFunsTo_Nil <- scCtorApp sc "Prelude.FunsTo_Nil"  [b]
+        scFunsTo_Nil <- scGlobalApply sc "Prelude.FunsTo_Nil"  [b]
         let scFunsTo_Cons (t,v) r =
-              scCtorApp sc "Prelude.FunsTo_Cons" [b,t,v,r]
+              scGlobalApply sc "Prelude.FunsTo_Cons" [b,t,v,r]
         Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs
 
   -------------------------------------------------------------

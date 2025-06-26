@@ -92,7 +92,6 @@ module SAWCore.SharedTerm
     -- ** Term construction
     -- *** Datatypes and constructors
   , scCtorAppParams
-  , scCtorApp
   , scApplyCtor
   , scSort
   , scISort
@@ -567,11 +566,6 @@ scCtorAppParams :: SharedContext
 scCtorAppParams sc c params args =
   do t <- scTermF sc (Constant c)
      scApplyAll sc t (params ++ args)
-
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
-scCtorApp sc c_id args = scGlobalApply sc c_id args
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv

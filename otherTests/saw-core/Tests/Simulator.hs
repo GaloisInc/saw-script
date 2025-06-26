@@ -54,11 +54,11 @@ normalizeSharedTermTests = [
 
   -- Succ 2 ~> 3
   ("Succ_nat",
-   \sc -> scCtorApp sc "Prelude.Succ" . (:[]) =<< scNat sc 2,
+   \sc -> scGlobalApply sc "Prelude.Succ" . (:[]) =<< scNat sc 2,
    \sc -> scNat sc 3),
   -- Succ (bvToNat 8 2) ~> bvToNat 9 (bvNat 9 3) 
   ("Succ_bvToNat",
-   \sc -> scCtorApp sc "Prelude.Succ" . (:[]) =<<
+   \sc -> scGlobalApply sc "Prelude.Succ" . (:[]) =<<
             scBvToNat sc 8 =<< scBvLit sc 8 2,
    \sc -> scBvToNat sc 9 =<< scBvConst sc 9 3),
 
