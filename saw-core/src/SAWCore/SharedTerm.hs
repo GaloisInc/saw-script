@@ -504,10 +504,7 @@ scFreshName sc x =
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
-  do i <- scFreshVarIndex sc
-     let uri = scFreshNameURI x i
-     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
-     scRegisterNameWithIndex sc i nmi
+  do Name i nmi <- scFreshName sc x
      pure (EC i nmi tp)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
@@ -618,26 +615,42 @@ scInsDefInMap sc d =
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
 
+-- | Internal function to extend the SAWCore global environment with a
+-- new constant, which may or may not have a definition. Not exported.
+-- Assumes that the type and body (if present) are closed terms, and
+-- that the body has the given type.
+scDeclareDef ::
+  SharedContext -> Name -> DefQualifier -> Term -> Maybe Term -> IO Term
+scDeclareDef sc nm q ty body =
+  do scInsDefInMap sc $
+       Def
+       { defNameInfo = nameInfo nm
+       , defVarIndex = nameIndex nm
+       , defQualifier = q
+       , defType = ty
+       , defBody = body
+       }
+     t <- scTermF sc (Constant nm)
+     -- Register constant in scGlobalEnv if it has an Ident name
+     case nameInfo nm of
+       ModuleIdentifier ident -> scRegisterGlobal sc ident t
+       ImportedName{} -> pure ()
+     pure t
+
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      i <- scRegisterName sc nmi
      let nm = Name i nmi
-     t <- scTermF sc (Constant nm)
-     scRegisterGlobal sc ident t
-     scInsDefInMap sc $
-                  Def { defNameInfo = nmi,
-                        defVarIndex = i,
-                        defQualifier = q,
-                        defType = def_tp,
-                        defBody = Nothing }
+     _ <- scDeclareDef sc nm q def_tp Nothing
+     pure ()
 
 -- | Insert a definition into a SAW core module
 scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
 scInsertDef sc ident def_tp def_tm =
-  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
-     scRegisterGlobal sc ident t
+  do _ <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
+     pure ()
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
@@ -1689,13 +1702,7 @@ scConstant sc name rhs ty =
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
      nm <- scFreshName sc name
-     scInsDefInMap sc $
-       Def { defNameInfo = nameInfo nm,
-             defVarIndex = nameIndex nm,
-             defQualifier = NoQualifier,
-             defType = ty',
-             defBody = Just rhs' }
-     t <- scTermF sc (Constant nm)
+     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1722,13 +1729,7 @@ scConstant' sc nmi rhs ty =
      ty' <- scFunAll sc (map ecType ecs) ty
      i <- scRegisterName sc nmi
      let nm = Name i nmi
-     scInsDefInMap sc $
-       Def { defNameInfo = nmi,
-             defVarIndex = i,
-             defQualifier = NoQualifier,
-             defType = ty',
-             defBody = Just rhs' }
-     t <- scTermF sc (Constant nm)
+     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1744,13 +1745,7 @@ scOpaqueConstant ::
 scOpaqueConstant sc nmi ty =
   do i <- scRegisterName sc nmi
      let nm = Name i nmi
-     scInsDefInMap sc $
-       Def { defNameInfo = nmi,
-             defVarIndex = i,
-             defQualifier = NoQualifier,
-             defType = ty,
-             defBody = Nothing }
-     scTermF sc (Constant nm)
+     scDeclareDef sc nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
