@@ -500,7 +500,7 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
             Just (tp, x, _y) ->
               -- NB, we don't check if x is convertable to y here, as that will
               -- be done later in @tacticTrivial@ during the type-checking step
-              lift $ scCtorApp sc "Prelude.Refl" [tp, x]
+              lift $ scGlobalApply sc "Prelude.Refl" [tp, x]
             Nothing ->
               throwError $ unlines
                 [ "The trivial tactic can only prove quantified equalities, but"

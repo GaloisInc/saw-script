@@ -164,7 +164,7 @@ declareDefFun mnm d tp =
 -- for datatype @d@ with parameters @p_ctx@ and type @tp@ in module @MMM@
 declareDataTypeFun :: ModuleName -> Text -> Un.UTerm -> DecWriter ()
 declareDataTypeFun mnm d tp =
-  declareTypedNameFun [| scDataTypeApp |] mnm d False tp
+  declareTypedNameFun [| scGlobalApply |] mnm d False tp
 
 -- | Declare a Haskell function
 --
@@ -173,7 +173,7 @@ declareDataTypeFun mnm d tp =
 -- for constructor @c@ with type (including parameters) @tp@ in module @MMM@
 declareCtorFun :: ModuleName -> Text -> Un.UTerm -> DecWriter ()
 declareCtorFun mnm c tp =
-  declareTypedNameFun [| scCtorApp |] mnm c True tp
+  declareTypedNameFun [| scGlobalApply |] mnm c True tp
 
 
 -- | Declare Haskell functions, via 'declareTermApplyFun', that build shared

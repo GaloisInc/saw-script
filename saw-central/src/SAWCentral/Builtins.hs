@@ -1390,7 +1390,7 @@ proveByBVInduction script t =
             indMotive <- io $
                 do indVar <- scFreshGlobal sc "inductionVar" natty
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
-                   teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
+                   teq    <- scGlobalApply sc "Prelude.IsLeNat" [tsz', indVar]
                    t2     <- scFun sc teq tbody
                    t3     <- scGeneralizeTerms sc vars t2
                    scAbstractTerms sc [indVar] t3
@@ -1424,14 +1424,14 @@ proveByBVInduction script t =
 
                    natinnersz <- scApplyAll sc toNat [wt, innersz]
 
-                   succinnersz <- scCtorApp sc "Prelude.Succ" [natinnersz]
+                   succinnersz <- scGlobalApply sc "Prelude.Succ" [natinnersz]
 
                    bvltVar <- scFreshGlobal sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
 
                    leVar   <- scFreshGlobal sc "Hle" =<<
-                                 scDataTypeApp sc "Prelude.IsLeNat" [natoutersz, nVar]
+                                 scGlobalApply sc "Prelude.IsLeNat" [natoutersz, nVar]
 
-                   refl_inner <- scCtorApp sc "Prelude.IsLeNat_base" [natinnersz]
+                   refl_inner <- scGlobalApply sc "Prelude.IsLeNat_base" [natinnersz]
 
                    prf     <- do hyx <- scGlobalApply sc "Prelude.bvultToIsLtNat" [wt,innersz,outersz,bvltVar]
                                  scGlobalApply sc "Prelude.IsLeNat_transitive" [succinnersz, natoutersz, nVar, hyx, leVar]
@@ -1450,7 +1450,7 @@ proveByBVInduction script t =
             indApp <- io $
                 do varH   <- scFreshGlobal sc "Hind" thmHyp
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
-                   trefl  <- scCtorApp sc "Prelude.IsLeNat_base" [tsz']
+                   trefl  <- scGlobalApply sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
                    ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
                    ind''  <- scAbstractTerms sc (varH : vars) ind
@@ -1988,8 +1988,8 @@ size_to_term s =
                   C.Forall [] [] t ->
                     case C.evalType mempty t of
                       Left (C.Nat x) | x >= 0 ->
-                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
-                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                        scGlobalApply sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scGlobalApply sc "Cryptol.TCInf" []
                       _ -> fail "size_to_term: not a numeric type"
                   _ -> fail "size_to_term: unsupported polymorphic type"
 

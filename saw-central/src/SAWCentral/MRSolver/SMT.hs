@@ -150,8 +150,8 @@ mkReflProof :: SharedContext -> Bool -> IO TmValue
 mkReflProof sc b =
   do b_trm <- scBool sc b
      bool_tp <- scBoolType sc
-     refl_trm <- scCtorApp sc "Prelude.Refl" [bool_tp, b_trm]
-     eq_tp <- scDataTypeApp sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
+     refl_trm <- scGlobalApply sc "Prelude.Refl" [bool_tp, b_trm]
+     eq_tp <- scGlobalApply sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
      return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm
 
 mkDummyProofValue :: Text -> IO (Thunk TermModel)
@@ -540,7 +540,7 @@ injReprComp r1 r2 =
 mrApplyRepr :: InjectiveRepr -> Term -> MRM t Term
 mrApplyRepr InjReprId t = return t
 mrApplyRepr (InjReprNum steps) t_top = foldM applyStep t_top steps where
-  applyStep t InjNatToNum = liftSC2 scCtorApp "Cryptol.TCNum" [t]
+  applyStep t InjNatToNum = liftSC2 scGlobalApply "Cryptol.TCNum" [t]
   applyStep t (InjBVToNat n) = liftSC2 scBvToNat n t
 mrApplyRepr (InjReprPair repr1 repr2) t =
   do t1 <- mrApplyRepr repr1 =<< doTermProj t TermProjLeft

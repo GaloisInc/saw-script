@@ -46,10 +46,10 @@ module SAWCore.SharedTerm
   , scShowTerm
   , DuplicateNameException(..)
     -- * SharedContext interface for building shared terms
-  , SharedContext
+  , SharedContext -- abstract type
   , mkSharedContext
   , scGetModuleMap
-  , SharedContextCheckpoint
+  , SharedContextCheckpoint -- abstract type
   , checkpointSharedContext
   , restoreSharedContext
   , scGetNamingEnv
@@ -63,11 +63,9 @@ module SAWCore.SharedTerm
   , scFreshName
   , scExtCns
   , scGlobalDef
-  , scRegisterGlobal
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
   , scDataTypeAppParams
-  , scDataTypeApp
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
@@ -77,33 +75,32 @@ module SAWCore.SharedTerm
     -- ** Modules
   , scLoadModule
   , scImportModule
-  , scDeclarePrim
-  , scInsertDef
   , scModuleIsLoaded
   , scFindModule
   , scFindDef
-  , scBeginDataType
-  , scCompleteDataType
   , scFindDataType
   , scFindCtor
   , scRequireDef
   , scRequireDataType
   , scRequireCtor
   , scInjectCode
+    -- ** Declaring global constants
+  , scDeclarePrim
+  , scInsertDef
+  , scConstant
+  , scConstant'
+  , scOpaqueConstant
+  , scBeginDataType
+  , scCompleteDataType
     -- ** Term construction
     -- *** Datatypes and constructors
   , scCtorAppParams
-  , scCtorApp
   , scApplyCtor
   , scSort
   , scISort
   , scSortWithFlags
     -- *** Variables and constants
   , scLocalVar
-  , scConstant
-  , scConstant'
-  , scOpaqueConstant
-  , scLookupDef
     -- *** Functions and function application
   , scApply
   , scApplyAll
@@ -397,6 +394,18 @@ insertTFM tf x tfm =
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
+-- | 'SharedContext' is an abstract datatype representing all the
+-- information necessary to resolve names and to construct,
+-- type-check, normalize, and evaluate SAWCore 'Term's.
+-- A 'SharedContext' contains mutable references so that it can be
+-- extended at run-time with new names and declarations.
+
+-- Invariant: scGlobalEnv is a cache with one entry for every global
+-- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
+-- Each map entry points to a 'Constant' term with the same 'Ident'.
+-- It exists only to save one map lookup when building terms: Without
+-- it we would first have to look up the Ident by URI in scURIEnv, and
+-- then do another lookup for hash-consing the Constant term.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
@@ -501,10 +510,7 @@ scFreshName sc x =
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
-  do i <- scFreshVarIndex sc
-     let uri = scFreshNameURI x i
-     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
-     scRegisterNameWithIndex sc i nmi
+  do Name i nmi <- scFreshName sc x
      pure (EC i nmi tp)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
@@ -520,6 +526,9 @@ scGlobalDef sc ident =
        Nothing -> fail ("Could not find global: " ++ show ident)
        Just t -> pure t
 
+-- | Internal function to register an 'Ident' with a 'Term' (which
+-- must be a 'Constant' term with the same 'Ident') in the
+-- 'scGlobalEnv' map of the 'SharedContext'. Not exported.
 scRegisterGlobal :: SharedContext -> Ident -> Term -> IO ()
 scRegisterGlobal sc ident t =
   do dup <- atomicModifyIORef' (scGlobalEnv sc) f
@@ -558,11 +567,6 @@ scDataTypeAppParams sc d params args =
   do t <- scTermF sc (Constant d)
      scApplyAll sc t (params ++ args)
 
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
-scDataTypeApp sc d_id args = scGlobalApply sc d_id args
-
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scCtorAppParams :: SharedContext
@@ -573,11 +577,6 @@ scCtorAppParams :: SharedContext
 scCtorAppParams sc c params args =
   do t <- scTermF sc (Constant c)
      scApplyAll sc t (params ++ args)
-
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
-scCtorApp sc c_id args = scGlobalApply sc c_id args
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -622,26 +621,42 @@ scInsDefInMap sc d =
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
 
+-- | Internal function to extend the SAWCore global environment with a
+-- new constant, which may or may not have a definition. Not exported.
+-- Assumes that the type and body (if present) are closed terms, and
+-- that the body has the given type.
+scDeclareDef ::
+  SharedContext -> Name -> DefQualifier -> Term -> Maybe Term -> IO Term
+scDeclareDef sc nm q ty body =
+  do scInsDefInMap sc $
+       Def
+       { defNameInfo = nameInfo nm
+       , defVarIndex = nameIndex nm
+       , defQualifier = q
+       , defType = ty
+       , defBody = body
+       }
+     t <- scTermF sc (Constant nm)
+     -- Register constant in scGlobalEnv if it has an Ident name
+     case nameInfo nm of
+       ModuleIdentifier ident -> scRegisterGlobal sc ident t
+       ImportedName{} -> pure ()
+     pure t
+
 -- | Declare a SAW core primitive of the specified type.
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
      i <- scRegisterName sc nmi
      let nm = Name i nmi
-     t <- scTermF sc (Constant nm)
-     scRegisterGlobal sc ident t
-     scInsDefInMap sc $
-                  Def { defNameInfo = nmi,
-                        defVarIndex = i,
-                        defQualifier = q,
-                        defType = def_tp,
-                        defBody = Nothing }
+     _ <- scDeclareDef sc nm q def_tp Nothing
+     pure ()
 
 -- | Insert a definition into a SAW core module
 scInsertDef :: SharedContext -> Ident -> Term -> Term -> IO ()
 scInsertDef sc ident def_tp def_tm =
-  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
-     scRegisterGlobal sc ident t
+  do _ <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
+     pure ()
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
@@ -1484,11 +1499,6 @@ scApplyBeta sc f arg = scApply sc f arg
 scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAllBeta sc = foldlM (scApplyBeta sc)
 
--- | Returns the defined constant with the given 'Ident'. Fails if no
--- such constant exists in the module.
-scLookupDef :: SharedContext -> Ident -> IO Term
-scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
-
 scDefTerm :: SharedContext -> Def -> IO Term
 scDefTerm sc Def{..} = scTermF sc (Constant (Name defVarIndex defNameInfo))
 
@@ -1693,13 +1703,7 @@ scConstant sc name rhs ty =
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
      nm <- scFreshName sc name
-     scInsDefInMap sc $
-       Def { defNameInfo = nameInfo nm,
-             defVarIndex = nameIndex nm,
-             defQualifier = NoQualifier,
-             defType = ty',
-             defBody = Just rhs' }
-     t <- scTermF sc (Constant nm)
+     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1726,13 +1730,7 @@ scConstant' sc nmi rhs ty =
      ty' <- scFunAll sc (map ecType ecs) ty
      i <- scRegisterName sc nmi
      let nm = Name i nmi
-     scInsDefInMap sc $
-       Def { defNameInfo = nmi,
-             defVarIndex = i,
-             defQualifier = NoQualifier,
-             defType = ty',
-             defBody = Just rhs' }
-     t <- scTermF sc (Constant nm)
+     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1748,13 +1746,7 @@ scOpaqueConstant ::
 scOpaqueConstant sc nmi ty =
   do i <- scRegisterName sc nmi
      let nm = Name i nmi
-     scInsDefInMap sc $
-       Def { defNameInfo = nmi,
-             defVarIndex = i,
-             defQualifier = NoQualifier,
-             defType = ty,
-             defBody = Nothing }
-     scTermF sc (Constant nm)
+     scDeclareDef sc nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).

@@ -731,7 +731,7 @@ mrUnitType = Type <$> liftSC0 scUnitType
 
 -- | Build a constructor application in Mr. Monad
 mrCtorApp :: Ident -> [Term] -> MRM t Term
-mrCtorApp = liftSC2 scCtorApp
+mrCtorApp = liftSC2 scGlobalApply
 
 -- | Build a 'Term' for a global in Mr. Monad
 mrGlobalTerm :: Ident -> MRM t Term
@@ -763,7 +763,7 @@ mrBvType n =
 
 -- | Build the equality proposition @Eq a t1 t2@
 mrEqProp :: Term -> Term -> Term -> MRM t Term
-mrEqProp tp t1 t2 = liftSC2 scDataTypeApp "Prelude.Eq" [tp,t1,t2]
+mrEqProp tp t1 t2 = liftSC2 scGlobalApply "Prelude.Eq" [tp,t1,t2]
 
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
