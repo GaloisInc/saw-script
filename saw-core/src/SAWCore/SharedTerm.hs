@@ -399,6 +399,13 @@ insertTFM tf x tfm =
 -- type-check, normalize, and evaluate SAWCore 'Term's.
 -- A 'SharedContext' contains mutable references so that it can be
 -- extended at run-time with new names and declarations.
+
+-- Invariant: scGlobalEnv is a cache with one entry for every global
+-- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
+-- Each map entry points to a 'Constant' term with the same 'Ident'.
+-- It exists only to save one map lookup when building terms: Without
+-- it we would first have to look up the Ident by URI in scURIEnv, and
+-- then do another lookup for hash-consing the Constant term.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
@@ -407,12 +414,6 @@ data SharedContext = SharedContext
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   }
--- Invariant: scGlobalEnv is a cache with one entry for every global
--- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
--- Each map entry points to a 'Constant' term with the same 'Ident'.
--- It exists only to save one map lookup when building terms: Without
--- it we would first have to look up the Ident by URI in scURIEnv, and
--- then do another lookup for hash-consing the Constant term.
 
 data SharedContextCheckpoint =
   SCC
