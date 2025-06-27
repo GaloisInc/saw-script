@@ -75,19 +75,23 @@ module SAWCore.SharedTerm
     -- ** Modules
   , scLoadModule
   , scImportModule
-  , scDeclarePrim
-  , scInsertDef
   , scModuleIsLoaded
   , scFindModule
   , scFindDef
-  , scBeginDataType
-  , scCompleteDataType
   , scFindDataType
   , scFindCtor
   , scRequireDef
   , scRequireDataType
   , scRequireCtor
   , scInjectCode
+    -- ** Declaring global constants
+  , scDeclarePrim
+  , scInsertDef
+  , scConstant
+  , scConstant'
+  , scOpaqueConstant
+  , scBeginDataType
+  , scCompleteDataType
     -- ** Term construction
     -- *** Datatypes and constructors
   , scCtorAppParams
@@ -97,9 +101,6 @@ module SAWCore.SharedTerm
   , scSortWithFlags
     -- *** Variables and constants
   , scLocalVar
-  , scConstant
-  , scConstant'
-  , scOpaqueConstant
   , scLookupDef
     -- *** Functions and function application
   , scApply
