@@ -19,7 +19,8 @@ cp /saw-bin/saw "$SAW_INSTALL_DIR"/bin/saw
 cp /saw-bin/abc "$SAW_INSTALL_DIR"/bin/abc
 cp /saw-bin/yices "$SAW_INSTALL_DIR"/bin/yices
 cp /saw-bin/yices-smt2 "$SAW_INSTALL_DIR"/bin/yices-smt2
-cp /saw-bin/z3-4.8.8 "$SAW_INSTALL_DIR"/bin/z3
+#cp /saw-bin/z3-4.8.8 "$SAW_INSTALL_DIR"/bin/z3
+cp /saw-bin/z3 "$SAW_INSTALL_DIR"/bin/z3
 "$SAW_INSTALL_DIR"/bin/saw --version
 "$SAW_INSTALL_DIR"/bin/abc -h || true  # exits 1 on -h, sigh
 "$SAW_INSTALL_DIR"/bin/yices --version
