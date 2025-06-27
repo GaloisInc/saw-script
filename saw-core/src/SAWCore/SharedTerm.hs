@@ -46,10 +46,10 @@ module SAWCore.SharedTerm
   , scShowTerm
   , DuplicateNameException(..)
     -- * SharedContext interface for building shared terms
-  , SharedContext
+  , SharedContext -- abstract type
   , mkSharedContext
   , scGetModuleMap
-  , SharedContextCheckpoint
+  , SharedContextCheckpoint -- abstract type
   , checkpointSharedContext
   , restoreSharedContext
   , scGetNamingEnv
@@ -394,6 +394,11 @@ insertTFM tf x tfm =
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
+-- | 'SharedContext' is an abstract datatype representing all the
+-- information necessary to resolve names and to construct,
+-- type-check, normalize, and evaluate SAWCore 'Term's.
+-- A 'SharedContext' contains mutable references so that it can be
+-- extended at run-time with new names and declarations.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
@@ -403,7 +408,7 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   }
 -- Invariant: scGlobalEnv is a cache with one entry for every global
--- declaration in the 'ModuleMap' whose name is a 'ModuleIdentifier'.
+-- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
 -- Each map entry points to a 'Constant' term with the same 'Ident'.
 -- It exists only to save one map lookup when building terms: Without
 -- it we would first have to look up the Ident by URI in scURIEnv, and
