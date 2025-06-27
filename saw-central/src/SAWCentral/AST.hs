@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor,DeriveFoldable,DeriveTraversable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
@@ -53,10 +52,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
 
-#if !MIN_VERSION_base(4,8,0)
-import Data.Foldable (Foldable)
-import Data.Traversable (Traversable)
-#endif
 import qualified Prettyprinter as PP
 import           Prettyprinter (Pretty)
 

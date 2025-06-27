@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 
 module SAWCentral.CongruenceClosure
@@ -37,9 +36,6 @@ module SAWCentral.CongruenceClosure
   , mayAliases
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$), (<$>))
-#endif
 import qualified Control.Monad.State as MTL
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE

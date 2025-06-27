@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -58,10 +57,6 @@ module SAWCore.Rewriter
   , hoistIfs
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>), pure, (<*>))
-import Data.Foldable (Foldable)
-#endif
 import Control.Monad (MonadPlus(..), (>=>), guard, join, unless)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe

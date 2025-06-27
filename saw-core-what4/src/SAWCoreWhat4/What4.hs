@@ -11,7 +11,6 @@
 -- (This module is derived from SAWCoreSBV.SBV)
 ------------------------------------------------------------------------
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds#-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -76,9 +75,6 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import Data.Traversable as T
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import qualified Control.Exception as X
 import Control.Monad ((<=<), foldM, unless)
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)

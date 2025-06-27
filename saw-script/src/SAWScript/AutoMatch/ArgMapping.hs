@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module SAWScript.AutoMatch.ArgMapping
   ( ArgMapping
   , typeBins
@@ -17,9 +15,6 @@ import qualified Data.Set as Set
 import           Data.Set   (Set)
 
 import Data.Maybe
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 
 import SAWScript.AutoMatch.Declaration
 import SAWScript.AutoMatch.Util

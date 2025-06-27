@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -22,11 +21,6 @@ Stability   : provisional
 
 module SAWCentral.Builtins where
 
-#if !MIN_VERSION_base(4,8,0)
-import Data.Functor
-import Control.Applicative
-import Data.Monoid
-#endif
 import Control.Lens (view)
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (MonadError(..))

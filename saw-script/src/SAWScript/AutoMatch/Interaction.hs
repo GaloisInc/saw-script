@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveFunctor    #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE CPP              #-}
 
 module SAWScript.AutoMatch.Interaction where
 
@@ -23,9 +22,6 @@ import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
 import Control.Monad.Trans (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Writer (MonadWriter(..), WriterT(..))
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import Control.Arrow ((***), second)
 import Text.Read (readMaybe)
 import Data.Maybe

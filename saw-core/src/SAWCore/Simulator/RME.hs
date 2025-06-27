@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
@@ -51,11 +50,6 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
 import SAWCore.SharedTerm
 import SAWCore.SATQuery
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Traversable
-#endif
 
 ------------------------------------------------------------
 

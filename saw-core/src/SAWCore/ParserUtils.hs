@@ -23,9 +23,6 @@ module SAWCore.ParserUtils
  , tcInsertModule -- re-exported for code using defineModuleFromFileWithFns
  ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import Control.Monad (forM_)
 import Control.Monad.State (StateT, execStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))

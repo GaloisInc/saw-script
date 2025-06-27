@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -348,17 +347,6 @@ import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty
 import SAWCore.Unique
-
-
-#if !MIN_VERSION_base(4,8,0)
-countTrailingZeros :: (FiniteBits b) => b -> Int
-countTrailingZeros x = go 0
-  where
-    go i | i >= w      = i
-         | testBit x i = i
-         | otherwise   = go (i+1)
-    w = finiteBitSize x
-#endif
 
 newtype Uninterp = Uninterp { getUninterp :: (String, Term) } deriving Show
 

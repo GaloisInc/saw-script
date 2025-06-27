@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -68,9 +67,6 @@ import qualified Cryptol.TypeCheck.AST as T
 import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative (Applicative(..), pure, (<*>))
-#endif
 import Control.Monad (unless, ap, void)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (put, get, StateT(..))
@@ -204,10 +200,6 @@ instance Monad REPL where
   m >>= f = REPL $ \ref -> do
     x <- unREPL m ref
     unREPL (f x) ref
-
-#if !MIN_VERSION_base(4,13,0)
-  fail = Fail.fail
-#endif
 
 instance Fail.MonadFail REPL where
   {-# INLINE fail #-}

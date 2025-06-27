@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -28,11 +27,6 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Concrete (evalSharedTerm) -- , CValue)
 import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
 
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>), Applicative)
-import Data.Traversable (traverse)
-#endif
 import qualified Control.Monad.Fail as F
 import Control.Monad.Random
 import Data.Functor.Compose (Compose(..))

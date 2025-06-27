@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module SAWScript.AutoMatch.Util where
 
 import qualified Data.Set as Set
@@ -11,10 +9,6 @@ import Data.Maybe (fromMaybe)
 import Data.List (intersperse)
 import Control.Monad (mfilter)
 import Control.Arrow ( (&&&) )
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 
 import SAWScript.AutoMatch.Declaration
 

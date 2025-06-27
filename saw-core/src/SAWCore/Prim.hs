@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 {- |
@@ -13,9 +12,6 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Prim where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import qualified Control.Exception as X
 import Data.Bits
 import Data.Typeable (Typeable)

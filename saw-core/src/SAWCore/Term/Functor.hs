@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -62,9 +61,6 @@ module SAWCore.Term.Functor
   ) where
 
 import Data.Bits
-#if !MIN_VERSION_base(4,8,0)
-import Data.Foldable (Foldable)
-#endif
 import qualified Data.Foldable as Foldable (and, foldl')
 import Data.Function (on)
 import Data.Hashable

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -56,9 +55,6 @@ import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-#if !MIN_VERSION_base(4,8,0)
-import Data.Traversable (Traversable(..))
-#endif
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -36,9 +35,6 @@ import Data.Maybe (isJust)
 import Control.Monad (forM)
 import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), State, execState)
-#if !MIN_VERSION_base(4,8,0)
-import Data.Foldable (Foldable)
-#endif
 import qualified Data.Foldable as Fold
 import Data.Hashable (hash)
 import qualified Data.Text as Text

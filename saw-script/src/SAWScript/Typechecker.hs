@@ -6,7 +6,6 @@ Maintainer  : diatchki
 Stability   : provisional
 -}
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -22,10 +21,6 @@ module SAWScript.Typechecker
        , checkStmt
        , checkSchemaPattern
        ) where
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 
 import Control.Monad (when, zipWithM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
