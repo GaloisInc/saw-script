@@ -162,11 +162,11 @@ span.spaces    { background: white }
 <span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">r &lt;- SC.scBvXor sc w x y</span></span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">SC.scBvNot sc w r</span></span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceAnd -&gt; <span class="nottickedoff">bvReduce True =&lt;&lt; do</span></span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;and&quot;</span></span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;and&quot;</span></span>
 <span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceOr -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceXor -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;xor&quot;</span></span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;xor&quot;</span></span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceXnor -&gt; <span class="nottickedoff">bvReduce True =&lt;&lt; do</span></span>
 <span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">boolTy &lt;- liftIO $ SC.scBoolType sc</span></span>
 <span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">xEC &lt;- liftIO $ SC.scFreshEC sc &quot;x&quot; boolTy</span></span>
@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scNot sc r</span></span>
 <span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scAbstractExts sc [xEC, yEC] res</span></span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">CellTypeReduceBool -&gt; <span class="nottickedoff">bvReduce False =&lt;&lt; do</span></span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;or&quot;</span></span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">CellTypeShl -&gt; do</span>
 <span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">ta &lt;- fmap cellTermTerm $ input &quot;A&quot;</span>
 <span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">nb &lt;- cellTermNat sc =&lt;&lt; input &quot;B&quot;</span>
@@ -289,7 +289,7 @@ span.spaces    { background: white }
 <span class="lineno">  270 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">newval &lt;- liftIO $ SC.scIte sc widthBv bit bval aval</span></span>
 <span class="lineno">  271 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">liftIO $ SC.scPairValue sc newidx newval</span></span>
 <span class="lineno">  272 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
 <span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">resPair &lt;- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]</span></span>
 <span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scPairRight sc resPair</span></span>
 <span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output $ CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;Y&quot;)</span></span>
@@ -386,7 +386,7 @@ span.spaces    { background: white }
 <span class="lineno">  367 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">w &lt;- connWidth &quot;A&quot;</span></span>
 <span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">boolTy &lt;- liftIO $ SC.scBoolType sc</span></span>
 <span class="lineno">  369 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">identity &lt;- liftIO $ SC.scBool sc boolIdentity</span></span>
-<span class="lineno">  370 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
+<span class="lineno">  370 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scFoldr &lt;- liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName &quot;foldr&quot;</span></span>
 <span class="lineno">  371 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bit &lt;- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]</span></span>
 <span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">outputBit bit</span></span></span>
 
