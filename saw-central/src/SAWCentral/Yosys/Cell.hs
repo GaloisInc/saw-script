@@ -143,11 +143,11 @@ primCellToMap sc c args = case c ^. cellType of
     r <- SC.scBvXor sc w x y
     SC.scBvNot sc w r
   CellTypeReduceAnd -> bvReduce True =<< do
-    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "and"
+    liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "and"
   CellTypeReduceOr -> bvReduce False =<< do
-    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+    liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
   CellTypeReduceXor -> bvReduce False =<< do
-    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "xor"
+    liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
   CellTypeReduceXnor -> bvReduce True =<< do
     boolTy <- liftIO $ SC.scBoolType sc
     xEC <- liftIO $ SC.scFreshEC sc "x" boolTy
@@ -158,7 +158,7 @@ primCellToMap sc c args = case c ^. cellType of
     res <- liftIO $ SC.scNot sc r
     liftIO $ SC.scAbstractExts sc [xEC, yEC] res
   CellTypeReduceBool -> bvReduce False =<< do
-    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+    liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
   CellTypeShl -> do
     ta <- fmap cellTermTerm $ input "A"
     nb <- cellTermNat sc =<< input "B"
@@ -270,7 +270,7 @@ primCellToMap sc c args = case c ^. cellType of
       newval <- liftIO $ SC.scIte sc widthBv bit bval aval
       liftIO $ SC.scPairValue sc newidx newval
 
-    scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
+    scFoldr <- liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
     resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
     res <- liftIO $ SC.scPairRight sc resPair
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
@@ -367,6 +367,6 @@ primCellToMap sc c args = case c ^. cellType of
       w <- connWidth "A"
       boolTy <- liftIO $ SC.scBoolType sc
       identity <- liftIO $ SC.scBool sc boolIdentity
-      scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
+      scFoldr <- liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
       bit <- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
       outputBit bit

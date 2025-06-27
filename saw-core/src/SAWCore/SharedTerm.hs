@@ -101,7 +101,6 @@ module SAWCore.SharedTerm
   , scSortWithFlags
     -- *** Variables and constants
   , scLocalVar
-  , scLookupDef
     -- *** Functions and function application
   , scApply
   , scApplyAll
@@ -1493,11 +1492,6 @@ scApplyBeta sc f arg = scApply sc f arg
 -- the function is a lambda
 scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAllBeta sc = foldlM (scApplyBeta sc)
-
--- | Returns the defined constant with the given 'Ident'. Fails if no
--- such constant exists in the module.
-scLookupDef :: SharedContext -> Ident -> IO Term
-scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 scDefTerm :: SharedContext -> Def -> IO Term
 scDefTerm sc Def{..} = scTermF sc (Constant (Name defVarIndex defNameInfo))
