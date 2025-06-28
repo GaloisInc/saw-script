@@ -135,16 +135,29 @@ emptyEnv :: Env
 emptyEnv =
   Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
--- | bindTParam - create a binding for a type parameter, returing the
---                environment and the new sawcore type var (as Term).
-bindTParam :: SharedContext -> C.TParam -> Env -> IO (Env, Term)
-bindTParam sc tp env = do
+
+-- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
+--                 - environment
+--                 - the SAWCore kind of the parameter
+--                 - the SAWCore term for the type variable.
+bindTParam' :: SharedContext -> C.TParam -> Env -> IO (Env, Term, Term)
+bindTParam' sc tp env = do
   k <- importKind sc (C.tpKind tp)
   v <- scFreshGlobal sc (tparamToLocalName tp) k
   return ( env { envT = Map.insert (C.tpUnique tp) v (envT env)
                }
          , v
+         , k
          )
+
+-- | bindTParam - create a binding for a type parameter, just return
+--                environment and the new sawcore type var (as Term).
+bindTParam :: SharedContext -> C.TParam -> Env -> IO (Env, Term)
+bindTParam sc tp env =
+  do
+  (e,v,_) <- bindTParam' sc tp env
+  return (e,v)
+
 
 -- | bindName - create a new binding, adding to appropriate
 --              environments; return 3-tuple
@@ -2168,6 +2181,15 @@ genCodeForNominalTypes sc nominalMap env0 =
             e <- importExpr sc env fnWithTAbs
             return [(conNm, e)]
 
+-- FIXME: ?
+mapAccumLM :: (Monad m) => (a -> x -> m (a, y)) -> a -> [x] -> m (a, [y])
+mapAccumLM _ acc []     = return (acc, [])
+mapAccumLM f acc (x:xs) =
+  do
+  (acc', y) <- f acc x
+  (acc'', ys) <- mapAccumLM f acc' xs
+  return (acc'', y:ys)
+
 
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
@@ -2208,23 +2230,31 @@ genCodeForEnum sc env nt ctors =
 
   -- The type parameters (`ts` in the example above)
   let tyParamsInfo  = C.ntParams nt
-      tyParamsNames = map tparamToLocalName tyParamsInfo
 
   -- | the kinds of the type Params:
-  tyParamsKinds <- forM tyParamsInfo $ \tpi ->
-                     importKind sc (C.tpKind tpi)
-  -- | the type Params captured using ExtCns:
-  tyParamsECs   <- forM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
-                     scFreshEC sc nm k
-  -- | create references to the type Params:
-  tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
+  -- tyParamsKinds <- forM tyParamsInfo $ \tpi ->
+  --                   importKind sc (C.tpKind tpi)
+  -- | create variables for the type Params:
+  -- tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
+
+  (envWithTParams,tks) <-
+    mapAccumLM
+      (\env' tpi -> do
+                    (env'',ty,k) <- bindTParam' sc tpi env'
+                    return (env'', (ty,k))
+      )
+      env
+      tyParamsInfo
+  let (tyParamsVars, tyParamsKinds) = unzip tks
+
 
   let
       -- | @addTypeAbstractions t@ - create the SAWCore type
       --   abstractions around @t@ (holding the type Param references)
       addTypeAbstractions :: Term -> IO Term
-      addTypeAbstractions t = scAbstractExts sc tyParamsECs t
+      addTypeAbstractions t = scAbstractTerms sc tyParamsVars t
 
+      -- FIXME: ^ inline or keep?
   -------------------------------------------------------------
   -- Common naming conventions:
   let sumTy_ident = identOfEnumType ntName'
@@ -2281,22 +2311,9 @@ genCodeForEnum sc env nt ctors =
 
   -- argTypes_eachCtor is the sum-of-products matrix for this enum type:
   (argTypes_eachCtor :: [[Term]]) <-
-    do
-    -- add tyParamsInfo to the env as it is needed to allow `importType`
-    -- to work:
-    env' <- Fold.foldrM (\tp env'-> fst <$> bindTParam sc tp env')
-                        env
-                        tyParamsInfo
     forM ctors $ \c->     -- for each constructor
       forM (C.ecFields c) -- for each constructor field (type)
-           (\t-> do
-                 t' <- importType sc env' t
-                 instantiateVarList sc 0 tyParamsVars t'
-                    -- here ^, type params are references to ExtCns
-                   -- FIXME[F1]:
-                   --   this call suggests we have (length tyParamsVar) debruijns!
-           )
-
+         (importType sc envWithTParams)
 
   -- map the list of types to the product type:
   represType_eachCtor <- forM argTypes_eachCtor $ \ts ->
@@ -2350,7 +2367,7 @@ genCodeForEnum sc env nt ctors =
       b <- scFreshGlobal sc "b" sort0
            -- all uses are direct under the 'Pi'
       altFuncTypes <- mkAltFuncTypes b
-      scGeneralizeExts sc tyParamsECs
+      scGeneralizeTerms sc tyParamsVars
         =<< scGeneralizeTerms sc [b] -- the scPi construct
         =<< scFunAll sc altFuncTypes
         =<< scFun sc sumTy_applied b
@@ -2375,6 +2392,7 @@ genCodeForEnum sc env nt ctors =
                                        scTupleSelector sc x i n
                          body <- scApplyAll sc funcVar funcArgs
                          scAbstractTerms sc [x] body
+                         -- FIXME: ^ use =<< idiom for clarity!
 
       addTypeAbstractions
         =<< scAbstractTerms sc [b]
