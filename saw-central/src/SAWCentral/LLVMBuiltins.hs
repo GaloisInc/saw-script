@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,9 +18,6 @@ Stability   : provisional
 
 module SAWCentral.LLVMBuiltins where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative hiding (many)
-#endif
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as Text

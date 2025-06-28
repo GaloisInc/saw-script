@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -183,9 +182,6 @@ module SAWCentral.Value (
 
 import Prelude hiding (fail)
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative (Applicative)
-#endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))

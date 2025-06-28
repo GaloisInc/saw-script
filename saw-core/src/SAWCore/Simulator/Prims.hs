@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE LambdaCase #-}
@@ -56,9 +55,6 @@ import Prelude hiding (sequence, mapM)
 
 import GHC.Stack( HasCallStack )
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import Control.Monad (liftM, unless, mzero)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Trans

@@ -51,11 +51,6 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack, splitOn)
 import Control.Monad(when)
 
-#if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
-import Data.Traversable
-#endif
-
 import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)

@@ -5,7 +5,6 @@ Maintainer  : jhendrix, atomb
 Stability   : provisional
 -}
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,10 +13,6 @@ Stability   : provisional
 
 module SAWCentral.Utils where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Traversable (traverse)
-#endif
 import Control.Exception as CE
 import Control.Monad.State
 import Control.Monad.Trans.Except

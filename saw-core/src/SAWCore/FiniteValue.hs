@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 {- |
@@ -10,11 +9,6 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module SAWCore.FiniteValue where
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Traversable
-#endif
 
 import GHC.Generics (Generic)
 import Control.Monad (replicateM, mzero)

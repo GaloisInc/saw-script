@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {- |
 Module      : SAWCore.UnionFind
@@ -29,9 +28,6 @@ module SAWCore.UnionFind (
   , modifyClassDesc
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative (Applicative)
-#endif
 import Control.Monad.State.Strict
 import Data.List (foldl')
 import Data.Map (Map)

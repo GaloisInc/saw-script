@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,9 +19,6 @@ module SAWCore.ExternalFormat (
 import Control.Monad (forM)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
-#if !MIN_VERSION_base(4,8,0)
-import Data.Traversable
-#endif
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text

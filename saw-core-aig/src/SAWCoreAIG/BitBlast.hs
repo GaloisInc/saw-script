@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -22,10 +21,6 @@ module SAWCoreAIG.BitBlast
   , withBitBlastedSATQuery
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Traversable
-#endif
 import Control.Monad ((<=<),unless)
 import Data.IORef
 import Data.Map (Map)

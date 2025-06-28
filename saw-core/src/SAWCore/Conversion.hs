@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -104,9 +103,6 @@ module SAWCore.Conversion
   , remove_ident_unsafeCoerce
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative (Applicative(..), (<$>), (<*>))
-#endif
 import Control.Lens (view, _1, _2)
 import Control.Monad (ap, guard, liftM, liftM2, (>=>), (<=<))
 import Data.Bits

@@ -5,7 +5,6 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,10 +17,6 @@ module SAWCentral.ImportAIG
   , verifyAIGCompatible
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Control.Lens
-#endif
 import Control.Exception
 import Control.Monad
 import Control.Monad.State.Strict

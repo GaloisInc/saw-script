@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP              #-}
 {-# LANGUAGE DeriveFunctor    #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
@@ -23,12 +22,10 @@ import Control.Monad.IfElse (awhen)
 import qualified Control.Monad.ST as ST
 import           Control.Monad.ST (ST)
 
+import Data.Function
 import Data.Ord
 import Data.List (delete, sortBy)
 import Data.Maybe
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 
 import System.FilePath
 
@@ -61,10 +58,6 @@ import Language.JVM.Common (dotsToSlashes, mkClassName)
 import Prettyprinter.Render.Text (putDoc, hPutDoc)
 
 import System.IO
-
-#if MIN_VERSION_base(4,8,0)
-import Data.Function
-#endif
 
 -- | The interactive procedure for matching two given function declarations
 matchingProcedure :: Decl -> Decl -> Interaction (Assignments, Mappings)
@@ -324,10 +317,6 @@ autoMatch interpreter leftFile rightFile =
    autoTagSourceFiles leftFile rightFile &
       (either (io . putStrLn) $
          uncurry autoMatchFiles >=> io . interactIO >=> actAfterMatch interpreter)
-
-#if !MIN_VERSION_base(4,8,0)
-   where (&) = flip ($)
-#endif
 
 -- | Just a bunch of SAWScript statments as output and a supply of unique identifiers
 type ScriptWriter s tp = WriterT [SAWScript.Stmt] (ReaderT (NonceGenerator (ST s) tp) (ST s))

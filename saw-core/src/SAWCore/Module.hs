@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
@@ -77,9 +76,6 @@ module SAWCore.Module
   ) where
 
 import Control.Monad (foldM)
-#if !MIN_VERSION_base(4,8,0)
-import Data.Foldable (Foldable)
-#endif
 import Data.Foldable (foldl', foldr')
 import Data.Hashable
 import Data.IntMap.Strict (IntMap)
