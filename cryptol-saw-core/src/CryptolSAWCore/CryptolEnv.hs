@@ -63,7 +63,7 @@ import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars)
+import SAWCore.SharedTerm (NameInfo, SharedContext, Term)
 import SAWCore.Term.Pretty (showTerm)
 
 import qualified CryptolSAWCore.Cryptol as C
@@ -338,7 +338,7 @@ mkCryEnv env =
      let types' = Map.union (eExtraTypes env) types
      let terms = eTermEnv env
      let cryEnv = C.emptyEnv
-           { C.envE = fmap (\t -> (t, 0)) terms
+           { C.envE = terms
            , C.envC = types'
            , C.envPrims = ePrims env
            , C.envPrimTypes = ePrimTypes env
@@ -356,10 +356,8 @@ translateDeclGroups ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env dgs =
-  do cryEnv <- mkCryEnv env
+  do cryEnv  <- mkCryEnv env
      cryEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv dgs
-     termEnv' <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv')
-
      let decls = concatMap T.groupDecls dgs
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
@@ -367,7 +365,7 @@ translateDeclGroups sc env dgs =
      return env
            { eExtraNames = foldr addName (eExtraNames env) names
            , eExtraTypes = Map.union (eExtraTypes env) newTypes
-           , eTermEnv = termEnv'
+           , eTermEnv    = C.envE cryEnv'
            }
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
@@ -379,7 +377,7 @@ genTermEnv sc modEnv cryEnv0 = do
       nominals   = ME.loadedNominalTypes modEnv
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv2)
+  return (C.envE cryEnv2)
 
 --------------------------------------------------------------------------------
 
@@ -441,7 +439,7 @@ loadCryptolModule sc primOpts env path = do
   newTermEnv <-
     do cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
-       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+       return (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
 
@@ -550,7 +548,7 @@ importModule sc env src as vis imps = do
     do cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
                                                             cEnv newDeclGroups
-       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+       return (C.envE newCryEnv)
 
   return $
     updateFFITypes m
