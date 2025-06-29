@@ -151,7 +151,7 @@ bindTParam' sc tp env = do
          )
 
 -- | bindTParam - create a binding for a type parameter, just return
---                environment and the new sawcore type var (as Term).
+--                the new environment and the new sawcore type var (as Term).
 bindTParam :: SharedContext -> C.TParam -> Env -> IO (Env, Term)
 bindTParam sc tp env =
   do
@@ -458,6 +458,9 @@ provePropRec sc env prop0 prop =
        do -- apply field projections as necessary to compute superclasses
           -- NB: reverse the order of the fields
           foldM (scRecordSelect sc) prf (reverse fs)
+          -- FIXME:suspicious:
+          --   we removed debruijn indices here, but I'm not
+          --   seeing the "complementary code"?!
 
     -- Class dictionary not provided, compute it from the structure of types
     Nothing ->
