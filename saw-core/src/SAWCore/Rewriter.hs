@@ -375,7 +375,7 @@ ruleOfTerm sc t ann =
   do (ecs, body) <- scAsPiList sc t
      case R.asGlobalApply eqIdent body of
        Just [_, x, y] -> pure $ mkRewriteRule ecs x y False ann
-       _ -> panic "ruleOfSharedTerm" ["Illegal argument"]
+       _ -> panic "ruleOfTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
 -- this is a rule that immediately loops whether used forwards or backwards.
