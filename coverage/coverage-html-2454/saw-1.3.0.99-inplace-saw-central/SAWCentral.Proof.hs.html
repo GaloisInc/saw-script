@@ -2050,289 +2050,290 @@ span.spaces    { background: white }
 <span class="lineno"> 2031 </span>  IO (Maybe [Either Term Prop])
 <span class="lineno"> 2032 </span><span class="decl"><span class="istickedoff">propApply sc rule goal = applyFirst =&lt;&lt; asPiLists (unProp rule)</span>
 <span class="lineno"> 2033 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2034 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2034 </span><span class="spaces">    </span><span class="istickedoff">applyFirst :: [([ExtCns Term], Term)] -&gt; IO (Maybe [Either Term Prop])</span>
 <span class="lineno"> 2035 </span><span class="spaces">    </span><span class="istickedoff">applyFirst [] = <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno"> 2036 </span><span class="spaces">    </span><span class="istickedoff">applyFirst ((ruleArgs, ruleConcl) : rest) =</span>
 <span class="lineno"> 2037 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scMatch <span class="nottickedoff">sc</span> ruleArgs ruleConcl (unProp goal)</span>
 <span class="lineno"> 2038 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
 <span class="lineno"> 2039 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">applyFirst rest</span></span>
 <span class="lineno"> 2040 </span><span class="spaces">           </span><span class="istickedoff">Just inst -&gt;</span>
-<span class="lineno"> 2041 </span><span class="spaces">             </span><span class="istickedoff">do let mkNewGoal ec =</span>
-<span class="lineno"> 2042 </span><span class="spaces">                      </span><span class="istickedoff">case Map.lookup (ecVarIndex ec) inst of</span>
-<span class="lineno"> 2043 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2044 </span><span class="spaces">                          </span><span class="istickedoff">-- this argument not solved by unification, so make it a goal</span>
-<span class="lineno"> 2045 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst (ecType ec)</span>
-<span class="lineno"> 2046 </span><span class="spaces">                             </span><span class="istickedoff">mp &lt;- termToMaybeProp sc c0</span>
-<span class="lineno"> 2047 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
-<span class="lineno"> 2048 </span><span class="spaces">                             </span><span class="istickedoff">case mp of</span>
-<span class="lineno"> 2049 </span><span class="spaces">                               </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2050 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;goal_apply: could not find instantiation for &quot; ++ show nm)</span></span>
-<span class="lineno"> 2051 </span><span class="spaces">                               </span><span class="istickedoff">Just p -&gt; pure (Right p)</span>
-<span class="lineno"> 2052 </span><span class="spaces">                        </span><span class="istickedoff">Just tm -&gt;</span>
-<span class="lineno"> 2053 </span><span class="spaces">                          </span><span class="istickedoff">pure (Left tm)</span>
-<span class="lineno"> 2054 </span><span class="spaces">                </span><span class="istickedoff">Just &lt;$&gt; traverse mkNewGoal ruleArgs</span>
-<span class="lineno"> 2055 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2056 </span><span class="spaces">    </span><span class="istickedoff">asPiLists :: Term -&gt; IO [([ExtCns Term], Term)]</span>
-<span class="lineno"> 2057 </span><span class="spaces">    </span><span class="istickedoff">asPiLists t =</span>
-<span class="lineno"> 2058 </span><span class="spaces">      </span><span class="istickedoff">scAsPi sc t &gt;&gt;= \case</span>
-<span class="lineno"> 2059 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; pure [([], t)]</span>
-<span class="lineno"> 2060 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
-<span class="lineno"> 2061 </span><span class="spaces">          </span><span class="istickedoff">do lists &lt;- asPiLists body</span>
-<span class="lineno"> 2062 </span><span class="spaces">             </span><span class="istickedoff">pure $ [ (ec : args, concl) | (args, concl) &lt;- lists ] ++ <span class="nottickedoff">[([], t)]</span></span></span>
-<span class="lineno"> 2063 </span>
+<span class="lineno"> 2041 </span><span class="spaces">             </span><span class="istickedoff">do let mkNewGoal :: ExtCns Term -&gt; IO (Either Term Prop)</span>
+<span class="lineno"> 2042 </span><span class="spaces">                    </span><span class="istickedoff">mkNewGoal ec =</span>
+<span class="lineno"> 2043 </span><span class="spaces">                      </span><span class="istickedoff">case Map.lookup (ecVarIndex ec) inst of</span>
+<span class="lineno"> 2044 </span><span class="spaces">                        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2045 </span><span class="spaces">                          </span><span class="istickedoff">-- this argument not solved by unification, so make it a goal</span>
+<span class="lineno"> 2046 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst (ecType ec)</span>
+<span class="lineno"> 2047 </span><span class="spaces">                             </span><span class="istickedoff">mp &lt;- termToMaybeProp sc c0</span>
+<span class="lineno"> 2048 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2049 </span><span class="spaces">                             </span><span class="istickedoff">case mp of</span>
+<span class="lineno"> 2050 </span><span class="spaces">                               </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2051 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;goal_apply: could not find instantiation for &quot; ++ show nm)</span></span>
+<span class="lineno"> 2052 </span><span class="spaces">                               </span><span class="istickedoff">Just p -&gt; pure (Right p)</span>
+<span class="lineno"> 2053 </span><span class="spaces">                        </span><span class="istickedoff">Just tm -&gt;</span>
+<span class="lineno"> 2054 </span><span class="spaces">                          </span><span class="istickedoff">pure (Left tm)</span>
+<span class="lineno"> 2055 </span><span class="spaces">                </span><span class="istickedoff">Just &lt;$&gt; traverse mkNewGoal ruleArgs</span>
+<span class="lineno"> 2056 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2057 </span><span class="spaces">    </span><span class="istickedoff">asPiLists :: Term -&gt; IO [([ExtCns Term], Term)]</span>
+<span class="lineno"> 2058 </span><span class="spaces">    </span><span class="istickedoff">asPiLists t =</span>
+<span class="lineno"> 2059 </span><span class="spaces">      </span><span class="istickedoff">scAsPi sc t &gt;&gt;= \case</span>
+<span class="lineno"> 2060 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; pure [([], t)]</span>
+<span class="lineno"> 2061 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
+<span class="lineno"> 2062 </span><span class="spaces">          </span><span class="istickedoff">do lists &lt;- asPiLists body</span>
+<span class="lineno"> 2063 </span><span class="spaces">             </span><span class="istickedoff">pure $ [ (ec : args, concl) | (args, concl) &lt;- lists ] ++ <span class="nottickedoff">[([], t)]</span></span></span>
 <span class="lineno"> 2064 </span>
-<span class="lineno"> 2065 </span>-- | Attempt to prove a universally quantified goal by introducing a fresh variable
-<span class="lineno"> 2066 </span>--   for the binder. Return the generated fresh term.
-<span class="lineno"> 2067 </span>tacticIntro :: (F.MonadFail m, MonadIO m) =&gt;
-<span class="lineno"> 2068 </span>  SharedContext -&gt;
-<span class="lineno"> 2069 </span>  Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} -&gt;
-<span class="lineno"> 2070 </span>  Tactic m TypedTerm
-<span class="lineno"> 2071 </span><span class="decl"><span class="istickedoff">tacticIntro sc usernm = Tactic \goal -&gt;</span>
-<span class="lineno"> 2072 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
-<span class="lineno"> 2073 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
-<span class="lineno"> 2074 </span><span class="spaces">      </span><span class="istickedoff">liftIO (scAsPi sc (unProp p)) &gt;&gt;= \case</span>
-<span class="lineno"> 2075 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
-<span class="lineno"> 2076 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
-<span class="lineno"> 2077 </span><span class="spaces">             </span><span class="istickedoff">let tp = ecType ec</span>
-<span class="lineno"> 2078 </span><span class="spaces">             </span><span class="istickedoff">let name = if <span class="tickonlyfalse">Text.null usernm</span> then <span class="nottickedoff">nm</span> else usernm</span>
-<span class="lineno"> 2079 </span><span class="spaces">             </span><span class="istickedoff">xv &lt;- liftIO $ scFreshEC sc name tp</span>
-<span class="lineno"> 2080 </span><span class="spaces">             </span><span class="istickedoff">x  &lt;- liftIO $ scExtCns sc xv</span>
-<span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">tt &lt;- liftIO $ mkTypedTerm sc x</span>
-<span class="lineno"> 2082 </span><span class="spaces">             </span><span class="istickedoff">body' &lt;- liftIO $ scInstantiateExt sc (Map.singleton (ecVarIndex ec) x) body</span>
-<span class="lineno"> 2083 </span><span class="spaces">             </span><span class="istickedoff">let goal' = goal { goalSequent = mkSqt (Prop body') }</span>
-<span class="lineno"> 2084 </span><span class="spaces">             </span><span class="istickedoff">return (<span class="nottickedoff">tt</span>, <span class="nottickedoff">mempty</span>, [goal'], introEvidence xv)</span>
-<span class="lineno"> 2085 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2086 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;intro tactic failed: not a function&quot;</span></span>
-<span class="lineno"> 2087 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2088 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;intro tactic: conclusion focus required&quot;</span></span></span>
-<span class="lineno"> 2089 </span>
-<span class="lineno"> 2090 </span>-- | Given a focused conclusion, decompose the conclusion along implications by
-<span class="lineno"> 2091 </span>--   introducing new hypotheses.  The given integer indicates how many hypotheses
-<span class="lineno"> 2092 </span>--   to introduce.
-<span class="lineno"> 2093 </span>tacticIntroHyps :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
-<span class="lineno"> 2094 </span><span class="decl"><span class="nottickedoff">tacticIntroHyps sc n = Tactic \goal -&gt;</span>
-<span class="lineno"> 2095 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
-<span class="lineno"> 2096 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 2097 </span><span class="spaces">      </span><span class="nottickedoff">do (newhs, g') &lt;- liftIO (loop n g)</span>
-<span class="lineno"> 2098 </span><span class="spaces">         </span><span class="nottickedoff">let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)</span>
-<span class="lineno"> 2099 </span><span class="spaces">         </span><span class="nottickedoff">let goal' = goal{ goalSequent = sqt' }</span>
-<span class="lineno"> 2100 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
-<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;goal_intro_hyps: conclusion focus required&quot;</span>
-<span class="lineno"> 2102 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2103 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2104 </span><span class="spaces">   </span><span class="nottickedoff">loop i g</span>
-<span class="lineno"> 2105 </span><span class="spaces">     </span><span class="nottickedoff">| i &lt;= 0 = return ([],g)</span>
-<span class="lineno"> 2106 </span><span class="spaces">     </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno"> 2107 </span><span class="spaces">         </span><span class="nottickedoff">splitImpl sc g &gt;&gt;= \case</span>
-<span class="lineno"> 2108 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt; fail &quot;intro_hyps: could not find enough hypotheses to introduce&quot;</span>
-<span class="lineno"> 2109 </span><span class="spaces">           </span><span class="nottickedoff">Just (h,g') -&gt;</span>
-<span class="lineno"> 2110 </span><span class="spaces">             </span><span class="nottickedoff">do (hs,g'') &lt;- loop (i-1) g'</span>
-<span class="lineno"> 2111 </span><span class="spaces">                </span><span class="nottickedoff">return (h:hs, g'')</span></span>
-<span class="lineno"> 2112 </span>
-<span class="lineno"> 2113 </span>tacticRevertHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
-<span class="lineno"> 2114 </span><span class="decl"><span class="nottickedoff">tacticRevertHyp sc i = Tactic \goal -&gt;</span>
-<span class="lineno"> 2115 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
-<span class="lineno"> 2116 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 2117 </span><span class="spaces">      </span><span class="nottickedoff">case genericDrop i hs of</span>
-<span class="lineno"> 2118 </span><span class="spaces">        </span><span class="nottickedoff">(h:_) -&gt;</span>
-<span class="lineno"> 2119 </span><span class="spaces">          </span><span class="nottickedoff">case (asEqTrue (unProp h), asEqTrue (unProp g)) of</span>
-<span class="lineno"> 2120 </span><span class="spaces">            </span><span class="nottickedoff">(Just h', Just g') -&gt;</span>
-<span class="lineno"> 2121 </span><span class="spaces">              </span><span class="nottickedoff">do g'' &lt;- liftIO (Prop &lt;$&gt; (scEqTrue sc =&lt;&lt; scImplies sc h' g'))</span>
-<span class="lineno"> 2122 </span><span class="spaces">                 </span><span class="nottickedoff">let sqt' = ConclFocusedSequent hs (FB gs1 g'' gs2)</span>
-<span class="lineno"> 2123 </span><span class="spaces">                 </span><span class="nottickedoff">let goal' = goal{ goalSequent = sqt' }</span>
-<span class="lineno"> 2124 </span><span class="spaces">                 </span><span class="nottickedoff">return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
-<span class="lineno"> 2125 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2126 </span><span class="spaces">            </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: expected EqTrue props&quot;</span>
-<span class="lineno"> 2127 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: not enough hypotheses&quot;</span>
-<span class="lineno"> 2128 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: conclusion focus required&quot;</span></span>
-<span class="lineno"> 2129 </span>
+<span class="lineno"> 2065 </span>
+<span class="lineno"> 2066 </span>-- | Attempt to prove a universally quantified goal by introducing a fresh variable
+<span class="lineno"> 2067 </span>--   for the binder. Return the generated fresh term.
+<span class="lineno"> 2068 </span>tacticIntro :: (F.MonadFail m, MonadIO m) =&gt;
+<span class="lineno"> 2069 </span>  SharedContext -&gt;
+<span class="lineno"> 2070 </span>  Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} -&gt;
+<span class="lineno"> 2071 </span>  Tactic m TypedTerm
+<span class="lineno"> 2072 </span><span class="decl"><span class="istickedoff">tacticIntro sc usernm = Tactic \goal -&gt;</span>
+<span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
+<span class="lineno"> 2074 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
+<span class="lineno"> 2075 </span><span class="spaces">      </span><span class="istickedoff">liftIO (scAsPi sc (unProp p)) &gt;&gt;= \case</span>
+<span class="lineno"> 2076 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
+<span class="lineno"> 2077 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2078 </span><span class="spaces">             </span><span class="istickedoff">let tp = ecType ec</span>
+<span class="lineno"> 2079 </span><span class="spaces">             </span><span class="istickedoff">let name = if <span class="tickonlyfalse">Text.null usernm</span> then <span class="nottickedoff">nm</span> else usernm</span>
+<span class="lineno"> 2080 </span><span class="spaces">             </span><span class="istickedoff">xv &lt;- liftIO $ scFreshEC sc name tp</span>
+<span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">x  &lt;- liftIO $ scExtCns sc xv</span>
+<span class="lineno"> 2082 </span><span class="spaces">             </span><span class="istickedoff">tt &lt;- liftIO $ mkTypedTerm sc x</span>
+<span class="lineno"> 2083 </span><span class="spaces">             </span><span class="istickedoff">body' &lt;- liftIO $ scInstantiateExt sc (Map.singleton (ecVarIndex ec) x) body</span>
+<span class="lineno"> 2084 </span><span class="spaces">             </span><span class="istickedoff">let goal' = goal { goalSequent = mkSqt (Prop body') }</span>
+<span class="lineno"> 2085 </span><span class="spaces">             </span><span class="istickedoff">return (<span class="nottickedoff">tt</span>, <span class="nottickedoff">mempty</span>, [goal'], introEvidence xv)</span>
+<span class="lineno"> 2086 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2087 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;intro tactic failed: not a function&quot;</span></span>
+<span class="lineno"> 2088 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2089 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;intro tactic: conclusion focus required&quot;</span></span></span>
+<span class="lineno"> 2090 </span>
+<span class="lineno"> 2091 </span>-- | Given a focused conclusion, decompose the conclusion along implications by
+<span class="lineno"> 2092 </span>--   introducing new hypotheses.  The given integer indicates how many hypotheses
+<span class="lineno"> 2093 </span>--   to introduce.
+<span class="lineno"> 2094 </span>tacticIntroHyps :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
+<span class="lineno"> 2095 </span><span class="decl"><span class="nottickedoff">tacticIntroHyps sc n = Tactic \goal -&gt;</span>
+<span class="lineno"> 2096 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
+<span class="lineno"> 2097 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
+<span class="lineno"> 2098 </span><span class="spaces">      </span><span class="nottickedoff">do (newhs, g') &lt;- liftIO (loop n g)</span>
+<span class="lineno"> 2099 </span><span class="spaces">         </span><span class="nottickedoff">let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)</span>
+<span class="lineno"> 2100 </span><span class="spaces">         </span><span class="nottickedoff">let goal' = goal{ goalSequent = sqt' }</span>
+<span class="lineno"> 2101 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
+<span class="lineno"> 2102 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;goal_intro_hyps: conclusion focus required&quot;</span>
+<span class="lineno"> 2103 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2104 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2105 </span><span class="spaces">   </span><span class="nottickedoff">loop i g</span>
+<span class="lineno"> 2106 </span><span class="spaces">     </span><span class="nottickedoff">| i &lt;= 0 = return ([],g)</span>
+<span class="lineno"> 2107 </span><span class="spaces">     </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 2108 </span><span class="spaces">         </span><span class="nottickedoff">splitImpl sc g &gt;&gt;= \case</span>
+<span class="lineno"> 2109 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt; fail &quot;intro_hyps: could not find enough hypotheses to introduce&quot;</span>
+<span class="lineno"> 2110 </span><span class="spaces">           </span><span class="nottickedoff">Just (h,g') -&gt;</span>
+<span class="lineno"> 2111 </span><span class="spaces">             </span><span class="nottickedoff">do (hs,g'') &lt;- loop (i-1) g'</span>
+<span class="lineno"> 2112 </span><span class="spaces">                </span><span class="nottickedoff">return (h:hs, g'')</span></span>
+<span class="lineno"> 2113 </span>
+<span class="lineno"> 2114 </span>tacticRevertHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
+<span class="lineno"> 2115 </span><span class="decl"><span class="nottickedoff">tacticRevertHyp sc i = Tactic \goal -&gt;</span>
+<span class="lineno"> 2116 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
+<span class="lineno"> 2117 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
+<span class="lineno"> 2118 </span><span class="spaces">      </span><span class="nottickedoff">case genericDrop i hs of</span>
+<span class="lineno"> 2119 </span><span class="spaces">        </span><span class="nottickedoff">(h:_) -&gt;</span>
+<span class="lineno"> 2120 </span><span class="spaces">          </span><span class="nottickedoff">case (asEqTrue (unProp h), asEqTrue (unProp g)) of</span>
+<span class="lineno"> 2121 </span><span class="spaces">            </span><span class="nottickedoff">(Just h', Just g') -&gt;</span>
+<span class="lineno"> 2122 </span><span class="spaces">              </span><span class="nottickedoff">do g'' &lt;- liftIO (Prop &lt;$&gt; (scEqTrue sc =&lt;&lt; scImplies sc h' g'))</span>
+<span class="lineno"> 2123 </span><span class="spaces">                 </span><span class="nottickedoff">let sqt' = ConclFocusedSequent hs (FB gs1 g'' gs2)</span>
+<span class="lineno"> 2124 </span><span class="spaces">                 </span><span class="nottickedoff">let goal' = goal{ goalSequent = sqt' }</span>
+<span class="lineno"> 2125 </span><span class="spaces">                 </span><span class="nottickedoff">return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))</span>
+<span class="lineno"> 2126 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2127 </span><span class="spaces">            </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: expected EqTrue props&quot;</span>
+<span class="lineno"> 2128 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: not enough hypotheses&quot;</span>
+<span class="lineno"> 2129 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;goal_revert_hyp: conclusion focus required&quot;</span></span>
 <span class="lineno"> 2130 </span>
-<span class="lineno"> 2131 </span>-- | Attempt to prove a goal by applying a local hypothesis.  Any hypotheses of
-<span class="lineno"> 2132 </span>--   the applied proposition will generate additional subgoals.
-<span class="lineno"> 2133 </span>tacticApplyHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
-<span class="lineno"> 2134 </span><span class="decl"><span class="nottickedoff">tacticApplyHyp sc n = Tactic \goal -&gt;</span>
-<span class="lineno"> 2135 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
-<span class="lineno"> 2136 </span><span class="spaces">    </span><span class="nottickedoff">UnfocusedSequent{} -&gt; fail &quot;apply hyp tactic: focus required&quot;</span>
-<span class="lineno"> 2137 </span><span class="spaces">    </span><span class="nottickedoff">HypFocusedSequent{} -&gt; fail &quot;apply hyp tactic: cannot apply in a hypothesis&quot;</span>
-<span class="lineno"> 2138 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
-<span class="lineno"> 2139 </span><span class="spaces">      </span><span class="nottickedoff">case genericDrop n hs of</span>
-<span class="lineno"> 2140 </span><span class="spaces">        </span><span class="nottickedoff">(h:_) -&gt;</span>
-<span class="lineno"> 2141 </span><span class="spaces">          </span><span class="nottickedoff">liftIO (propApply sc h g) &gt;&gt;= \case</span>
-<span class="lineno"> 2142 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; fail &quot;apply hyp tactic: no match&quot;</span>
-<span class="lineno"> 2143 </span><span class="spaces">            </span><span class="nottickedoff">Just newterms -&gt;</span>
-<span class="lineno"> 2144 </span><span class="spaces">              </span><span class="nottickedoff">let newgoals =</span>
-<span class="lineno"> 2145 </span><span class="spaces">                    </span><span class="nottickedoff">[ goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)</span>
-<span class="lineno"> 2146 </span><span class="spaces">                          </span><span class="nottickedoff">, goalType = goalType goal ++ &quot;.subgoal&quot; ++ show i</span>
-<span class="lineno"> 2147 </span><span class="spaces">                          </span><span class="nottickedoff">}</span>
-<span class="lineno"> 2148 </span><span class="spaces">                    </span><span class="nottickedoff">| Right p &lt;- newterms</span>
-<span class="lineno"> 2149 </span><span class="spaces">                    </span><span class="nottickedoff">| i &lt;- [0::Integer ..]</span>
-<span class="lineno"> 2150 </span><span class="spaces">                    </span><span class="nottickedoff">] in</span>
-<span class="lineno"> 2151 </span><span class="spaces">              </span><span class="nottickedoff">return ((), mempty, newgoals, \es -&gt; ApplyHypEvidence n &lt;$&gt; processEvidence newterms es)</span>
-<span class="lineno"> 2152 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;apply hyp tactic: not enough hypotheses&quot;</span>
-<span class="lineno"> 2153 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2154 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2155 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
-<span class="lineno"> 2156 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Left tm : xs) es     = (Left tm :) &lt;$&gt; processEvidence xs es</span>
-<span class="lineno"> 2157 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Right _ : xs) (e:es) = (Right e :) &lt;$&gt; processEvidence xs es</span>
-<span class="lineno"> 2158 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence []             []     = pure []</span>
-<span class="lineno"> 2159 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence _ _ = fail &quot;apply hyp tactic failed: evidence mismatch&quot;</span></span>
-<span class="lineno"> 2160 </span>
+<span class="lineno"> 2131 </span>
+<span class="lineno"> 2132 </span>-- | Attempt to prove a goal by applying a local hypothesis.  Any hypotheses of
+<span class="lineno"> 2133 </span>--   the applied proposition will generate additional subgoals.
+<span class="lineno"> 2134 </span>tacticApplyHyp :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Integer -&gt; Tactic m ()
+<span class="lineno"> 2135 </span><span class="decl"><span class="nottickedoff">tacticApplyHyp sc n = Tactic \goal -&gt;</span>
+<span class="lineno"> 2136 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent goal of</span>
+<span class="lineno"> 2137 </span><span class="spaces">    </span><span class="nottickedoff">UnfocusedSequent{} -&gt; fail &quot;apply hyp tactic: focus required&quot;</span>
+<span class="lineno"> 2138 </span><span class="spaces">    </span><span class="nottickedoff">HypFocusedSequent{} -&gt; fail &quot;apply hyp tactic: cannot apply in a hypothesis&quot;</span>
+<span class="lineno"> 2139 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocusedSequent hs (FB gs1 g gs2) -&gt;</span>
+<span class="lineno"> 2140 </span><span class="spaces">      </span><span class="nottickedoff">case genericDrop n hs of</span>
+<span class="lineno"> 2141 </span><span class="spaces">        </span><span class="nottickedoff">(h:_) -&gt;</span>
+<span class="lineno"> 2142 </span><span class="spaces">          </span><span class="nottickedoff">liftIO (propApply sc h g) &gt;&gt;= \case</span>
+<span class="lineno"> 2143 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; fail &quot;apply hyp tactic: no match&quot;</span>
+<span class="lineno"> 2144 </span><span class="spaces">            </span><span class="nottickedoff">Just newterms -&gt;</span>
+<span class="lineno"> 2145 </span><span class="spaces">              </span><span class="nottickedoff">let newgoals =</span>
+<span class="lineno"> 2146 </span><span class="spaces">                    </span><span class="nottickedoff">[ goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)</span>
+<span class="lineno"> 2147 </span><span class="spaces">                          </span><span class="nottickedoff">, goalType = goalType goal ++ &quot;.subgoal&quot; ++ show i</span>
+<span class="lineno"> 2148 </span><span class="spaces">                          </span><span class="nottickedoff">}</span>
+<span class="lineno"> 2149 </span><span class="spaces">                    </span><span class="nottickedoff">| Right p &lt;- newterms</span>
+<span class="lineno"> 2150 </span><span class="spaces">                    </span><span class="nottickedoff">| i &lt;- [0::Integer ..]</span>
+<span class="lineno"> 2151 </span><span class="spaces">                    </span><span class="nottickedoff">] in</span>
+<span class="lineno"> 2152 </span><span class="spaces">              </span><span class="nottickedoff">return ((), mempty, newgoals, \es -&gt; ApplyHypEvidence n &lt;$&gt; processEvidence newterms es)</span>
+<span class="lineno"> 2153 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;apply hyp tactic: not enough hypotheses&quot;</span>
+<span class="lineno"> 2154 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2155 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2156 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
+<span class="lineno"> 2157 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Left tm : xs) es     = (Left tm :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2158 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence (Right _ : xs) (e:es) = (Right e :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2159 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence []             []     = pure []</span>
+<span class="lineno"> 2160 </span><span class="spaces">   </span><span class="nottickedoff">processEvidence _ _ = fail &quot;apply hyp tactic failed: evidence mismatch&quot;</span></span>
 <span class="lineno"> 2161 </span>
-<span class="lineno"> 2162 </span>-- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
-<span class="lineno"> 2163 </span>--   the theorem will generate additional subgoals.
-<span class="lineno"> 2164 </span>tacticApply :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Theorem -&gt; Tactic m ()
-<span class="lineno"> 2165 </span><span class="decl"><span class="istickedoff">tacticApply sc thm = Tactic \goal -&gt;</span>
-<span class="lineno"> 2166 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
-<span class="lineno"> 2167 </span><span class="spaces">    </span><span class="istickedoff">Unfocused -&gt; <span class="nottickedoff">fail &quot;apply tactic: focus required&quot;</span></span>
-<span class="lineno"> 2168 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;apply tactic: cannot apply in a hypothesis&quot;</span></span>
-<span class="lineno"> 2169 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus gl mkSqt -&gt;</span>
-<span class="lineno"> 2170 </span><span class="spaces">      </span><span class="istickedoff">liftIO (propApply sc (thmProp thm) gl) &gt;&gt;= \case</span>
-<span class="lineno"> 2171 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;apply tactic failed: no match&quot;</span></span>
-<span class="lineno"> 2172 </span><span class="spaces">        </span><span class="istickedoff">Just newterms -&gt;</span>
-<span class="lineno"> 2173 </span><span class="spaces">          </span><span class="istickedoff">let newgoals =</span>
-<span class="lineno"> 2174 </span><span class="spaces">                </span><span class="istickedoff">[ goal{ goalSequent = mkSqt p, goalType = <span class="nottickedoff">goalType goal ++ &quot;.subgoal&quot; ++ show i</span> }</span>
-<span class="lineno"> 2175 </span><span class="spaces">                </span><span class="istickedoff">| Right p &lt;- newterms</span>
-<span class="lineno"> 2176 </span><span class="spaces">                </span><span class="istickedoff">| i &lt;- [0::Integer ..]</span>
-<span class="lineno"> 2177 </span><span class="spaces">                </span><span class="istickedoff">] in</span>
-<span class="lineno"> 2178 </span><span class="spaces">          </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, newgoals, \es -&gt; ApplyEvidence thm &lt;$&gt; processEvidence newterms es)</span>
-<span class="lineno"> 2179 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2180 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno"> 2181 </span><span class="spaces">   </span><span class="istickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
-<span class="lineno"> 2182 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Left tm : xs) es     = (Left tm :) &lt;$&gt; processEvidence xs es</span>
-<span class="lineno"> 2183 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Right _ : xs) (e:es) = (Right e :) &lt;$&gt; processEvidence xs es</span>
-<span class="lineno"> 2184 </span><span class="spaces">   </span><span class="istickedoff">processEvidence []             []     = pure []</span>
-<span class="lineno"> 2185 </span><span class="spaces">   </span><span class="istickedoff">processEvidence _ _ = <span class="nottickedoff">fail &quot;apply tactic failed: evidence mismatch&quot;</span></span></span>
-<span class="lineno"> 2186 </span>
-<span class="lineno"> 2187 </span>-- | Attempt to simplify a goal by splitting it along conjunctions, disjunctions,
-<span class="lineno"> 2188 </span>--   implication or if/then/else.  If successful, two subgoals will be produced,
-<span class="lineno"> 2189 </span>--   representing the two subgoals that must be proved.
-<span class="lineno"> 2190 </span>tacticSplit :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Tactic m ()
-<span class="lineno"> 2191 </span><span class="decl"><span class="nottickedoff">tacticSplit sc = Tactic \gl -&gt;</span>
-<span class="lineno"> 2192 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (splitSequent sc (goalSequent gl)) &gt;&gt;= \case</span>
-<span class="lineno"> 2193 </span><span class="spaces">    </span><span class="nottickedoff">Just (sqt1, sqt2) -&gt;</span>
-<span class="lineno"> 2194 </span><span class="spaces">      </span><span class="nottickedoff">do let g1 = gl{ goalType = goalType gl ++ &quot;.l&quot;, goalSequent = sqt1 }</span>
-<span class="lineno"> 2195 </span><span class="spaces">         </span><span class="nottickedoff">let g2 = gl{ goalType = goalType gl ++ &quot;.r&quot;, goalSequent = sqt2 }</span>
-<span class="lineno"> 2196 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [g1,g2], splitEvidence)</span>
-<span class="lineno"> 2197 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail &quot;split tactic failed&quot;</span></span>
-<span class="lineno"> 2198 </span>
-<span class="lineno"> 2199 </span>-- | Specialize a focused hypothesis with the given terms. A new specialized
-<span class="lineno"> 2200 </span>--   hypothesis will be added to the sequent; the original hypothesis will
-<span class="lineno"> 2201 </span>--   remain focused.
-<span class="lineno"> 2202 </span>tacticSpecializeHyp ::
-<span class="lineno"> 2203 </span>  (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; [Term] -&gt; Tactic m ()
-<span class="lineno"> 2204 </span><span class="decl"><span class="nottickedoff">tacticSpecializeHyp sc ts = Tactic \gl -&gt;</span>
-<span class="lineno"> 2205 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent gl of</span>
-<span class="lineno"> 2206 </span><span class="spaces">    </span><span class="nottickedoff">HypFocusedSequent (FB hs1 h hs2) gs -&gt;</span>
-<span class="lineno"> 2207 </span><span class="spaces">      </span><span class="nottickedoff">do res &lt;- liftIO (specializeProp sc h ts)</span>
-<span class="lineno"> 2208 </span><span class="spaces">         </span><span class="nottickedoff">case res of</span>
-<span class="lineno"> 2209 </span><span class="spaces">           </span><span class="nottickedoff">Left err -&gt;</span>
-<span class="lineno"> 2210 </span><span class="spaces">             </span><span class="nottickedoff">fail (unlines ([&quot;specialize_hyp tactic: failed to specialize&quot;] ++ TC.prettyTCError err))</span>
-<span class="lineno"> 2211 </span><span class="spaces">           </span><span class="nottickedoff">Right h' -&gt;</span>
-<span class="lineno"> 2212 </span><span class="spaces">             </span><span class="nottickedoff">do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }</span>
-<span class="lineno"> 2213 </span><span class="spaces">                </span><span class="nottickedoff">return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)</span>
-<span class="lineno"> 2214 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;specialize_hyp tactic failed: requires hypothesis focus&quot;</span></span>
-<span class="lineno"> 2215 </span>
+<span class="lineno"> 2162 </span>
+<span class="lineno"> 2163 </span>-- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
+<span class="lineno"> 2164 </span>--   the theorem will generate additional subgoals.
+<span class="lineno"> 2165 </span>tacticApply :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Theorem -&gt; Tactic m ()
+<span class="lineno"> 2166 </span><span class="decl"><span class="istickedoff">tacticApply sc thm = Tactic \goal -&gt;</span>
+<span class="lineno"> 2167 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
+<span class="lineno"> 2168 </span><span class="spaces">    </span><span class="istickedoff">Unfocused -&gt; <span class="nottickedoff">fail &quot;apply tactic: focus required&quot;</span></span>
+<span class="lineno"> 2169 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;apply tactic: cannot apply in a hypothesis&quot;</span></span>
+<span class="lineno"> 2170 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus gl mkSqt -&gt;</span>
+<span class="lineno"> 2171 </span><span class="spaces">      </span><span class="istickedoff">liftIO (propApply sc (thmProp thm) gl) &gt;&gt;= \case</span>
+<span class="lineno"> 2172 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;apply tactic failed: no match&quot;</span></span>
+<span class="lineno"> 2173 </span><span class="spaces">        </span><span class="istickedoff">Just newterms -&gt;</span>
+<span class="lineno"> 2174 </span><span class="spaces">          </span><span class="istickedoff">let newgoals =</span>
+<span class="lineno"> 2175 </span><span class="spaces">                </span><span class="istickedoff">[ goal{ goalSequent = mkSqt p, goalType = <span class="nottickedoff">goalType goal ++ &quot;.subgoal&quot; ++ show i</span> }</span>
+<span class="lineno"> 2176 </span><span class="spaces">                </span><span class="istickedoff">| Right p &lt;- newterms</span>
+<span class="lineno"> 2177 </span><span class="spaces">                </span><span class="istickedoff">| i &lt;- [0::Integer ..]</span>
+<span class="lineno"> 2178 </span><span class="spaces">                </span><span class="istickedoff">] in</span>
+<span class="lineno"> 2179 </span><span class="spaces">          </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, newgoals, \es -&gt; ApplyEvidence thm &lt;$&gt; processEvidence newterms es)</span>
+<span class="lineno"> 2180 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2181 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno"> 2182 </span><span class="spaces">   </span><span class="istickedoff">processEvidence :: [Either Term Prop] -&gt; [Evidence] -&gt; IO [Either Term Evidence]</span>
+<span class="lineno"> 2183 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Left tm : xs) es     = (Left tm :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2184 </span><span class="spaces">   </span><span class="istickedoff">processEvidence (Right _ : xs) (e:es) = (Right e :) &lt;$&gt; processEvidence xs es</span>
+<span class="lineno"> 2185 </span><span class="spaces">   </span><span class="istickedoff">processEvidence []             []     = pure []</span>
+<span class="lineno"> 2186 </span><span class="spaces">   </span><span class="istickedoff">processEvidence _ _ = <span class="nottickedoff">fail &quot;apply tactic failed: evidence mismatch&quot;</span></span></span>
+<span class="lineno"> 2187 </span>
+<span class="lineno"> 2188 </span>-- | Attempt to simplify a goal by splitting it along conjunctions, disjunctions,
+<span class="lineno"> 2189 </span>--   implication or if/then/else.  If successful, two subgoals will be produced,
+<span class="lineno"> 2190 </span>--   representing the two subgoals that must be proved.
+<span class="lineno"> 2191 </span>tacticSplit :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Tactic m ()
+<span class="lineno"> 2192 </span><span class="decl"><span class="nottickedoff">tacticSplit sc = Tactic \gl -&gt;</span>
+<span class="lineno"> 2193 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (splitSequent sc (goalSequent gl)) &gt;&gt;= \case</span>
+<span class="lineno"> 2194 </span><span class="spaces">    </span><span class="nottickedoff">Just (sqt1, sqt2) -&gt;</span>
+<span class="lineno"> 2195 </span><span class="spaces">      </span><span class="nottickedoff">do let g1 = gl{ goalType = goalType gl ++ &quot;.l&quot;, goalSequent = sqt1 }</span>
+<span class="lineno"> 2196 </span><span class="spaces">         </span><span class="nottickedoff">let g2 = gl{ goalType = goalType gl ++ &quot;.r&quot;, goalSequent = sqt2 }</span>
+<span class="lineno"> 2197 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [g1,g2], splitEvidence)</span>
+<span class="lineno"> 2198 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail &quot;split tactic failed&quot;</span></span>
+<span class="lineno"> 2199 </span>
+<span class="lineno"> 2200 </span>-- | Specialize a focused hypothesis with the given terms. A new specialized
+<span class="lineno"> 2201 </span>--   hypothesis will be added to the sequent; the original hypothesis will
+<span class="lineno"> 2202 </span>--   remain focused.
+<span class="lineno"> 2203 </span>tacticSpecializeHyp ::
+<span class="lineno"> 2204 </span>  (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; [Term] -&gt; Tactic m ()
+<span class="lineno"> 2205 </span><span class="decl"><span class="nottickedoff">tacticSpecializeHyp sc ts = Tactic \gl -&gt;</span>
+<span class="lineno"> 2206 </span><span class="spaces">  </span><span class="nottickedoff">case goalSequent gl of</span>
+<span class="lineno"> 2207 </span><span class="spaces">    </span><span class="nottickedoff">HypFocusedSequent (FB hs1 h hs2) gs -&gt;</span>
+<span class="lineno"> 2208 </span><span class="spaces">      </span><span class="nottickedoff">do res &lt;- liftIO (specializeProp sc h ts)</span>
+<span class="lineno"> 2209 </span><span class="spaces">         </span><span class="nottickedoff">case res of</span>
+<span class="lineno"> 2210 </span><span class="spaces">           </span><span class="nottickedoff">Left err -&gt;</span>
+<span class="lineno"> 2211 </span><span class="spaces">             </span><span class="nottickedoff">fail (unlines ([&quot;specialize_hyp tactic: failed to specialize&quot;] ++ TC.prettyTCError err))</span>
+<span class="lineno"> 2212 </span><span class="spaces">           </span><span class="nottickedoff">Right h' -&gt;</span>
+<span class="lineno"> 2213 </span><span class="spaces">             </span><span class="nottickedoff">do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }</span>
+<span class="lineno"> 2214 </span><span class="spaces">                </span><span class="nottickedoff">return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)</span>
+<span class="lineno"> 2215 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;specialize_hyp tactic failed: requires hypothesis focus&quot;</span></span>
 <span class="lineno"> 2216 </span>
-<span class="lineno"> 2217 </span>-- | This tactic adds a new hypothesis to the current goal by first specializing the
-<span class="lineno"> 2218 </span>--   given theorem with the list of terms provided and then using cut to add the
-<span class="lineno"> 2219 </span>--   hypothesis, discharging the produced additional goal by applying the theorem.
-<span class="lineno"> 2220 </span>tacticInsert :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Theorem -&gt; [Term] -&gt; Tactic m ()
-<span class="lineno"> 2221 </span><span class="decl"><span class="istickedoff">tacticInsert sc thm ts = Tactic \gl -&gt;</span>
-<span class="lineno"> 2222 </span><span class="spaces">  </span><span class="istickedoff">do res &lt;- liftIO (specializeProp <span class="nottickedoff">sc</span> (_thmProp thm) ts)</span>
-<span class="lineno"> 2223 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
-<span class="lineno"> 2224 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt;</span>
-<span class="lineno"> 2225 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">fail (unlines ([&quot;goal_insert_and_specialize tactic: failed to specialize&quot;] ++</span></span>
-<span class="lineno"> 2226 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">TC.prettyTCError err))</span></span>
-<span class="lineno"> 2227 </span><span class="spaces">       </span><span class="istickedoff">Right h -&gt;</span>
-<span class="lineno"> 2228 </span><span class="spaces">         </span><span class="istickedoff">do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }</span>
-<span class="lineno"> 2229 </span><span class="spaces">            </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [gl'], insertEvidence thm h ts)</span></span>
-<span class="lineno"> 2230 </span>
-<span class="lineno"> 2231 </span>-- | This tactic implements the &quot;cut rule&quot; of sequent calculus.  The given
-<span class="lineno"> 2232 </span>--   proposition is used to split the current goal into two goals, one where
-<span class="lineno"> 2233 </span>--   the given proposition is assumed as a new hypothesis, and a second
-<span class="lineno"> 2234 </span>--   where the proposition is added as a new conclusion to prove.
-<span class="lineno"> 2235 </span>--
-<span class="lineno"> 2236 </span>--         HS, X |- GS
-<span class="lineno"> 2237 </span>--         HS    |- GS, X
-<span class="lineno"> 2238 </span>--       ------------------ (Cut)
-<span class="lineno"> 2239 </span>--         HS    |- GS
-<span class="lineno"> 2240 </span>tacticCut :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Prop -&gt; Tactic m ()
-<span class="lineno"> 2241 </span><span class="decl"><span class="nottickedoff">tacticCut _sc p = Tactic \gl -&gt;</span>
-<span class="lineno"> 2242 </span><span class="spaces">  </span><span class="nottickedoff">let sqt1 = addHypothesis p (goalSequent gl)</span>
-<span class="lineno"> 2243 </span><span class="spaces">      </span><span class="nottickedoff">sqt2 = addNewFocusedConcl p (goalSequent gl)</span>
-<span class="lineno"> 2244 </span><span class="spaces">      </span><span class="nottickedoff">g1 = gl{ goalType = goalType gl ++ &quot;.cutH&quot;, goalSequent = sqt1 }</span>
-<span class="lineno"> 2245 </span><span class="spaces">      </span><span class="nottickedoff">g2 = gl{ goalType = goalType gl ++ &quot;.cutG&quot;, goalSequent = sqt2 }</span>
-<span class="lineno"> 2246 </span><span class="spaces">   </span><span class="nottickedoff">in return ((), mempty, [g1, g2], cutEvidence p)</span></span>
-<span class="lineno"> 2247 </span>
-<span class="lineno"> 2248 </span>-- | Attempt to solve a goal by recognizing it as a trivially true proposition.
-<span class="lineno"> 2249 </span>tacticTrivial :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Tactic m ()
-<span class="lineno"> 2250 </span><span class="decl"><span class="istickedoff">tacticTrivial sc = Tactic \goal -&gt;</span>
-<span class="lineno"> 2251 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
-<span class="lineno"> 2252 </span><span class="spaces">    </span><span class="istickedoff">Unfocused -&gt; <span class="nottickedoff">fail &quot;trivial tactic: focus required&quot;</span></span>
-<span class="lineno"> 2253 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;trivial tactic: cannot apply trivial in a hypothesis&quot;</span></span>
-<span class="lineno"> 2254 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus g _ -&gt;</span>
-<span class="lineno"> 2255 </span><span class="spaces">      </span><span class="istickedoff">liftIO (trivialProofTerm sc g) &gt;&gt;= \case</span>
-<span class="lineno"> 2256 </span><span class="spaces">        </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail err</span></span>
-<span class="lineno"> 2257 </span><span class="spaces">        </span><span class="istickedoff">Right pf -&gt;</span>
-<span class="lineno"> 2258 </span><span class="spaces">           </span><span class="istickedoff">do let gp = unProp g</span>
-<span class="lineno"> 2259 </span><span class="spaces">              </span><span class="istickedoff">ty &lt;- liftIO $ TC.scTypeCheckError sc pf</span>
-<span class="lineno"> 2260 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
-<span class="lineno"> 2261 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ fail $ unlines</span>
-<span class="lineno"> 2262 </span><span class="spaces">                </span><span class="istickedoff">[ &quot;The trivial tactic cannot prove this equality&quot;</span>
-<span class="lineno"> 2263 </span><span class="spaces">                </span><span class="istickedoff">, showTerm gp</span>
-<span class="lineno"> 2264 </span><span class="spaces">                </span><span class="istickedoff">]</span>
-<span class="lineno"> 2265 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], leafEvidence (ProofTerm pf))</span></span>
-<span class="lineno"> 2266 </span>
-<span class="lineno"> 2267 </span>-- | Attempt to prove a goal by giving a direct proof term.
-<span class="lineno"> 2268 </span>tacticExact :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Term -&gt; Tactic m ()
-<span class="lineno"> 2269 </span><span class="decl"><span class="nottickedoff">tacticExact sc tm = Tactic \goal -&gt;</span>
-<span class="lineno"> 2270 </span><span class="spaces">  </span><span class="nottickedoff">case sequentState (goalSequent goal) of</span>
-<span class="lineno"> 2271 </span><span class="spaces">    </span><span class="nottickedoff">Unfocused -&gt; fail &quot;tactic exact: focus required&quot;</span>
-<span class="lineno"> 2272 </span><span class="spaces">    </span><span class="nottickedoff">HypFocus _ _ -&gt; fail &quot;tactic exact: cannot apply exact in a hypothesis&quot;</span>
-<span class="lineno"> 2273 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocus g _ -&gt;</span>
-<span class="lineno"> 2274 </span><span class="spaces">      </span><span class="nottickedoff">do let gp = unProp g</span>
-<span class="lineno"> 2275 </span><span class="spaces">         </span><span class="nottickedoff">ty &lt;- liftIO $ TC.scTypeCheckError sc tm</span>
-<span class="lineno"> 2276 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
-<span class="lineno"> 2277 </span><span class="spaces">         </span><span class="nottickedoff">unless ok $ fail $ unlines</span>
-<span class="lineno"> 2278 </span><span class="spaces">             </span><span class="nottickedoff">[ &quot;Proof term does not prove the required proposition&quot;</span>
-<span class="lineno"> 2279 </span><span class="spaces">             </span><span class="nottickedoff">, showTerm gp</span>
-<span class="lineno"> 2280 </span><span class="spaces">             </span><span class="nottickedoff">, showTerm tm</span>
-<span class="lineno"> 2281 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
-<span class="lineno"> 2282 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [], leafEvidence (ProofTerm tm))</span></span>
-<span class="lineno"> 2283 </span>
+<span class="lineno"> 2217 </span>
+<span class="lineno"> 2218 </span>-- | This tactic adds a new hypothesis to the current goal by first specializing the
+<span class="lineno"> 2219 </span>--   given theorem with the list of terms provided and then using cut to add the
+<span class="lineno"> 2220 </span>--   hypothesis, discharging the produced additional goal by applying the theorem.
+<span class="lineno"> 2221 </span>tacticInsert :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Theorem -&gt; [Term] -&gt; Tactic m ()
+<span class="lineno"> 2222 </span><span class="decl"><span class="istickedoff">tacticInsert sc thm ts = Tactic \gl -&gt;</span>
+<span class="lineno"> 2223 </span><span class="spaces">  </span><span class="istickedoff">do res &lt;- liftIO (specializeProp <span class="nottickedoff">sc</span> (_thmProp thm) ts)</span>
+<span class="lineno"> 2224 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
+<span class="lineno"> 2225 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt;</span>
+<span class="lineno"> 2226 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">fail (unlines ([&quot;goal_insert_and_specialize tactic: failed to specialize&quot;] ++</span></span>
+<span class="lineno"> 2227 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">TC.prettyTCError err))</span></span>
+<span class="lineno"> 2228 </span><span class="spaces">       </span><span class="istickedoff">Right h -&gt;</span>
+<span class="lineno"> 2229 </span><span class="spaces">         </span><span class="istickedoff">do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }</span>
+<span class="lineno"> 2230 </span><span class="spaces">            </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [gl'], insertEvidence thm h ts)</span></span>
+<span class="lineno"> 2231 </span>
+<span class="lineno"> 2232 </span>-- | This tactic implements the &quot;cut rule&quot; of sequent calculus.  The given
+<span class="lineno"> 2233 </span>--   proposition is used to split the current goal into two goals, one where
+<span class="lineno"> 2234 </span>--   the given proposition is assumed as a new hypothesis, and a second
+<span class="lineno"> 2235 </span>--   where the proposition is added as a new conclusion to prove.
+<span class="lineno"> 2236 </span>--
+<span class="lineno"> 2237 </span>--         HS, X |- GS
+<span class="lineno"> 2238 </span>--         HS    |- GS, X
+<span class="lineno"> 2239 </span>--       ------------------ (Cut)
+<span class="lineno"> 2240 </span>--         HS    |- GS
+<span class="lineno"> 2241 </span>tacticCut :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Prop -&gt; Tactic m ()
+<span class="lineno"> 2242 </span><span class="decl"><span class="nottickedoff">tacticCut _sc p = Tactic \gl -&gt;</span>
+<span class="lineno"> 2243 </span><span class="spaces">  </span><span class="nottickedoff">let sqt1 = addHypothesis p (goalSequent gl)</span>
+<span class="lineno"> 2244 </span><span class="spaces">      </span><span class="nottickedoff">sqt2 = addNewFocusedConcl p (goalSequent gl)</span>
+<span class="lineno"> 2245 </span><span class="spaces">      </span><span class="nottickedoff">g1 = gl{ goalType = goalType gl ++ &quot;.cutH&quot;, goalSequent = sqt1 }</span>
+<span class="lineno"> 2246 </span><span class="spaces">      </span><span class="nottickedoff">g2 = gl{ goalType = goalType gl ++ &quot;.cutG&quot;, goalSequent = sqt2 }</span>
+<span class="lineno"> 2247 </span><span class="spaces">   </span><span class="nottickedoff">in return ((), mempty, [g1, g2], cutEvidence p)</span></span>
+<span class="lineno"> 2248 </span>
+<span class="lineno"> 2249 </span>-- | Attempt to solve a goal by recognizing it as a trivially true proposition.
+<span class="lineno"> 2250 </span>tacticTrivial :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Tactic m ()
+<span class="lineno"> 2251 </span><span class="decl"><span class="istickedoff">tacticTrivial sc = Tactic \goal -&gt;</span>
+<span class="lineno"> 2252 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
+<span class="lineno"> 2253 </span><span class="spaces">    </span><span class="istickedoff">Unfocused -&gt; <span class="nottickedoff">fail &quot;trivial tactic: focus required&quot;</span></span>
+<span class="lineno"> 2254 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;trivial tactic: cannot apply trivial in a hypothesis&quot;</span></span>
+<span class="lineno"> 2255 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus g _ -&gt;</span>
+<span class="lineno"> 2256 </span><span class="spaces">      </span><span class="istickedoff">liftIO (trivialProofTerm sc g) &gt;&gt;= \case</span>
+<span class="lineno"> 2257 </span><span class="spaces">        </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail err</span></span>
+<span class="lineno"> 2258 </span><span class="spaces">        </span><span class="istickedoff">Right pf -&gt;</span>
+<span class="lineno"> 2259 </span><span class="spaces">           </span><span class="istickedoff">do let gp = unProp g</span>
+<span class="lineno"> 2260 </span><span class="spaces">              </span><span class="istickedoff">ty &lt;- liftIO $ TC.scTypeCheckError sc pf</span>
+<span class="lineno"> 2261 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
+<span class="lineno"> 2262 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ fail $ unlines</span>
+<span class="lineno"> 2263 </span><span class="spaces">                </span><span class="istickedoff">[ &quot;The trivial tactic cannot prove this equality&quot;</span>
+<span class="lineno"> 2264 </span><span class="spaces">                </span><span class="istickedoff">, showTerm gp</span>
+<span class="lineno"> 2265 </span><span class="spaces">                </span><span class="istickedoff">]</span>
+<span class="lineno"> 2266 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], leafEvidence (ProofTerm pf))</span></span>
+<span class="lineno"> 2267 </span>
+<span class="lineno"> 2268 </span>-- | Attempt to prove a goal by giving a direct proof term.
+<span class="lineno"> 2269 </span>tacticExact :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Term -&gt; Tactic m ()
+<span class="lineno"> 2270 </span><span class="decl"><span class="nottickedoff">tacticExact sc tm = Tactic \goal -&gt;</span>
+<span class="lineno"> 2271 </span><span class="spaces">  </span><span class="nottickedoff">case sequentState (goalSequent goal) of</span>
+<span class="lineno"> 2272 </span><span class="spaces">    </span><span class="nottickedoff">Unfocused -&gt; fail &quot;tactic exact: focus required&quot;</span>
+<span class="lineno"> 2273 </span><span class="spaces">    </span><span class="nottickedoff">HypFocus _ _ -&gt; fail &quot;tactic exact: cannot apply exact in a hypothesis&quot;</span>
+<span class="lineno"> 2274 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocus g _ -&gt;</span>
+<span class="lineno"> 2275 </span><span class="spaces">      </span><span class="nottickedoff">do let gp = unProp g</span>
+<span class="lineno"> 2276 </span><span class="spaces">         </span><span class="nottickedoff">ty &lt;- liftIO $ TC.scTypeCheckError sc tm</span>
+<span class="lineno"> 2277 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc True gp ty</span>
+<span class="lineno"> 2278 </span><span class="spaces">         </span><span class="nottickedoff">unless ok $ fail $ unlines</span>
+<span class="lineno"> 2279 </span><span class="spaces">             </span><span class="nottickedoff">[ &quot;Proof term does not prove the required proposition&quot;</span>
+<span class="lineno"> 2280 </span><span class="spaces">             </span><span class="nottickedoff">, showTerm gp</span>
+<span class="lineno"> 2281 </span><span class="spaces">             </span><span class="nottickedoff">, showTerm tm</span>
+<span class="lineno"> 2282 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
+<span class="lineno"> 2283 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [], leafEvidence (ProofTerm tm))</span></span>
 <span class="lineno"> 2284 </span>
-<span class="lineno"> 2285 </span>-- | Examine the given proof goal and potentially do some work with it,
-<span class="lineno"> 2286 </span>--   but do not alter the proof state.
-<span class="lineno"> 2287 </span>tacticId :: Monad m =&gt; (ProofGoal -&gt; m a) -&gt; Tactic m a
-<span class="lineno"> 2288 </span><span class="decl"><span class="istickedoff">tacticId f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2289 </span><span class="spaces">  </span><span class="istickedoff">do x &lt;- lift (f gl)</span>
-<span class="lineno"> 2290 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">x</span>, <span class="nottickedoff">mempty</span>, [gl], passthroughEvidence)</span></span>
-<span class="lineno"> 2291 </span>
-<span class="lineno"> 2292 </span>data SolveResult
-<span class="lineno"> 2293 </span>  = SolveSuccess Evidence
-<span class="lineno"> 2294 </span>  | SolveCounterexample CEX
-<span class="lineno"> 2295 </span>  | SolveUnknown
-<span class="lineno"> 2296 </span>
-<span class="lineno"> 2297 </span>-- | Attempt to solve the given goal, usually via an automatic solver.
-<span class="lineno"> 2298 </span>--   If the goal is discharged, return evidence for the goal.  If there
-<span class="lineno"> 2299 </span>--   is a counterexample for the goal, the counterexample will be used
-<span class="lineno"> 2300 </span>--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
-<span class="lineno"> 2301 </span>tacticSolve :: Monad m =&gt; (ProofGoal -&gt; m (SolverStats, SolveResult)) -&gt; Tactic m ()
-<span class="lineno"> 2302 </span><span class="decl"><span class="istickedoff">tacticSolve f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2303 </span><span class="spaces">  </span><span class="istickedoff">do (stats, sres) &lt;- lift (f gl)</span>
-<span class="lineno"> 2304 </span><span class="spaces">     </span><span class="istickedoff">case sres of</span>
-<span class="lineno"> 2305 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, stats, [], leafEvidence e)</span>
-<span class="lineno"> 2306 </span><span class="spaces">       </span><span class="istickedoff">SolveUnknown   -&gt; <span class="nottickedoff">return ((), stats, [gl], passthroughEvidence)</span></span>
-<span class="lineno"> 2307 </span><span class="spaces">       </span><span class="istickedoff">SolveCounterexample cex -&gt; throwError (stats, cex)</span></span>
-<span class="lineno"> 2308 </span>
-<span class="lineno"> 2309 </span>-- | Attempt to simplify a proof goal via computation, rewriting or similar.
-<span class="lineno"> 2310 </span>--   The tactic should return a new proposition to prove and a method for
-<span class="lineno"> 2311 </span>--   transferring evidence for the modified proposition into a evidence for
-<span class="lineno"> 2312 </span>--   the original goal.
-<span class="lineno"> 2313 </span>tacticChange :: Monad m =&gt; (ProofGoal -&gt; m (Sequent, Evidence -&gt; Evidence)) -&gt; Tactic m ()
-<span class="lineno"> 2314 </span><span class="decl"><span class="istickedoff">tacticChange f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2315 </span><span class="spaces">  </span><span class="istickedoff">do (sqt, ef) &lt;- lift (f gl)</span>
-<span class="lineno"> 2316 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [ gl{ goalSequent = sqt } ], updateEvidence ef)</span></span>
+<span class="lineno"> 2285 </span>
+<span class="lineno"> 2286 </span>-- | Examine the given proof goal and potentially do some work with it,
+<span class="lineno"> 2287 </span>--   but do not alter the proof state.
+<span class="lineno"> 2288 </span>tacticId :: Monad m =&gt; (ProofGoal -&gt; m a) -&gt; Tactic m a
+<span class="lineno"> 2289 </span><span class="decl"><span class="istickedoff">tacticId f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2290 </span><span class="spaces">  </span><span class="istickedoff">do x &lt;- lift (f gl)</span>
+<span class="lineno"> 2291 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">x</span>, <span class="nottickedoff">mempty</span>, [gl], passthroughEvidence)</span></span>
+<span class="lineno"> 2292 </span>
+<span class="lineno"> 2293 </span>data SolveResult
+<span class="lineno"> 2294 </span>  = SolveSuccess Evidence
+<span class="lineno"> 2295 </span>  | SolveCounterexample CEX
+<span class="lineno"> 2296 </span>  | SolveUnknown
+<span class="lineno"> 2297 </span>
+<span class="lineno"> 2298 </span>-- | Attempt to solve the given goal, usually via an automatic solver.
+<span class="lineno"> 2299 </span>--   If the goal is discharged, return evidence for the goal.  If there
+<span class="lineno"> 2300 </span>--   is a counterexample for the goal, the counterexample will be used
+<span class="lineno"> 2301 </span>--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
+<span class="lineno"> 2302 </span>tacticSolve :: Monad m =&gt; (ProofGoal -&gt; m (SolverStats, SolveResult)) -&gt; Tactic m ()
+<span class="lineno"> 2303 </span><span class="decl"><span class="istickedoff">tacticSolve f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2304 </span><span class="spaces">  </span><span class="istickedoff">do (stats, sres) &lt;- lift (f gl)</span>
+<span class="lineno"> 2305 </span><span class="spaces">     </span><span class="istickedoff">case sres of</span>
+<span class="lineno"> 2306 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, stats, [], leafEvidence e)</span>
+<span class="lineno"> 2307 </span><span class="spaces">       </span><span class="istickedoff">SolveUnknown   -&gt; <span class="nottickedoff">return ((), stats, [gl], passthroughEvidence)</span></span>
+<span class="lineno"> 2308 </span><span class="spaces">       </span><span class="istickedoff">SolveCounterexample cex -&gt; throwError (stats, cex)</span></span>
+<span class="lineno"> 2309 </span>
+<span class="lineno"> 2310 </span>-- | Attempt to simplify a proof goal via computation, rewriting or similar.
+<span class="lineno"> 2311 </span>--   The tactic should return a new proposition to prove and a method for
+<span class="lineno"> 2312 </span>--   transferring evidence for the modified proposition into a evidence for
+<span class="lineno"> 2313 </span>--   the original goal.
+<span class="lineno"> 2314 </span>tacticChange :: Monad m =&gt; (ProofGoal -&gt; m (Sequent, Evidence -&gt; Evidence)) -&gt; Tactic m ()
+<span class="lineno"> 2315 </span><span class="decl"><span class="istickedoff">tacticChange f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2316 </span><span class="spaces">  </span><span class="istickedoff">do (sqt, ef) &lt;- lift (f gl)</span>
+<span class="lineno"> 2317 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [ gl{ goalSequent = sqt } ], updateEvidence ef)</span></span>
 
 </pre>
 </body>
