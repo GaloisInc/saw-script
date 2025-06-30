@@ -157,8 +157,8 @@ emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
 insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
 
-first_order_match :: [ExtCns Term] -> Term -> Term -> Maybe (Map VarIndex Term)
-first_order_match ctxt pat term = match pat term Map.empty
+firstOrderMatch :: [ExtCns Term] -> Term -> Term -> Maybe (Map VarIndex Term)
+firstOrderMatch ctxt pat term = match pat term Map.empty
   where
     ixs :: IntSet
     ixs = IntSet.fromList (map ecVarIndex ctxt)
@@ -381,10 +381,10 @@ ruleOfTerm sc t ann =
 -- this is a rule that immediately loops whether used forwards or backwards.
 rulePermutes :: [ExtCns Term] -> Term -> Term -> Bool
 rulePermutes ctxt lhs rhs =
-    case first_order_match ctxt lhs rhs of
+    case firstOrderMatch ctxt lhs rhs of
         Nothing -> False -- rhs is not an instance of lhs
         Just _ ->
-          case first_order_match ctxt rhs lhs of
+          case firstOrderMatch ctxt rhs lhs of
             Nothing -> False -- but here we have a looping rule, not good!
             Just _ -> True
 
@@ -856,7 +856,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
              Term -> IO Term
     apply [] t = return t
     apply (Left rule : rules) t =
-      case first_order_match (ctxt rule) (lhs rule) t of
+      case firstOrderMatch (ctxt rule) (lhs rule) t of
         Nothing -> apply rules t
         Just inst ->
           do recordAnn (annotation rule)
@@ -888,7 +888,7 @@ rewritingSharedContext sc ss = sc'
     apply [] (Unshared tf) = scTermF sc tf
     apply [] STApp{ stAppTermF = tf } = scTermF sc tf
     apply (Left (RewriteRule c l r _ _shallow _ann) : rules) t =
-      case first_order_match c l t of
+      case firstOrderMatch c l t of
         Nothing -> apply rules t
         Just inst
           | l == r ->
