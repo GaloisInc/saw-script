@@ -137,7 +137,6 @@ import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import           Data.List (genericDrop, genericLength, genericSplitAt)
-import           Data.Maybe (fromMaybe)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -2030,40 +2029,38 @@ propApply ::
   Prop {- ^ propsition to apply (usually a quantified and/or implication term) -} ->
   Prop {- ^ goal to apply the proposition to -} ->
   IO (Maybe [Either Term Prop])
-propApply sc rule goal = applyFirst (asPiLists (unProp rule))
+propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
   where
-
+    applyFirst :: [([ExtCns Term], Term)] -> IO (Maybe [Either Term Prop])
     applyFirst [] = pure Nothing
     applyFirst ((ruleArgs, ruleConcl) : rest) =
-      do result <- scMatch sc ruleConcl (unProp goal)
+      do result <- scMatch sc ruleArgs ruleConcl (unProp goal)
          case result of
            Nothing -> applyFirst rest
            Just inst ->
-             do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
-                dummy <- scUnitType sc
-                let mkNewGoals (Nothing : mts) ((nm, prop) : args) =
-                      do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
-                         mp <- termToMaybeProp sc c0
-                         case mp of
-                           Nothing ->
-                             fail ("goal_apply: could not find instantiation for " ++ show nm)
-                           Just p ->
-                             do cs <- mkNewGoals mts args
-                                return (Right p : cs)
-                    mkNewGoals (Just tm : mts) (_ : args) =
-                      do cs <- mkNewGoals mts args
-                         return (Left tm : cs)
-                    mkNewGoals _ _ = return []
+             do let mkNewGoal :: ExtCns Term -> IO (Either Term Prop)
+                    mkNewGoal ec =
+                      case Map.lookup (ecVarIndex ec) inst of
+                        Nothing ->
+                          -- this argument not solved by unification, so make it a goal
+                          do c0 <- scInstantiateExt sc inst (ecType ec)
+                             mp <- termToMaybeProp sc c0
+                             let nm = toShortName (ecName ec)
+                             case mp of
+                               Nothing ->
+                                 fail ("goal_apply: could not find instantiation for " ++ show nm)
+                               Just p -> pure (Right p)
+                        Just tm ->
+                          pure (Left tm)
+                Just <$> traverse mkNewGoal ruleArgs
 
-                newgoalterms <- mkNewGoals inst' (reverse ruleArgs)
-                return (Just (reverse newgoalterms))
-
-    asPiLists :: Term -> [([(Text, Term)], Term)]
+    asPiLists :: Term -> IO [([ExtCns Term], Term)]
     asPiLists t =
-      case asPi t of
-        Nothing -> [([], t)]
-        Just (nm, tp, body) ->
-          [ ((nm, tp) : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
+      scAsPi sc t >>= \case
+        Nothing -> pure [([], t)]
+        Just (ec, body) ->
+          do lists <- asPiLists body
+             pure $ [ (ec : args, concl) | (args, concl) <- lists ] ++ [([], t)]
 
 
 -- | Attempt to prove a universally quantified goal by introducing a fresh variable

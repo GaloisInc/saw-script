@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -29,6 +30,7 @@ module SAWCore.Rewriter
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfProp
+  , propOfRewriteRule
   , scDefRewriteRules
   , scEqsRewriteRules
   , scEqRewriteRule
@@ -57,9 +59,11 @@ module SAWCore.Rewriter
   , hoistIfs
   ) where
 
-import Control.Monad (MonadPlus(..), (>=>), guard, join, unless)
+import Control.Monad (MonadPlus(..), (>=>), guard, unless)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import Data.IORef
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -95,7 +99,7 @@ import SAWCore.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule
-    { ctxt :: [Term]
+    { ctxt :: [ExtCns Term]
     , lhs :: Term
     , rhs :: Term
     , permutative :: Bool
@@ -111,7 +115,7 @@ instance Eq (RewriteRule a) where
   RewriteRule c1 l1 r1 p1 s1 _a1 == RewriteRule c2 l2 r2 p2 s2 _a2 =
     c1 == c2 && l1 == l2 && r1 == r2 && p1 == p2 && s1 == s2
 
-ctxtRewriteRule :: RewriteRule a -> [Term]
+ctxtRewriteRule :: RewriteRule a -> [ExtCns Term]
 ctxtRewriteRule = ctxt
 
 lhsRewriteRule :: RewriteRule a -> Term
@@ -126,12 +130,20 @@ annRewriteRule = annotation
 instance Net.Pattern (RewriteRule a) where
   toPat (RewriteRule _ lhs _ _ _ _) = Net.toPat lhs
 
+-- | Convert a rewrite rule to a proposition (a 'Term' of SAWCore type
+-- @Prop@) representing the meaning of the rewrite rule.
+propOfRewriteRule :: SharedContext -> RewriteRule a -> IO Term
+propOfRewriteRule sc rule =
+  do ty <- scTypeOf sc (lhs rule)
+     eq <- scGlobalApply sc "Prelude.Eq" [ty, lhs rule, rhs rule]
+     scGeneralizeExts sc (ctxt rule) eq
+
 ----------------------------------------------------------------------
 -- Matching
 
 data MatchState =
   MatchState
-  { substitution :: Map DeBruijnIndex Term
+  { substitution :: Map VarIndex Term
   , constraints :: [(Term, Natural)]
   }
 
@@ -145,12 +157,15 @@ emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
 insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
 
-first_order_match :: Term -> Term -> Maybe (Map DeBruijnIndex Term)
-first_order_match pat term = match pat term Map.empty
+firstOrderMatch :: [ExtCns Term] -> Term -> Term -> Maybe (Map VarIndex Term)
+firstOrderMatch ctxt pat term = match pat term Map.empty
   where
+    ixs :: IntSet
+    ixs = IntSet.fromList (map ecVarIndex ctxt)
+    match :: Term -> Term -> Map VarIndex Term -> Maybe (Map VarIndex Term)
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
-        (LocalVar i, _) ->
+        (FTermF (ExtCns (ecVarIndex -> i)), _) | IntSet.member i ixs ->
             case my' of
               Nothing -> Just m'
               Just y' -> if alphaEquiv y y' then Just m' else Nothing
@@ -206,23 +221,27 @@ asConstantNat t =
 --   is closed, then the terms in the instantiation will also be closed.
 scMatch ::
   SharedContext ->
+  [ExtCns Term] {- ^ context of unification variables in pattern -} ->
   Term {- ^ pattern -} ->
   Term {- ^ term -} ->
-  IO (Maybe (Map DeBruijnIndex Term))
-scMatch sc pat term =
+  IO (Maybe (Map VarIndex Term))
+scMatch sc ctxt pat term =
   runMaybeT $
   do -- lift $ putStrLn $ "********** scMatch **********"
      MatchState inst cs <- match 0 [] pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
   where
+    -- The set of VarIndexes of the unification variables
+    ixs :: IntSet
+    ixs = IntSet.fromList (map ecVarIndex ctxt)
     -- Check that a constraint of the form pat = n for natural number literal n
     -- is satisfied by the supplied substitution (aka instantiation) inst
-    check :: Map DeBruijnIndex Term -> (Term, Natural) -> MaybeT IO ()
+    check :: Map VarIndex Term -> (Term, Natural) -> MaybeT IO ()
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
       -- apply substitution to the term
-      t' <- lift $ instantiateVarList sc 0 (Map.elems inst) t
+      t' <- lift $ scInstantiateExt sc inst t
       --lift $ putStrLn $ "t': " ++ show t'
       -- constant-fold nat operations
       -- ensure that it evaluates to the same number
@@ -233,15 +252,14 @@ scMatch sc pat term =
     -- Check if a term is a higher-order variable pattern, i.e., a free variable
     -- (meaning one that can match anything) applied to 0 or more bound variable
     -- arguments. Depth is the number of variables bound by lambdas or pis since
-    -- the top of the current pattern, so "free" means >= the current depth and
-    -- "bound" means less than the current depth
-    asVarPat :: Int -> Term -> Maybe (DeBruijnIndex, [DeBruijnIndex])
+    -- the top of the current pattern, so "bound" means less than the current depth
+    asVarPat :: Int -> Term -> Maybe (VarIndex, [DeBruijnIndex])
     asVarPat depth = go []
       where
         go js x =
           case unwrapTermF x of
-            LocalVar i
-              | i >= depth -> Just (i, js)
+            FTermF (ExtCns ec)
+              | IntSet.member (ecVarIndex ec) ixs -> Just (ecVarIndex ec, js)
               | otherwise  -> Nothing
             App t (unwrapTermF -> LocalVar j)
               | j < depth -> go (j : js) t
@@ -259,6 +277,12 @@ scMatch sc pat term =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm PPS.defaultOpts y) >>
       case asVarPat depth x of
+        -- If the lhs pattern is of the form (?u b1..bk) where ?u is a
+        -- unification variable and b1..bk are all locally bound
+        -- variables: First check whether the rhs contains any locally
+        -- bound variables *not* in the list b1..bk. If it contains any
+        -- others, then there is no match. If it only uses a subset of
+        -- b1..bk, then we can instantiate ?u to (\b1..bk -> rhs).
         Just (i, js) ->
           do -- ensure parameter variables are distinct
              guard (Set.size (Set.fromList js) == length js)
@@ -267,12 +291,8 @@ scMatch sc pat term =
              let fvy = looseVars y `intersectBitSets` (completeBitSet depth)
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
-                   do v <- scFreshGlobal sc nm ty
-                      -- asExtCns should always return Just here because
-                      -- scFreshGlobal always returns an ExtCns.
-                      ec <- case R.asExtCns v of
-                              Just ec -> pure ec
-                              Nothing -> error "scMatch.match: impossible"
+                   do ec <- scFreshEC sc nm ty
+                      v <- scExtCns sc ec
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
              let fixVars t [] = return (t, [])
@@ -286,7 +306,7 @@ scMatch sc pat term =
              -- replace global variables with reindexed bound vars
              -- y2 should have no more of the newly-created ExtCns vars
              y2 <- lift $ scAbstractExts sc [ ecs !! j | j <- js ] y1
-             let (my3, m') = insertLookup (i - depth) y2 m
+             let (my3, m') = insertLookup i y2 m
              case my3 of
                Nothing -> return (MatchState m' cs)
                Just y3 -> if y2 == y3 then return (MatchState m' cs) else mzero
@@ -350,34 +370,31 @@ intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
 
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
-ruleOfTerm :: Term -> Maybe a -> RewriteRule a
-ruleOfTerm t ann =
-  case t of
-    (R.asGlobalApply eqIdent -> Just [_, x, y]) ->
-      mkRewriteRule [] x y False ann
-    (R.asPi -> Just (_, ty, body)) ->
-      rule { ctxt = ty : ctxt rule }
-      where rule = ruleOfTerm body ann
-    _ -> panic "ruleOfSharedTerm" ["Illegal argument"]
+ruleOfTerm :: SharedContext -> Term -> Maybe a -> IO (RewriteRule a)
+ruleOfTerm sc t ann =
+  do (ecs, body) <- scAsPiList sc t
+     case R.asGlobalApply eqIdent body of
+       Just [_, x, y] -> pure $ mkRewriteRule ecs x y False ann
+       _ -> panic "ruleOfTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
 -- this is a rule that immediately loops whether used forwards or backwards.
-rulePermutes :: Term -> Term -> Bool
-rulePermutes lhs rhs =
-    case first_order_match lhs rhs of
+rulePermutes :: [ExtCns Term] -> Term -> Term -> Bool
+rulePermutes ctxt lhs rhs =
+    case firstOrderMatch ctxt lhs rhs of
         Nothing -> False -- rhs is not an instance of lhs
         Just _ ->
-          case first_order_match rhs lhs of
+          case firstOrderMatch ctxt rhs lhs of
             Nothing -> False -- but here we have a looping rule, not good!
             Just _ -> True
 
-mkRewriteRule :: [Term] -> Term -> Term -> Bool -> Maybe a -> RewriteRule a
+mkRewriteRule :: [ExtCns Term] -> Term -> Term -> Bool -> Maybe a -> RewriteRule a
 mkRewriteRule c l r shallow ann =
     RewriteRule
     { ctxt = c
     , lhs = l
     , rhs = r
-    , permutative = rulePermutes l r
+    , permutative = rulePermutes c l r
     , shallow = shallow
     , annotation = ann
     }
@@ -391,44 +408,50 @@ ruleOfTerms l r = mkRewriteRule [] l r False Nothing
 -- returning 'Nothing' if the predicate is not an equation.
 ruleOfProp :: SharedContext -> Term -> Maybe a -> IO (Maybe (RewriteRule a))
 ruleOfProp sc term ann =
-  case term of
-    (R.asPi -> Just (_, ty, body)) ->
-      do  rule <- ruleOfProp sc body ann
-          pure $ (\r -> r { ctxt = ty : ctxt r }) <$> rule
-    (R.asLambda -> Just (_, ty, body)) ->
-      do  rule <- ruleOfProp sc body ann
-          pure $ (\r -> r { ctxt = ty : ctxt r }) <$> rule
-    (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef pairEqIdent -> Just (), [_, _, _, _, x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
-    (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
-    (unwrapTermF -> Constant nm) ->
-      do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
-         case mres of
-           Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
-           _ -> pure Nothing
-    (R.asEq -> Just (_, x, y)) -> eqRule x y
-    (R.asEqTrue -> Just body) -> ruleOfProp sc body ann
-    (R.asApplyAll -> (R.asConstant -> Just nm, args)) ->
-      do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
-         case mres of
-           Just (ResolvedDef (defBody -> Just body)) ->
-             do app <- scApplyAllBeta sc body args
-                ruleOfProp sc app ann
-           _ -> pure Nothing
-    _ -> pure Nothing
+  scAsPi sc term >>= \case
+  Just (ec, body) ->
+    do rule <- ruleOfProp sc body ann
+       pure $ (\r -> r { ctxt = ec : ctxt r}) <$> rule
+  Nothing ->
+    scAsLambda sc term >>= \case
+    Just (ec, body) ->
+      do rule <- ruleOfProp sc body ann
+         pure $ (\r -> r { ctxt = ec : ctxt r}) <$> rule
+    Nothing ->
+      case term of
+        (R.asGlobalApply ecEqIdent -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply bvEqIdent -> Just [_, x, y]) -> eqRule x y
+        (R.asGlobalApply equalNatIdent -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply boolEqIdent -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply vecEqIdent -> Just [_, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply pairEqIdent -> Just [_, _, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply arrayEqIdent -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply intEqIdent -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply intModEqIdent -> Just [_, x, y]) -> eqRule x y
+        (unwrapTermF -> Constant nm) ->
+          do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
+             case mres of
+               Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
+               _ -> pure Nothing
+        (R.asEq -> Just (_, x, y)) -> eqRule x y
+        (R.asEqTrue -> Just body) -> ruleOfProp sc body ann
+        (R.asApplyAll -> (R.asConstant -> Just nm, args)) ->
+          do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
+             case mres of
+               Just (ResolvedDef (defBody -> Just body)) ->
+                 do app <- scApplyAllBeta sc body args
+                    ruleOfProp sc app ann
+               _ -> pure Nothing
+        _ -> pure Nothing
 
   where
     eqRule x y = pure $ Just $ mkRewriteRule [] x y False ann
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
 scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)
-scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfIdent sc i <*> pure Nothing
+scEqRewriteRule sc i =
+  do ty <- scTypeOfIdent sc i
+     ruleOfTerm sc ty Nothing
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule a]
@@ -442,54 +465,49 @@ scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 -- * If the rhs is a record, then split into a separate rule for each accessor.
 scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule a])
 scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
-  case rhs of
-    (R.asLambda -> Just (_, ty, body)) ->
-      do let ctxt' = ctxt ++ [ty]
-         lhs1 <- incVars sc 0 1 lhs
-         var0 <- scLocalVar sc 0
-         lhs' <- scApply sc lhs1 var0
-         return $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
+  scAsLambda sc rhs >>= \case
+  Just (ec, body) ->
+    do let ctxt' = ctxt ++ [ec]
+       var0 <- scExtCns sc ec
+       lhs' <- scApply sc lhs var0
+       pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
+  Nothing ->
+    case rhs of
     (R.asRecordValue -> Just m) ->
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
                   return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asLocalVar -> Just i),
-      more)) ->
-      do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
-         let ctxt2 = reverse (take i (reverse ctxt))
-         -- The type @ti@ is in the de Bruijn context @ctxt1@.
-         ti <- scWhnf sc (reverse ctxt !! i)
+     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asExtCns -> Just ec), more))
+      | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
+      do -- ti is the type of the value being scrutinized
+         ti <- scWhnf sc (ecType ec)
          -- The datatype parameters are also in context @ctxt1@.
          let (_d, (params1, _ixs)) = fmap (splitAt (length (recursorParams crec))) (R.asApplyAll ti)
          let ctorRule ctor =
-               do -- Compute the argument types @argTs@ in context @ctxt1@.
+               do -- Compute the argument types @argTs@.
                   ctorT <- piAppType (ctorType ctor) params1
-                  let argTs = map snd (fst (R.asPiList ctorT))
-                  let nargs = length argTs
-                  -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
-                  params2 <- traverse (incVars sc 0 nargs) params1
-                  args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
-                  c <- scCtorAppParams sc (ctorName ctor) params2 args
+                  argECs <- fst <$> scAsPiList sc ctorT
+                  -- Build a fully-applied constructor @c@.
+                  args <- traverse (scExtCns sc) argECs
+                  c <- scCtorAppParams sc (ctorName ctor) params1 args
+                  -- Define function to substitute the constructor @c@
+                  -- in for the old local variable @ec@.
+                  let subst = Map.singleton (ecVarIndex ec) c
+                  let adjust t = scInstantiateExt sc subst t
                   -- Build the list of types of the new context.
-                  let ctxt' = ctxt1 ++ argTs ++ ctxt2
-                  -- Define function to adjust indices on a term from
-                  -- context @ctxt@ into context @ctxt'@. We also
-                  -- substitute the constructor @c@ in for the old
-                  -- local variable @i@.
-                  let adjust t = instantiateVar sc i c =<< incVars sc (i+1) nargs t
-                  -- Adjust the indices and substitute the new
-                  -- constructor value to make the new params, lhs,
-                  -- and rhs in context @ctxt'@.
+                  ctxt2' <- traverse (traverse adjust) ctxt2
+                  let ctxt' = ctxt1 ++ argECs ++ ctxt2'
+                  -- Substitute the new constructor value to make the
+                  -- new lhs and rhs in context @ctxt'@.
                   lhs' <- adjust lhs
 
                   rec'  <- adjust rec
                   crec' <- traverse adjust crec
-                  args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc rec' crec' (ctorName ctor) args'
+                  rhs1 <- scReduceRecursor sc rec' crec' (ctorName ctor) args
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
@@ -509,8 +527,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
     piAppType :: Term -> [Term] -> IO Term
     piAppType funtype [] = return funtype
     piAppType funtype (arg : args) =
-      do (_, _, body) <- maybe (fail "expected Pi type") return (R.asPi funtype)
-         funtype' <- instantiateVar sc 0 arg body
+      do funtype' <- reducePi sc funtype arg
          piAppType funtype' args
 
     betaReduce :: Term -> IO Term
@@ -572,11 +589,11 @@ delRule rule = Net.delete_term (lhs rule, Left rule)
 addRules :: [RewriteRule a] -> Simpset a -> Simpset a
 addRules rules ss = foldr addRule ss rules
 
-addSimp :: Term -> Maybe a -> Simpset a -> Simpset a
-addSimp prop ann = addRule (ruleOfTerm prop ann)
+addSimp :: SharedContext -> Term -> Maybe a -> Simpset a -> IO (Simpset a)
+addSimp sc prop ann ss = flip addRule ss <$> ruleOfTerm sc prop ann
 
-delSimp :: Term -> Simpset a -> Simpset a
-delSimp prop = delRule (ruleOfTerm prop Nothing)
+delSimp :: SharedContext -> Term -> Simpset a -> IO (Simpset a)
+delSimp sc prop ss = flip delRule ss <$> ruleOfTerm sc prop Nothing
 
 addConv :: Conversion -> Simpset a -> Simpset a
 addConv conv = Net.insert_term (conv, Right conv)
@@ -726,7 +743,7 @@ rewriteSharedTerm sc ss t0 =
              [Either (RewriteRule a) Conversion] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
-      result <- scMatch sc lhs t
+      result <- scMatch sc ctxt lhs t
       case result of
         Nothing -> apply rules t
         Just inst
@@ -736,25 +753,25 @@ rewriteSharedTerm sc ss t0 =
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
-          | Map.keys inst /= take (length ctxt) [0 ..] ->
+          | Map.keysSet inst /= Set.fromList (map ecVarIndex ctxt) ->
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
           | permutative ->
             do
-              t' <- instantiateVarList sc 0 (Map.elems inst) rhs
+              t' <- scInstantiateExt sc inst rhs
               case termWeightLt t' t of
                 True -> recordAnn annotation >> rewriteAll t' -- keep the result only if it is "smaller"
                 False -> apply rules t
           | shallow ->
             -- do not to further rewriting to the result of a "shallow" rule
             do recordAnn annotation
-               instantiateVarList sc 0 (Map.elems inst) rhs
+               scInstantiateExt sc inst rhs
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
                recordAnn annotation
-               rewriteAll =<< instantiateVarList sc 0 (Map.elems inst) rhs
+               rewriteAll =<< scInstantiateExt sc inst rhs
     apply (Right conv : rules) t =
         do -- putStrLn "REWRITING:"
            -- print (Net.toPat conv)
@@ -839,11 +856,11 @@ rewriteSharedTermTypeSafe sc ss t0 =
              Term -> IO Term
     apply [] t = return t
     apply (Left rule : rules) t =
-      case first_order_match (lhs rule) t of
+      case firstOrderMatch (ctxt rule) (lhs rule) t of
         Nothing -> apply rules t
         Just inst ->
           do recordAnn (annotation rule)
-             rewriteAll =<< instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+             rewriteAll =<< scInstantiateExt sc inst (rhs rule)
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
@@ -870,14 +887,14 @@ rewritingSharedContext sc ss = sc'
              Term -> IO Term
     apply [] (Unshared tf) = scTermF sc tf
     apply [] STApp{ stAppTermF = tf } = scTermF sc tf
-    apply (Left (RewriteRule _ l r _ _shallow _ann) : rules) t =
-      case first_order_match l t of
+    apply (Left (RewriteRule c l r _ _shallow _ann) : rules) t =
+      case firstOrderMatch c l t of
         Nothing -> apply rules t
         Just inst
           | l == r ->
             do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm PPS.defaultOpts l
                apply rules t
-          | otherwise -> instantiateVarList sc' 0 (Map.elems inst) r
+          | otherwise -> scInstantiateExt sc' inst r
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
@@ -915,19 +932,7 @@ hoistIfs :: SharedContext
 hoistIfs sc t = do
    cache <- newCache
 
-   let app x y = join (scTermF sc <$> (pure App <*> x <*> y))
-   itePat <-
-          (scGlobalDef sc "Prelude.ite")
-          `app`
-          (scLocalVar sc 0)
-          `app`
-          (scLocalVar sc 1)
-          `app`
-          (scLocalVar sc 2)
-          `app`
-          (scLocalVar sc 3)
-
-   rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
+   rules <- mapM (\i -> scTypeOfIdent sc i >>= \rt -> ruleOfTerm sc rt Nothing)
               [ "Prelude.ite_true"
               , "Prelude.ite_false"
               , "Prelude.ite_not"
@@ -953,7 +958,7 @@ hoistIfs sc t = do
               ]
    let ss :: Simpset () = addRules rules emptySimpset
 
-   (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
+   (t', conds) <- doHoistIfs sc ss cache . snd =<< rewriteSharedTerm sc ss t
 
    -- remove duplicate conditions from the list, as muxing in SAW can result in
    -- many copies of the same condition, which cause a performance issue
@@ -988,33 +993,24 @@ doHoistIfs :: Ord a =>
   Simpset a ->
   Cache IO TermIndex (HoistIfs s) ->
   Term ->
-  Term ->
   IO (HoistIfs s)
-doHoistIfs sc ss hoistCache itePat = go
+doHoistIfs sc ss hoistCache = go
 
  where go :: Term -> IO (HoistIfs s)
        go t@(STApp{ stAppIndex = idx, stAppTermF = tf}) = useCache hoistCache idx $ top t tf
        go t@(Unshared tf)  = top t tf
 
        top :: Term -> TermF Term -> IO (HoistIfs s)
-       top t tf
-          | Just inst <- first_order_match itePat t = do
-               -- All of these Map lookups should be safe due to the term
-               -- structure of an if-then-else expression.
-               let err = error "doHoistIfs.top: impossible"
-               let branch_tp   = Map.findWithDefault err 0 inst
-               let cond        = Map.findWithDefault err 1 inst
-               let then_branch = Map.findWithDefault err 2 inst
-               let else_branch = Map.findWithDefault err 3 inst
-
-               (then_branch',conds1) <- go then_branch
-               (else_branch',conds2) <- go else_branch
-
-               t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
-               let ecs = getAllExtSet cond
-               return (t', (cond, ecs) : conds1 ++ conds2)
-
-          | otherwise = goF t tf
+       top t tf =
+         case R.asGlobalApply "Prelude.ite" t of
+           Just [branch_tp, cond, then_branch, else_branch] ->
+             do (then_branch',conds1) <- go then_branch
+                (else_branch',conds2) <- go else_branch
+                t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
+                let ecs = getAllExtSet cond
+                return (t', (cond, ecs) : conds1 ++ conds2)
+           _ ->
+             goF t tf
 
        goF :: Term -> TermF Term -> IO (HoistIfs s)
 
