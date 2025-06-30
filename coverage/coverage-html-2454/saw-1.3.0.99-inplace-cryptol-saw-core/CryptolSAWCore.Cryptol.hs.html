@@ -855,7 +855,7 @@ span.spaces    { background: white }
 <span class="lineno">  836 </span><span class="decl"><span class="istickedoff">importOpaque sc env n sch = do</span>
 <span class="lineno">  837 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- importSchema sc <span class="nottickedoff">env</span> sch</span>
 <span class="lineno">  838 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  839 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi t</span></span>
+<span class="lineno">  839 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi <span class="nottickedoff">t</span></span></span>
 <span class="lineno">  840 </span>
 <span class="lineno">  841 </span>importConstant :: SharedContext -&gt; Env -&gt; C.Name -&gt; C.Schema -&gt; Term -&gt; IO Term
 <span class="lineno">  842 </span><span class="decl"><span class="istickedoff">importConstant sc env n sch rhs = do</span>
@@ -1555,7 +1555,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1536 </span><span class="spaces">        </span><span class="istickedoff">rhs' &lt;- case declOpts of</span>
 <span class="lineno"> 1537 </span><span class="spaces">                  </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1538 </span><span class="spaces">                    </span><span class="istickedoff">do nmi &lt;- importName (C.dName decl)</span>
-<span class="lineno"> 1539 </span><span class="spaces">                       </span><span class="istickedoff">scConstant' sc nmi rhs t'</span>
+<span class="lineno"> 1539 </span><span class="spaces">                       </span><span class="istickedoff">scConstant' sc nmi rhs <span class="nottickedoff">t'</span></span>
 <span class="lineno"> 1540 </span><span class="spaces">                  </span><span class="istickedoff">NestedDeclGroup -&gt; return rhs</span>
 <span class="lineno"> 1541 </span><span class="spaces">        </span><span class="istickedoff">let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)</span>
 <span class="lineno"> 1542 </span><span class="spaces">                       </span><span class="istickedoff">, envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }</span>
@@ -1621,7 +1621,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1602 </span><span class="spaces">               </span><span class="istickedoff">case declOpts of</span>
 <span class="lineno"> 1603 </span><span class="spaces">                 </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1604 </span><span class="spaces">                   </span><span class="istickedoff">do nmi &lt;- importName (C.dName d)</span>
-<span class="lineno"> 1605 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r t</span>
+<span class="lineno"> 1605 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r <span class="nottickedoff">t</span></span>
 <span class="lineno"> 1606 </span><span class="spaces">                 </span><span class="istickedoff">NestedDeclGroup -&gt; <span class="nottickedoff">return r</span></span>
 <span class="lineno"> 1607 </span><span class="spaces">      </span><span class="istickedoff">rhss &lt;- sequence (Map.intersectionWith mkRhs dm tm)</span>
 <span class="lineno"> 1608 </span><span class="spaces"></span><span class="istickedoff"></span>

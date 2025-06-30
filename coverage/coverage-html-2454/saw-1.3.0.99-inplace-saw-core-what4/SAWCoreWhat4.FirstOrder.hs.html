@@ -67,9 +67,9 @@ span.spaces    { background: white }
 <span class="lineno">   48 </span>-- | Convert a type expression from SAW-core to What4
 <span class="lineno">   49 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
 <span class="lineno">   50 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseBoolRepr)</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseBoolRepr)</span></span>
 <span class="lineno">   52 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
-<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseIntegerRepr)</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
 <span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>
 <span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
 <span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat FOTBit)</span>
@@ -81,9 +81,9 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn (replicate (fromIntegral nat) fot)</span></span>
 <span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
 <span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTArray fot1 fot2)</span>
-<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- fotToBaseType fot1</span>
-<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- fotToBaseType fot2</span>
-<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- <span class="nottickedoff">fotToBaseType fot1</span></span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- <span class="nottickedoff">fotToBaseType fot2</span></span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span></span>
 <span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTTuple fots)</span>
 <span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn fots</span></span>
 <span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
@@ -126,7 +126,7 @@ span.spaces    { background: white }
 <span class="lineno">  107 </span>-- | Convert between What4 GroundValues and saw-core FirstOrderValues
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>groundToFOV :: BaseTypeRepr ty -&gt; GroundValue ty -&gt; Either String FirstOrderValue
-<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = pure $ FOVBit b</span>
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = <span class="nottickedoff">pure $ FOVBit b</span></span>
 <span class="lineno">  111 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseIntegerRepr i         = <span class="nottickedoff">pure $ FOVInt i</span></span>
 <span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)</span>
 <span class="lineno">  113 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseRealRepr    _         = <span class="nottickedoff">Left &quot;Real is not FOV&quot;</span></span>

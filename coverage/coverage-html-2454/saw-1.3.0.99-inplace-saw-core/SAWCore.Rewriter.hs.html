@@ -394,7 +394,7 @@ span.spaces    { background: white }
 <span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">do (ecs, body) &lt;- scAsPiList sc t</span>
 <span class="lineno">  376 </span><span class="spaces">     </span><span class="istickedoff">case R.asGlobalApply eqIdent body of</span>
 <span class="lineno">  377 </span><span class="spaces">       </span><span class="istickedoff">Just [_, x, y] -&gt; pure $ mkRewriteRule ecs x y False ann</span>
-<span class="lineno">  378 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;ruleOfSharedTerm&quot; [&quot;Illegal argument&quot;]</span></span></span>
+<span class="lineno">  378 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;ruleOfTerm&quot; [&quot;Illegal argument&quot;]</span></span></span>
 <span class="lineno">  379 </span>
 <span class="lineno">  380 </span>-- Test whether a rewrite rule is permutative
 <span class="lineno">  381 </span>-- this is a rule that immediately loops whether used forwards or backwards.
