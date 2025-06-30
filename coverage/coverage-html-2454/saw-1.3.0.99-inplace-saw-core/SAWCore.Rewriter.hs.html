@@ -176,8 +176,8 @@ span.spaces    { background: white }
 <span class="lineno">  157 </span>insertLookup :: Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; (Maybe a, Map k a)
 <span class="lineno">  158 </span><span class="decl"><span class="istickedoff">insertLookup k x t = Map.insertLookupWithKey (\_ a _ -&gt; a) k x t</span></span>
 <span class="lineno">  159 </span>
-<span class="lineno">  160 </span>first_order_match :: [ExtCns Term] -&gt; Term -&gt; Term -&gt; Maybe (Map VarIndex Term)
-<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">first_order_match ctxt pat term = match pat term Map.empty</span>
+<span class="lineno">  160 </span>firstOrderMatch :: [ExtCns Term] -&gt; Term -&gt; Term -&gt; Maybe (Map VarIndex Term)
+<span class="lineno">  161 </span><span class="decl"><span class="istickedoff">firstOrderMatch ctxt pat term = match pat term Map.empty</span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">ixs :: IntSet</span>
 <span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">ixs = IntSet.fromList (map ecVarIndex ctxt)</span>
@@ -400,10 +400,10 @@ span.spaces    { background: white }
 <span class="lineno">  381 </span>-- this is a rule that immediately loops whether used forwards or backwards.
 <span class="lineno">  382 </span>rulePermutes :: [ExtCns Term] -&gt; Term -&gt; Term -&gt; Bool
 <span class="lineno">  383 </span><span class="decl"><span class="istickedoff">rulePermutes ctxt lhs rhs =</span>
-<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">case first_order_match ctxt lhs rhs of</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">case firstOrderMatch ctxt lhs rhs of</span>
 <span class="lineno">  385 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; False -- rhs is not an instance of lhs</span>
 <span class="lineno">  386 </span><span class="spaces">        </span><span class="istickedoff">Just _ -&gt;</span>
-<span class="lineno">  387 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case first_order_match ctxt rhs lhs of</span></span>
+<span class="lineno">  387 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case firstOrderMatch ctxt rhs lhs of</span></span>
 <span class="lineno">  388 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; False -- but here we have a looping rule, not good!</span></span>
 <span class="lineno">  389 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Just _ -&gt; True</span></span></span>
 <span class="lineno">  390 </span>
@@ -875,7 +875,7 @@ span.spaces    { background: white }
 <span class="lineno">  856 </span><span class="spaces">             </span><span class="nottickedoff">Term -&gt; IO Term</span>
 <span class="lineno">  857 </span><span class="spaces">    </span><span class="nottickedoff">apply [] t = return t</span>
 <span class="lineno">  858 </span><span class="spaces">    </span><span class="nottickedoff">apply (Left rule : rules) t =</span>
-<span class="lineno">  859 </span><span class="spaces">      </span><span class="nottickedoff">case first_order_match (ctxt rule) (lhs rule) t of</span>
+<span class="lineno">  859 </span><span class="spaces">      </span><span class="nottickedoff">case firstOrderMatch (ctxt rule) (lhs rule) t of</span>
 <span class="lineno">  860 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; apply rules t</span>
 <span class="lineno">  861 </span><span class="spaces">        </span><span class="nottickedoff">Just inst -&gt;</span>
 <span class="lineno">  862 </span><span class="spaces">          </span><span class="nottickedoff">do recordAnn (annotation rule)</span>
@@ -907,7 +907,7 @@ span.spaces    { background: white }
 <span class="lineno">  888 </span><span class="spaces">    </span><span class="istickedoff">apply [] (Unshared tf) = scTermF sc tf</span>
 <span class="lineno">  889 </span><span class="spaces">    </span><span class="istickedoff">apply [] STApp{ stAppTermF = tf } = <span class="nottickedoff">scTermF sc tf</span></span>
 <span class="lineno">  890 </span><span class="spaces">    </span><span class="istickedoff">apply (Left (RewriteRule c l r _ _shallow _ann) : rules) t =</span>
-<span class="lineno">  891 </span><span class="spaces">      </span><span class="istickedoff">case first_order_match c l t of</span>
+<span class="lineno">  891 </span><span class="spaces">      </span><span class="istickedoff">case firstOrderMatch c l t of</span>
 <span class="lineno">  892 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">apply rules t</span></span>
 <span class="lineno">  893 </span><span class="spaces">        </span><span class="istickedoff">Just inst</span>
 <span class="lineno">  894 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlyfalse">l == r</span> -&gt;</span>
