@@ -2031,14 +2031,15 @@ propApply ::
   IO (Maybe [Either Term Prop])
 propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
   where
-
+    applyFirst :: [([ExtCns Term], Term)] -> IO (Maybe [Either Term Prop])
     applyFirst [] = pure Nothing
     applyFirst ((ruleArgs, ruleConcl) : rest) =
       do result <- scMatch sc ruleArgs ruleConcl (unProp goal)
          case result of
            Nothing -> applyFirst rest
            Just inst ->
-             do let mkNewGoal ec =
+             do let mkNewGoal :: ExtCns Term -> IO (Either Term Prop)
+                    mkNewGoal ec =
                       case Map.lookup (ecVarIndex ec) inst of
                         Nothing ->
                           -- this argument not solved by unification, so make it a goal
