@@ -227,77 +227,55 @@ ctxRecursorAppM recM ixsM argM =
 -- | The class of "in-context" types that support lifting and substitution
 class Monad m => CtxLiftSubst f m where
   -- | Lift an @f@ into an extended context
-  ctxLift :: [(LocalName, tp1)] -> [(LocalName, tp2)] -> f -> m f
+  ctxLift :: DeBruijnIndex -> DeBruijnIndex -> f -> m f
   -- | Substitute a list of terms into an @f@
-  ctxSubst :: [Term] -> [(LocalName, tp)] -> f -> m f
+  ctxSubst :: [Term] -> DeBruijnIndex -> f -> m f
 
 -- | Lift an @f@ that is in an extended list of bindings
-ctxLiftInBindings :: CtxLiftSubst f m => [(LocalName, tp1)] ->
-                     [(LocalName, tp2)] ->
-                     [(LocalName, tp3)] ->
+ctxLiftInBindings :: CtxLiftSubst f m => DeBruijnIndex ->
+                     DeBruijnIndex ->
+                     DeBruijnIndex ->
                      f -> m f
-ctxLiftInBindings = helper . map (fmap Left)
-  where
-    helper :: CtxLiftSubst f m => [(LocalName, Either tp1 tp2)] ->
-              [(LocalName, tp2)] ->
-              [(LocalName, tp3)] ->
-              f -> m f
-    helper ctx1 [] as = ctxLift ctx1 as
-    helper ctx1 ((str, tp) : ctx2) as =
-      helper (ctx1 ++ [(str, Right tp)]) ctx2 as
+ctxLiftInBindings i1 i2 j = ctxLift (i1 + i2) j
 
 -- | Substitute into an @f@ that is in an extended list of bindings
 ctxSubstInBindings :: CtxLiftSubst f m => [Term] ->
-                      [(LocalName, tp1)] ->
-                      [(LocalName, tp2)] ->
+                      DeBruijnIndex ->
+                      DeBruijnIndex ->
                       f -> m f
-ctxSubstInBindings subst =
-  helper subst . map (fmap Left) where
-  helper :: CtxLiftSubst f m => [Term] ->
-            [(LocalName, Either tp1 tp2)] ->
-            [(LocalName, tp2)] ->
-            f -> m f
-  helper s ctx2 [] f = ctxSubst s ctx2 f
-  helper s ctx2 ((x, tp) : ctx3) f =
-    helper s (ctx2 ++ [(x, Right tp)]) ctx3 f
+ctxSubstInBindings s i1 i2 = ctxSubst s (i1 + i2)
 
 instance MonadTerm m => CtxLiftSubst Term m where
-  ctxLift ctx1 ctx2 t =
-    liftTerm (length ctx1) (length ctx2) t
-  ctxSubst subst ctx t =
+  ctxLift i j t = liftTerm i j t
+  ctxSubst subst i t =
     -- NOTE: our term lists put the least recently-bound variable first, so we
     -- have to reverse here to call substTerm, which wants the term for the most
     -- recently-bound variable first
-    substTerm (length ctx) (reverse subst) t
+    substTerm i (reverse subst) t
 
 instance MonadTerm m => CtxLiftSubst [Term] m where
-  ctxLift _ _ [] = return []
-  ctxLift ctx1 ctx2 (t : ts) =
-    (:) <$> ctxLift ctx1 ctx2 t <*> ctxLift ctx1 ctx2 ts
-  ctxSubst _ _ [] = return []
-  ctxSubst subst ctx (t : ts) =
-    (:) <$> ctxSubst subst ctx t <*>
-    ctxSubst subst ctx ts
+  ctxLift i j ts = traverse (ctxLift i j) ts
+  ctxSubst subst i ts = traverse (ctxSubst subst i) ts
 
 instance CtxLiftSubst tp m => CtxLiftSubst [(LocalName, tp)] m where
   ctxLift _ _ [] = return []
-  ctxLift ctx1 ctx2 ((x, x_tp) : bs) =
-    (\t -> (:) (x, t)) <$> ctxLift ctx1 ctx2 x_tp <*>
-    ctxLift (ctx1 ++ [(x, error "Unused")]) ctx2 bs
+  ctxLift i j ((x, x_tp) : bs) =
+    (\t -> (:) (x, t)) <$> ctxLift i j x_tp <*>
+    ctxLift (i + 1) j bs
   ctxSubst _ _ [] = return []
-  ctxSubst subst ctx ((x, x_tp) : bs) =
-    (\t -> (:) (x, t)) <$> ctxSubst subst ctx x_tp <*>
-    ctxSubst subst (ctx ++ [(x, error "Unused")]) bs
+  ctxSubst subst i ((x, x_tp) : bs) =
+    (\t -> (:) (x, t)) <$> ctxSubst subst i x_tp <*>
+    ctxSubst subst (i + 1) bs
 
 instance MonadTerm m => CtxLiftSubst CtorArg m where
-  ctxLift ctx1 ctx2 (ConstArg tp) = ConstArg <$> ctxLift ctx1 ctx2 tp
-  ctxLift ctx1 ctx2 (RecursiveArg zs ixs) =
-    RecursiveArg <$> ctxLift ctx1 ctx2 zs <*>
-    ctxLiftInBindings ctx1 zs ctx2 ixs
-  ctxSubst subst ctx (ConstArg tp) = ConstArg <$> ctxSubst subst ctx tp
-  ctxSubst subst ctx (RecursiveArg zs ixs) =
-    RecursiveArg <$> ctxSubst subst ctx zs <*>
-    ctxSubstInBindings subst ctx zs ixs
+  ctxLift i j (ConstArg tp) = ConstArg <$> ctxLift i j tp
+  ctxLift i j (RecursiveArg zs ixs) =
+    RecursiveArg <$> ctxLift i j zs <*>
+    ctxLiftInBindings i (length zs) j ixs
+  ctxSubst subst i (ConstArg tp) = ConstArg <$> ctxSubst subst i tp
+  ctxSubst subst i (RecursiveArg zs ixs) =
+    RecursiveArg <$> ctxSubst subst i zs <*>
+    ctxSubstInBindings subst i (length zs) ixs
 
 
 --
@@ -346,7 +324,7 @@ ctxCtorArgType :: MonadTerm m => Name ->
 ctxCtorArgType _ _ _ (ConstArg tp) = return tp
 ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =
   ctxPi zs_ctx $ \_ ->
-  ctxDataTypeM d ((fst <$> ctxVars2 params prevs) >>= ctxLift [] zs_ctx)
+  ctxDataTypeM d ((fst <$> ctxVars2 params prevs) >>= ctxLift 0 (length zs_ctx))
   (return ixs)
 
 -- | Convert a bindings list of 'CtorArg's to a binding list of types
@@ -371,7 +349,7 @@ ctxCtorType d (CtorArgStruct{..}) =
          [] ctorArgs
        ctxPi bs $ \_ ->
          ctxDataTypeM d
-         (ctxLift [] bs params)
+         (ctxLift 0 (length bs) params)
          (return ctorIndices))
 
 
@@ -393,7 +371,7 @@ ctxPRetTp :: MonadTerm m => Name ->
 ctxPRetTp d params ixs s =
   ctxPi ixs $ \ix_vars ->
   do param_vars <- ctxVars params
-     dt <- ctxDataTypeM d (ctxLift [] ixs param_vars)
+     dt <- ctxDataTypeM d (ctxLift 0 (length ixs) param_vars)
        (return ix_vars)
      ctxPi1 "_" dt $ \_ -> ctxSort s
 
@@ -414,7 +392,7 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
         (ix_ctx, Just params) ->
           do p_ret <- (ctxPRetTp d
                        p_ctx ix_ctx s)
-             ctxSubst params []
+             ctxSubst params 0
                (castPRet p_ctx p_ret)
         (_, Nothing) ->
           error "mkPRetTp: incorrect number of parameters"
@@ -460,9 +438,9 @@ ctxCtorElimType d_top c
       p_ret_tp <- ctxPRetTp d_top params dataTypeIndices propSort
 
       -- Lift the argument and return indices into the context of p_ret
-      args <- ctxLift [] [("_", p_ret_tp)] ctorArgs
+      args <- ctxLift 0 1 ctorArgs
       ixs <-
-        ctxLiftInBindings [] ctorArgs [("_", p_ret_tp)]
+        ctxLiftInBindings 0 (length ctorArgs) 1
         ctorIndices
       -- Form the context (params ::> p_ret)
       let params_pret = params ++ [("_", p_ret_tp)]
@@ -512,12 +490,11 @@ ctxCtorElimType d_top c
         ctxTermsCtxHeadTail <$> fst <$> ctxVars2 params_pret prevs
       -- Build the type of the argument arg
       arg_tp <- ctxPi zs (\_ -> ctxDataTypeM d
-                                (ctxLift [] zs param_vars)
+                                (ctxLift 0 (length zs) param_vars)
                                 (return ts))
       -- Lift zs and ts into the context of arg
-      let arg_ctx = [("_", arg_tp)]
-      zs' <- ctxLift [] arg_ctx zs
-      ts' <- ctxLiftInBindings [] zs arg_ctx ts
+      zs' <- ctxLift 0 1 zs
+      ts' <- ctxLiftInBindings 0 (length zs) 1 ts
       -- Build the pi-abstraction for arg
       ctxPi1 str arg_tp $ \arg ->
         do rest <-
@@ -526,8 +503,8 @@ ctxCtorElimType d_top c
            ih_tp <- ctxPi zs' $ \z_vars ->
              ctxApply
              (ctxApplyMulti
-              (ctxLift [] (("_", arg_tp) : zs') p_ret) (return ts'))
-             (ctxApplyMulti (ctxLift [] zs' arg) (return z_vars))
+              (ctxLift 0 (length zs' + 1) p_ret) (return ts'))
+             (ctxApplyMulti (ctxLift 0 (length zs') arg) (return z_vars))
            -- Finally, build the pi-abstraction for ih around the rest
            --
            -- NOTE: we cast away the IH argument, because that is a type that is
@@ -535,7 +512,7 @@ ctxCtorElimType d_top c
            -- could, but it would be much more work to) express that computation
            -- in the Haskell type system
            (ctxPi1 "_" ih_tp $ \_ ->
-               ctxLift [] [("_", ih_tp)] rest)
+               ctxLift 0 1 rest)
 
 -- | Build a function that substitutes parameters and a @p_ret@ return type
 -- function into the type of an eliminator, as returned by 'ctxCtorElimType',
@@ -556,7 +533,7 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
            Just paramsCtx ->
              ctxSubstInBindings
              (paramsCtx ++ [p_ret])
-             [] [] ctxElimType
+             0 0 ctxElimType
 
 
 -- | Reduce an application of a recursor to a particular constructor.
@@ -631,8 +608,8 @@ ctxReduceRecursor_ rec fi args0 argCtx =
 
     -- process an argument that is a recursive call
     mk_args pre_xs (x : xs) ((_, RecursiveArg zs ixs) : args) =
-      do zs'  <- ctxSubstInBindings pre_xs [] [] zs
-         ixs' <- ctxSubstInBindings pre_xs [] zs ixs
+      do zs'  <- ctxSubstInBindings pre_xs 0 0 zs
+         ixs' <- ctxSubstInBindings pre_xs 0 (length zs) ixs
          recx <- mk_rec_arg zs' ixs' x
          tl   <- mk_args (pre_xs ++ [x]) xs args
          pure (x : recx : tl)
@@ -650,10 +627,10 @@ ctxReduceRecursor_ rec fi args0 argCtx =
       -- eta expand over the zs and apply the RecursorApp form
       ctxLambda zs_ctx (\zs ->
         ctxRecursorAppM
-          (ctxLift [] zs_ctx rec)
+          (ctxLift 0 (length zs_ctx) rec)
           (return ixs)
           (ctxApplyMulti
-            (ctxLift [] zs_ctx x)
+            (ctxLift 0 (length zs_ctx) x)
             (return zs)))
 
 
