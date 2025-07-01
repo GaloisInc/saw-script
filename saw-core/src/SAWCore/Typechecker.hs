@@ -421,31 +421,27 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
            (c,) <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
   ctors <-
-    case dtParams of
-      p_ctx ->
-        case dtIndices of
-          ix_ctx ->
-            forM typed_ctors $ \(c, typed_tp) ->
-            -- Check that the universe level of the type of each constructor
-            (case asSort (typedType typed_tp) of
-                Just ctor_sort
-                  | dtSort /= propSort && ctor_sort > dtSort ->
-                    err ("Universe level of constructors should be strictly" ++
-                         " contained in that of the datatype")
-                Just _ ->
-                    return ()
-                Nothing ->
-                    panic "processDecls" [
-                        "Type of the type of constructor is not a sort!",
-                        "Constructor type: " <> Text.pack (showTerm $ typedVal typed_tp),
-                        "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
-                    ]
-            ) >>
-            let tp = typedVal typed_tp in
-            case mkCtorArgStruct pn p_ctx ix_ctx tp of
-              Just arg_struct ->
-                liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
-              Nothing -> err ("Malformed type form constructor: " ++ show c)
+    forM typed_ctors $ \(c, typed_tp) ->
+    -- Check that the universe level of the type of each constructor
+    (case asSort (typedType typed_tp) of
+        Just ctor_sort
+          | dtSort /= propSort && ctor_sort > dtSort ->
+            err ("Universe level of constructors should be strictly" ++
+                 " contained in that of the datatype")
+        Just _ ->
+            return ()
+        Nothing ->
+            panic "processDecls" [
+                "Type of the type of constructor is not a sort!",
+                "Constructor type: " <> Text.pack (showTerm $ typedVal typed_tp),
+                "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
+            ]
+    ) >>
+    let tp = typedVal typed_tp in
+    case mkCtorArgStruct pn dtParams dtIndices tp of
+      Just arg_struct ->
+        liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
+      Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
   liftTCM scCompleteDataType dtIdent ctors
