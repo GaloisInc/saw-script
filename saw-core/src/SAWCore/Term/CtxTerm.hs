@@ -231,7 +231,7 @@ class Monad m => CtxLiftSubst f m where
   -- | Substitute a list of terms into an @f@
   ctxSubst :: [Term] -> [(LocalName, tp)] -> f -> m f
 
--- | Lift an @f@ that is in an extended list of 'Bindings'
+-- | Lift an @f@ that is in an extended list of bindings
 ctxLiftInBindings :: CtxLiftSubst f m => [(LocalName, tp1)] ->
                      [(LocalName, tp2)] ->
                      [(LocalName, tp3)] ->
@@ -246,7 +246,7 @@ ctxLiftInBindings = helper . map (fmap Left)
     helper ctx1 ((str, tp) : ctx2) as =
       helper (ctx1 ++ [(str, Right tp)]) ctx2 as
 
--- | Substitute into an @f@ that is in an extended list of 'Bindings'
+-- | Substitute into an @f@ that is in an extended list of bindings
 ctxSubstInBindings :: CtxLiftSubst f m => [Term] ->
                       [(LocalName, tp1)] ->
                       [(LocalName, tp2)] ->
@@ -768,7 +768,7 @@ mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs [] ->
 mkCtorArgsIxs _ _ _ _ _ = Nothing
 
 
--- | Take in a datatype and 'Bindings' lists for its parameters and indices, and
+-- | Take in a datatype and bindings lists for its parameters and indices, and
 -- also a prospective type of a constructor for that datatype, where the
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
