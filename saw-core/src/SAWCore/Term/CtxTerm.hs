@@ -47,7 +47,7 @@ module SAWCore.Term.CtxTerm
     -- * Contexts and Bindings
   , Typ
   , CtxInvApp, CtxInv
-  , Bindings(..), bindingsLength, InvBindings(..), InBindings(..)
+  , Bindings(..), bindingsLength, InvBindings(..)
   , invAppendBindings, invertBindings
     -- * Terms in Context
   , Arrows
@@ -197,13 +197,6 @@ appendTopInvBindings ctx1 InvNoBind = ctx1
 appendTopInvBindings ctx1 (InvBind ctx2 x tp) =
   let ret = appendTopInvBindings ctx1 ctx2 in
   InvBind ret x (ctxLiftNil ret tp)
-
--- | A sequence of bindings bundled with something that is relative to those
--- bindings
-data InBindings tp (f :: Ctx Type -> k -> Type) ctx (a::k) where
-  InBindings :: Bindings tp ctx as -> f (CtxInvApp ctx as) a ->
-                InBindings tp f ctx a
-
 
 --
 -- * Terms In Context
