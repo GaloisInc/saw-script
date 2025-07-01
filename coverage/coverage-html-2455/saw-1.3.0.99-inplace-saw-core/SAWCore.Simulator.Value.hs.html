@@ -1,0 +1,442 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE PatternGuards #-}
+<span class="lineno">    2 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ConstraintKinds #-}
+<span class="lineno">    5 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    6 </span>{-# LANGUAGE UndecidableInstances #-}  -- For `Show` instance, it's OK.
+<span class="lineno">    7 </span>{-# LANGUAGE EmptyDataDecls #-}
+<span class="lineno">    8 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>{- |
+<span class="lineno">   11 </span>Module      : SAWCore.Simulator.Value
+<span class="lineno">   12 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">   13 </span>License     : BSD3
+<span class="lineno">   14 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">   15 </span>Stability   : experimental
+<span class="lineno">   16 </span>Portability : non-portable (language extensions)
+<span class="lineno">   17 </span>-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>module SAWCore.Simulator.Value
+<span class="lineno">   20 </span>       ( module SAWCore.Simulator.Value
+<span class="lineno">   21 </span>       , module SAWCore.Simulator.MonadLazy
+<span class="lineno">   22 </span>       ) where
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import Prelude hiding (mapM)
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import Control.Monad (foldM, mapM)
+<span class="lineno">   27 </span>import Data.Kind (Type)
+<span class="lineno">   28 </span>import Data.Map (Map)
+<span class="lineno">   29 </span>import qualified Data.Map as Map
+<span class="lineno">   30 </span>import Data.Text (Text)
+<span class="lineno">   31 </span>import qualified Data.Text as Text
+<span class="lineno">   32 </span>import Data.Vector (Vector)
+<span class="lineno">   33 </span>import qualified Data.Vector as V
+<span class="lineno">   34 </span>import Numeric.Natural
+<span class="lineno">   35 </span>import GHC.Stack
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import SAWCore.Name
+<span class="lineno">   40 </span>import SAWCore.Panic (panic)
+<span class="lineno">   41 </span>import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
+<span class="lineno">   42 </span>import SAWCore.SharedTerm
+<span class="lineno">   43 </span>import SAWCore.Term.Functor
+<span class="lineno">   44 </span>import SAWCore.Term.Pretty
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import SAWCore.Simulator.MonadLazy
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>------------------------------------------------------------
+<span class="lineno">   49 </span>-- Values and Thunks
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>{- | SAWCore Values. Values are parameterized by the /name/ of an
+<span class="lineno">   52 </span>instantiation.
+<span class="lineno">   53 </span>The concrete parameters to use are computed from the name using
+<span class="lineno">   54 </span>a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
+<span class="lineno">   55 </span>data Value l
+<span class="lineno">   56 </span>  = VFun !LocalName !(Thunk l -&gt; MValue l)
+<span class="lineno">   57 </span>  | VUnit
+<span class="lineno">   58 </span>  | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
+<span class="lineno">   59 </span>  | VCtorApp !(ExtCns (TValue l)) ![Thunk l] ![Thunk l]
+<span class="lineno">   60 </span>  | VVector !(Vector (Thunk l))
+<span class="lineno">   61 </span>  | VBool (VBool l)
+<span class="lineno">   62 </span>  | VWord (VWord l)
+<span class="lineno">   63 </span>  | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
+<span class="lineno">   64 </span>  | VIntToNat (Value l)
+<span class="lineno">   65 </span>  | VNat !Natural
+<span class="lineno">   66 </span>  | VInt (VInt l)
+<span class="lineno">   67 </span>  | VIntMod !Natural (VInt l)
+<span class="lineno">   68 </span>  | VArray (VArray l)
+<span class="lineno">   69 </span>  | VString !Text
+<span class="lineno">   70 </span>  | VRecordValue ![(FieldName, Thunk l)]
+<span class="lineno">   71 </span>  | VRecursor
+<span class="lineno">   72 </span>     !(ExtCns (TValue l)) -- data type ident
+<span class="lineno">   73 </span>     ![Value l]  -- data type parameters
+<span class="lineno">   74 </span>     !(Value l)  -- motive function
+<span class="lineno">   75 </span>     !(TValue l) -- type of motive
+<span class="lineno">   76 </span>     !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
+<span class="lineno">   77 </span>  | VExtra (Extra l)
+<span class="lineno">   78 </span>  | TValue (TValue l)
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>-- | The subset of values that represent types.
+<span class="lineno">   81 </span>data TValue l
+<span class="lineno">   82 </span>  = VVecType !Natural !(TValue l)
+<span class="lineno">   83 </span>  | VBoolType
+<span class="lineno">   84 </span>  | VIntType
+<span class="lineno">   85 </span>  | VIntModType !Natural
+<span class="lineno">   86 </span>  | VArrayType !(TValue l) !(TValue l)
+<span class="lineno">   87 </span>  | VPiType LocalName !(TValue l) !(PiBody l)
+<span class="lineno">   88 </span>  | VStringType
+<span class="lineno">   89 </span>  | VUnitType
+<span class="lineno">   90 </span>  | VPairType !(TValue l) !(TValue l)
+<span class="lineno">   91 </span>  | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
+<span class="lineno">   92 </span>  | VRecordType ![(FieldName, TValue l)]
+<span class="lineno">   93 </span>  | VSort !Sort
+<span class="lineno">   94 </span>  | VRecursorType
+<span class="lineno">   95 </span>     !(ExtCns (TValue l)) -- data type name
+<span class="lineno">   96 </span>     ![Value l]  -- data type parameters
+<span class="lineno">   97 </span>     !(Value l)  -- motive function
+<span class="lineno">   98 </span>     !(TValue l) -- type of motive function
+<span class="lineno">   99 </span>  | VTyTerm !Sort !Term
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>data PiBody l
+<span class="lineno">  102 </span>  = VDependentPi !(Thunk l -&gt; EvalM l (TValue l))
+<span class="lineno">  103 </span>  | VNondependentPi !(TValue l)
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>-- | Neutral terms represent computations that are blocked
+<span class="lineno">  106 </span>--   because some internal term cannot be evaluated
+<span class="lineno">  107 </span>--   (e.g., because it is a variable, because it's definition
+<span class="lineno">  108 </span>--   is being hidden, etc.)
+<span class="lineno">  109 </span>data NeutralTerm
+<span class="lineno">  110 </span>  = NeutralBox Term -- the thing blocking evaluation
+<span class="lineno">  111 </span>  | NeutralPairLeft NeutralTerm   -- left pair projection
+<span class="lineno">  112 </span>  | NeutralPairRight NeutralTerm  -- right pair projection
+<span class="lineno">  113 </span>  | NeutralRecordProj NeutralTerm FieldName -- record projection
+<span class="lineno">  114 </span>  | NeutralApp NeutralTerm Term -- function application
+<span class="lineno">  115 </span>  | NeutralRecursor
+<span class="lineno">  116 </span>      NeutralTerm -- recursor value
+<span class="lineno">  117 </span>      [Term] -- indices for the inductive type
+<span class="lineno">  118 </span>      Term   -- argument being eliminated
+<span class="lineno">  119 </span>  | NeutralRecursorArg -- recursor application
+<span class="lineno">  120 </span>      Term   -- recursor value
+<span class="lineno">  121 </span>      [Term] -- indices for the inductive type
+<span class="lineno">  122 </span>      NeutralTerm -- argument being elminated
+<span class="lineno">  123 </span>  | NeutralConstant -- A constant value with no definition
+<span class="lineno">  124 </span>      Name
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>type Thunk l = Lazy (EvalM l) (Value l)
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>-- | Evaluation monad for value instantiation 'l'
+<span class="lineno">  129 </span>type family EvalM l :: Type -&gt; Type
+<span class="lineno">  130 </span>-- | Booleans for value instantiation 'l'
+<span class="lineno">  131 </span>type family VBool l :: Type
+<span class="lineno">  132 </span>-- | Words for value instantiation 'l'
+<span class="lineno">  133 </span>type family VWord l :: Type
+<span class="lineno">  134 </span>-- | Integers for value instantiation 'l'
+<span class="lineno">  135 </span>type family VInt  l :: Type
+<span class="lineno">  136 </span>-- | SMT arrays for value instantiation 'l'
+<span class="lineno">  137 </span>type family VArray l :: Type
+<span class="lineno">  138 </span>-- | Additional constructors for instantiation 'l'
+<span class="lineno">  139 </span>type family Extra l :: Type
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>-- | Short-hand for a monadic value.
+<span class="lineno">  142 </span>type MValue l     = EvalM l (Value l)
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>-- | Short-hand for a monadic boolean.
+<span class="lineno">  145 </span>type MBool  l     = EvalM l (VBool l)
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>-- | Short-hand for a monadic word.
+<span class="lineno">  148 </span>type MWord l      = EvalM l (VWord l)
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>-- | Short-hand for a monadic integer.
+<span class="lineno">  151 </span>type MInt l       = EvalM l (VInt  l)
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Short-hand for a monadic array.
+<span class="lineno">  154 </span>type MArray l     = EvalM l (VArray l)
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>-- | Short hand to specify that the evaluation monad is a monad (very common)
+<span class="lineno">  157 </span>type VMonad l     = Monad (EvalM l)
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>-- | Short hand to specify that the evaluation monad is a lazy monad.
+<span class="lineno">  160 </span>type VMonadLazy l = MonadLazy (EvalM l)
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>-- | Language instantiations with a specific monad.
+<span class="lineno">  166 </span>data WithM (m :: Type -&gt; Type) l
+<span class="lineno">  167 </span>type instance EvalM (WithM m l) = m
+<span class="lineno">  168 </span>type instance VBool (WithM m l) = VBool l
+<span class="lineno">  169 </span>type instance VWord (WithM m l) = VWord l
+<span class="lineno">  170 </span>type instance VInt  (WithM m l) = VInt l
+<span class="lineno">  171 </span>type instance VArray (WithM m l) = VArray l
+<span class="lineno">  172 </span>type instance Extra (WithM m l) = Extra l
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>--------------------------------------------------------------------------------
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (Extra l) =&gt; Show (Value l)</span></span></span></span> where
+<span class="lineno">  177 </span>  <span class="decl"><span class="nottickedoff">showsPrec p v =</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="nottickedoff">case v of</span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="nottickedoff">VFun {}        -&gt; showString &quot;&lt;&lt;fun&gt;&gt;&quot;</span>
+<span class="lineno">  180 </span><span class="spaces">      </span><span class="nottickedoff">VUnit          -&gt; showString &quot;()&quot;</span>
+<span class="lineno">  181 </span><span class="spaces">      </span><span class="nottickedoff">VPair{}        -&gt; showString &quot;&lt;&lt;tuple&gt;&gt;&quot;</span>
+<span class="lineno">  182 </span><span class="spaces">      </span><span class="nottickedoff">VCtorApp s _ps _xv -&gt; shows (toAbsoluteName (ecName s))</span>
+<span class="lineno">  183 </span><span class="spaces">      </span><span class="nottickedoff">VVector xv     -&gt; showList (toList xv)</span>
+<span class="lineno">  184 </span><span class="spaces">      </span><span class="nottickedoff">VBool _        -&gt; showString &quot;&lt;&lt;boolean&gt;&gt;&quot;</span>
+<span class="lineno">  185 </span><span class="spaces">      </span><span class="nottickedoff">VWord _        -&gt; showString &quot;&lt;&lt;bitvector&gt;&gt;&quot;</span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat n x   -&gt; showString &quot;bvToNat &quot; . shows n . showString &quot; &quot; . showParen True (shows x)</span>
+<span class="lineno">  187 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat x    -&gt; showString &quot;intToNat &quot; . showParen True (shows x)</span>
+<span class="lineno">  188 </span><span class="spaces">      </span><span class="nottickedoff">VNat n         -&gt; shows n</span>
+<span class="lineno">  189 </span><span class="spaces">      </span><span class="nottickedoff">VInt _         -&gt; showString &quot;&lt;&lt;integer&gt;&gt;&quot;</span>
+<span class="lineno">  190 </span><span class="spaces">      </span><span class="nottickedoff">VIntMod n _    -&gt; showString (&quot;&lt;&lt;Z &quot; ++ show n ++ &quot;&gt;&gt;&quot;)</span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="nottickedoff">VArray{}       -&gt; showString &quot;&lt;&lt;array&gt;&gt;&quot;</span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="nottickedoff">VString s      -&gt; shows s</span>
+<span class="lineno">  193 </span><span class="spaces">      </span><span class="nottickedoff">VRecordValue [] -&gt; showString &quot;{}&quot;</span>
+<span class="lineno">  194 </span><span class="spaces">      </span><span class="nottickedoff">VRecordValue ((fld,_):_) -&gt;</span>
+<span class="lineno">  195 </span><span class="spaces">        </span><span class="nottickedoff">showString &quot;{&quot; . showString (Text.unpack fld) . showString &quot; = _, ...}&quot;</span>
+<span class="lineno">  196 </span><span class="spaces">      </span><span class="nottickedoff">VRecursor d _ _ _ _</span>
+<span class="lineno">  197 </span><span class="spaces">                     </span><span class="nottickedoff">-&gt; showString &quot;&lt;&lt;recursor: &quot; . shows d . showString &quot;&gt;&gt;&quot;</span>
+<span class="lineno">  198 </span><span class="spaces">      </span><span class="nottickedoff">VExtra x       -&gt; showsPrec p x</span>
+<span class="lineno">  199 </span><span class="spaces">      </span><span class="nottickedoff">TValue x       -&gt; showsPrec p x</span>
+<span class="lineno">  200 </span><span class="spaces">    </span><span class="nottickedoff">where</span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="nottickedoff">toList = map (const Nil) . V.toList</span></span>
+<span class="lineno">  202 </span>
+<span class="lineno">  203 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (Extra l) =&gt; Show (TValue l)</span></span></span></span> where
+<span class="lineno">  204 </span>  <span class="decl"><span class="nottickedoff">showsPrec p v =</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">case v of</span>
+<span class="lineno">  206 </span><span class="spaces">      </span><span class="nottickedoff">VBoolType      -&gt; showString &quot;Bool&quot;</span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="nottickedoff">VStringType    -&gt; showString &quot;String&quot;</span>
+<span class="lineno">  208 </span><span class="spaces">      </span><span class="nottickedoff">VIntType       -&gt; showString &quot;Integer&quot;</span>
+<span class="lineno">  209 </span><span class="spaces">      </span><span class="nottickedoff">VIntModType n  -&gt; showParen True (showString &quot;IntMod &quot; . shows n)</span>
+<span class="lineno">  210 </span><span class="spaces">      </span><span class="nottickedoff">VArrayType{}   -&gt; showString &quot;Array&quot;</span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">VPiType _ t _    -&gt; showParen True</span>
+<span class="lineno">  212 </span><span class="spaces">                        </span><span class="nottickedoff">(shows t . showString &quot; -&gt; ...&quot;)</span>
+<span class="lineno">  213 </span><span class="spaces">      </span><span class="nottickedoff">VUnitType      -&gt; showString &quot;#()&quot;</span>
+<span class="lineno">  214 </span><span class="spaces">      </span><span class="nottickedoff">VPairType x y  -&gt; showParen True (shows x . showString &quot; * &quot; . shows y)</span>
+<span class="lineno">  215 </span><span class="spaces">      </span><span class="nottickedoff">VDataType s ps vs</span>
+<span class="lineno">  216 </span><span class="spaces">        </span><span class="nottickedoff">| null (ps++vs) -&gt; shows s</span>
+<span class="lineno">  217 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise  -&gt; shows s . showList (ps++vs)</span>
+<span class="lineno">  218 </span><span class="spaces">      </span><span class="nottickedoff">VRecordType [] -&gt; showString &quot;{}&quot;</span>
+<span class="lineno">  219 </span><span class="spaces">      </span><span class="nottickedoff">VRecordType ((fld,_):_) -&gt;</span>
+<span class="lineno">  220 </span><span class="spaces">        </span><span class="nottickedoff">showString &quot;{&quot; . showString (Text.unpack fld) . showString &quot; :: _, ...}&quot;</span>
+<span class="lineno">  221 </span><span class="spaces">      </span><span class="nottickedoff">VVecType n a   -&gt; showString &quot;Vec &quot; . shows n</span>
+<span class="lineno">  222 </span><span class="spaces">                        </span><span class="nottickedoff">. showString &quot; &quot; . showParen True (showsPrec p a)</span>
+<span class="lineno">  223 </span><span class="spaces">      </span><span class="nottickedoff">VSort s        -&gt; shows s</span>
+<span class="lineno">  224 </span><span class="spaces">      </span><span class="nottickedoff">VRecursorType{} -&gt; showString &quot;RecursorType&quot;</span>
+<span class="lineno">  225 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="nottickedoff">VTyTerm _ tm   -&gt; showString &quot;TyTerm (&quot; . (\x -&gt; showTerm tm ++ x) . showString &quot;)&quot;</span></span>
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>data Nil = Nil
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Nil</span></span></span></span> where
+<span class="lineno">  231 </span>  <span class="decl"><span class="nottickedoff">show Nil = &quot;_&quot;</span></span>
+<span class="lineno">  232 </span>
+<span class="lineno">  233 </span>------------------------------------------------------------
+<span class="lineno">  234 </span>-- Basic operations on values
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>vTuple :: VMonad l =&gt; [Thunk l] -&gt; Value l
+<span class="lineno">  237 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
+<span class="lineno">  238 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
+<span class="lineno">  239 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
+<span class="lineno">  240 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = <span class="nottickedoff">VPair x (ready (vTuple xs))</span></span></span>
+<span class="lineno">  241 </span>
+<span class="lineno">  242 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
+<span class="lineno">  243 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
+<span class="lineno">  244 </span><span class="spaces"></span><span class="nottickedoff">vTupleType [t] = t</span>
+<span class="lineno">  245 </span><span class="spaces"></span><span class="nottickedoff">vTupleType (t : ts) = VPairType t (vTupleType ts)</span></span>
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
+<span class="lineno">  248 </span><span class="decl"><span class="nottickedoff">valPairLeft (VPair t1 _) = force t1</span>
+<span class="lineno">  249 </span><span class="spaces"></span><span class="nottickedoff">valPairLeft v = panic &quot;valPairLeft&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
+<span class="lineno">  250 </span>
+<span class="lineno">  251 </span>valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; MValue l
+<span class="lineno">  252 </span><span class="decl"><span class="nottickedoff">valPairRight (VPair _ t2) = force t2</span>
+<span class="lineno">  253 </span><span class="spaces"></span><span class="nottickedoff">valPairRight v = panic &quot;valPairRight&quot; [&quot;Not a pair value: &quot; &lt;&gt; Text.pack (show v)]</span></span>
+<span class="lineno">  254 </span>
+<span class="lineno">  255 </span>vRecord :: Map FieldName (Thunk l) -&gt; Value l
+<span class="lineno">  256 </span><span class="decl"><span class="nottickedoff">vRecord m = VRecordValue (Map.assocs m)</span></span>
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; FieldName -&gt; MValue l
+<span class="lineno">  259 </span><span class="decl"><span class="istickedoff">valRecordProj (VRecordValue fld_map) fld</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">| Just t &lt;- lookup fld fld_map = force t</span>
+<span class="lineno">  261 </span><span class="spaces"></span><span class="istickedoff">valRecordProj v@(VRecordValue _) fld =</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;valRecordProj&quot; [</span></span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;Record field &quot; &lt;&gt; Text.pack (show fld) &lt;&gt; &quot; not found in value: &quot; &lt;&gt;</span></span>
+<span class="lineno">  264 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Text.pack (show v)</span></span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  266 </span><span class="spaces"></span><span class="istickedoff">valRecordProj v _ =</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;valRecordProj&quot; [&quot;Not a record value: &quot; &lt;&gt; Text.pack (show v)]</span></span></span>
+<span class="lineno">  268 </span>
+<span class="lineno">  269 </span>apply :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; Thunk l -&gt; MValue l
+<span class="lineno">  270 </span><span class="decl"><span class="istickedoff">apply (VFun _ f) x = f x</span>
+<span class="lineno">  271 </span><span class="spaces"></span><span class="istickedoff">apply (TValue (VPiType _ _ body)) x = <span class="nottickedoff">TValue &lt;$&gt; applyPiBody body x</span></span>
+<span class="lineno">  272 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff">apply v _x = <span class="nottickedoff">panic &quot;apply&quot; [&quot;Not a function value: &quot; &lt;&gt; Text.pack (show v)]</span></span></span>
+<span class="lineno">  274 </span>
+<span class="lineno">  275 </span>applyAll :: (VMonad l, Show (Extra l)) =&gt; Value l -&gt; [Thunk l] -&gt; MValue l
+<span class="lineno">  276 </span><span class="decl"><span class="istickedoff">applyAll = foldM apply</span></span>
+<span class="lineno">  277 </span>
+<span class="lineno">  278 </span>{-# INLINE applyPiBody #-}
+<span class="lineno">  279 </span>applyPiBody :: VMonad l =&gt; PiBody l -&gt; Thunk l -&gt; EvalM l (TValue l)
+<span class="lineno">  280 </span><span class="decl"><span class="istickedoff">applyPiBody (VDependentPi f) x    = f x</span>
+<span class="lineno">  281 </span><span class="spaces"></span><span class="istickedoff">applyPiBody (VNondependentPi t) _ = pure t</span></span>
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>asFiniteTypeValue :: Value l -&gt; Maybe FiniteType
+<span class="lineno">  284 </span><span class="decl"><span class="istickedoff">asFiniteTypeValue v =</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFiniteTypeTValue tv</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  288 </span>
+<span class="lineno">  289 </span>asFiniteTypeTValue :: TValue l -&gt; Maybe FiniteType
+<span class="lineno">  290 </span><span class="decl"><span class="istickedoff">asFiniteTypeTValue v =</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; return FTBit</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; do</span>
+<span class="lineno">  294 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFiniteTypeTValue v1</span>
+<span class="lineno">  295 </span><span class="spaces">      </span><span class="istickedoff">return (FTVec n t1)</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">return (FTTuple [])</span></span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  298 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t1 &lt;- asFiniteTypeTValue v1</span></span>
+<span class="lineno">  299 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- asFiniteTypeTValue v2</span></span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case t2 of</span></span>
+<span class="lineno">  301 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">FTTuple ts -&gt; return (FTTuple (t1 : ts))</span></span>
+<span class="lineno">  302 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; return (FTTuple [t1, t2])</span></span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">VRecordType elem_tps -&gt;</span>
+<span class="lineno">  304 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">FTRec &lt;$&gt; Map.fromList &lt;$&gt;</span></span>
+<span class="lineno">  305 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">mapM (\(fld,tp) -&gt; (fld,) &lt;$&gt; asFiniteTypeTValue tp) elem_tps</span></span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  307 </span>
+<span class="lineno">  308 </span>asFirstOrderTypeValue :: Value l -&gt; Maybe FirstOrderType
+<span class="lineno">  309 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeValue v =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">TValue tv -&gt; asFirstOrderTypeTValue tv</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>asFirstOrderTypeTValue :: TValue l -&gt; Maybe FirstOrderType
+<span class="lineno">  315 </span><span class="decl"><span class="istickedoff">asFirstOrderTypeTValue v =</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">VBoolType     -&gt; return FOTBit</span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; FOTVec n &lt;$&gt; asFirstOrderTypeTValue v1</span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; return FOTInt</span>
+<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return <span class="nottickedoff">(FOTIntMod m)</span></span>
+<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
+<span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return <span class="nottickedoff">(FOTTuple [])</span></span>
+<span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
+<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="istickedoff">case t2 of</span>
+<span class="lineno">  328 </span><span class="spaces">        </span><span class="istickedoff">FOTTuple ts -&gt; return (FOTTuple (t1 : ts))</span>
+<span class="lineno">  329 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return (FOTTuple [t1, t2])</span>
+<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">VRecordType elem_tps -&gt;</span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">FOTRec . Map.fromList &lt;$&gt;</span></span>
+<span class="lineno">  332 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">mapM (traverse asFirstOrderTypeTValue) elem_tps</span></span>
+<span class="lineno">  333 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">VStringType   -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">VPiType{}   -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  336 </span><span class="spaces">    </span><span class="istickedoff">VDataType{} -&gt; Nothing</span>
+<span class="lineno">  337 </span><span class="spaces">    </span><span class="istickedoff">VSort{}     -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  338 </span><span class="spaces">    </span><span class="istickedoff">VRecursorType{} -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  339 </span><span class="spaces">    </span><span class="istickedoff">VTyTerm{}   -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  340 </span>
+<span class="lineno">  341 </span>-- | A (partial) injective mapping from type values to strings. These
+<span class="lineno">  342 </span>-- are intended to be useful as suffixes for names of type instances
+<span class="lineno">  343 </span>-- of uninterpreted constants.
+<span class="lineno">  344 </span>suffixTValue :: TValue sym -&gt; Maybe String
+<span class="lineno">  345 </span><span class="decl"><span class="nottickedoff">suffixTValue tv =</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">case tv of</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="nottickedoff">VVecType n a -&gt;</span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
+<span class="lineno">  349 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Vec_&quot; ++ show n ++ a')</span>
+<span class="lineno">  350 </span><span class="spaces">    </span><span class="nottickedoff">VBoolType -&gt; Just &quot;_Bool&quot;</span>
+<span class="lineno">  351 </span><span class="spaces">    </span><span class="nottickedoff">VIntType -&gt; Just &quot;_Int&quot;</span>
+<span class="lineno">  352 </span><span class="spaces">    </span><span class="nottickedoff">VIntModType n -&gt; Just (&quot;_IntMod_&quot; ++ show n)</span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="nottickedoff">VArrayType a b -&gt;</span>
+<span class="lineno">  354 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
+<span class="lineno">  355 </span><span class="spaces">         </span><span class="nottickedoff">b' &lt;- suffixTValue b</span>
+<span class="lineno">  356 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Array&quot; ++ a' ++ b')</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="nottickedoff">VPiType _ _ _ -&gt; Nothing</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="nottickedoff">VUnitType -&gt; Just &quot;_Unit&quot;</span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="nottickedoff">VPairType a b -&gt;</span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="nottickedoff">do a' &lt;- suffixTValue a</span>
+<span class="lineno">  361 </span><span class="spaces">         </span><span class="nottickedoff">b' &lt;- suffixTValue b</span>
+<span class="lineno">  362 </span><span class="spaces">         </span><span class="nottickedoff">Just (&quot;_Pair&quot; ++ a' ++ b')</span>
+<span class="lineno">  363 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  364 </span><span class="spaces">    </span><span class="nottickedoff">VStringType -&gt; Nothing</span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">VDataType {} -&gt; Nothing</span>
+<span class="lineno">  366 </span><span class="spaces">    </span><span class="nottickedoff">VRecordType {} -&gt; Nothing</span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="nottickedoff">VSort {} -&gt; Nothing</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="nottickedoff">VRecursorType{} -&gt; Nothing</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">VTyTerm{} -&gt; Nothing</span></span>
+<span class="lineno">  370 </span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>neutralToTerm :: NeutralTerm -&gt; Term
+<span class="lineno">  373 </span><span class="decl"><span class="nottickedoff">neutralToTerm = loop</span>
+<span class="lineno">  374 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralBox tm) = tm</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralPairLeft nt) =</span>
+<span class="lineno">  377 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (FTermF (PairLeft (loop nt)))</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralPairRight nt) =</span>
+<span class="lineno">  379 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (FTermF (PairRight (loop nt)))</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralRecordProj nt f) =</span>
+<span class="lineno">  381 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (FTermF (RecordProj (loop nt) f))</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralApp nt arg) =</span>
+<span class="lineno">  383 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (App (loop nt) arg)</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralRecursorArg r ixs x) =</span>
+<span class="lineno">  385 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (FTermF (RecursorApp r ixs (loop x)))</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralRecursor r ixs x) =</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (FTermF (RecursorApp (loop r) ixs x))</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">loop (NeutralConstant nm) =</span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="nottickedoff">Unshared (Constant nm)</span></span>
+<span class="lineno">  390 </span>
+<span class="lineno">  391 </span>neutralToSharedTerm :: SharedContext -&gt; NeutralTerm -&gt; IO Term
+<span class="lineno">  392 </span><span class="decl"><span class="istickedoff">neutralToSharedTerm sc = loop</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralBox tm) = pure tm</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralPairLeft nt) =</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">scFlatTermF sc . PairLeft =&lt;&lt; loop nt</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralPairRight nt) =</span>
+<span class="lineno">  398 </span><span class="spaces">    </span><span class="istickedoff">scFlatTermF sc . PairRight =&lt;&lt; loop nt</span>
+<span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralRecordProj nt f) =</span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do tm &lt;- loop nt</span></span>
+<span class="lineno">  401 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scFlatTermF sc (RecordProj tm f)</span></span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralApp nt arg) =</span>
+<span class="lineno">  403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do tm &lt;- loop nt</span></span>
+<span class="lineno">  404 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scApply sc tm arg</span></span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralRecursor nt ixs x) =</span>
+<span class="lineno">  406 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do tm &lt;- loop nt</span></span>
+<span class="lineno">  407 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scFlatTermF sc (RecursorApp tm ixs x)</span></span>
+<span class="lineno">  408 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralRecursorArg r ixs nt) =</span>
+<span class="lineno">  409 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do tm &lt;- loop nt</span></span>
+<span class="lineno">  410 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scFlatTermF sc (RecursorApp r ixs tm)</span></span>
+<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">loop (NeutralConstant nm) =</span>
+<span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">do scTermF sc (Constant nm)</span></span></span>
+<span class="lineno">  413 </span>
+<span class="lineno">  414 </span>ppNeutral :: PPS.Opts -&gt; NeutralTerm -&gt; PPS.Doc
+<span class="lineno">  415 </span><span class="decl"><span class="nottickedoff">ppNeutral opts = ppTerm opts . neutralToTerm</span></span>
+<span class="lineno">  416 </span>
+<span class="lineno">  417 </span>-- XXX this shouldn't be a Show instance
+<span class="lineno">  418 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show NeutralTerm</span></span></span></span> where
+<span class="lineno">  419 </span>  <span class="decl"><span class="nottickedoff">show = PPS.render PPS.defaultOpts . ppNeutral PPS.defaultOpts</span></span>
+
+</pre>
+</body>
+</html>
