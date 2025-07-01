@@ -51,24 +51,12 @@ import SAWCore.Term.Functor
 ctxTermsCtxHeadTail :: [Term] -> ([Term], Term)
 ctxTermsCtxHeadTail as = (init as, last as)
 
--- | Like 'ctxTermsForBindings' but can return a '[Term]' in an arbitrary
--- context. We consider this "unsafe" because it associates an arbitrary context
--- with these terms, and so we do not export this function.
-ctxTermsForBindingsOpen :: [(LocalName, tp)] -> [Term] -> Maybe [Term]
-ctxTermsForBindingsOpen [] [] = Just []
-ctxTermsForBindingsOpen (_ : bs) (t : ts) =
-  (t :) <$> ctxTermsForBindingsOpen bs ts
-ctxTermsForBindingsOpen _ _ = Nothing
-
 -- | Take a list of terms and match them up with a sequence of bindings,
--- returning a structured '[Term]' list. Note that the bindings themselves can
--- be in an arbitrary context, but the terms passed in are assumed to be closed,
--- i.e., in the empty context.
+-- returning a structured '[Term]' list.
 ctxTermsForBindings :: [(LocalName, tp)] -> [Term] -> Maybe [Term]
-ctxTermsForBindings [] [] = Just []
-ctxTermsForBindings (_ : bs) (t : ts) =
-  (t :) <$> ctxTermsForBindings bs ts
-ctxTermsForBindings _ _ = Nothing
+ctxTermsForBindings bs ts
+  | length bs == length ts = Just ts
+  | otherwise = Nothing
 
 splitCtxTermsCtx :: [(LocalName, tp)] ->
                     [Term] ->
@@ -208,8 +196,8 @@ ctxAsDataTypeApp d params ixs t =
      guard (d == d')
      guard (length args == length params + length ixs)
      let (params', ixs') = splitAt (length params) args
-     params_ret <- ctxTermsForBindingsOpen params params'
-     ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
+     params_ret <- ctxTermsForBindings params params'
+     ixs_ret <- ctxTermsForBindings ixs ixs'
      pure (params_ret, ixs_ret)
 
 
@@ -613,7 +601,7 @@ ctxReduceRecursor :: forall m.
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
   m Term
 ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =
-  case ctxTermsForBindingsOpen ctorArgs c_args of
+  case ctxTermsForBindings ctorArgs c_args of
      Just argsCtx ->
        ctxReduceRecursor_ rec elimf argsCtx ctorArgs
      Nothing ->
