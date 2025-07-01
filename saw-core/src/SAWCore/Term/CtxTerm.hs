@@ -102,9 +102,6 @@ appendTopInvBindings ctx1 (InvBind ctx2 x tp) =
 -- * Terms In Context
 --
 
--- | An 'Either' type relative to a context and type
-newtype CtxEither f g = CtxEither (Either f g)
-
 -- | A list of terms in a given context, stored "inside-out"
 data CtxTermsCtx where
   CtxTermsCtxNil :: CtxTermsCtx
@@ -401,15 +398,15 @@ ctxLiftInBindings :: CtxLiftSubst f m => InvBindings tp1 ->
                      [(LocalName, tp2)] ->
                      [(LocalName, tp3)] ->
                      f -> m f
-ctxLiftInBindings = helper . mapInvBindings (CtxEither . Left)
+ctxLiftInBindings = helper . mapInvBindings (Left)
   where
-    helper :: CtxLiftSubst f m => InvBindings (CtxEither tp1 tp2) ->
+    helper :: CtxLiftSubst f m => InvBindings (Either tp1 tp2) ->
               [(LocalName, tp2)] ->
               [(LocalName, tp3)] ->
               f -> m f
     helper ctx1 [] as = ctxLift ctx1 as
     helper ctx1 ((str, tp) : ctx2) as =
-      helper (InvBind ctx1 str (CtxEither $ Right tp)) ctx2 as
+      helper (InvBind ctx1 str (Right tp)) ctx2 as
 
 -- | Substitute into an @f@ that is in an extended list of 'Bindings'
 ctxSubstInBindings :: CtxLiftSubst f m => CtxTermsCtx ->
@@ -417,14 +414,14 @@ ctxSubstInBindings :: CtxLiftSubst f m => CtxTermsCtx ->
                       [(LocalName, tp2)] ->
                       f -> m f
 ctxSubstInBindings subst =
-  helper subst . mapInvBindings (CtxEither . Left) where
+  helper subst . mapInvBindings Left where
   helper :: CtxLiftSubst f m => CtxTermsCtx ->
-            InvBindings (CtxEither tp1 tp2) ->
+            InvBindings (Either tp1 tp2) ->
             [(LocalName, tp2)] ->
             f -> m f
   helper s ctx2 [] f = ctxSubst s ctx2 f
   helper s ctx2 ((x, tp) : ctx3) f =
-    helper s (InvBind ctx2 x (CtxEither $ Right tp)) ctx3 f
+    helper s (InvBind ctx2 x (Right tp)) ctx3 f
 
 instance MonadTerm m => CtxLiftSubst Term m where
   ctxLift ctx1 ctx2 t =
