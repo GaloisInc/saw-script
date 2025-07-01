@@ -178,12 +178,12 @@ data Ctor =
 -- | Return the number of parameters of a constructor
 ctorNumParams :: Ctor -> Int
 ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
-  bindingsLength ctorParams
+  length ctorParams
 
 -- | Return the number of non-parameter arguments of a constructor
 ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
-  bindingsLength ctorArgs
+  length ctorArgs
 
 -- | Compute the 'Name' that uniquely references a constructor
 ctorName :: Ctor -> Name
