@@ -5791,7 +5791,7 @@ primitives = Map.fromList
     [ "Monadify a Cryptol term, converting it to a form where all recursion"
     , " and errors are represented as monadic operators"]
 
-  , prim "set_monadification" "String -> String -> Bool -> TopLevel Term"
+  , prim "set_monadification" "String -> String -> Bool -> TopLevel ()"
     (scVal setMonadification)
     Experimental
     [ "Set the monadification of a specific Cryptol identifer to a SAW core "
