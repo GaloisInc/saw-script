@@ -101,28 +101,9 @@ appendTopInvBindings ctx1 (InvBind ctx2 x tp) =
 -- * Terms In Context
 --
 
--- | A list of terms in a given context, stored "inside-out"
-data CtxTermsCtx where
-  CtxTermsCtxNil :: CtxTermsCtx
-  CtxTermsCtxCons :: CtxTermsCtx -> Term -> CtxTermsCtx
-
-{-
 -- | Get the head and tail of a non-empty '[Term]' list
-ctxTermsHeadTail :: [Term] -> (Term, [Term])
-ctxTermsHeadTail (a : as) = (a, as)
--}
-
--- | Get the head and tail of a non-empty 'CtxTermsCtx' list
-ctxTermsCtxHeadTail :: CtxTermsCtx -> (CtxTermsCtx, Term)
-ctxTermsCtxHeadTail (CtxTermsCtxCons as a) = (as, a)
-ctxTermsCtxHeadTail CtxTermsCtxNil = error "ctxTermCtxHeadTail: unexpected CtxTermsCtxNil"
-
--- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
--- because it throws away our typing information
-ctxTermsCtxToListUnsafe :: CtxTermsCtx -> [Term]
-ctxTermsCtxToListUnsafe CtxTermsCtxNil = []
-ctxTermsCtxToListUnsafe (CtxTermsCtxCons ts t) =
-  ctxTermsCtxToListUnsafe ts ++ [t]
+ctxTermsCtxHeadTail :: [Term] -> ([Term], Term)
+ctxTermsCtxHeadTail as = (init as, last as)
 
 -- | Like 'ctxTermsForBindings' but can return a '[Term]' in an arbitrary
 -- context. We consider this "unsafe" because it associates an arbitrary context
@@ -143,25 +124,11 @@ ctxTermsForBindings (_ : bs) (t : ts) =
   (t :) <$> ctxTermsForBindings bs ts
 ctxTermsForBindings _ _ = Nothing
 
--- | Invert a '[Term]' list and append it to an already-inverted 'CtxTermsCtx'
--- list
-invertAppendCtxTerms :: CtxTermsCtx -> [Term] -> CtxTermsCtx
-invertAppendCtxTerms as [] = as
-invertAppendCtxTerms as (b : bs) =
-  invertAppendCtxTerms (CtxTermsCtxCons as b) bs
-
--- | Invert a '[Term]' list
-invertCtxTerms :: [Term] -> CtxTermsCtx
-invertCtxTerms = invertAppendCtxTerms CtxTermsCtxNil
-
 splitCtxTermsCtx :: InvBindings tp ->
-                    CtxTermsCtx ->
-                    (CtxTermsCtx, CtxTermsCtx)
-splitCtxTermsCtx InvNoBind terms = (terms, CtxTermsCtxNil)
-splitCtxTermsCtx (InvBind ctx _ _) (CtxTermsCtxCons ts t) =
-  let (ts1, ts2) = splitCtxTermsCtx ctx ts in
-  (ts1, CtxTermsCtxCons ts2 t)
-splitCtxTermsCtx _ _ = error "splitCtxTermsCtx: impossible"
+                    [Term] ->
+                    ([Term], [Term])
+splitCtxTermsCtx ctx terms =
+  splitAt (length terms - invBindingsLength ctx) terms
 
 --
 -- * Operations on Terms-in-Context
@@ -191,17 +158,15 @@ ctxVar :: MonadTerm m => [(LocalName, tp)] -> m Term
 ctxVar ctx = mkTermF (LocalVar $ bindingsLength ctx)
 
 -- | Build a list of all the free variables as 'Term's
---
--- FIXME: there should be a nicer way to do this that does not require
--- ctxAppNilEq
-ctxVars :: MonadTerm m => InvBindings tp -> m CtxTermsCtx
+ctxVars :: MonadTerm m => InvBindings tp -> m [Term]
 ctxVars ctx_top =
   helper ctx_top []
       where
-        helper :: MonadTerm m => InvBindings tp -> [(LocalName, tp)] -> m CtxTermsCtx
-        helper InvNoBind _ = return CtxTermsCtxNil
+        helper :: MonadTerm m => InvBindings tp -> [(LocalName, tp)] -> m [Term]
+        helper InvNoBind _ = return []
         helper (InvBind vars_ctx x tp) ctx =
-          CtxTermsCtxCons <$> helper vars_ctx ((x, tp) : ctx) <*> ctxVar ctx
+          snoc <$> helper vars_ctx ((x, tp) : ctx) <*> ctxVar ctx
+        snoc xs x = xs ++ [x]
 
 -- | Build two lists of the free variables, split at a specific point
 --
@@ -210,7 +175,7 @@ ctxVars ctx_top =
 -- ctxAppNilEq)
 ctxVars2 :: MonadTerm m => InvBindings tp ->
             InvBindings tp ->
-            m (CtxTermsCtx, CtxTermsCtx)
+            m ([Term], [Term])
 ctxVars2 vars1 vars2 =
   splitCtxTermsCtx vars2 <$> ctxVars (appendTopInvBindings vars1 vars2)
 
@@ -281,11 +246,11 @@ ctxDataTypeM ::
   forall m.
   MonadTerm m =>
   Name ->
-  m CtxTermsCtx ->
-  m CtxTermsCtx ->
+  m [Term] ->
+  m [Term] ->
   m Term
 ctxDataTypeM d paramsM ixsM =
-  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) ixsM
+  ctxApplyMulti (ctxApplyMulti t paramsM) ixsM
   where
     t :: m Term
     t = mkTermF (Constant d)
@@ -312,41 +277,22 @@ ctxCtorAppM ::
   MonadTerm m =>
   Name ->
   ExtCns Term ->
-  m CtxTermsCtx ->
-  m CtxTermsCtx ->
+  m [Term] ->
+  m [Term] ->
   m Term
 ctxCtorAppM _d c paramsM argsM =
-  ctxApplyMultiInv (ctxApplyMultiInv t paramsM) argsM
+  ctxApplyMulti (ctxApplyMulti t paramsM) argsM
   where
     t :: m Term
     t = mkTermF (Constant (Name (ecVarIndex c) (ecName c)))
 
--- | Apply a 'Term' to an inside-out list of arguments. Used only
--- to define 'ctxDataTypeM' and 'ctxCtorAppM`.
-ctxApplyMultiInv ::
-  MonadTerm m =>
-  m Term ->
-  m CtxTermsCtx ->
-  m Term
-ctxApplyMultiInv fm argsm =
-  do f <- fm
-     args <- argsm
-     helper f args
-  where
-    helper :: MonadTerm m => Term -> CtxTermsCtx -> m Term
-    helper f CtxTermsCtxNil = pure f
-    helper f (CtxTermsCtxCons args arg) = ctxApply (helper f args) (pure arg)
-
 ctxRecursorAppM :: MonadTerm m =>
   m Term ->
-  m CtxTermsCtx ->
+  m [Term] ->
   m Term ->
   m Term
 ctxRecursorAppM recM ixsM argM =
-  do app <- RecursorApp <$>
-              recM <*>
-              (ctxTermsCtxToListUnsafe <$> ixsM) <*>
-              argM
+  do app <- RecursorApp <$> recM <*> ixsM <*> argM
      mkFlatTermF app
 
 --
@@ -358,7 +304,7 @@ class Monad m => CtxLiftSubst f m where
   -- | Lift an @f@ into an extended context
   ctxLift :: InvBindings tp1 -> [(LocalName, tp2)] -> f -> m f
   -- | Substitute a list of terms into an @f@
-  ctxSubst :: CtxTermsCtx -> InvBindings tp -> f -> m f
+  ctxSubst :: [Term] -> InvBindings tp -> f -> m f
 
 -- | Lift an @f@ that is in an extended list of 'Bindings'
 ctxLiftInBindings :: CtxLiftSubst f m => InvBindings tp1 ->
@@ -376,13 +322,13 @@ ctxLiftInBindings = helper . mapInvBindings (Left)
       helper (InvBind ctx1 str (Right tp)) ctx2 as
 
 -- | Substitute into an @f@ that is in an extended list of 'Bindings'
-ctxSubstInBindings :: CtxLiftSubst f m => CtxTermsCtx ->
+ctxSubstInBindings :: CtxLiftSubst f m => [Term] ->
                       InvBindings tp1 ->
                       [(LocalName, tp2)] ->
                       f -> m f
 ctxSubstInBindings subst =
   helper subst . mapInvBindings Left where
-  helper :: CtxLiftSubst f m => CtxTermsCtx ->
+  helper :: CtxLiftSubst f m => [Term] ->
             InvBindings (Either tp1 tp2) ->
             [(LocalName, tp2)] ->
             f -> m f
@@ -397,7 +343,7 @@ instance MonadTerm m => CtxLiftSubst Term m where
     -- NOTE: our term lists put the least recently-bound variable first, so we
     -- have to reverse here to call substTerm, which wants the term for the most
     -- recently-bound variable first
-    substTerm (invBindingsLength ctx) (reverse (ctxTermsCtxToListUnsafe subst)) t
+    substTerm (invBindingsLength ctx) (reverse subst) t
 
 instance MonadTerm m => CtxLiftSubst [Term] m where
   ctxLift _ _ [] = return []
@@ -407,15 +353,6 @@ instance MonadTerm m => CtxLiftSubst [Term] m where
   ctxSubst subst ctx (t : ts) =
     (:) <$> ctxSubst subst ctx t <*>
     ctxSubst subst ctx ts
-
-instance MonadTerm m => CtxLiftSubst CtxTermsCtx m where
-  ctxLift _ _ CtxTermsCtxNil = return CtxTermsCtxNil
-  ctxLift ctx1 ctx2 (CtxTermsCtxCons ts t) =
-    CtxTermsCtxCons <$> ctxLift ctx1 ctx2 ts <*> ctxLift ctx1 ctx2 t
-  ctxSubst _ _ CtxTermsCtxNil = return CtxTermsCtxNil
-  ctxSubst subst ctx (CtxTermsCtxCons ts t) =
-    CtxTermsCtxCons <$> ctxSubst subst ctx ts <*>
-    ctxSubst subst ctx t
 
 instance CtxLiftSubst tp m => CtxLiftSubst [(LocalName, tp)] m where
   ctxLift _ _ [] = return []
@@ -489,7 +426,7 @@ ctxCtorArgType _ _ _ (ConstArg tp) = return tp
 ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =
   ctxPi zs_ctx $ \_ ->
   ctxDataTypeM d ((fst <$> ctxVars2 params prevs) >>= ctxLift InvNoBind zs_ctx)
-  (return $ invertCtxTerms ixs)
+  (return ixs)
 
 -- | Convert a bindings list of 'CtorArg's to a binding list of types
 ctxCtorArgBindings :: MonadTerm m => Name ->
@@ -513,8 +450,8 @@ ctxCtorType d (CtorArgStruct{..}) =
          InvNoBind ctorArgs
        ctxPi bs $ \_ ->
          ctxDataTypeM d
-         (ctxLift InvNoBind bs $ invertCtxTerms params)
-         (return $ invertCtxTerms ctorIndices))
+         (ctxLift InvNoBind bs params)
+         (return ctorIndices))
 
 
 --
@@ -536,7 +473,7 @@ ctxPRetTp d params ixs s =
   ctxPi ixs $ \ix_vars ->
   do param_vars <- ctxVars params
      dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
-       (return $ invertCtxTerms ix_vars)
+       (return ix_vars)
      ctxPi1 "_" dt $ \_ -> ctxSort s
 
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
@@ -556,7 +493,7 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
         (ix_ctx, Just params) ->
           do p_ret <- (ctxPRetTp d
                        (invertBindings p_ctx) ix_ctx s)
-             ctxSubst (invertCtxTerms params) InvNoBind
+             ctxSubst params InvNoBind
                (castPRet (invertBindings p_ctx) p_ret)
         (_, Nothing) ->
           error "mkPRetTp: incorrect number of parameters"
@@ -655,7 +592,7 @@ ctxCtorElimType d_top c
       -- Build the type of the argument arg
       arg_tp <- ctxPi zs (\_ -> ctxDataTypeM d
                                 (ctxLift InvNoBind zs param_vars)
-                                (return $ invertCtxTerms ts))
+                                (return ts))
       -- Lift zs and ts into the context of arg
       let arg_ctx = [("_", arg_tp)]
       zs' <- ctxLift InvNoBind arg_ctx zs
@@ -697,7 +634,7 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
            Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
            Just paramsCtx ->
              ctxSubstInBindings
-             (CtxTermsCtxCons (invertCtxTerms paramsCtx) p_ret)
+             (paramsCtx ++ [p_ret])
              InvNoBind [] ctxElimType
 
 
@@ -754,11 +691,11 @@ ctxReduceRecursor_ :: forall m.
     {- ^ telescope describing the constructor arguments -} ->
   m Term
 ctxReduceRecursor_ rec fi args0 argCtx =
-  do args <- mk_args CtxTermsCtxNil args0 argCtx
+  do args <- mk_args [] args0 argCtx
      whnfTerm =<< foldM (\f arg -> mkTermF $ App f arg) fi args
 
  where
-    mk_args :: CtxTermsCtx ->  -- already processed parameters/arguments
+    mk_args :: [Term] ->  -- already processed parameters/arguments
                [Term] ->     -- remaining actual arguments to process
                [(LocalName, CtorArg)] ->
                  -- telescope for typing the actual arguments
@@ -768,7 +705,7 @@ ctxReduceRecursor_ rec fi args0 argCtx =
 
     -- process an argument that is not a recursive call
     mk_args pre_xs (x : xs) ((_, ConstArg _) : args) =
-      do tl <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+      do tl <- mk_args (pre_xs ++ [x]) xs args
          pure (x : tl)
 
     -- process an argument that is a recursive call
@@ -776,7 +713,7 @@ ctxReduceRecursor_ rec fi args0 argCtx =
       do zs'  <- ctxSubstInBindings pre_xs InvNoBind [] zs
          ixs' <- ctxSubstInBindings pre_xs InvNoBind zs ixs
          recx <- mk_rec_arg zs' ixs' x
-         tl   <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+         tl   <- mk_args (pre_xs ++ [x]) xs args
          pure (x : recx : tl)
 
     mk_args _ _ _ = error "mk_args: impossible"
@@ -793,7 +730,7 @@ ctxReduceRecursor_ rec fi args0 argCtx =
       ctxLambda zs_ctx (\zs ->
         ctxRecursorAppM
           (ctxLift InvNoBind zs_ctx rec)
-          (return (invertCtxTerms ixs))
+          (return ixs)
           (ctxApplyMulti
             (ctxLift InvNoBind zs_ctx x)
             (return zs)))
