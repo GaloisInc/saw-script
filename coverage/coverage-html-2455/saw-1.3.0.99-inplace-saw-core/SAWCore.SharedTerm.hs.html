@@ -857,7 +857,7 @@ span.spaces    { background: white }
 <span class="lineno">  838 </span><span class="spaces">    </span><span class="istickedoff">-- constructor argument variables</span>
 <span class="lineno">  839 </span><span class="spaces">    </span><span class="istickedoff">let num_args =</span>
 <span class="lineno">  840 </span><span class="spaces">          </span><span class="istickedoff">case arg_struct of</span>
-<span class="lineno">  841 </span><span class="spaces">            </span><span class="istickedoff">CtorArgStruct {..} -&gt; bindingsLength ctorArgs</span>
+<span class="lineno">  841 </span><span class="spaces">            </span><span class="istickedoff">CtorArgStruct {..} -&gt; length ctorArgs</span>
 <span class="lineno">  842 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  843 </span><span class="spaces">    </span><span class="istickedoff">vars &lt;- reverse &lt;$&gt; mapM (scLocalVar sc) (take num_args [0 ..])</span>
 <span class="lineno">  844 </span><span class="spaces">    </span><span class="istickedoff">elim_var &lt;- scLocalVar sc num_args</span>

@@ -197,12 +197,12 @@ span.spaces    { background: white }
 <span class="lineno">  178 </span>-- | Return the number of parameters of a constructor
 <span class="lineno">  179 </span>ctorNumParams :: Ctor -&gt; Int
 <span class="lineno">  180 </span><span class="decl"><span class="istickedoff">ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">bindingsLength ctorParams</span></span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">length ctorParams</span></span>
 <span class="lineno">  182 </span>
 <span class="lineno">  183 </span>-- | Return the number of non-parameter arguments of a constructor
 <span class="lineno">  184 </span>ctorNumArgs :: Ctor -&gt; Int
 <span class="lineno">  185 </span><span class="decl"><span class="istickedoff">ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =</span>
-<span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">bindingsLength ctorArgs</span></span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">length ctorArgs</span></span>
 <span class="lineno">  187 </span>
 <span class="lineno">  188 </span>-- | Compute the 'Name' that uniquely references a constructor
 <span class="lineno">  189 </span>ctorName :: Ctor -&gt; Name
