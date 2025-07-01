@@ -172,8 +172,8 @@ bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO (Env,Term,Term)
 bindName sc name schema env = do
   ty <- importSchema sc env schema
   v  <- scFreshGlobal sc (nameToLocalName name) ty
-  let env' = env { envE = Map.insert name v      (envE env')
-                 , envC = Map.insert name schema (envC env')
+  let env' = env { envE = Map.insert name v      (envE env)
+                 , envC = Map.insert name schema (envC env)
                  }
   return (env', v, ty)
 
