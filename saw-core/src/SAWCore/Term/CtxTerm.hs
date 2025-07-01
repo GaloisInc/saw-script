@@ -23,7 +23,7 @@ module SAWCore.Term.CtxTerm
     -- * Terms in Context
   , CtxTerm(..), CtxTermsCtx(..)
   , mkClosedTerm, mkClosedTyp, elimClosedTerm
-  , ExistsTp(..), ctxBindingsOfTerms
+  , ctxBindingsOfTerms
   , ctxTermsForBindings
     -- * Operations on Terms-in-Context
   , MonadTerm(..)
@@ -153,9 +153,6 @@ mkClosedTyp = mkClosedTerm
 elimClosedTerm :: CtxTerm -> Term
 elimClosedTerm (CtxTerm t) = t
 
--- | Existentially quantify over the "type" of an object
-data ExistsTp tp = ExistsTp tp
-
 -- | Build a 'Bindings' list from a list of variable names and types, assuming
 -- that each variable is free in the remaining types and that @ctx@ describes
 -- the ambient context of the top-level type in the context. Note that nothing
@@ -164,11 +161,11 @@ data ExistsTp tp = ExistsTp tp
 -- the Haskell type system is not powerful enough to represent all the SAW types
 -- anyway, and any code that consumes this 'Bindings' list cannot know that
 -- anyway. See also the comments for 'CtxTerm'.
-ctxBindingsOfTerms :: [(LocalName, Term)] -> ExistsTp (Bindings CtxTerm)
-ctxBindingsOfTerms [] = ExistsTp NoBind
+ctxBindingsOfTerms :: [(LocalName, Term)] -> Bindings CtxTerm
+ctxBindingsOfTerms [] = NoBind
 ctxBindingsOfTerms ((x,tp):ctx) =
   case ctxBindingsOfTerms ctx of
-    ExistsTp rest -> ExistsTp (Bind x (CtxTerm tp) rest)
+    rest -> Bind x (CtxTerm tp) rest
 
 -- | A dummy unit type that takes in a context
 data CtxUnit ctx a = CtxUnit
@@ -663,10 +660,10 @@ mkPRetTp :: MonadTerm m =>
   m Term
 mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
   case ctxBindingsOfTerms untyped_p_ctx of
-    ExistsTp p_ctx ->
+    p_ctx ->
       case (ctxBindingsOfTerms untyped_ix_ctx,
             ctxTermsForBindings p_ctx untyped_params) of
-        (ExistsTp ix_ctx, Just params) ->
+        (ix_ctx, Just params) ->
           do p_ret <- (ctxPRetTp d
                        (invertBindings p_ctx) ix_ctx s)
              elimClosedTerm <$>

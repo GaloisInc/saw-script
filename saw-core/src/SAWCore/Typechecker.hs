@@ -422,9 +422,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
            (c,) <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
   ctors <-
     case ctxBindingsOfTerms dtParams of
-      ExistsTp p_ctx ->
+      p_ctx ->
         case ctxBindingsOfTerms dtIndices of
-          ExistsTp ix_ctx ->
+          ix_ctx ->
             forM typed_ctors $ \(c, typed_tp) ->
             -- Check that the universe level of the type of each constructor
             (case asSort (typedType typed_tp) of
