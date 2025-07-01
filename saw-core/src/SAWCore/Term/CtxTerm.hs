@@ -53,12 +53,6 @@ ctxTermsForBindings bs ts
   | length bs == length ts = Just ts
   | otherwise = Nothing
 
-splitCtxTermsCtx :: [(LocalName, tp)] ->
-                    [Term] ->
-                    ([Term], [Term])
-splitCtxTermsCtx ctx terms =
-  splitAt (length terms - length ctx) terms
-
 --
 -- * Operations on Terms-in-Context
 --
@@ -99,7 +93,8 @@ ctxVars2 :: MonadTerm m => [(LocalName, tp)] ->
             [(LocalName, tp)] ->
             m ([Term], [Term])
 ctxVars2 vars1 vars2 =
-  splitCtxTermsCtx vars2 <$> ctxVars (vars1 ++ vars2)
+  splitAt (length vars1) <$> ctxVars (vars1 ++ vars2)
+
 
 -- | Build a 'Term' for a 'Sort'
 ctxSort :: MonadTerm m => Sort -> m Term
