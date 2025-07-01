@@ -21,7 +21,6 @@ module SAWCore.Term.CtxTerm
     bindingsLength, InvBindings(..)
   , invAppendBindings, invertBindings
     -- * Terms in Context
-  , CtxTermsCtx(..)
   , ctxTermsForBindings
     -- * Operations on Terms-in-Context
   , MonadTerm(..)
@@ -117,13 +116,6 @@ ctxTermsHeadTail (a : as) = (a, as)
 ctxTermsCtxHeadTail :: CtxTermsCtx -> (CtxTermsCtx, Term)
 ctxTermsCtxHeadTail (CtxTermsCtxCons as a) = (as, a)
 ctxTermsCtxHeadTail CtxTermsCtxNil = error "ctxTermCtxHeadTail: unexpected CtxTermsCtxNil"
-
--- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
--- because it throws away our typing information
-ctxTermsToListUnsafe :: [Term] -> [Term]
-ctxTermsToListUnsafe [] = []
-ctxTermsToListUnsafe (t : ts) =
-  t : ctxTermsToListUnsafe ts
 
 -- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
 -- because it throws away our typing information
@@ -852,7 +844,7 @@ asCtorDTApp :: Name -> [(LocalName, Term)] ->
 asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
                                        Just (param_vars, ixs))
   | isVarList params ctx1 ctx2 param_vars &&
-    not (any (usesDataType d) $ ctxTermsToListUnsafe ixs)
+    not (any (usesDataType d) ixs)
   = Just ixs
   where
     -- Check that the given list of terms is a list of bound variables, one for
