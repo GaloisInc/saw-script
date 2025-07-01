@@ -464,11 +464,8 @@ provePropRec sc env prop0 prop =
     -- Class dictionary was provided as an argument
     Just (prf, fs) ->
        do -- apply field projections as necessary to compute superclasses
-          -- NB: reverse the order of the fields
+          -- NB: reverse the order of the fields, see
           foldM (scRecordSelect sc) prf (reverse fs)
-          -- FIXME:suspicious:
-          --   we removed debruijn indices here, but I'm not
-          --   seeing the "complementary code"?!
 
     -- Class dictionary not provided, compute it from the structure of types
     Nothing ->
@@ -1593,8 +1590,9 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
                  NestedDeclGroup -> return r
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-      -- FIXME: Question: what's the difference between this environment and env2?
-      --        Correct: ignore env2 and create result that builds on original 'env'?
+      -- FIXME: Question 1: what's the difference between this
+      --        environment and env2?  Is it correct to ignore env2
+      --        and create result that builds on original 'env'?
 
       -- FIXME[C2]: inline env'
       let env' = env { envE = Map.union rhss                   (envE env)
@@ -2404,7 +2402,7 @@ genCodeForEnum sc env nt ctors =
                                        scTupleSelector sc x i n
                          body <- scApplyAll sc funcVar funcArgs
                          scAbstractTerms sc [x] body
-                         -- FIXME: ^ use =<< idiom for clarity!
+                         -- FIXME[C2]: ^ use =<< idiom for clarity!
 
       addTypeAbstractions
         =<< scAbstractTerms sc [b]
@@ -2481,7 +2479,7 @@ genCodeForEnum sc env nt ctors =
 
       return scNthInjection
 
-  -- FIXME: rename: 'params' to 'args' [often 'params' suggest type args]
+  -- FIXME[C2]: rename: 'params' to 'args' [often 'params' suggest type args]
   -------------------------------------------------------------
   -- Create the definition for each constructor:
   defn_eachCtor <-
