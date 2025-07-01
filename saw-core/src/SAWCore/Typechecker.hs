@@ -421,9 +421,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
            (c,) <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
   ctors <-
-    case ctxBindingsOfTerms dtParams of
+    case dtParams of
       p_ctx ->
-        case ctxBindingsOfTerms dtIndices of
+        case dtIndices of
           ix_ctx ->
             forM typed_ctors $ \(c, typed_tp) ->
             -- Check that the universe level of the type of each constructor
