@@ -181,8 +181,8 @@ bindProp :: SharedContext -> C.Prop -> Text -> Env -> IO (Env, Term)
 bindProp sc prop nm env =
   (when debug $ putStrLn ("bindProp: " ++ show nm)) >>
   do
-  k <- scSort sc (mkSort 0)
-  v <- scFreshGlobal sc nm k
+  ty <- importType sc env prop
+  v <- scFreshGlobal sc nm ty
   return ( env { envP = insertSupers prop [] v (envP env)}
          , v
          )
