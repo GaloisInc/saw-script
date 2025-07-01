@@ -250,7 +250,7 @@ span.spaces    { background: white }
 <span class="lineno">  231 </span>  -- | Substitute a list of terms into an @f@
 <span class="lineno">  232 </span>  ctxSubst :: [Term] -&gt; [(LocalName, tp)] -&gt; f -&gt; m f
 <span class="lineno">  233 </span>
-<span class="lineno">  234 </span>-- | Lift an @f@ that is in an extended list of 'Bindings'
+<span class="lineno">  234 </span>-- | Lift an @f@ that is in an extended list of bindings
 <span class="lineno">  235 </span>ctxLiftInBindings :: CtxLiftSubst f m =&gt; [(LocalName, tp1)] -&gt;
 <span class="lineno">  236 </span>                     [(LocalName, tp2)] -&gt;
 <span class="lineno">  237 </span>                     [(LocalName, tp3)] -&gt;
@@ -265,7 +265,7 @@ span.spaces    { background: white }
 <span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">helper ctx1 ((str, tp) : ctx2) as =</span>
 <span class="lineno">  247 </span><span class="spaces">      </span><span class="istickedoff">helper (ctx1 ++ [<span class="nottickedoff">(str, Right tp)</span>]) ctx2 as</span></span>
 <span class="lineno">  248 </span>
-<span class="lineno">  249 </span>-- | Substitute into an @f@ that is in an extended list of 'Bindings'
+<span class="lineno">  249 </span>-- | Substitute into an @f@ that is in an extended list of bindings
 <span class="lineno">  250 </span>ctxSubstInBindings :: CtxLiftSubst f m =&gt; [Term] -&gt;
 <span class="lineno">  251 </span>                      [(LocalName, tp1)] -&gt;
 <span class="lineno">  252 </span>                      [(LocalName, tp2)] -&gt;
@@ -787,7 +787,7 @@ span.spaces    { background: white }
 <span class="lineno">  768 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs _ _ _ _ _ = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  769 </span>
 <span class="lineno">  770 </span>
-<span class="lineno">  771 </span>-- | Take in a datatype and 'Bindings' lists for its parameters and indices, and
+<span class="lineno">  771 </span>-- | Take in a datatype and bindings lists for its parameters and indices, and
 <span class="lineno">  772 </span>-- also a prospective type of a constructor for that datatype, where the
 <span class="lineno">  773 </span>-- constructor type is allowed to have the parameters but not the indices free.
 <span class="lineno">  774 </span>-- Test that the constructor type is an allowed type for a constructor of this
