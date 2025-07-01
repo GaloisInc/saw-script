@@ -83,18 +83,18 @@ mkFlatTermF :: MonadTerm m => FlatTermF Term -> m Term
 mkFlatTermF = mkTermF . FTermF
 
 -- | Build a free variable as a 'Term'
-ctxVar :: MonadTerm m => [(LocalName, tp)] -> m Term
-ctxVar ctx = mkTermF (LocalVar $ length ctx)
+ctxVar :: MonadTerm m => DeBruijnIndex -> m Term
+ctxVar i = mkTermF (LocalVar i)
 
 -- | Build a list of all the free variables as 'Term's
 ctxVars :: MonadTerm m => [(LocalName, tp)] -> m [Term]
 ctxVars ctx_top =
-  helper ctx_top []
+  helper ctx_top 0
       where
-        helper :: MonadTerm m => [(LocalName, tp)] -> [(LocalName, tp)] -> m [Term]
+        helper :: MonadTerm m => [(LocalName, tp)] -> DeBruijnIndex -> m [Term]
         helper [] _ = return []
-        helper vars_ctx ctx =
-          snoc <$> helper (init vars_ctx) (last vars_ctx : ctx) <*> ctxVar ctx
+        helper vars_ctx i =
+          snoc <$> helper (init vars_ctx) (i + 1) <*> ctxVar i
         snoc xs x = xs ++ [x]
 
 -- | Build two lists of the free variables, split at a specific point
@@ -134,7 +134,7 @@ ctxLambda1 :: MonadTerm m => LocalName -> Term ->
               (Term -> m Term) ->
               m Term
 ctxLambda1 x tp body_f =
-  do var <- ctxVar []
+  do var <- ctxVar 0
      body <- body_f var
      mkTermF (Lambda x tp body)
 
@@ -145,14 +145,14 @@ ctxLambda [] body_f = body_f []
 ctxLambda ((x, tp) : xs) body_f =
   ctxLambda1 x tp $ \_ ->
   ctxLambda xs $ \vars ->
-  do var <- ctxVar xs
+  do var <- ctxVar (length xs)
      body_f (var : vars)
 
 -- | Form a pi-abstraction as a 'Term'
 ctxPi1 :: MonadTerm m => LocalName -> Term ->
           (Term -> m Term) -> m Term
 ctxPi1 x tp body_f =
-  do var <- ctxVar []
+  do var <- ctxVar 0
      body <- body_f var
      mkTermF (Pi x tp body)
 
@@ -163,7 +163,7 @@ ctxPi [] body_f = body_f []
 ctxPi ((x, tp) : xs) body_f =
   ctxPi1 x tp $ \_ ->
   ctxPi xs $ \vars ->
-  do var <- ctxVar xs
+  do var <- ctxVar (length xs)
      body_f (var : vars)
 
 -- | Build an application of a datatype as a 'Term'
