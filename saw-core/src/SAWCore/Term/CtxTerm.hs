@@ -53,12 +53,6 @@ import SAWCore.Term.Functor
 -- * Contexts and Bindings
 --
 
--- | An identifier for a datatype that is statically associated with Haskell
--- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
--- we simplify datatypes to arbitrary Haskell types.
-newtype DataIdent = DataIdent Name
-  -- Invariant, the type of datatypes is always a closed term
-
 -- | A sequence of bindings of pairs of a variable name and a type of some form
 -- for that variable. These bindings are relative to ambient context @ctx@, use
 -- @tp@ for the variable types, and bind variables whose types are listed in
@@ -398,11 +392,11 @@ ctxAsPiMulti t = CtxMultiPi NoBind t
 ctxDataTypeM ::
   forall m.
   MonadTerm m =>
-  DataIdent ->
+  Name ->
   m CtxTermsCtx ->
   m CtxTermsCtx ->
   m CtxTerm
-ctxDataTypeM (DataIdent d) paramsM ixsM =
+ctxDataTypeM d paramsM ixsM =
   ctxApplyMultiInv (ctxApplyMultiInv t paramsM) ixsM
   where
     t :: m CtxTerm
@@ -410,10 +404,10 @@ ctxDataTypeM (DataIdent d) paramsM ixsM =
 
 -- | Test if a 'CtxTerm' is an application of a specific datatype with the
 -- supplied context of parameters and indices
-ctxAsDataTypeApp :: DataIdent -> Bindings tp1 ->
+ctxAsDataTypeApp :: Name -> Bindings tp1 ->
                     Bindings tp2 -> CtxTerm ->
                     Maybe (CtxTerms, CtxTerms)
-ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm t) =
+ctxAsDataTypeApp d params ixs (CtxTerm t) =
   do let (f, args) = asApplyAll t
      d' <- asConstant f
      guard (d == d')
@@ -428,7 +422,7 @@ ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm t) =
 ctxCtorAppM ::
   forall m.
   MonadTerm m =>
-  DataIdent ->
+  Name ->
   ExtCns Term ->
   m CtxTermsCtx ->
   m CtxTermsCtx ->
@@ -603,7 +597,7 @@ data CtorArgStruct =
 
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
 -- the parameters and of the previous arguments
-ctxCtorArgType :: MonadTerm m => DataIdent ->
+ctxCtorArgType :: MonadTerm m => Name ->
                   InvBindings CtxTerm ->
                   InvBindings CtxTerm ->
                   CtorArg ->
@@ -615,7 +609,7 @@ ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =
   (return $ invertCtxTerms ixs)
 
 -- | Convert a bindings list of 'CtorArg's to a binding list of types
-ctxCtorArgBindings :: MonadTerm m => DataIdent ->
+ctxCtorArgBindings :: MonadTerm m => Name ->
                       InvBindings CtxTerm ->
                       InvBindings CtxTerm ->
                       Bindings CtorArg ->
@@ -633,10 +627,10 @@ ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
     do bs <-
-         ctxCtorArgBindings (DataIdent d) (invertBindings ctorParams)
+         ctxCtorArgBindings d (invertBindings ctorParams)
          InvNoBind ctorArgs
        ctxPi bs $ \_ ->
-         ctxDataTypeM (DataIdent d)
+         ctxDataTypeM d
          (ctxLift InvNoBind bs $ invertCtxTerms params)
          (return $ invertCtxTerms ctorIndices))
 
@@ -652,11 +646,11 @@ ctxCtorType d (CtorArgStruct{..}) =
 --
 -- where the @pi@ are free variables for the parameters of @d@, the @ixj@
 -- are the indices of @d@, and @s@ is any sort supplied as an argument.
-ctxPRetTp :: MonadTerm m => DataIdent ->
+ctxPRetTp :: MonadTerm m => Name ->
              InvBindings CtxTerm ->
              Bindings CtxTerm -> Sort ->
              m CtxTerm
-ctxPRetTp (d :: DataIdent) params ixs s =
+ctxPRetTp d params ixs s =
   ctxPi ixs $ \ix_vars ->
   do param_vars <- ctxVars params
      dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
@@ -678,7 +672,7 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
       case (ctxBindingsOfTerms untyped_ix_ctx,
             ctxTermsForBindings p_ctx untyped_params) of
         (ExistsTp ix_ctx, Just params) ->
-          do p_ret <- (ctxPRetTp (DataIdent d)
+          do p_ret <- (ctxPRetTp d
                        (invertBindings p_ctx) ix_ctx s)
              elimClosedTerm <$>
                ctxSubst (invertCtxTerms params) InvNoBind
@@ -714,11 +708,11 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
 -- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType :: MonadTerm m =>
-  DataIdent ->
+  Name ->
   ExtCns Term ->
   CtorArgStruct ->
   m CtxTerm
-ctxCtorElimType (d_top :: DataIdent) c
+ctxCtorElimType d_top c
   (CtorArgStruct{..}) =
   (do let params = invertBindings ctorParams
       -- NOTE: we use propSort for the type of p_ret just as arbitrary sort, but
@@ -744,7 +738,7 @@ ctxCtorElimType (d_top :: DataIdent) c
   -- a slightly richer type, but we are not going to try to compute this richer
   -- type in Haskell land.
   helper :: MonadTerm m =>
-    DataIdent ->
+    Name ->
     InvBindings CtxTerm ->
     InvBindings CtxTerm ->
     Bindings CtorArg ->
@@ -761,7 +755,7 @@ ctxCtorElimType (d_top :: DataIdent) c
     -- For a constant argument type, just abstract it and continue
     (ctxPi (Bind str tp NoBind) $ \_ ->
       helper d params_pret (InvBind prevs str tp) args ixs)
-  helper (d::DataIdent) params_pret
+  helper d params_pret
     prevs (Bind str (RecursiveArg zs ts) args) ixs =
     -- For a recursive argument type of the form
     --
@@ -817,7 +811,7 @@ mkCtorElimTypeFun :: MonadTerm m =>
   CtorArgStruct ->
   m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
-  do ctxElimType <- ctxCtorElimType (DataIdent d) c argStruct
+  do ctxElimType <- ctxCtorElimType d c argStruct
      return $ \params p_ret ->
          whnfTerm =<<
          case ctxTermsForBindings ctorParams params of
@@ -940,16 +934,16 @@ ctxReduceRecursor_ rec fi args0 argCtx =
 
 -- | Generic method for testing whether a datatype occurs in an object
 class UsesDataType a where
-  usesDataType :: DataIdent -> a -> Bool
+  usesDataType :: Name -> a -> Bool
 
 instance UsesDataType (TermF Term) where
-  usesDataType (DataIdent d) (Constant d')
+  usesDataType d (Constant d')
     | d' == d = True
---  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+--  usesDataType d (FTermF (DataTypeApp d' _ _))
 --    | d' == d = True
-  usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))
+  usesDataType d (FTermF (RecursorType d' _ _ _))
     | d' == d = True
-  usesDataType (DataIdent d) (FTermF (Recursor rec))
+  usesDataType d (FTermF (Recursor rec))
     | recursorDataType rec == d = True
   usesDataType d tf = any (usesDataType d) tf
 
@@ -973,7 +967,7 @@ instance UsesDataType (Bindings CtxTerm) where
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: DataIdent -> Bindings CtxTerm ->
+asCtorDTApp :: Name -> Bindings CtxTerm ->
                Bindings CtxTerm ->
                InvBindings tp1 ->
                Bindings tp2 ->
@@ -1006,7 +1000,7 @@ data ExCtorArg =
   ExCtorArg CtorArg
 
 -- | Check that an argument for a constructor has one of the allowed forms
-asCtorArg :: DataIdent -> Bindings CtxTerm ->
+asCtorArg :: Name -> Bindings CtxTerm ->
              Bindings CtxTerm ->
              InvBindings tp ->
              CtxTerm ->
@@ -1028,7 +1022,7 @@ data CtxPiCtorArg =
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
-asPiCtorArg :: DataIdent -> Bindings CtxTerm ->
+asPiCtorArg :: Name -> Bindings CtxTerm ->
                Bindings CtxTerm ->
                InvBindings tp ->
                CtxTerm ->
@@ -1048,7 +1042,7 @@ data CtorArgsIxs =
   CtorArgsIxs (Bindings CtorArg) CtxTerms
 
 -- | Helper function for 'mkCtorArgStruct'
-mkCtorArgsIxs :: DataIdent -> Bindings CtxTerm ->
+mkCtorArgsIxs :: Name -> Bindings CtxTerm ->
                  Bindings CtxTerm ->
                  InvBindings CtorArg ->
                  CtxTerm ->
@@ -1076,7 +1070,7 @@ mkCtorArgStruct ::
   Term ->
   Maybe CtorArgStruct
 mkCtorArgStruct d params dt_ixs ctor_tp =
-  case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of
+  case mkCtorArgsIxs d params dt_ixs InvNoBind (CtxTerm ctor_tp) of
     Just (CtorArgsIxs args ctor_ixs) ->
       Just (CtorArgStruct params args ctor_ixs dt_ixs)
     Nothing -> Nothing
