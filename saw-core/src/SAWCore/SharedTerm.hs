@@ -820,7 +820,7 @@ scBuildCtor ::
   SharedContext ->
   Name {- ^ data type -} ->
   Ident {- ^ constructor name -} ->
-  CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
+  CtorArgStruct {- ^ constructor formal arguments -} ->
   IO Ctor
 scBuildCtor sc d c arg_struct =
   do
