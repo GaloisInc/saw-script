@@ -111,7 +111,7 @@ $(runIO (mkSharedContext >>= \sc ->
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
 
 debug :: Bool
-debug = True
+debug = False
 
 --------------------------------------------------------------------------------
 type CNameUnique = Int -- C.Name field type
