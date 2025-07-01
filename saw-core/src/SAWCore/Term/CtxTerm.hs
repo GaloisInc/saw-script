@@ -88,14 +88,11 @@ ctxVar i = mkTermF (LocalVar i)
 
 -- | Build a list of all the free variables as 'Term's
 ctxVars :: MonadTerm m => [(LocalName, tp)] -> m [Term]
-ctxVars ctx_top =
-  helper ctx_top 0
-      where
-        helper :: MonadTerm m => [(LocalName, tp)] -> DeBruijnIndex -> m [Term]
-        helper [] _ = return []
-        helper vars_ctx i =
-          snoc <$> helper (init vars_ctx) (i + 1) <*> ctxVar i
-        snoc xs x = xs ++ [x]
+ctxVars = helper
+  where
+    helper :: MonadTerm m => [(LocalName, tp)] -> m [Term]
+    helper [] = pure []
+    helper (_ : ctx) = (:) <$> ctxVar (length ctx) <*> helper ctx
 
 -- | Build two lists of the free variables, split at a specific point
 ctxVars2 :: MonadTerm m => [(LocalName, tp)] ->
