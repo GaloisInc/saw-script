@@ -284,31 +284,6 @@ ctxPi ((x, tp) : xs) body_f =
   do var <- ctxVar xs
      body_f (var : vars)
 
--- | Existential return type of 'ctxAsPi'
-data CtxPi =
-  CtxPi LocalName Term Term
-
--- | Test if a 'Term' is a pi-abstraction, returning its components if so.
--- Note that we are not returning any equality constraints on the input type,
--- @a@; i.e., if a term is a pi-abstraction, one would expect @a@ to have the
--- form @b -> c@, but this would require a /lot/ more work...
-ctxAsPi :: Term -> Maybe CtxPi
-ctxAsPi (unwrapTermF -> Pi x tp body) =
-  Just (CtxPi x tp body)
-ctxAsPi _ = Nothing
-
--- | Existential return type of 'ctxAsPiMulti'
-data CtxMultiPi =
-  CtxMultiPi [(LocalName, Term)] Term
-
--- | Repeatedly apply 'ctxAsPi', returning the 'Bindings' list of 0 or more
--- pi-abstraction bindings in the given term
-ctxAsPiMulti :: Term -> CtxMultiPi
-ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
-  case ctxAsPiMulti body of
-    CtxMultiPi as body' -> CtxMultiPi ((x, tp) : as) body'
-ctxAsPiMulti t = CtxMultiPi [] t
-
 -- | Build an application of a datatype as a 'Term'
 ctxDataTypeM ::
   forall m.
@@ -895,30 +870,22 @@ asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
 asCtorDTApp _ _ _ _ _ _ = Nothing
 
 
--- | Existential return type for 'asCtorArg'
-data ExCtorArg =
-  ExCtorArg CtorArg
-
 -- | Check that an argument for a constructor has one of the allowed forms
 asCtorArg :: Name -> [(LocalName, Term)] ->
              [(LocalName, Term)] ->
              InvBindings tp ->
              Term ->
-             Maybe ExCtorArg
-asCtorArg d params dt_ixs prevs (ctxAsPiMulti ->
-                                 CtxMultiPi zs
-                                 (asCtorDTApp d params dt_ixs prevs zs ->
+             Maybe CtorArg
+asCtorArg d params dt_ixs prevs (asPiList ->
+                                 (zs,
+                                  asCtorDTApp d params dt_ixs prevs zs ->
                                   Just ixs))
   | not (usesDataType d zs)
-  = Just (ExCtorArg $ RecursiveArg zs ixs)
+  = Just (RecursiveArg zs ixs)
 asCtorArg d _ _ _ tp
   | not (usesDataType d tp)
-  = Just (ExCtorArg $ ConstArg tp)
+  = Just (ConstArg tp)
 asCtorArg _ _ _ _ _ = Nothing
-
--- | Existential return type of 'asPiCtorArg'
-data CtxPiCtorArg =
-  CtxPiCtorArg LocalName CtorArg Term
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
@@ -926,32 +893,28 @@ asPiCtorArg :: Name -> [(LocalName, Term)] ->
                [(LocalName, Term)] ->
                InvBindings tp ->
                Term ->
-               Maybe CtxPiCtorArg
-asPiCtorArg d params dt_ixs prevs (ctxAsPi ->
-                                   Just (CtxPi x
-                                         (asCtorArg d params dt_ixs prevs ->
-                                          Just (ExCtorArg arg)) rest)) =
-  Just $ CtxPiCtorArg x arg rest
+               Maybe (LocalName, CtorArg, Term)
+asPiCtorArg d params dt_ixs prevs (asPi ->
+                                   Just (x,
+                                         asCtorArg d params dt_ixs prevs ->
+                                          Just arg, rest)) =
+  Just (x, arg, rest)
 asPiCtorArg _ _ _ _ _ = Nothing
-
--- | Existential return type of 'mkCtorArgsIxs'
-data CtorArgsIxs =
-  CtorArgsIxs [(LocalName, CtorArg)] [Term]
 
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs :: Name -> [(LocalName, Term)] ->
                  [(LocalName, Term)] ->
                  InvBindings CtorArg ->
                  Term ->
-                 Maybe CtorArgsIxs
+                 Maybe ([(LocalName, CtorArg)], [Term])
 mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs ->
-                                     Just (CtxPiCtorArg x arg rest)) =
+                                     Just (x, arg, rest)) =
   case mkCtorArgsIxs d params dt_ixs (InvBind prevs x arg) rest of
-    Just (CtorArgsIxs args ixs) -> Just (CtorArgsIxs ((x, arg) : args) ixs)
+    Just (args, ixs) -> Just ((x, arg) : args, ixs)
     Nothing -> Nothing
 mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs [] ->
                                      Just ixs) =
-  Just (CtorArgsIxs [] ixs)
+  Just ([], ixs)
 mkCtorArgsIxs _ _ _ _ _ = Nothing
 
 
@@ -968,6 +931,6 @@ mkCtorArgStruct ::
   Maybe CtorArgStruct
 mkCtorArgStruct d params dt_ixs ctor_tp =
   case mkCtorArgsIxs d params dt_ixs InvNoBind ctor_tp of
-    Just (CtorArgsIxs args ctor_ixs) ->
+    Just (args, ctor_ixs) ->
       Just (CtorArgStruct params args ctor_ixs dt_ixs)
     Nothing -> Nothing
