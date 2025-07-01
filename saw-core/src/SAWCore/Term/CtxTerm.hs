@@ -231,20 +231,6 @@ class Monad m => CtxLiftSubst f m where
   -- | Substitute a list of terms into an @f@
   ctxSubst :: [Term] -> DeBruijnIndex -> f -> m f
 
--- | Lift an @f@ that is in an extended list of bindings
-ctxLiftInBindings :: CtxLiftSubst f m => DeBruijnIndex ->
-                     DeBruijnIndex ->
-                     DeBruijnIndex ->
-                     f -> m f
-ctxLiftInBindings i1 i2 j = ctxLift (i1 + i2) j
-
--- | Substitute into an @f@ that is in an extended list of bindings
-ctxSubstInBindings :: CtxLiftSubst f m => [Term] ->
-                      DeBruijnIndex ->
-                      DeBruijnIndex ->
-                      f -> m f
-ctxSubstInBindings s i1 i2 = ctxSubst s (i1 + i2)
-
 instance MonadTerm m => CtxLiftSubst Term m where
   ctxLift i j t = liftTerm i j t
   ctxSubst subst i t =
@@ -271,11 +257,11 @@ instance MonadTerm m => CtxLiftSubst CtorArg m where
   ctxLift i j (ConstArg tp) = ConstArg <$> ctxLift i j tp
   ctxLift i j (RecursiveArg zs ixs) =
     RecursiveArg <$> ctxLift i j zs <*>
-    ctxLiftInBindings i (length zs) j ixs
+    ctxLift (i + length zs) j ixs
   ctxSubst subst i (ConstArg tp) = ConstArg <$> ctxSubst subst i tp
   ctxSubst subst i (RecursiveArg zs ixs) =
     RecursiveArg <$> ctxSubst subst i zs <*>
-    ctxSubstInBindings subst i (length zs) ixs
+    ctxSubst subst (i + length zs) ixs
 
 
 --
@@ -440,7 +426,7 @@ ctxCtorElimType d_top c
       -- Lift the argument and return indices into the context of p_ret
       args <- ctxLift 0 1 ctorArgs
       ixs <-
-        ctxLiftInBindings 0 (length ctorArgs) 1
+        ctxLift (length ctorArgs) 1
         ctorIndices
       -- Form the context (params ::> p_ret)
       let params_pret = params ++ [("_", p_ret_tp)]
@@ -494,7 +480,7 @@ ctxCtorElimType d_top c
                                 (return ts))
       -- Lift zs and ts into the context of arg
       zs' <- ctxLift 0 1 zs
-      ts' <- ctxLiftInBindings 0 (length zs) 1 ts
+      ts' <- ctxLift (length zs) 1 ts
       -- Build the pi-abstraction for arg
       ctxPi1 str arg_tp $ \arg ->
         do rest <-
@@ -531,9 +517,9 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
          case ctxTermsForBindings ctorParams params of
            Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
            Just paramsCtx ->
-             ctxSubstInBindings
+             ctxSubst
              (paramsCtx ++ [p_ret])
-             0 0 ctxElimType
+             0 ctxElimType
 
 
 -- | Reduce an application of a recursor to a particular constructor.
@@ -608,8 +594,8 @@ ctxReduceRecursor_ rec fi args0 argCtx =
 
     -- process an argument that is a recursive call
     mk_args pre_xs (x : xs) ((_, RecursiveArg zs ixs) : args) =
-      do zs'  <- ctxSubstInBindings pre_xs 0 0 zs
-         ixs' <- ctxSubstInBindings pre_xs 0 (length zs) ixs
+      do zs'  <- ctxSubst pre_xs 0 zs
+         ixs' <- ctxSubst pre_xs (length zs) ixs
          recx <- mk_rec_arg zs' ixs' x
          tl   <- mk_args (pre_xs ++ [x]) xs args
          pure (x : recx : tl)
