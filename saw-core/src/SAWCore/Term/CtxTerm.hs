@@ -53,6 +53,13 @@ ctxTermsForBindings bs ts
   | length bs == length ts = Just ts
   | otherwise = Nothing
 
+-- | Zip two lists of equal length, but return 'Nothing' if the
+-- lengths are different.
+zipSameLength :: [a] -> [b] -> Maybe [(a, b)]
+zipSameLength xs ys
+  | length xs == length ys = Just (zip xs ys)
+  | otherwise = Nothing
+
 --
 -- * Operations on Terms-in-Context
 --
@@ -545,9 +552,9 @@ ctxReduceRecursor :: forall m.
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
   m Term
 ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =
-  case ctxTermsForBindings ctorArgs c_args of
-     Just argsCtx ->
-       ctxReduceRecursor_ rec elimf argsCtx ctorArgs
+  case zipSameLength c_args ctorArgs of
+     Just argsCtx_ctorArgs ->
+       ctxReduceRecursor_ rec elimf argsCtx_ctorArgs
      Nothing ->
        error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
 
@@ -560,37 +567,33 @@ ctxReduceRecursor_ :: forall m.
   MonadTerm m =>
   Term     {- ^ recursor value eliminatiting data type d -}->
   Term     {- ^ eliminator function for the constructor -} ->
-  [Term]    {- ^ constructor actual arguments -} ->
-  [(LocalName, CtorArg)]
-    {- ^ telescope describing the constructor arguments -} ->
+  [(Term, (LocalName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
   m Term
-ctxReduceRecursor_ rec fi args0 argCtx =
-  do args <- mk_args [] args0 argCtx
+ctxReduceRecursor_ rec fi args0_argCtx =
+  do args <- mk_args [] args0_argCtx
      whnfTerm =<< foldM (\f arg -> mkTermF $ App f arg) fi args
 
  where
     mk_args :: [Term] ->  -- already processed parameters/arguments
-               [Term] ->     -- remaining actual arguments to process
-               [(LocalName, CtorArg)] ->
+               [(Term, (LocalName, CtorArg))] ->
+                 -- remaining actual arguments to process, with
                  -- telescope for typing the actual arguments
                m [Term]
     -- no more arguments to process
-    mk_args _ _ [] = return []
+    mk_args _ [] = return []
 
     -- process an argument that is not a recursive call
-    mk_args pre_xs (x : xs) ((_, ConstArg _) : args) =
-      do tl <- mk_args (pre_xs ++ [x]) xs args
+    mk_args pre_xs ((x, (_, ConstArg _)) : xs_args) =
+      do tl <- mk_args (pre_xs ++ [x]) xs_args
          pure (x : tl)
 
     -- process an argument that is a recursive call
-    mk_args pre_xs (x : xs) ((_, RecursiveArg zs ixs) : args) =
+    mk_args pre_xs ((x, (_, RecursiveArg zs ixs)) : xs_args) =
       do zs'  <- ctxSubst pre_xs 0 zs
          ixs' <- ctxSubst pre_xs (length zs) ixs
          recx <- mk_rec_arg zs' ixs' x
-         tl   <- mk_args (pre_xs ++ [x]) xs args
+         tl   <- mk_args (pre_xs ++ [x]) xs_args
          pure (x : recx : tl)
-
-    mk_args _ _ _ = error "mk_args: impossible"
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
