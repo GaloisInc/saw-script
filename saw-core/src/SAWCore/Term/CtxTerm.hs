@@ -17,16 +17,11 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Term.CtxTerm
   (
-    -- * Terms in Context
-    ctxTermsForBindings
     -- * Operations on Terms-in-Context
-  , MonadTerm(..)
+    MonadTerm(..)
   , ctxLambda, ctxPi, ctxPi1
-    -- * Generalized Lifting and Substitution
-  , CtxLiftSubst(..), ctxLiftInBindings
-  , mkLiftedClosedTerm
     -- * Constructor Argument Types
-  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType
+  , CtorArg(..), CtorArgStruct(..), ctxCtorType
     -- * Computing with Eliminators
   , mkPRetTp
   , ctxCtorElimType, mkCtorElimTypeFun
@@ -303,10 +298,6 @@ instance MonadTerm m => CtxLiftSubst CtorArg m where
   ctxSubst subst ctx (RecursiveArg zs ixs) =
     RecursiveArg <$> ctxSubst subst ctx zs <*>
     ctxSubstInBindings subst ctx zs ixs
-
--- | Make a closed term and then lift it into a context
-mkLiftedClosedTerm :: MonadTerm m => [(LocalName, tp)] -> Term -> m Term
-mkLiftedClosedTerm inners t = ctxLift [] inners t
 
 
 --
