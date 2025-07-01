@@ -1594,11 +1594,9 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       --        environment and env2?  Is it correct to ignore env2
       --        and create result that builds on original 'env'?
 
-      -- FIXME[C2]: inline env'
-      let env' = env { envE = Map.union rhss                   (envE env)
-                     , envC = Map.union (fmap C.dSignature dm) (envC env)
-                     }
-      return env'
+      return env { envE = Map.union rhss                   (envE env)
+                 , envC = Map.union (fmap C.dSignature dm) (envC env)
+                 }
 
   where
   panicForeignNoExpr decl = panic "importDeclGroup" [
