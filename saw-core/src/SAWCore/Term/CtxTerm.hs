@@ -183,9 +183,7 @@ ctxAsDataTypeApp d params ixs t =
      guard (d == d')
      guard (length args == length params + length ixs)
      let (params', ixs') = splitAt (length params) args
-     params_ret <- ctxTermsForBindings params params'
-     ixs_ret <- ctxTermsForBindings ixs ixs'
-     pure (params_ret, ixs_ret)
+     pure (params', ixs')
 
 
 -- | Build an application of a constructor as a 'Term'
