@@ -44,14 +44,6 @@ import SAWCore.Term.Functor
 
 
 --
--- * Contexts and Bindings
---
-
--- | Map over all types in an inverted bindings list
-mapInvBindings :: (f -> g) -> [(LocalName, f)] -> [(LocalName, g)]
-mapInvBindings f = map (fmap f)
-
---
 -- * Terms In Context
 --
 
@@ -261,7 +253,7 @@ ctxLiftInBindings :: CtxLiftSubst f m => [(LocalName, tp1)] ->
                      [(LocalName, tp2)] ->
                      [(LocalName, tp3)] ->
                      f -> m f
-ctxLiftInBindings = helper . mapInvBindings (Left)
+ctxLiftInBindings = helper . map (fmap Left)
   where
     helper :: CtxLiftSubst f m => [(LocalName, Either tp1 tp2)] ->
               [(LocalName, tp2)] ->
@@ -277,7 +269,7 @@ ctxSubstInBindings :: CtxLiftSubst f m => [Term] ->
                       [(LocalName, tp2)] ->
                       f -> m f
 ctxSubstInBindings subst =
-  helper subst . mapInvBindings Left where
+  helper subst . map (fmap Left) where
   helper :: CtxLiftSubst f m => [Term] ->
             [(LocalName, Either tp1 tp2)] ->
             [(LocalName, tp2)] ->
