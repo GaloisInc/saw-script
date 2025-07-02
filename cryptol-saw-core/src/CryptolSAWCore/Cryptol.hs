@@ -2657,6 +2657,7 @@ newIdent name suffix =
        --        the prelude but to the module where the Enum (or ...)
        --        is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
+
 --------------------------------------------------------------------------------
 -- Utility Functions:
 
