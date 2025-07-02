@@ -6175,7 +6175,7 @@ primitives = Map.fromList
     , "representation of the given Term."
     ]
 
-  , prim "approxmc"  "Term -> TopLevel String"
+  , prim "approxmc"  "Term -> TopLevel ()"
     (pureVal approxmc)
     Current
     [ "Use the approxmc solver to approximate the number of solutions to the"
