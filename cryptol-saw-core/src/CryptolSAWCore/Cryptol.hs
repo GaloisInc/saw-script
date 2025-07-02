@@ -456,7 +456,7 @@ provePropRec sc env prop0 prop =
     -- Class dictionary was provided as an argument
     Just (prf, fs) ->
        do -- apply field projections as necessary to compute superclasses
-          -- NB: reverse the order of the fields, see
+          -- NB: reverse the order of the fields
           foldM (scRecordSelect sc) prf (reverse fs)
 
     -- Class dictionary not provided, compute it from the structure of types
@@ -1578,8 +1578,9 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
       -- and take its fixpoint
       rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
-      -- finally, build projections from the fixed record to shove into the environment
-      -- if toplevel, then wrap each binding with a Constant constructor
+      -- finally, build projections from the fixed record to shove
+      -- into the environment if toplevel, then wrap each binding with
+      -- a Constant constructor
       let mkRhs d t =
             do let s = nameToFieldName (C.dName d)
                r <- scRecordSelect sc rhs s
@@ -1590,10 +1591,9 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                  NestedDeclGroup -> return r
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-      -- FIXME: Question 1: what's the difference between this
-      --        environment and env2?  Is it correct to ignore env2
-      --        and create result that builds on original 'env'?
-
+     -- NOTE: The envE fields of env2 and the following Env
+     -- are different.  The same names bound in env2 are now bound to
+     -- the output of the fixed-point operator:
       return env0 { envE = Map.union rhss                   (envE env0)
                   , envC = Map.union (fmap C.dSignature dm) (envC env0)
                   }
@@ -1606,7 +1606,6 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
     ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
-
   rhs <- case C.dDefinition decl of
     C.DForeign _ mexpr
       | TopLevelDeclGroup _ <- declOpts ->
@@ -2253,7 +2252,6 @@ genCodeForEnum sc env nt ctors =
       addTypeAbstractions :: Term -> IO Term
       addTypeAbstractions t = scAbstractTerms sc tyParamsVars t
 
-      -- FIXME: ^ inline or keep?
   -------------------------------------------------------------
   -- Common naming conventions:
   let sumTy_ident = identOfEnumType ntName'
@@ -2468,7 +2466,6 @@ genCodeForEnum sc env nt ctors =
 
       return scNthInjection
 
-  -- FIXME[C2]: rename: 'params' to 'args' [often 'params' suggest type args]
   -------------------------------------------------------------
   -- Create the definition for each constructor:
   defn_eachCtor <-
@@ -2666,5 +2663,5 @@ mapAccumLM f acc (x:xs) = do
                           (acc', y) <- f acc x
                           (acc'', ys) <- mapAccumLM f acc' xs
                           return (acc'', y:ys)
-  -- FIXME: When support ends for ghc-9.4.8, we can remove definition and call
-  --   Data.Traversable.mapAccumM instead.
+  -- FIXME: When support ends for ghc-9.4.8, we can remove this
+  -- definition and call Data.Traversable.mapAccumM instead.
