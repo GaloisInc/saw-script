@@ -6029,7 +6029,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_find_symbol_commands"
-    "HeapsterEnv -> String -> TopLevel [String]"
+    "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_symbol_commands)
     Experimental
     [ "Map a search string str to a newline-separated sequence of SAW-script "
