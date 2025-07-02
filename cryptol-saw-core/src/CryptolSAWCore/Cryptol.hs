@@ -110,9 +110,6 @@ $(runIO (mkSharedContext >>= \sc ->
           scLoadPreludeModule sc >> scLoadCryptolModule sc >>
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
 
-debug :: Bool
-debug = False
-
 --------------------------------------------------------------------------------
 type CNameUnique = Int -- C.Name field type
 
@@ -144,7 +141,6 @@ emptyEnv =
 --                 - the SAWCore term for the type variable.
 bindTParam' :: SharedContext -> C.TParam -> Env -> IO (Env, Term, Term)
 bindTParam' sc tp env =
-  (when debug $ putStrLn ("bindTParam': " ++ show tp)) >>
   do
   k <- importKind sc (C.tpKind tp)
   v <- scFreshGlobal sc (tparamToLocalName tp) k
@@ -179,7 +175,6 @@ bindName sc name schema env = do
 
 bindProp :: SharedContext -> C.Prop -> Text -> Env -> IO (Env, Term)
 bindProp sc prop nm env =
-  (when debug $ putStrLn ("bindProp: " ++ show nm)) >>
   do
   ty <- importType sc env prop
   v <- scFreshGlobal sc nm ty
@@ -285,7 +280,6 @@ importPC sc pc =
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: HasCallStack => SharedContext -> Env -> C.Type -> IO Term
 importType sc env ty =
-  (when debug $ putStrLn ("importType: " ++ show ty)) >>
   case ty of
     C.TVar tvar ->
       case tvar of
@@ -458,7 +452,6 @@ proveProp sc env prop = provePropRec sc env prop prop
 -- be able to print it)
 provePropRec :: HasCallStack => SharedContext -> Env -> C.Prop -> C.Prop -> IO Term
 provePropRec sc env prop0 prop =
-  (when debug $ putStrLn ("provePropRec:  " ++ show prop0)) >>
   case Map.lookup (normalizeProp prop) (envP env) of
 
     -- Class dictionary was provided as an argument
@@ -1490,7 +1483,6 @@ importName cnm =
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 importDeclGroup declOpts sc env (C.Recursive decls) =
-  (when debug $ putStrLn ("importDeclGroup: ")) >>
   case decls of
 
     [decl] ->
