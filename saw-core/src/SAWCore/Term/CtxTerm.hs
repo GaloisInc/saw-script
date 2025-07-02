@@ -42,10 +42,6 @@ import SAWCore.Term.Functor
 -- * Terms In Context
 --
 
--- | Get the head and tail of a non-empty '[Term]' list
-ctxTermsCtxHeadTail :: [Term] -> ([Term], Term)
-ctxTermsCtxHeadTail as = (init as, last as)
-
 -- | Take a list of terms and match them up with a sequence of bindings,
 -- returning a structured '[Term]' list.
 ctxTermsForBindings :: [(LocalName, tp)] -> [Term] -> Maybe [Term]
@@ -426,9 +422,9 @@ ctxCtorElimType d_top c
         ctxLift (length ctorArgs) 1
         ctorIndices
       -- Form the context (params ::> p_ret)
-      let params_pret = params ++ [("_", p_ret_tp)]
+      let pret = ("_", p_ret_tp)
       -- Call the helper and cast the result to (Typ ret)
-      helper d_top params_pret [] args ixs
+      helper d_top params pret [] args ixs
   ) where
 
   -- Iterate through the argument types of the constructor, building up a
@@ -439,22 +435,25 @@ ctxCtorElimType d_top c
   helper :: MonadTerm m =>
     Name ->
     [(LocalName, Term)] ->
+    (LocalName, Term) ->
     [(LocalName, Term)] ->
     [(LocalName, CtorArg)] ->
     [Term] ->
     m Term
-  helper d params_pret prevs [] ret_ixs =
+  helper d params pret prevs [] ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
-    do (vars, prev_vars) <- ctxVars2 params_pret prevs
-       let (param_terms, p_ret) = ctxTermsCtxHeadTail vars
+    do (vars, prev_vars) <- ctxVars2 (params ++ [pret]) prevs
+       -- note: length vars == length (params ++ [pret])
+       let param_terms = init vars
+       let p_ret = last vars
        ctxApply (ctxApplyMulti (return p_ret) (return ret_ixs)) $
          ctxCtorAppM d c (return param_terms) (return prev_vars)
-  helper d params_pret prevs ((str, ConstArg tp) : args) ixs =
+  helper d params pret prevs ((str, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
     (ctxPi [(str, tp)] $ \_ ->
-      helper d params_pret (prevs ++ [(str, tp)]) args ixs)
-  helper d params_pret
+      helper d params pret (prevs ++ [(str, tp)]) args ixs)
+  helper d params pret
     prevs ((str, RecursiveArg zs ts) : args) ixs =
     -- For a recursive argument type of the form
     --
@@ -469,8 +468,10 @@ ctxCtorElimType d_top c
     -- where rest is the result of a recursive call
     do
       -- Build terms for the params and p_ret variables
-      (param_vars, p_ret) <-
-        ctxTermsCtxHeadTail <$> fst <$> ctxVars2 params_pret prevs
+      vars <- fst <$> ctxVars2 (params ++ [pret]) prevs
+      -- note: length vars == length (params ++ [pret])
+      let param_vars = init vars
+      let p_ret = last vars
       -- Build the type of the argument arg
       arg_tp <- ctxPi zs (\_ -> ctxDataTypeM d
                                 (ctxLift 0 (length zs) param_vars)
@@ -481,7 +482,7 @@ ctxCtorElimType d_top c
       -- Build the pi-abstraction for arg
       ctxPi1 str arg_tp $ \arg ->
         do rest <-
-             helper d params_pret (prevs ++ [(str, arg_tp)]) args ixs
+             helper d params pret (prevs ++ [(str, arg_tp)]) args ixs
            -- Build the type of ih, in the context of arg
            ih_tp <- ctxPi zs' $ \z_vars ->
              ctxApply
