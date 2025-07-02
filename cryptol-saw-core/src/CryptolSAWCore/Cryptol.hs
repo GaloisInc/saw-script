@@ -111,12 +111,11 @@ $(runIO (mkSharedContext >>= \sc ->
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
 
 --------------------------------------------------------------------------------
-type CNameUnique = Int -- C.Name field type
 
 -- | Type Environments
 --   SharedTerms are paired with a deferred shift amount for loose variables
 data Env = Env
-  { envT :: Map CNameUnique Term  -- ^ Type variables are referenced by unique id
+  { envT :: Map Int    Term  -- ^ Type variables are referenced by unique id
   , envE :: Map C.Name Term       -- ^ Term variables are referenced by name
   , envP :: Map C.Prop (Term, [FieldName])
               -- ^ Bound propositions are referenced implicitly by their types
@@ -1482,9 +1481,8 @@ importName cnm =
 -- Cryptol expressions if a Cryptol implementation exists, and as an
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
-importDeclGroup declOpts sc env (C.Recursive decls) =
+importDeclGroup declOpts sc env0 (C.Recursive decls) =
   case decls of
-
     [decl] ->
       case C.dDefinition decl of
 
@@ -1499,13 +1497,14 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
             Nothing -> panicForeignNoExpr decl
             Just expr -> addExpr expr
 
-        C.DExpr expr -> addExpr expr
+        C.DExpr expr ->
+          addExpr expr
 
       where
       addExpr expr = do
         let ty = C.dSignature decl
             nm = C.dName decl
-        (env1,v,t') <- bindName sc nm ty env
+        (env1,v,t') <- bindName sc nm ty env0
         e' <- importExpr' sc env1 ty expr
         f' <- scAbstractTerms sc [v] e'
         rhs <- scGlobalApply sc "Prelude.fix" [t', f']
@@ -1513,10 +1512,11 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
                   TopLevelDeclGroup _ ->
                     do nmi <- importName nm
                        scConstant' sc nmi rhs t'
-                  NestedDeclGroup -> return rhs
-        return env { envE = Map.insert nm rhs' (envE env)
-                   , envC = Map.insert nm ty   (envC env)
-                   }
+                  NestedDeclGroup ->
+                    return rhs
+        return env0 { envE = Map.insert nm rhs' (envE env0)
+                    , envC = Map.insert nm ty   (envC env0)
+                    }
 
     -- - A group of mutually-recursive declarations -
     -- We handle this by "tupling up" all the declarations using a record and
@@ -1527,39 +1527,47 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
       -- the types of the declarations
-      tm <- traverse (importSchema sc env . C.dSignature) dm
+      tm <- traverse (importSchema sc env0 . C.dSignature) dm
 
       -- the type of the recursive record
       rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
 
-      -- grab a reference to the outermost variable; this will be the record in the body
-      -- of the lambda we build later
+      -- grab a reference to the outermost variable; this will be the record
+      -- in the body of the lambda we build later
       v0 <- scFreshGlobal sc "fixRecord" rect
 
       -- build a list of projections from a record variable
       vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
 
-      let env2 = env { envE = Map.union vm                     (envE env)
-                     , envC = Map.union (fmap C.dSignature dm) (envC env)
-                     }
-
-      let extractDeclExpr decl =
-            case C.dDefinition decl of
-              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-              C.DForeign _ mexpr ->
-                case mexpr of
-                  Nothing -> panicForeignNoExpr decl
-                  Just expr ->
-                    importExpr' sc env2 (C.dSignature decl) expr
-              C.DPrim ->
-                panic "importDeclGroup" [
-                    "Primitive declarations cannot be recursive (multiple decls): " <>
-                        Text.pack (show (C.dName decl)),
-                    "   " <> Text.pack (pretty decl)
-                ]
-
       -- the raw imported bodies of the declarations
-      em <- traverse extractDeclExpr dm
+      em <- do
+            let
+                -- | In env2 the names of the recursively-defined
+                -- functions/values are bound to projections from the
+                -- local variable of the fixed-point operator (for use
+                -- in translating the definition bodies).
+                env2 =
+                  env0 { envE = Map.union vm                     (envE env0)
+                       , envC = Map.union (fmap C.dSignature dm) (envC env0)
+                       }
+
+                extractDeclExpr decl =
+                  case C.dDefinition decl of
+                    C.DExpr expr ->
+                      importExpr' sc env2 (C.dSignature decl) expr
+                    C.DForeign _ mexpr ->
+                      case mexpr of
+                        Nothing -> panicForeignNoExpr decl
+                        Just expr ->
+                          importExpr' sc env2 (C.dSignature decl) expr
+                    C.DPrim ->
+                      panic "importDeclGroup" [
+                        "Primitive declarations cannot be recursive (multiple decls): "
+                        <> Text.pack (show (C.dName decl))
+                      , "   " <> Text.pack (pretty decl)
+                      ]
+
+            traverse extractDeclExpr dm
 
       -- the body of the recursive record
       recv <- scRecord sc (Map.mapKeys nameToFieldName em)
@@ -1586,9 +1594,9 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       --        environment and env2?  Is it correct to ignore env2
       --        and create result that builds on original 'env'?
 
-      return env { envE = Map.union rhss                   (envE env)
-                 , envC = Map.union (fmap C.dSignature dm) (envC env)
-                 }
+      return env0 { envE = Map.union rhss                   (envE env0)
+                  , envC = Map.union (fmap C.dSignature dm) (envC env0)
+                  }
 
   where
   panicForeignNoExpr decl = panic "importDeclGroup" [
@@ -2181,15 +2189,6 @@ genCodeForNominalTypes sc nominalMap env0 =
             e <- importExpr sc env fnWithTAbs
             return [(conNm, e)]
 
--- FIXME: ?
-mapAccumLM :: (Monad m) => (a -> x -> m (a, y)) -> a -> [x] -> m (a, [y])
-mapAccumLM _ acc []     = return (acc, [])
-mapAccumLM f acc (x:xs) =
-  do
-  (acc', y) <- f acc x
-  (acc'', ys) <- mapAccumLM f acc' xs
-  return (acc'', y:ys)
-
 
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
@@ -2331,7 +2330,7 @@ genCodeForEnum sc env nt ctors =
   -- > ETT ts = EithersV (ETT__LS ts);
   --
 
-  -- the Typelist(tl) applied to the type arguments.
+  -- the Typelist(tl) applied to the type parameters.
   tl_applied <- scGlobalApply sc tl_ident tyParamsVars
 
   sumTy_type <- scFunAll sc tyParamsKinds sort0
@@ -2486,14 +2485,14 @@ genCodeForEnum sc env nt ctors =
         -- SAWCore code.
 
         -- create the vars (& names) for constructor arguments:
-        let paramNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
-        paramVars <- zipWithM (scFreshGlobal sc) paramNames argTypes
+        let argNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
+        argVars <- zipWithM (scFreshGlobal sc) argNames argTypes
 
         -- create the constructor:
         ctorBody <- addTypeAbstractions
-                      =<< scAbstractTerms sc paramVars
+                      =<< scAbstractTerms sc argVars
                       =<< scNthInjection ctorNumber
-                      =<< scTuple sc paramVars
+                      =<< scTuple sc argVars
         assertSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
         return (ctorName, ctorBody)
 
@@ -2658,3 +2657,14 @@ newIdent name suffix =
        -- FIXME: These generated definitions should not be added to the prelude but to
        --        the module where the Enum (or ...) is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
+--------------------------------------------------------------------------------
+-- Utility Functions:
+
+mapAccumLM :: (Monad m) => (a -> x -> m (a, y)) -> a -> [x] -> m (a, [y])
+mapAccumLM _ acc []     = return (acc, [])
+mapAccumLM f acc (x:xs) = do
+                          (acc', y) <- f acc x
+                          (acc'', ys) <- mapAccumLM f acc' xs
+                          return (acc'', y:ys)
+  -- FIXME: When support ends for ghc-9.4.8, we can remove definition and call
+  --   Data.Traversable.mapAccumM instead.
