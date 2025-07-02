@@ -43,7 +43,7 @@ module CryptolSAWCore.Cryptol
 
   ) where
 
-import Control.Monad (foldM, forM, join, when, unless)
+import Control.Monad (foldM, forM, zipWithM, join, when, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -110,25 +110,20 @@ $(runIO (mkSharedContext >>= \sc ->
           scLoadPreludeModule sc >> scLoadCryptolModule sc >>
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
 
-
 --------------------------------------------------------------------------------
+
 -- | Type Environments
 --   SharedTerms are paired with a deferred shift amount for loose variables
 data Env = Env
-  { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
-  , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop (Term, [FieldName], Int)
+  { envT :: Map Int    Term  -- ^ Type variables are referenced by unique id
+  , envE :: Map C.Name Term       -- ^ Term variables are referenced by name
+  , envP :: Map C.Prop (Term, [FieldName])
               -- ^ Bound propositions are referenced implicitly by their types
               --   The actual class dictionary we need is obtained by applying the
               --   given field selectors (in reverse order!) to the term.
+
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
-  , envS :: [Term]                 -- ^ SAWCore bound variable environment (for type checking)
-              -- FIXME: assuming this environment is to be indexed by De Bruijn indexes?
-              -- FIXME: this field appears to be never read
-              --   - verify and remove if so.
-              --   - guessing that this would be useful if we want to do a SAWCore type check
-              --     on an expression with free vars (which would be in this @envS@).
-              -- FIXME: if this remains, use Vector instead.
+
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
@@ -136,69 +131,55 @@ data Env = Env
 
 emptyEnv :: Env
 emptyEnv =
-  Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
+  Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
--- FIXME: Regarding De Bruijn indices and documenting the use of
---   - are there abstractions (better abstractions) for managing them?
---   - should they really belong in this module?
---   - The term 'lift' is highly overused, how about another term?
 
--- FIXME: Can we define the terminology here (or elsewhere):
---   - loose = ?  same as free?
---   - 'dangling bound variables' = ??
---   - 'deferred shift amount' = ??
-
--- FIXME: A small effort has been made in this module to document the assumptions
--- regarding the De Bruijn assumptions/conventions of the generated SAWCore.
--- More of this would be desirable.
-
-liftTerm :: (Term, Int) -> (Term, Int)
-liftTerm (t, j) = (t, j + 1)
-
-liftProp :: (Term, [FieldName], Int) -> (Term, [FieldName], Int)
-liftProp (t, fns, j) = (t, fns, j + 1)
-
--- | Increment dangling bound variables of various sorts in environment.
-liftEnv :: Env -> Env
-liftEnv env =
-  Env { envT = fmap liftTerm (envT env)
-      , envE = fmap liftTerm (envE env)
-      , envP = fmap liftProp (envP env)
-      , envC = envC env
-      , envS = envS env
-      , envRefPrims = envRefPrims env
-      , envPrims = envPrims env
-      , envPrimTypes = envPrimTypes env
-      }
-
-bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
-bindTParam sc tp env = do
-  let env' = liftEnv env
-  v <- scLocalVar sc 0
+-- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
+--                 - environment
+--                 - the SAWCore kind of the parameter
+--                 - the SAWCore term for the type variable.
+bindTParam' :: SharedContext -> C.TParam -> Env -> IO (Env, Term, Term)
+bindTParam' sc tp env =
+  do
   k <- importKind sc (C.tpKind tp)
-  return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
-                , envS = k : envS env
-                }
+  v <- scFreshGlobal sc (tparamToLocalName tp) k
+  return ( env { envT = Map.insert (C.tpUnique tp) v (envT env)
+               }
+         , v
+         , k
+         )
 
--- | bindName - bind name in appropriate environments to De Bruijn index 0.
-bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
+-- | bindTParam - create a binding for a type parameter, just return
+--                the new environment and the new sawcore type var (as Term).
+bindTParam :: SharedContext -> C.TParam -> Env -> IO (Env, Term)
+bindTParam sc tp env =
+  do
+  (e,v,_) <- bindTParam' sc tp env
+  return (e,v)
+
+
+-- | bindName - create a new binding, adding to appropriate
+--              environments; return 3-tuple
+--               - the updated environment,
+--               - the new SAWCore var (as a Term), and
+--               - the SAWCore type of the variable.
+bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO (Env,Term,Term)
 bindName sc name schema env = do
-  let env' = liftEnv env
-  v <- scLocalVar sc 0
-  t <- importSchema sc env schema
-  return $ env' { envE = Map.insert name (v, 0) (envE env')
-                , envC = Map.insert name schema (envC env')
-                , envS = t : envS env'
-                }
+  ty <- importSchema sc env schema
+  v  <- scFreshGlobal sc (nameToLocalName name) ty
+  let env' = env { envE = Map.insert name v      (envE env)
+                 , envC = Map.insert name schema (envC env)
+                 }
+  return (env', v, ty)
 
-bindProp :: SharedContext -> C.Prop -> Env -> IO Env
-bindProp sc prop env = do
-  let env' = liftEnv env
-  v <- scLocalVar sc 0
-  k <- scSort sc (mkSort 0)
-  return $ env' { envP = insertSupers prop [] v (envP env')
-                , envS = k : envS env'
-                }
+bindProp :: SharedContext -> C.Prop -> Text -> Env -> IO (Env, Term)
+bindProp sc prop nm env =
+  do
+  ty <- importType sc env prop
+  v <- scFreshGlobal sc nm ty
+  return ( env { envP = insertSupers prop [] v (envP env)}
+         , v
+         )
 
 -- | When we insert a non-erasable prop into the environment, make
 --   sure to also insert all its superclasses.  We arrange it so
@@ -208,14 +189,14 @@ insertSupers ::
   C.Prop ->
   [FieldName] {- Field names to project the associated class (in reverse order) -} ->
   Term ->
-  Map C.Prop (Term, [FieldName], Int) ->
-  Map C.Prop (Term, [FieldName], Int)
+  Map C.Prop (Term, [FieldName]) ->
+  Map C.Prop (Term, [FieldName])
 insertSupers prop fs v m
   -- If the prop is already in the map, stop
   | Just _ <- Map.lookup prop m = m
 
   -- Insert the prop and check if it has any superclasses that also need to be added
-  | otherwise = Map.insert (normalizeProp prop) (v, fs, 0) $ go prop
+  | otherwise = Map.insert (normalizeProp prop) (v, fs) $ go prop
 
  where
  super p f t = insertSupers (C.TCon (C.PC p) [t]) (f:fs) v
@@ -306,7 +287,7 @@ importType sc env ty =
                 "TVFree in TVar is not supported: " <> Text.pack (pretty ty)
             ]
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
-            Just (t, j) -> incVars sc 0 j t
+            Just t -> pure t
             Nothing ->
               panic "importType" [
                   "found TVar that's TVBound but doesn't exist: " <> Text.pack (show $ pp v)
@@ -443,18 +424,21 @@ nameToFieldName :: C.Name -> FieldName
 nameToFieldName = C.identText . C.nameIdent
 
 tparamToLocalName :: C.TParam -> LocalName
-tparamToLocalName tp = maybe (Text.pack ("u" ++ show (C.tpUnique tp))) nameToLocalName (C.tpName tp)
+tparamToLocalName tp =
+  maybe (Text.pack ("u" ++ show (C.tpUnique tp)))
+        nameToLocalName
+        (C.tpName tp)
 
 importPolyType :: SharedContext -> Env -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
 importPolyType sc env [] props ty = importPropsType sc env props ty
 importPolyType sc env (tp : tps) props ty =
-  do k <- importKind sc (C.tpKind tp)
-     env' <- bindTParam sc tp env
+  do (env',a) <- bindTParam sc tp env
      t <- importPolyType sc env' tps props ty
-     scPi sc (tparamToLocalName tp) k t
+     scGeneralizeTerms sc [a] t
 
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
-importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
+importSchema sc env (C.Forall tparams props ty) =
+  importPolyType sc env tparams props ty
 
 -- entry point
 proveProp :: HasCallStack => SharedContext -> Env -> C.Prop -> IO Term
@@ -470,12 +454,10 @@ provePropRec sc env prop0 prop =
   case Map.lookup (normalizeProp prop) (envP env) of
 
     -- Class dictionary was provided as an argument
-    Just (prf, fs, j) ->
-       do -- shift deBruijn indicies by j
-          v <- incVars sc 0 j prf
-          -- apply field projections as necessary to compute superclasses
+    Just (prf, fs) ->
+       do -- apply field projections as necessary to compute superclasses
           -- NB: reverse the order of the fields
-          foldM (scRecordSelect sc) v (reverse fs)
+          foldM (scRecordSelect sc) prf (reverse fs)
 
     -- Class dictionary not provided, compute it from the structure of types
     Nothing ->
@@ -1180,14 +1162,13 @@ importExpr sc env expr =
 
     C.EVar qname ->
       case Map.lookup qname (envE env) of
-        Just (e', j) -> incVars sc 0 j e'
-        Nothing      -> panic "importExpr" ["Unknown variable: " <> Text.pack (show qname)]
+        Just e' -> pure e'
+        Nothing -> panic "importExpr" ["Unknown variable: " <> Text.pack (show qname)]
 
     C.ETAbs tp e ->
-      do env' <- bindTParam sc tp env
-         k <- importKind sc (C.tpKind tp)
+      do (env',a) <- bindTParam sc tp env
          e' <- importExpr sc env' e
-         scLambda sc (tparamToLocalName tp) k e'
+         scAbstractTerms sc [a] e'
 
     C.ETApp e t ->
       do e' <- importExpr sc env e
@@ -1209,18 +1190,16 @@ importExpr sc env expr =
          scApply sc e1' e2'
 
     C.EAbs x t e ->
-      do t' <- importType sc env t
-         env' <- bindName sc x (C.tMono t) env
+      do (env',v,_) <- bindName sc x (C.tMono t) env
          e' <- importExpr sc env' e
-         scLambda sc (nameToLocalName x) t' e'
+         scAbstractTerms sc [v] e'
 
     C.EProofAbs prop e
       | isErasedProp prop -> importExpr sc env e
       | otherwise ->
-        do p' <- importType sc env prop
-           env' <- bindProp sc prop env
+        do (env',v) <- bindProp sc prop "_P" env
            e' <- importExpr sc env' e
-           scLambda sc "_P" p' e'
+           scAbstractTerms sc [v] e'
 
     C.EProofApp e ->
       case fastSchemaOf (envC env) e of
@@ -1331,18 +1310,16 @@ importExpr' sc env schema expr =
                    "Unexpected empty params in type abstraction (ETAbs)",
                    "   " <> Text.pack (show expr)
                ]
-         env' <- bindTParam sc tp env
-         k <- importKind sc (C.tpKind tp)
+         (env',v) <- bindTParam sc tp env
          e' <- importExpr' sc env' schema' e
-         scLambda sc (tparamToLocalName tp) k e'
+         scAbstractTerms sc [v] e'
 
     C.EAbs x _ e ->
       do ty <- the "expected a mono schema in EAbs" (C.isMono schema)
          (a, b) <- the "expected a function type in EAbs" (C.tIsFun ty)
-         a' <- importType sc env a
-         env' <- bindName sc x (C.tMono a) env
+         (env',v,_) <- bindName sc x (C.tMono a) env
          e' <- importExpr' sc env' (C.tMono b) e
-         scLambda sc (nameToLocalName x) a' e'
+         scAbstractTerms sc [v] e'
 
     C.EProofAbs _ e ->
       do (prop, schema') <-
@@ -1360,10 +1337,9 @@ importExpr' sc env schema expr =
                 ]
          if isErasedProp prop
            then importExpr' sc env schema' e
-           else do p' <- importType sc env prop
-                   env' <- bindProp sc prop env
+           else do (env',v) <- bindProp sc prop "_P" env
                    e' <- importExpr' sc env' schema' e
-                   scLambda sc "_P" p' e'
+                   scAbstractTerms sc [v] e'
 
     C.EWhere e dgs ->
       do env' <- importDeclGroups sc env dgs
@@ -1505,10 +1481,8 @@ importName cnm =
 -- Cryptol expressions if a Cryptol implementation exists, and as an
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
-
-importDeclGroup declOpts sc env (C.Recursive decls) =
+importDeclGroup declOpts sc env0 (C.Recursive decls) =
   case decls of
-
     [decl] ->
       case C.dDefinition decl of
 
@@ -1523,24 +1497,26 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
             Nothing -> panicForeignNoExpr decl
             Just expr -> addExpr expr
 
-        C.DExpr expr -> addExpr expr
+        C.DExpr expr ->
+          addExpr expr
 
       where
       addExpr expr = do
-        env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
-        t' <- importSchema sc env (C.dSignature decl)
-        e' <- importExpr' sc env1 (C.dSignature decl) expr
-        let x = nameToLocalName (C.dName decl)
-        f' <- scLambda sc x t' e'
+        let ty = C.dSignature decl
+            nm = C.dName decl
+        (env1,v,t') <- bindName sc nm ty env0
+        e' <- importExpr' sc env1 ty expr
+        f' <- scAbstractTerms sc [v] e'
         rhs <- scGlobalApply sc "Prelude.fix" [t', f']
         rhs' <- case declOpts of
                   TopLevelDeclGroup _ ->
-                    do nmi <- importName (C.dName decl)
+                    do nmi <- importName nm
                        scConstant' sc nmi rhs t'
-                  NestedDeclGroup -> return rhs
-        let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-        return env'
+                  NestedDeclGroup ->
+                    return rhs
+        return env0 { envE = Map.insert nm rhs' (envE env0)
+                    , envC = Map.insert nm ty   (envC env0)
+                    }
 
     -- - A group of mutually-recursive declarations -
     -- We handle this by "tupling up" all the declarations using a record and
@@ -1550,52 +1526,61 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       -- build the environment for the declaration bodies
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
-      -- grab a reference to the outermost variable; this will be the record in the body
-      -- of the lambda we build later
-      v0 <- scLocalVar sc 0
+      -- the types of the declarations
+      tm <- traverse (importSchema sc env0 . C.dSignature) dm
+
+      -- the type of the recursive record
+      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+
+      -- grab a reference to the outermost variable; this will be the record
+      -- in the body of the lambda we build later
+      v0 <- scFreshGlobal sc "fixRecord" rect
 
       -- build a list of projections from a record variable
       vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
 
-      -- the types of the declarations
-      tm <- traverse (importSchema sc env . C.dSignature) dm
-      -- the type of the recursive record
-      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
-
-      let env1 = liftEnv env
-      let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
-                      , envC = Map.union (fmap C.dSignature dm) (envC env1)
-                      , envS = rect : envS env1 }
-
-      let extractDeclExpr decl =
-            case C.dDefinition decl of
-              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-              C.DForeign _ mexpr ->
-                case mexpr of
-                  Nothing -> panicForeignNoExpr decl
-                  Just expr ->
-                    importExpr' sc env2 (C.dSignature decl) expr
-              C.DPrim ->
-                panic "importDeclGroup" [
-                    "Primitive declarations cannot be recursive (multiple decls): " <>
-                        Text.pack (show (C.dName decl)),
-                    "   " <> Text.pack (pretty decl)
-                ]
-
       -- the raw imported bodies of the declarations
-      em <- traverse extractDeclExpr dm
+      em <- do
+            let
+                -- | In env2 the names of the recursively-defined
+                -- functions/values are bound to projections from the
+                -- local variable of the fixed-point operator (for use
+                -- in translating the definition bodies).
+                env2 =
+                  env0 { envE = Map.union vm                     (envE env0)
+                       , envC = Map.union (fmap C.dSignature dm) (envC env0)
+                       }
+
+                extractDeclExpr decl =
+                  case C.dDefinition decl of
+                    C.DExpr expr ->
+                      importExpr' sc env2 (C.dSignature decl) expr
+                    C.DForeign _ mexpr ->
+                      case mexpr of
+                        Nothing -> panicForeignNoExpr decl
+                        Just expr ->
+                          importExpr' sc env2 (C.dSignature decl) expr
+                    C.DPrim ->
+                      panic "importDeclGroup" [
+                        "Primitive declarations cannot be recursive (multiple decls): "
+                        <> Text.pack (show (C.dName decl))
+                      , "   " <> Text.pack (pretty decl)
+                      ]
+
+            traverse extractDeclExpr dm
 
       -- the body of the recursive record
       recv <- scRecord sc (Map.mapKeys nameToFieldName em)
 
       -- build a lambda from the record body...
-      f <- scLambda sc "fixRecord" rect recv
+      f <- scAbstractTerms sc [v0] recv
 
       -- and take its fixpoint
       rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
-      -- finally, build projections from the fixed record to shove into the environment
-      -- if toplevel, then wrap each binding with a Constant constructor
+      -- finally, build projections from the fixed record to shove
+      -- into the environment if toplevel, then wrap each binding with
+      -- a Constant constructor
       let mkRhs d t =
             do let s = nameToFieldName (C.dName d)
                r <- scRecordSelect sc rhs s
@@ -1606,10 +1591,12 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
                  NestedDeclGroup -> return r
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
-                     , envC = Map.union (fmap C.dSignature dm) (envC env)
-                     }
-      return env'
+     -- NOTE: The envE fields of env2 and the following Env
+     -- are different.  The same names bound in env2 are now bound to
+     -- the output of the fixed-point operator:
+      return env0 { envE = Map.union rhss                   (envE env0)
+                  , envC = Map.union (fmap C.dSignature dm) (envC env0)
+                  }
 
   where
   panicForeignNoExpr decl = panic "importDeclGroup" [
@@ -1619,7 +1606,6 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
     ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
-
   rhs <- case C.dDefinition decl of
     C.DForeign _ mexpr
       | TopLevelDeclGroup _ <- declOpts ->
@@ -1650,7 +1636,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
           importConstant sc env (C.dName decl) (C.dSignature decl) rhs
         NestedDeclGroup -> return rhs
 
-  pure env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+  pure env { envE = Map.insert (C.dName decl) rhs (envE env)
            , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
            }
 
@@ -1837,9 +1823,9 @@ lambdaTuple :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] 
 lambdaTuple sc env ty expr argss [] = lambdaTuples sc env ty expr argss
 lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType sc env t
-     env' <- bindName sc x (C.Forall [] [] t) env
+     (env',x',_) <- bindName sc x (C.Forall [] [] t) env
      e <- lambdaTuple sc env' ty expr argss args
-     f <- scLambda sc (nameToLocalName x) a e
+     f <- scAbstractTerms sc [x'] e
      if null args
         then return f
         else do b <- importType sc env (tNestedTuple (map snd args))
@@ -1884,11 +1870,12 @@ importMatches sc env (C.From name _len _eltty expr : matches) = do
   m <- importType sc env len1
   a <- importType sc env ty1
   xs <- importExpr sc env expr
-  env' <- bindName sc name (C.Forall [] [] ty1) env
+  (env',v,_) <- bindName sc name (C.Forall [] [] ty1) env
   (body, len2, ty2, args) <- importMatches sc env' matches
   n <- importType sc env len2
   b <- importType sc env ty2
-  f <- scLambda sc (nameToLocalName name) a body
+  f <- scAbstractTerms sc [v] body
+
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
   return (result, C.tMul len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
@@ -1933,12 +1920,12 @@ importMatches sc env (C.Let decl : matches) =
                        "Unimplemented: polymorphic Let",
                        "   " <> Text.pack (pretty decl)
                    ]
-     a <- importType sc env ty1
-     env' <- bindName sc (C.dName decl) (C.dSignature decl) env
+     (env', v, _) <- bindName sc (C.dName decl) (C.dSignature decl) env
      (body, len, ty2, args) <- importMatches sc env' matches
      n <- importType sc env len
+     a <- importType sc env ty1
      b <- importType sc env ty2
-     f <- scLambda sc (nameToLocalName (C.dName decl)) a body
+     f <- scAbstractTerms sc [v] body
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
@@ -2168,18 +2155,13 @@ genCodeForNominalTypes sc nominalMap env0 =
             Text.pack (show kinds)
           ]
 
-      ns <- newDefsForNominal env nt
+      constrs <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
-          constrs = map
-                      (\(x,e) -> (x,(e,0)))  -- the De Bruijn 'magic'
-                      ns
-      let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
-                     , envC = foldr (uncurry Map.insert) (envC env) conTs
-                     }
+      return env { envE = foldr (uncurry Map.insert) (envE env) constrs
+                 , envC = foldr (uncurry Map.insert) (envC env) conTs
+                 }
         -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
         --       the Cryptol environment.
-
-      return env'
 
     -- | Create functions/constructors for different 'NominalType's.
     newDefsForNominal ::
@@ -2189,6 +2171,8 @@ genCodeForNominalTypes sc nominalMap env0 =
         C.Abstract  -> return []
 
         C.Enum x    -> genCodeForEnum sc env nt x
+                        -- returns constructors, everything else put directly into
+                        -- SAWCore environment.
 
         C.Struct fs -> do
             let recTy      = C.TRec (C.ntFields fs)
@@ -2197,6 +2181,7 @@ genCodeForNominalTypes sc nominalMap env0 =
                              -- NOTE: We use name of constructor as the
                              -- name of the constructor argument! Thus we can
                              -- avoid need for a new unique name.
+                             --
                              -- FIXME: this doesn't seem foolproof!
                 fn         = C.EAbs paramName recTy (C.EVar paramName)
                 fnWithTAbs = foldr C.ETAbs fn (C.ntParams nt)
@@ -2243,25 +2228,29 @@ genCodeForEnum sc env nt ctors =
 
   -- The type parameters (`ts` in the example above)
   let tyParamsInfo  = C.ntParams nt
-      tyParamsNames = map tparamToLocalName tyParamsInfo
 
   -- | the kinds of the type Params:
-  tyParamsKinds <- forM tyParamsInfo $ \tpi ->
-                   importKind sc (C.tpKind tpi)
-  -- | the type Params captured using ExtCns:
-  tyParamsECs   <- forM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
-                   scFreshEC sc nm k
-  -- | create references to the type Params:
-  tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
+  -- tyParamsKinds <- forM tyParamsInfo $ \tpi ->
+  --                   importKind sc (C.tpKind tpi)
+  -- | create variables for the type Params:
+  -- tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
+
+  (envWithTParams,tks) <-
+    mapAccumLM
+      (\env' tpi -> do
+                    (env'',ty,k) <- bindTParam' sc tpi env'
+                    return (env'', (ty,k))
+      )
+      env
+      tyParamsInfo
+  let (tyParamsVars, tyParamsKinds) = unzip tks
+
 
   let
       -- | @addTypeAbstractions t@ - create the SAWCore type
       --   abstractions around @t@ (holding the type Param references)
-      --
-      --    N.B.: by using ExtCns we can write SAWCore in (`t`) that
-      --    need not keep track of de Bruijn's for the type parameters.
       addTypeAbstractions :: Term -> IO Term
-      addTypeAbstractions t = scAbstractExts sc tyParamsECs t
+      addTypeAbstractions t = scAbstractTerms sc tyParamsVars t
 
   -------------------------------------------------------------
   -- Common naming conventions:
@@ -2312,23 +2301,16 @@ genCodeForEnum sc env nt ctors =
   --   >                  LS_Nil));
 
   --  cheating a little in the above syntax.
-  --   - scTupleType is not SAWCore, it represents what's created with `scTupleType' function
-  --   - using list syntax for the ListSort lists that are the arguments to the above.
+  --   - scTupleType is not SAWCore, it represents what's created with
+  --     `scTupleType' function
+  --   - using list syntax for the ListSort lists that are the arguments
+  --     to the above.
 
-  -- argTypes_eachCtor is the sum of products matrix for our enum type:
+  -- argTypes_eachCtor is the sum-of-products matrix for this enum type:
   (argTypes_eachCtor :: [[Term]]) <-
-    -- add tyParamsInfo to the env as it is needed to allow `importType`
-    -- to work:
-    do
-    env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
-    forM ctors $ \c->
-      mapM (\t-> do
-              t' <- importType sc env' t
-                -- here ^, type params are De Bruijn's
-              instantiateVarList sc 0 tyParamsVars t'
-                -- here ^, type params are references to ExtCns
-           )
-           (C.ecFields c)
+    forM ctors $ \c->     -- for each constructor
+      forM (C.ecFields c) -- for each constructor field (type)
+         (importType sc envWithTParams)
 
   -- map the list of types to the product type:
   represType_eachCtor <- forM argTypes_eachCtor $ \ts ->
@@ -2346,7 +2328,7 @@ genCodeForEnum sc env nt ctors =
   -- > ETT ts = EithersV (ETT__LS ts);
   --
 
-  -- the Typelist(tl) applied to the [free] type arguments.
+  -- the Typelist(tl) applied to the type parameters.
   tl_applied <- scGlobalApply sc tl_ident tyParamsVars
 
   sumTy_type <- scFunAll sc tyParamsKinds sort0
@@ -2379,12 +2361,11 @@ genCodeForEnum sc env nt ctors =
   let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
   case_type <-
       do
-      b <- scLocalVar sc 0
-            -- all uses are direct under the 'Pi'
-            -- N.B.: scFun's aren't included in De Bruijn's!
+      b <- scFreshGlobal sc "b" sort0
+           -- all uses are direct under the 'Pi'
       altFuncTypes <- mkAltFuncTypes b
-      scGeneralizeExts sc tyParamsECs
-        =<< scPi sc "b" sort0
+      scGeneralizeTerms sc tyParamsVars
+        =<< scGeneralizeTerms sc [b] -- the scPi construct
         =<< scFunAll sc altFuncTypes
         =<< scFun sc sumTy_applied b
 
@@ -2394,28 +2375,24 @@ genCodeForEnum sc env nt ctors =
       --  - generating something like:
       --    \tyvars..-> \(b: sort)->(\f1 f2 ... ->
       --       eithersV b (FunsToCons b ... (\x-> f1 ...) ...)
-      --  - the 'base' of the de Bruijn indices are inside `body` below,
-      --    thus, the following two defs:
-      x <- scLocalVar sc 0
-      funcVars  <- reverse <$> mapM (scLocalVar sc) [1..numCtors]
 
-      bExtCn <- scFreshEC sc "b" sort0
-      b      <- scExtCns sc bExtCn  -- bExtCn into Term variable
-
+      b <- scFreshGlobal sc "b" sort0
       let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
       funcTypes <- mkAltFuncTypes b
+      funcVars  <- zipWithM (scFreshGlobal sc) funcNames funcTypes
       funcDefs  <- forM (zip3 funcVars represType_eachCtor ctors) $
                      \(funcVar,ty,ctor) ->
                          do
+                         x <- scFreshGlobal sc "x" ty
                          let n = length (C.ecFields ctor)
-                         funcArgs <- forM [1..n] $ \i->
-                                       scTupleSelector sc x i n
-                         body <- scApplyAll sc funcVar funcArgs
-                         scLambda sc "x" ty body
+                         scAbstractTerms sc [x]
+                           =<< scApplyAll sc funcVar
+                           =<< forM [1..n]
+                                 (\i-> scTupleSelector sc x i n)
 
       addTypeAbstractions
-        =<< scAbstractExts sc [bExtCn]
-        =<< scLambdaList sc (zip funcNames funcTypes)
+        =<< scAbstractTerms sc [b]
+        =<< scAbstractTerms sc funcVars
         =<< sc_eithersV b
         =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
 
@@ -2504,14 +2481,14 @@ genCodeForEnum sc env nt ctors =
         -- SAWCore code.
 
         -- create the vars (& names) for constructor arguments:
-        paramVars <- reverse <$> mapM (scLocalVar sc) [0..numArgs-1]
-        let paramNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
+        let argNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
+        argVars <- zipWithM (scFreshGlobal sc) argNames argTypes
 
         -- create the constructor:
         ctorBody <- addTypeAbstractions
-                    =<< scLambdaList sc (zip paramNames argTypes)
-                    =<< scNthInjection ctorNumber
-                    =<< scTuple sc paramVars
+                      =<< scAbstractTerms sc argVars
+                      =<< scNthInjection ctorNumber
+                      =<< scTuple sc argVars
         assertSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
         return (ctorName, ctorBody)
 
@@ -2546,7 +2523,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               Text.pack (pretty scrutineeTy)
           ]
 
-  -- Create a sequential set of `C.CaseAlt`s that exactly match the constructors:
+  -- Create a sequential set of `C.CaseAlt`s that exactly match the
+  -- constructors:
   --   - preconditions:
   --      Assume `altsMap` is valid, thus not checking for extraneous
   --      entries. (Call panic if a missing alternative is not covered
@@ -2575,11 +2553,13 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                     vts  = map
                              (\ty-> (nm',plainSubst sub ty))
                              (C.ecFields ctor)
-                  -- N.B.: to avoid extra name construction, we are using
-                  --  the same name (un-referenced!) nm' for each of the arguments
-                  --  of the CaseAlt function.  This appears to work.  However, if the
-                  --  '_' name *was* actually referenced, it would not be what we would want
-                  --  However, typechecking would ascertain this.
+                  -- N.B.: to avoid extra name construction, we are
+                  --  using the same name (un-referenced!) nm' for
+                  --  each of the arguments of the CaseAlt function.
+                  --  This appears to work.  However, if the '_' name
+                  --  *was* actually referenced, it would not be what
+                  --  we would want However, typechecking would
+                  --  ascertain this.
 
                 return (C.CaseAlt vts dfltE)
 
@@ -2673,6 +2653,19 @@ newIdent :: C.Name -> Text -> Ident
 newIdent name suffix =
   mkIdent
     preludeName
-       -- FIXME: These generated definitions should not be added to the prelude but to
-       --        the module where the Enum (or ...) is defined.
+       -- FIXME: These generated definitions should not be added to
+       --        the prelude but to the module where the Enum (or ...)
+       --        is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
+
+--------------------------------------------------------------------------------
+-- Utility Functions:
+
+mapAccumLM :: (Monad m) => (a -> x -> m (a, y)) -> a -> [x] -> m (a, [y])
+mapAccumLM _ acc []     = return (acc, [])
+mapAccumLM f acc (x:xs) = do
+                          (acc', y) <- f acc x
+                          (acc'', ys) <- mapAccumLM f acc' xs
+                          return (acc'', y:ys)
+  -- FIXME: When support ends for ghc-9.4.8, we can remove this
+  -- definition and call Data.Traversable.mapAccumM instead.

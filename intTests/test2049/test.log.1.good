@@ -13,12 +13,12 @@ Literal equality postcondition
 Expected term: 
 let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in fresh:zero::table#903
+ in fresh:zero::table#1533
 Actual term:
 let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in Cryptol.ecArrayUpdate x@1 x@1 fresh:zero::table#903
-      fresh:zero::k#904
+ in Cryptol.ecArrayUpdate x@1 x@1 fresh:zero::table#1533
+      fresh:zero::k#1534
       (Prelude.bvNat 8 0)
 
  SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = N}
