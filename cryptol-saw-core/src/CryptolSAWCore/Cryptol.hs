@@ -1824,7 +1824,6 @@ lambdaTuple sc env ty expr argss [] = lambdaTuples sc env ty expr argss
 lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType sc env t
      (env',x',_) <- bindName sc x (C.Forall [] [] t) env
-     -- FIXME: better naming convention?? "x' is sawcore version of x"
      e <- lambdaTuple sc env' ty expr argss args
      f <- scAbstractTerms sc [x'] e
      if null args
@@ -2182,6 +2181,7 @@ genCodeForNominalTypes sc nominalMap env0 =
                              -- NOTE: We use name of constructor as the
                              -- name of the constructor argument! Thus we can
                              -- avoid need for a new unique name.
+                             --
                              -- FIXME: this doesn't seem foolproof!
                 fn         = C.EAbs paramName recTy (C.EVar paramName)
                 fnWithTAbs = foldr C.ETAbs fn (C.ntParams nt)
@@ -2524,7 +2524,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               Text.pack (pretty scrutineeTy)
           ]
 
-  -- Create a sequential set of `C.CaseAlt`s that exactly match the constructors:
+  -- Create a sequential set of `C.CaseAlt`s that exactly match the
+  -- constructors:
   --   - preconditions:
   --      Assume `altsMap` is valid, thus not checking for extraneous
   --      entries. (Call panic if a missing alternative is not covered
@@ -2553,11 +2554,13 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                     vts  = map
                              (\ty-> (nm',plainSubst sub ty))
                              (C.ecFields ctor)
-                  -- N.B.: to avoid extra name construction, we are using
-                  --  the same name (un-referenced!) nm' for each of the arguments
-                  --  of the CaseAlt function.  This appears to work.  However, if the
-                  --  '_' name *was* actually referenced, it would not be what we would want
-                  --  However, typechecking would ascertain this.
+                  -- N.B.: to avoid extra name construction, we are
+                  --  using the same name (un-referenced!) nm' for
+                  --  each of the arguments of the CaseAlt function.
+                  --  This appears to work.  However, if the '_' name
+                  --  *was* actually referenced, it would not be what
+                  --  we would want However, typechecking would
+                  --  ascertain this.
 
                 return (C.CaseAlt vts dfltE)
 
@@ -2651,8 +2654,9 @@ newIdent :: C.Name -> Text -> Ident
 newIdent name suffix =
   mkIdent
     preludeName
-       -- FIXME: These generated definitions should not be added to the prelude but to
-       --        the module where the Enum (or ...) is defined.
+       -- FIXME: These generated definitions should not be added to
+       --        the prelude but to the module where the Enum (or ...)
+       --        is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
 --------------------------------------------------------------------------------
 -- Utility Functions:
