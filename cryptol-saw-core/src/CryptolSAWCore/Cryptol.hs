@@ -2385,11 +2385,10 @@ genCodeForEnum sc env nt ctors =
                          do
                          x <- scFreshGlobal sc "x" ty
                          let n = length (C.ecFields ctor)
-                         funcArgs <- forM [1..n] $ \i->
-                                       scTupleSelector sc x i n
-                         body <- scApplyAll sc funcVar funcArgs
-                         scAbstractTerms sc [x] body
-                         -- FIXME[C2]: ^ use =<< idiom for clarity!
+                         scAbstractTerms sc [x]
+                           =<< scApplyAll sc funcVar
+                           =<< forM [1..n]
+                                 (\i-> scTupleSelector sc x i n)
 
       addTypeAbstractions
         =<< scAbstractTerms sc [b]
