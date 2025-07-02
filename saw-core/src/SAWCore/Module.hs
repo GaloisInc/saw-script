@@ -126,13 +126,12 @@ instance Hashable Def -- automatically derived
 
 -- | A specification of a constructor
 data Ctor =
-  forall d params ixs.
   Ctor
   { ctorNameInfo :: !NameInfo
     -- ^ The name of this constructor
   , ctorVarIndex :: !VarIndex
     -- ^ Unique var index for this constructor
-  , ctorArgStruct :: CtorArgStruct d params ixs
+  , ctorArgStruct :: CtorArgStruct
     -- ^ Arguments to the constructor
   , ctorDataType :: !Name
     -- ^ The datatype this constructor belongs to
@@ -179,12 +178,12 @@ data Ctor =
 -- | Return the number of parameters of a constructor
 ctorNumParams :: Ctor -> Int
 ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
-  bindingsLength ctorParams
+  length ctorParams
 
 -- | Return the number of non-parameter arguments of a constructor
 ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
-  bindingsLength ctorArgs
+  length ctorArgs
 
 -- | Compute the 'Name' that uniquely references a constructor
 ctorName :: Ctor -> Name

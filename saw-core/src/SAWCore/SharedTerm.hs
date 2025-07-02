@@ -820,7 +820,7 @@ scBuildCtor ::
   SharedContext ->
   Name {- ^ data type -} ->
   Ident {- ^ constructor name -} ->
-  CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
+  CtorArgStruct {- ^ constructor formal arguments -} ->
   IO Ctor
 scBuildCtor sc d c arg_struct =
   do
@@ -838,7 +838,7 @@ scBuildCtor sc d c arg_struct =
     -- constructor argument variables
     let num_args =
           case arg_struct of
-            CtorArgStruct {..} -> bindingsLength ctorArgs
+            CtorArgStruct {..} -> length ctorArgs
 
     vars <- reverse <$> mapM (scLocalVar sc) (take num_args [0 ..])
     elim_var <- scLocalVar sc num_args
