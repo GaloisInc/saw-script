@@ -701,12 +701,12 @@ asPiCtorArg :: Name -> [(LocalName, Term)] ->
                [(LocalName, tp)] ->
                Term ->
                Maybe (LocalName, CtorArg, Term)
-asPiCtorArg d params dt_ixs prevs (asPi ->
-                                   Just (x,
-                                         asCtorArg d params dt_ixs prevs ->
-                                          Just arg, rest)) =
-  Just (x, arg, rest)
-asPiCtorArg _ _ _ _ _ = Nothing
+asPiCtorArg d params dt_ixs prevs t =
+  case asPi t of
+    Just (x, asCtorArg d params dt_ixs prevs -> Just arg, rest) ->
+      Just (x, arg, rest)
+    _ ->
+      Nothing
 
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs :: Name -> [(LocalName, Term)] ->
