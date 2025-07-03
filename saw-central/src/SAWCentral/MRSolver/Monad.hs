@@ -54,7 +54,6 @@ import Prettyprinter
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
 import SAWCore.Term.Functor
-import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
 import SAWCore.SCTypeCheck
 import SAWCore.SharedTerm
@@ -396,7 +395,6 @@ newtype MRM t a = MRM { unMRM :: ReaderT (MRInfo t) (StateT (MRState t)
 instance MonadTerm (MRM t) where
   mkTermF = liftSC1 scTermF
   liftTerm = liftSC3 incVars
-  whnfTerm = liftSC1 scWhnf
   substTerm = liftSC3 instantiateVarList
 
 -- | Get the current value of 'mriSC'
