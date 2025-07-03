@@ -924,7 +924,8 @@ ctxCtorArgType ::
 ctxCtorArgType _ _ _ _ (ConstArg tp) = return tp
 ctxCtorArgType sc d params prevs (RecursiveArg zs_ctx ixs) =
   ctxPi sc zs_ctx $ \_ ->
-    do params' <- (fst <$> ctxVars2 sc params prevs) >>= ctxLift sc 0 (length zs_ctx)
+    do (vars, _) <- ctxVars2 sc params prevs
+       params' <- ctxLift sc 0 (length zs_ctx) vars
        scDataTypeAppParams sc d params' ixs
 
 -- | Internal: Convert a bindings list of 'CtorArg's to a binding list
