@@ -32,8 +32,8 @@ import SAWCore.Term.Functor
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices
-ctxAsDataTypeApp :: Name -> [(LocalName, tp1)] ->
-                    [(LocalName, tp2)] -> Term ->
+ctxAsDataTypeApp :: Name -> [param] ->
+                    [index] -> Term ->
                     Maybe ([Term], [Term])
 ctxAsDataTypeApp d params ixs t =
   do let (f, args) = asApplyAll t
@@ -115,10 +115,10 @@ instance UsesDataType [(LocalName, Term)] where
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: Name -> [(LocalName, Term)] ->
-               [(LocalName, Term)] ->
-               [(LocalName, tp1)] ->
-               [(LocalName, tp2)] ->
+asCtorDTApp :: Name -> [param] ->
+               [index] ->
+               [a] ->
+               [b] ->
                Term ->
                Maybe [Term]
 asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
@@ -129,9 +129,9 @@ asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
   where
     -- Check that the given list of terms is a list of bound variables, one for
     -- each parameter, in the context extended by the given arguments
-    isVarList :: [(LocalName, tp1)] ->
-                 [(LocalName, tp2)] ->
-                 [(LocalName, tp3)] ->
+    isVarList :: [param] ->
+                 [a] ->
+                 [b] ->
                  [Term] ->
                  Bool
     isVarList _ _ _ [] = True
@@ -143,9 +143,9 @@ asCtorDTApp _ _ _ _ _ _ = Nothing
 
 
 -- | Check that an argument for a constructor has one of the allowed forms
-asCtorArg :: Name -> [(LocalName, Term)] ->
-             [(LocalName, Term)] ->
-             [(LocalName, tp)] ->
+asCtorArg :: Name -> [param] ->
+             [index] ->
+             [prev] ->
              Term ->
              Maybe CtorArg
 asCtorArg d params dt_ixs prevs (asPiList ->
@@ -161,9 +161,9 @@ asCtorArg _ _ _ _ _ = Nothing
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
-asPiCtorArg :: Name -> [(LocalName, Term)] ->
-               [(LocalName, Term)] ->
-               [(LocalName, tp)] ->
+asPiCtorArg :: Name -> [param] ->
+               [index] ->
+               [prev] ->
                Term ->
                Maybe (LocalName, CtorArg, Term)
 asPiCtorArg d params dt_ixs prevs t =
@@ -174,8 +174,8 @@ asPiCtorArg d params dt_ixs prevs t =
       Nothing
 
 -- | Helper function for 'mkCtorArgStruct'
-mkCtorArgsIxs :: Name -> [(LocalName, Term)] ->
-                 [(LocalName, Term)] ->
+mkCtorArgsIxs :: Name -> [param] ->
+                 [index] ->
                  [(LocalName, CtorArg)] ->
                  Term ->
                  Maybe ([(LocalName, CtorArg)], [Term])
