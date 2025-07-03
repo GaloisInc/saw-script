@@ -1220,7 +1220,7 @@ ctxReduceRecursor_ ::
   IO Term
 ctxReduceRecursor_ sc rec fi args0_argCtx =
   do args <- mk_args [] args0_argCtx
-     scWhnf sc =<< foldM (\f arg -> scTermF sc $ App f arg) fi args
+     scWhnf sc =<< scApplyAll sc fi args
 
  where
     mk_args :: [Term] ->  -- already processed parameters/arguments
