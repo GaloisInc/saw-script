@@ -796,14 +796,6 @@ ctxVars2 ::
 ctxVars2 sc vars1 vars2 =
   splitAt (length vars1) <$> ctxVars sc (vars1 ++ vars2)
 
-
--- | Apply two 'Term's
-ctxApply :: SharedContext -> IO Term -> IO Term -> IO Term
-ctxApply sc fm argm =
-  do f <- fm
-     arg <- argm
-     scTermF sc (App f arg)
-
 -- | Form a multi-arity lambda-abstraction as a 'Term'
 ctxLambda ::
   SharedContext -> [(LocalName, Term)] ->
@@ -1101,8 +1093,9 @@ ctxCtorElimType sc d_top c
        let param_terms = init vars
        let p_ret = last vars
        let cname = Name (ecVarIndex c) (ecName c)
-       ctxApply sc (scApplyAll sc p_ret ret_ixs) $
-         scCtorAppParams sc cname param_terms prev_vars
+       p_ret_ixs <- scApplyAll sc p_ret ret_ixs
+       appliedCtor <- scCtorAppParams sc cname param_terms prev_vars
+       scApply sc p_ret_ixs appliedCtor
   helper d params pret prevs ((str, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
     (ctxPi sc [(str, tp)] $ \_ ->
