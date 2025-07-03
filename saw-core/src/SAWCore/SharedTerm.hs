@@ -680,13 +680,13 @@ scRequireDef sc i =
 scBeginDataType ::
   SharedContext ->
   Ident {- ^ The name of this datatype -} ->
-  [(LocalName, Term)] {- ^ The context of parameters of this datatype -} ->
+  [ExtCns Term] {- ^ The context of parameters of this datatype -} ->
   [(LocalName, Term)] {- ^ The context of indices of this datatype -} ->
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
   do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtIdent)
-     dtType <- scPiList sc (dtParams ++ dtIndices) =<< scSort sc dtSort
+     dtType <- scGeneralizeExts sc dtParams =<< scPiList sc dtIndices =<< scSort sc dtSort
      let dtNameInfo = ModuleIdentifier dtIdent
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
@@ -881,41 +881,39 @@ allowedElimSort dt s =
 -- | Internal: Convert a 'CtorArg' into the type that it represents,
 -- given a context of the parameters and of the previous arguments.
 ctxCtorArgType ::
-  SharedContext -> Name ->
-  [(LocalName, Term)] ->
-  [(LocalName, Term)] ->
+  SharedContext ->
+  Term {- ^ datatype applied to ExtCns parameters -} ->
   CtorArg ->
   IO Term
-ctxCtorArgType _ _ _ _ (ConstArg tp) = return tp
-ctxCtorArgType sc d params prevs (RecursiveArg zs_ctx ixs) =
+ctxCtorArgType _ _ (ConstArg tp) = return tp
+ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
   ctxPi sc zs_ctx $ \_ ->
-    do (vars, _) <- ctxVars2 sc params prevs
-       params' <- ctxLift sc 0 (length zs_ctx) vars
-       scDataTypeAppParams sc d params' ixs
+    scApplyAll sc d_params ixs
 
 -- | Internal: Convert a bindings list of 'CtorArg's to a binding list
 -- of types.
 ctxCtorArgBindings ::
-  SharedContext -> Name ->
-  [(LocalName, Term)] ->
-  [(LocalName, Term)] ->
+  SharedContext ->
+  Term {- ^ data type applied to ExtCns params -} ->
   [(LocalName, CtorArg)] ->
   IO [(LocalName, Term)]
-ctxCtorArgBindings _ _ _ _ [] = return []
-ctxCtorArgBindings sc d params prevs ((x, arg) : args) =
-  do tp <- ctxCtorArgType sc d params prevs arg
-     rest <- ctxCtorArgBindings sc d params (prevs ++ [(x, tp)]) args
+ctxCtorArgBindings _ _ [] = return []
+ctxCtorArgBindings sc d_params ((x, arg) : args) =
+  do tp <- ctxCtorArgType sc d_params arg
+     rest <- ctxCtorArgBindings sc d_params args
      return ((x, tp) : rest)
 
 -- | Internal: Compute the type of a constructor from the name of its
 -- datatype and its 'CtorArgStruct'
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
-  ctxPi sc ctorParams $ \params ->
-    do bs <- ctxCtorArgBindings sc d ctorParams [] ctorArgs
-       ctxPi sc bs $ \_ ->
-         do params' <- ctxLift sc 0 (length bs) params
-            scDataTypeAppParams sc d params' ctorIndices
+  do params <- traverse (scExtCns sc) ctorParams
+     d' <- scTermF sc (Constant d)
+     d_params <- scApplyAll sc d' params
+     bs <- ctxCtorArgBindings sc d_params ctorArgs
+     d_params_ixs <- scApplyAll sc d_params ctorIndices
+     body <- scPiList sc bs d_params_ixs
+     scGeneralizeExts sc ctorParams body
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
@@ -984,14 +982,13 @@ scBuildCtor sc d c arg_struct =
 -- are the indices of @d@, and @s@ is any sort supplied as an argument.
 ctxPRetTp ::
   SharedContext -> Name ->
-  [(LocalName, Term)] ->
+  [ExtCns Term] ->
   [(LocalName, Term)] -> Sort ->
   IO Term
 ctxPRetTp sc d params ixs s =
   ctxPi sc ixs $ \ix_vars ->
-  do param_vars <- ctxVars sc params
-     param_vars' <- ctxLift sc 0 (length ixs) param_vars
-     dt <- scDataTypeAppParams sc d param_vars' ix_vars
+  do param_vars <- traverse (scExtCns sc) params
+     dt <- scDataTypeAppParams sc d param_vars ix_vars
      scFun sc dt =<< scSort sc s
 
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
@@ -999,14 +996,15 @@ ctxPRetTp sc d params ixs s =
 mkPRetTp ::
   SharedContext ->
   Name ->
-  [(LocalName, Term)] ->
+  [ExtCns Term] ->
   [(LocalName, Term)] ->
   [Term] ->
   Sort ->
   IO Term
 mkPRetTp sc d p_ctx ix_ctx params s =
   do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
-     ctxSubst sc params 0 p_ret
+     let subst = Map.fromList (zip (map ecVarIndex p_ctx) params)
+     scInstantiateExt sc subst p_ret
 
 
 -- | Compute the type of an eliminator function for a constructor from the name
@@ -1062,7 +1060,7 @@ ctxCtorElimType sc d_top c
   -- type in Haskell land.
   helper ::
     Name ->
-    [(LocalName, Term)] ->
+    [ExtCns Term] ->
     (LocalName, Term) ->
     [(LocalName, Term)] ->
     [(LocalName, CtorArg)] ->
@@ -1071,10 +1069,8 @@ ctxCtorElimType sc d_top c
   helper _d params pret prevs [] ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
-    do (vars, prev_vars) <- ctxVars2 sc (params ++ [pret]) prevs
-       -- note: length vars == length (params ++ [pret])
-       let param_terms = init vars
-       let p_ret = last vars
+    do param_terms <- traverse (scExtCns sc) params
+       ([p_ret], prev_vars) <- ctxVars2 sc [pret] prevs
        let cname = Name (ecVarIndex c) (ecName c)
        p_ret_ixs <- scApplyAll sc p_ret ret_ixs
        appliedCtor <- scCtorAppParams sc cname param_terms prev_vars
@@ -1097,16 +1093,13 @@ ctxCtorElimType sc d_top c
     --
     -- where rest is the result of a recursive call
     do
+      param_vars <- traverse (scExtCns sc) params
       -- Build terms for the params and p_ret variables
-      vars <- fst <$> ctxVars2 sc (params ++ [pret]) prevs
-      -- note: length vars == length (params ++ [pret])
-      let param_vars = init vars
-      let p_ret = last vars
+      [p_ret] <- fst <$> ctxVars2 sc [pret] prevs
       -- Build the type of the argument arg
       arg_tp <-
         ctxPi sc zs $ \_ ->
-        do param_vars' <- ctxLift sc 0 (length zs) param_vars
-           scDataTypeAppParams sc d param_vars' ts
+        scDataTypeAppParams sc d param_vars ts
       -- Lift zs and ts into the context of arg
       zs' <- ctxLift sc 0 1 zs
       ts' <- ctxLift sc (length zs) 1 ts
@@ -1141,8 +1134,11 @@ mkCtorElimTypeFun ::
   IO ([Term] -> Term -> IO Term)
 mkCtorElimTypeFun sc d c argStruct =
   do ctxElimType <- ctxCtorElimType sc d c argStruct
+     let vs = map ecVarIndex (ctorParams argStruct)
      return $ \params p_ret ->
-       scWhnf sc =<< ctxSubst sc (params ++ [p_ret]) 0 ctxElimType
+       do t <- ctxSubst sc [p_ret] 0 ctxElimType
+          let subst = Map.fromList (zip vs params)
+          scWhnf sc =<< scInstantiateExt sc subst t
 
 -- | Zip two lists of equal length, but return 'Nothing' if the
 -- lengths are different.

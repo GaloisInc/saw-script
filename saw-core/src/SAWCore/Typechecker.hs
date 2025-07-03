@@ -33,6 +33,7 @@ module SAWCore.Typechecker
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -103,26 +104,30 @@ inferApplyAll t (arg:args) =
 inferResolveNameApp :: Text -> [SCTypedTerm] -> TCM SCTypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
+     nctx <- askCtxEC
      mnm <- getModuleName
      mm <- liftTCM scGetModuleMap
      let ident = mkIdent mnm n
-     case (findIndex ((== n) . fst) ctx, resolveNameInMap mm ident) of
-       (Just i, _) ->
+     case (findIndex ((== n) . fst) ctx, Map.lookup n nctx, resolveNameInMap mm ident) of
+       (Just i, _, _) ->
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
-       (_, Just (ResolvedCtor ctor)) ->
+       (_, Just ec, _) ->
+         do t <- typeInferComplete (FTermF (ExtCns ec))
+            inferApplyAll t args
+       (_, _, Just (ResolvedCtor ctor)) ->
          do let c = ctorName ctor
             t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
-       (_, Just (ResolvedDataType dt)) ->
+       (_, _, Just (ResolvedDataType dt)) ->
          do let c = dtName dt
             t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
-       (_, Just (ResolvedDef d)) ->
+       (_, _, Just (ResolvedDef d)) ->
          do t <- liftTCM scDefTerm d
             f <- SCTypedTerm t <$> liftTCM scTypeOf t
             inferApplyAll f args
-       (Nothing, Nothing) ->
+       (Nothing, Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
 -- | Match an untyped term as a name applied to 0 or more arguments
@@ -375,12 +380,13 @@ processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
 
 processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
+  let param_ctx' = map (\(x, t) -> (Un.termVarLocalName x, t)) param_ctx in
   -- This top line makes sure that we process the rest of the decls after the
   -- main body of the code below, which processes just the current data decl
   (>> processDecls rest) $ atPos p $
   -- Step 1: type-check the parameters
-  typeInferCompleteInCtx param_ctx $ \params -> do
-  let dtParams = map (\(x,tp,_) -> (x,tp)) params
+  typeInferCompleteInCtxEC param_ctx' $ \params -> do
+  let dtParams = map (\(_,ec,_) -> ec) params
   let param_sort = maxSort (map (\(_,_,s) -> s) params)
   let err :: String -> TCM a
       err msg = throwTCError $ DeclError nm msg

@@ -83,6 +83,10 @@ data TranslationReader = TranslationReader
     -- ^ The list of Coq identifiers associated with the current SAW core
     -- Bruijn-indexed local variables in scope, innermost (index 0) first
 
+  , _namedEnvironment  :: Map.Map Name Coq.Ident
+    -- ^ The map of Coq identifiers associated with the SAW core named
+    -- variables in scope
+
   , _unavailableIdents :: Set.Set Coq.Ident
     -- ^ The set of Coq identifiers that are either reserved or already in use.
     -- To avoid shadowing, fresh identifiers should be chosen to be disjoint
@@ -194,6 +198,14 @@ withSAWVar n m =
   invalidateOpenSharing $ withFreshIdent n $ \n_coq ->
   localTR (over localEnvironment (n_coq :)) $ m n_coq
 
+-- | Run a translation in a context with one more SAW core variable with the
+-- given name. Pass the corresponding Coq identifier used for this SAW core
+-- variable to the computation in which it is bound.
+withSAWVarEC :: TermTranslationMonad m => Name -> (Coq.Ident -> m a) -> m a
+withSAWVarEC n m =
+  withFreshIdent (toShortName (nameInfo n)) $ \n_coq ->
+  localTR (over namedEnvironment (Map.insert n n_coq)) $ m n_coq
+
 -- | Find a fresh name generated from 'nextSharedName' to use in place of the
 -- supplied 'Term' with the supplied index, and associate that index with the
 -- fresh name in the 'sharedNames' sharing map. Pass the name that was generated
@@ -267,6 +279,7 @@ runTermTranslationMonad configuration mname mm globalDecls localEnv =
   (TranslationReader {
       _currentModule = mname
       , _localEnvironment = localEnv
+      , _namedEnvironment = Map.empty
       , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
       , _sharedNames        = IntMap.empty
       , _nextSharedName     = "var__0"
@@ -456,7 +469,13 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    ExtCns ec -> translateConstant (Name (ecVarIndex ec) (ecName ec))
+    -- ExtCns ec -> translateConstant (Name (ecVarIndex ec) (ecName ec))
+    ExtCns ec ->
+      do env <- view namedEnvironment <$> askTR
+         let nm = Name (ecVarIndex ec) (ecName ec)
+         case Map.lookup nm env of
+           Just ident -> pure (Coq.Var ident)
+           Nothing -> translateConstant nm
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
@@ -508,6 +527,7 @@ withTopTranslationState m =
             TranslationReader {
               _currentModule     = view currentModule r,
               _localEnvironment  = [],
+              _namedEnvironment  = Map.empty,
               _unavailableIdents = reservedIdents,
               _sharedNames       = IntMap.empty,
               _nextSharedName    = "var__0" ,
@@ -579,6 +599,35 @@ translateBinder n ty@(asPiList -> (args, pi_body)) f =
                 helper n' rest (g . ((nh,nhty) :))
          helper n' ((False,_):rest) g = helper n' rest g
 
+-- | Given an 'ExtCns' with its type (as a 'Term'), translate the 'ExtCns'
+-- to a Coq identifier, translate the type to a Coq term, and generate zero or
+-- more additional 'Ident's and 'Type's representing additonal implicit
+-- typeclass arguments, added if the given type is @isort@, etc. Pass all of
+-- this information to the supplied computation, in which the SAW core variable
+-- is bound to its Coq identifier.
+translateBinderEC ::
+  TermTranslationMonad m => ExtCns Term -> (BindTrans -> m a) -> m a
+translateBinderEC ec f =
+  do ty' <- translateTerm ty
+     let mb_sort = asSortWithFlags pi_body
+         flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
+         flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
+                           ("QT", "QuantType")]
+     withSAWVarEC nm $ \n' ->
+       helper n' (zip flagValues flagLocalNames) (\imps ->
+                                                   f $ BindTrans n' ty' imps)
+       where
+         ty = ecType ec
+         (args, pi_body) = asPiList ty
+         nm = Name (ecVarIndex ec) (ecName ec)
+         n = toShortName (ecName ec)
+         helper _ [] g = g []
+         helper n' ((True,(prefix,tc)):rest) g =
+           do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')
+              withFreshIdent (prefix <> "_" <> n) $ \nh ->
+                helper n' rest (g . ((nh,nhty) :))
+         helper n' ((False,_):rest) g = helper n' rest g
+
 -- | Call 'translateBinder' on a list of SAW core bindings
 translateBinders :: TermTranslationMonad m => [(LocalName,Term)] ->
                     ([BindTrans] -> m a) -> m a
@@ -586,6 +635,14 @@ translateBinders [] f = f []
 translateBinders ((n,ty):ns_tys) f =
   translateBinder n ty $ \bnd ->
   translateBinders ns_tys $ \bnds -> f (bnd : bnds)
+
+-- | Call 'translateBinder' on a list of SAW core bindings
+translateBindersEC ::
+  TermTranslationMonad m => [ExtCns Term] -> ([BindTrans] -> m a) -> m a
+translateBindersEC [] f = f []
+translateBindersEC (ec : ecs) f =
+  translateBinderEC ec $ \bnd ->
+  translateBindersEC ecs $ \bnds -> f (bnd : bnds)
 
 -- | Given a typeclass (as a Coq term), a list of 'LocalName's and their
 -- corresponding types (as 'Term's), and a type-level function with argument
@@ -612,6 +669,15 @@ translateParams :: TermTranslationMonad m => [(LocalName, Term)] ->
                    ([Coq.Binder] -> m a) -> m a
 translateParams bs m =
   translateBinders bs (m . concat . map bindTransToBinder)
+
+-- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
+-- return a list of explicit 'Binder's, for use representing the bound variables
+-- in 'Lambda's, 'Let's, etc.
+translateParamsEC ::
+  TermTranslationMonad m => [ExtCns Term] -> ([Coq.Binder] -> m a) -> m a
+translateParamsEC bs m =
+  translateBindersEC bs (m . concatMap bindTransToBinder)
+
 
 -- | Given a list of 'LocalName's and their corresponding types (as 'Term's)
 -- representing argument types and a 'Term' representing the return type,
