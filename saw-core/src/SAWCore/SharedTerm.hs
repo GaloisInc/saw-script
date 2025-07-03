@@ -804,17 +804,6 @@ ctxApply sc fm argm =
      arg <- argm
      scTermF sc (App f arg)
 
--- | Apply a 'Term' to a list of arguments
-ctxApplyMulti :: SharedContext -> IO Term -> IO [Term] -> IO Term
-ctxApplyMulti sc fm argsm =
-  fm >>= \f -> argsm >>= \args -> helper f args
-  where
-    helper :: Term -> [Term] -> IO Term
-    helper f [] = return f
-    helper f (arg : args) =
-      do f' <- scApply sc f arg
-         helper f' args
-
 -- | Form a multi-arity lambda-abstraction as a 'Term'
 ctxLambda ::
   SharedContext -> [(LocalName, Term)] ->
@@ -1151,10 +1140,10 @@ ctxCtorElimType sc d_top c
              helper d params pret (prevs ++ [(str, arg_tp)]) args ixs
            -- Build the type of ih, in the context of arg
            ih_tp <- ctxPi sc zs' $ \z_vars ->
-             ctxApply sc
-             (ctxApplyMulti sc
-              (ctxLift sc 0 (length zs' + 1) p_ret) (return ts'))
-             (ctxApplyMulti sc (ctxLift sc 0 (length zs') arg) (return z_vars))
+             do p_ret' <- ctxLift sc 0 (length zs' + 1) p_ret
+                p_ret_ts <- scApplyAll sc p_ret' ts'
+                arg' <- ctxLift sc 0 (length zs') arg
+                scApply sc p_ret_ts =<< scApplyAll sc arg' z_vars
            -- Finally, build the pi-abstraction for ih around the rest
            --
            -- NOTE: we cast away the IH argument, because that is a type that is
@@ -1277,13 +1266,11 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
       IO Term
     mk_rec_arg zs_ctx ixs x =
       -- eta expand over the zs and apply the RecursorApp form
-      ctxLambda sc zs_ctx (\zs ->
-        ctxRecursorAppM sc
-          (ctxLift sc 0 (length zs_ctx) rec)
-          (return ixs)
-          (ctxApplyMulti sc
-            (ctxLift sc 0 (length zs_ctx) x)
-            (return zs)))
+      ctxLambda sc zs_ctx $ \zs ->
+        do rec' <- ctxLift sc 0 (length zs_ctx) rec
+           x' <- ctxLift sc 0 (length zs_ctx) x
+           x_zs <- scApplyAll sc x' zs
+           ctxRecursorAppM sc (pure rec') (return ixs) (pure x_zs)
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
