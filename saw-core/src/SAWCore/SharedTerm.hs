@@ -815,26 +815,16 @@ ctxApplyMulti sc fm argsm =
       do f' <- scApply sc f arg
          helper f' args
 
--- | Form a lambda-abstraction as a 'Term'
-ctxLambda1 ::
-  SharedContext -> LocalName -> Term ->
-  (Term -> IO Term) ->
-  IO Term
-ctxLambda1 sc x tp body_f =
-  do var <- scLocalVar sc 0
-     body <- body_f var
-     scLambda sc x tp body
-
 -- | Form a multi-arity lambda-abstraction as a 'Term'
 ctxLambda ::
   SharedContext -> [(LocalName, Term)] ->
   ([Term] -> IO Term) -> IO Term
 ctxLambda _sc [] body_f = body_f []
 ctxLambda sc ((x, tp) : xs) body_f =
-  ctxLambda1 sc x tp $ \_ ->
-  ctxLambda sc xs $ \vars ->
+  scLambda sc x tp =<<
+  ctxLambda sc xs (\vars ->
   do var <- scLocalVar sc (length xs)
-     body_f (var : vars)
+     body_f (var : vars))
 
 -- | Form a pi-abstraction as a 'Term'
 ctxPi1 :: SharedContext -> LocalName -> Term -> (Term -> IO Term) -> IO Term
