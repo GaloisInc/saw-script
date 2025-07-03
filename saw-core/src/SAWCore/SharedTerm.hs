@@ -779,17 +779,13 @@ getTerm cache termF =
 --------------------------------------------------------------------------------
 -- Recursors
 
--- | Build a free variable as a 'Term'
-ctxVar :: SharedContext -> DeBruijnIndex -> IO Term
-ctxVar sc i = scTermF sc (LocalVar i)
-
 -- | Build a list of all the free variables as 'Term's
 ctxVars :: SharedContext -> [(LocalName, tp)] -> IO [Term]
 ctxVars sc = helper
   where
     helper :: [(LocalName, tp)] -> IO [Term]
     helper [] = pure []
-    helper (_ : ctx) = (:) <$> ctxVar sc (length ctx) <*> helper ctx
+    helper (_ : ctx) = (:) <$> scLocalVar sc (length ctx) <*> helper ctx
 
 -- | Build two lists of the free variables, split at a specific point
 ctxVars2 ::
@@ -825,7 +821,7 @@ ctxLambda1 ::
   (Term -> IO Term) ->
   IO Term
 ctxLambda1 sc x tp body_f =
-  do var <- ctxVar sc 0
+  do var <- scLocalVar sc 0
      body <- body_f var
      scTermF sc (Lambda x tp body)
 
@@ -837,13 +833,13 @@ ctxLambda _sc [] body_f = body_f []
 ctxLambda sc ((x, tp) : xs) body_f =
   ctxLambda1 sc x tp $ \_ ->
   ctxLambda sc xs $ \vars ->
-  do var <- ctxVar sc (length xs)
+  do var <- scLocalVar sc (length xs)
      body_f (var : vars)
 
 -- | Form a pi-abstraction as a 'Term'
 ctxPi1 :: SharedContext -> LocalName -> Term -> (Term -> IO Term) -> IO Term
 ctxPi1 sc x tp body_f =
-  do var <- ctxVar sc 0
+  do var <- scLocalVar sc 0
      body <- body_f var
      scTermF sc (Pi x tp body)
 
@@ -853,7 +849,7 @@ ctxPi _sc [] body_f = body_f []
 ctxPi sc ((x, tp) : xs) body_f =
   ctxPi1 sc x tp $ \_ ->
   ctxPi sc xs $ \vars ->
-  do var <- ctxVar sc (length xs)
+  do var <- scLocalVar sc (length xs)
      body_f (var : vars)
 
 -- | Build an application of a datatype as a 'Term'
