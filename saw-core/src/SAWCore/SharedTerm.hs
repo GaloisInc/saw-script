@@ -852,19 +852,6 @@ ctxPi sc ((x, tp) : xs) body_f =
   do var <- scLocalVar sc (length xs)
      body_f (var : vars)
 
--- | Build an application of a datatype as a 'Term'
-ctxDataTypeM ::
-  SharedContext ->
-  Name ->
-  IO [Term] ->
-  IO [Term] ->
-  IO Term
-ctxDataTypeM sc d paramsM ixsM =
-  ctxApplyMulti sc (ctxApplyMulti sc t paramsM) ixsM
-  where
-    t :: IO Term
-    t = scTermF sc (Constant d)
-
 -- | Build an application of a constructor as a 'Term'
 ctxCtorAppM ::
   SharedContext ->
@@ -951,8 +938,8 @@ ctxCtorArgType ::
 ctxCtorArgType _ _ _ _ (ConstArg tp) = return tp
 ctxCtorArgType sc d params prevs (RecursiveArg zs_ctx ixs) =
   ctxPi sc zs_ctx $ \_ ->
-  ctxDataTypeM sc d ((fst <$> ctxVars2 sc params prevs) >>= ctxLift sc 0 (length zs_ctx))
-  (return ixs)
+    do params' <- (fst <$> ctxVars2 sc params prevs) >>= ctxLift sc 0 (length zs_ctx)
+       scDataTypeAppParams sc d params' ixs
 
 -- | Internal: Convert a bindings list of 'CtorArg's to a binding list
 -- of types.
@@ -973,12 +960,10 @@ ctxCtorArgBindings sc d params prevs ((x, arg) : args) =
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
   ctxPi sc ctorParams $ \params ->
-    do bs <-
-         ctxCtorArgBindings sc d ctorParams [] ctorArgs
+    do bs <- ctxCtorArgBindings sc d ctorParams [] ctorArgs
        ctxPi sc bs $ \_ ->
-         ctxDataTypeM sc d
-         (ctxLift sc 0 (length bs) params)
-         (return ctorIndices)
+         do params' <- ctxLift sc 0 (length bs) params
+            scDataTypeAppParams sc d params' ctorIndices
 
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
@@ -1053,8 +1038,8 @@ ctxPRetTp ::
 ctxPRetTp sc d params ixs s =
   ctxPi sc ixs $ \ix_vars ->
   do param_vars <- ctxVars sc params
-     dt <- ctxDataTypeM sc d (ctxLift sc 0 (length ixs) param_vars)
-       (return ix_vars)
+     param_vars' <- ctxLift sc 0 (length ixs) param_vars
+     dt <- scDataTypeAppParams sc d param_vars' ix_vars
      ctxPi1 sc "_" dt $ \_ -> scSort sc s
 
 -- | Take a list of terms and match them up with a sequence of bindings,
@@ -1175,9 +1160,10 @@ ctxCtorElimType sc d_top c
       let param_vars = init vars
       let p_ret = last vars
       -- Build the type of the argument arg
-      arg_tp <- ctxPi sc zs (\_ -> ctxDataTypeM sc d
-                                (ctxLift sc 0 (length zs) param_vars)
-                                (return ts))
+      arg_tp <-
+        ctxPi sc zs $ \_ ->
+        do param_vars' <- ctxLift sc 0 (length zs) param_vars
+           scDataTypeAppParams sc d param_vars' ts
       -- Lift zs and ts into the context of arg
       zs' <- ctxLift sc 0 1 zs
       ts' <- ctxLift sc (length zs) 1 ts
