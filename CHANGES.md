@@ -84,6 +84,28 @@ support compositional verification using techniques similar to SAW.
 
 ## Bug fixes
 
+* A number of SAWScript builtins were found to have wrong return types declared.
+  These have been corrected; minor adjustments to existing code might be needed.
+  (Any actual _use_ of the returned values would have triggered a panic and been
+  noticed.)
+  The affected builtins:
+     * `approxmc`
+     * `heapster_assume_fun_multi`
+     * `heapster_assume_fun_rename_prim`
+     * `heapster_assume_fun_rename`
+     * `heapster_assume_fun`
+     * `heapster_define_llvmshape`
+     * `heapster_define_opaque_llvmshape`
+     * `heapster_define_opaque_perm`
+     * `heapster_define_perm`
+     * `heapster_define_reachability_perm`
+     * `heapster_define_recursive_perm`
+     * `heapster_define_recursive_shape`
+     * `heapster_define_rust_type_qual`
+     * `heapster_define_rust_type`
+     * `heapster_find_symbol_commands`
+     * `set_monadification`
+
 * The `head` and `tail` primitives are now implemented in the SAW-Core
   evaluator (#2312).
 

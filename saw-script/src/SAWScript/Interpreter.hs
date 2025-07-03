@@ -5865,7 +5865,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_opaque_perm)
     Experimental
     [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
@@ -5874,7 +5874,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_recursive_perm)
     Experimental
     [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
@@ -5884,7 +5884,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_reachability_perm)
     Experimental
     [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
@@ -5897,7 +5897,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_recursive_shape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
     (bicVal heapster_define_recursive_shape)
     Experimental
     [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
@@ -5907,7 +5907,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_perm)
     Experimental
     [ "heapster_define_perm nm args tp p defines a Heapster permission named"
@@ -5916,7 +5916,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
     (bicVal heapster_define_llvmshape)
     Experimental
     [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
@@ -5925,7 +5925,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_opaque_llvmshape)
     Experimental
     [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
@@ -5943,7 +5943,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_rust_type"
-    "HeapsterEnv -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_define_rust_type)
     Experimental
     [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
@@ -5951,7 +5951,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_rust_type_qual"
-    "HeapsterEnv -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> TopLevel ()"
     (bicVal heapster_define_rust_type_qual)
     Experimental
     [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
@@ -6047,7 +6047,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_assume_fun"
-    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun)
     Experimental
     [ "heapster_assume_fun env nm perms trans assumes that function nm has"
@@ -6055,7 +6055,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_assume_fun_rename"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun_rename)
     Experimental
     [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
@@ -6064,7 +6064,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_assume_fun_rename_prim"
-    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun_rename_prim)
     Experimental
     [
@@ -6073,7 +6073,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_assume_fun_multi"
-    "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> [(String, String)] -> TopLevel ()"
     (bicVal heapster_assume_fun_multi)
     Experimental
     [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
