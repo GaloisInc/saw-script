@@ -994,13 +994,6 @@ ctxPRetTp sc d params ixs s =
      dt <- scDataTypeAppParams sc d param_vars' ix_vars
      scFun sc dt =<< scSort sc s
 
--- | Take a list of terms and match them up with a sequence of bindings,
--- returning a structured '[Term]' list.
-ctxTermsForBindings :: [(LocalName, tp)] -> [Term] -> Maybe [Term]
-ctxTermsForBindings bs ts
-  | length bs == length ts = Just ts
-  | otherwise = Nothing
-
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
 mkPRetTp ::
@@ -1011,13 +1004,9 @@ mkPRetTp ::
   [Term] ->
   Sort ->
   IO Term
-mkPRetTp sc d p_ctx ix_ctx untyped_params s =
-  case ctxTermsForBindings p_ctx untyped_params of
-    Just params ->
-      do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
-         ctxSubst sc params 0 p_ret
-    Nothing ->
-      error "mkPRetTp: incorrect number of parameters"
+mkPRetTp sc d p_ctx ix_ctx params s =
+  do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
+     ctxSubst sc params 0 p_ret
 
 
 -- | Compute the type of an eliminator function for a constructor from the name
@@ -1153,13 +1142,7 @@ mkCtorElimTypeFun ::
 mkCtorElimTypeFun sc d c argStruct@(CtorArgStruct {..}) =
   do ctxElimType <- ctxCtorElimType sc d c argStruct
      return $ \params p_ret ->
-         scWhnf sc =<<
-         case ctxTermsForBindings ctorParams params of
-           Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
-           Just paramsCtx ->
-             ctxSubst sc
-             (paramsCtx ++ [p_ret])
-             0 ctxElimType
+       scWhnf sc =<< ctxSubst sc (params ++ [p_ret]) 0 ctxElimType
 
 -- | Zip two lists of equal length, but return 'Nothing' if the
 -- lengths are different.
