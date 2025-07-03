@@ -812,7 +812,7 @@ ctxApplyMulti sc fm argsm =
     helper :: Term -> [Term] -> IO Term
     helper f [] = return f
     helper f (arg : args) =
-      do f' <- ctxApply sc (return f) (return arg)
+      do f' <- scApply sc f arg
          helper f' args
 
 -- | Form a lambda-abstraction as a 'Term'
@@ -823,7 +823,7 @@ ctxLambda1 ::
 ctxLambda1 sc x tp body_f =
   do var <- scLocalVar sc 0
      body <- body_f var
-     scTermF sc (Lambda x tp body)
+     scLambda sc x tp body
 
 -- | Form a multi-arity lambda-abstraction as a 'Term'
 ctxLambda ::
@@ -841,7 +841,7 @@ ctxPi1 :: SharedContext -> LocalName -> Term -> (Term -> IO Term) -> IO Term
 ctxPi1 sc x tp body_f =
   do var <- scLocalVar sc 0
      body <- body_f var
-     scTermF sc (Pi x tp body)
+     scPi sc x tp body
 
 -- | Form a multi-arity pi-abstraction as a 'Term'
 ctxPi :: SharedContext -> [(LocalName, Term)] -> ([Term] -> IO Term) -> IO Term
@@ -1026,7 +1026,7 @@ ctxPRetTp sc d params ixs s =
   do param_vars <- ctxVars sc params
      param_vars' <- ctxLift sc 0 (length ixs) param_vars
      dt <- scDataTypeAppParams sc d param_vars' ix_vars
-     ctxPi1 sc "_" dt $ \_ -> scSort sc s
+     scFun sc dt =<< scSort sc s
 
 -- | Take a list of terms and match them up with a sequence of bindings,
 -- returning a structured '[Term]' list.
@@ -1170,8 +1170,7 @@ ctxCtorElimType sc d_top c
            -- computed from the argument structure, and we cannot (well, we
            -- could, but it would be much more work to) express that computation
            -- in the Haskell type system
-           (ctxPi1 sc "_" ih_tp $ \_ ->
-               ctxLift sc 0 1 rest)
+           scFun sc ih_tp rest
 
 -- | Build a function that substitutes parameters and a @p_ret@ return type
 -- function into the type of an eliminator, as returned by 'ctxCtorElimType',
