@@ -823,15 +823,9 @@ ctxPi sc ((x, tp) : xs) body_f =
   do var <- scLocalVar sc (length xs)
      body_f (var : vars)
 
-ctxRecursorAppM ::
-  SharedContext ->
-  IO Term ->
-  IO [Term] ->
-  IO Term ->
-  IO Term
-ctxRecursorAppM sc recM ixsM argM =
-  do app <- RecursorApp <$> recM <*> ixsM <*> argM
-     scFlatTermF sc app
+scRecursorApp :: SharedContext -> Term -> [Term] -> Term -> IO Term
+scRecursorApp sc rec ixs arg =
+  scFlatTermF sc (RecursorApp rec ixs arg)
 
 -- | The class of "in-context" types that support lifting and substitution
 class CtxLiftSubst f where
@@ -1263,7 +1257,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
         do rec' <- ctxLift sc 0 (length zs_ctx) rec
            x' <- ctxLift sc 0 (length zs_ctx) x
            x_zs <- scApplyAll sc x' zs
-           ctxRecursorAppM sc (pure rec') (return ixs) (pure x_zs)
+           scRecursorApp sc rec' ixs x_zs
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
