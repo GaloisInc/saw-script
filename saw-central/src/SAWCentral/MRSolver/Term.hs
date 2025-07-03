@@ -3,6 +3,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -38,6 +39,7 @@ import Data.IORef
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, runReader)
+import Control.Monad.Trans (MonadTrans(..))
 import qualified Data.IntMap as IntMap
 import Numeric.Natural (Natural)
 import GHC.Generics
@@ -49,7 +51,6 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
 import SAWCore.Module (ModuleMap)
 import SAWCore.Term.Functor
-import SAWCore.Term.CtxTerm (MonadTerm(..))
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.Recognizer hiding ((:*:))
@@ -312,6 +313,22 @@ asLambdaName :: Recognizer Term LocalName
 asLambdaName (asLambda -> Just (nm, _, _)) = Just nm
 asLambdaName _ = Nothing
 
+----------------------------------------------------------------------
+-- * 'MonadTerm' type class
+----------------------------------------------------------------------
+
+-- | The class of monads that can build terms and substitute into them
+class Monad m => MonadTerm m where
+  mkTermF :: TermF Term -> m Term
+  liftTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> m Term
+  substTerm :: DeBruijnIndex -> [Term] -> Term -> m Term
+               -- ^ NOTE: the first term in the list is substituted for the most
+               -- recently-bound variable, i.e., deBruijn index 0
+
+instance (MonadTerm m, MonadTrans t, Monad (t m)) => MonadTerm (t m) where
+  mkTermF = lift . mkTermF
+  liftTerm n i t = lift $ liftTerm n i t
+  substTerm n s t = lift $ substTerm n s t
 
 ----------------------------------------------------------------------
 -- * Utility Functions for Transforming 'Term's
