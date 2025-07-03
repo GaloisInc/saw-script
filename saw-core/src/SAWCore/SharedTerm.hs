@@ -852,20 +852,6 @@ ctxPi sc ((x, tp) : xs) body_f =
   do var <- scLocalVar sc (length xs)
      body_f (var : vars)
 
--- | Build an application of a constructor as a 'Term'
-ctxCtorAppM ::
-  SharedContext ->
-  Name ->
-  ExtCns Term ->
-  IO [Term] ->
-  IO [Term] ->
-  IO Term
-ctxCtorAppM sc _d c paramsM argsM =
-  ctxApplyMulti sc (ctxApplyMulti sc t paramsM) argsM
-  where
-    t :: IO Term
-    t = scTermF sc (Constant (Name (ecVarIndex c) (ecName c)))
-
 ctxRecursorAppM ::
   SharedContext ->
   IO Term ->
@@ -1127,15 +1113,16 @@ ctxCtorElimType sc d_top c
     [(LocalName, CtorArg)] ->
     [Term] ->
     IO Term
-  helper d params pret prevs [] ret_ixs =
+  helper _d params pret prevs [] ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
     do (vars, prev_vars) <- ctxVars2 sc (params ++ [pret]) prevs
        -- note: length vars == length (params ++ [pret])
        let param_terms = init vars
        let p_ret = last vars
-       ctxApply sc (ctxApplyMulti sc (return p_ret) (return ret_ixs)) $
-         ctxCtorAppM sc d c (return param_terms) (return prev_vars)
+       let cname = Name (ecVarIndex c) (ecName c)
+       ctxApply sc (scApplyAll sc p_ret ret_ixs) $
+         scCtorAppParams sc cname param_terms prev_vars
   helper d params pret prevs ((str, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
     (ctxPi sc [(str, tp)] $ \_ ->
