@@ -3,7 +3,6 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -40,6 +39,7 @@ import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, runReader)
 import Control.Monad.Trans (MonadTrans(..))
+import Control.Monad.Trans.Maybe
 import qualified Data.IntMap as IntMap
 import Numeric.Natural (Natural)
 import GHC.Generics
@@ -325,7 +325,7 @@ class Monad m => MonadTerm m where
                -- ^ NOTE: the first term in the list is substituted for the most
                -- recently-bound variable, i.e., deBruijn index 0
 
-instance (MonadTerm m, MonadTrans t, Monad (t m)) => MonadTerm (t m) where
+instance (MonadTerm m) => MonadTerm (MaybeT m) where
   mkTermF = lift . mkTermF
   liftTerm n i t = lift $ liftTerm n i t
   substTerm n s t = lift $ substTerm n s t
