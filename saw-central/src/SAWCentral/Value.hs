@@ -282,9 +282,9 @@ data Value
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
-  | VMaybe (Maybe Value)
   | VRecord (Map SS.Name Value)
-  | VLambda (Value -> TopLevel Value)
+  | VLambda LocalEnv SS.Pattern SS.Expr
+  | VBuiltin (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
   | VReturn Value -- Returned value in unspecified monad
@@ -444,15 +444,19 @@ showsPrecValue opts nenv p v =
     VInteger n -> shows n
     VArray vs -> PPS.showBrackets $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
     VTuple vs -> showParen True $ PPS.showCommaSep $ map (showsPrecValue opts nenv 0) vs
-    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
-    VMaybe Nothing -> showString "Nothing"
     VRecord m ->
       PPS.showBraces $ PPS.showCommaSep $ map showFld (M.toList m)
         where
           showFld (n, fv) =
             showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
-    VLambda {} -> showString "<<function>>"
+    VLambda _env pat e ->
+      let pat' = PP.pretty pat
+          e' = PP.pretty e
+      in
+      shows $ PP.sep ["\\", pat', "->", e']
+
+    VBuiltin {} -> showString "<<builtin>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
