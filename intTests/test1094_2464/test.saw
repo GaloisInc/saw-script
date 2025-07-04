@@ -1,0 +1,21 @@
+// A regression test for #1094 and #2464. This ensures that we can successfully
+// use sat-related commands to produce models for Vec values in SAWCore, in both
+// the SBV and What4 backends.
+
+let test_prop (prover : ProofScript ()) (prop : Term) = do {
+    // Test both sat_print...
+    sat_print prover prop;
+
+    // ...and sat/caseSatResult, as these commands exercise slightly different
+    // code paths.
+    r_sbv <- sat prover prop;
+    caseSatResult r_sbv (print "Unsat") print;
+};
+
+let prop1 = {{ \(x : [2][8]) -> x == reverse x }};
+test_prop (sbv_unint_z3 []) prop1;
+test_prop (w4_unint_z3 []) prop1;
+
+let prop2 = {{ \(x : [0][8]) -> x == reverse x }};
+test_prop (sbv_unint_z3 []) prop2;
+test_prop (w4_unint_z3 []) prop2;
