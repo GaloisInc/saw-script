@@ -84,28 +84,17 @@ data CtorArgStruct =
 -- * Parsing and Building Constructor Types
 --
 
--- | Generic method for testing whether a datatype occurs in an object
-class UsesDataType a where
-  usesDataType :: Name -> a -> Bool
-
-instance UsesDataType (TermF Term) where
-  usesDataType d (Constant d')
-    | d' == d = True
---  usesDataType d (FTermF (DataTypeApp d' _ _))
---    | d' == d = True
-  usesDataType d (FTermF (RecursorType d' _ _ _))
-    | d' == d = True
-  usesDataType d (FTermF (Recursor rec))
-    | recursorDataType rec == d = True
-  usesDataType d tf = any (usesDataType d) tf
-
-instance UsesDataType Term where
-  usesDataType d = usesDataType d . unwrapTermF
-
-instance UsesDataType [(LocalName, Term)] where
-  usesDataType _ [] = False
-  usesDataType d ((_, tp) : tps) = usesDataType d tp || usesDataType d tps
-
+-- | Test whether a specific datatype occurs in a term.
+usesDataType :: Name -> Term -> Bool
+usesDataType d t =
+  case unwrapTermF t of
+    Constant d'
+      | d' == d -> True
+    FTermF (RecursorType d' _ _ _)
+      | d' == d -> True
+    FTermF (Recursor (recursorDataType -> d'))
+      | d' == d -> True
+    tf -> any (usesDataType d) tf
 
 -- | Check that a type is a valid application of datatype @d@ for use in
 -- specific ways in the type of a constructor for @d@. This requires that this
@@ -145,7 +134,7 @@ asCtorArg d params dt_ixs (asPiList ->
                                  (zs,
                                   asCtorDTApp d params dt_ixs ->
                                   Just ixs))
-  | not (usesDataType d zs)
+  | not (any (usesDataType d . snd) zs)
   = Just (RecursiveArg zs ixs)
 asCtorArg d _ _ tp
   | not (usesDataType d tp)
