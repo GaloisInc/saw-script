@@ -331,6 +331,8 @@ import SAWCore.Module
   , resolvedNameType
   , resolveNameInMap
   , requireNameInMap
+  , CtorArg(..)
+  , CtorArgStruct(..)
   , Ctor(..)
   , DefQualifier(..)
   , DataType(..)
@@ -343,7 +345,6 @@ import SAWCore.Name
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
-import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty
 import SAWCore.Unique
 

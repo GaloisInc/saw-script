@@ -16,12 +16,7 @@ Portability : non-portable (language extensions)
 {-# LANGUAGE UndecidableInstances #-}
 
 module SAWCore.Term.CtxTerm
-  (
-    -- * Constructor Argument Types
-    CtorArg(..)
-  , CtorArgStruct(..)
-    -- * Parsing and Building Constructor Types
-  , mkCtorArgStruct
+  ( mkCtorArgStruct
   ) where
 
 import Control.Monad
@@ -29,7 +24,7 @@ import Control.Monad
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
--- import SAWCore.Term.Pretty (showTerm)
+import SAWCore.Module (CtorArg(..), CtorArgStruct(..))
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices
@@ -43,46 +38,6 @@ ctxAsDataTypeApp d params ixs t =
      guard (length args == length params + length ixs)
      let (params', ixs') = splitAt (length params) args
      pure (params', ixs')
-
---
--- * Constructor Argument Types
---
-
--- | A specification of the type of an argument for a constructor of datatype
--- @d@, that has a specified list @ixs@ of indices, inside a context @ctx@ of
--- parameters and earlier arguments
-data CtorArg where
-  -- | A fixed, constant type
-  ConstArg :: Term -> CtorArg
-  -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
-  -- specifies a recursive argument type of the form
-  --
-  -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
-  --
-  -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
-  -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
-  -- parameters of @d@ (not given here), and the @ei@ are the type indices of
-  -- @d@.
-  RecursiveArg ::
-    [(LocalName, Term)] ->
-    [Term] ->
-    CtorArg
-
--- | A structure that defines the parameters, arguments, and return type indices
--- of a constructor, using 'Term' and friends to get the bindings right
-data CtorArgStruct =
-  CtorArgStruct
-  {
-    ctorParams :: [ExtCns Term],
-    ctorArgs :: [(LocalName, CtorArg)],
-    ctorIndices :: [Term],
-    dataTypeIndices :: [(LocalName, Term)]
-  }
-
-
---
--- * Parsing and Building Constructor Types
---
 
 -- | Test whether a specific datatype occurs in a term.
 usesDataType :: Name -> Term -> Bool
