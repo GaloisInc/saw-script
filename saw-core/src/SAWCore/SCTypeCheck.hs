@@ -28,6 +28,7 @@ module SAWCore.SCTypeCheck
   , TCM
   , runTCM
   , askCtx
+  , askCtxEC
   , askModName
   , withVar
   , withCtx
@@ -39,6 +40,7 @@ module SAWCore.SCTypeCheck
   , typeInferCompleteWHNF
   , TypeInferCtx(..)
   , typeInferCompleteInCtx
+  , typeInferCompleteInCtxEC
   , checkSubtype
   , ensureSort
   , applyPiTyped
@@ -90,7 +92,7 @@ type TCState = Map TermIndex Term
 --
 -- * Can throw 'TCError's
 type TCM =
-  ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)])
+  ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)], Map LocalName (ExtCns Term))
   (StateT TCState (ExceptT TCError IO))
 
 -- | Run a type-checking computation in a given context, starting from the empty
@@ -99,15 +101,19 @@ runTCM ::
   TCM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   IO (Either TCError a)
 runTCM m sc mnm ctx =
-  runExceptT $ evalStateT (runReaderT m (sc, mnm, ctx)) Map.empty
+  runExceptT $ evalStateT (runReaderT m (sc, mnm, ctx, Map.empty)) Map.empty
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
-askCtx = (\(_,_,ctx) -> ctx) <$> ask
+askCtx = (\(_,_,ctx,_) -> ctx) <$> ask
+
+-- | Read the current context of named variables
+askCtxEC :: TCM (Map LocalName (ExtCns Term))
+askCtxEC = (\(_,_,_,nctx) -> nctx) <$> ask
 
 -- | Read the current module name
 askModName :: TCM (Maybe ModuleName)
-askModName = (\(_,mnm,_) -> mnm) <$> ask
+askModName = (\(_,mnm,_,_) -> mnm) <$> ask
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -121,7 +127,16 @@ withVar x tp m =
   flip catchError (throwError . ErrorCtx x tp) $
   do saved_table <- get
      put Map.empty
-     a <- local (\(sc,mnm,ctx) -> (sc, mnm, (x,tp):ctx)) m
+     a <- local (\(sc,mnm,ctx,nctx) -> (sc, mnm, (x,tp):ctx, nctx)) m
+     put saved_table
+     return a
+
+withEC :: LocalName -> ExtCns Term -> TCM a -> TCM a
+withEC x ec m =
+  flip catchError (throwError . ErrorCtx x (ecType ec)) $
+  do saved_table <- get
+     put Map.empty
+     a <- local (\(sc,mnm,ctx,nctx) -> (sc, mnm, ctx, Map.insert x ec nctx)) m
      put saved_table
      return a
 
@@ -129,6 +144,11 @@ withVar x tp m =
 -- variables and their types. See 'withVar'.
 withCtx :: [(LocalName, Term)] -> TCM a -> TCM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
+
+-- | Run a type-checking computation in a typing context extended by a list of
+-- variables and their types. See 'withEC'.
+withCtxEC :: [(LocalName, ExtCns Term)] -> TCM a -> TCM a
+withCtxEC = flip (foldr (\(x,ec) -> withEC x ec))
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorTerm' constructor
@@ -158,7 +178,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- (\(sc,_,_) -> sc) <$> ask
+    do sc <- (\(sc,_,_,_) -> sc) <$> ask
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where
@@ -370,6 +390,15 @@ instance TypeInfer a => TypeInferCtx LocalName a where
        ((x,typedVal typed_tp,s):) <$>
          withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
 
+typeInferCompleteCtxEC ::
+  TypeInfer a => [(LocalName, a)] -> TCM [(LocalName, ExtCns Term, Sort)]
+typeInferCompleteCtxEC [] = pure []
+typeInferCompleteCtxEC ((x, tp) : ctx) =
+  do typed_tp <- typeInferComplete tp
+     s <- ensureSort (typedType typed_tp)
+     ec <- liftTCM scFreshEC x (typedVal typed_tp)
+     ((x, ec, s) :) <$> withEC x ec (typeInferCompleteCtxEC ctx)
+
 -- | Perform type inference on a context via 'typeInferCompleteCtx', and then
 -- run a computation in that context via 'withCtx', also passing in that context
 -- to the computation
@@ -380,6 +409,15 @@ typeInferCompleteInCtx ctx f =
   do typed_ctx <- typeInferCompleteCtx ctx
      withCtx (map (\(x,tp,_) -> (x,tp)) typed_ctx) (f typed_ctx)
 
+-- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
+-- run a computation in that context via 'withCtxEC', also passing in that context
+-- to the computation
+typeInferCompleteInCtxEC ::
+  TypeInfer tp => [(LocalName, tp)] ->
+  ([(LocalName, ExtCns Term, Sort)] -> TCM a) -> TCM a
+typeInferCompleteInCtxEC ctx f =
+  do typed_ctx <- typeInferCompleteCtxEC ctx
+     withCtxEC (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work

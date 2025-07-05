@@ -29,11 +29,12 @@ import Control.Monad
 import SAWCore.Name
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
+-- import SAWCore.Term.Pretty (showTerm)
 
 -- | Test if a 'Term' is an application of a specific datatype with the
 -- supplied context of parameters and indices
-ctxAsDataTypeApp :: Name -> [(LocalName, tp1)] ->
-                    [(LocalName, tp2)] -> Term ->
+ctxAsDataTypeApp :: Name -> [param] ->
+                    [index] -> Term ->
                     Maybe ([Term], [Term])
 ctxAsDataTypeApp d params ixs t =
   do let (f, args) = asApplyAll t
@@ -72,7 +73,7 @@ data CtorArg where
 data CtorArgStruct =
   CtorArgStruct
   {
-    ctorParams :: [(LocalName, Term)],
+    ctorParams :: [ExtCns Term],
     ctorArgs :: [(LocalName, CtorArg)],
     ctorIndices :: [Term],
     dataTypeIndices :: [(LocalName, Term)]
@@ -115,79 +116,68 @@ instance UsesDataType [(LocalName, Term)] where
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: Name -> [(LocalName, Term)] ->
-               [(LocalName, Term)] ->
-               [(LocalName, tp1)] ->
-               [(LocalName, tp2)] ->
+asCtorDTApp :: Name -> [ExtCns Term] ->
+               [index] ->
                Term ->
                Maybe [Term]
-asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
+asCtorDTApp d params dt_ixs (ctxAsDataTypeApp d params dt_ixs ->
                                        Just (param_vars, ixs))
-  | isVarList params ctx1 ctx2 param_vars &&
-    not (any (usesDataType d) ixs)
+  | isVarList params param_vars && not (any (usesDataType d) ixs)
   = Just ixs
   where
-    -- Check that the given list of terms is a list of bound variables, one for
-    -- each parameter, in the context extended by the given arguments
-    isVarList :: [(LocalName, tp1)] ->
-                 [(LocalName, tp2)] ->
-                 [(LocalName, tp3)] ->
-                 [Term] ->
-                 Bool
-    isVarList _ _ _ [] = True
-    isVarList (_ : ps) c1 c2 ((unwrapTermF -> LocalVar i) : ts) =
-      i == length ps + length c1 + length c2 &&
-      isVarList ps c1 c2 ts
-    isVarList _ _ _ _ = False
-asCtorDTApp _ _ _ _ _ _ = Nothing
+    -- Check that the given list of terms is a list of named
+    -- variables, one for each parameter
+    isVarList :: [ExtCns Term] -> [Term] -> Bool
+    isVarList _ [] = True
+    isVarList (p : ps) ((asExtCns -> Just ec) : ts) =
+      ec == p && isVarList ps ts
+    isVarList _ _ = False
+    -- isVarList ps (t : _) = error $ unwords ["isVarList", showTerm t, show (map (showTerm . Unshared . FTermF . ExtCns) ps)]
+asCtorDTApp _ _ _ _ = Nothing
 
 
 -- | Check that an argument for a constructor has one of the allowed forms
-asCtorArg :: Name -> [(LocalName, Term)] ->
-             [(LocalName, Term)] ->
-             [(LocalName, tp)] ->
+asCtorArg :: Name -> [ExtCns Term] ->
+             [index] ->
              Term ->
              Maybe CtorArg
-asCtorArg d params dt_ixs prevs (asPiList ->
+asCtorArg d params dt_ixs (asPiList ->
                                  (zs,
-                                  asCtorDTApp d params dt_ixs prevs zs ->
+                                  asCtorDTApp d params dt_ixs ->
                                   Just ixs))
   | not (usesDataType d zs)
   = Just (RecursiveArg zs ixs)
-asCtorArg d _ _ _ tp
+asCtorArg d _ _ tp
   | not (usesDataType d tp)
   = Just (ConstArg tp)
-asCtorArg _ _ _ _ _ = Nothing
+asCtorArg _ _ _ _ = Nothing
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
-asPiCtorArg :: Name -> [(LocalName, Term)] ->
-               [(LocalName, Term)] ->
-               [(LocalName, tp)] ->
+asPiCtorArg :: Name -> [ExtCns Term] ->
+               [index] ->
                Term ->
                Maybe (LocalName, CtorArg, Term)
-asPiCtorArg d params dt_ixs prevs t =
+asPiCtorArg d params dt_ixs t =
   case asPi t of
-    Just (x, asCtorArg d params dt_ixs prevs -> Just arg, rest) ->
+    Just (x, asCtorArg d params dt_ixs -> Just arg, rest) ->
       Just (x, arg, rest)
     _ ->
       Nothing
 
 -- | Helper function for 'mkCtorArgStruct'
-mkCtorArgsIxs :: Name -> [(LocalName, Term)] ->
-                 [(LocalName, Term)] ->
-                 [(LocalName, CtorArg)] ->
+mkCtorArgsIxs :: Name -> [ExtCns Term] ->
+                 [index] ->
                  Term ->
                  Maybe ([(LocalName, CtorArg)], [Term])
-mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs ->
+mkCtorArgsIxs d params dt_ixs (asPiCtorArg d params dt_ixs ->
                                      Just (x, arg, rest)) =
-  case mkCtorArgsIxs d params dt_ixs (prevs ++ [(x, arg)]) rest of
+  case mkCtorArgsIxs d params dt_ixs rest of
     Just (args, ixs) -> Just ((x, arg) : args, ixs)
     Nothing -> Nothing
-mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs [] ->
-                                     Just ixs) =
+mkCtorArgsIxs d params dt_ixs (asCtorDTApp d params dt_ixs -> Just ixs) =
   Just ([], ixs)
-mkCtorArgsIxs _ _ _ _ _ = Nothing
+mkCtorArgsIxs _ _ _ _ = Nothing
 
 
 -- | Take in a datatype and bindings lists for its parameters and indices, and
@@ -197,12 +187,12 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
 mkCtorArgStruct ::
   Name ->
-  [(LocalName, Term)] ->
+  [ExtCns Term] ->
   [(LocalName, Term)] ->
   Term ->
   Maybe CtorArgStruct
 mkCtorArgStruct d params dt_ixs ctor_tp =
-  case mkCtorArgsIxs d params dt_ixs [] ctor_tp of
+  case mkCtorArgsIxs d params dt_ixs ctor_tp of
     Just (args, ctor_ixs) ->
       Just (CtorArgStruct params args ctor_ixs dt_ixs)
     Nothing -> Nothing

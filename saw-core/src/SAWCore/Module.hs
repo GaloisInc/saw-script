@@ -211,7 +211,7 @@ data DataType =
     -- ^ The name of this datatype
   , dtVarIndex :: !VarIndex
     -- ^ Unique var index for this data type
-  , dtParams :: [(LocalName, Term)]
+  , dtParams :: [ExtCns Term]
     -- ^ The context of parameters of this datatype
   , dtIndices :: [(LocalName, Term)]
     -- ^ The context of indices of this datatype
