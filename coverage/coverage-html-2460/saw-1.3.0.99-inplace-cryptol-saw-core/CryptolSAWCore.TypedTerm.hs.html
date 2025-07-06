@@ -187,9 +187,9 @@ span.spaces    { background: white }
 <span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; <span class="nottickedoff">C.tBit</span></span>
 <span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt; <span class="nottickedoff">C.tInteger</span></span>
 <span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt; <span class="nottickedoff">C.tIntMod (C.tNum n)</span></span>
-<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; <span class="nottickedoff">C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)</span></span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum <span class="nottickedoff">n</span>) (cryptolTypeOfFirstOrderType t)</span>
 <span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">-- NB, special case, don't produce 1-tuples</span>
-<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; <span class="nottickedoff">cryptolTypeOfFirstOrderType x</span></span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; cryptolTypeOfFirstOrderType x</span>
 <span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map <span class="nottickedoff">cryptolTypeOfFirstOrderType</span> ts)</span>
 <span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">FOTArray a b -&gt;</span>
 <span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tArray</span></span>

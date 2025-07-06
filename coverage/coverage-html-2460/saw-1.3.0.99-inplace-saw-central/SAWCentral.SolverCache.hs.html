@@ -151,7 +151,7 @@ span.spaces    { background: white }
 <span class="lineno">  132 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">| t_us `mod` 1000    == 0 = show (t_us `div` 1000) ++ &quot;ms&quot;</span></span>
 <span class="lineno">  133 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">| otherwise               = show t_us ++ &quot;us&quot;</span></span>
 <span class="lineno">  134 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">in Left $ &quot;Operation timed out (&quot; ++ t_str ++ &quot;)&quot;</span></span>
-<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">Left (exn :: SomeException) -&gt; Left $ show exn</span></span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">Left (exn :: SomeException) -&gt; <span class="nottickedoff">Left $ show exn</span></span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>-- | Encode a 'ByteString' as a hex string
 <span class="lineno">  138 </span>encodeHex :: ByteString -&gt; String
@@ -523,10 +523,10 @@ span.spaces    { background: white }
 <span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">(Right (), cache') -&gt; do</span>
 <span class="lineno">  505 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ M.adjust (+1) Inserts</span>
 <span class="lineno">  506 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
-<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; do</span>
-<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span>
-<span class="lineno">  509 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ <span class="nottickedoff">M.adjust (+1) FailedInserts</span></span>
-<span class="lineno">  510 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">cache'</span>)</span></span>
+<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  509 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ M.adjust (+1) FailedInserts</span></span>
+<span class="lineno">  510 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span></span>
 <span class="lineno">  511 </span>
 <span class="lineno">  512 </span>-- | Set the 'FilePath' of the solver result cache and save all results cached
 <span class="lineno">  513 </span>-- so far
@@ -591,7 +591,7 @@ span.spaces    { background: white }
 <span class="lineno">  572 </span><span class="spaces">  </span><span class="istickedoff">(ks, mvs) &lt;- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], M.empty) db</span>
 <span class="lineno">  573 </span><span class="spaces">  </span><span class="istickedoff">forM_ ks $ \k -&gt; LMDB.transaction env $ LMDB.delete k db</span>
 <span class="lineno">  574 </span><span class="spaces">  </span><span class="istickedoff">let s0 = if <span class="tickonlyfalse">length ks == 1</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;s&quot;</span>
-<span class="lineno">  575 </span><span class="spaces">      </span><span class="istickedoff">s1 = if M.size mvs == 0 then &quot;&quot; else &quot;:&quot;</span>
+<span class="lineno">  575 </span><span class="spaces">      </span><span class="istickedoff">s1 = if <span class="tickonlyfalse">M.size mvs == 0</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;:&quot;</span>
 <span class="lineno">  576 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $</span>
 <span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">&quot;Removed &quot; ++ show (length ks) ++</span>
 <span class="lineno">  578 </span><span class="spaces">    </span><span class="istickedoff">&quot; cached result&quot; ++ s0 ++ &quot; with mismatched version&quot; ++ s0 ++ s1</span>

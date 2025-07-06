@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  | FOTArray FirstOrderType FirstOrderType
 <span class="lineno">   66 </span>  | FOTTuple [FirstOrderType]
 <span class="lineno">   67 </span>  | FOTRec (Map FieldName FirstOrderType)
-<span class="lineno">   68 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">   68 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Generic</span></span></span></span>)
 <span class="lineno">   69 </span>
 <span class="lineno">   70 </span>-- | Values inhabiting those first-order types.
 <span class="lineno">   71 </span>-- NB: The JSON encoding of this type, used for saw-script solver result caching,
@@ -269,15 +269,15 @@ span.spaces    { background: white }
 <span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff">dropFO cs = <span class="nottickedoff">cs</span></span></span>
 <span class="lineno">  251 </span>
 <span class="lineno">  252 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">FromJSON FirstOrderType</span></span></span></span> where
-<span class="lineno">  253 </span>  <span class="decl"><span class="nottickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
-<span class="lineno">  254 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">FromJSON FirstOrderValue</span></span></span></span> where
+<span class="lineno">  253 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
+<span class="lineno">  254 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSON FirstOrderValue</span></span></span></span> where
 <span class="lineno">  255 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
-<span class="lineno">  256 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
+<span class="lineno">  256 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
 <span class="lineno">  257 </span>
 <span class="lineno">  258 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON FirstOrderType</span></span></span></span></span></span> where
 <span class="lineno">  259 </span>  <span class="decl"><span class="istickedoff">toJSON = JSON.genericToJSON firstOrderJSONOptions</span></span>
 <span class="lineno">  260 </span>  <span class="decl"><span class="nottickedoff">toEncoding = JSON.genericToEncoding firstOrderJSONOptions</span></span>
-<span class="lineno">  261 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON FirstOrderValue</span></span></span></span></span></span> where
+<span class="lineno">  261 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON FirstOrderValue</span></span></span></span></span></span> where
 <span class="lineno">  262 </span>  <span class="decl"><span class="istickedoff">toJSON = JSON.genericToJSON firstOrderJSONOptions</span></span>
 <span class="lineno">  263 </span>  <span class="decl"><span class="istickedoff">toEncoding = JSON.genericToEncoding <span class="nottickedoff">firstOrderJSONOptions</span></span></span>
 <span class="lineno">  264 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">ToJSONKey FirstOrderValue</span></span></span></span>
@@ -299,17 +299,17 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span>
 <span class="lineno">  281 </span>-- | Smart constructor
 <span class="lineno">  282 </span>fovVec :: FirstOrderType -&gt; [FirstOrderValue] -&gt; FirstOrderValue
-<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">fovVec t vs =</span>
-<span class="lineno">  284 </span><span class="spaces">  </span><span class="nottickedoff">case (t, traverse toBit vs) of</span>
-<span class="lineno">  285 </span><span class="spaces">    </span><span class="nottickedoff">(FOTBit, Just bs) -&gt; FOVWord (fromIntegral (length bs)) (fromBits bs)</span>
-<span class="lineno">  286 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; FOVVec t vs</span>
-<span class="lineno">  287 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  288 </span><span class="spaces">    </span><span class="nottickedoff">toBit :: FirstOrderValue -&gt; Maybe Bool</span>
-<span class="lineno">  289 </span><span class="spaces">    </span><span class="nottickedoff">toBit (FOVBit b) = Just b</span>
-<span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">toBit _ = Nothing</span>
-<span class="lineno">  291 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">fromBits :: [Bool] -&gt; Integer</span>
-<span class="lineno">  293 </span><span class="spaces">    </span><span class="nottickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span>
+<span class="lineno">  283 </span><span class="decl"><span class="istickedoff">fovVec t vs =</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">case (t, <span class="nottickedoff">traverse toBit vs</span>) of</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff">(FOTBit, Just bs) -&gt; <span class="nottickedoff">FOVWord (fromIntegral (length bs)) (fromBits bs)</span></span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; FOVVec t vs</span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">toBit :: FirstOrderValue -&gt; Maybe Bool</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">toBit (FOVBit b) = Just b</span></span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">toBit _ = Nothing</span></span>
+<span class="lineno">  291 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">fromBits :: [Bool] -&gt; Integer</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fromBits = foldl (\n b -&gt; 2*n + if b then 1 else 0) 0</span></span></span>
 <span class="lineno">  294 </span>
 <span class="lineno">  295 </span>finiteTypeOf :: FiniteValue -&gt; FiniteType
 <span class="lineno">  296 </span><span class="decl"><span class="nottickedoff">finiteTypeOf fv =</span>
@@ -327,10 +327,10 @@ span.spaces    { background: white }
 <span class="lineno">  308 </span><span class="spaces">    </span><span class="istickedoff">FOVInt _    -&gt; <span class="nottickedoff">FOTInt</span></span>
 <span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">FOVIntMod n _ -&gt; <span class="nottickedoff">FOTIntMod n</span></span>
 <span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">FOVWord n _ -&gt; <span class="nottickedoff">FOTVec n FOTBit</span></span>
-<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FOVVec t vs -&gt; <span class="nottickedoff">FOTVec (fromIntegral (length vs)) t</span></span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FOVVec t vs -&gt; FOTVec <span class="nottickedoff">(fromIntegral (length vs))</span> t</span>
 <span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">FOVArray tk d _vs -&gt; <span class="nottickedoff">FOTArray tk (firstOrderTypeOf d)</span></span>
 <span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">FOVOpaqueArray tk tv -&gt; <span class="nottickedoff">FOTArray tk tv</span></span>
-<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">FOVTuple vs -&gt; FOTTuple (map <span class="nottickedoff">firstOrderTypeOf</span> vs)</span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">FOVTuple vs -&gt; FOTTuple (map firstOrderTypeOf vs)</span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">FOVRec vm   -&gt; <span class="nottickedoff">FOTRec (fmap firstOrderTypeOf vm)</span></span></span>
 <span class="lineno">  316 </span>
 <span class="lineno">  317 </span>-- | Compute the number of bits in the type
@@ -441,9 +441,9 @@ span.spaces    { background: white }
 <span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">i' &lt;- scNatToInt sc =&lt;&lt; scNat sc (fromInteger (i `mod` toInteger n))</span></span>
 <span class="lineno">  423 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">scToIntMod sc n' i'</span></span>
 <span class="lineno">  424 </span><span class="spaces">    </span><span class="istickedoff">FOVWord n x -&gt; scBvConst sc n x</span>
-<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">FOVVec t vs -&gt; <span class="nottickedoff">do t' &lt;- scFirstOrderType sc t</span></span>
-<span class="lineno">  426 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">vs' &lt;- traverse (scFirstOrderValue sc) vs</span></span>
-<span class="lineno">  427 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">scVector sc t' vs'</span></span>
+<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">FOVVec t vs -&gt; do t' &lt;- scFirstOrderType sc t</span>
+<span class="lineno">  426 </span><span class="spaces">                      </span><span class="istickedoff">vs' &lt;- traverse (scFirstOrderValue sc) vs</span>
+<span class="lineno">  427 </span><span class="spaces">                      </span><span class="istickedoff">scVector sc t' vs'</span>
 <span class="lineno">  428 </span><span class="spaces">    </span><span class="istickedoff">FOVArray tk d vs -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno">  429 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- first get the key and value types</span></span>
 <span class="lineno">  430 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tk' &lt;- scFirstOrderType sc tk</span></span>
