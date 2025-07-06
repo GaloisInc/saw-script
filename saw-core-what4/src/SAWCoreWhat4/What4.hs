@@ -1296,7 +1296,12 @@ data Labeler sym
   = BaseLabel (TypedExpr sym)
   | ZeroWidthBVLabel
   | IntModLabel Natural (SymInteger sym)
-  | VecLabel (Vector (Labeler sym))
+  | VecLabel
+      FirstOrderType
+      -- ^ The element type. It is necessary to store this in case the Vec is
+      -- empty, in which case we cannot retrieve the type from the element
+      -- values.
+      (Vector (Labeler sym))
   | TupleLabel (Vector (Labeler sym))
   | RecLabel (Map FieldName (Labeler sym))
 
@@ -1316,7 +1321,7 @@ newVarFOT sym (FOTVec n tp)
   | tp /= FOTBit
   = do (labels,vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVarFOT sym tp)
        args <- traverse @Vector @(StateT Int IO) (return . ready) vals
-       return (VecLabel labels, VVector args)
+       return (VecLabel tp labels, VVector args)
 
 newVarFOT sym (FOTRec tm)
   = do (labels, vals) <- myfun <$> traverse (newVarFOT sym) tm
@@ -1351,9 +1356,8 @@ getLabelValues f =
   \case
     TupleLabel labels ->
       FOVTuple <$> traverse (getLabelValues f) (V.toList labels)
-    VecLabel labels ->
+    VecLabel vty labels ->
       FOVVec vty <$> traverse (getLabelValues f) (V.toList labels)
-      where vty = error "TODO: compute vector type, or just store it"
     RecLabel labels ->
       FOVRec <$> traverse (getLabelValues f) labels
     IntModLabel n x ->
