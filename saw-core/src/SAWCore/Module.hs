@@ -138,16 +138,20 @@ data CtorArg
   -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
   -- parameters of @d@ (not given here), and the @ei@ are the type indices of
   -- @d@.
-  | RecursiveArg [(LocalName, Term)] [Term]
+  | RecursiveArg [ExtCns Term] [Term]
 
 -- | A structure that defines the parameters, arguments, and return type indices
--- of a constructor, using 'Term' and friends to get the bindings right
+-- of a constructor.
 data CtorArgStruct =
   CtorArgStruct
   { ctorParams :: [ExtCns Term],
-    ctorArgs :: [(LocalName, CtorArg)],
+    -- ^ earlier ctorParams are in scope
+    ctorArgs :: [(Name, CtorArg)],
+    -- ^ ctorParams and earlier ctorArgs are in scope
     ctorIndices :: [Term],
-    dataTypeIndices :: [(LocalName, Term)]
+    -- ^ ctorParams and ctorArgs are in scope
+    dataTypeIndices :: [ExtCns Term]
+    -- ^ ctorParams and earlier dataTypeIndices are in scope
   }
 
 -- | A specification of a constructor
@@ -239,7 +243,7 @@ data DataType =
     -- ^ Unique var index for this data type
   , dtParams :: [ExtCns Term]
     -- ^ The context of parameters of this datatype
-  , dtIndices :: [(LocalName, Term)]
+  , dtIndices :: [ExtCns Term]
     -- ^ The context of indices of this datatype
   , dtSort :: Sort
     -- ^ The universe of this datatype

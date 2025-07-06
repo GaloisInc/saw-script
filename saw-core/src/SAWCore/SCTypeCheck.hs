@@ -39,6 +39,7 @@ module SAWCore.SCTypeCheck
   , typeCheckWHNF
   , typeInferCompleteWHNF
   , TypeInferCtx(..)
+  , typeInferCompleteCtxEC
   , typeInferCompleteInCtx
   , typeInferCompleteInCtxEC
   , checkSubtype

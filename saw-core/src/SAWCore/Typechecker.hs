@@ -399,8 +399,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
       (ixs, Un.Sort _ s h) | h == noFlags ->
         return (ixs, s) -- NB, don't allow `isort`, etc.
       _ -> err "Wrong form for type of datatype"
-  dt_ixs_typed <- typeInferCompleteCtx dt_ixs
-  let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed
+  let dt_ixs' = map (\(x, t) -> (Un.termVarLocalName x, t)) dt_ixs
+  dt_ixs_typed <- typeInferCompleteCtxEC dt_ixs'
+  let dtIndices = map (\(_,ec,_) -> ec) dt_ixs_typed
       ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative
@@ -429,7 +430,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   ctors <-
     forM typed_ctors $ \(c, typed_tp) ->
     -- Check that the universe level of the type of each constructor
-    (case asSort (typedType typed_tp) of
+    do
+    case asSort (typedType typed_tp) of
         Just ctor_sort
           | dtSort /= propSort && ctor_sort > dtSort ->
             err ("Universe level of constructors should be strictly" ++
@@ -442,9 +444,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                 "Constructor type: " <> Text.pack (showTerm $ typedVal typed_tp),
                 "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
             ]
-    ) >>
-    let tp = typedVal typed_tp in
-    case mkCtorArgStruct pn dtParams dtIndices tp of
+    let tp = typedVal typed_tp
+    result <- liftTCM mkCtorArgStruct pn dtParams dtIndices tp
+    case result of
       Just arg_struct ->
         liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
       Nothing -> err ("Malformed type form constructor: " ++ show c)
