@@ -72,7 +72,7 @@ import SAWCore.Simulator.Value
 import SAWCore.Term.Functor (FieldName)
 import SAWCore.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
-            , fovVec, firstOrderTypeOf, asFirstOrderType
+            , fovVec, asFirstOrderType
             )
 
 import SAWCoreSBV.Panic
@@ -735,7 +735,12 @@ data Labeler
    | IntegerLabel String
    | WordLabel String
    | ZeroWidthWordLabel
-   | VecLabel (Vector Labeler)
+   | VecLabel
+       FirstOrderType
+      -- ^ The element type. It is necessary to store this in case the Vec is
+      -- empty, in which case we cannot retrieve the type from the element
+      -- values.
+       (Vector Labeler)
    | TupleLabel (Vector Labeler)
    | RecLabel (Map FieldName Labeler)
      deriving (Show)
@@ -765,7 +770,7 @@ newVars nm fot =
     FOTVec n tp ->
       do let f i = newVars (nm ++ "." ++ show i) tp
          (labels, vals) <- V.unzip <$> V.generateM (fromIntegral n) f
-         pure (VecLabel labels, VVector <$> traverse (fmap ready) vals)
+         pure (VecLabel tp labels, VVector <$> traverse (fmap ready) vals)
     FOTArray{} ->
       fail "FOTArray unimplemented for backend"
     FOTTuple ts ->
@@ -800,12 +805,7 @@ getLabels ls d args
 
   getLabel ZeroWidthWordLabel = FOVWord 0 0
 
-  getLabel (VecLabel ns) =
-    case V.uncons ns of
-      Nothing     -> error "getLabel of empty vector"
-      Just (n, _) -> fovVec t vs
-        where vs = map getLabel (V.toList ns)
-              t  = firstOrderTypeOf (getLabel n)
+  getLabel (VecLabel t ns) = fovVec t (map getLabel (V.toList ns))
 
   getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
   getLabel (RecLabel ns) = FOVRec $ fmap getLabel ns

@@ -11,6 +11,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeApplications #-}
@@ -469,7 +470,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    -- ExtCns ec -> translateConstant (Name (ecVarIndex ec) (ecName ec))
     ExtCns ec ->
       do env <- view namedEnvironment <$> askTR
          let nm = Name (ecVarIndex ec) (ecName ec)
@@ -606,10 +606,11 @@ translateBinder n ty@(asPiList -> (args, pi_body)) f =
 -- this information to the supplied computation, in which the SAW core variable
 -- is bound to its Coq identifier.
 translateBinderEC ::
-  TermTranslationMonad m => ExtCns Term -> (BindTrans -> m a) -> m a
+  forall m a. TermTranslationMonad m => ExtCns Term -> (BindTrans -> m a) -> m a
 translateBinderEC ec f =
   do ty' <- translateTerm ty
      let mb_sort = asSortWithFlags pi_body
+         -- NOTE: sortFlagsToList always returns a 2-element list
          flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
          flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
                            ("QT", "QuantType")]
@@ -621,6 +622,11 @@ translateBinderEC ec f =
          (args, pi_body) = asPiList ty
          nm = Name (ecVarIndex ec) (ecName ec)
          n = toShortName (ecName ec)
+         helper ::
+           Coq.Ident ->
+           [(Bool, (LocalName, Coq.Ident))] ->
+           ([(Coq.Ident, Coq.Term)] -> m a) ->
+           m a
          helper _ [] g = g []
          helper n' ((True,(prefix,tc)):rest) g =
            do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')

@@ -52,7 +52,7 @@ import Control.Applicative
 import Control.Monad (foldM, forM, forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
 import Data.Map (Map)
@@ -84,6 +84,15 @@ import SAWCore.Term.Pretty (scPrettyTermInCtx)
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term
 
+-- | The 'ReaderT' environment for a type-checking computation.
+data TCEnv =
+  TCEnv
+  { tcSharedContext :: SharedContext -- ^ the SAW context
+  , tcModName :: Maybe ModuleName    -- ^ the current module name, if any
+  , tcCtx :: [(LocalName, Term)]     -- ^ the mapping of names to de Bruijn bound variables
+  , tcCtxEC :: Map LocalName (ExtCns Term) -- ^ the mapping of names to named variables
+  }
+
 -- | The monad for type checking and inference, which:
 --
 -- * Maintains a 'SharedContext', the name of the current module, and a variable
@@ -92,9 +101,7 @@ type TCState = Map TermIndex Term
 -- * Memoizes the most general type inferred for each expression; AND
 --
 -- * Can throw 'TCError's
-type TCM =
-  ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)], Map LocalName (ExtCns Term))
-  (StateT TCState (ExceptT TCError IO))
+type TCM = ReaderT TCEnv (StateT TCState (ExceptT TCError IO))
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
@@ -102,19 +109,19 @@ runTCM ::
   TCM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   IO (Either TCError a)
 runTCM m sc mnm ctx =
-  runExceptT $ evalStateT (runReaderT m (sc, mnm, ctx, Map.empty)) Map.empty
+  runExceptT $ evalStateT (runReaderT m (TCEnv sc mnm ctx Map.empty)) Map.empty
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
-askCtx = (\(_,_,ctx,_) -> ctx) <$> ask
+askCtx = asks tcCtx
 
 -- | Read the current context of named variables
 askCtxEC :: TCM (Map LocalName (ExtCns Term))
-askCtxEC = (\(_,_,_,nctx) -> nctx) <$> ask
+askCtxEC = asks tcCtxEC
 
 -- | Read the current module name
 askModName :: TCM (Maybe ModuleName)
-askModName = (\(_,mnm,_,_) -> mnm) <$> ask
+askModName = asks tcModName
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -128,7 +135,7 @@ withVar x tp m =
   flip catchError (throwError . ErrorCtx x tp) $
   do saved_table <- get
      put Map.empty
-     a <- local (\(sc,mnm,ctx,nctx) -> (sc, mnm, (x,tp):ctx, nctx)) m
+     a <- local (\env -> env { tcCtx = (x,tp) : tcCtx env }) m
      put saved_table
      return a
 
@@ -137,7 +144,7 @@ withEC x ec m =
   flip catchError (throwError . ErrorCtx x (ecType ec)) $
   do saved_table <- get
      put Map.empty
-     a <- local (\(sc,mnm,ctx,nctx) -> (sc, mnm, ctx, Map.insert x ec nctx)) m
+     a <- local (\env -> env { tcCtxEC = Map.insert x ec (tcCtxEC env) }) m
      put saved_table
      return a
 
@@ -179,7 +186,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- (\(sc,_,_,_) -> sc) <$> ask
+    do sc <- asks tcSharedContext
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where

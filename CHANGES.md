@@ -111,6 +111,9 @@ support compositional verification using techniques similar to SAW.
   found in conventional CPUs and programming languages (which uses Euclidean
   division).
 
+* Fix SAW errors that could arise when producing models for sequence values
+  (e.g., values of type `[2][8]`) when using the `sat` or `sat_print` commands.
+
 ## Deprecations
 
 * The "highly experimental" SAWScript `callcc` builtin (an
