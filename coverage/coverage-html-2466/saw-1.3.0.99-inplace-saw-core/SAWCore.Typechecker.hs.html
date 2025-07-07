@@ -449,61 +449,60 @@ span.spaces    { background: white }
 <span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">ctors &lt;-</span>
 <span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">forM typed_ctors $ \(c, typed_tp) -&gt;</span>
 <span class="lineno">  432 </span><span class="spaces">    </span><span class="istickedoff">-- Check that the universe level of the type of each constructor</span>
-<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">do</span>
-<span class="lineno">  434 </span><span class="spaces">    </span><span class="istickedoff">case asSort (typedType typed_tp) of</span>
-<span class="lineno">  435 </span><span class="spaces">        </span><span class="istickedoff">Just ctor_sort</span>
-<span class="lineno">  436 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort</span> -&gt;</span>
-<span class="lineno">  437 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span></span>
-<span class="lineno">  438 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">&quot; contained in that of the datatype&quot;)</span></span>
-<span class="lineno">  439 </span><span class="spaces">        </span><span class="istickedoff">Just _ -&gt;</span>
-<span class="lineno">  440 </span><span class="spaces">            </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
-<span class="lineno">  441 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  442 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;processDecls&quot; [</span></span>
-<span class="lineno">  443 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Type of the type of constructor is not a sort!&quot;,</span></span>
-<span class="lineno">  444 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Constructor type: &quot; &lt;&gt; Text.pack (showTerm $ typedVal typed_tp),</span></span>
-<span class="lineno">  445 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Type of that type: &quot; &lt;&gt; Text.pack (showTerm $ typedType typed_tp)</span></span>
-<span class="lineno">  446 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">let tp = typedVal typed_tp</span>
-<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">result &lt;- liftTCM mkCtorArgStruct pn dtParams dtIndices tp</span>
-<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">case result of</span>
-<span class="lineno">  450 </span><span class="spaces">      </span><span class="istickedoff">Just arg_struct -&gt;</span>
-<span class="lineno">  451 </span><span class="spaces">        </span><span class="istickedoff">liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct</span>
-<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">err (&quot;Malformed type form constructor: &quot; ++ show c)</span></span>
-<span class="lineno">  453 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  454 </span><span class="spaces">  </span><span class="istickedoff">-- Step 6: complete the datatype with the given ctors</span>
-<span class="lineno">  455 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scCompleteDataType dtIdent ctors</span></span>
+<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">do case asSort (typedType typed_tp) of</span>
+<span class="lineno">  434 </span><span class="spaces">           </span><span class="istickedoff">Just ctor_sort</span>
+<span class="lineno">  435 </span><span class="spaces">             </span><span class="istickedoff">| <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort</span> -&gt;</span>
+<span class="lineno">  436 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span></span>
+<span class="lineno">  437 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot; contained in that of the datatype&quot;)</span></span>
+<span class="lineno">  438 </span><span class="spaces">           </span><span class="istickedoff">Just _ -&gt;</span>
+<span class="lineno">  439 </span><span class="spaces">               </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
+<span class="lineno">  440 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  441 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">panic &quot;processDecls&quot; [</span></span>
+<span class="lineno">  442 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">&quot;Type of the type of constructor is not a sort!&quot;,</span></span>
+<span class="lineno">  443 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">&quot;Constructor type: &quot; &lt;&gt; Text.pack (showTerm $ typedVal typed_tp),</span></span>
+<span class="lineno">  444 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">&quot;Type of that type: &quot; &lt;&gt; Text.pack (showTerm $ typedType typed_tp)</span></span>
+<span class="lineno">  445 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  446 </span><span class="spaces">       </span><span class="istickedoff">let tp = typedVal typed_tp</span>
+<span class="lineno">  447 </span><span class="spaces">       </span><span class="istickedoff">result &lt;- liftTCM mkCtorArgStruct pn dtParams dtIndices tp</span>
+<span class="lineno">  448 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
+<span class="lineno">  449 </span><span class="spaces">         </span><span class="istickedoff">Just arg_struct -&gt;</span>
+<span class="lineno">  450 </span><span class="spaces">           </span><span class="istickedoff">liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct</span>
+<span class="lineno">  451 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">err (&quot;Malformed type form constructor: &quot; ++ show c)</span></span>
+<span class="lineno">  452 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  453 </span><span class="spaces">  </span><span class="istickedoff">-- Step 6: complete the datatype with the given ctors</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="istickedoff">liftTCM scCompleteDataType dtIdent ctors</span></span>
+<span class="lineno">  455 </span>
 <span class="lineno">  456 </span>
-<span class="lineno">  457 </span>
-<span class="lineno">  458 </span>-- | Typecheck a module and, on success, insert it into the current context
-<span class="lineno">  459 </span>tcInsertModule :: SharedContext -&gt; Un.Module -&gt; IO ()
-<span class="lineno">  460 </span><span class="decl"><span class="istickedoff">tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do</span>
-<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">-- First, insert an empty module for mnm</span>
-<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">scLoadModule sc $ emptyModule mnm</span>
-<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">-- Next, process all the imports</span>
-<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">forM_ imports $ \imp -&gt;</span>
-<span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff">do let imn = val $ Un.importModName imp</span>
-<span class="lineno">  466 </span><span class="spaces">       </span><span class="istickedoff">i_exists &lt;- scModuleIsLoaded sc imn</span>
-<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">unless i_exists $ <span class="nottickedoff">fail $ &quot;Imported module not found: &quot; ++ show imn</span></span>
-<span class="lineno">  468 </span><span class="spaces">       </span><span class="istickedoff">scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . <span class="nottickedoff">Text.unpack</span>) imn mnm</span>
-<span class="lineno">  469 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
-<span class="lineno">  470 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
-<span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
-<span class="lineno">  472 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ unlines $ prettyTCError err</span></span>
-<span class="lineno">  473 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return <span class="nottickedoff">()</span></span></span>
+<span class="lineno">  457 </span>-- | Typecheck a module and, on success, insert it into the current context
+<span class="lineno">  458 </span>tcInsertModule :: SharedContext -&gt; Un.Module -&gt; IO ()
+<span class="lineno">  459 </span><span class="decl"><span class="istickedoff">tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do</span>
+<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">-- First, insert an empty module for mnm</span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">scLoadModule sc $ emptyModule mnm</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">-- Next, process all the imports</span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">forM_ imports $ \imp -&gt;</span>
+<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">do let imn = val $ Un.importModName imp</span>
+<span class="lineno">  465 </span><span class="spaces">       </span><span class="istickedoff">i_exists &lt;- scModuleIsLoaded sc imn</span>
+<span class="lineno">  466 </span><span class="spaces">       </span><span class="istickedoff">unless i_exists $ <span class="nottickedoff">fail $ &quot;Imported module not found: &quot; ++ show imn</span></span>
+<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . <span class="nottickedoff">Text.unpack</span>) imn mnm</span>
+<span class="lineno">  468 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
+<span class="lineno">  469 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm) []</span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
+<span class="lineno">  471 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ unlines $ prettyTCError err</span></span>
+<span class="lineno">  472 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return <span class="nottickedoff">()</span></span></span>
+<span class="lineno">  473 </span>
 <span class="lineno">  474 </span>
-<span class="lineno">  475 </span>
-<span class="lineno">  476 </span>--
-<span class="lineno">  477 </span>-- Helper functions for type-checking modules
-<span class="lineno">  478 </span>--
-<span class="lineno">  479 </span>
-<span class="lineno">  480 </span>-- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
-<span class="lineno">  481 </span>-- far as the supplied list of variables, and use them as the new names
-<span class="lineno">  482 </span>matchPiWithNames :: [LocalName] -&gt; Term -&gt; Maybe ([(LocalName, Term)], Term)
-<span class="lineno">  483 </span><span class="decl"><span class="istickedoff">matchPiWithNames [] tp = return ([], tp)</span>
-<span class="lineno">  484 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames (var:vars) (asPi -&gt; Just (_, arg_tp, body_tp)) =</span>
-<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">do (ctx,body) &lt;- matchPiWithNames vars body_tp</span>
-<span class="lineno">  486 </span><span class="spaces">     </span><span class="istickedoff">return ((var,arg_tp):ctx,body)</span>
-<span class="lineno">  487 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  475 </span>--
+<span class="lineno">  476 </span>-- Helper functions for type-checking modules
+<span class="lineno">  477 </span>--
+<span class="lineno">  478 </span>
+<span class="lineno">  479 </span>-- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
+<span class="lineno">  480 </span>-- far as the supplied list of variables, and use them as the new names
+<span class="lineno">  481 </span>matchPiWithNames :: [LocalName] -&gt; Term -&gt; Maybe ([(LocalName, Term)], Term)
+<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">matchPiWithNames [] tp = return ([], tp)</span>
+<span class="lineno">  483 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames (var:vars) (asPi -&gt; Just (_, arg_tp, body_tp)) =</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">do (ctx,body) &lt;- matchPiWithNames vars body_tp</span>
+<span class="lineno">  485 </span><span class="spaces">     </span><span class="istickedoff">return ((var,arg_tp):ctx,body)</span>
+<span class="lineno">  486 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = <span class="nottickedoff">Nothing</span></span></span>
 
 </pre>
 </body>
