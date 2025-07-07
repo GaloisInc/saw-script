@@ -284,6 +284,14 @@ data Value
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
   | VLambda LocalEnv SS.Pattern SS.Expr
+    -- | Function-shaped value that's a Haskell-level function. This
+    --   is how builtins appear.
+    --
+    -- XXX: Calling this "VBuiltin" was optimistic. It actually covers
+    -- everything function-shaped that isn't a SAWScript-level lambda,
+    -- which includes not just builtins but also the closures used to
+    -- implement stack traces and possibly other messes, all of which
+    -- should be removed.
   | VBuiltin (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema

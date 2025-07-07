@@ -343,8 +343,9 @@ processTypeCheck (errs_or_output, warns) =
 ------------------------------------------------------------
 -- Stack tracing
 
--- | Implement stack tracing by adding error handlers that rethrow
--- user errors, prepended with the given string.
+-- | Implement stack tracing by wrapping every function-shaped value
+--   in sight in another closure that manipulates the interpreter's
+--   current stack trace.
 --
 -- XXX this is the wrong way to do this.
 withStackTraceFrame :: String -> Value -> Value
@@ -374,9 +375,13 @@ withStackTraceFrame str val =
   in
   case val of
     VLambda env pat e ->
-      -- This is gross. But, since this is the wrong way to do all
-      -- this anyway, with luck we'll be able to remove the lot before
-      -- much longer.
+      -- This is gross. The point of having VLambda is that it's _not_
+      -- a closure, but in order to handle stack traces by wrapping
+      -- everything in closures, we have to wrap it in a closure
+      -- anyway.
+      --
+      -- But, since this is the wrong way to do stack traces anyway,
+      -- with luck we'll be able to remove the lot before much longer.
       let info = "(stack trace thunk)"
           wrap v2 =
             withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env pat e) v2)
@@ -424,6 +429,10 @@ withStackTraceFrame str val =
 ------------------------------------------------------------
 -- Interpreter core
 
+-- | Apply an argument value to a function value.
+--   v1 must have type a -> b; v2 must have type a.
+--   The first (Text) argument is printed as part of the panic if v1
+--   turns out not to be a function value.
 applyValue :: Text -> Value -> Value -> TopLevel Value
 applyValue v1info v1 v2 = case v1 of
     VLambda env pat e ->
