@@ -89,6 +89,8 @@ import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
+import qualified Data.IntMap as IntMap
+import           Data.IntMap (IntMap)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -147,8 +149,8 @@ data OverrideState' sym ext = OverrideState
   { -- | Substitution for memory allocations
     _setupValueSub :: Map AllocIndex (MS.Pointer' ext sym)
 
-    -- | Substitution for SAW Core external constants
-  , _termSub :: Map VarIndex Term
+    -- | Substitution for SAW Core external constants, keyed by 'VarIndex'
+  , _termSub :: IntMap Term
 
     -- | Equalities of SAW Core terms. The four elements of each tuple are:
     --
@@ -193,7 +195,7 @@ initialState ::
   sym                           {- ^ simulator                      -} ->
   Crucible.SymGlobalState sym   {- ^ initial global variables       -} ->
   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substituion -} ->
-  Map VarIndex Term             {- ^ initial term substituion       -} ->
+  IntMap Term                   {- ^ initial term substitution      -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
   W4.ProgramLoc                 {- ^ location information for the override -} ->
   OverrideState' sym ext
@@ -433,7 +435,7 @@ runOverrideMatcher ::
    sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
-   Map VarIndex Term           {- ^ initial term substitution       -} ->
+   IntMap Term                 {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->
    OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
@@ -531,7 +533,7 @@ enforceCompleteSubstitution loc ss =
 
      let -- predicate matches terms that are not covered by the computed
          -- term substitution
-         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
+         isMissing tt = ecVarIndex (tecExt tt) `IntMap.notMember` sub
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
@@ -545,8 +547,8 @@ refreshTerms ::
   MS.StateSpec ext {- ^ current phase spec -} ->
   OverrideMatcher ext w ()
 refreshTerms sc ss =
-  do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
-     OM (termSub %= Map.union extension)
+  do extension <- IntMap.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
+     OM (termSub %= IntMap.union extension)
   where
     freshenTerm (TypedExtCns _cty ec) =
       do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)

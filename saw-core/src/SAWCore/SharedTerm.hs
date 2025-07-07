@@ -923,7 +923,7 @@ mkPRetTp ::
   IO Term
 mkPRetTp sc d p_ctx ix_ctx params s =
   do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
-     let subst = Map.fromList (zip (map ecVarIndex p_ctx) params)
+     let subst = IntMap.fromList (zip (map ecVarIndex p_ctx) params)
      scInstantiateExt sc subst p_ret
 
 
@@ -1030,7 +1030,7 @@ mkCtorElimTypeFun sc d c argStruct =
      let vs = map ecVarIndex (ctorParams argStruct)
      return $ \params p_ret ->
        do t <- instantiateVarList sc 0 [p_ret] ctxElimType
-          let subst = Map.fromList (zip vs params)
+          let subst = IntMap.fromList (zip vs params)
           scWhnf sc =<< scInstantiateExt sc subst t
 
 -- | Zip two lists of equal length, but return 'Nothing' if the
@@ -1089,11 +1089,11 @@ ctxReduceRecursor_ ::
   [(Term, (Name, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
   IO Term
 ctxReduceRecursor_ sc rec fi args0_argCtx =
-  do args <- mk_args Map.empty args0_argCtx
+  do args <- mk_args IntMap.empty args0_argCtx
      scWhnf sc =<< scApplyAll sc fi args
 
  where
-    mk_args :: Map VarIndex Term ->  -- already processed parameters/arguments
+    mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (Name, CtorArg))] ->
                  -- remaining actual arguments to process, with
                  -- telescope for typing the actual arguments
@@ -1103,7 +1103,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
 
     -- process an argument that is not a recursive call
     mk_args pre_xs ((x, (nm, ConstArg _)) : xs_args) =
-      do tl <- mk_args (Map.insert (nameIndex nm) x pre_xs) xs_args
+      do tl <- mk_args (IntMap.insert (nameIndex nm) x pre_xs) xs_args
          pure (x : tl)
 
     -- process an argument that is a recursive call
@@ -1111,7 +1111,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
       do zs'  <- traverse (traverse (scInstantiateExt sc pre_xs)) zs
          ixs' <- traverse (scInstantiateExt sc pre_xs) ixs
          recx <- mk_rec_arg zs' ixs' x
-         tl   <- mk_args (Map.insert (nameIndex nm) x pre_xs) xs_args
+         tl   <- mk_args (IntMap.insert (nameIndex nm) x pre_xs) xs_args
          pure (x : recx : tl)
 
     -- Build an individual recursive call, given the parameters, the bindings
@@ -2844,13 +2844,10 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 --   Note: this replacement is _not_ applied recursively
 --   to the terms in the replacement map; so external constants
 --   in those terms will not be replaced.
-scInstantiateExt :: SharedContext
-                 -> Map VarIndex Term
-                 -> Term
-                 -> IO Term
+scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
 scInstantiateExt sc vmap = instantiateVars sc fn 0
   where fn _rec l (Left ec) =
-            case Map.lookup (ecVarIndex ec) vmap of
+            case IntMap.lookup (ecVarIndex ec) vmap of
                Just t  -> incVars sc 0 l t
                Nothing -> scFlatTermF sc $ ExtCns ec
         fn _ _ (Right i) = scTermF sc $ LocalVar i
@@ -3168,7 +3165,7 @@ scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
           -> IO Term
 scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
-    body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
+    body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
     close sc (toShortName (ecName ec)) (ecType ec) body'
 
 -- | Compute the body of 0 or more nested lambda-abstractions by applying the

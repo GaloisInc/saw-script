@@ -30,6 +30,7 @@ import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
 import qualified Control.Monad.Fail as F
 import Control.Monad.Random
 import Data.Functor.Compose (Compose(..))
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Random.TF (newTFGen, TFGen)
@@ -72,7 +73,7 @@ execTest sc mmap vars tm =
   do testVec <- sequence vars
      tm' <- liftIO $
              do argMap0 <- traverse (scFirstOrderValue sc) testVec
-                let argMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- Map.toList argMap0 ]
+                let argMap = IntMap.fromList [ (ecVarIndex ec, v) | (ec,v) <- Map.toList argMap0 ]
                 scInstantiateExt sc argMap tm
      case evalSharedTerm mmap Map.empty Map.empty tm' of
        -- satisfaible, return counterexample

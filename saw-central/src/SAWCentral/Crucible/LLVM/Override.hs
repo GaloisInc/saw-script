@@ -71,6 +71,8 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.ByteString as BS
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import           Data.List (partition, tails)
 import qualified Data.List.NonEmpty as NE
 import           Data.IORef (IORef, modifyIORef)
@@ -334,7 +336,7 @@ methodSpecHandler opts sc cc mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree = Set.fromList (map (ecVarIndex . tecExt)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
-          in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
+          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)
 
@@ -2306,9 +2308,9 @@ executeFreshPointer cc (AllocIndex i) =
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'SetupValue'.
 instantiateSetupValue ::
-  SharedContext     ->
-  Map VarIndex Term ->
-  SetupValue (LLVM arch)        ->
+  SharedContext ->
+  IntMap Term ->
+  SetupValue (LLVM arch) ->
   IO (SetupValue (LLVM arch))
 instantiateSetupValue sc s v =
   case v of

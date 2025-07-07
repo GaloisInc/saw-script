@@ -1752,7 +1752,7 @@ cexEvalFn sc args tm = do
   let exts = map fst args
   args' <- mapM (scFirstOrderValue sc . snd) args
   let is = map ecVarIndex exts
-      argMap = Map.fromList (zip is args')
+      argMap = IntMap.fromList (zip is args')
 
   -- TODO, instead of instantiating and then evaluating, we should
   -- evaluate in the context of an EC map instead.  argMap is almost

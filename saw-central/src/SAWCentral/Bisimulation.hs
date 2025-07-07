@@ -79,6 +79,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Foldable (foldl')
+import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -222,8 +223,8 @@ buildCompositionSideCondition bc innerBt = do
   rhsTuple <- io $ scTuple sc [rhsOuterState, input]  -- (f_rhs_s, in)
   innerRel' <- io $
     scInstantiateExt sc
-                     (Map.fromList [ (ecVarIndex lhsInnerEc, lhsTuple)
-                                   , (ecVarIndex rhsInnerEc, rhsTuple)])
+                     (IntMap.fromList [ (ecVarIndex lhsInnerEc, lhsTuple)
+                                      , (ecVarIndex rhsInnerEc, rhsTuple)])
                      innerRel
 
   -- outer state relation implies inner state relation
