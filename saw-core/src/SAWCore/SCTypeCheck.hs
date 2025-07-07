@@ -51,7 +51,7 @@ import Control.Applicative
 import Control.Monad (foldM, forM, forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
 import Data.Map (Map)
@@ -112,15 +112,15 @@ runTCM m sc mnm ctx =
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
-askCtx = tcCtx <$> ask
+askCtx = asks tcCtx
 
 -- | Read the current context of named variables
 askCtxEC :: TCM (Map LocalName (ExtCns Term))
-askCtxEC = tcCtxEC <$> ask
+askCtxEC = asks tcCtxEC
 
 -- | Read the current module name
 askModName :: TCM (Maybe ModuleName)
-askModName = tcModName <$> ask
+askModName = asks tcModName
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -185,7 +185,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- tcSharedContext <$> ask
+    do sc <- asks tcSharedContext
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where
