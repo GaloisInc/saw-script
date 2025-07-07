@@ -122,8 +122,8 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span><span class="spaces">      </span><span class="nottickedoff">let inductiveName = name</span>
 <span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">(inductiveParameters, inductiveIndices) &lt;-</span>
 <span class="lineno">  105 </span><span class="spaces">        </span><span class="nottickedoff">liftTermTranslationMonad $</span>
-<span class="lineno">  106 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtParams $ \ps -&gt;</span>
-<span class="lineno">  107 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParams dtIndices $ \ixs -&gt;</span>
+<span class="lineno">  106 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParamsEC dtParams $ \ps -&gt;</span>
+<span class="lineno">  107 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.translateParamsEC dtIndices $ \ixs -&gt;</span>
 <span class="lineno">  108 </span><span class="spaces">        </span><span class="nottickedoff">-- Translating the indices of a data type should never yield</span>
 <span class="lineno">  109 </span><span class="spaces">        </span><span class="nottickedoff">-- Inhabited constraints, so the result of calling</span>
 <span class="lineno">  110 </span><span class="spaces">        </span><span class="nottickedoff">-- `translateParams dtIndices` above should only return Binders and not</span>

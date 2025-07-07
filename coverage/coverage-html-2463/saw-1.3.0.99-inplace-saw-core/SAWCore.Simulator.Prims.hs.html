@@ -341,7 +341,7 @@ span.spaces    { background: white }
 <span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.divModNat&quot;, divModNatOp <span class="nottickedoff">bp</span>)</span>
 <span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expNat&quot;, <span class="nottickedoff">expNatOp</span>)</span>
 <span class="lineno">  324 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.widthNat&quot;, widthNatOp)</span>
-<span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natCase&quot;, natCaseOp)</span>
+<span class="lineno">  325 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natCase&quot;, <span class="nottickedoff">natCaseOp</span>)</span>
 <span class="lineno">  326 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.equalNat&quot;, equalNatOp bp)</span>
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.ltNat&quot;, <span class="nottickedoff">ltNatOp bp</span>)</span>
 <span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
@@ -732,15 +732,15 @@ span.spaces    { background: white }
 <span class="lineno">  713 </span>
 <span class="lineno">  714 </span>-- natCase :: (p :: Nat -&gt; sort 0) -&gt; p Zero -&gt; ((n :: Nat) -&gt; p (Succ n)) -&gt; (n :: Nat) -&gt; p n;
 <span class="lineno">  715 </span>natCaseOp :: (VMonad l, Show (Extra l)) =&gt; Prim l
-<span class="lineno">  716 </span><span class="decl"><span class="istickedoff">natCaseOp =</span>
-<span class="lineno">  717 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
-<span class="lineno">  718 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \z -&gt;</span>
-<span class="lineno">  719 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \s -&gt;</span>
-<span class="lineno">  720 </span><span class="spaces">  </span><span class="istickedoff">natFun $ \n -&gt; Prim $</span>
-<span class="lineno">  721 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span></span>
-<span class="lineno">  722 </span><span class="spaces">    </span><span class="istickedoff">then <span class="nottickedoff">force z</span></span>
-<span class="lineno">  723 </span><span class="spaces">    </span><span class="istickedoff">else do s' &lt;- force s</span>
-<span class="lineno">  724 </span><span class="spaces">            </span><span class="istickedoff">apply s' <span class="nottickedoff">(ready (VNat (n - 1)))</span></span></span>
+<span class="lineno">  716 </span><span class="decl"><span class="nottickedoff">natCaseOp =</span>
+<span class="lineno">  717 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
+<span class="lineno">  718 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \z -&gt;</span>
+<span class="lineno">  719 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \s -&gt;</span>
+<span class="lineno">  720 </span><span class="spaces">  </span><span class="nottickedoff">natFun $ \n -&gt; Prim $</span>
+<span class="lineno">  721 </span><span class="spaces">    </span><span class="nottickedoff">if n == 0</span>
+<span class="lineno">  722 </span><span class="spaces">    </span><span class="nottickedoff">then force z</span>
+<span class="lineno">  723 </span><span class="spaces">    </span><span class="nottickedoff">else do s' &lt;- force s</span>
+<span class="lineno">  724 </span><span class="spaces">            </span><span class="nottickedoff">apply s' (ready (VNat (n - 1)))</span></span>
 <span class="lineno">  725 </span>
 <span class="lineno">  726 </span>--------------------------------------------------------------------------------
 <span class="lineno">  727 </span>-- Strings
