@@ -298,10 +298,14 @@ data Value
   | VBuiltin (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
-  | VReturn Value -- Returned value in unspecified monad
-  | VBind SS.Pos Value Value
-    -- ^ Monadic bind in unspecified monad. Requires a source position because
-    -- operations in these monads can fail at runtime.
+    -- | Returned value in unspecified monad
+  | VReturn Value
+    -- | Not-yet-executed do-block in unspecified monad
+  | VDo SS.Pos LocalEnv [SS.Stmt]
+    -- | Single monadic bind in unspecified monad.
+    --   This exists only to support the "for" builtin; see notes there
+    --   for why this is so. XXX: remove it once that's no longer needed
+  | VBindOnce Value Value
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
   | VSimpset SAWSimpset
@@ -446,6 +450,7 @@ showRefnset opts ss =
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
       SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
 
+-- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
@@ -470,8 +475,15 @@ showsPrecValue opts nenv p v =
     VBuiltin {} -> showString "<<builtin>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
-    VReturn {} -> showString "<<monadic>>"
-    VBind {} -> showString "<<monadic>>"
+    VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
+    VDo pos _env stmts ->
+      let e = SS.Block pos stmts in
+      shows (PP.pretty e)
+    VBindOnce v1 v2 ->
+      let v1' = showsPrecValue opts nenv 0 v1
+          v2' = showsPrecValue opts nenv 0 v2
+      in
+      v1' . showString " >>= " . v2'
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VRefnset ss -> showString (showRefnset opts ss)

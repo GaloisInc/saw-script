@@ -303,32 +303,44 @@ bindPatternEnv pat ms v env =
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
   actionFromValue :: FromValue a => Value -> m a
+  mkValue :: m Value -> Value
   getMonadContext :: m SS.Context
+  withLocalEnvAny :: LocalEnv -> m a -> m a
 
 instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
+  mkValue = VTopLevel
   getMonadContext = return SS.TopLevel
+  withLocalEnvAny = withLocalEnv
 
 instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
+  mkValue = VProofScript
   getMonadContext = return SS.ProofScript
+  withLocalEnvAny = withLocalEnvProof
 
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
+  mkValue = VLLVMCrucibleSetup
   getMonadContext = return SS.LLVMSetup
+  withLocalEnvAny = withLocalEnvLLVM
 
 instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
+  mkValue = VJVMSetup
   getMonadContext = return SS.JavaSetup
+  withLocalEnvAny = withLocalEnvJVM
 
 instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
+  mkValue = VMIRSetup
   getMonadContext = return SS.MIRSetup
+  withLocalEnvAny = withLocalEnvMIR
 
 
 ------------------------------------------------------------
@@ -393,7 +405,7 @@ withStackTraceFrame str val =
       --
       -- But, since this is the wrong way to do stack traces anyway,
       -- with luck we'll be able to remove the lot before much longer.
-      let info = "(stack trace thunk)"
+      let info = "(stack trace thunk for lambda)"
           wrap v2 =
             withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env pat e) v2)
       in
@@ -413,11 +425,15 @@ withStackTraceFrame str val =
             withStackTraceFrame str `fmap` doProofScript m
       in
       VProofScript m'
-    VBind pos v1 v2 ->
+    VDo _pos _env _stmts ->
+      -- Blah. Let's just ignore it for now... XXX.
+      -- (but with luck we'll be able to throw this code out before anyone cares)
+      val
+    VBindOnce v1 v2 ->
       let v1' = withStackTraceFrame str v1
           v2' = withStackTraceFrame str v2
       in
-      VBind pos v1' v2'
+      VBindOnce v1' v2'
     VLLVMCrucibleSetup m ->
       let m' =
             withStackTraceFrame str `fmap` doLLVM m
@@ -457,6 +473,21 @@ applyValue v1info v1 v2 = case v1 of
             v1info
         ]
 
+-- Eval an expression.
+--
+-- This executes purely: when we see a do-block, return it as a value.
+-- If the caller is executing in a monad, it'll intercept that and
+-- eval it.
+--
+-- This code lives in the interpreter monad anyway for two reasons:
+-- first, properly, because it needs (readonly) access to the Cryptol
+-- environment. This could conceivably just be passed in instead.
+--
+-- Second, improperly, a randomly-chosen selection of SAWScript
+-- builtins are pure in SAWScript but not in Haskell; these execute
+-- in TopLevel when the last argument is applied by applyValue, and
+-- that happens inside here.
+--
 interpretExpr :: SS.Expr -> TopLevel Value
 interpretExpr expr =
     let ?fileReader = BS.readFile in
@@ -482,8 +513,9 @@ interpretExpr expr =
           return (toValue s)
       SS.Array _ es ->
           VArray <$> traverse interpretExpr es
-      SS.Block _ stmts ->
-          interpretStmts stmts
+      SS.Block pos stmts -> do
+          env <- getLocalEnv
+          return $ VDo pos env stmts
       SS.Tuple _ es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _ bs ->
@@ -539,11 +571,16 @@ interpretExpr expr =
                   "Expression: " <> PPS.pShowText e1
               ]
 
+-- Eval a "decl", which is the RHS of a let-binding.
+-- Evaluates the body expression purely.
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
     v <- interpretExpr expr
     return (bindPatternLocal pat mt v env)
 
+-- Eval the RHS of a single let-binding in a mutually recursive group.
+-- These are required to be functions; that's enforced by the
+-- typechecker.
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
@@ -555,6 +592,8 @@ interpretFunction env expr =
             "Expression found: " <> PPS.pShowText expr
         ]
 
+-- Eval a "decl group", which is a let-binding or group of mutually
+-- recursive let-bindings.
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
 interpretDeclGroup (SS.NonRecursive d) = do
     env <- getLocalEnv
@@ -566,32 +605,72 @@ interpretDeclGroup (SS.Recursive ds) = do
         env' = foldr addDecl env ds
     return env'
 
-interpretStmts :: InterpreterMonad m => [SS.Stmt] -> m Value
+-- Eval some statements. This happens in some monad; we only come here
+-- once the monad action is executed. Therefore, we can execute binds:
+-- if we get a do-block back, execute it recursively. (Such a do-block
+-- must be in the same monad in order to be well typed.)
+--
+-- In let-bindings the RHS is evaluated purely.
+--
+interpretStmts :: forall m. InterpreterMonad m => [SS.Stmt] -> m Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
+    let force :: Value -> m Value
+        force v = case v of
+          VReturn v' -> do
+            -- VReturn v' -> VProofScript (return v')
+            -- (or whichever value for whichever monad)
+            let v'' :: m Value = return v'
+            return $ mkValue v''
+          VDo _blkpos env stmts' ->
+            withLocalEnvAny env (interpretStmts stmts')
+          VBindOnce m1 v2 -> do
+            v1 <- actionFromValue m1
+            m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via force" v2 v1
+            force m2
+          _ -> pure v
+    in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
       [] ->
           fail "empty block"
       [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
           savepos <- liftTopLevel $ pushPosition pos
-          result <- liftTopLevel $ interpretExpr e
+          -- Execute the expression purely first.
+          result :: Value <- liftTopLevel $ interpretExpr e
+          -- If we got a do-block or similar back, execute it now.
+          result' :: Value <- force result
+          -- This gives us a VTopLevel/VProofScript/etc with a
+          -- TopLevel/ProofScript/etc Value in it.
+          -- Return that as the result of the block; let the caller
+          -- execute it.
           liftTopLevel $ popPosition savepos
-          return result
+          return result'
       SS.StmtBind pos pat e : ss -> do
-          env <- liftTopLevel $ getLocalEnv
+          env <- liftTopLevel getLocalEnv
           savepos <- liftTopLevel $ pushPosition pos
-          v1 <- liftTopLevel $ interpretExpr e
+          -- Execute the expression purely first.
+          v1 :: Value <- liftTopLevel $ interpretExpr e
+          -- If we got a do-block or similar back, execute it now.
+          v1' :: Value <- force v1
+          -- We should now have a VTopLevel/VProofScript/etc with a
+          -- TopLevel/ProofScript/etc Value in it that we can execute
+          -- in Haskell to get the resultant Value.
+          v1'' :: Value <- actionFromValue v1'
           liftTopLevel $ popPosition savepos
+          let msg = Text.pack (show pos) <> ": value came from here"
           -- Caution re pos: see StmtLet
-          liftTopLevel $ bindValue pos v1 (VLambda env pat (SS.Block pos ss))
-      SS.StmtLet pos bs : ss ->
+          -- this can be simplified a lot, but that's for later (XXX)
+          liftTopLevel $ applyValue msg (VLambda env pat (SS.Block pos ss)) v1''
+      SS.StmtLet pos bs : ss -> do
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
           -- position there, so all we need is a placeholder for it to
           -- ignore. Therefore, don't take the trouble to compute the
           -- correct position (the bounding box on the statements ss).
-          liftTopLevel $ interpretExpr (SS.Let pos bs (SS.Block pos ss))
+          ss' <- liftTopLevel $ interpretExpr (SS.Let pos bs (SS.Block pos ss))
+          -- this is the rest of the block, so will always be a VDo value
+          force ss'
       SS.StmtCode _ s : ss -> do
           sc <- liftTopLevel $ getSharedContext
           rw <- liftTopLevel $ getMergedEnv
@@ -608,6 +687,7 @@ interpretStmts stmts =
           let env' = LocalTypedef (getVal name) ty : env
           liftTopLevel $ withLocalEnv env' (interpretStmts ss)
 
+-- Execute a top-level bind.
 processStmtBind ::
   InterpreterMonad m =>
   Bool ->
@@ -666,7 +746,8 @@ processStmtBind printBinds pat expr = do -- mx mt
    do rw' <- getTopLevelRW
       putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
--- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
+-- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
+--   This duplicates the logic in interpretStmts for no particularly good reason.
 interpretStmt :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
@@ -942,11 +1023,12 @@ instance IsValue a => IsValue (TopLevel a) where
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = do
-      savepos <- pushPosition pos
+    fromValue (VDo _pos env stmts) = do
+      v <- withLocalEnv env (interpretStmts stmts)
+      fromValue v
+    fromValue (VBindOnce m1 v2) = do
       v1 <- fromValue m1
-      popPosition savepos
-      m2 <- applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
+      m2 <- applyValue "Value in a VBindOnce, via TopLevel fromValue" v2 v1
       fromValue m2
     fromValue v = error $ "fromValue TopLevel:" <> show v
 
@@ -960,11 +1042,12 @@ instance FromValue a => FromValue (ProofScript a) where
     --  the type system should keep this from happening.
     fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = ProofScript $ do
-      savepos <- lift $ lift $ pushPosition pos
+    fromValue (VDo _pos env stmts) = do
+      v <- withLocalEnvProof env (interpretStmts stmts)
+      fromValue v
+    fromValue (VBindOnce m1 v2) = ProofScript $ do
       v1 <- unProofScript (fromValue m1)
-      lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
+      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via ProofScript fromValue" v2 v1
       unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
 
@@ -974,12 +1057,12 @@ instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VLLVMCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
-      -- TODO: Should both of these be run with the new position?
-      savepos <- lift $ lift $ pushPosition pos
+    fromValue (VDo _pos env stmts) = do
+      v <- withLocalEnvLLVM env (interpretStmts stmts)
+      fromValue v
+    fromValue (VBindOnce m1 v2) = LLVMCrucibleSetupM $ do
       v1 <- runLLVMCrucibleSetupM (fromValue m1)
-      lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
+      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via LLVMSetup fromValue" v2 v1
       runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
@@ -989,11 +1072,12 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = JVMSetupM $ do
-      savepos <- lift $ lift $ pushPosition pos
+    fromValue (VDo _pos env stmts) = do
+      v <- withLocalEnvJVM env (interpretStmts stmts)
+      fromValue v
+    fromValue (VBindOnce m1 v2) = JVMSetupM $ do
       v1 <- runJVMSetupM (fromValue m1)
-      lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
+      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via JVMSetup fromValue" v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
@@ -1003,11 +1087,12 @@ instance IsValue a => IsValue (MIRSetupM a) where
 instance FromValue a => FromValue (MIRSetupM a) where
     fromValue (VMIRSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = MIRSetupM $ do
-      savepos <- lift $ lift $ pushPosition pos
+    fromValue (VDo _pos env stmts) = do
+      v <- withLocalEnvMIR env (interpretStmts stmts)
+      fromValue v
+    fromValue (VBindOnce m1 v2) = MIRSetupM $ do
       v1 <- runMIRSetupM (fromValue m1)
-      lift $ lift $ popPosition savepos
-      m2 <- lift $ lift $ applyValue (Text.pack (show pos) <> ": value came from here") v2 v1
+      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via MIRSetup fromValue" v2 v1
       runMIRSetupM (fromValue m2)
     fromValue _ = error "fromValue MIRSetup"
 
@@ -1325,14 +1410,43 @@ proofScriptSubshell = VBuiltin $ \_ ->
      env <- getLocalEnv
      return (VProofScript (toValue <$> withLocalEnvProof env m))
 
+-- The "for" builtin.
+--
+-- XXX: this is the only thing in the tree that uses VBindOnce.
+-- Unfortunately, for the time being it needs to be this way:
+--    - as a builtin it can only operate in Value;
+--    - VDo contains abstract syntax;
+--    - there is no way to lift an arbitrary Value into the abstract
+--      syntax, and there won't be anytime soon, because there's
+--      already enough of a tangle with Value and the interpreter
+--      state without also including the entire abstract syntax in
+--      the yarn ball;
+--    - it needs to be able to do SAWScript-level binds and those
+--      are the only ways.
+--
+-- Probably the best long-term solution is to move the implementation
+-- into the SAWScript prelude, once we have one (see #253; that
+-- issue's been open a long time), since the only thing stopping that
+-- is having a place to put the code.
+--
+-- Failing that, at some point the SAWScript interpreter will
+-- hopefully have been cleaned up to the point where there's a Value
+-- case in the abstract syntax, which there properly speaking should
+-- be anyway, at which point this can be rewritten with VDo.
+--
+-- Failing _that_, it's probably possible to open-code the bind here
+-- in terms of calling pieces of the interpreter directly, but that's
+-- likely to be quite messy.
+--
 forValue :: [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn (VArray [])
-forValue (x : xs) f =
-  do m1 <- applyValue "(value was in a \"for\")" f x
-     m2 <- forValue xs f
-     bindValue (SS.PosInternal "<for>") m1 (VBuiltin $ \v1 ->
-       bindValue (SS.PosInternal "<for>") m2 (VBuiltin $ \v2 ->
-         return $ VReturn (VArray (v1 : fromValue v2))))
+forValue (x : xs) f = do
+   --let pos = SS.PosInternal "<for>"
+   m1 <- applyValue "(value was in a \"for\")" f x
+   m2 <- forValue xs f
+   return $ VBindOnce m1 $ VBuiltin $ \v1 ->
+     return $ VBindOnce m2 $ VBuiltin $ \v2 ->
+       return $ VReturn (VArray (v1 : fromValue v2))
 
 caseProofResultPrim ::
   ProofResult ->
@@ -6281,7 +6395,7 @@ primitives = Map.fromList
 
 -- FUTURE: extract here is now functionally a nop, so if things don't
 -- change going forward we should consider simplifying so primTypes
--- uses the same type as the interprer environment this function
+-- uses the same type as the interpreter environment this function
 -- seeds, instead of its own.
 primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
 primNamedTypeEnv = fmap extract primTypes
