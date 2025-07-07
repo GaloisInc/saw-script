@@ -70,7 +70,7 @@ span.spaces    { background: white }
 <span class="lineno">   51 </span>import Control.Monad (foldM, forM, forM_, mapM, unless, void)
 <span class="lineno">   52 </span>import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 <span class="lineno">   53 </span>import Control.Monad.IO.Class (MonadIO(..))
-<span class="lineno">   54 </span>import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+<span class="lineno">   54 </span>import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 <span class="lineno">   55 </span>import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 <span class="lineno">   56 </span>
 <span class="lineno">   57 </span>import Data.Map (Map)
@@ -131,15 +131,15 @@ span.spaces    { background: white }
 <span class="lineno">  112 </span>
 <span class="lineno">  113 </span>-- | Read the current typing context
 <span class="lineno">  114 </span>askCtx :: TCM [(LocalName, Term)]
-<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">askCtx = tcCtx &lt;$&gt; ask</span></span>
+<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">askCtx = asks tcCtx</span></span>
 <span class="lineno">  116 </span>
 <span class="lineno">  117 </span>-- | Read the current context of named variables
 <span class="lineno">  118 </span>askCtxEC :: TCM (Map LocalName (ExtCns Term))
-<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">askCtxEC = tcCtxEC &lt;$&gt; ask</span></span>
+<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">askCtxEC = asks tcCtxEC</span></span>
 <span class="lineno">  120 </span>
 <span class="lineno">  121 </span>-- | Read the current module name
 <span class="lineno">  122 </span>askModName :: TCM (Maybe ModuleName)
-<span class="lineno">  123 </span><span class="decl"><span class="istickedoff">askModName = tcModName &lt;$&gt; ask</span></span>
+<span class="lineno">  123 </span><span class="decl"><span class="istickedoff">askModName = asks tcModName</span></span>
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>-- | Run a type-checking computation in a typing context extended with a new
 <span class="lineno">  126 </span>-- variable with the given type. This throws away the memoization table while
@@ -204,7 +204,7 @@ span.spaces    { background: white }
 <span class="lineno">  185 </span>instance LiftTCM (IO a) where
 <span class="lineno">  186 </span>  type TCMLifted (IO a) = TCM a
 <span class="lineno">  187 </span>  <span class="decl"><span class="istickedoff">liftTCM f =</span>
-<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">do sc &lt;- tcSharedContext &lt;$&gt; ask</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">do sc &lt;- asks tcSharedContext</span>
 <span class="lineno">  189 </span><span class="spaces">       </span><span class="istickedoff">liftIO (f sc)</span></span>
 <span class="lineno">  190 </span>
 <span class="lineno">  191 </span>instance LiftTCM b =&gt; LiftTCM (a -&gt; b) where
