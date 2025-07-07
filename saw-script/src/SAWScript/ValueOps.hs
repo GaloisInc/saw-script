@@ -21,8 +21,6 @@ module SAWScript.ValueOps (
     lookupValue,
     -- used by SAWScript.Interpreter
     tupleLookupValue,
-    -- XXX apparently unused
-    thenValue,
     -- used by SAWScript.Interpreter
     bindValue,
     -- used by SAWScript.Interpreter
@@ -100,9 +98,6 @@ tupleLookupValue (VTuple vs) i
   | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
-
-thenValue :: SS.Pos -> Value -> Value -> Value
-thenValue pos v1 v2 = VBind pos v1 (VReturn v2)
 
 bindValue :: SS.Pos -> Value -> Value -> TopLevel Value
 bindValue pos v1 v2 = return (VBind pos v1 v2)
