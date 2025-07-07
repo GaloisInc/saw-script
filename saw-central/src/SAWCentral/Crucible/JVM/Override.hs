@@ -58,11 +58,12 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import           Data.IORef
 import           Data.List (tails)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -204,7 +205,7 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree =
                Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tecExt . to ecVarIndex)
-          in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
+          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)
 
@@ -925,9 +926,9 @@ executePred sc cc md tt =
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'SetupValue'.
 instantiateSetupValue ::
-  SharedContext     ->
-  Map VarIndex Term ->
-  SetupValue        ->
+  SharedContext ->
+  IntMap Term ->
+  SetupValue ->
   IO SetupValue
 instantiateSetupValue sc s v =
   case v of

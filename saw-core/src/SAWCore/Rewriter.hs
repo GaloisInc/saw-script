@@ -62,11 +62,12 @@ module SAWCore.Rewriter
 import Control.Monad (MonadPlus(..), (>=>), guard, unless)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 import Data.IORef
 import qualified Data.Foldable as Foldable
-import Data.Map (Map)
 import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
@@ -143,26 +144,27 @@ propOfRewriteRule sc rule =
 
 data MatchState =
   MatchState
-  { substitution :: Map VarIndex Term
+  { substitution :: IntMap Term
+    -- ^ Mapping of 'ExtCns' variables, indexed by 'VarIndex'
   , constraints :: [(Term, Natural)]
   }
 
 emptyMatchState :: MatchState
-emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
+emptyMatchState = MatchState { substitution = IntMap.empty, constraints = [] }
 
 
 -- First-order matching
 
 -- | Equivalent to @(lookup k t, insert k x t)@.
-insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
-insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
+insertLookup :: VarIndex -> a -> IntMap a -> (Maybe a, IntMap a)
+insertLookup k x t = IntMap.insertLookupWithKey (\_ a _ -> a) k x t
 
-firstOrderMatch :: [ExtCns Term] -> Term -> Term -> Maybe (Map VarIndex Term)
-firstOrderMatch ctxt pat term = match pat term Map.empty
+firstOrderMatch :: [ExtCns Term] -> Term -> Term -> Maybe (IntMap Term)
+firstOrderMatch ctxt pat term = match pat term IntMap.empty
   where
     ixs :: IntSet
     ixs = IntSet.fromList (map ecVarIndex ctxt)
-    match :: Term -> Term -> Map VarIndex Term -> Maybe (Map VarIndex Term)
+    match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
         (FTermF (ExtCns (ecVarIndex -> i)), _) | IntSet.member i ixs ->
@@ -224,7 +226,7 @@ scMatch ::
   [ExtCns Term] {- ^ context of unification variables in pattern -} ->
   Term {- ^ pattern -} ->
   Term {- ^ term -} ->
-  IO (Maybe (Map VarIndex Term))
+  IO (Maybe (IntMap Term))
 scMatch sc ctxt pat term =
   runMaybeT $
   do -- lift $ putStrLn $ "********** scMatch **********"
@@ -237,7 +239,7 @@ scMatch sc ctxt pat term =
     ixs = IntSet.fromList (map ecVarIndex ctxt)
     -- Check that a constraint of the form pat = n for natural number literal n
     -- is satisfied by the supplied substitution (aka instantiation) inst
-    check :: Map VarIndex Term -> (Term, Natural) -> MaybeT IO ()
+    check :: IntMap Term -> (Term, Natural) -> MaybeT IO ()
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
       -- apply substitution to the term
@@ -494,7 +496,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   c <- scCtorAppParams sc (ctorName ctor) params1 args
                   -- Define function to substitute the constructor @c@
                   -- in for the old local variable @ec@.
-                  let subst = Map.singleton (ecVarIndex ec) c
+                  let subst = IntMap.singleton (ecVarIndex ec) c
                   let adjust t = scInstantiateExt sc subst t
                   -- Build the list of types of the new context.
                   ctxt2' <- traverse (traverse adjust) ctxt2
@@ -753,7 +755,7 @@ rewriteSharedTerm sc ss t0 =
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t
-          | Map.keysSet inst /= Set.fromList (map ecVarIndex ctxt) ->
+          | IntMap.keysSet inst /= IntSet.fromList (map ecVarIndex ctxt) ->
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ scPrettyTerm PPS.defaultOpts lhs
                apply rules t

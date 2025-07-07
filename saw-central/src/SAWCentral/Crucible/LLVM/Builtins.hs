@@ -104,6 +104,7 @@ import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, fold)
 import           Data.Functor (void)
+import qualified Data.IntMap as IntMap
 import           Data.IORef
 import           Data.List (find, nub, partition)
 import           Data.List.Extra (nubOrd)
@@ -444,7 +445,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           shared_context <- getSharedContext
 
           let output_values =
-                map (((Map.!) $ post_override_state ^. termSub) . ecVarIndex) output_parameters
+                map (((IntMap.!) $ post_override_state ^. termSub) . ecVarIndex) output_parameters
 
           extracted_func <-
             io $ scAbstractExts shared_context input_parameters
@@ -464,7 +465,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
             mkTypedTerm shared_context
               =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
           let output_parameter_substitution =
-                Map.fromList $
+                IntMap.fromList $
                 zip (map ecVarIndex output_parameters) (map ttTerm applied_extracted_func_selectors)
           let substitute_output_parameters =
                 ttTermLens $ scInstantiateExt shared_context output_parameter_substitution
@@ -1594,7 +1595,7 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
-     let ecs0 = Map.fromList
+     let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
            , let ec = tecExt tt ]

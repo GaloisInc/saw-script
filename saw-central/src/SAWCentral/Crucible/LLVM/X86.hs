@@ -46,6 +46,7 @@ import Control.Monad.State (MonadState, StateT(..), execStateT, gets)
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
 import Data.Functor (void)
+import qualified Data.IntMap as IntMap
 import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
@@ -1493,7 +1494,7 @@ assertPost path func env premem preregs mdMap = do
         $ ms ^. MS.csPostState . MS.csConditions
 
   let
-    initialECs = Map.fromList
+    initialECs = IntMap.fromList
       [ (ecVarIndex ec, ec)
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
       , let ec = tecExt tt

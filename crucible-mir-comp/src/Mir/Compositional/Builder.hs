@@ -20,8 +20,9 @@ import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable
 import Data.Functor.Const
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import Data.Parameterized.Nonce
@@ -576,20 +577,20 @@ finish msb =
 buildSubstMap ::
     SAW.SharedContext ->
     [(SAW.ExtCns SAW.Term, SAW.Term)] ->
-    IO (Map SAW.VarIndex SAW.Term)
-buildSubstMap sc substs0 = go Map.empty substs0
+    IO (IntMap SAW.Term)
+buildSubstMap sc substs0 = go IntMap.empty substs0
   where
     go sm [] = return sm
     go sm ((ec, term) : substs) = do
         -- Rewrite the RHSs of previous substitutions using the current one.
-        let sm1 = Map.singleton (SAW.ecVarIndex ec) term
+        let sm1 = IntMap.singleton (SAW.ecVarIndex ec) term
         sm' <- mapM (SAW.scInstantiateExt sc sm1) sm
         -- Add the current subst and continue.
-        go (Map.insert (SAW.ecVarIndex ec) term sm') substs
+        go (IntMap.insert (SAW.ecVarIndex ec) term sm') substs
 
 substMethodSpec ::
     SAW.SharedContext ->
-    Map SAW.VarIndex SAW.Term ->
+    IntMap SAW.Term ->
     MIRMethodSpec ->
     IO MIRMethodSpec
 substMethodSpec sc sm ms = do
@@ -608,7 +609,7 @@ substMethodSpec sc sm ms = do
         pointsTos' <- mapM goPointsTo $ ss ^. MS.csPointsTos
         conditions' <- mapM goSetupCondition $ ss ^. MS.csConditions
         let freshVars' =
-                filter (\tec -> not $ Map.member (SAW.ecVarIndex $ SAW.tecExt tec) sm) $
+                filter (\tec -> not $ IntMap.member (SAW.ecVarIndex $ SAW.tecExt tec) sm) $
                     ss ^. MS.csFreshVars
         return $ ss
             & MS.csPointsTos .~ pointsTos'

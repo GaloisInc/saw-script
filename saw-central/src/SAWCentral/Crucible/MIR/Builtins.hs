@@ -80,6 +80,7 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import qualified Data.Foldable.WithIndex as FWI
+import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.List.Extra as List (find, unsnoc)
 import qualified Data.List.NonEmpty as NE
@@ -1163,7 +1164,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
-     let ecs0 = Map.fromList
+     let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
            , let ec = tecExt tt ]

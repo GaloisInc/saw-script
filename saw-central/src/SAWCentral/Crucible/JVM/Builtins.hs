@@ -61,6 +61,7 @@ import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
+import qualified Data.IntMap as IntMap
 import           Data.IORef
 import           Data.List (isPrefixOf, sortBy)
 import           Data.List.NonEmpty (NonEmpty)
@@ -785,7 +786,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
-     let ecs0 = Map.fromList
+     let ecs0 = IntMap.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
            , let ec = tecExt tt ]

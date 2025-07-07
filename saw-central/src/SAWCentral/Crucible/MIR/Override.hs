@@ -36,11 +36,12 @@ import Data.Either (partitionEithers)
 import qualified Data.Text as Text
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
+import qualified Data.IntMap as IntMap
+import Data.IntMap (IntMap)
 import Data.IORef (IORef, modifyIORef)
 import Data.List (tails)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
-import Data.Map (Map)
 import Data.Maybe (catMaybes)
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
@@ -864,7 +865,7 @@ instantiateExtResolveSAWPred sc cc cond = do
 -- the given 'MirPointsTo' value.
 instantiateMirPointsTo ::
   SharedContext     ->
-  Map VarIndex Term ->
+  IntMap Term       ->
   MirPointsTo       ->
   IO MirPointsTo
 instantiateMirPointsTo sc s (MirPointsTo md reference referents) =
@@ -875,7 +876,7 @@ instantiateMirPointsTo sc s (MirPointsTo md reference referents) =
 -- the given 'SetupValue'.
 instantiateSetupValue ::
   SharedContext     ->
-  Map VarIndex Term ->
+  IntMap Term       ->
   SetupValue        ->
   IO SetupValue
 instantiateSetupValue sc s v =
@@ -1545,7 +1546,7 @@ methodSpecHandler opts sc cc mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree = Set.fromList (map (ecVarIndex . tecExt)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
-          in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
+          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)
 

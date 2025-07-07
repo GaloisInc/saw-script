@@ -136,6 +136,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
+import qualified Data.IntMap as IntMap
 import           Data.List (genericDrop, genericLength, genericSplitAt)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -1765,7 +1766,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                      , showTerm ty
                      ]
                    x' <- scExtCns sc x
-                   body' <- scInstantiateExt sc (Map.singleton (ecVarIndex ec) x') body
+                   body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x') body
                    check nenv e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
@@ -2040,7 +2041,7 @@ propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
            Just inst ->
              do let mkNewGoal :: ExtCns Term -> IO (Either Term Prop)
                     mkNewGoal ec =
-                      case Map.lookup (ecVarIndex ec) inst of
+                      case IntMap.lookup (ecVarIndex ec) inst of
                         Nothing ->
                           -- this argument not solved by unification, so make it a goal
                           do c0 <- scInstantiateExt sc inst (ecType ec)
@@ -2080,7 +2081,7 @@ tacticIntro sc usernm = Tactic \goal ->
              xv <- liftIO $ scFreshEC sc name tp
              x  <- liftIO $ scExtCns sc xv
              tt <- liftIO $ mkTypedTerm sc x
-             body' <- liftIO $ scInstantiateExt sc (Map.singleton (ecVarIndex ec) x) body
+             body' <- liftIO $ scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x) body
              let goal' = goal { goalSequent = mkSqt (Prop body') }
              return (tt, mempty, [goal'], introEvidence xv)
 

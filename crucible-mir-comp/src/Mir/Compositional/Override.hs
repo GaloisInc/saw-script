@@ -22,6 +22,8 @@ import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString as BS
 import Data.Foldable
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -162,7 +164,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- so we don't need to split up our `runOverrideMatcher` call into multiple
     -- blocks.
     let postFresh = ms ^. MS.csPostState . MS.csFreshVars
-    postFreshTermSub <- liftM Map.fromList $ forM postFresh $ \tec -> do
+    postFreshTermSub <- liftM IntMap.fromList $ forM postFresh $ \tec -> do
         let ec = SAW.tecExt tec
         let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecName ec
         let nameSymbol = W4.safeSymbol nameStr
@@ -234,7 +236,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
                 ms ^. MS.csPostState . MS.csFreshVars
         forM_ allFresh $ \tec -> do
             let var = SAW.ecVarIndex $ SAW.tecExt tec
-            when (not $ Map.member var termSub) $ do
+            when (not $ IntMap.member var termSub) $ do
                 error $ "argument matching failed to produce a binding for " ++
                     show (SAW.ppTypedExtCns tec)
 
@@ -367,9 +369,9 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             Just ec -> do
                 let var = SAW.ecVarIndex ec
                 sub <- use MS.termSub
-                when (Map.member var sub) $
+                when (IntMap.member var sub) $
                     MS.failure loc MS.NonlinearPatternNotSupported
-                MS.termSub %= Map.insert var exprTerm
+                MS.termSub %= IntMap.insert var exprTerm
             Nothing -> do
                 -- If the `TypedTerm` is a constant, we want to assert that the
                 -- argument `expr` matches the constant.
@@ -504,7 +506,7 @@ setupToReg :: forall sym t st fs tp0.
     SAW.SharedContext ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
-    Map SAW.VarIndex SAW.Term ->
+    IntMap SAW.Term ->
     -- | `myRegMap`: maps `VarIndex`es in the context's namespace to the
     -- corresponding W4 variables in the context's namespace.
     Map SAW.VarIndex (Some (W4.Expr t)) ->
