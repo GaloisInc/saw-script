@@ -1,0 +1,1384 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# Language GADTs, KindSignatures, DataKinds, ImplicitParams #-}
+<span class="lineno">    2 </span>{-# Language PatternSynonyms, TypeFamilies, TypeSynonymInstances #-}
+<span class="lineno">    3 </span>{-# Language TypeApplications #-}
+<span class="lineno">    4 </span>{-# Language TypeOperators #-}
+<span class="lineno">    5 </span>{-# Language OverloadedStrings #-}
+<span class="lineno">    6 </span>{-# Language ExistentialQuantification #-}
+<span class="lineno">    7 </span>{-# Language Rank2Types #-}
+<span class="lineno">    8 </span>{-# Language FlexibleContexts #-}
+<span class="lineno">    9 </span>{-# Language ScopedTypeVariables #-}
+<span class="lineno">   10 </span>{-# Language ConstraintKinds #-}
+<span class="lineno">   11 </span>{-# Language PartialTypeSignatures #-}
+<span class="lineno">   12 </span>{-# Language CPP #-}
+<span class="lineno">   13 </span>#if __GLASGOW_HASKELL__ &gt;= 806
+<span class="lineno">   14 </span>{-# Language NoStarIsType #-}
+<span class="lineno">   15 </span>#endif
+<span class="lineno">   16 </span>module SAWCentral.X86Spec
+<span class="lineno">   17 </span>  ( Specification(..)
+<span class="lineno">   18 </span>  , SpecType, Pre, Post
+<span class="lineno">   19 </span>  , FunSpec(..)
+<span class="lineno">   20 </span>  , verifyMode
+<span class="lineno">   21 </span>  , overrideMode
+<span class="lineno">   22 </span>  , State(..)
+<span class="lineno">   23 </span>  , Loc(..)
+<span class="lineno">   24 </span>  , V(..)
+<span class="lineno">   25 </span>  , Prop(..)
+<span class="lineno">   26 </span>  , Alloc(..)
+<span class="lineno">   27 </span>  , Area(..)
+<span class="lineno">   28 </span>  , Mode(..)
+<span class="lineno">   29 </span>  , Unit(..)
+<span class="lineno">   30 </span>  , (*.)
+<span class="lineno">   31 </span>  , inMem
+<span class="lineno">   32 </span>  , (===)
+<span class="lineno">   33 </span>  , Opts(..)
+<span class="lineno">   34 </span>  , optsSym
+<span class="lineno">   35 </span>  , KnownType
+<span class="lineno">   36 </span>  , intLit
+<span class="lineno">   37 </span>  , litByte
+<span class="lineno">   38 </span>  , litWord
+<span class="lineno">   39 </span>  , litDWord
+<span class="lineno">   40 </span>  , litQWord
+<span class="lineno">   41 </span>  , litV128
+<span class="lineno">   42 </span>  , litV256
+<span class="lineno">   43 </span>  , area
+<span class="lineno">   44 </span>  , LLVMPointerType
+<span class="lineno">   45 </span>  , Overrides
+<span class="lineno">   46 </span>  , debugPPReg
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>  , Sym
+<span class="lineno">   49 </span>  , freshRegister
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>  -- * Cryptol
+<span class="lineno">   52 </span>  , CryArg(..)
+<span class="lineno">   53 </span>  , cryPre
+<span class="lineno">   54 </span>  , cryCur
+<span class="lineno">   55 </span>  , cryTerm
+<span class="lineno">   56 </span>  , cryConst
+<span class="lineno">   57 </span>  , mkGlobalMap
+<span class="lineno">   58 </span>  ) where
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>import GHC.TypeLits(KnownNat)
+<span class="lineno">   61 </span>import GHC.Natural(Natural)
+<span class="lineno">   62 </span>import Data.Kind(Type)
+<span class="lineno">   63 </span>import Control.Applicative ( (&lt;|&gt;) )
+<span class="lineno">   64 </span>import Control.Lens (view, (^.), over)
+<span class="lineno">   65 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   66 </span>import Data.List(sortBy)
+<span class="lineno">   67 </span>import Data.Maybe(catMaybes)
+<span class="lineno">   68 </span>import Data.Text (Text)
+<span class="lineno">   69 </span>import qualified Data.Text as Text
+<span class="lineno">   70 </span>import Data.Map (Map)
+<span class="lineno">   71 </span>import Data.Proxy(Proxy(..))
+<span class="lineno">   72 </span>import qualified Data.Map as Map
+<span class="lineno">   73 </span>import Data.IORef(newIORef,atomicModifyIORef')
+<span class="lineno">   74 </span>import Data.String
+<span class="lineno">   75 </span>import Control.Monad (MonadPlus(..), foldM, join, zipWithM)
+<span class="lineno">   76 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>import Data.Parameterized.NatRepr
+<span class="lineno">   79 </span>import Data.Parameterized.Classes
+<span class="lineno">   80 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   81 </span>import qualified Data.Parameterized.Map as MapF
+<span class="lineno">   82 </span>import Data.Parameterized.Pair
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>import Data.Foldable(foldlM, toList)
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>import What4.Interface
+<span class="lineno">   87 </span>          (bvLit,isEq, Pred, notPred, orPred, natEq, freshNat
+<span class="lineno">   88 </span>          , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
+<span class="lineno">   89 </span>import What4.ProgramLoc
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>import Lang.Crucible.FunctionHandle
+<span class="lineno">   92 </span>import SAWCentral.Crucible.LLVM.CrucibleLLVM
+<span class="lineno">   93 </span>  ( EndianForm(LittleEndian)
+<span class="lineno">   94 </span>  , MemImpl, doLoad, doPtrAddOffset, emptyMem
+<span class="lineno">   95 </span>  , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem
+<span class="lineno">   96 </span>  , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
+<span class="lineno">   97 </span>  , LLVMPointerType, LLVMVal(LLVMValInt)
+<span class="lineno">   98 </span>  , ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv, llvmPointer_bv
+<span class="lineno">   99 </span>  , muxLLVMPtr
+<span class="lineno">  100 </span>  , bitvectorType
+<span class="lineno">  101 </span>  , Bytes, bytesToInteger, toBytes
+<span class="lineno">  102 </span>  , StorageType
+<span class="lineno">  103 </span>  , noAlignment
+<span class="lineno">  104 </span>  , pattern LLVMPointer
+<span class="lineno">  105 </span>  )
+<span class="lineno">  106 </span>import qualified Lang.Crucible.LLVM.MemModel as Crucible
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
+<span class="lineno">  109 </span>import Lang.Crucible.Backend
+<span class="lineno">  110 </span>          ( addAssumption, getProofObligations, goalsToList
+<span class="lineno">  111 </span>          , assert, CrucibleAssumption(..)
+<span class="lineno">  112 </span>          , ProofGoal(..), labeledPredMsg
+<span class="lineno">  113 </span>          , HasSymInterface(backendGetSym)
+<span class="lineno">  114 </span>          , SomeBackend(..), IsSymBackend
+<span class="lineno">  115 </span>          )
+<span class="lineno">  116 </span>import Lang.Crucible.Simulator.ExecutionTree
+<span class="lineno">  117 </span>import Lang.Crucible.Simulator.OverrideSim
+<span class="lineno">  118 </span>import Lang.Crucible.CFG.Common
+<span class="lineno">  119 </span>import Lang.Crucible.Simulator.RegMap
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>--import Lang.Crucible.Backend.SAWCore
+<span class="lineno">  122 </span>--  (bindSAWTerm,sawBackendSharedContext,toSC,SAWCoreBackend)
+<span class="lineno">  123 </span>import Lang.Crucible.Types
+<span class="lineno">  124 </span>  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>import SAWCore.SharedTerm
+<span class="lineno">  127 </span>  (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
+<span class="lineno">  128 </span>import Data.Macaw.Memory(RegionIndex)
+<span class="lineno">  129 </span>import Data.Macaw.Symbolic
+<span class="lineno">  130 </span>  ( GlobalMap(..), ToCrucibleType, LookupFunctionHandle(..)
+<span class="lineno">  131 </span>  , MacawCrucibleRegTypes, MacawSimulatorState
+<span class="lineno">  132 </span>  )
+<span class="lineno">  133 </span>import Data.Macaw.Symbolic.Backend ( crucArchRegTypes )
+<span class="lineno">  134 </span>import Data.Macaw.X86.X86Reg
+<span class="lineno">  135 </span>import Data.Macaw.X86.Symbolic
+<span class="lineno">  136 </span>     (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg)
+<span class="lineno">  137 </span>import Data.Macaw.X86.ArchTypes(X86_64)
+<span class="lineno">  138 </span>import qualified Data.Macaw.Types as M
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
+<span class="lineno">  141 </span>import SAWCoreWhat4.ReturnTrip
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>import Cryptol.ModuleSystem.Name(Name)
+<span class="lineno">  144 </span>import Cryptol.ModuleSystem.Interface(ifTySyns)
+<span class="lineno">  145 </span>import Cryptol.TypeCheck.AST(TySyn(tsDef))
+<span class="lineno">  146 </span>import Cryptol.TypeCheck.TypePat(aNat)
+<span class="lineno">  147 </span>import Cryptol.Utils.PP(pp)
+<span class="lineno">  148 </span>import Cryptol.Utils.Patterns(matchMaybe)
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>import SAWCentral.Crucible.Common (Sym, sawCoreState)
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>data Specification = Specification
+<span class="lineno">  154 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">specAllocs</span></span></span>  :: ![Alloc]
+<span class="lineno">  155 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">specPres</span></span></span>    :: ![(String, Prop Pre)]
+<span class="lineno">  156 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">specPosts</span></span></span>   :: ![(String, Prop Post)]
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">specGlobsRO</span></span></span> :: ![ (String, Integer, Unit, [ Integer ]) ]
+<span class="lineno">  159 </span>    -- ^ Read only globals.
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">specCalls</span></span></span>   :: ![ (String, Integer, Int -&gt; Specification) ]
+<span class="lineno">  162 </span>    -- ^ Specifications for the functions we call.
+<span class="lineno">  163 </span>    -- The integer is the absolute address of the function.
+<span class="lineno">  164 </span>    -- The &quot;Int&quot; counts how many times we called this function so far.
+<span class="lineno">  165 </span>  }
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>{- | A specifiction for a function.
+<span class="lineno">  170 </span>The outer, &quot;Pre&quot;, computiation sets up the initial state of the
+<span class="lineno">  171 </span>computation (i.e., the pre-condition for the function).
+<span class="lineno">  172 </span>As a result, we return the inital register assignemtn,
+<span class="lineno">  173 </span>and the post-condition for the function). -}
+<span class="lineno">  174 </span>data FunSpec =
+<span class="lineno">  175 </span>    NewStyle (CryptolEnv -&gt; IO Specification)
+<span class="lineno">  176 </span>             (State -&gt; IO ())
+<span class="lineno">  177 </span>              -- Debug: Run this to print some stuff at interesting times.
+<span class="lineno">  178 </span>
+<span class="lineno">  179 </span>-- | Is this a pre- or post-condition specificiation.
+<span class="lineno">  180 </span>data {- kind -} SpecType = Pre | Post
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>-- | We are specifying a pre-condition.
+<span class="lineno">  183 </span>type Pre  = 'Pre
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>-- | We are specifying a post-condition.
+<span class="lineno">  186 </span>type Post = 'Post
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>
+<span class="lineno">  189 </span>
+<span class="lineno">  190 </span>data Opts = Opts
+<span class="lineno">  191 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">optsBackend</span></span></span> :: SomeBackend Sym
+<span class="lineno">  192 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">optsMvar</span></span></span> :: GlobalVar Mem
+<span class="lineno">  193 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">optsCry</span></span></span> :: CryptolEnv
+<span class="lineno">  194 </span>  }
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>optsWithBackend :: Opts -&gt; (forall bak. IsSymBackend Sym bak =&gt; bak -&gt; a) -&gt; a
+<span class="lineno">  197 </span><span class="decl"><span class="nottickedoff">optsWithBackend opts k = case optsBackend opts of SomeBackend bak -&gt; k bak</span></span>
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>optsSym :: Opts -&gt; Sym
+<span class="lineno">  200 </span><span class="decl"><span class="nottickedoff">optsSym opts = optsWithBackend opts backendGetSym</span></span>
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>(*.) :: Integer -&gt; Unit -&gt; Bytes
+<span class="lineno">  203 </span><span class="decl"><span class="nottickedoff">n *. u = toBytes (fromInteger n * bs)</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="nottickedoff">where bs = unitByteSize u natValue :: Natural</span></span>
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>unitBitSize :: Unit -&gt; (forall w. (1 &lt;= w) =&gt; NatRepr w -&gt; a) -&gt; a
+<span class="lineno">  207 </span><span class="decl"><span class="nottickedoff">unitBitSize u k = unitByteSize u $ \bits -&gt;</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="nottickedoff">case leqMulPos (knownNat @8) bits of</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">LeqProof -&gt; k (natMultiply (knownNat @8) bits)</span></span>
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>unitByteSize :: Unit -&gt; (forall w. (1 &lt;= w) =&gt; NatRepr w -&gt; a) -&gt; a
+<span class="lineno">  212 </span><span class="decl"><span class="nottickedoff">unitByteSize u k =</span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="nottickedoff">case u of</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="nottickedoff">Bytes  -&gt; k (knownNat @1)</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">Words  -&gt; k (knownNat @2)</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="nottickedoff">DWords -&gt; k (knownNat @4)</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="nottickedoff">QWords -&gt; k (knownNat @8)</span>
+<span class="lineno">  218 </span><span class="spaces">    </span><span class="nottickedoff">V128s  -&gt; k (knownNat @16)</span>
+<span class="lineno">  219 </span><span class="spaces">    </span><span class="nottickedoff">V256s  -&gt; k (knownNat @32)</span></span>
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>data Mode = RO    -- ^ Starts initialized; cannot write to it
+<span class="lineno">  224 </span>          | RW    -- ^ Starts initialized; can write to it
+<span class="lineno">  225 </span>          | WO    -- ^ Starts uninitialized; can write to it
+<span class="lineno">  226 </span>          deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  227 </span>
+<span class="lineno">  228 </span>data Area = Area
+<span class="lineno">  229 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">areaName</span></span></span> :: String
+<span class="lineno">  230 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">areaMode</span></span></span> :: Mode
+<span class="lineno">  231 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">areaSize</span></span></span> :: (Integer,Unit)
+<span class="lineno">  232 </span>
+<span class="lineno">  233 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">areaHasPointers</span></span></span> :: Bool
+<span class="lineno">  234 </span>    -- ^ Could this area contain pointers
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">areaPtr</span></span></span>  :: Bytes
+<span class="lineno">  237 </span>    {- ^ The canonical pointer to this area is this many bytes from
+<span class="lineno">  238 </span>    -- the start of the actual object.
+<span class="lineno">  239 </span>    -- When we initialize such an area, we allocate it, then advnace
+<span class="lineno">  240 </span>    -- the pointer by this much, and return *that* as the value of
+<span class="lineno">  241 </span>    -- initialization.
+<span class="lineno">  242 </span>
+<span class="lineno">  243 </span>    -- When we match such an area, we get the value as it,
+<span class="lineno">  244 </span>    -- but then we have to check that there are this many bytes *before*
+<span class="lineno">  245 </span>    -- the value we got.
+<span class="lineno">  246 </span>    -}
+<span class="lineno">  247 </span>  }
+<span class="lineno">  248 </span>
+<span class="lineno">  249 </span>area :: String -&gt; Mode -&gt; Integer -&gt; Unit -&gt; Area
+<span class="lineno">  250 </span><span class="decl"><span class="nottickedoff">area n m u s = Area { areaName = n</span>
+<span class="lineno">  251 </span><span class="spaces">                  </span><span class="nottickedoff">, areaMode = m</span>
+<span class="lineno">  252 </span><span class="spaces">                  </span><span class="nottickedoff">, areaSize = (u,s)</span>
+<span class="lineno">  253 </span><span class="spaces">                  </span><span class="nottickedoff">, areaHasPointers = False</span>
+<span class="lineno">  254 </span><span class="spaces">                  </span><span class="nottickedoff">, areaPtr = 0 *. Bytes</span>
+<span class="lineno">  255 </span><span class="spaces">                  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>data Loc :: CrucibleType -&gt; Type where
+<span class="lineno">  258 </span>
+<span class="lineno">  259 </span>  InMem :: (1 &lt;= w) =&gt;
+<span class="lineno">  260 </span>           NatRepr w                {- Read this much (in bytes) -} -&gt;
+<span class="lineno">  261 </span>           Loc (LLVMPointerType 64) {- Read from this pointer -} -&gt;
+<span class="lineno">  262 </span>           Integer                  {- Starting at this offset in bytes -} -&gt;
+<span class="lineno">  263 </span>           Loc (LLVMPointerType (8*w))
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>  InReg :: X86Reg tp -&gt; Loc (ToCrucibleType tp)
+<span class="lineno">  266 </span>
+<span class="lineno">  267 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (Loc t)</span></span></span></span> where
+<span class="lineno">  268 </span>  <span class="decl"><span class="nottickedoff">show x =</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="nottickedoff">case x of</span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="nottickedoff">InReg r -&gt; show r</span>
+<span class="lineno">  271 </span><span class="spaces">      </span><span class="nottickedoff">InMem w l o -&gt;</span>
+<span class="lineno">  272 </span><span class="spaces">        </span><span class="nottickedoff">&quot;[&quot; ++ show l ++ off ++ &quot; |&quot; ++ show (8 * natValue w) ++ &quot;]&quot;</span>
+<span class="lineno">  273 </span><span class="spaces">        </span><span class="nottickedoff">where off | o &lt; 0     = &quot; - &quot; ++ show (negate o)</span>
+<span class="lineno">  274 </span><span class="spaces">                  </span><span class="nottickedoff">| o == 0    = &quot;&quot;</span>
+<span class="lineno">  275 </span><span class="spaces">                  </span><span class="nottickedoff">| otherwise = &quot; + &quot; ++ show o</span></span>
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>inMem ::
+<span class="lineno">  278 </span>  (1 &lt;= w, KnownNat w) =&gt;
+<span class="lineno">  279 </span>  Loc (LLVMPointerType 64) -&gt;
+<span class="lineno">  280 </span>  Integer -&gt;
+<span class="lineno">  281 </span>  Unit -&gt;
+<span class="lineno">  282 </span>  Loc (LLVMPointerType (8 * w))
+<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">inMem l n u = InMem knownNat l (bytesToInteger (n *. u))</span></span>
+<span class="lineno">  284 </span>
+<span class="lineno">  285 </span>instance TestEquality Loc where
+<span class="lineno">  286 </span>  <span class="decl"><span class="nottickedoff">testEquality x y = case compareF x y of</span>
+<span class="lineno">  287 </span><span class="spaces">                       </span><span class="nottickedoff">EQF -&gt; Just Refl</span>
+<span class="lineno">  288 </span><span class="spaces">                       </span><span class="nottickedoff">_   -&gt; Nothing</span></span>
+<span class="lineno">  289 </span>
+<span class="lineno">  290 </span>-- | Allocation order.  Also used when resolving equalities,
+<span class="lineno">  291 </span>-- the smallest number is the representative.
+<span class="lineno">  292 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">OrdF Loc</span></span></span></span></span></span></span></span> where
+<span class="lineno">  293 </span>  <span class="decl"><span class="nottickedoff">compareF x y =</span>
+<span class="lineno">  294 </span><span class="spaces">    </span><span class="nottickedoff">case (x,y) of</span>
+<span class="lineno">  295 </span><span class="spaces">      </span><span class="nottickedoff">(InReg a, InReg b) -&gt; case compareF a b of</span>
+<span class="lineno">  296 </span><span class="spaces">                              </span><span class="nottickedoff">EQF -&gt; EQF</span>
+<span class="lineno">  297 </span><span class="spaces">                              </span><span class="nottickedoff">LTF -&gt; LTF</span>
+<span class="lineno">  298 </span><span class="spaces">                              </span><span class="nottickedoff">GTF -&gt; GTF</span>
+<span class="lineno">  299 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="nottickedoff">(InReg {}, InMem {}) -&gt; LTF</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="nottickedoff">(InMem {}, InReg {}) -&gt; GTF</span>
+<span class="lineno">  302 </span><span class="spaces">      </span><span class="nottickedoff">(InMem s a i, InMem t b j) -&gt;</span>
+<span class="lineno">  303 </span><span class="spaces">        </span><span class="nottickedoff">case compareF a b of</span>
+<span class="lineno">  304 </span><span class="spaces">          </span><span class="nottickedoff">EQF -&gt; case compare i j of</span>
+<span class="lineno">  305 </span><span class="spaces">                   </span><span class="nottickedoff">LT -&gt; LTF</span>
+<span class="lineno">  306 </span><span class="spaces">                   </span><span class="nottickedoff">GT -&gt; GTF</span>
+<span class="lineno">  307 </span><span class="spaces">                   </span><span class="nottickedoff">EQ -&gt; case compareF s t of</span>
+<span class="lineno">  308 </span><span class="spaces">                           </span><span class="nottickedoff">LTF -&gt; LTF -- XXX: shouldn't allow?</span>
+<span class="lineno">  309 </span><span class="spaces">                           </span><span class="nottickedoff">GTF -&gt; GTF -- XXX: shouldn't allow?</span>
+<span class="lineno">  310 </span><span class="spaces">                           </span><span class="nottickedoff">EQF -&gt; EQF</span>
+<span class="lineno">  311 </span><span class="spaces">          </span><span class="nottickedoff">LTF -&gt; LTF</span>
+<span class="lineno">  312 </span><span class="spaces">          </span><span class="nottickedoff">GTF -&gt; GTF</span></span>
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>
+<span class="lineno">  316 </span>data Alloc = Loc (LLVMPointerType 64) := Area
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>allocArea :: Alloc -&gt; Area
+<span class="lineno">  319 </span><span class="decl"><span class="nottickedoff">allocArea (_ := a) = a</span></span>
+<span class="lineno">  320 </span>
+<span class="lineno">  321 </span>cmpAlloc :: Alloc -&gt; Alloc -&gt; Ordering
+<span class="lineno">  322 </span><span class="decl"><span class="nottickedoff">cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of</span>
+<span class="lineno">  323 </span><span class="spaces">                                 </span><span class="nottickedoff">LTF -&gt; LT</span>
+<span class="lineno">  324 </span><span class="spaces">                                 </span><span class="nottickedoff">EQF -&gt; EQ</span>
+<span class="lineno">  325 </span><span class="spaces">                                 </span><span class="nottickedoff">GTF -&gt; GT</span></span>
+<span class="lineno">  326 </span>
+<span class="lineno">  327 </span>data V :: SpecType -&gt; CrucibleType -&gt; Type where
+<span class="lineno">  328 </span>
+<span class="lineno">  329 </span>  CryFun ::
+<span class="lineno">  330 </span>    (1 &lt;= w) =&gt; NatRepr w -&gt; Text -&gt; [CryArg p] -&gt; V p (LLVMPointerType w)
+<span class="lineno">  331 </span>  -- An opaque Cryptol term; WARNING: type is unchecked
+<span class="lineno">  332 </span>  -- XXX there does not appear to be anything that creates these
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>  IntLit :: (1 &lt;= w) =&gt; NatRepr w -&gt; Integer -&gt; V p (LLVMPointerType w)
+<span class="lineno">  335 </span>  -- A literal value
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>  -- The whole location thing needs to be fixed...
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>  Loc    :: Loc t -&gt; V p t
+<span class="lineno">  340 </span>  -- Read the value at the location in the *current* state:
+<span class="lineno">  341 </span>  -- pre or post depending on `p`
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span>  PreLoc :: Loc t -&gt; V Post t
+<span class="lineno">  344 </span>  -- Read the location from the pre-condition state.
+<span class="lineno">  345 </span>
+<span class="lineno">  346 </span>  PreAddPtr ::
+<span class="lineno">  347 </span>    Loc (LLVMPointerType 64) -&gt; Integer -&gt; Unit -&gt; V Post (LLVMPointerType 64)
+<span class="lineno">  348 </span>  -- Add a constant to a pointer from a location in the pre-condition.
+<span class="lineno">  349 </span>
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (V p t)</span></span></span></span> where
+<span class="lineno">  352 </span>  <span class="decl"><span class="nottickedoff">show val =</span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="nottickedoff">case val of</span>
+<span class="lineno">  354 </span><span class="spaces">      </span><span class="nottickedoff">CryFun w f xs -&gt; pars (Text.unpack f ++ &quot; &quot; ++ unwords (map show xs) ++ sh w)</span>
+<span class="lineno">  355 </span><span class="spaces">      </span><span class="nottickedoff">IntLit w x -&gt; pars (show x ++ sh w)</span>
+<span class="lineno">  356 </span><span class="spaces">      </span><span class="nottickedoff">Loc l     -&gt; show l</span>
+<span class="lineno">  357 </span><span class="spaces">      </span><span class="nottickedoff">PreLoc l  -&gt; pars (&quot;pre &quot; ++ show l)</span>
+<span class="lineno">  358 </span><span class="spaces">      </span><span class="nottickedoff">PreAddPtr l i u -&gt;</span>
+<span class="lineno">  359 </span><span class="spaces">          </span><span class="nottickedoff">pars (&quot;pre &amp;&quot; ++ show l ++ &quot; + &quot; ++ show i ++ &quot; &quot; ++ show u)</span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="nottickedoff">where</span>
+<span class="lineno">  362 </span><span class="spaces">    </span><span class="nottickedoff">pars x = &quot;(&quot; ++ x ++ &quot;)&quot;</span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="nottickedoff">sh w = &quot; : [&quot; ++ show (natValue w) ++ &quot;]&quot;</span></span>
+<span class="lineno">  364 </span>
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>litByte :: Integer -&gt; V p (LLVMPointerType 8)
+<span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">litByte = intLit</span></span>
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>litWord :: Integer -&gt; V p (LLVMPointerType 16)
+<span class="lineno">  370 </span><span class="decl"><span class="nottickedoff">litWord = intLit</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>litDWord :: Integer -&gt; V p (LLVMPointerType 32)
+<span class="lineno">  373 </span><span class="decl"><span class="nottickedoff">litDWord = intLit</span></span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>litQWord :: Integer -&gt; V p (LLVMPointerType 64)
+<span class="lineno">  376 </span><span class="decl"><span class="nottickedoff">litQWord = intLit</span></span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>litV128 :: Integer -&gt; V p (LLVMPointerType 128)
+<span class="lineno">  379 </span><span class="decl"><span class="nottickedoff">litV128 = intLit</span></span>
+<span class="lineno">  380 </span>
+<span class="lineno">  381 </span>litV256 :: Integer -&gt; V p (LLVMPointerType 256)
+<span class="lineno">  382 </span><span class="decl"><span class="nottickedoff">litV256 = intLit</span></span>
+<span class="lineno">  383 </span>
+<span class="lineno">  384 </span>intLit :: (1 &lt;= w, KnownNat w) =&gt; Integer -&gt; V p (LLVMPointerType w)
+<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">intLit = IntLit knownNat</span></span>
+<span class="lineno">  386 </span>
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>data CryArg :: SpecType -&gt; Type where
+<span class="lineno">  390 </span>  CryNat    :: Integer -&gt; CryArg p
+<span class="lineno">  391 </span>  Cry       :: V p (LLVMPointerType w) -&gt; CryArg p
+<span class="lineno">  392 </span>  CryArrCur :: V p (LLVMPointerType 64) -&gt; Integer -&gt; Unit -&gt; CryArg p
+<span class="lineno">  393 </span>  CryArrPre :: V Post (LLVMPointerType 64) -&gt; Integer -&gt; Unit -&gt; CryArg Post
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (CryArg p)</span></span></span></span> where
+<span class="lineno">  397 </span>  <span class="decl"><span class="nottickedoff">show x =</span>
+<span class="lineno">  398 </span><span class="spaces">    </span><span class="nottickedoff">case x of</span>
+<span class="lineno">  399 </span><span class="spaces">      </span><span class="nottickedoff">Cry v -&gt; show v</span>
+<span class="lineno">  400 </span><span class="spaces">      </span><span class="nottickedoff">CryNat n -&gt; show n</span>
+<span class="lineno">  401 </span><span class="spaces">      </span><span class="nottickedoff">CryArrCur p n u -&gt; &quot;[&quot; ++ show p ++ &quot;|&quot; ++ show n ++ &quot; &quot; ++ show u ++ &quot;]&quot;</span>
+<span class="lineno">  402 </span><span class="spaces">      </span><span class="nottickedoff">CryArrPre p n u -&gt;</span>
+<span class="lineno">  403 </span><span class="spaces">        </span><span class="nottickedoff">&quot;[pre &quot; ++ show p ++ &quot;|&quot; ++ show n ++ &quot; &quot; ++ show u ++ &quot;]&quot;</span></span>
+<span class="lineno">  404 </span>
+<span class="lineno">  405 </span>cryPre :: Loc (LLVMPointerType w) -&gt; CryArg Post
+<span class="lineno">  406 </span><span class="decl"><span class="nottickedoff">cryPre l = Cry (PreLoc l)</span></span>
+<span class="lineno">  407 </span>
+<span class="lineno">  408 </span>cryCur :: Loc (LLVMPointerType w) -&gt; CryArg p
+<span class="lineno">  409 </span><span class="decl"><span class="nottickedoff">cryCur l = Cry (Loc l)</span></span>
+<span class="lineno">  410 </span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>data Prop :: SpecType -&gt; Type where
+<span class="lineno">  413 </span>  Same    :: TypeRepr t -&gt; V p t -&gt; V p t -&gt; Prop p
+<span class="lineno">  414 </span>  CryProp :: Text -&gt; [ CryArg p ] -&gt; Prop p
+<span class="lineno">  415 </span>  CryPostMem ::
+<span class="lineno">  416 </span>    V Post (LLVMPointerType 64) {- starting here -} -&gt;
+<span class="lineno">  417 </span>    Integer                     {- this many elemnts -} -&gt;
+<span class="lineno">  418 </span>    Unit                        {- of this size -} -&gt;
+<span class="lineno">  419 </span>    Text                        {- are defined by this Cry. func. -} -&gt;
+<span class="lineno">  420 </span>    [CryArg Post]               {- applied to these argumnets -} -&gt;
+<span class="lineno">  421 </span>    Prop Post
+<span class="lineno">  422 </span>
+<span class="lineno">  423 </span>type KnownType = KnownRepr TypeRepr
+<span class="lineno">  424 </span>
+<span class="lineno">  425 </span>(===) :: KnownType t =&gt; V p t -&gt; V p t -&gt; Prop p
+<span class="lineno">  426 </span><span class="decl"><span class="nottickedoff">x === y = Same knownRepr x y</span></span>
+<span class="lineno">  427 </span>
+<span class="lineno">  428 </span>locRepr :: Loc t -&gt; TypeRepr t
+<span class="lineno">  429 </span><span class="decl"><span class="nottickedoff">locRepr l =</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="nottickedoff">case l of</span>
+<span class="lineno">  431 </span><span class="spaces">    </span><span class="nottickedoff">InMem w _ _ -&gt; ptrTy w</span>
+<span class="lineno">  432 </span><span class="spaces">    </span><span class="nottickedoff">InReg r -&gt;</span>
+<span class="lineno">  433 </span><span class="spaces">      </span><span class="nottickedoff">case M.typeRepr r of</span>
+<span class="lineno">  434 </span><span class="spaces">        </span><span class="nottickedoff">M.BVTypeRepr w -&gt; LLVMPointerRepr w</span>
+<span class="lineno">  435 </span><span class="spaces">        </span><span class="nottickedoff">M.BoolTypeRepr -&gt; BoolRepr</span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="nottickedoff">M.TupleTypeRepr {} -&gt; error $ &quot;[locRepr] Unexpected tuple register&quot;</span>
+<span class="lineno">  437 </span><span class="spaces">        </span><span class="nottickedoff">M.FloatTypeRepr {} -&gt; error $ &quot;[locRepr] Unexpected float register&quot;</span>
+<span class="lineno">  438 </span><span class="spaces">        </span><span class="nottickedoff">M.VecTypeRepr {} -&gt; error $ &quot;[locRepr] Unexpected vector register&quot;</span></span>
+<span class="lineno">  439 </span>
+<span class="lineno">  440 </span>--------------------------------------------------------------------------------
+<span class="lineno">  441 </span>
+<span class="lineno">  442 </span>data State = State
+<span class="lineno">  443 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stateMem</span></span></span>  :: MemImpl Sym
+<span class="lineno">  444 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stateRegs</span></span></span> :: Ctx.Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64)
+<span class="lineno">  445 </span>  }
+<span class="lineno">  446 </span>
+<span class="lineno">  447 </span>freshState :: Sym -&gt; IO State
+<span class="lineno">  448 </span><span class="decl"><span class="nottickedoff">freshState sym =</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="nottickedoff">do regs &lt;- Ctx.traverseWithIndex (freshRegister sym) knownRepr</span>
+<span class="lineno">  450 </span><span class="spaces">     </span><span class="nottickedoff">mem  &lt;- emptyMem LittleEndian</span>
+<span class="lineno">  451 </span><span class="spaces">     </span><span class="nottickedoff">return State { stateMem = mem, stateRegs = regs }</span></span>
+<span class="lineno">  452 </span>
+<span class="lineno">  453 </span>freshRegister :: Sym -&gt; Ctx.Index ctx tp -&gt; TypeRepr tp -&gt; IO (RegValue' Sym tp)
+<span class="lineno">  454 </span><span class="decl"><span class="istickedoff">freshRegister sym idx repr = RV &lt;$&gt; freshVal sym repr True (&quot;reg&quot; ++ show idx)</span></span>
+<span class="lineno">  455 </span>
+<span class="lineno">  456 </span>freshVal ::
+<span class="lineno">  457 </span>  Sym -&gt; TypeRepr t -&gt; Bool {- ptrOK ?-}-&gt; String -&gt; IO (RegValue Sym t)
+<span class="lineno">  458 </span><span class="decl"><span class="istickedoff">freshVal sym t ptrOk nm =</span>
+<span class="lineno">  459 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
+<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">BoolRepr -&gt; do</span>
+<span class="lineno">  461 </span><span class="spaces">      </span><span class="istickedoff">sn &lt;- symName nm</span>
+<span class="lineno">  462 </span><span class="spaces">      </span><span class="istickedoff">freshConstant sym sn BaseBoolRepr</span>
+<span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">LLVMPointerRepr w</span>
+<span class="lineno">  464 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">ptrOk</span>, Just Refl &lt;- testEquality w (knownNat @64) -&gt; do</span>
+<span class="lineno">  465 </span><span class="spaces">          </span><span class="istickedoff">sn_base &lt;- symName (nm ++ &quot;_base&quot;)</span>
+<span class="lineno">  466 </span><span class="spaces">          </span><span class="istickedoff">sn_off &lt;- symName (nm ++ &quot;_off&quot;)</span>
+<span class="lineno">  467 </span><span class="spaces">          </span><span class="istickedoff">base &lt;- freshNat sym sn_base</span>
+<span class="lineno">  468 </span><span class="spaces">          </span><span class="istickedoff">off &lt;- freshConstant sym sn_off (BaseBVRepr w)</span>
+<span class="lineno">  469 </span><span class="spaces">          </span><span class="istickedoff">return (LLVMPointer base off)</span>
+<span class="lineno">  470 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
+<span class="lineno">  471 </span><span class="spaces">          </span><span class="istickedoff">sn &lt;- symName nm</span>
+<span class="lineno">  472 </span><span class="spaces">          </span><span class="istickedoff">base &lt;- natLit sym 0</span>
+<span class="lineno">  473 </span><span class="spaces">          </span><span class="istickedoff">off &lt;- freshConstant sym sn (BaseBVRepr w)</span>
+<span class="lineno">  474 </span><span class="spaces">          </span><span class="istickedoff">return (LLVMPointer <span class="nottickedoff">base</span> <span class="nottickedoff">off</span>)</span>
+<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">it -&gt; <span class="nottickedoff">fail (&quot;[freshVal] Unexpected type repr: &quot; ++ show it)</span></span>
+<span class="lineno">  476 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  478 </span><span class="spaces">  </span><span class="istickedoff">symName s =</span>
+<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">case userSymbol (&quot;macaw_&quot; ++ s) of</span>
+<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">error (&quot;Invalid symbol name &quot; ++ show s ++ &quot;: &quot; ++ show err)</span></span>
+<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff">Right a -&gt; return a</span></span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>getLoc :: (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  484 </span>  Loc t -&gt; Opts -&gt; State -&gt; IO (RegValue Sym t)
+<span class="lineno">  485 </span><span class="decl"><span class="nottickedoff">getLoc l =</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="nottickedoff">case l of</span>
+<span class="lineno">  487 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="nottickedoff">InReg r -&gt;</span>
+<span class="lineno">  489 </span><span class="spaces">      </span><span class="nottickedoff">\_ s -&gt; case lookupX86Reg r (stateRegs s) of</span>
+<span class="lineno">  490 </span><span class="spaces">                </span><span class="nottickedoff">Just (RV v) -&gt; return v</span>
+<span class="lineno">  491 </span><span class="spaces">                </span><span class="nottickedoff">_           -&gt; fail (&quot;[getLoc] Invalid register: &quot; ++ show r)</span>
+<span class="lineno">  492 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="nottickedoff">InMem w lm n -&gt;</span>
+<span class="lineno">  494 </span><span class="spaces">      </span><span class="nottickedoff">\opts s -&gt; optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  495 </span><span class="spaces">         </span><span class="nottickedoff">do obj &lt;- getLoc lm opts s</span>
+<span class="lineno">  496 </span><span class="spaces">            </span><span class="nottickedoff">let mem = stateMem s</span>
+<span class="lineno">  497 </span><span class="spaces">            </span><span class="nottickedoff">let ?ptrWidth = knownNat</span>
+<span class="lineno">  498 </span><span class="spaces">            </span><span class="nottickedoff">loc &lt;- adjustPtr bak mem obj n</span>
+<span class="lineno">  499 </span><span class="spaces">            </span><span class="nottickedoff">doLoad bak mem loc (llvmBytes w) (locRepr l) noAlignment</span></span>
+<span class="lineno">  500 </span>
+<span class="lineno">  501 </span>ptrTy :: (1 &lt;= w) =&gt; NatRepr w -&gt; TypeRepr (LLVMPointerType (8 * w))
+<span class="lineno">  502 </span><span class="decl"><span class="nottickedoff">ptrTy wb</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">| LeqProof &lt;- leqMulPos (knownNat @8) wb =</span>
+<span class="lineno">  504 </span><span class="spaces">        </span><span class="nottickedoff">LLVMPointerRepr (natMultiply (knownNat @8) wb)</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>llvmBytes :: NatRepr w -&gt; StorageType
+<span class="lineno">  507 </span><span class="decl"><span class="nottickedoff">llvmBytes w = bitvectorType (toBytes (natValue w))</span></span>
+<span class="lineno">  508 </span>
+<span class="lineno">  509 </span>setLoc :: (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  510 </span>  Loc t -&gt; Opts -&gt; RegValue Sym t -&gt; State -&gt; IO State
+<span class="lineno">  511 </span><span class="decl"><span class="nottickedoff">setLoc l =</span>
+<span class="lineno">  512 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="nottickedoff">case l of</span>
+<span class="lineno">  514 </span><span class="spaces">    </span><span class="nottickedoff">InReg r -&gt;</span>
+<span class="lineno">  515 </span><span class="spaces">      </span><span class="nottickedoff">\_ v s -&gt;</span>
+<span class="lineno">  516 </span><span class="spaces">        </span><span class="nottickedoff">case updateX86Reg r (const (RV v)) (stateRegs s) of</span>
+<span class="lineno">  517 </span><span class="spaces">          </span><span class="nottickedoff">Just rs -&gt; return s { stateRegs = rs }</span>
+<span class="lineno">  518 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; fail (&quot;[setLoc] Invalid register: &quot; ++ show r)</span>
+<span class="lineno">  519 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  520 </span><span class="spaces">    </span><span class="nottickedoff">InMem w lm n -&gt;</span>
+<span class="lineno">  521 </span><span class="spaces">      </span><span class="nottickedoff">\opts v s -&gt;</span>
+<span class="lineno">  522 </span><span class="spaces">        </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  523 </span><span class="spaces">          </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
+<span class="lineno">  524 </span><span class="spaces">             </span><span class="nottickedoff">obj &lt;- getLoc lm opts s</span>
+<span class="lineno">  525 </span><span class="spaces">             </span><span class="nottickedoff">let mem = stateMem s</span>
+<span class="lineno">  526 </span><span class="spaces">             </span><span class="nottickedoff">let ?ptrWidth = knownNat</span>
+<span class="lineno">  527 </span><span class="spaces">             </span><span class="nottickedoff">loc &lt;- adjustPtr bak mem obj n</span>
+<span class="lineno">  528 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  529 </span><span class="spaces">             </span><span class="nottickedoff">let lty = llvmBytes w</span>
+<span class="lineno">  530 </span><span class="spaces">                 </span><span class="nottickedoff">ty  = locRepr l</span>
+<span class="lineno">  531 </span><span class="spaces">             </span><span class="nottickedoff">val &lt;- packMemValue sym lty ty v</span>
+<span class="lineno">  532 </span><span class="spaces">             </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno">  533 </span><span class="spaces">             </span><span class="nottickedoff">mem1 &lt;- storeConstRaw bak mem loc lty alignment val</span>
+<span class="lineno">  534 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  535 </span><span class="spaces">             </span><span class="nottickedoff">return s { stateMem = mem1 }</span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>
+<span class="lineno">  538 </span>class Eval p where
+<span class="lineno">  539 </span>  type S p
+<span class="lineno">  540 </span>  eval ::
+<span class="lineno">  541 </span>    (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  542 </span>    V p t -&gt; Opts -&gt; S p -&gt; IO (RegValue Sym t)
+<span class="lineno">  543 </span>  curState :: f p -&gt; S p -&gt; State
+<span class="lineno">  544 </span>  setCurState :: f p -&gt; State -&gt; S p -&gt; S p
+<span class="lineno">  545 </span>
+<span class="lineno">  546 </span>evIntLit :: (1 &lt;= w) =&gt; Sym -&gt; NatRepr w -&gt; Integer -&gt; IO (LLVMPtr Sym w)
+<span class="lineno">  547 </span><span class="decl"><span class="nottickedoff">evIntLit sym w n = llvmPointer_bv sym =&lt;&lt; bvLit sym w (BV.mkBV w n)</span></span>
+<span class="lineno">  548 </span>
+<span class="lineno">  549 </span>instance Eval Pre where
+<span class="lineno">  550 </span>  type S Pre = State
+<span class="lineno">  551 </span>  <span class="decl"><span class="nottickedoff">eval val =</span>
+<span class="lineno">  552 </span><span class="spaces">    </span><span class="nottickedoff">case val of</span>
+<span class="lineno">  553 </span><span class="spaces">      </span><span class="nottickedoff">CryFun w f xs  -&gt; \opts s -&gt; evalCryFun opts s w f xs</span>
+<span class="lineno">  554 </span><span class="spaces">      </span><span class="nottickedoff">IntLit w n     -&gt; \opts _ -&gt; evIntLit (optsSym opts) w n</span>
+<span class="lineno">  555 </span><span class="spaces">      </span><span class="nottickedoff">Loc l          -&gt; \opts s -&gt; getLoc l opts s</span></span>
+<span class="lineno">  556 </span>  <span class="decl"><span class="nottickedoff">curState _ s = s</span></span>
+<span class="lineno">  557 </span>  <span class="decl"><span class="nottickedoff">setCurState _ s _ = s</span></span>
+<span class="lineno">  558 </span>
+<span class="lineno">  559 </span>instance Eval Post where
+<span class="lineno">  560 </span>  type S Post = (State,State)
+<span class="lineno">  561 </span>  <span class="decl"><span class="nottickedoff">eval val =</span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="nottickedoff">case val of</span>
+<span class="lineno">  563 </span><span class="spaces">      </span><span class="nottickedoff">CryFun w f xs   -&gt; \opts s         -&gt; evalCryFun opts s w f xs</span>
+<span class="lineno">  564 </span><span class="spaces">      </span><span class="nottickedoff">IntLit w n      -&gt; \opts _         -&gt; evIntLit (optsSym opts) w n</span>
+<span class="lineno">  565 </span><span class="spaces">      </span><span class="nottickedoff">Loc l           -&gt; \opts (_,post)  -&gt; getLoc l opts post</span>
+<span class="lineno">  566 </span><span class="spaces">      </span><span class="nottickedoff">PreLoc l        -&gt; \opts (pre,_)   -&gt; getLoc l opts pre</span>
+<span class="lineno">  567 </span><span class="spaces">      </span><span class="nottickedoff">PreAddPtr l i u -&gt; \opts (pre,_) -&gt;</span>
+<span class="lineno">  568 </span><span class="spaces">        </span><span class="nottickedoff">do ptr &lt;- getLoc l opts pre</span>
+<span class="lineno">  569 </span><span class="spaces">           </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  570 </span><span class="spaces">             </span><span class="nottickedoff">adjustPtr bak (stateMem pre) ptr (bytesToInteger (i *. u))</span></span>
+<span class="lineno">  571 </span>
+<span class="lineno">  572 </span>  <span class="decl"><span class="nottickedoff">curState _ (_,s) = s</span></span>
+<span class="lineno">  573 </span>  <span class="decl"><span class="nottickedoff">setCurState _ s (s1,_) = (s1,s)</span></span>
+<span class="lineno">  574 </span>
+<span class="lineno">  575 </span>evalCry ::
+<span class="lineno">  576 </span>  forall p.
+<span class="lineno">  577 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  578 </span>  Opts -&gt; CryArg p -&gt; S p -&gt; IO Term
+<span class="lineno">  579 </span><span class="decl"><span class="nottickedoff">evalCry opts cry s =</span>
+<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  581 </span><span class="spaces">      </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
+<span class="lineno">  582 </span><span class="spaces">         </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  583 </span><span class="spaces">         </span><span class="nottickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  584 </span><span class="spaces">         </span><span class="nottickedoff">case cry of</span>
+<span class="lineno">  585 </span><span class="spaces">           </span><span class="nottickedoff">CryNat n -&gt; scNat sc (fromInteger n)</span>
+<span class="lineno">  586 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  587 </span><span class="spaces">           </span><span class="nottickedoff">Cry v -&gt; toSC sym st =&lt;&lt; projectLLVM_bv bak =&lt;&lt; eval v opts s</span>
+<span class="lineno">  588 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  589 </span><span class="spaces">           </span><span class="nottickedoff">CryArrCur ptr n u -&gt;</span>
+<span class="lineno">  590 </span><span class="spaces">             </span><span class="nottickedoff">unitByteSize u $ \byteW -&gt;</span>
+<span class="lineno">  591 </span><span class="spaces">             </span><span class="nottickedoff">do vs &lt;- readArr opts ptr n byteW s (curState (Proxy @p) s)</span>
+<span class="lineno">  592 </span><span class="spaces">                </span><span class="nottickedoff">terms &lt;- mapM (\x -&gt; toSC sym st =&lt;&lt; projectLLVM_bv bak x) vs</span>
+<span class="lineno">  593 </span><span class="spaces">                </span><span class="nottickedoff">ty &lt;- scBitvector sc (fromIntegral (8 * natValue byteW))</span>
+<span class="lineno">  594 </span><span class="spaces">                </span><span class="nottickedoff">scVector sc ty terms</span>
+<span class="lineno">  595 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  596 </span><span class="spaces">           </span><span class="nottickedoff">CryArrPre ptr n u -&gt;</span>
+<span class="lineno">  597 </span><span class="spaces">             </span><span class="nottickedoff">unitByteSize u $ \byteW -&gt;</span>
+<span class="lineno">  598 </span><span class="spaces">             </span><span class="nottickedoff">do vs &lt;- readArr opts ptr n byteW s (fst s)</span>
+<span class="lineno">  599 </span><span class="spaces">                </span><span class="nottickedoff">terms &lt;- mapM (\x -&gt; toSC sym st =&lt;&lt; projectLLVM_bv bak x) vs</span>
+<span class="lineno">  600 </span><span class="spaces">                </span><span class="nottickedoff">ty &lt;- scBitvector sc (fromIntegral (8 * natValue byteW))</span>
+<span class="lineno">  601 </span><span class="spaces">                </span><span class="nottickedoff">scVector sc ty terms</span></span>
+<span class="lineno">  602 </span>
+<span class="lineno">  603 </span>evalCryFunGen ::
+<span class="lineno">  604 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  605 </span>  Opts -&gt;
+<span class="lineno">  606 </span>  S p -&gt;
+<span class="lineno">  607 </span>  BaseTypeRepr t -&gt;
+<span class="lineno">  608 </span>  Text -&gt;
+<span class="lineno">  609 </span>  [CryArg p] -&gt;
+<span class="lineno">  610 </span>  IO (RegValue Sym (BaseToType t))
+<span class="lineno">  611 </span><span class="decl"><span class="nottickedoff">evalCryFunGen opts s ty f xs =</span>
+<span class="lineno">  612 </span><span class="spaces">  </span><span class="nottickedoff">do let sym = optsSym opts</span>
+<span class="lineno">  613 </span><span class="spaces">     </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  614 </span><span class="spaces">     </span><span class="nottickedoff">ts &lt;- mapM (\x -&gt; evalCry opts x s) xs</span>
+<span class="lineno">  615 </span><span class="spaces">     </span><span class="nottickedoff">bindSAWTerm sym st ty =&lt;&lt; cryTerm opts f ts</span></span>
+<span class="lineno">  616 </span>
+<span class="lineno">  617 </span>
+<span class="lineno">  618 </span>-- | Cryptol function that returns a list of bit-vectors.
+<span class="lineno">  619 </span>evalCryFunArr ::
+<span class="lineno">  620 </span>  (1 &lt;= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  621 </span>  Opts -&gt;
+<span class="lineno">  622 </span>  S p -&gt;
+<span class="lineno">  623 </span>  Integer -&gt;
+<span class="lineno">  624 </span>  NatRepr w -&gt;
+<span class="lineno">  625 </span>  Text -&gt;
+<span class="lineno">  626 </span>  [CryArg p] -&gt;
+<span class="lineno">  627 </span>  IO [ LLVMPtr Sym w ]
+<span class="lineno">  628 </span><span class="decl"><span class="nottickedoff">evalCryFunArr opts s n w f xs =</span>
+<span class="lineno">  629 </span><span class="spaces">  </span><span class="nottickedoff">do term &lt;- cryTerm opts f =&lt;&lt; mapM (\x -&gt; evalCry opts x s) xs</span>
+<span class="lineno">  630 </span><span class="spaces">     </span><span class="nottickedoff">let sym = optsSym opts</span>
+<span class="lineno">  631 </span><span class="spaces">     </span><span class="nottickedoff">st  &lt;- sawCoreState sym</span>
+<span class="lineno">  632 </span><span class="spaces">     </span><span class="nottickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  633 </span><span class="spaces">     </span><span class="nottickedoff">len &lt;- scNat sc (fromInteger n)</span>
+<span class="lineno">  634 </span><span class="spaces">     </span><span class="nottickedoff">ty  &lt;- scBitvector sc (natValue w)</span>
+<span class="lineno">  635 </span><span class="spaces">     </span><span class="nottickedoff">let atIx i = do ind    &lt;- scNat sc (fromInteger i)</span>
+<span class="lineno">  636 </span><span class="spaces">                     </span><span class="nottickedoff">term_i &lt;- scAt sc len ty term ind</span>
+<span class="lineno">  637 </span><span class="spaces">                     </span><span class="nottickedoff">bv &lt;- bindSAWTerm sym st (BaseBVRepr w) term_i</span>
+<span class="lineno">  638 </span><span class="spaces">                     </span><span class="nottickedoff">llvmPointer_bv sym bv</span>
+<span class="lineno">  639 </span><span class="spaces">     </span><span class="nottickedoff">mapM atIx [ 0 .. n - 1 ]</span></span>
+<span class="lineno">  640 </span>
+<span class="lineno">  641 </span>
+<span class="lineno">  642 </span>-- | Cryptol function that returns a bitvector of the given len
+<span class="lineno">  643 </span>evalCryFun ::
+<span class="lineno">  644 </span>  (1 &lt;= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  645 </span>  Opts -&gt;
+<span class="lineno">  646 </span>  S p -&gt;
+<span class="lineno">  647 </span>  NatRepr w -&gt;
+<span class="lineno">  648 </span>  Text -&gt;
+<span class="lineno">  649 </span>  [CryArg p] -&gt;
+<span class="lineno">  650 </span>  IO (LLVMPtr Sym w)
+<span class="lineno">  651 </span><span class="decl"><span class="nottickedoff">evalCryFun opts s w f xs =</span>
+<span class="lineno">  652 </span><span class="spaces">  </span><span class="nottickedoff">llvmPointer_bv (optsSym opts) =&lt;&lt; evalCryFunGen opts s (BaseBVRepr w) f xs</span></span>
+<span class="lineno">  653 </span>
+<span class="lineno">  654 </span>evalProp ::
+<span class="lineno">  655 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  656 </span>  Opts -&gt; Prop p -&gt; S p -&gt; IO (Pred Sym)
+<span class="lineno">  657 </span><span class="decl"><span class="nottickedoff">evalProp opts p s =</span>
+<span class="lineno">  658 </span><span class="spaces">  </span><span class="nottickedoff">case p of</span>
+<span class="lineno">  659 </span><span class="spaces">    </span><span class="nottickedoff">Same t x y -&gt;</span>
+<span class="lineno">  660 </span><span class="spaces">      </span><span class="nottickedoff">do v1 &lt;- eval x opts s</span>
+<span class="lineno">  661 </span><span class="spaces">         </span><span class="nottickedoff">v2 &lt;- eval y opts s</span>
+<span class="lineno">  662 </span><span class="spaces">         </span><span class="nottickedoff">evalSame sym t v1 v2</span>
+<span class="lineno">  663 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  664 </span><span class="spaces">    </span><span class="nottickedoff">CryProp f xs -&gt; evalCryFunGen opts s BaseBoolRepr f xs</span>
+<span class="lineno">  665 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  666 </span><span class="spaces">    </span><span class="nottickedoff">CryPostMem ptr n u f xs -&gt;</span>
+<span class="lineno">  667 </span><span class="spaces">      </span><span class="nottickedoff">-- unitBitSize  u $ \wBits -&gt;</span>
+<span class="lineno">  668 </span><span class="spaces">      </span><span class="nottickedoff">unitByteSize u $ \wBytes -&gt;</span>
+<span class="lineno">  669 </span><span class="spaces">      </span><span class="nottickedoff">do LeqProof &lt;- return (leqMulPos (Proxy @8) wBytes)</span>
+<span class="lineno">  670 </span><span class="spaces">         </span><span class="nottickedoff">let wBits = natMultiply (knownNat @8) wBytes</span>
+<span class="lineno">  671 </span><span class="spaces">         </span><span class="nottickedoff">need   &lt;- evalCryFunArr opts s n wBits f xs -- expected values</span>
+<span class="lineno">  672 </span><span class="spaces">         </span><span class="nottickedoff">have   &lt;- readArr opts ptr n wBytes s (snd s)</span>
+<span class="lineno">  673 </span><span class="spaces">         </span><span class="nottickedoff">checks &lt;- zipWithM (ptrEq sym wBits) need have</span>
+<span class="lineno">  674 </span><span class="spaces">         </span><span class="nottickedoff">foldM (andPred sym) (truePred sym) checks</span>
+<span class="lineno">  675 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  676 </span><span class="spaces">  </span><span class="nottickedoff">sym = optsSym opts</span></span>
+<span class="lineno">  677 </span>
+<span class="lineno">  678 </span>
+<span class="lineno">  679 </span>readArr :: forall w p.
+<span class="lineno">  680 </span>  (1 &lt;= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  681 </span>  Opts -&gt;
+<span class="lineno">  682 </span>  V p (LLVMPointerType 64) -&gt;
+<span class="lineno">  683 </span>  Integer -&gt;
+<span class="lineno">  684 </span>  NatRepr w -&gt;
+<span class="lineno">  685 </span>  S p -&gt;
+<span class="lineno">  686 </span>  State -&gt;
+<span class="lineno">  687 </span>  IO [ LLVMPtr Sym (8 * w) ]
+<span class="lineno">  688 </span><span class="decl"><span class="nottickedoff">readArr opts ptr n wBytes s sMem =</span>
+<span class="lineno">  689 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  690 </span><span class="spaces">      </span><span class="nottickedoff">do ptrV &lt;- eval ptr opts s</span>
+<span class="lineno">  691 </span><span class="spaces">         </span><span class="nottickedoff">LeqProof &lt;- return (leqMulPos (Proxy @8) (Proxy @w))</span>
+<span class="lineno">  692 </span><span class="spaces">         </span><span class="nottickedoff">let mem    = stateMem sMem</span>
+<span class="lineno">  693 </span><span class="spaces">             </span><span class="nottickedoff">wBits  = natMultiply (knownNat @8) wBytes</span>
+<span class="lineno">  694 </span><span class="spaces">             </span><span class="nottickedoff">cruT   = LLVMPointerRepr wBits</span>
+<span class="lineno">  695 </span><span class="spaces">             </span><span class="nottickedoff">llT    = llvmBytes wBytes</span>
+<span class="lineno">  696 </span><span class="spaces">             </span><span class="nottickedoff">getAt i =</span>
+<span class="lineno">  697 </span><span class="spaces">               </span><span class="nottickedoff">do let ?ptrWidth = knownNat</span>
+<span class="lineno">  698 </span><span class="spaces">                  </span><span class="nottickedoff">loc &lt;- adjustPtr bak mem ptrV (i * toInteger (natValue wBytes))</span>
+<span class="lineno">  699 </span><span class="spaces">                  </span><span class="nottickedoff">doLoad bak mem loc llT cruT noAlignment</span>
+<span class="lineno">  700 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  701 </span><span class="spaces">         </span><span class="nottickedoff">mapM getAt [ 0 .. n - 1 ]</span></span>
+<span class="lineno">  702 </span>
+<span class="lineno">  703 </span>
+<span class="lineno">  704 </span>evalSame ::
+<span class="lineno">  705 </span>  Sym -&gt; TypeRepr t -&gt; RegValue Sym t -&gt; RegValue Sym t -&gt; IO (Pred Sym)
+<span class="lineno">  706 </span><span class="decl"><span class="nottickedoff">evalSame sym t v1 v2 =</span>
+<span class="lineno">  707 </span><span class="spaces">  </span><span class="nottickedoff">case t of</span>
+<span class="lineno">  708 </span><span class="spaces">    </span><span class="nottickedoff">BoolRepr          -&gt; isEq sym v1 v2</span>
+<span class="lineno">  709 </span><span class="spaces">    </span><span class="nottickedoff">LLVMPointerRepr w -&gt; ptrEq sym w v1 v2</span>
+<span class="lineno">  710 </span><span class="spaces">    </span><span class="nottickedoff">it -&gt; fail (&quot;[evalProp] Unexpected value repr: &quot; ++ show it)</span></span>
+<span class="lineno">  711 </span>
+<span class="lineno">  712 </span>
+<span class="lineno">  713 </span>
+<span class="lineno">  714 </span>-- | Add an assertion to the post-condition.
+<span class="lineno">  715 </span>doAssert ::
+<span class="lineno">  716 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  717 </span>  Opts -&gt; S p -&gt; (String, Prop p) -&gt; IO ()
+<span class="lineno">  718 </span><span class="decl"><span class="nottickedoff">doAssert opts s (msg,p) =</span>
+<span class="lineno">  719 </span><span class="spaces">  </span><span class="nottickedoff">do pr &lt;- evalProp opts p s</span>
+<span class="lineno">  720 </span><span class="spaces">     </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  721 </span><span class="spaces">       </span><span class="nottickedoff">assert bak pr (AssertFailureSimError msg &quot;&quot;)</span></span>
+<span class="lineno">  722 </span>
+<span class="lineno">  723 </span>
+<span class="lineno">  724 </span>--------------------------------------------------------------------------------
+<span class="lineno">  725 </span>
+<span class="lineno">  726 </span>data Rep t = Rep (TypeRepr t) Int
+<span class="lineno">  727 </span>
+<span class="lineno">  728 </span>instance <span class="decl"><span class="nottickedoff">Eq (Rep t)</span></span> where
+<span class="lineno">  729 </span>  <span class="decl"><span class="nottickedoff">Rep _ x == Rep _ y = x == y</span></span>
+<span class="lineno">  730 </span>
+<span class="lineno">  731 </span>instance TestEquality Rep where
+<span class="lineno">  732 </span>  <span class="decl"><span class="nottickedoff">testEquality x y = case compareF x y of</span>
+<span class="lineno">  733 </span><span class="spaces">                       </span><span class="nottickedoff">EQF -&gt; Just Refl</span>
+<span class="lineno">  734 </span><span class="spaces">                       </span><span class="nottickedoff">_   -&gt; Nothing</span></span>
+<span class="lineno">  735 </span>
+<span class="lineno">  736 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">OrdF Rep</span></span></span></span></span></span></span></span> where
+<span class="lineno">  737 </span>  <span class="decl"><span class="nottickedoff">compareF (Rep s x) (Rep t y) =</span>
+<span class="lineno">  738 </span><span class="spaces">    </span><span class="nottickedoff">case compareF s t of</span>
+<span class="lineno">  739 </span><span class="spaces">      </span><span class="nottickedoff">LTF -&gt; LTF</span>
+<span class="lineno">  740 </span><span class="spaces">      </span><span class="nottickedoff">GTF -&gt; GTF</span>
+<span class="lineno">  741 </span><span class="spaces">      </span><span class="nottickedoff">EQF -&gt; case compare x y of</span>
+<span class="lineno">  742 </span><span class="spaces">                </span><span class="nottickedoff">LT -&gt; LTF</span>
+<span class="lineno">  743 </span><span class="spaces">                </span><span class="nottickedoff">GT -&gt; GTF</span>
+<span class="lineno">  744 </span><span class="spaces">                </span><span class="nottickedoff">EQ -&gt; EQF</span></span>
+<span class="lineno">  745 </span>
+<span class="lineno">  746 </span>data RepMap p = RepMap
+<span class="lineno">  747 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">repFor</span></span></span> :: MapF.MapF Loc Rep
+<span class="lineno">  748 </span>     -- ^ Keeps track of the representative for a value
+<span class="lineno">  749 </span>
+<span class="lineno">  750 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">repBy</span></span></span>  :: MapF.MapF Rep (Equiv p)
+<span class="lineno">  751 </span>    -- ^ Inverse of the above: keeps track of which locs have this rep.
+<span class="lineno">  752 </span>
+<span class="lineno">  753 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nextRep</span></span></span> :: !Int
+<span class="lineno">  754 </span>  }
+<span class="lineno">  755 </span>
+<span class="lineno">  756 </span>
+<span class="lineno">  757 </span>emptyRepMap :: RepMap p
+<span class="lineno">  758 </span><span class="decl"><span class="nottickedoff">emptyRepMap = RepMap { repFor = MapF.empty</span>
+<span class="lineno">  759 </span><span class="spaces">                     </span><span class="nottickedoff">, repBy = MapF.empty</span>
+<span class="lineno">  760 </span><span class="spaces">                     </span><span class="nottickedoff">, nextRep = 0</span>
+<span class="lineno">  761 </span><span class="spaces">                     </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  762 </span>
+<span class="lineno">  763 </span>data Equiv p t = Equiv [ Loc t ] [ V p t ] deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  764 </span>
+<span class="lineno">  765 </span>jnEquiv :: Equiv p t -&gt; Equiv p t -&gt; Equiv p t
+<span class="lineno">  766 </span><span class="decl"><span class="nottickedoff">jnEquiv (Equiv xs ys) (Equiv as bs) = Equiv (xs ++ as) (ys ++ bs)</span></span>
+<span class="lineno">  767 </span>
+<span class="lineno">  768 </span>-- | Add a fresh representative for something that had no rep before.
+<span class="lineno">  769 </span>newRep :: TypeRepr t -&gt; Equiv p t -&gt; RepMap p -&gt; (Rep t, RepMap p)
+<span class="lineno">  770 </span><span class="decl"><span class="nottickedoff">newRep t xs mp =</span>
+<span class="lineno">  771 </span><span class="spaces">  </span><span class="nottickedoff">let n = nextRep mp</span>
+<span class="lineno">  772 </span><span class="spaces">      </span><span class="nottickedoff">r = Rep t n</span>
+<span class="lineno">  773 </span><span class="spaces">  </span><span class="nottickedoff">in (r, mp { nextRep = n + 1</span>
+<span class="lineno">  774 </span><span class="spaces">            </span><span class="nottickedoff">, repBy   = MapF.insert r xs (repBy mp)</span>
+<span class="lineno">  775 </span><span class="spaces">            </span><span class="nottickedoff">})</span></span>
+<span class="lineno">  776 </span>
+<span class="lineno">  777 </span>getRep :: TypeRepr t -&gt; RepMap p -&gt; Loc t -&gt; (Rep t, RepMap p)
+<span class="lineno">  778 </span><span class="decl"><span class="nottickedoff">getRep t mp x =</span>
+<span class="lineno">  779 </span><span class="spaces">  </span><span class="nottickedoff">case MapF.lookup x (repFor mp) of</span>
+<span class="lineno">  780 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; let (r,mp1) = newRep t (Equiv [x] []) mp</span>
+<span class="lineno">  781 </span><span class="spaces">               </span><span class="nottickedoff">in (r, mp1 { repFor = MapF.insert x r (repFor mp1) })</span>
+<span class="lineno">  782 </span><span class="spaces">    </span><span class="nottickedoff">Just y  -&gt; (y, mp)</span></span>
+<span class="lineno">  783 </span>
+<span class="lineno">  784 </span>
+<span class="lineno">  785 </span>addEqLocVal :: TypeRepr t -&gt; Loc t -&gt; V p t -&gt; RepMap p -&gt; RepMap p
+<span class="lineno">  786 </span><span class="decl"><span class="nottickedoff">addEqLocVal t loc lit mp =</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="nottickedoff">let (x1,mp1) = getRep t mp loc</span>
+<span class="lineno">  788 </span><span class="spaces">      </span><span class="nottickedoff">(x2,mp2) = newRep t (Equiv [] [lit]) mp1</span>
+<span class="lineno">  789 </span><span class="spaces">  </span><span class="nottickedoff">in joinReps x1 x2 mp2</span></span>
+<span class="lineno">  790 </span>
+<span class="lineno">  791 </span>addEqLocLoc :: TypeRepr t -&gt; Loc t -&gt; Loc t -&gt; RepMap p -&gt; RepMap p
+<span class="lineno">  792 </span><span class="decl"><span class="nottickedoff">addEqLocLoc t x y mp =</span>
+<span class="lineno">  793 </span><span class="spaces">  </span><span class="nottickedoff">let (x1,mp1) = getRep t mp  x</span>
+<span class="lineno">  794 </span><span class="spaces">      </span><span class="nottickedoff">(y1,mp2) = getRep t mp1 y</span>
+<span class="lineno">  795 </span><span class="spaces">  </span><span class="nottickedoff">in joinReps x1 y1 mp2</span></span>
+<span class="lineno">  796 </span>
+<span class="lineno">  797 </span>joinReps :: Rep t -&gt; Rep t -&gt; RepMap p -&gt; RepMap p
+<span class="lineno">  798 </span><span class="decl"><span class="nottickedoff">joinReps x y mp</span>
+<span class="lineno">  799 </span><span class="spaces">  </span><span class="nottickedoff">| x == y = mp</span>
+<span class="lineno">  800 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  801 </span><span class="spaces">    </span><span class="nottickedoff">-- x is the new rep</span>
+<span class="lineno">  802 </span><span class="spaces">    </span><span class="nottickedoff">case MapF.lookup y (repBy mp) of</span>
+<span class="lineno">  803 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; error &quot;[joinReps] Empty equivalance class&quot;</span>
+<span class="lineno">  804 </span><span class="spaces">      </span><span class="nottickedoff">Just new@(Equiv ls _) -&gt;</span>
+<span class="lineno">  805 </span><span class="spaces">        </span><span class="nottickedoff">let setRep z = MapF.insert z x</span>
+<span class="lineno">  806 </span><span class="spaces">        </span><span class="nottickedoff">in mp { repBy = MapF.insertWith jnEquiv x new</span>
+<span class="lineno">  807 </span><span class="spaces">                      </span><span class="nottickedoff">$ MapF.delete y (repBy mp)</span>
+<span class="lineno">  808 </span><span class="spaces">              </span><span class="nottickedoff">, repFor = foldr setRep (repFor mp) ls</span>
+<span class="lineno">  809 </span><span class="spaces">              </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  810 </span>
+<span class="lineno">  811 </span>getEq :: (String,Prop p) -&gt; RepMap p -&gt; RepMap p
+<span class="lineno">  812 </span><span class="decl"><span class="nottickedoff">getEq (_,p) mp =</span>
+<span class="lineno">  813 </span><span class="spaces">  </span><span class="nottickedoff">case p of</span>
+<span class="lineno">  814 </span><span class="spaces">    </span><span class="nottickedoff">Same t (Loc x) (Loc y) -&gt; addEqLocLoc t x y mp</span>
+<span class="lineno">  815 </span><span class="spaces">    </span><span class="nottickedoff">Same t (Loc x) v       -&gt; addEqLocVal t x v mp</span>
+<span class="lineno">  816 </span><span class="spaces">    </span><span class="nottickedoff">Same t v       (Loc x) -&gt; addEqLocVal t x v mp</span>
+<span class="lineno">  817 </span><span class="spaces">    </span><span class="nottickedoff">_                      -&gt; mp</span></span>
+<span class="lineno">  818 </span>
+<span class="lineno">  819 </span>makeEquiv ::
+<span class="lineno">  820 </span>  forall p.
+<span class="lineno">  821 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  822 </span>  Opts -&gt; S p -&gt; Pair Rep (Equiv p) -&gt; IO (S p)
+<span class="lineno">  823 </span><span class="decl"><span class="nottickedoff">makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =</span>
+<span class="lineno">  824 </span><span class="spaces"> </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  825 </span><span class="spaces">  </span><span class="nottickedoff">do -- Note that (at least currently) the `ys` do not</span>
+<span class="lineno">  826 </span><span class="spaces">     </span><span class="nottickedoff">-- depend on the current state: they are all either `Lit`</span>
+<span class="lineno">  827 </span><span class="spaces">     </span><span class="nottickedoff">-- or SAW terms, or `PreLoc`.  This is why we can evaluate</span>
+<span class="lineno">  828 </span><span class="spaces">     </span><span class="nottickedoff">-- them now, without worrying about dependencies.  I think. (Yav)</span>
+<span class="lineno">  829 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  830 </span><span class="spaces">     </span><span class="nottickedoff">-- XXX: With the introduction of `CryFun` one could depend on the</span>
+<span class="lineno">  831 </span><span class="spaces">     </span><span class="nottickedoff">-- current state.  For now, we are simply careful not to,</span>
+<span class="lineno">  832 </span><span class="spaces">     </span><span class="nottickedoff">-- in particular, `CryFun` is used only in pre-conditions and all</span>
+<span class="lineno">  833 </span><span class="spaces">     </span><span class="nottickedoff">-- its arguments are `LocPre` (i.e., the values before execution).</span>
+<span class="lineno">  834 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  835 </span><span class="spaces">     </span><span class="nottickedoff">-- Note 2: Sometimes it is useful for CryFun to depend on the current</span>
+<span class="lineno">  836 </span><span class="spaces">     </span><span class="nottickedoff">-- state.  For example, consider a function which computes two things</span>
+<span class="lineno">  837 </span><span class="spaces">     </span><span class="nottickedoff">-- f : x -&gt; (a,b)</span>
+<span class="lineno">  838 </span><span class="spaces">     </span><span class="nottickedoff">-- Now we may have specs like this:</span>
+<span class="lineno">  839 </span><span class="spaces">     </span><span class="nottickedoff">--    a = spec1 x</span>
+<span class="lineno">  840 </span><span class="spaces">     </span><span class="nottickedoff">--    b = spec2 x a</span>
+<span class="lineno">  841 </span><span class="spaces">     </span><span class="nottickedoff">-- Of course, we could replcae `b` by:</span>
+<span class="lineno">  842 </span><span class="spaces">     </span><span class="nottickedoff">--    b = spec2 x (spec1 x)</span>
+<span class="lineno">  843 </span><span class="spaces">     </span><span class="nottickedoff">-- but that's ugly and duplicates stuff.</span>
+<span class="lineno">  844 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  845 </span><span class="spaces">     </span><span class="nottickedoff">vs &lt;- mapM (\v -&gt; eval v opts s) ys</span>
+<span class="lineno">  846 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  847 </span><span class="spaces">     </span><span class="nottickedoff">let sym = backendGetSym bak</span>
+<span class="lineno">  848 </span><span class="spaces">     </span><span class="nottickedoff">let pName = Proxy :: Proxy p</span>
+<span class="lineno">  849 </span><span class="spaces">     </span><span class="nottickedoff">let cur = curState pName s</span>
+<span class="lineno">  850 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  851 </span><span class="spaces">     </span><span class="nottickedoff">(v,rest) &lt;- case vs of</span>
+<span class="lineno">  852 </span><span class="spaces">                   </span><span class="nottickedoff">v : us -&gt; return (v,us)</span>
+<span class="lineno">  853 </span><span class="spaces">                   </span><span class="nottickedoff">[] -&gt; case xs of</span>
+<span class="lineno">  854 </span><span class="spaces">                           </span><span class="nottickedoff">[] -&gt; error &quot;[makeEquiv] Empty equivalence class&quot;</span>
+<span class="lineno">  855 </span><span class="spaces">                           </span><span class="nottickedoff">l : _ -&gt; do v &lt;- getLoc l opts cur</span>
+<span class="lineno">  856 </span><span class="spaces">                                       </span><span class="nottickedoff">return (v,[])</span>
+<span class="lineno">  857 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  858 </span><span class="spaces">     </span><span class="nottickedoff">s1 &lt;- foldM (\s' y -&gt; setLoc y opts v s') cur xs</span>
+<span class="lineno">  859 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  860 </span><span class="spaces">     </span><span class="nottickedoff">let same a =</span>
+<span class="lineno">  861 </span><span class="spaces">           </span><span class="nottickedoff">do p &lt;- evalSame sym t v a</span>
+<span class="lineno">  862 </span><span class="spaces">              </span><span class="nottickedoff">let loc = mkProgramLoc &quot;&lt;makeEquiv&gt;&quot; InternalPos</span>
+<span class="lineno">  863 </span><span class="spaces">              </span><span class="nottickedoff">addAssumption bak</span>
+<span class="lineno">  864 </span><span class="spaces">                </span><span class="nottickedoff">$ GenericAssumption loc &quot;equivalance class assumption&quot; p</span>
+<span class="lineno">  865 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  866 </span><span class="spaces">     </span><span class="nottickedoff">mapM_ same rest</span>
+<span class="lineno">  867 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  868 </span><span class="spaces">     </span><span class="nottickedoff">return (setCurState pName s1 s)</span></span>
+<span class="lineno">  869 </span>
+<span class="lineno">  870 </span>
+<span class="lineno">  871 </span>makeEquivs ::
+<span class="lineno">  872 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  873 </span>  Opts -&gt; RepMap p -&gt; S p -&gt; IO (S p)
+<span class="lineno">  874 </span><span class="decl"><span class="nottickedoff">makeEquivs opts mp s = foldM (makeEquiv opts) s (MapF.toList (repBy mp))</span></span>
+<span class="lineno">  875 </span>
+<span class="lineno">  876 </span>
+<span class="lineno">  877 </span>
+<span class="lineno">  878 </span>addAsmp ::
+<span class="lineno">  879 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  880 </span>  Opts -&gt; S p -&gt; (String,Prop p) -&gt; IO ()
+<span class="lineno">  881 </span><span class="decl"><span class="nottickedoff">addAsmp opts s (msg,p) =</span>
+<span class="lineno">  882 </span><span class="spaces">  </span><span class="nottickedoff">case p of</span>
+<span class="lineno">  883 </span><span class="spaces">    </span><span class="nottickedoff">Same _ (Loc _) _ -&gt; return ()</span>
+<span class="lineno">  884 </span><span class="spaces">    </span><span class="nottickedoff">Same _ _ (Loc _) -&gt; return ()</span>
+<span class="lineno">  885 </span><span class="spaces">    </span><span class="nottickedoff">CryPostMem {}    -&gt; return ()</span>
+<span class="lineno">  886 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  887 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  888 </span><span class="spaces">           </span><span class="nottickedoff">do p' &lt;- evalProp opts p s</span>
+<span class="lineno">  889 </span><span class="spaces">              </span><span class="nottickedoff">let loc = mkProgramLoc &quot;&lt;addAssmp&gt;&quot; InternalPos -- FIXME</span>
+<span class="lineno">  890 </span><span class="spaces">              </span><span class="nottickedoff">addAssumption bak (GenericAssumption loc msg p')</span></span>
+<span class="lineno">  891 </span>
+<span class="lineno">  892 </span>setCryPost ::
+<span class="lineno">  893 </span>  forall p.
+<span class="lineno">  894 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  895 </span>  Opts -&gt; S p -&gt; (String,Prop p) -&gt; IO (S p)
+<span class="lineno">  896 </span><span class="decl"><span class="nottickedoff">setCryPost opts s (_nm,p) =</span>
+<span class="lineno">  897 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  898 </span><span class="spaces">  </span><span class="nottickedoff">case p of</span>
+<span class="lineno">  899 </span><span class="spaces">    </span><span class="nottickedoff">(CryPostMem ptr n u f xs) -&gt;</span>
+<span class="lineno">  900 </span><span class="spaces">      </span><span class="nottickedoff">unitBitSize  u $ \bitW -&gt;</span>
+<span class="lineno">  901 </span><span class="spaces">      </span><span class="nottickedoff">unitByteSize u $ \byteW -&gt;</span>
+<span class="lineno">  902 </span><span class="spaces">      </span><span class="nottickedoff">do vs   &lt;- evalCryFunArr opts s n bitW f xs</span>
+<span class="lineno">  903 </span><span class="spaces">         </span><span class="nottickedoff">ptrV &lt;- eval ptr opts s</span>
+<span class="lineno">  904 </span><span class="spaces">         </span><span class="nottickedoff">let llT  = llvmBytes byteW</span>
+<span class="lineno">  905 </span><span class="spaces">             </span><span class="nottickedoff">cruT = LLVMPointerRepr bitW</span>
+<span class="lineno">  906 </span><span class="spaces">             </span><span class="nottickedoff">sym  = backendGetSym bak</span>
+<span class="lineno">  907 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  908 </span><span class="spaces">         </span><span class="nottickedoff">let doSet mem (i,v) =</span>
+<span class="lineno">  909 </span><span class="spaces">               </span><span class="nottickedoff">do let ?ptrWidth = knownNat</span>
+<span class="lineno">  910 </span><span class="spaces">                  </span><span class="nottickedoff">loc &lt;- adjustPtr bak mem ptrV (bytesToInteger (i *. u))</span>
+<span class="lineno">  911 </span><span class="spaces">                  </span><span class="nottickedoff">val &lt;- packMemValue sym llT cruT v</span>
+<span class="lineno">  912 </span><span class="spaces">                  </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno">  913 </span><span class="spaces">                  </span><span class="nottickedoff">storeConstRaw bak mem loc llT alignment val</span>
+<span class="lineno">  914 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  915 </span><span class="spaces">         </span><span class="nottickedoff">let cur   = Proxy @p</span>
+<span class="lineno">  916 </span><span class="spaces">             </span><span class="nottickedoff">curSt = curState cur s :: State</span>
+<span class="lineno">  917 </span><span class="spaces">         </span><span class="nottickedoff">mem1 &lt;- foldM doSet (stateMem curSt) (zip [ 0 .. ] vs)</span>
+<span class="lineno">  918 </span><span class="spaces">         </span><span class="nottickedoff">return (setCurState cur curSt { stateMem = mem1 } s)</span>
+<span class="lineno">  919 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  920 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return s</span></span>
+<span class="lineno">  921 </span>
+<span class="lineno">  922 </span>
+<span class="lineno">  923 </span>addAssumptions ::
+<span class="lineno">  924 </span>  forall p.
+<span class="lineno">  925 </span>  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  926 </span>  Opts -&gt; S p -&gt; [(String, Prop p)] -&gt; IO State
+<span class="lineno">  927 </span><span class="decl"><span class="nottickedoff">addAssumptions opts s0 ps =</span>
+<span class="lineno">  928 </span><span class="spaces">  </span><span class="nottickedoff">do let mp = foldr getEq emptyRepMap ps</span>
+<span class="lineno">  929 </span><span class="spaces">     </span><span class="nottickedoff">s1 &lt;- makeEquivs opts mp s0</span>
+<span class="lineno">  930 </span><span class="spaces">     </span><span class="nottickedoff">s2 &lt;- foldM (setCryPost opts) s1 ps</span>
+<span class="lineno">  931 </span><span class="spaces">     </span><span class="nottickedoff">mapM_ (addAsmp opts s2) ps</span>
+<span class="lineno">  932 </span><span class="spaces">     </span><span class="nottickedoff">return (curState (Proxy :: Proxy p) s2)</span></span>
+<span class="lineno">  933 </span>
+<span class="lineno">  934 </span>
+<span class="lineno">  935 </span>--------------------------------------------------------------------------------
+<span class="lineno">  936 </span>
+<span class="lineno">  937 </span>-- | Allocate a memory region.
+<span class="lineno">  938 </span>allocate ::
+<span class="lineno">  939 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  940 </span>  Opts -&gt; Area -&gt; State -&gt; IO (LLVMPtr Sym 64, State)
+<span class="lineno">  941 </span><span class="decl"><span class="nottickedoff">allocate opts ar s =</span>
+<span class="lineno">  942 </span><span class="spaces">  </span><span class="nottickedoff">case areaMode ar of</span>
+<span class="lineno">  943 </span><span class="spaces">    </span><span class="nottickedoff">RO -&gt; do (base,p,m1) &lt;- alloc Immutable</span>
+<span class="lineno">  944 </span><span class="spaces">             </span><span class="nottickedoff">m2     &lt;- fillFresh opts withPtrs base uni names m1</span>
+<span class="lineno">  945 </span><span class="spaces">             </span><span class="nottickedoff">return (p, s { stateMem = m2 })</span>
+<span class="lineno">  946 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  947 </span><span class="spaces">    </span><span class="nottickedoff">RW -&gt; do (base,p,m1) &lt;- alloc Mutable</span>
+<span class="lineno">  948 </span><span class="spaces">             </span><span class="nottickedoff">m2 &lt;- fillFresh opts withPtrs base uni names m1</span>
+<span class="lineno">  949 </span><span class="spaces">             </span><span class="nottickedoff">return (p, s { stateMem = m2 })</span>
+<span class="lineno">  950 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  951 </span><span class="spaces">    </span><span class="nottickedoff">WO -&gt; do (_,p,m1) &lt;- alloc Mutable</span>
+<span class="lineno">  952 </span><span class="spaces">             </span><span class="nottickedoff">return (p, s { stateMem = m1 })</span>
+<span class="lineno">  953 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  954 </span><span class="spaces">  </span><span class="nottickedoff">withPtrs = areaHasPointers ar</span>
+<span class="lineno">  955 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  956 </span><span class="spaces">  </span><span class="nottickedoff">alloc mut =</span>
+<span class="lineno">  957 </span><span class="spaces">    </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  958 </span><span class="spaces">      </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
+<span class="lineno">  959 </span><span class="spaces">         </span><span class="nottickedoff">let ?ptrWidth = knownNat @64</span>
+<span class="lineno">  960 </span><span class="spaces">         </span><span class="nottickedoff">let szInt = bytesToInteger (uncurry (*.) (areaSize ar))</span>
+<span class="lineno">  961 </span><span class="spaces">         </span><span class="nottickedoff">sz &lt;- bvLit sym knownNat (BV.mkBV knownNat szInt)</span>
+<span class="lineno">  962 </span><span class="spaces">         </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno">  963 </span><span class="spaces">         </span><span class="nottickedoff">(base,mem) &lt;- doMalloc bak HeapAlloc mut (areaName ar) (stateMem s) sz alignment</span>
+<span class="lineno">  964 </span><span class="spaces">         </span><span class="nottickedoff">ptr &lt;- adjustPtr bak mem base (bytesToInteger (areaPtr ar))</span>
+<span class="lineno">  965 </span><span class="spaces">         </span><span class="nottickedoff">return (base,ptr,mem)</span>
+<span class="lineno">  966 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">(num,uni) = areaSize ar</span>
+<span class="lineno">  968 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  969 </span><span class="spaces">  </span><span class="nottickedoff">names :: [String]</span>
+<span class="lineno">  970 </span><span class="spaces">  </span><span class="nottickedoff">names = [ areaName ar ++ &quot;_&quot; ++ show uni ++ &quot;_&quot; ++ show i</span>
+<span class="lineno">  971 </span><span class="spaces">          </span><span class="nottickedoff">| i &lt;- take (fromInteger num) [ 0 :: Int .. ] ]</span></span>
+<span class="lineno">  972 </span>
+<span class="lineno">  973 </span>fillFresh ::
+<span class="lineno">  974 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  975 </span>  Opts -&gt;
+<span class="lineno">  976 </span>  Bool -&gt;
+<span class="lineno">  977 </span>  LLVMPtr Sym 64 -&gt;
+<span class="lineno">  978 </span>  Unit -&gt;
+<span class="lineno">  979 </span>  [String] -&gt;
+<span class="lineno">  980 </span>  MemImpl Sym -&gt;
+<span class="lineno">  981 </span>  IO (MemImpl Sym)
+<span class="lineno">  982 </span><span class="decl"><span class="nottickedoff">fillFresh opts ptrOk p u todo mem =</span>
+<span class="lineno">  983 </span><span class="spaces">  </span><span class="nottickedoff">unitByteSize u $ \w -&gt;</span>
+<span class="lineno">  984 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno">  985 </span><span class="spaces">  </span><span class="nottickedoff">case todo of</span>
+<span class="lineno">  986 </span><span class="spaces">    </span><span class="nottickedoff">[] -&gt; return mem</span>
+<span class="lineno">  987 </span><span class="spaces">    </span><span class="nottickedoff">nm : more -&gt;</span>
+<span class="lineno">  988 </span><span class="spaces">      </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
+<span class="lineno">  989 </span><span class="spaces">         </span><span class="nottickedoff">let ?ptrWidth = knownNat</span>
+<span class="lineno">  990 </span><span class="spaces">         </span><span class="nottickedoff">let ty        = ptrTy w</span>
+<span class="lineno">  991 </span><span class="spaces">         </span><span class="nottickedoff">let elS       = toInteger (natValue w)</span>
+<span class="lineno">  992 </span><span class="spaces">         </span><span class="nottickedoff">let lty       = bitvectorType (toBytes elS)</span>
+<span class="lineno">  993 </span><span class="spaces">         </span><span class="nottickedoff">val &lt;- packMemValue sym lty ty =&lt;&lt; freshVal sym ty ptrOk nm</span>
+<span class="lineno">  994 </span><span class="spaces">         </span><span class="nottickedoff">-- Here we use the write that ignore mutability.</span>
+<span class="lineno">  995 </span><span class="spaces">         </span><span class="nottickedoff">-- This is because we are writinging initialization code.</span>
+<span class="lineno">  996 </span><span class="spaces">         </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno">  997 </span><span class="spaces">         </span><span class="nottickedoff">mem1 &lt;- storeConstRaw bak mem p lty alignment val</span>
+<span class="lineno">  998 </span><span class="spaces">         </span><span class="nottickedoff">p1   &lt;- adjustPtr bak mem1 p elS</span>
+<span class="lineno">  999 </span><span class="spaces">         </span><span class="nottickedoff">fillFresh opts ptrOk p1 u more mem1</span></span>
+<span class="lineno"> 1000 </span>
+<span class="lineno"> 1001 </span>
+<span class="lineno"> 1002 </span>-- | Make an allocation.  Used when verifying.
+<span class="lineno"> 1003 </span>doAlloc ::
+<span class="lineno"> 1004 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1005 </span>  Opts -&gt; State -&gt; Alloc -&gt; IO State
+<span class="lineno"> 1006 </span><span class="decl"><span class="nottickedoff">doAlloc opts s (l := a) =</span>
+<span class="lineno"> 1007 </span><span class="spaces">  </span><span class="nottickedoff">do (p,s1) &lt;- allocate opts a s</span>
+<span class="lineno"> 1008 </span><span class="spaces">     </span><span class="nottickedoff">setLoc l opts p s1</span></span>
+<span class="lineno"> 1009 </span>
+<span class="lineno"> 1010 </span>-- | Fill-in a memory area with fresh values.
+<span class="lineno"> 1011 </span>-- This has no effect if the area is RO.
+<span class="lineno"> 1012 </span>clobberArea ::
+<span class="lineno"> 1013 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1014 </span>  Opts -&gt; MemImpl Sym -&gt; LLVMPtr Sym 64 -&gt; Area -&gt; IO (MemImpl Sym)
+<span class="lineno"> 1015 </span><span class="decl"><span class="nottickedoff">clobberArea opts mem p ar =</span>
+<span class="lineno"> 1016 </span><span class="spaces">  </span><span class="nottickedoff">case areaMode ar of</span>
+<span class="lineno"> 1017 </span><span class="spaces">    </span><span class="nottickedoff">RO -&gt; return mem</span>
+<span class="lineno"> 1018 </span><span class="spaces">    </span><span class="nottickedoff">_  -&gt; optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1019 </span><span class="spaces">      </span><span class="nottickedoff">do base &lt;- adjustPtr bak mem p (negate (bytesToInteger (areaPtr ar)))</span>
+<span class="lineno"> 1020 </span><span class="spaces">         </span><span class="nottickedoff">let (num,uni) = areaSize ar</span>
+<span class="lineno"> 1021 </span><span class="spaces">             </span><span class="nottickedoff">xs = take (fromInteger num)</span>
+<span class="lineno"> 1022 </span><span class="spaces">                  </span><span class="nottickedoff">[ areaName ar ++ &quot;_&quot; ++ show uni ++ &quot;_at_&quot; ++ show i</span>
+<span class="lineno"> 1023 </span><span class="spaces">                                                      </span><span class="nottickedoff">| i &lt;- [ 0 :: Int .. ]]</span>
+<span class="lineno"> 1024 </span><span class="spaces">         </span><span class="nottickedoff">fillFresh opts (areaHasPointers ar) base uni xs mem</span></span>
+<span class="lineno"> 1025 </span>
+<span class="lineno"> 1026 </span>
+<span class="lineno"> 1027 </span>-- | Lookup the value for an allocation in the existing state.
+<span class="lineno"> 1028 </span>-- Used when overriding.
+<span class="lineno"> 1029 </span>-- Returns the start and end of the allocation.
+<span class="lineno"> 1030 </span>checkAlloc ::
+<span class="lineno"> 1031 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1032 </span>  Opts -&gt; State -&gt; Alloc -&gt; IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
+<span class="lineno"> 1033 </span><span class="decl"><span class="nottickedoff">checkAlloc opts s (l := a) =</span>
+<span class="lineno"> 1034 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1035 </span><span class="spaces">    </span><span class="nottickedoff">do let mem = stateMem s</span>
+<span class="lineno"> 1036 </span><span class="spaces">       </span><span class="nottickedoff">p1 &lt;- getLoc l opts s</span>
+<span class="lineno"> 1037 </span><span class="spaces">       </span><span class="nottickedoff">p2 &lt;- adjustPtr bak mem p1 (negate (bytesToInteger (areaPtr a)))</span>
+<span class="lineno"> 1038 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1039 </span><span class="spaces">       </span><span class="nottickedoff">-- Make sure that we have a pointer and it is big enough.</span>
+<span class="lineno"> 1040 </span><span class="spaces">       </span><span class="nottickedoff">let siI = bytesToInteger $ uncurry (*.) (areaSize a)</span>
+<span class="lineno"> 1041 </span><span class="spaces">       </span><span class="nottickedoff">p3 &lt;- adjustPtr bak mem p2 siI</span>
+<span class="lineno"> 1042 </span><span class="spaces">       </span><span class="nottickedoff">return (p2,p3)</span></span>
+<span class="lineno"> 1043 </span>
+<span class="lineno"> 1044 </span>-- | Implements a layer to map 'LLVMPtr's to their underlying allocations, as
+<span class="lineno"> 1045 </span>-- tracked by the 'RegionIndex' map
+<span class="lineno"> 1046 </span>--
+<span class="lineno"> 1047 </span>-- NOTE: If the initial obvious mapping (where the concrete nat is in the map)
+<span class="lineno"> 1048 </span>-- fails, there are two possibilities:
+<span class="lineno"> 1049 </span>--
+<span class="lineno"> 1050 </span>-- 1. The region ID is concrete but not in the map.  We should just pass it
+<span class="lineno"> 1051 </span>--    through without modifying it, since it is a valid LLVM pointer
+<span class="lineno"> 1052 </span>-- 2. The region ID is symbolic.  In this case, we need to generate a mux that
+<span class="lineno"> 1053 </span>--    dispatches to the entries in the map when they match, or otherwise passes
+<span class="lineno"> 1054 </span>--    the pointer through untouched.
+<span class="lineno"> 1055 </span>--
+<span class="lineno"> 1056 </span>-- If the region ID is concretely zero, it should be the case that the
+<span class="lineno"> 1057 </span>-- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
+<span class="lineno"> 1058 </span>-- entry (established in 'setupGlobals') is for 0.
+<span class="lineno"> 1059 </span>mkGlobalMap ::
+<span class="lineno"> 1060 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1061 </span>  Map.Map RegionIndex (LLVMPtr Sym 64) -&gt;
+<span class="lineno"> 1062 </span>  GlobalMap Sym Crucible.Mem 64
+<span class="lineno"> 1063 </span><span class="decl"><span class="istickedoff">mkGlobalMap rmap = GlobalMap $ \bak mem region off -&gt;</span>
+<span class="lineno"> 1064 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 1065 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">sym = backendGetSym bak</span></span>
+<span class="lineno"> 1066 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1067 </span><span class="spaces">    </span><span class="istickedoff">mapConcreteRegion = maybe <span class="nottickedoff">mzero</span> id (addOffset &lt;$&gt; thisRegion)</span>
+<span class="lineno"> 1068 </span><span class="spaces">    </span><span class="istickedoff">thisRegion = join (findRegion &lt;$&gt; asNat region)</span>
+<span class="lineno"> 1069 </span><span class="spaces">    </span><span class="istickedoff">findRegion r = Map.lookup (fromIntegral r) rmap</span>
+<span class="lineno"> 1070 </span><span class="spaces">    </span><span class="istickedoff">addOffset p = doPtrAddOffset bak mem p off</span>
+<span class="lineno"> 1071 </span><span class="spaces">      </span><span class="istickedoff">where ?ptrWidth = knownNat</span>
+<span class="lineno"> 1072 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">passThroughConcreteRegion =</span></span>
+<span class="lineno"> 1073 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case asNat region of</span></span>
+<span class="lineno"> 1074 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; mzero</span></span>
+<span class="lineno"> 1075 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just _ -&gt; return (LLVMPointer region off)</span></span>
+<span class="lineno"> 1076 </span><span class="spaces">    </span><span class="istickedoff">-- If the symbolic nat is (symbolically) equal to any of the entries in the</span>
+<span class="lineno"> 1077 </span><span class="spaces">    </span><span class="istickedoff">-- rmap, we need to do the translation; otherwise, we pass it through</span>
+<span class="lineno"> 1078 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">mapSymbolicRegion = foldlM muxSymbolicRegion (LLVMPointer region off) (Map.toList rmap)</span></span>
+<span class="lineno"> 1079 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">muxSymbolicRegion others (regionNum, basePtr) = do</span></span>
+<span class="lineno"> 1080 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">thisRegionNat &lt;- natLit sym (fromIntegral regionNum)</span></span>
+<span class="lineno"> 1081 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">isEqRegion &lt;- natEq sym thisRegionNat region</span></span>
+<span class="lineno"> 1082 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">adjustedPtr &lt;- addOffset basePtr</span></span>
+<span class="lineno"> 1083 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">muxLLVMPtr sym isEqRegion adjustedPtr others</span></span>
+<span class="lineno"> 1084 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1085 </span><span class="spaces">  </span><span class="istickedoff">in mapConcreteRegion &lt;|&gt; <span class="nottickedoff">passThroughConcreteRegion</span> &lt;|&gt; <span class="nottickedoff">mapSymbolicRegion</span></span></span>
+<span class="lineno"> 1086 </span>
+<span class="lineno"> 1087 </span>-- | Setup globals in a single read-only region (index 0).
+<span class="lineno"> 1088 </span>setupGlobals ::
+<span class="lineno"> 1089 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1090 </span>  Opts -&gt;
+<span class="lineno"> 1091 </span>  [(String,Integer,Unit,[Integer])] -&gt;
+<span class="lineno"> 1092 </span>  [(String,Integer,Int -&gt; Specification)] -&gt;
+<span class="lineno"> 1093 </span>  State -&gt;
+<span class="lineno"> 1094 </span>  IO ((GlobalMap Sym Crucible.Mem 64, Overrides), State)
+<span class="lineno"> 1095 </span><span class="decl"><span class="nottickedoff">setupGlobals opts gs fs s</span>
+<span class="lineno"> 1096 </span><span class="spaces">  </span><span class="nottickedoff">| null regions &amp;&amp; null fs = return ((mkGlobalMap Map.empty, Map.empty), s)</span>
+<span class="lineno"> 1097 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1098 </span><span class="spaces">  </span><span class="nottickedoff">| not (null overlaps) =</span>
+<span class="lineno"> 1099 </span><span class="spaces">      </span><span class="nottickedoff">fail $ unlines $ &quot;Overlapping regions in global spec:&quot;</span>
+<span class="lineno"> 1100 </span><span class="spaces">                     </span><span class="nottickedoff">: [ &quot;*** &quot; ++ x ++ &quot; and &quot; ++ y</span>
+<span class="lineno"> 1101 </span><span class="spaces">                          </span><span class="nottickedoff">| (x,y) &lt;- overlaps ]</span>
+<span class="lineno"> 1102 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1103 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1104 </span><span class="spaces">    </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1105 </span><span class="spaces">    </span><span class="nottickedoff">do let endGlob = case last regions of</span>
+<span class="lineno"> 1106 </span><span class="spaces">                       </span><span class="nottickedoff">(_,start,n) -&gt; start + bytesToInteger n</span>
+<span class="lineno"> 1107 </span><span class="spaces">           </span><span class="nottickedoff">size    = maximum (endGlob : fundAddrs)</span>
+<span class="lineno"> 1108 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1109 </span><span class="spaces">       </span><span class="nottickedoff">let ?ptrWidth = knownNat @64</span>
+<span class="lineno"> 1110 </span><span class="spaces">       </span><span class="nottickedoff">sz &lt;- bvLit sym knownNat (BV.mkBV knownNat size)</span>
+<span class="lineno"> 1111 </span><span class="spaces">       </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno"> 1112 </span><span class="spaces">       </span><span class="nottickedoff">(p,mem) &lt;- doMalloc bak GlobalAlloc Immutable &quot;Globals&quot; (stateMem s) sz alignment</span>
+<span class="lineno"> 1113 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1114 </span><span class="spaces">       </span><span class="nottickedoff">base &lt;- case asNat (fst (llvmPointerView p)) of</span>
+<span class="lineno"> 1115 </span><span class="spaces">         </span><span class="nottickedoff">Just base -&gt; pure base</span>
+<span class="lineno"> 1116 </span><span class="spaces">         </span><span class="nottickedoff">Nothing   -&gt; error &quot;[setupGlobals] Expected concrete block number from doMalloc&quot;</span>
+<span class="lineno"> 1117 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1118 </span><span class="spaces">       </span><span class="nottickedoff">mem1 &lt;- foldM (writeGlob p) mem gs</span>
+<span class="lineno"> 1119 </span><span class="spaces">       </span><span class="nottickedoff">let gMap = mkGlobalMap (Map.singleton 0 p)</span>
+<span class="lineno"> 1120 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1121 </span><span class="spaces">           </span><span class="nottickedoff">{- NOTE:  Some functions are called multiple times with different</span>
+<span class="lineno"> 1122 </span><span class="spaces">                     </span><span class="nottickedoff">sizes. This means that we need different specs for them,</span>
+<span class="lineno"> 1123 </span><span class="spaces">                     </span><span class="nottickedoff">at least until we support polymorphic specs.  As a quick</span>
+<span class="lineno"> 1124 </span><span class="spaces">                     </span><span class="nottickedoff">work-around we count the number of times a function is</span>
+<span class="lineno"> 1125 </span><span class="spaces">                     </span><span class="nottickedoff">entered and provide this as an input to the spec.</span>
+<span class="lineno"> 1126 </span><span class="spaces">                     </span><span class="nottickedoff">In simple cases this allows the spec to change itslef. -}</span>
+<span class="lineno"> 1127 </span><span class="spaces">           </span><span class="nottickedoff">mkHandler (name,a, sp) =</span>
+<span class="lineno"> 1128 </span><span class="spaces">              </span><span class="nottickedoff">do entryCounter &lt;- newIORef 0</span>
+<span class="lineno"> 1129 </span><span class="spaces">                 </span><span class="nottickedoff">let fname = fromString name</span>
+<span class="lineno"> 1130 </span><span class="spaces">                 </span><span class="nottickedoff">return $</span>
+<span class="lineno"> 1131 </span><span class="spaces">                    </span><span class="nottickedoff">( (base,a)</span>
+<span class="lineno"> 1132 </span><span class="spaces">                    </span><span class="nottickedoff">, \_ -&gt; LookupFunctionHandle $ \st _ _ -&gt;</span>
+<span class="lineno"> 1133 </span><span class="spaces">                         </span><span class="nottickedoff">do let sty = crucArchRegTypes x86_64MacawSymbolicFns</span>
+<span class="lineno"> 1134 </span><span class="spaces">                            </span><span class="nottickedoff">let rty = StructRepr sty</span>
+<span class="lineno"> 1135 </span><span class="spaces">                            </span><span class="nottickedoff">let o = mkOverride' fname rty $ do</span>
+<span class="lineno"> 1136 </span><span class="spaces">                                      </span><span class="nottickedoff">-- NB, grab the backend from the override monad;</span>
+<span class="lineno"> 1137 </span><span class="spaces">                                      </span><span class="nottickedoff">-- this may be different than the one available now</span>
+<span class="lineno"> 1138 </span><span class="spaces">                                      </span><span class="nottickedoff">-- while setting up the globals</span>
+<span class="lineno"> 1139 </span><span class="spaces">                                      </span><span class="nottickedoff">bak' &lt;- _ctxBackend &lt;$&gt; getContext</span>
+<span class="lineno"> 1140 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1141 </span><span class="spaces">                                      </span><span class="nottickedoff">ent &lt;- liftIO $ atomicModifyIORef' entryCounter $</span>
+<span class="lineno"> 1142 </span><span class="spaces">                                                             </span><span class="nottickedoff">\e -&gt; (e + 1, e)</span>
+<span class="lineno"> 1143 </span><span class="spaces">                                      </span><span class="nottickedoff">-- liftIO $ putStrLn (&quot;ENTER &quot; ++ _f)</span>
+<span class="lineno"> 1144 </span><span class="spaces">                                      </span><span class="nottickedoff">RegMap args &lt;- getOverrideArgs</span>
+<span class="lineno"> 1145 </span><span class="spaces">                                      </span><span class="nottickedoff">mem' &lt;- readGlobal (optsMvar opts)</span>
+<span class="lineno"> 1146 </span><span class="spaces">                                      </span><span class="nottickedoff">let st0 = State { stateRegs = regValue (Ctx.last args), stateMem = mem' }</span>
+<span class="lineno"> 1147 </span><span class="spaces">                                      </span><span class="nottickedoff">-- liftIO $ debugPPReg RCX st0</span>
+<span class="lineno"> 1148 </span><span class="spaces">                                      </span><span class="nottickedoff">st1 &lt;- liftIO $ overrideMode (sp ent) opts{ optsBackend = bak' } st0</span>
+<span class="lineno"> 1149 </span><span class="spaces">                                      </span><span class="nottickedoff">-- liftIO $ debugPPReg RCX st1</span>
+<span class="lineno"> 1150 </span><span class="spaces">                                      </span><span class="nottickedoff">writeGlobal (optsMvar opts) (stateMem st1)</span>
+<span class="lineno"> 1151 </span><span class="spaces">                                      </span><span class="nottickedoff">-- liftIO $ putStrLn (&quot;EXIT &quot; ++ _f)</span>
+<span class="lineno"> 1152 </span><span class="spaces">                                      </span><span class="nottickedoff">return (stateRegs st1)</span>
+<span class="lineno"> 1153 </span><span class="spaces">                            </span><span class="nottickedoff">let halloc = simHandleAllocator (st ^. stateContext)</span>
+<span class="lineno"> 1154 </span><span class="spaces">                            </span><span class="nottickedoff">h &lt;- mkHandle halloc fname</span>
+<span class="lineno"> 1155 </span><span class="spaces">                            </span><span class="nottickedoff">let addBinding = over (stateContext . functionBindings)</span>
+<span class="lineno"> 1156 </span><span class="spaces">                                               </span><span class="nottickedoff">(FnBindings . insertHandleMap h (UseOverride o) . fnBindings)</span>
+<span class="lineno"> 1157 </span><span class="spaces">                            </span><span class="nottickedoff">return (h, addBinding st)</span>
+<span class="lineno"> 1158 </span><span class="spaces">                      </span><span class="nottickedoff">)</span>
+<span class="lineno"> 1159 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1160 </span><span class="spaces">       </span><span class="nottickedoff">fMap &lt;- Map.fromList &lt;$&gt; mapM mkHandler fs</span>
+<span class="lineno"> 1161 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1162 </span><span class="spaces">       </span><span class="nottickedoff">return ((gMap,fMap), s { stateMem = mem1 })</span>
+<span class="lineno"> 1163 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 1164 </span><span class="spaces">  </span><span class="nottickedoff">sym = optsSym opts</span>
+<span class="lineno"> 1165 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1166 </span><span class="spaces">  </span><span class="nottickedoff">fundAddrs = [ a | (_,a,_) &lt;- fs ]</span>
+<span class="lineno"> 1167 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1168 </span><span class="spaces">  </span><span class="nottickedoff">regions = sortBy cmpStart</span>
+<span class="lineno"> 1169 </span><span class="spaces">          </span><span class="nottickedoff">$ [ (nm,start, fromIntegral (length els) *. u)</span>
+<span class="lineno"> 1170 </span><span class="spaces">              </span><span class="nottickedoff">| (nm,start,u,els) &lt;- gs ]</span>
+<span class="lineno"> 1171 </span><span class="spaces">  </span><span class="nottickedoff">cmpStart (_,s1,_) (_,s2,_) = compare s1 s2</span>
+<span class="lineno"> 1172 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1173 </span><span class="spaces">  </span><span class="nottickedoff">overlaps = catMaybes (zipWith check regions (drop 1 regions))</span>
+<span class="lineno"> 1174 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1175 </span><span class="spaces">  </span><span class="nottickedoff">-- check for overlap, assuming first one starts at smaller address.</span>
+<span class="lineno"> 1176 </span><span class="spaces">  </span><span class="nottickedoff">check (r1,s1,n1) (r2,s2,_)</span>
+<span class="lineno"> 1177 </span><span class="spaces">    </span><span class="nottickedoff">| s1 + bytesToInteger n1 &lt;= s2 = Nothing</span>
+<span class="lineno"> 1178 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise                    = Just (r1,r2)</span>
+<span class="lineno"> 1179 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1180 </span><span class="spaces">  </span><span class="nottickedoff">writeGlob base mem (_,start,u,els) =</span>
+<span class="lineno"> 1181 </span><span class="spaces">    </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1182 </span><span class="spaces">      </span><span class="nottickedoff">do p &lt;- adjustPtr bak mem base start</span>
+<span class="lineno"> 1183 </span><span class="spaces">         </span><span class="nottickedoff">snd &lt;$&gt; foldM (writeU u) (p,mem) els</span>
+<span class="lineno"> 1184 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1185 </span><span class="spaces">  </span><span class="nottickedoff">writeU u (p,mem) v =</span>
+<span class="lineno"> 1186 </span><span class="spaces">    </span><span class="nottickedoff">unitBitSize u $ \w -&gt;</span>
+<span class="lineno"> 1187 </span><span class="spaces">    </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1188 </span><span class="spaces">      </span><span class="nottickedoff">do let sz = 1 *. u</span>
+<span class="lineno"> 1189 </span><span class="spaces">             </span><span class="nottickedoff">szI = bytesToInteger sz</span>
+<span class="lineno"> 1190 </span><span class="spaces">             </span><span class="nottickedoff">lty = bitvectorType sz</span>
+<span class="lineno"> 1191 </span><span class="spaces">         </span><span class="nottickedoff">z    &lt;- natLit sym 0</span>
+<span class="lineno"> 1192 </span><span class="spaces">         </span><span class="nottickedoff">val  &lt;- LLVMValInt z &lt;$&gt; bvLit sym w (BV.mkBV w v)</span>
+<span class="lineno"> 1193 </span><span class="spaces">         </span><span class="nottickedoff">let ?ptrWidth = knownNat</span>
+<span class="lineno"> 1194 </span><span class="spaces">         </span><span class="nottickedoff">let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)</span>
+<span class="lineno"> 1195 </span><span class="spaces">         </span><span class="nottickedoff">mem1 &lt;- storeConstRaw bak mem p lty alignment val</span>
+<span class="lineno"> 1196 </span><span class="spaces">         </span><span class="nottickedoff">p1   &lt;- adjustPtr bak mem1 p szI</span>
+<span class="lineno"> 1197 </span><span class="spaces">         </span><span class="nottickedoff">return (p1,mem1)</span></span>
+<span class="lineno"> 1198 </span>
+<span class="lineno"> 1199 </span>debugPPReg ::
+<span class="lineno"> 1200 </span>  (ToCrucibleType mt ~ LLVMPointerType w) =&gt;
+<span class="lineno"> 1201 </span>  X86Reg mt -&gt; State -&gt; IO ()
+<span class="lineno"> 1202 </span><span class="decl"><span class="nottickedoff">debugPPReg r s =</span>
+<span class="lineno"> 1203 </span><span class="spaces">  </span><span class="nottickedoff">do RV v &lt;- case lookupX86Reg r (stateRegs s) of</span>
+<span class="lineno"> 1204 </span><span class="spaces">       </span><span class="nottickedoff">Just rv -&gt; pure rv</span>
+<span class="lineno"> 1205 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; error $ &quot;[debugPPReg] Could not find register: &quot; ++ show r</span>
+<span class="lineno"> 1206 </span><span class="spaces">     </span><span class="nottickedoff">putStrLn (show r ++ &quot; = &quot; ++ show (ppPtr v))</span></span>
+<span class="lineno"> 1207 </span>
+<span class="lineno"> 1208 </span>_debugDumpGoals :: Opts -&gt; IO ()
+<span class="lineno"> 1209 </span><span class="decl"><span class="nottickedoff">_debugDumpGoals opts =</span>
+<span class="lineno"> 1210 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1211 </span><span class="spaces">    </span><span class="nottickedoff">do obls &lt;- maybe [] goalsToList &lt;$&gt; getProofObligations bak</span>
+<span class="lineno"> 1212 </span><span class="spaces">       </span><span class="nottickedoff">mapM_ sh (toList obls)</span>
+<span class="lineno"> 1213 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 1214 </span><span class="spaces">  </span><span class="nottickedoff">sh (ProofGoal _hyps g) = print (view labeledPredMsg g)</span></span>
+<span class="lineno"> 1215 </span>
+<span class="lineno"> 1216 </span>
+<span class="lineno"> 1217 </span>type Overrides = Map (Natural,Integer) (Sym -&gt; LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64)
+<span class="lineno"> 1218 </span>
+<span class="lineno"> 1219 </span>-- | Use a specification to verify a function.
+<span class="lineno"> 1220 </span>-- Returns the initial state for the function, and a post-condition.
+<span class="lineno"> 1221 </span>verifyMode ::
+<span class="lineno"> 1222 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1223 </span>  Specification -&gt;
+<span class="lineno"> 1224 </span>  Opts -&gt;
+<span class="lineno"> 1225 </span>  IO ( (GlobalMap Sym Crucible.Mem 64, Overrides)
+<span class="lineno"> 1226 </span>     , State
+<span class="lineno"> 1227 </span>     , State -&gt; IO ()
+<span class="lineno"> 1228 </span>     )
+<span class="lineno"> 1229 </span><span class="decl"><span class="nottickedoff">verifyMode spec opts =</span>
+<span class="lineno"> 1230 </span><span class="spaces">  </span><span class="nottickedoff">do let sym = optsSym opts</span>
+<span class="lineno"> 1231 </span><span class="spaces">     </span><span class="nottickedoff">s0 &lt;- freshState sym</span>
+<span class="lineno"> 1232 </span><span class="spaces">     </span><span class="nottickedoff">(globs,s1) &lt;- setupGlobals opts (specGlobsRO spec) (specCalls spec) s0</span>
+<span class="lineno"> 1233 </span><span class="spaces">     </span><span class="nottickedoff">s2 &lt;- foldM (doAlloc opts) s1 $ sortBy cmpAlloc $ specAllocs spec</span>
+<span class="lineno"> 1234 </span><span class="spaces">     </span><span class="nottickedoff">s3 &lt;- addAssumptions opts s2 (specPres spec)</span>
+<span class="lineno"> 1235 </span><span class="spaces">     </span><span class="nottickedoff">let post sF = mapM_ (doAssert opts (s3,sF)) (specPosts spec)</span>
+<span class="lineno"> 1236 </span><span class="spaces">     </span><span class="nottickedoff">return (globs, s3, post)</span></span>
+<span class="lineno"> 1237 </span>
+<span class="lineno"> 1238 </span>-- | Ensure that writable areas do not overlap with any other areas.
+<span class="lineno"> 1239 </span>checkOverlaps ::
+<span class="lineno"> 1240 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1241 </span>   Opts -&gt; [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -&gt; IO ()
+<span class="lineno"> 1242 </span><span class="decl"><span class="nottickedoff">checkOverlaps opts = check</span>
+<span class="lineno"> 1243 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 1244 </span><span class="spaces">  </span><span class="nottickedoff">check (p : ps) = mapM_ (nonOverLap p) ps &gt;&gt; check ps</span>
+<span class="lineno"> 1245 </span><span class="spaces">  </span><span class="nottickedoff">check []       = return ()</span>
+<span class="lineno"> 1246 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1247 </span><span class="spaces">  </span><span class="nottickedoff">nonOverLap ((p1,p2),ar1) ((q1,q2),ar2)</span>
+<span class="lineno"> 1248 </span><span class="spaces">    </span><span class="nottickedoff">-- Read-only area may overlap</span>
+<span class="lineno"> 1249 </span><span class="spaces">    </span><span class="nottickedoff">| areaMode ar1 == RO &amp;&amp; areaMode ar2 == RO = return ()</span>
+<span class="lineno"> 1250 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1251 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1252 </span><span class="spaces">    </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
+<span class="lineno"> 1253 </span><span class="spaces">      </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
+<span class="lineno"> 1254 </span><span class="spaces">         </span><span class="nottickedoff">let (a1,x1) = llvmPointerView p1</span>
+<span class="lineno"> 1255 </span><span class="spaces">             </span><span class="nottickedoff">(_, x2) = llvmPointerView p2</span>
+<span class="lineno"> 1256 </span><span class="spaces">             </span><span class="nottickedoff">(b1,y1) = llvmPointerView q1</span>
+<span class="lineno"> 1257 </span><span class="spaces">             </span><span class="nottickedoff">(_,y2)  = llvmPointerView q2</span>
+<span class="lineno"> 1258 </span><span class="spaces">         </span><span class="nottickedoff">opt1 &lt;- notPred sym =&lt;&lt; natEq sym a1 b1</span>
+<span class="lineno"> 1259 </span><span class="spaces">         </span><span class="nottickedoff">opt2 &lt;- bvUle sym x2 y1</span>
+<span class="lineno"> 1260 </span><span class="spaces">         </span><span class="nottickedoff">opt3 &lt;- bvUle sym y2 x1</span>
+<span class="lineno"> 1261 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- orPred sym opt1 =&lt;&lt; orPred sym opt2 opt3</span>
+<span class="lineno"> 1262 </span><span class="spaces">         </span><span class="nottickedoff">let msg = unlines</span>
+<span class="lineno"> 1263 </span><span class="spaces">               </span><span class="nottickedoff">[ &quot;Potentially aliased pointers:&quot;</span>
+<span class="lineno"> 1264 </span><span class="spaces">               </span><span class="nottickedoff">, &quot;*** &quot; ++ show (ppPtr p1)</span>
+<span class="lineno"> 1265 </span><span class="spaces">               </span><span class="nottickedoff">, &quot;*** &quot; ++ show (ppPtr q1)</span>
+<span class="lineno"> 1266 </span><span class="spaces">               </span><span class="nottickedoff">]</span>
+<span class="lineno"> 1267 </span><span class="spaces">         </span><span class="nottickedoff">assert bak ok $ AssertFailureSimError msg &quot;&quot;</span></span>
+<span class="lineno"> 1268 </span>
+<span class="lineno"> 1269 </span>-- | Use a specification to replace the execution of a function.
+<span class="lineno"> 1270 </span>overrideMode ::
+<span class="lineno"> 1271 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno"> 1272 </span>  Specification -&gt; Opts -&gt; State -&gt; IO State
+<span class="lineno"> 1273 </span><span class="decl"><span class="nottickedoff">overrideMode spec opts s =</span>
+<span class="lineno"> 1274 </span><span class="spaces">  </span><span class="nottickedoff">do let sym = optsSym opts</span>
+<span class="lineno"> 1275 </span><span class="spaces">     </span><span class="nottickedoff">let orderedAllocs = sortBy cmpAlloc (specAllocs spec)</span>
+<span class="lineno"> 1276 </span><span class="spaces">     </span><span class="nottickedoff">as &lt;- mapM (checkAlloc opts s) orderedAllocs    -- check sizes</span>
+<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="nottickedoff">checkOverlaps opts (zip as (map allocArea orderedAllocs)) -- check distinct</span>
+<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="nottickedoff">mapM_ (doAssert opts s) (specPres spec)         -- assert pre-condition</span>
+<span class="lineno"> 1279 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1280 </span><span class="spaces">     </span><span class="nottickedoff">newRegs &lt;- stateRegs &lt;$&gt; freshState sym</span>
+<span class="lineno"> 1281 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1282 </span><span class="spaces">     </span><span class="nottickedoff">mem1 &lt;- foldM (\s' (p,a) -&gt; clobberArea opts s' p a) (stateMem s)</span>
+<span class="lineno"> 1283 </span><span class="spaces">           </span><span class="nottickedoff">$ reverse $ zip (map fst as) [ a | _ := a &lt;- orderedAllocs ]</span>
+<span class="lineno"> 1284 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1285 </span><span class="spaces">     </span><span class="nottickedoff">let sNew1 = State { stateMem = mem1, stateRegs = newRegs  }</span>
+<span class="lineno"> 1286 </span><span class="spaces">     </span><span class="nottickedoff">sf &lt;- addAssumptions opts (s,sNew1) (specPosts spec)</span>
+<span class="lineno"> 1287 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1288 </span><span class="spaces">     </span><span class="nottickedoff">-- XXX: When Macaw calls us, the IP is already at the adress of the</span>
+<span class="lineno"> 1289 </span><span class="spaces">     </span><span class="nottickedoff">-- called function.  Unfortunately, the return address is not on top</span>
+<span class="lineno"> 1290 </span><span class="spaces">     </span><span class="nottickedoff">-- of the stack, as it shold be, so we don't know the correct value.</span>
+<span class="lineno"> 1291 </span><span class="spaces">     </span><span class="nottickedoff">-- It looks like things work, if keep the orignal value instead.</span>
+<span class="lineno"> 1292 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1293 </span><span class="spaces">     </span><span class="nottickedoff">ip0 &lt;- case lookupX86Reg X86_IP (stateRegs s) of</span>
+<span class="lineno"> 1294 </span><span class="spaces">       </span><span class="nottickedoff">Just ip0 -&gt; pure ip0</span>
+<span class="lineno"> 1295 </span><span class="spaces">       </span><span class="nottickedoff">Nothing  -&gt; noIPError</span>
+<span class="lineno"> 1296 </span><span class="spaces">     </span><span class="nottickedoff">finalRegs &lt;- case updateX86Reg X86_IP (const ip0) (stateRegs sf) of</span>
+<span class="lineno"> 1297 </span><span class="spaces">       </span><span class="nottickedoff">Just finalRegs -&gt; pure finalRegs</span>
+<span class="lineno"> 1298 </span><span class="spaces">       </span><span class="nottickedoff">Nothing        -&gt; noIPError</span>
+<span class="lineno"> 1299 </span><span class="spaces">     </span><span class="nottickedoff">return sf { stateRegs = finalRegs }</span>
+<span class="lineno"> 1300 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 1301 </span><span class="spaces">    </span><span class="nottickedoff">noIPError :: a</span>
+<span class="lineno"> 1302 </span><span class="spaces">    </span><span class="nottickedoff">noIPError = error &quot;[overrideMode] Could not find instruction pointer&quot;</span></span>
+<span class="lineno"> 1303 </span>
+<span class="lineno"> 1304 </span>
+<span class="lineno"> 1305 </span>
+<span class="lineno"> 1306 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1307 </span>-- Cryptol
+<span class="lineno"> 1308 </span>
+<span class="lineno"> 1309 </span>
+<span class="lineno"> 1310 </span>-- | Lookup a cryptol term, and apply it to the given arguments,
+<span class="lineno"> 1311 </span>-- returning the result.
+<span class="lineno"> 1312 </span>cryTerm :: Opts -&gt; Text -&gt; [Term] -&gt; IO Term
+<span class="lineno"> 1313 </span><span class="decl"><span class="nottickedoff">cryTerm opts x xs =</span>
+<span class="lineno"> 1314 </span><span class="spaces">  </span><span class="nottickedoff">case lookupCry x (eTermEnv (optsCry opts)) of</span>
+<span class="lineno"> 1315 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; fail $ Text.unpack err</span>
+<span class="lineno"> 1316 </span><span class="spaces">    </span><span class="nottickedoff">Right t -&gt;</span>
+<span class="lineno"> 1317 </span><span class="spaces">     </span><span class="nottickedoff">do let sym = optsSym opts</span>
+<span class="lineno"> 1318 </span><span class="spaces">        </span><span class="nottickedoff">sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno"> 1319 </span><span class="spaces">        </span><span class="nottickedoff">scApplyAll sc t xs</span></span>
+<span class="lineno"> 1320 </span>
+<span class="lineno"> 1321 </span>-- | Lookup a Crytpol type synonym, which should resolve to a constant.
+<span class="lineno"> 1322 </span>cryConst :: CryptolEnv -&gt; Text -&gt; Either Text Integer
+<span class="lineno"> 1323 </span><span class="decl"><span class="nottickedoff">cryConst env x =</span>
+<span class="lineno"> 1324 </span><span class="spaces">  </span><span class="nottickedoff">do let mp = ifTySyns (getAllIfaceDecls (eModuleEnv env))</span>
+<span class="lineno"> 1325 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- lookupCry x mp</span>
+<span class="lineno"> 1326 </span><span class="spaces">     </span><span class="nottickedoff">case matchMaybe (aNat (tsDef t)) of</span>
+<span class="lineno"> 1327 </span><span class="spaces">       </span><span class="nottickedoff">Just n  -&gt; return n</span>
+<span class="lineno"> 1328 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; Left (x &lt;&gt; &quot; is not a fixed constant type synonym.&quot;)</span></span>
+<span class="lineno"> 1329 </span>
+<span class="lineno"> 1330 </span>-- | Lookup a name in a map indexed by Cryptol names.
+<span class="lineno"> 1331 </span>lookupCry :: Text -&gt; Map Name a -&gt; Either Text a
+<span class="lineno"> 1332 </span><span class="decl"><span class="nottickedoff">lookupCry x mp =</span>
+<span class="lineno"> 1333 </span><span class="spaces">  </span><span class="nottickedoff">case x `lookupIn` mp of</span>
+<span class="lineno"> 1334 </span><span class="spaces">    </span><span class="nottickedoff">Left [] -&gt; Left $ Text.unlines $ (&quot;Missing Cryptol name: &quot; &lt;&gt; x)</span>
+<span class="lineno"> 1335 </span><span class="spaces">                                   </span><span class="nottickedoff">: [ &quot;*** &quot; &lt;&gt; ppName y | y &lt;- Map.keys mp ]</span>
+<span class="lineno"> 1336 </span><span class="spaces">    </span><span class="nottickedoff">Left ys -&gt; Left $ Text.unlines ( &quot;Ambiguous Cryptol name:&quot;</span>
+<span class="lineno"> 1337 </span><span class="spaces">                                   </span><span class="nottickedoff">: [ &quot;*** &quot; &lt;&gt; ppName y | y &lt;- ys ]</span>
+<span class="lineno"> 1338 </span><span class="spaces">                                   </span><span class="nottickedoff">)</span>
+<span class="lineno"> 1339 </span><span class="spaces">    </span><span class="nottickedoff">Right a -&gt; Right a</span>
+<span class="lineno"> 1340 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1341 </span><span class="spaces">  </span><span class="nottickedoff">where ppName = Text.pack . show . pp</span></span>
+<span class="lineno"> 1342 </span>
+<span class="lineno"> 1343 </span>
+<span class="lineno"> 1344 </span>
+<span class="lineno"> 1345 </span>
+<span class="lineno"> 1346 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1347 </span>
+<span class="lineno"> 1348 </span>
+<span class="lineno"> 1349 </span>adjustPtr ::
+<span class="lineno"> 1350 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym, IsSymBackend Sym bak) =&gt;
+<span class="lineno"> 1351 </span>  bak -&gt;
+<span class="lineno"> 1352 </span>  MemImpl Sym -&gt;
+<span class="lineno"> 1353 </span>  LLVMPtr Sym 64 -&gt;
+<span class="lineno"> 1354 </span>  Integer -&gt;
+<span class="lineno"> 1355 </span>  IO (LLVMPtr Sym 64)
+<span class="lineno"> 1356 </span><span class="decl"><span class="nottickedoff">adjustPtr bak mem ptr amt</span>
+<span class="lineno"> 1357 </span><span class="spaces">  </span><span class="nottickedoff">| amt == 0  = return ptr</span>
+<span class="lineno"> 1358 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1359 </span><span class="spaces">    </span><span class="nottickedoff">do let ?ptrWidth = knownNat</span>
+<span class="lineno"> 1360 </span><span class="spaces">       </span><span class="nottickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 1361 </span><span class="spaces">       </span><span class="nottickedoff">doPtrAddOffset bak mem ptr =&lt;&lt; bvLit sym knownNat (BV.mkBV knownNat amt)</span></span>
+
+</pre>
+</body>
+</html>
