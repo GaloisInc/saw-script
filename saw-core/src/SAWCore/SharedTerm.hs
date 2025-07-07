@@ -954,44 +954,36 @@ ctxCtorElimType ::
   SharedContext ->
   Name ->
   ExtCns Term ->
+  Term ->
   CtorArgStruct ->
   IO Term
-ctxCtorElimType sc d_top c
-  (CtorArgStruct{..}) =
-  (do params <- traverse (scExtCns sc) ctorParams
-      -- NOTE: we use propSort for the type of p_ret just as arbitrary sort, but
-      -- it doesn't matter because p_ret_tp is only actually used to form
-      -- contexts, and is never actually used directly in the output
-      _p_ret_tp <- ctxPRetTp sc d_top ctorParams dataTypeIndices propSort
-      pret <- scLocalVar sc 0
-      -- Call the helper and cast the result to (Typ ret)
-      helper d_top params pret [] ctorArgs ctorIndices
-  ) where
+ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
+  do params <- traverse (scExtCns sc) ctorParams
+     helper d_top params [] ctorArgs ctorIndices
+  where
 
   -- Iterate through the argument types of the constructor, building up a
   -- function from those arguments to the result type of the p_ret function.
   helper ::
     Name ->
     [Term] ->
-    Term ->
     [Term] ->
     [(Name, CtorArg)] ->
     [Term] ->
     IO Term
-  helper _d params pret prevs [] ret_ixs =
+  helper _d params prevs [] ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
     do let cname = Name (ecVarIndex c) (ecName c)
-       p_ret_ixs <- scApplyAll sc pret ret_ixs
+       p_ret_ixs <- scApplyAll sc p_ret ret_ixs
        appliedCtor <- scCtorAppParams sc cname params prevs
        scApply sc p_ret_ixs appliedCtor
-  helper d params pret prevs ((nm, ConstArg tp) : args) ixs =
+  helper d params prevs ((nm, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
     do arg <- scExtCns sc (EC (nameIndex nm) (nameInfo nm) tp)
-       rest <- helper d params pret (prevs ++ [arg]) args ixs
+       rest <- helper d params (prevs ++ [arg]) args ixs
        scGeneralizeTerms sc [arg] rest
-  helper d params pret
-    prevs ((nm, RecursiveArg zs ts) : args) ixs =
+  helper d params prevs ((nm, RecursiveArg zs ts) : args) ixs =
     -- For a recursive argument type of the form
     --
     -- (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk
@@ -1008,13 +1000,13 @@ ctxCtorElimType sc d_top c
        arg_tp <- scGeneralizeExts sc zs dt
        arg <- scExtCns sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
        -- Build the type of ih
-       pret_ts <- scApplyAll sc pret ts
+       pret_ts <- scApplyAll sc p_ret ts
        z_vars <- traverse (scExtCns sc) zs
        arg_zs <- scApplyAll sc arg z_vars
        ih_ret <- scApply sc pret_ts arg_zs
        ih_tp <- scGeneralizeExts sc zs ih_ret
        -- Finally, build the pi-abstraction for arg and ih around the rest
-       rest <- helper d params pret (prevs ++ [arg]) args ixs
+       rest <- helper d params (prevs ++ [arg]) args ixs
        scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
 
 -- | Build a function that substitutes parameters and a @p_ret@ return type
@@ -1029,7 +1021,12 @@ mkCtorElimTypeFun ::
   CtorArgStruct ->
   IO ([Term] -> Term -> IO Term)
 mkCtorElimTypeFun sc d c argStruct =
-  do ctxElimType <- ctxCtorElimType sc d c argStruct
+  do -- Use de Bruijn variable for p_ret so we can instantiate it later
+     -- NOTE: This is kind of gross, because the p_ret in the callback
+     -- argument below does not always have the same type (it is as
+     -- computed by ctxPRetTp, but the return sort may vary)
+     p_ret_var <- scLocalVar sc 0
+     ctxElimType <- ctxCtorElimType sc d c p_ret_var argStruct
      let vs = map ecVarIndex (ctorParams argStruct)
      return $ \params p_ret ->
        do t <- instantiateVarList sc 0 [p_ret] ctxElimType
