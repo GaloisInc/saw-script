@@ -798,6 +798,9 @@ jobs:
           - file: saw-remote-api/Dockerfile
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
+          - file: crux-mir-comp/Dockerfile
+            image: ghcr.io/galoisinc/crux-mir-comp
+            cache: ghcr.io/galoisinc/cache-crux-mir-comp
     steps:
       - uses: actions/checkout@v4
         with:
