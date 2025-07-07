@@ -134,7 +134,8 @@ collect_all_html() {
 }
 
 install_system_deps() {
-  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-$BUILD_TARGET_ARCH-bin.zip" && unzip -o bins.zip && rm bins.zip)
+  #(cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-$BUILD_TARGET_ARCH-bin.zip" && unzip -o bins.zip && rm bins.zip)
+  (cd $BIN && cp ../deps/manual_solver_bins/$BUILD_TARGET_OS-$BUILD_TARGET_ARCH-bin.zip bins.zip && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
   export PATH="$BIN:$PATH"
@@ -198,8 +199,8 @@ zip_dist_with_solvers() {
   # back to 4.8.8 (a version known to work with the AWSLC and BLST proofs)
   # where necessary. See #1772.
   cp "$BIN/z3"         dist/bin/
-  cp "$BIN/z3-4.8.8"   dist/bin/
-  cp "$BIN/z3-4.8.14"  dist/bin/
+  # cp "$BIN/z3-4.8.8"   dist/bin/
+  # cp "$BIN/z3-4.8.14"  dist/bin/
   cp -r dist "$sname"
   tar -cvzf "$sname".tar.gz "$sname"
 }
