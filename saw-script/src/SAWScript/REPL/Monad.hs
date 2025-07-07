@@ -97,12 +97,12 @@ import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
 import SAWCentral.Value
-  ( AIGProxy(..), mergeLocalEnv, Value
+  ( AIGProxy(..), mergeLocalEnv
   , ProofScript(..), showsProofResult,
   )
 
 import SAWScript.Interpreter (buildTopLevelEnv)
-import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint, IsValue, toValue)
+import SAWScript.ValueOps (makeCheckpoint, restoreCheckpoint)
 
 
 deriving instance Typeable AIG.Proxy
@@ -308,17 +308,16 @@ exceptionProtect cmd =
       do io (putStrLn "" >> putStrLn s)
          void $ liftTopLevel (restoreCheckpoint chk)
 
--- XXX: there's no longer any reason to bake Value into this
-liftTopLevel :: IsValue a => TopLevel a -> REPL Value
+liftTopLevel :: TopLevel a -> REPL a
 liftTopLevel m =
   do ro  <- getTopLevelRO
      ref <- getEnvironmentRef
      io $ do rw <- readIORef ref
              (a, rw') <- runTopLevel m ro rw
              writeIORef ref rw'
-             return $ toValue a
+             return a
 
-liftProofScript :: IsValue a => ProofScript a -> IORef ProofState -> REPL Value
+liftProofScript :: ProofScript a -> IORef ProofState -> REPL a
 liftProofScript m ref =
   liftTopLevel $
   do st <- liftIO $ readIORef ref
@@ -328,7 +327,7 @@ liftProofScript m ref =
        Left (stats, cex) ->
          do ppOpts <- rwPPOpts <$> get
             fail (showsProofResult ppOpts (InvalidProof stats cex st') "")
-       Right x -> return (toValue x)
+       Right x -> return x
 
 -- Primitives ------------------------------------------------------------------
 
