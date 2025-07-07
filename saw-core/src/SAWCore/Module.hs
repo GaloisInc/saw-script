@@ -94,7 +94,6 @@ import Prelude hiding (all, foldr, sum)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Term.Functor
-import SAWCore.Term.CtxTerm
 
 
 -- Definitions -----------------------------------------------------------------
@@ -123,6 +122,37 @@ instance Hashable Def -- automatically derived
 
 
 -- Constructors ----------------------------------------------------------------
+
+-- | A specification of the type of an argument for a constructor of datatype
+-- @d@, that has a specified list @ixs@ of indices, inside a context @ctx@ of
+-- parameters and earlier arguments
+data CtorArg
+  -- | A fixed, constant type
+  = ConstArg Term
+  -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
+  -- specifies a recursive argument type of the form
+  --
+  -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
+  --
+  -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
+  -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
+  -- parameters of @d@ (not given here), and the @ei@ are the type indices of
+  -- @d@.
+  | RecursiveArg [ExtCns Term] [Term]
+
+-- | A structure that defines the parameters, arguments, and return type indices
+-- of a constructor.
+data CtorArgStruct =
+  CtorArgStruct
+  { ctorParams :: [ExtCns Term],
+    -- ^ earlier ctorParams are in scope
+    ctorArgs :: [(Name, CtorArg)],
+    -- ^ ctorParams and earlier ctorArgs are in scope
+    ctorIndices :: [Term],
+    -- ^ ctorParams and ctorArgs are in scope
+    dataTypeIndices :: [ExtCns Term]
+    -- ^ ctorParams and earlier dataTypeIndices are in scope
+  }
 
 -- | A specification of a constructor
 data Ctor =
@@ -213,7 +243,7 @@ data DataType =
     -- ^ Unique var index for this data type
   , dtParams :: [ExtCns Term]
     -- ^ The context of parameters of this datatype
-  , dtIndices :: [(LocalName, Term)]
+  , dtIndices :: [ExtCns Term]
     -- ^ The context of indices of this datatype
   , dtSort :: Sort
     -- ^ The universe of this datatype
