@@ -504,9 +504,9 @@ span.spaces    { background: white }
 <span class="lineno">  485 </span><span class="spaces">                                                 </span><span class="nottickedoff">normCompTerm t'</span>
 <span class="lineno">  486 </span><span class="spaces">           </span><span class="nottickedoff">_ -&gt; throwMRFailure (MalformedComp t)</span>
 <span class="lineno">  487 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  488 </span><span class="spaces">    </span><span class="nottickedoff">-- For an ExtCns, we have to check what sort of variable it is</span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="nottickedoff">-- For a Variable, we have to check what sort of variable it is</span>
 <span class="lineno">  489 </span><span class="spaces">    </span><span class="nottickedoff">-- FIXME: substitute for evars if they have been instantiated</span>
-<span class="lineno">  490 </span><span class="spaces">    </span><span class="nottickedoff">((asExtCns -&gt; Just ec), args) -&gt;</span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="nottickedoff">((asVariable -&gt; Just ec), args) -&gt;</span>
 <span class="lineno">  491 </span><span class="spaces">      </span><span class="nottickedoff">do fun_name &lt;- extCnsToFunName ec</span>
 <span class="lineno">  492 </span><span class="spaces">         </span><span class="nottickedoff">FunBind fun_name args &lt;$&gt; mkCompFunReturn &lt;$&gt;</span>
 <span class="lineno">  493 </span><span class="spaces">           </span><span class="nottickedoff">mrFunOutType fun_name args</span>

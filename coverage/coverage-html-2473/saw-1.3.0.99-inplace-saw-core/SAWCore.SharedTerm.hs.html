@@ -79,7 +79,7 @@ span.spaces    { background: white }
 <span class="lineno">   60 </span>  , scFreshGlobal
 <span class="lineno">   61 </span>  , scFreshEC
 <span class="lineno">   62 </span>  , scFreshName
-<span class="lineno">   63 </span>  , scExtCns
+<span class="lineno">   63 </span>  , scVariable
 <span class="lineno">   64 </span>  , scGlobalDef
 <span class="lineno">   65 </span>  , scFreshenGlobalIdent
 <span class="lineno">   66 </span>    -- ** Recursors and datatypes
@@ -455,9 +455,9 @@ span.spaces    { background: white }
 <span class="lineno">  436 </span>scFlatTermF :: SharedContext -&gt; FlatTermF Term -&gt; IO Term
 <span class="lineno">  437 </span><span class="decl"><span class="istickedoff">scFlatTermF sc ftf = scTermF sc (FTermF ftf)</span></span>
 <span class="lineno">  438 </span>
-<span class="lineno">  439 </span>-- | Create a 'Term' from an 'ExtCns'.
-<span class="lineno">  440 </span>scExtCns :: SharedContext -&gt; ExtCns Term -&gt; IO Term
-<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">scExtCns sc ec = scFlatTermF sc (ExtCns ec)</span></span>
+<span class="lineno">  439 </span>-- | Create a named variable 'Term' from an 'ExtCns'.
+<span class="lineno">  440 </span>scVariable :: SharedContext -&gt; ExtCns Term -&gt; IO Term
+<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">scVariable sc ec = scFlatTermF sc (Variable ec)</span></span>
 <span class="lineno">  442 </span>
 <span class="lineno">  443 </span>data DuplicateNameException = DuplicateNameException URI
 <span class="lineno">  444 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Exception DuplicateNameException</span></span></span></span></span></span>
@@ -522,7 +522,7 @@ span.spaces    { background: white }
 <span class="lineno">  503 </span>
 <span class="lineno">  504 </span>-- | Create a global variable with the given identifier (which may be &quot;_&quot;) and type.
 <span class="lineno">  505 </span>scFreshGlobal :: SharedContext -&gt; Text -&gt; Term -&gt; IO Term
-<span class="lineno">  506 </span><span class="decl"><span class="istickedoff">scFreshGlobal sc x tp = scExtCns sc =&lt;&lt; scFreshEC sc x tp</span></span>
+<span class="lineno">  506 </span><span class="decl"><span class="istickedoff">scFreshGlobal sc x tp = scVariable sc =&lt;&lt; scFreshEC sc x tp</span></span>
 <span class="lineno">  507 </span>
 <span class="lineno">  508 </span>-- | Returns shared term associated with ident.
 <span class="lineno">  509 </span>-- Does not check module namespace.
@@ -844,7 +844,7 @@ span.spaces    { background: white }
 <span class="lineno">  825 </span>-- datatype and its 'CtorArgStruct'
 <span class="lineno">  826 </span>ctxCtorType :: SharedContext -&gt; Name -&gt; CtorArgStruct -&gt; IO Term
 <span class="lineno">  827 </span><span class="decl"><span class="istickedoff">ctxCtorType sc d (CtorArgStruct{..}) =</span>
-<span class="lineno">  828 </span><span class="spaces">  </span><span class="istickedoff">do params &lt;- traverse (scExtCns sc) ctorParams</span>
+<span class="lineno">  828 </span><span class="spaces">  </span><span class="istickedoff">do params &lt;- traverse (scVariable sc) ctorParams</span>
 <span class="lineno">  829 </span><span class="spaces">     </span><span class="istickedoff">d' &lt;- scTermF sc (Constant d)</span>
 <span class="lineno">  830 </span><span class="spaces">     </span><span class="istickedoff">d_params &lt;- scApplyAll sc d' params</span>
 <span class="lineno">  831 </span><span class="spaces">     </span><span class="istickedoff">bs &lt;- ctxCtorArgBindings sc d_params ctorArgs</span>
@@ -924,8 +924,8 @@ span.spaces    { background: white }
 <span class="lineno">  905 </span>  Sort -&gt;
 <span class="lineno">  906 </span>  IO Term
 <span class="lineno">  907 </span><span class="decl"><span class="istickedoff">ctxPRetTp sc d params ixs s =</span>
-<span class="lineno">  908 </span><span class="spaces">  </span><span class="istickedoff">do param_vars &lt;- traverse (scExtCns sc) params</span>
-<span class="lineno">  909 </span><span class="spaces">     </span><span class="istickedoff">ix_vars &lt;- traverse (scExtCns sc) ixs</span>
+<span class="lineno">  908 </span><span class="spaces">  </span><span class="istickedoff">do param_vars &lt;- traverse (scVariable sc) params</span>
+<span class="lineno">  909 </span><span class="spaces">     </span><span class="istickedoff">ix_vars &lt;- traverse (scVariable sc) ixs</span>
 <span class="lineno">  910 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- scDataTypeAppParams sc d param_vars ix_vars</span>
 <span class="lineno">  911 </span><span class="spaces">     </span><span class="istickedoff">ret &lt;- scFun sc dt =&lt;&lt; scSort sc s</span>
 <span class="lineno">  912 </span><span class="spaces">     </span><span class="istickedoff">scGeneralizeExts sc ixs ret</span></span>
@@ -977,7 +977,7 @@ span.spaces    { background: white }
 <span class="lineno">  958 </span>  CtorArgStruct -&gt;
 <span class="lineno">  959 </span>  IO Term
 <span class="lineno">  960 </span><span class="decl"><span class="istickedoff">ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =</span>
-<span class="lineno">  961 </span><span class="spaces">  </span><span class="istickedoff">do params &lt;- traverse (scExtCns sc) ctorParams</span>
+<span class="lineno">  961 </span><span class="spaces">  </span><span class="istickedoff">do params &lt;- traverse (scVariable sc) ctorParams</span>
 <span class="lineno">  962 </span><span class="spaces">     </span><span class="istickedoff">helper d_top params [] ctorArgs ctorIndices</span>
 <span class="lineno">  963 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  964 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -999,7 +999,7 @@ span.spaces    { background: white }
 <span class="lineno">  980 </span><span class="spaces">       </span><span class="istickedoff">scApply sc p_ret_ixs appliedCtor</span>
 <span class="lineno">  981 </span><span class="spaces">  </span><span class="istickedoff">helper d params prevs ((nm, ConstArg tp) : args) ixs =</span>
 <span class="lineno">  982 </span><span class="spaces">    </span><span class="istickedoff">-- For a constant argument type, just abstract it and continue</span>
-<span class="lineno">  983 </span><span class="spaces">    </span><span class="istickedoff">do arg &lt;- scExtCns sc (EC (nameIndex nm) (nameInfo nm) tp)</span>
+<span class="lineno">  983 </span><span class="spaces">    </span><span class="istickedoff">do arg &lt;- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)</span>
 <span class="lineno">  984 </span><span class="spaces">       </span><span class="istickedoff">rest &lt;- helper d params (prevs ++ [arg]) args ixs</span>
 <span class="lineno">  985 </span><span class="spaces">       </span><span class="istickedoff">scGeneralizeTerms sc [arg] rest</span>
 <span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">helper d params prevs ((nm, RecursiveArg zs ts) : args) ixs =</span>
@@ -1017,10 +1017,10 @@ span.spaces    { background: white }
 <span class="lineno">  998 </span><span class="spaces">    </span><span class="istickedoff">do dt &lt;- scDataTypeAppParams sc d params ts</span>
 <span class="lineno">  999 </span><span class="spaces">       </span><span class="istickedoff">-- Build the type of the argument arg</span>
 <span class="lineno"> 1000 </span><span class="spaces">       </span><span class="istickedoff">arg_tp &lt;- scGeneralizeExts <span class="nottickedoff">sc</span> zs dt</span>
-<span class="lineno"> 1001 </span><span class="spaces">       </span><span class="istickedoff">arg &lt;- scExtCns sc (EC (nameIndex nm) (nameInfo nm) arg_tp)</span>
+<span class="lineno"> 1001 </span><span class="spaces">       </span><span class="istickedoff">arg &lt;- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)</span>
 <span class="lineno"> 1002 </span><span class="spaces">       </span><span class="istickedoff">-- Build the type of ih</span>
 <span class="lineno"> 1003 </span><span class="spaces">       </span><span class="istickedoff">pret_ts &lt;- scApplyAll sc p_ret ts</span>
-<span class="lineno"> 1004 </span><span class="spaces">       </span><span class="istickedoff">z_vars &lt;- traverse <span class="nottickedoff">(scExtCns sc)</span> zs</span>
+<span class="lineno"> 1004 </span><span class="spaces">       </span><span class="istickedoff">z_vars &lt;- traverse <span class="nottickedoff">(scVariable sc)</span> zs</span>
 <span class="lineno"> 1005 </span><span class="spaces">       </span><span class="istickedoff">arg_zs &lt;- scApplyAll <span class="nottickedoff">sc</span> arg z_vars</span>
 <span class="lineno"> 1006 </span><span class="spaces">       </span><span class="istickedoff">ih_ret &lt;- scApply sc pret_ts arg_zs</span>
 <span class="lineno"> 1007 </span><span class="spaces">       </span><span class="istickedoff">ih_tp &lt;- scGeneralizeExts <span class="nottickedoff">sc</span> zs ih_ret</span>
@@ -1142,7 +1142,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1123 </span><span class="spaces">      </span><span class="istickedoff">IO Term</span>
 <span class="lineno"> 1124 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg zs_ctx ixs x =</span>
 <span class="lineno"> 1125 </span><span class="spaces">      </span><span class="istickedoff">-- eta expand over the zs and apply the RecursorApp form</span>
-<span class="lineno"> 1126 </span><span class="spaces">      </span><span class="istickedoff">do zs &lt;- traverse <span class="nottickedoff">(scExtCns sc)</span> zs_ctx</span>
+<span class="lineno"> 1126 </span><span class="spaces">      </span><span class="istickedoff">do zs &lt;- traverse <span class="nottickedoff">(scVariable sc)</span> zs_ctx</span>
 <span class="lineno"> 1127 </span><span class="spaces">         </span><span class="istickedoff">x_zs &lt;- scApplyAll <span class="nottickedoff">sc</span> x zs</span>
 <span class="lineno"> 1128 </span><span class="spaces">         </span><span class="istickedoff">body &lt;- scRecursorApp sc rec ixs x_zs</span>
 <span class="lineno"> 1129 </span><span class="spaces">         </span><span class="istickedoff">scAbstractExts <span class="nottickedoff">sc</span> zs_ctx body</span></span>
@@ -1542,7 +1542,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1523 </span><span class="spaces">          </span><span class="istickedoff">n &lt;- scNat sc (fromIntegral (V.length vs))</span>
 <span class="lineno"> 1524 </span><span class="spaces">          </span><span class="istickedoff">scVecType sc n tp</span>
 <span class="lineno"> 1525 </span><span class="spaces">        </span><span class="istickedoff">StringLit{} -&gt; <span class="nottickedoff">lift $ scStringType sc</span></span>
-<span class="lineno"> 1526 </span><span class="spaces">        </span><span class="istickedoff">ExtCns ec   -&gt; return $ ecType ec</span></span>
+<span class="lineno"> 1526 </span><span class="spaces">        </span><span class="istickedoff">Variable ec -&gt; pure $ ecType ec</span></span>
 <span class="lineno"> 1527 </span>
 <span class="lineno"> 1528 </span>--------------------------------------------------------------------------------
 <span class="lineno"> 1529 </span>
@@ -1609,7 +1609,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1590 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1591 </span><span class="spaces">    </span><span class="istickedoff">go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =&gt;</span>
 <span class="lineno"> 1592 </span><span class="spaces">           </span><span class="istickedoff">DeBruijnIndex -&gt; TermF Term -&gt; IO Term</span>
-<span class="lineno"> 1593 </span><span class="spaces">    </span><span class="istickedoff">go' _ (FTermF tf@(ExtCns _)) = <span class="nottickedoff">scFlatTermF sc tf</span></span>
+<span class="lineno"> 1593 </span><span class="spaces">    </span><span class="istickedoff">go' _ (FTermF tf@(Variable _)) = <span class="nottickedoff">scFlatTermF sc tf</span></span>
 <span class="lineno"> 1594 </span><span class="spaces">    </span><span class="istickedoff">go' l (FTermF tf)       = scFlatTermF sc =&lt;&lt; (traverse (go l) tf)</span>
 <span class="lineno"> 1595 </span><span class="spaces">    </span><span class="istickedoff">go' l (App x y)         = scTermF sc =&lt;&lt; (App &lt;$&gt; go l x &lt;*&gt; go l y)</span>
 <span class="lineno"> 1596 </span><span class="spaces">    </span><span class="istickedoff">go' l (Lambda i tp rhs) = scTermF sc =&lt;&lt; (Lambda i &lt;$&gt; go l tp &lt;*&gt; go (l+1) rhs)</span>
@@ -1635,7 +1635,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1616 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1617 </span><span class="spaces">    </span><span class="istickedoff">go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =&gt;</span>
 <span class="lineno"> 1618 </span><span class="spaces">           </span><span class="istickedoff">DeBruijnIndex -&gt; TermF Term -&gt; IO Term</span>
-<span class="lineno"> 1619 </span><span class="spaces">    </span><span class="istickedoff">go' l (FTermF (ExtCns ec)) = f (go l) l (Left ec)</span>
+<span class="lineno"> 1619 </span><span class="spaces">    </span><span class="istickedoff">go' l (FTermF (Variable ec)) = f (go l) l (Left ec)</span>
 <span class="lineno"> 1620 </span><span class="spaces">    </span><span class="istickedoff">go' l (FTermF tf)       = scFlatTermF sc =&lt;&lt; (traverse (go l) tf)</span>
 <span class="lineno"> 1621 </span><span class="spaces">    </span><span class="istickedoff">go' l (App x y)         = scTermF sc =&lt;&lt; (App &lt;$&gt; go l x &lt;*&gt; go l y)</span>
 <span class="lineno"> 1622 </span><span class="spaces">    </span><span class="istickedoff">go' l (Lambda i tp rhs) = scTermF sc =&lt;&lt; (Lambda i &lt;$&gt; go l tp &lt;*&gt; go (l+1) rhs)</span>
@@ -1967,7 +1967,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1948 </span><span class="spaces">     </span><span class="nottickedoff">ty' &lt;- scFunAll sc (map ecType ecs) ty</span>
 <span class="lineno"> 1949 </span><span class="spaces">     </span><span class="nottickedoff">nm &lt;- scFreshName sc name</span>
 <span class="lineno"> 1950 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- scDeclareDef sc nm NoQualifier ty' (Just rhs')</span>
-<span class="lineno"> 1951 </span><span class="spaces">     </span><span class="nottickedoff">args &lt;- mapM (scFlatTermF sc . ExtCns) ecs</span>
+<span class="lineno"> 1951 </span><span class="spaces">     </span><span class="nottickedoff">args &lt;- mapM (scVariable sc) ecs</span>
 <span class="lineno"> 1952 </span><span class="spaces">     </span><span class="nottickedoff">scApplyAll sc t args</span></span>
 <span class="lineno"> 1953 </span>
 <span class="lineno"> 1954 </span>-- FIXME: Regarding comments,
@@ -1994,7 +1994,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1975 </span><span class="spaces">     </span><span class="istickedoff">i &lt;- scRegisterName sc nmi</span>
 <span class="lineno"> 1976 </span><span class="spaces">     </span><span class="istickedoff">let nm = Name i nmi</span>
 <span class="lineno"> 1977 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- scDeclareDef sc nm <span class="nottickedoff">NoQualifier</span> ty' (Just rhs')</span>
-<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">args &lt;- mapM <span class="nottickedoff">(scFlatTermF sc . ExtCns)</span> ecs</span>
+<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">args &lt;- mapM <span class="nottickedoff">(scVariable sc)</span> ecs</span>
 <span class="lineno"> 1979 </span><span class="spaces">     </span><span class="istickedoff">scApplyAll <span class="nottickedoff">sc</span> t args</span></span>
 <span class="lineno"> 1980 </span>
 <span class="lineno"> 1981 </span>
@@ -2835,9 +2835,9 @@ span.spaces    { background: white }
 <span class="lineno"> 2816 </span>getAllExtSet :: Term -&gt; Set.Set (ExtCns Term)
 <span class="lineno"> 2817 </span><span class="decl"><span class="istickedoff">getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t</span>
 <span class="lineno"> 2818 </span><span class="spaces">    </span><span class="istickedoff">where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | IntSet.member idx is = acc</span>
-<span class="lineno"> 2819 </span><span class="spaces">          </span><span class="istickedoff">getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (ExtCns ec)) }) =</span>
+<span class="lineno"> 2819 </span><span class="spaces">          </span><span class="istickedoff">getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (Variable ec)) }) =</span>
 <span class="lineno"> 2820 </span><span class="spaces">            </span><span class="istickedoff">(IntSet.insert idx is, Set.insert ec a)</span>
-<span class="lineno"> 2821 </span><span class="spaces">          </span><span class="istickedoff">getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =</span>
+<span class="lineno"> 2821 </span><span class="spaces">          </span><span class="istickedoff">getExtCns (is, a) (Unshared (FTermF (Variable ec))) =</span>
 <span class="lineno"> 2822 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">(is, Set.insert ec a)</span></span>
 <span class="lineno"> 2823 </span><span class="spaces">          </span><span class="istickedoff">getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc</span>
 <span class="lineno"> 2824 </span><span class="spaces">          </span><span class="istickedoff">getExtCns acc (Unshared (Constant {})) = <span class="nottickedoff">acc</span></span>
@@ -2868,8 +2868,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2849 </span><span class="spaces">  </span><span class="istickedoff">where fn _rec l (Left ec) =</span>
 <span class="lineno"> 2850 </span><span class="spaces">            </span><span class="istickedoff">case IntMap.lookup (ecVarIndex ec) vmap of</span>
 <span class="lineno"> 2851 </span><span class="spaces">               </span><span class="istickedoff">Just t  -&gt; incVars sc 0 l t</span>
-<span class="lineno"> 2852 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; scFlatTermF sc $ ExtCns ec</span>
-<span class="lineno"> 2853 </span><span class="spaces">        </span><span class="istickedoff">fn _ _ (Right i) = scTermF sc $ LocalVar i</span></span>
+<span class="lineno"> 2852 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; scVariable sc ec</span>
+<span class="lineno"> 2853 </span><span class="spaces">        </span><span class="istickedoff">fn _ _ (Right i) = scLocalVar sc i</span></span>
 <span class="lineno"> 2854 </span>
 <span class="lineno"> 2855 </span>{-
 <span class="lineno"> 2856 </span>-- RWD: I'm pretty sure the following implementation gets incorrect results when
@@ -2883,14 +2883,14 @@ span.spaces    { background: white }
 <span class="lineno"> 2864 </span>      go t@(Unshared tf) =
 <span class="lineno"> 2865 </span>        case tf of
 <span class="lineno"> 2866 </span>          -- | Lookup variable in term if it is bound.
-<span class="lineno"> 2867 </span>          FTermF (ExtCns ec) -&gt;
+<span class="lineno"> 2867 </span>          FTermF (Variable ec) -&gt;
 <span class="lineno"> 2868 </span>            maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
 <span class="lineno"> 2869 </span>          -- | Recurse on other terms.
 <span class="lineno"> 2870 </span>          _ -&gt; whenModified t (scTermF sc) (traverse go tf)
 <span class="lineno"> 2871 </span>      go t@(STApp idx tf) =
 <span class="lineno"> 2872 </span>        case tf of
 <span class="lineno"> 2873 </span>          -- Lookup variable in term if it is bound.
-<span class="lineno"> 2874 </span>          FTermF (ExtCns ec) -&gt;
+<span class="lineno"> 2874 </span>          FTermF (Variable ec) -&gt;
 <span class="lineno"> 2875 </span>            maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
 <span class="lineno"> 2876 </span>          -- Recurse on other terms.
 <span class="lineno"> 2877 </span>          _ -&gt; useChangeCache tcache idx $
@@ -2912,7 +2912,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2893 </span><span class="spaces">        </span><span class="istickedoff">Left ec -&gt;</span>
 <span class="lineno"> 2894 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup (ecVarIndex ec) m of</span>
 <span class="lineno"> 2895 </span><span class="spaces">            </span><span class="istickedoff">Just k  -&gt; scLocalVar sc (l + k)</span>
-<span class="lineno"> 2896 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; scFlatTermF sc . ExtCns =&lt;&lt; traverse rec ec</span>
+<span class="lineno"> 2896 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; scVariable sc =&lt;&lt; traverse rec ec</span>
 <span class="lineno"> 2897 </span><span class="spaces">        </span><span class="istickedoff">Right i -&gt;</span>
 <span class="lineno"> 2898 </span><span class="spaces">          </span><span class="istickedoff">scLocalVar sc (i + length exts)</span></span>
 <span class="lineno"> 2899 </span>
@@ -2946,7 +2946,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2927 </span>
 <span class="lineno"> 2928 </span>-- | Create a lambda term by abstracting over the list of arguments,
 <span class="lineno"> 2929 </span>-- which must all be named variables (e.g. terms generated by
-<span class="lineno"> 2930 </span>-- 'scExtCns' or 'scFreshGlobal').
+<span class="lineno"> 2930 </span>-- 'scVariable' or 'scFreshGlobal').
 <span class="lineno"> 2931 </span>scAbstractTerms :: SharedContext -&gt; [Term] -&gt; Term -&gt; IO Term
 <span class="lineno"> 2932 </span><span class="decl"><span class="istickedoff">scAbstractTerms sc args body =</span>
 <span class="lineno"> 2933 </span><span class="spaces">  </span><span class="istickedoff">do vars &lt;- mapM toEC args</span>
@@ -2954,7 +2954,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2935 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 2936 </span><span class="spaces">    </span><span class="istickedoff">toEC :: Term -&gt; IO (ExtCns Term)</span>
 <span class="lineno"> 2937 </span><span class="spaces">    </span><span class="istickedoff">toEC t =</span>
-<span class="lineno"> 2938 </span><span class="spaces">      </span><span class="istickedoff">case asExtCns t of</span>
+<span class="lineno"> 2938 </span><span class="spaces">      </span><span class="istickedoff">case asVariable t of</span>
 <span class="lineno"> 2939 </span><span class="spaces">        </span><span class="istickedoff">Just ec -&gt; pure ec</span>
 <span class="lineno"> 2940 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scAbstractTerms: expected ExtCns&quot;</span></span></span>
 <span class="lineno"> 2941 </span>
@@ -2972,7 +2972,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2953 </span><span class="spaces">    </span><span class="nottickedoff">-- the final variable to abstract is applied to the</span>
 <span class="lineno"> 2954 </span><span class="spaces">    </span><span class="nottickedoff">-- term, and does not appear elsewhere in the term,</span>
 <span class="lineno"> 2955 </span><span class="spaces">    </span><span class="nottickedoff">-- so we can eta-collapse.</span>
-<span class="lineno"> 2956 </span><span class="spaces">    </span><span class="nottickedoff">loop (ec:exts) (asApp -&gt; Just (f,asExtCns -&gt; Just ec'))</span>
+<span class="lineno"> 2956 </span><span class="spaces">    </span><span class="nottickedoff">loop (ec:exts) (asApp -&gt; Just (f, asVariable -&gt; Just ec'))</span>
 <span class="lineno"> 2957 </span><span class="spaces">      </span><span class="nottickedoff">| ec == ec', not (Set.member ec (getAllExtSet f))</span>
 <span class="lineno"> 2958 </span><span class="spaces">      </span><span class="nottickedoff">= loop exts f</span>
 <span class="lineno"> 2959 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -3009,7 +3009,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2990 </span><span class="spaces">    </span><span class="istickedoff">loop [] = scExtsToLocals sc exts x</span></span>
 <span class="lineno"> 2991 </span>
 <span class="lineno"> 2992 </span>-- | Create a pi term by abstracting over the list of arguments, which
-<span class="lineno"> 2993 </span>-- must all be named variables (e.g. terms generated by 'scExtCns' or
+<span class="lineno"> 2993 </span>-- must all be named variables (e.g. terms generated by 'scVariable' or
 <span class="lineno"> 2994 </span>-- 'scFreshGlobal').
 <span class="lineno"> 2995 </span>scGeneralizeTerms :: SharedContext -&gt; [Term] -&gt; Term -&gt; IO Term
 <span class="lineno"> 2996 </span><span class="decl"><span class="istickedoff">scGeneralizeTerms sc args body =</span>
@@ -3018,7 +3018,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2999 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 3000 </span><span class="spaces">    </span><span class="istickedoff">toEC :: Term -&gt; IO (ExtCns Term)</span>
 <span class="lineno"> 3001 </span><span class="spaces">    </span><span class="istickedoff">toEC t =</span>
-<span class="lineno"> 3002 </span><span class="spaces">      </span><span class="istickedoff">case asExtCns t of</span>
+<span class="lineno"> 3002 </span><span class="spaces">      </span><span class="istickedoff">case asVariable t of</span>
 <span class="lineno"> 3003 </span><span class="spaces">        </span><span class="istickedoff">Just ec -&gt; pure ec</span>
 <span class="lineno"> 3004 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scGeneralizeTerms: expected ExtCns&quot;</span></span></span>
 <span class="lineno"> 3005 </span>
@@ -3170,7 +3170,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3151 </span>         -&gt; IO (ExtCns Term, Term)
 <span class="lineno"> 3152 </span><span class="decl"><span class="istickedoff">scOpenTerm sc nm tp idx body = do</span>
 <span class="lineno"> 3153 </span><span class="spaces">    </span><span class="istickedoff">ec &lt;- scFreshEC sc nm tp</span>
-<span class="lineno"> 3154 </span><span class="spaces">    </span><span class="istickedoff">ec_term &lt;- scFlatTermF sc (ExtCns ec)</span>
+<span class="lineno"> 3154 </span><span class="spaces">    </span><span class="istickedoff">ec_term &lt;- scVariable sc ec</span>
 <span class="lineno"> 3155 </span><span class="spaces">    </span><span class="istickedoff">body' &lt;- instantiateVar sc idx ec_term body</span>
 <span class="lineno"> 3156 </span><span class="spaces">    </span><span class="istickedoff">return (ec, body')</span></span>
 <span class="lineno"> 3157 </span>
@@ -3220,7 +3220,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3201 </span><span class="spaces">        </span><span class="nottickedoff">Just (nm, tp, body) -&gt;</span>
 <span class="lineno"> 3202 </span><span class="spaces">          </span><span class="nottickedoff">do tp' &lt;- instantiateVarList sc 0 vs tp</span>
 <span class="lineno"> 3203 </span><span class="spaces">             </span><span class="nottickedoff">ec  &lt;- scFreshEC sc nm tp'</span>
-<span class="lineno"> 3204 </span><span class="spaces">             </span><span class="nottickedoff">v   &lt;- scExtCns sc ec</span>
+<span class="lineno"> 3204 </span><span class="spaces">             </span><span class="nottickedoff">v   &lt;- scVariable sc ec</span>
 <span class="lineno"> 3205 </span><span class="spaces">             </span><span class="nottickedoff">loop (ec : ecs) (v : vs) body</span></span>
 <span class="lineno"> 3206 </span>
 <span class="lineno"> 3207 </span>-- | Deconstruct a pi term into a bound variable and a body, using
@@ -3245,7 +3245,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3226 </span><span class="spaces">        </span><span class="istickedoff">Just (nm, tp, body) -&gt;</span>
 <span class="lineno"> 3227 </span><span class="spaces">          </span><span class="istickedoff">do tp' &lt;- instantiateVarList sc 0 vs tp</span>
 <span class="lineno"> 3228 </span><span class="spaces">             </span><span class="istickedoff">ec  &lt;- scFreshEC sc nm tp'</span>
-<span class="lineno"> 3229 </span><span class="spaces">             </span><span class="istickedoff">v   &lt;- scExtCns sc ec</span>
+<span class="lineno"> 3229 </span><span class="spaces">             </span><span class="istickedoff">v   &lt;- scVariable sc ec</span>
 <span class="lineno"> 3230 </span><span class="spaces">             </span><span class="istickedoff">loop (ec : ecs) (v : vs) body</span></span>
 
 </pre>

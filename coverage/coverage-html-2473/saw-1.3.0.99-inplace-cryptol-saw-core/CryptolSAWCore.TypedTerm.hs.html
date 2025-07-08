@@ -48,7 +48,7 @@ span.spaces    { background: white }
 <span class="lineno">   29 </span>
 <span class="lineno">   30 </span>import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 <span class="lineno">   31 </span>import SAWCore.FiniteValue
-<span class="lineno">   32 </span>import SAWCore.Recognizer (asExtCns)
+<span class="lineno">   32 </span>import SAWCore.Recognizer (asVariable)
 <span class="lineno">   33 </span>import SAWCore.SharedTerm
 <span class="lineno">   34 </span>import SAWCore.SCTypeCheck (scTypeCheckError)
 <span class="lineno">   35 </span>import SAWCore.Term.Pretty (ppTerm)
@@ -208,7 +208,7 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- scFirstOrderValue sc fov</span>
 <span class="lineno">  190 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t</span></span>
 <span class="lineno">  191 </span>
-<span class="lineno">  192 </span>-- Typed external constants ----------------------------------------------------
+<span class="lineno">  192 </span>-- Typed named variables -------------------------------------------------------
 <span class="lineno">  193 </span>
 <span class="lineno">  194 </span>data TypedExtCns =
 <span class="lineno">  195 </span>  TypedExtCns
@@ -217,17 +217,17 @@ span.spaces    { background: white }
 <span class="lineno">  198 </span>  }
 <span class="lineno">  199 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
 <span class="lineno">  200 </span>
-<span class="lineno">  201 </span>-- | Recognize 'TypedTerm's that are external constants.
+<span class="lineno">  201 </span>-- | Recognize 'TypedTerm's that are named variables.
 <span class="lineno">  202 </span>asTypedExtCns :: TypedTerm -&gt; Maybe TypedExtCns
 <span class="lineno">  203 </span><span class="decl"><span class="istickedoff">asTypedExtCns (TypedTerm tp t) =</span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">do cty &lt;- ttIsMono tp</span>
-<span class="lineno">  205 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- asExtCns t</span>
+<span class="lineno">  205 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- asVariable t</span>
 <span class="lineno">  206 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedExtCns cty ec</span></span>
 <span class="lineno">  207 </span>
 <span class="lineno">  208 </span>-- | Make a 'TypedTerm' from a 'TypedExtCns'.
 <span class="lineno">  209 </span>typedTermOfExtCns :: SharedContext -&gt; TypedExtCns -&gt; IO TypedTerm
 <span class="lineno">  210 </span><span class="decl"><span class="istickedoff">typedTermOfExtCns sc (TypedExtCns cty ec) =</span>
-<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">TypedTerm (TypedTermSchema (C.tMono cty)) &lt;$&gt; scExtCns sc ec</span></span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">TypedTerm (TypedTermSchema (C.tMono cty)) &lt;$&gt; scVariable sc ec</span></span>
 <span class="lineno">  212 </span>
 <span class="lineno">  213 </span>abstractTypedExts :: SharedContext -&gt; [TypedExtCns] -&gt; TypedTerm -&gt; IO TypedTerm
 <span class="lineno">  214 </span><span class="decl"><span class="istickedoff">abstractTypedExts sc tecs (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =</span>

@@ -460,7 +460,7 @@ span.spaces    { background: white }
 <span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue _ args   -&gt;</span>
 <span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">ppArrayValue &lt;$&gt; mapM (ppTerm' PrecTerm) (V.toList args)</span>
 <span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt; <span class="nottickedoff">return $ viaShow s</span></span>
-<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">ExtCns cns -&gt; annotate <span class="nottickedoff">PPS.ExtCnsStyle</span> &lt;$&gt; ppExtCns cns</span></span>
+<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; annotate <span class="nottickedoff">PPS.ExtCnsStyle</span> &lt;$&gt; ppExtCns ec</span></span>
 <span class="lineno">  445 </span>
 <span class="lineno">  446 </span>-- | Pretty-print a big endian list of bit values as a hexadecimal number
 <span class="lineno">  447 </span>ppBitsToHex :: [Bool] -&gt; String
@@ -584,7 +584,7 @@ span.spaces    { background: white }
 <span class="lineno">  565 </span><span class="spaces">    </span><span class="istickedoff">FTermF NatLit{} -&gt; False</span>
 <span class="lineno">  566 </span><span class="spaces">    </span><span class="istickedoff">FTermF (ArrayValue _ v) | <span class="nottickedoff">V.length v == 0</span> -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">FTermF StringLit{} -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">FTermF ExtCns{} -&gt; False</span>
+<span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">FTermF Variable{} -&gt; False</span>
 <span class="lineno">  569 </span><span class="spaces">    </span><span class="istickedoff">Constant{} -&gt; False</span>
 <span class="lineno">  570 </span><span class="spaces">    </span><span class="istickedoff">LocalVar{} -&gt; False</span>
 <span class="lineno">  571 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; True</span></span>

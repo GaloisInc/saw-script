@@ -1352,7 +1352,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1333 </span><span class="spaces">                       </span><span class="istickedoff">Universal -&gt; scEqTrue sc t0</span>
 <span class="lineno"> 1334 </span><span class="spaces">                       </span><span class="istickedoff">Existential -&gt; scEqTrue sc =&lt;&lt; scNot sc t0</span>
 <span class="lineno"> 1335 </span><span class="spaces">               </span><span class="istickedoff">toPi (ec : ecs) t1 =</span>
-<span class="lineno"> 1336 </span><span class="spaces">                 </span><span class="istickedoff">do t2 &lt;- scApply sc t1 =&lt;&lt; scExtCns sc ec</span>
+<span class="lineno"> 1336 </span><span class="spaces">                 </span><span class="istickedoff">do t2 &lt;- scApply sc t1 =&lt;&lt; scVariable sc ec</span>
 <span class="lineno"> 1337 </span><span class="spaces">                    </span><span class="istickedoff">t3 &lt;- toPi ecs t2</span>
 <span class="lineno"> 1338 </span><span class="spaces">                    </span><span class="istickedoff">scGeneralizeExts sc [ec] t3</span>
 <span class="lineno"> 1339 </span><span class="spaces">           </span><span class="istickedoff">Prop &lt;$&gt; toPi argTs t</span></span>
@@ -1784,7 +1784,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1765 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, showTerm ty'</span></span>
 <span class="lineno"> 1766 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">, showTerm ty</span></span>
 <span class="lineno"> 1767 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1768 </span><span class="spaces">                   </span><span class="istickedoff">x' &lt;- scExtCns sc x</span>
+<span class="lineno"> 1768 </span><span class="spaces">                   </span><span class="istickedoff">x' &lt;- scVariable sc x</span>
 <span class="lineno"> 1769 </span><span class="spaces">                   </span><span class="istickedoff">body' &lt;- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x') body</span>
 <span class="lineno"> 1770 </span><span class="spaces">                   </span><span class="istickedoff">check <span class="nottickedoff">nenv</span> e' (mkSqt (Prop body'))</span></span>
 <span class="lineno"> 1771 </span>
@@ -2098,7 +2098,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2079 </span><span class="spaces">             </span><span class="istickedoff">let tp = ecType ec</span>
 <span class="lineno"> 2080 </span><span class="spaces">             </span><span class="istickedoff">let name = if <span class="tickonlyfalse">Text.null usernm</span> then <span class="nottickedoff">nm</span> else usernm</span>
 <span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">xv &lt;- liftIO $ scFreshEC sc name tp</span>
-<span class="lineno"> 2082 </span><span class="spaces">             </span><span class="istickedoff">x  &lt;- liftIO $ scExtCns sc xv</span>
+<span class="lineno"> 2082 </span><span class="spaces">             </span><span class="istickedoff">x  &lt;- liftIO $ scVariable sc xv</span>
 <span class="lineno"> 2083 </span><span class="spaces">             </span><span class="istickedoff">tt &lt;- liftIO $ mkTypedTerm sc x</span>
 <span class="lineno"> 2084 </span><span class="spaces">             </span><span class="istickedoff">body' &lt;- liftIO $ scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) x) body</span>
 <span class="lineno"> 2085 </span><span class="spaces">             </span><span class="istickedoff">let goal' = goal { goalSequent = mkSqt (Prop body') }</span>

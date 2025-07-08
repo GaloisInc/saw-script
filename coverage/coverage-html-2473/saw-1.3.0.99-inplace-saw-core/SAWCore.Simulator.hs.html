@@ -281,7 +281,7 @@ span.spaces    { background: white }
 <span class="lineno">  262 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  263 </span><span class="spaces">        </span><span class="istickedoff">StringLit s         -&gt; return $ VString s</span>
 <span class="lineno">  264 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  265 </span><span class="spaces">        </span><span class="istickedoff">ExtCns ec           -&gt; do ec' &lt;- traverse evalType ec</span>
+<span class="lineno">  265 </span><span class="spaces">        </span><span class="istickedoff">Variable ec         -&gt; do ec' &lt;- traverse evalType ec</span>
 <span class="lineno">  266 </span><span class="spaces">                                  </span><span class="istickedoff">simExtCns cfg tf ec'</span>
 <span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">evalType :: Term -&gt; EvalM l (TValue l)</span>

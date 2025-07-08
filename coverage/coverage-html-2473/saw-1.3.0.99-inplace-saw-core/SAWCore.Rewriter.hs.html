@@ -186,7 +186,7 @@ span.spaces    { background: white }
 <span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">match :: Term -&gt; Term -&gt; IntMap Term -&gt; Maybe (IntMap Term)</span>
 <span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">match x y m =</span>
 <span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">case (unwrapTermF x, unwrapTermF y) of</span>
-<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">(FTermF (ExtCns (ecVarIndex -&gt; i)), _) | IntSet.member i ixs -&gt;</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">(FTermF (Variable (ecVarIndex -&gt; i)), _) | IntSet.member i ixs -&gt;</span>
 <span class="lineno">  171 </span><span class="spaces">            </span><span class="istickedoff">case my' of</span>
 <span class="lineno">  172 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; Just m'</span>
 <span class="lineno">  173 </span><span class="spaces">              </span><span class="istickedoff">Just y' -&gt; <span class="nottickedoff">if alphaEquiv y y' then Just m' else Nothing</span></span>
@@ -279,7 +279,7 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces">      </span><span class="istickedoff">where</span>
 <span class="lineno">  261 </span><span class="spaces">        </span><span class="istickedoff">go js x =</span>
 <span class="lineno">  262 </span><span class="spaces">          </span><span class="istickedoff">case unwrapTermF x of</span>
-<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">FTermF (ExtCns ec)</span>
+<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">FTermF (Variable ec)</span>
 <span class="lineno">  264 </span><span class="spaces">              </span><span class="istickedoff">| IntSet.member (ecVarIndex ec) ixs -&gt; Just (ecVarIndex ec, js)</span>
 <span class="lineno">  265 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>  -&gt; Nothing</span>
 <span class="lineno">  266 </span><span class="spaces">            </span><span class="istickedoff">App t (unwrapTermF -&gt; LocalVar j)</span>
@@ -313,7 +313,7 @@ span.spaces    { background: white }
 <span class="lineno">  294 </span><span class="spaces">             </span><span class="istickedoff">guard (fvy `unionBitSets` fvj == fvj)</span>
 <span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let fixVar t (nm, ty) =</span>
 <span class="lineno">  296 </span><span class="spaces">                   </span><span class="istickedoff">do ec &lt;- scFreshEC sc nm ty</span>
-<span class="lineno">  297 </span><span class="spaces">                      </span><span class="istickedoff">v &lt;- scExtCns sc ec</span>
+<span class="lineno">  297 </span><span class="spaces">                      </span><span class="istickedoff">v &lt;- scVariable sc ec</span>
 <span class="lineno">  298 </span><span class="spaces">                      </span><span class="istickedoff">t' &lt;- instantiateVar sc 0 <span class="nottickedoff">v</span> t</span>
 <span class="lineno">  299 </span><span class="spaces">                      </span><span class="istickedoff">return (t', <span class="nottickedoff">ec</span>)</span>
 <span class="lineno">  300 </span><span class="spaces">             </span><span class="istickedoff">let fixVars t [] = return (t, <span class="nottickedoff">[]</span>)</span>
@@ -489,7 +489,7 @@ span.spaces    { background: white }
 <span class="lineno">  470 </span><span class="spaces">  </span><span class="istickedoff">scAsLambda sc rhs &gt;&gt;= \case</span>
 <span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">Just (ec, body) -&gt;</span>
 <span class="lineno">  472 </span><span class="spaces">    </span><span class="istickedoff">do let ctxt' = ctxt ++ [ec]</span>
-<span class="lineno">  473 </span><span class="spaces">       </span><span class="istickedoff">var0 &lt;- scExtCns sc ec</span>
+<span class="lineno">  473 </span><span class="spaces">       </span><span class="istickedoff">var0 &lt;- scVariable sc ec</span>
 <span class="lineno">  474 </span><span class="spaces">       </span><span class="istickedoff">lhs' &lt;- scApply sc lhs var0</span>
 <span class="lineno">  475 </span><span class="spaces">       </span><span class="istickedoff">pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]</span>
 <span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt;</span>
@@ -500,7 +500,7 @@ span.spaces    { background: white }
 <span class="lineno">  481 </span><span class="spaces">                  </span><span class="istickedoff">return (mkRewriteRule ctxt l x shallow ann)</span>
 <span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff">Just &lt;$&gt; traverse mkRule (Map.assocs m)</span>
 <span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">(R.asApplyAll -&gt;</span>
-<span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">(R.asRecursorApp -&gt; Just (rec, crec, _ixs, R.asExtCns -&gt; Just ec), more))</span>
+<span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">(R.asRecursorApp -&gt; Just (rec, crec, _ixs, R.asVariable -&gt; Just ec), more))</span>
 <span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">| (ctxt1, _ : ctxt2) &lt;- break (== ec) ctxt -&gt;</span>
 <span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">do -- ti is the type of the value being scrutinized</span>
 <span class="lineno">  487 </span><span class="spaces">         </span><span class="istickedoff">ti &lt;- scWhnf sc (ecType ec)</span>
@@ -511,7 +511,7 @@ span.spaces    { background: white }
 <span class="lineno">  492 </span><span class="spaces">                  </span><span class="istickedoff">ctorT &lt;- piAppType (ctorType ctor) params1</span>
 <span class="lineno">  493 </span><span class="spaces">                  </span><span class="istickedoff">argECs &lt;- fst &lt;$&gt; scAsPiList sc ctorT</span>
 <span class="lineno">  494 </span><span class="spaces">                  </span><span class="istickedoff">-- Build a fully-applied constructor @c@.</span>
-<span class="lineno">  495 </span><span class="spaces">                  </span><span class="istickedoff">args &lt;- traverse (scExtCns sc) argECs</span>
+<span class="lineno">  495 </span><span class="spaces">                  </span><span class="istickedoff">args &lt;- traverse (scVariable sc) argECs</span>
 <span class="lineno">  496 </span><span class="spaces">                  </span><span class="istickedoff">c &lt;- scCtorAppParams sc (ctorName ctor) params1 args</span>
 <span class="lineno">  497 </span><span class="spaces">                  </span><span class="istickedoff">-- Define function to substitute the constructor @c@</span>
 <span class="lineno">  498 </span><span class="spaces">                  </span><span class="istickedoff">-- in for the old local variable @ec@.</span>
@@ -862,7 +862,7 @@ span.spaces    { background: white }
 <span class="lineno">  843 </span><span class="spaces">          </span><span class="nottickedoff">NatLit{}         -&gt; return ftf -- doesn't matter</span>
 <span class="lineno">  844 </span><span class="spaces">          </span><span class="nottickedoff">ArrayValue t es  -&gt; ArrayValue t &lt;$&gt; traverse rewriteAll es</span>
 <span class="lineno">  845 </span><span class="spaces">          </span><span class="nottickedoff">StringLit{}      -&gt; return ftf</span>
-<span class="lineno">  846 </span><span class="spaces">          </span><span class="nottickedoff">ExtCns{}         -&gt; return ftf</span>
+<span class="lineno">  846 </span><span class="spaces">          </span><span class="nottickedoff">Variable{}       -&gt; return ftf</span>
 <span class="lineno">  847 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  848 </span><span class="spaces">    </span><span class="nottickedoff">rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =&gt;</span>
 <span class="lineno">  849 </span><span class="spaces">                  </span><span class="nottickedoff">Term -&gt; IO Term</span>

@@ -94,7 +94,7 @@ span.spaces    { background: white }
 <span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">-- variables, one for each parameter</span>
 <span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">isVarList :: [ExtCns Term] -&gt; [Term] -&gt; Bool</span>
 <span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ [] = True</span>
-<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">isVarList (p : ps) ((asExtCns -&gt; Just ec) : ts) =</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="istickedoff">isVarList (p : ps) ((asVariable -&gt; Just ec) : ts) =</span>
 <span class="lineno">   79 </span><span class="spaces">      </span><span class="istickedoff">ec == p &amp;&amp; isVarList ps ts</span>
 <span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">isVarList _ _ = <span class="nottickedoff">False</span></span>
 <span class="lineno">   81 </span><span class="spaces"></span><span class="istickedoff">asCtorDTApp _ _ _ _ = Nothing</span></span>

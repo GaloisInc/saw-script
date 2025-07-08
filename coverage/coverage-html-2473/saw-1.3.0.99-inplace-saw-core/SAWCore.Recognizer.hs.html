@@ -71,7 +71,7 @@ span.spaces    { background: white }
 <span class="lineno">   52 </span>  , asPiList
 <span class="lineno">   53 </span>  , asLocalVar
 <span class="lineno">   54 </span>  , asConstant
-<span class="lineno">   55 </span>  , asExtCns
+<span class="lineno">   55 </span>  , asVariable
 <span class="lineno">   56 </span>  , asSort
 <span class="lineno">   57 </span>  , asSortWithFlags
 <span class="lineno">   58 </span>    -- * Prelude recognizers.
@@ -363,12 +363,12 @@ span.spaces    { background: white }
 <span class="lineno">  344 </span><span class="decl"><span class="istickedoff">asConstant (unwrapTermF -&gt; Constant nm) = pure nm</span>
 <span class="lineno">  345 </span><span class="spaces"></span><span class="istickedoff">asConstant _ = Nothing</span></span>
 <span class="lineno">  346 </span>
-<span class="lineno">  347 </span>asExtCns :: Recognizer Term (ExtCns Term)
-<span class="lineno">  348 </span><span class="decl"><span class="istickedoff">asExtCns t = do</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">ExtCns ec -&gt; return ec</span>
-<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">_         -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  347 </span>asVariable :: Recognizer Term (ExtCns Term)
+<span class="lineno">  348 </span><span class="decl"><span class="istickedoff">asVariable t =</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">do ftf &lt;- asFTermF t</span>
+<span class="lineno">  350 </span><span class="spaces">     </span><span class="istickedoff">case ftf of</span>
+<span class="lineno">  351 </span><span class="spaces">       </span><span class="istickedoff">Variable ec -&gt; pure ec</span>
+<span class="lineno">  352 </span><span class="spaces">       </span><span class="istickedoff">_           -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  353 </span>
 <span class="lineno">  354 </span>asSort :: Recognizer Term Sort
 <span class="lineno">  355 </span><span class="decl"><span class="istickedoff">asSort t = do</span>

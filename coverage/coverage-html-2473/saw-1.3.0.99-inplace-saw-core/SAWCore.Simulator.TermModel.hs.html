@@ -148,7 +148,7 @@ span.spaces    { background: white }
 <span class="lineno">  129 </span><span class="spaces">         </span><span class="nottickedoff">ty' &lt;- readBackTValue sc cfg ty</span>
 <span class="lineno">  130 </span><span class="spaces">         </span><span class="nottickedoff">newec &lt;- scFreshEC sc (toShortName (ecName ec)) ty'</span>
 <span class="lineno">  131 </span><span class="spaces">         </span><span class="nottickedoff">modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))</span>
-<span class="lineno">  132 </span><span class="spaces">         </span><span class="nottickedoff">reflectTerm sc cfg ty =&lt;&lt; scFlatTermF sc (ExtCns newec)</span></span>
+<span class="lineno">  132 </span><span class="spaces">         </span><span class="nottickedoff">reflectTerm sc cfg ty =&lt;&lt; scVariable sc newec</span></span>
 <span class="lineno">  133 </span>
 <span class="lineno">  134 </span>normalizeSharedTerm ::
 <span class="lineno">  135 </span>  SharedContext -&gt;
@@ -314,7 +314,7 @@ span.spaces    { background: white }
 <span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">do t' &lt;- loop t</span>
 <span class="lineno">  296 </span><span class="spaces">       </span><span class="istickedoff">ec &lt;- scFreshEC sc nm t'</span>
 <span class="lineno">  297 </span><span class="spaces">       </span><span class="istickedoff">?recordEC <span class="nottickedoff">ec</span></span>
-<span class="lineno">  298 </span><span class="spaces">       </span><span class="istickedoff">ecTm &lt;- scExtCns sc ec</span>
+<span class="lineno">  298 </span><span class="spaces">       </span><span class="istickedoff">ecTm &lt;- scVariable sc ec</span>
 <span class="lineno">  299 </span><span class="spaces">       </span><span class="istickedoff">ecVal &lt;- delay (reflectTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">cfg</span> t ecTm)</span>
 <span class="lineno">  300 </span><span class="spaces">       </span><span class="istickedoff">body &lt;- applyPiBody pibody ecVal</span>
 <span class="lineno">  301 </span><span class="spaces">       </span><span class="istickedoff">(ecs,body') &lt;- readBackPis body</span>
@@ -498,7 +498,7 @@ span.spaces    { background: white }
 <span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do t' &lt;- readBackTValue sc cfg tv</span></span>
 <span class="lineno">  480 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ec &lt;- scFreshEC sc nm t'</span></span>
 <span class="lineno">  481 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">?recordEC ec</span></span>
-<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ecTm &lt;- scExtCns sc ec</span></span>
+<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ecTm &lt;- scVariable sc ec</span></span>
 <span class="lineno">  483 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ecVal &lt;- delay (reflectTerm sc cfg tv ecTm)</span></span>
 <span class="lineno">  484 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">tbody &lt;- applyPiBody pibody ecVal</span></span>
 <span class="lineno">  485 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">body  &lt;- f ecVal</span></span>
@@ -890,7 +890,7 @@ span.spaces    { background: white }
 <span class="lineno">  871 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do bvty &lt;- scBitvector sc n</span></span>
 <span class="lineno">  872 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ec   &lt;- scFreshEC sc &quot;x&quot; bvty</span></span>
 <span class="lineno">  873 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">?recordEC ec</span></span>
-<span class="lineno">  874 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ecTm &lt;- scExtCns sc ec</span></span>
+<span class="lineno">  874 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ecTm &lt;- scVariable sc ec</span></span>
 <span class="lineno">  875 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">res  &lt;- f (Left (n,ecTm))</span></span>
 <span class="lineno">  876 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">case res of</span></span>
 <span class="lineno">  877 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- computed a constant boolean without consulting the variable, just return it</span></span>

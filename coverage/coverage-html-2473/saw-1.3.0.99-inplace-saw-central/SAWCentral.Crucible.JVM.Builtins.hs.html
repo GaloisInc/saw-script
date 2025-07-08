@@ -809,7 +809,7 @@ span.spaces    { background: white }
 <span class="lineno">  790 </span><span class="spaces">           </span><span class="istickedoff">[ (ecVarIndex ec, ec)</span>
 <span class="lineno">  791 </span><span class="spaces">           </span><span class="istickedoff">| tt &lt;- mspec ^. MS.csPreState . MS.csFreshVars</span>
 <span class="lineno">  792 </span><span class="spaces">           </span><span class="istickedoff">, let ec = tecExt tt ]</span>
-<span class="lineno">  793 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scExtCns sc) ecs0</span>
+<span class="lineno">  793 </span><span class="spaces">     </span><span class="istickedoff">terms0 &lt;- io $ traverse (scVariable sc) ecs0</span>
 <span class="lineno">  794 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  795 </span><span class="spaces">     </span><span class="istickedoff">let initialFree = Set.fromList (map <span class="nottickedoff">(ecVarIndex . tecExt)</span></span>
 <span class="lineno">  796 </span><span class="spaces">                                    </span><span class="istickedoff">(view (MS.csPostState . MS.csFreshVars) mspec))</span>

@@ -133,8 +133,8 @@ span.spaces    { background: white }
 <span class="lineno">  114 </span>
 <span class="lineno">  115 </span>-- | Convert a 'FunName' to an unshared term, for printing
 <span class="lineno">  116 </span>funNameTerm :: FunName -&gt; Term
-<span class="lineno">  117 </span><span class="decl"><span class="nottickedoff">funNameTerm (CallSName var) = Unshared $ FTermF $ ExtCns $ unMRVar var</span>
-<span class="lineno">  118 </span><span class="spaces"></span><span class="nottickedoff">funNameTerm (EVarFunName var) = Unshared $ FTermF $ ExtCns $ unMRVar var</span>
+<span class="lineno">  117 </span><span class="decl"><span class="nottickedoff">funNameTerm (CallSName var) = Unshared $ FTermF $ Variable $ unMRVar var</span>
+<span class="lineno">  118 </span><span class="spaces"></span><span class="nottickedoff">funNameTerm (EVarFunName var) = Unshared $ FTermF $ Variable $ unMRVar var</span>
 <span class="lineno">  119 </span><span class="spaces"></span><span class="nottickedoff">funNameTerm (GlobalName gdef []) = globalDefTerm gdef</span>
 <span class="lineno">  120 </span><span class="spaces"></span><span class="nottickedoff">funNameTerm (GlobalName gdef (TermProjLeft:projs)) =</span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">Unshared $ FTermF $ PairLeft $ funNameTerm (GlobalName gdef projs)</span>

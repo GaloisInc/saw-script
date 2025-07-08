@@ -72,7 +72,7 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span>  , asSort
 <span class="lineno">   54 </span>  , asAnyNatLit
 <span class="lineno">   55 </span>  , asAnyVecLit
-<span class="lineno">   56 </span>  , asExtCns
+<span class="lineno">   56 </span>  , asVariable
 <span class="lineno">   57 </span>  , asLocalVar
 <span class="lineno">   58 </span>    -- ** Prelude matchers
 <span class="lineno">   59 </span>  , asBoolType
@@ -298,9 +298,9 @@ span.spaces    { background: white }
 <span class="lineno">  279 </span>asAnyVecLit :: Matcher (Term, V.Vector Term)
 <span class="lineno">  280 </span><span class="decl"><span class="istickedoff">asAnyVecLit = asVar $ \t -&gt; do ArrayValue u xs &lt;- R.asFTermF t; return (<span class="nottickedoff">u</span>,xs)</span></span>
 <span class="lineno">  281 </span>
-<span class="lineno">  282 </span>-- | Match any external constant.
-<span class="lineno">  283 </span>asExtCns :: Matcher (ExtCns Term)
-<span class="lineno">  284 </span><span class="decl"><span class="nottickedoff">asExtCns = asVar $ \t -&gt; do ExtCns ec &lt;- R.asFTermF t; return ec</span></span>
+<span class="lineno">  282 </span>-- | Match any named variable.
+<span class="lineno">  283 </span>asVariable :: Matcher (ExtCns Term)
+<span class="lineno">  284 </span><span class="decl"><span class="nottickedoff">asVariable = asVar R.asVariable</span></span>
 <span class="lineno">  285 </span>
 <span class="lineno">  286 </span>-- | Returns index of local var if any.
 <span class="lineno">  287 </span>asLocalVar :: Matcher DeBruijnIndex

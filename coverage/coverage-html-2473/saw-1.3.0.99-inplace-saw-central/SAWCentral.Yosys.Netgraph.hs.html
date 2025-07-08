@@ -210,7 +210,7 @@ span.spaces    { background: white }
 <span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">inputRecordType &lt;- cryptolRecordType sc inputFields</span>
 <span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">outputRecordType &lt;- cryptolRecordType sc outputFields</span>
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">inputRecordEC &lt;- liftIO $ SC.scFreshEC sc &quot;input&quot; inputRecordType</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">inputRecord &lt;- liftIO $ SC.scExtCns sc inputRecordEC</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">inputRecord &lt;- liftIO $ SC.scVariable sc inputRecordEC</span>
 <span class="lineno">  195 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">derivedInputs &lt;- forM (Map.assocs inputPorts) $ \(nm, inp) -&gt; do</span>
 <span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm</span>

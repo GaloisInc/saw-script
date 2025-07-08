@@ -571,7 +571,7 @@ span.spaces    { background: white }
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedExtCns _cty ec) =</span>
 <span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do ec' &lt;- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)</span>
-<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scExtCns sc ec'</span>
+<span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc ec'</span>
 <span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">return (ecVarIndex ec, new)</span></span>
 <span class="lineno">  557 </span>
 <span class="lineno">  558 </span>-- | An override packaged together with its preconditions, labeled with some
@@ -742,7 +742,7 @@ span.spaces    { background: white }
 <span class="lineno">  723 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
 <span class="lineno">  724 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
 <span class="lineno">  725 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
-<span class="lineno">  726 </span><span class="spaces">       </span><span class="istickedoff">FTermF (ExtCns ec)</span>
+<span class="lineno">  726 </span><span class="spaces">       </span><span class="istickedoff">FTermF (Variable ec)</span>
 <span class="lineno">  727 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (ecVarIndex ec) free -&gt;</span>
 <span class="lineno">  728 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (ecVarIndex ec) real</span>
 <span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>

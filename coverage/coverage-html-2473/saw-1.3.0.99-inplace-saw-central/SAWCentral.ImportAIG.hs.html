@@ -142,7 +142,7 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span>-- | Create vector for each input literal from expected types.
 <span class="lineno">  124 </span>bitblastVarsAsInputLits :: SharedContext -&gt; [ExtCns Term] -&gt; ExceptT String IO (V.Vector Term)
 <span class="lineno">  125 </span><span class="decl"><span class="istickedoff">bitblastVarsAsInputLits sc args = do</span>
-<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">inputs &lt;- liftIO $ mapM (scExtCns sc) args</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">inputs &lt;- liftIO $ mapM (scVariable sc) args</span>
 <span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">fmap snd $ runTypeParser V.empty $ do</span>
 <span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">zipWithM_ (bitblastSharedTerm sc) inputs (map ecType args)</span></span>
 <span class="lineno">  129 </span>

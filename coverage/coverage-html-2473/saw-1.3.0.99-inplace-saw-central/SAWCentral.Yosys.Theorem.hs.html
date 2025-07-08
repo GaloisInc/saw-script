@@ -82,7 +82,7 @@ span.spaces    { background: white }
 <span class="lineno">   63 </span>  m SC.TypedTerm
 <span class="lineno">   64 </span><span class="decl"><span class="istickedoff">theoremProp sc thm = do</span>
 <span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">ec &lt;- liftIO $ SC.scFreshEC sc &quot;r&quot; $ thm ^. theoremInputType</span>
-<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">r &lt;- liftIO $ SC.scExtCns sc ec</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">r &lt;- liftIO $ SC.scVariable sc ec</span>
 <span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">modr &lt;- liftIO $ SC.scApply sc (thm ^. theoremModule) r</span>
 <span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">bodyr &lt;- liftIO $ SC.scApply sc (thm ^. theoremBody) r</span>
 <span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">equality &lt;- liftIO $ eqBvRecords sc (thm ^. theoremOutputCryptolType) modr bodyr</span>
@@ -107,7 +107,7 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span>  m SC.Term
 <span class="lineno">   89 </span><span class="decl"><span class="istickedoff">theoremReplacement sc thm = do</span>
 <span class="lineno">   90 </span><span class="spaces">  </span><span class="istickedoff">ec &lt;- liftIO $ SC.scFreshEC sc &quot;r&quot; $ thm ^. theoremInputType</span>
-<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">r &lt;- liftIO $ SC.scExtCns sc ec</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="istickedoff">r &lt;- liftIO $ SC.scVariable sc ec</span>
 <span class="lineno">   92 </span><span class="spaces">  </span><span class="istickedoff">body &lt;- case thm ^. theoremPrecond of</span>
 <span class="lineno">   93 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; liftIO $ SC.scApply sc (thm ^. theoremBody) r</span>
 <span class="lineno">   94 </span><span class="spaces">    </span><span class="istickedoff">Just pc -&gt; do</span>

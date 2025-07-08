@@ -193,15 +193,15 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">            </span><span class="istickedoff">ArrayValue e v      -&gt; pure $ unwords (&quot;Array&quot; : show e :</span>
 <span class="lineno">  175 </span><span class="spaces">                                            </span><span class="istickedoff">map show (V.toList v))</span>
 <span class="lineno">  176 </span><span class="spaces">            </span><span class="istickedoff">StringLit s         -&gt; pure $ unwords [&quot;String&quot;, show s]</span>
-<span class="lineno">  177 </span><span class="spaces">            </span><span class="istickedoff">ExtCns ec -&gt;</span>
+<span class="lineno">  177 </span><span class="spaces">            </span><span class="istickedoff">Variable ec -&gt;</span>
 <span class="lineno">  178 </span><span class="spaces">               </span><span class="istickedoff">do stashEC ec</span>
-<span class="lineno">  179 </span><span class="spaces">                  </span><span class="istickedoff">pure $ unwords [&quot;ExtCns&quot;,show (ecVarIndex ec), show (ecType ec)]</span></span>
+<span class="lineno">  179 </span><span class="spaces">                  </span><span class="istickedoff">pure $ unwords [&quot;Variable&quot;,show (ecVarIndex ec), show (ecType ec)]</span></span>
 <span class="lineno">  180 </span>
 <span class="lineno">  181 </span>
 <span class="lineno">  182 </span>-- | During parsing, we maintain two maps used for renumbering: The
 <span class="lineno">  183 </span>-- first is for the 'Int' values that appear in the external core
 <span class="lineno">  184 </span>-- file, and the second is for the 'VarIndex' values that appear
-<span class="lineno">  185 </span>-- inside 'Constant' and 'ExtCns' constructors. We do not reuse any
+<span class="lineno">  185 </span>-- inside 'Constant' and 'Variable' constructors. We do not reuse any
 <span class="lineno">  186 </span>-- such numbers that appear in the external file, but generate fresh
 <span class="lineno">  187 </span>-- ones that are valid in the current 'SharedContext'.
 <span class="lineno">  188 </span>type ReadM = State.StateT (Map Int Term, Map VarIndex NameInfo, Map VarIndex VarIndex) IO
@@ -362,7 +362,7 @@ span.spaces    { background: white }
 <span class="lineno">  343 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Nat&quot;, n]          -&gt; FTermF &lt;$&gt; (NatLit &lt;$&gt; readM n)</span>
 <span class="lineno">  344 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Array&quot; : e : es)  -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (ArrayValue &lt;$&gt; readIdx e &lt;*&gt; (V.fromList &lt;$&gt; traverse readIdx es))</span></span>
 <span class="lineno">  345 </span><span class="spaces">        </span><span class="istickedoff">(&quot;String&quot; : ts)     -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (StringLit &lt;$&gt; (readM (unwords ts)))</span></span>
-<span class="lineno">  346 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ExtCns&quot;, i, t] -&gt; FTermF &lt;$&gt; (ExtCns &lt;$&gt; readEC i t)</span>
+<span class="lineno">  346 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Variable&quot;, i, t]  -&gt; FTermF &lt;$&gt; (Variable &lt;$&gt; readEC i t)</span>
 <span class="lineno">  347 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;Parse error: &quot; ++ unwords tokens</span></span></span>
 
 </pre>

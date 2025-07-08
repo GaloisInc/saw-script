@@ -503,7 +503,7 @@ span.spaces    { background: white }
 <span class="lineno">  484 </span>-- with special cases for primitives and constants to avoid re-type-checking
 <span class="lineno">  485 </span>-- their types as we are assuming they were type-checked when they were created
 <span class="lineno">  486 </span>instance TypeInfer (FlatTermF Term) where
-<span class="lineno">  487 </span>  <span class="decl"><span class="istickedoff">typeInfer (ExtCns ec) = return $ ecType ec</span>
+<span class="lineno">  487 </span>  <span class="decl"><span class="istickedoff">typeInfer (Variable ec) = return $ ecType ec</span>
 <span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">typeInfer t = typeInfer =&lt;&lt; mapM typeInferComplete t</span></span>
 <span class="lineno">  489 </span>  <span class="decl"><span class="nottickedoff">typeInferComplete ftf =</span>
 <span class="lineno">  490 </span><span class="spaces">    </span><span class="nottickedoff">SCTypedTerm &lt;$&gt; liftTCM scFlatTermF ftf</span>
@@ -591,7 +591,7 @@ span.spaces    { background: white }
 <span class="lineno">  572 </span><span class="spaces">       </span><span class="istickedoff">forM_ vs $ \v_elem -&gt; checkSubtype v_elem tp'</span>
 <span class="lineno">  573 </span><span class="spaces">       </span><span class="istickedoff">liftTCM scVecType n tp'</span>
 <span class="lineno">  574 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (StringLit{}) = liftTCM scStringType</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (ExtCns ec) =</span>
+<span class="lineno">  575 </span><span class="spaces">  </span><span class="istickedoff">typeInfer (Variable ec) =</span>
 <span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">-- FIXME: should we check that the type of ecType is a sort?</span>
 <span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">typeCheckWHNF $ typedVal $ ecType ec</span></span></span>
 <span class="lineno">  578 </span>

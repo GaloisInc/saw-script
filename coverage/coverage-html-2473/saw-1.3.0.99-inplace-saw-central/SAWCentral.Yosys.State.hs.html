@@ -150,7 +150,7 @@ span.spaces    { background: white }
 <span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">-- convert module into term</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">domainRecordEC &lt;- liftIO $ SC.scFreshEC sc &quot;input&quot; domainRecordType</span>
-<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">domainRecord &lt;- liftIO $ SC.scExtCns sc domainRecordEC</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">domainRecord &lt;- liftIO $ SC.scVariable sc domainRecordEC</span>
 <span class="lineno">  135 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  136 </span><span class="spaces">  </span><span class="istickedoff">derivedInputs &lt;- forM (Map.assocs inputPorts) $ \(nm, inp) -&gt; do</span>
 <span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ cryptolRecordSelect sc domainFields domainRecord nm</span>
@@ -234,7 +234,7 @@ span.spaces    { background: white }
 <span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">extendedInputType &lt;- fieldsToType sc extendedInputFields</span>
 <span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">extendedInputCryptolType &lt;- fieldsToCryptolType extendedInputFields</span>
 <span class="lineno">  217 </span><span class="spaces">  </span><span class="istickedoff">extendedInputRecordEC &lt;- liftIO $ SC.scFreshEC sc &quot;input&quot; extendedInputType</span>
-<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">extendedInputRecord &lt;- liftIO $ SC.scExtCns sc extendedInputRecordEC</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">extendedInputRecord &lt;- liftIO $ SC.scVariable sc extendedInputRecordEC</span>
 <span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">extendedOutputCryptolType &lt;- fieldsToCryptolType extendedOutputFields</span>
 <span class="lineno">  220 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">allInputs &lt;- fmap Map.fromList . forM (Map.keys extendedInputFields) $ \nm -&gt; do</span>
@@ -282,7 +282,7 @@ span.spaces    { background: white }
 <span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">stateType &lt;- fieldsToType <span class="nottickedoff">sc</span> $ s ^. yosysSequentialStateFields</span>
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">initialStateEC &lt;- liftIO $ SC.scFreshEC sc &quot;initial_state&quot; stateType</span>
-<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">initialState &lt;- liftIO $ SC.scExtCns sc initialStateEC</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">initialState &lt;- liftIO $ SC.scVariable sc initialStateEC</span>
 <span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">(_, outputs) &lt;- foldM (\acc i -&gt; compose1 i acc) (initialState, Map.empty) [0..n]</span>
 <span class="lineno">  268 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">outputRecord &lt;- cryptolRecord <span class="nottickedoff">sc</span> outputs</span>

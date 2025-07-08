@@ -323,7 +323,7 @@ span.spaces    { background: white }
 <span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">where -- | Create a new global variable of the given name and type</span>
 <span class="lineno">  305 </span><span class="spaces">        </span><span class="nottickedoff">instUVar :: LocalName -&gt; Term -&gt; MRM t Term</span>
 <span class="lineno">  306 </span><span class="spaces">        </span><span class="nottickedoff">instUVar nm =</span>
-<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">liftSC1 scWhnf &gt;=&gt; liftSC2 scFreshEC nm &gt;=&gt; liftSC1 scExtCns</span></span>
+<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">liftSC1 scWhnf &gt;=&gt; liftSC2 scFreshEC nm &gt;=&gt; liftSC1 scVariable</span></span>
 <span class="lineno">  308 </span>
 <span class="lineno">  309 </span>
 <span class="lineno">  310 </span>----------------------------------------------------------------------

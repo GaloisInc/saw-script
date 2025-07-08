@@ -731,7 +731,7 @@ span.spaces    { background: white }
 <span class="lineno">  712 </span><span class="spaces">               </span><span class="nottickedoff">&amp;&amp; not (List.isPrefixOf &quot;calign_amount&quot; $ show $ W4.printSymExpr variable))</span>
 <span class="lineno">  713 </span><span class="spaces">             </span><span class="nottickedoff">uninterpreted_constants</span>
 <span class="lineno">  714 </span><span class="spaces">       </span><span class="nottickedoff">body_tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants</span>
-<span class="lineno">  715 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
+<span class="lineno">  715 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
 <span class="lineno">  716 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  717 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  718 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry</span>
@@ -811,7 +811,7 @@ span.spaces    { background: white }
 <span class="lineno">  792 </span><span class="spaces">               </span><span class="nottickedoff">&amp;&amp; not (List.isPrefixOf &quot;calign_amount&quot; $ show $ W4.printSymExpr variable))</span>
 <span class="lineno">  793 </span><span class="spaces">             </span><span class="nottickedoff">uninterpreted_constants</span>
 <span class="lineno">  794 </span><span class="spaces">       </span><span class="nottickedoff">tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants</span>
-<span class="lineno">  795 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms</span>
+<span class="lineno">  795 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet tms</span>
 <span class="lineno">  796 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  797 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry</span>
 <span class="lineno">  798 </span><span class="spaces">       </span><span class="nottickedoff">arguments_tuple &lt;- scTuple sc arguments</span>
@@ -894,7 +894,7 @@ span.spaces    { background: white }
 <span class="lineno">  875 </span><span class="spaces">             </span><span class="nottickedoff">)</span>
 <span class="lineno">  876 </span><span class="spaces">             </span><span class="nottickedoff">implicit_params</span>
 <span class="lineno">  877 </span><span class="spaces">       </span><span class="nottickedoff">body_tms &lt;- mapM (viewSome $ toSC sym sawst) filtered_implicit_params</span>
-<span class="lineno">  878 </span><span class="spaces">       </span><span class="nottickedoff">implicit_params' &lt;- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
+<span class="lineno">  878 </span><span class="spaces">       </span><span class="nottickedoff">implicit_params' &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms</span>
 <span class="lineno">  879 </span><span class="spaces">       </span><span class="nottickedoff">initial_exprs &lt;-</span>
 <span class="lineno">  880 </span><span class="spaces">         </span><span class="nottickedoff">forM subst_pairs $</span>
 <span class="lineno">  881 </span><span class="spaces">           </span><span class="nottickedoff">\ (MapF.Pair _var (SimpleInvariant.InvariantEntry initVal _current)) -&gt;</span>
@@ -1520,7 +1520,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">]</span>
 <span class="lineno"> 1502 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars</span>
 <span class="lineno"> 1503 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ traverse (scExtCns sc) initialECs</span>
+<span class="lineno"> 1504 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ traverse (scVariable sc) initialECs</span>
 <span class="lineno"> 1505 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1506 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftIO</span>
 <span class="lineno"> 1507 </span><span class="spaces">    </span><span class="istickedoff">. O.runOverrideMatcher sym globals <span class="nottickedoff">env</span> initialTerms initialFree <span class="nottickedoff">(ms ^. MS.csLoc)</span></span>

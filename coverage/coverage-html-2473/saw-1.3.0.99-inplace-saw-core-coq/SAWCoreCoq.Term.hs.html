@@ -489,7 +489,7 @@ span.spaces    { background: white }
 <span class="lineno">  470 </span><span class="spaces">      </span><span class="nottickedoff">return $ Coq.List elems</span>
 <span class="lineno">  471 </span><span class="spaces">    </span><span class="nottickedoff">StringLit s -&gt; pure (Coq.Scope (Coq.StringLit (Text.unpack s)) &quot;string&quot;)</span>
 <span class="lineno">  472 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  473 </span><span class="spaces">    </span><span class="nottickedoff">ExtCns ec -&gt;</span>
+<span class="lineno">  473 </span><span class="spaces">    </span><span class="nottickedoff">Variable ec -&gt;</span>
 <span class="lineno">  474 </span><span class="spaces">      </span><span class="nottickedoff">do env &lt;- view namedEnvironment &lt;$&gt; askTR</span>
 <span class="lineno">  475 </span><span class="spaces">         </span><span class="nottickedoff">let nm = Name (ecVarIndex ec) (ecName ec)</span>
 <span class="lineno">  476 </span><span class="spaces">         </span><span class="nottickedoff">case Map.lookup nm env of</span>
