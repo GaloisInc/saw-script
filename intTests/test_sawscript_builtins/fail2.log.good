@@ -1,5 +1,6 @@
  Loading file "fail2.saw"
  Stack trace:
+"f" (fail2.saw:5:1-5:2)
 "fail" (fail2.saw:4:17-4:21)
 requested failure
 

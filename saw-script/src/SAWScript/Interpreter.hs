@@ -425,10 +425,8 @@ withStackTraceFrame str val =
             withStackTraceFrame str `fmap` doProofScript m
       in
       VProofScript m'
-    VDo _pos _env _stmts ->
-      -- Blah. Let's just ignore it for now... XXX.
-      -- (but with luck we'll be able to throw this code out before anyone cares)
-      val
+    VDo pos _ env stmts ->
+      VDo pos (Just str) env stmts
     VBindOnce v1 v2 ->
       let v1' = withStackTraceFrame str v1
           v2' = withStackTraceFrame str v2
@@ -515,7 +513,7 @@ interpretExpr expr =
           VArray <$> traverse interpretExpr es
       SS.Block pos stmts -> do
           env <- getLocalEnv
-          return $ VDo pos env stmts
+          return $ VDo pos Nothing env stmts
       SS.Tuple _ es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _ bs ->
@@ -622,8 +620,8 @@ interpretStmts stmts =
             -- (or whichever value for whichever monad)
             let v'' :: m Value = return v'
             return $ mkValue v''
-          VDo _blkpos env stmts' ->
-            withLocalEnvAny env (interpretStmts stmts')
+          VDo _blkpos mname env stmts' ->
+            withLocalEnvAny env (interpretStmts' mname stmts')              
           VBindOnce m1 v2 -> do
             v1 <- actionFromValue m1
             m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via force" v2 v1
@@ -688,6 +686,20 @@ interpretStmts stmts =
             env <- getLocalEnv
             let env' = LocalTypedef (getVal name) ty : env
             withLocalEnv env' (interpretStmts ss)
+
+-- Wrapper around interpretStmts for inserting a stack trace frame, in the
+-- old style. XXX remove along with the old stack trace code...
+interpretStmts' :: InterpreterMonad m => Maybe String -> [SS.Stmt] -> m Value
+interpretStmts' mname stmts = do
+  trace <- liftTopLevel $ gets rwStackTrace
+  case mname of
+    Nothing -> pure ()
+    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = name : trace })
+  v <- interpretStmts stmts
+  case mname of
+    Nothing -> pure ()
+    Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
+  return v
 
 -- Execute a top-level bind.
 processStmtBind ::
@@ -1025,8 +1037,8 @@ instance IsValue a => IsValue (TopLevel a) where
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos env stmts) = do
-      v <- withLocalEnv env (interpretStmts stmts)
+    fromValue (VDo _pos mname env stmts) = do
+      v <- withLocalEnv env (interpretStmts' mname stmts)
       fromValue v
     fromValue (VBindOnce m1 v2) = do
       v1 <- fromValue m1
@@ -1044,8 +1056,8 @@ instance FromValue a => FromValue (ProofScript a) where
     --  the type system should keep this from happening.
     fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos env stmts) = do
-      v <- withLocalEnvProof env (interpretStmts stmts)
+    fromValue (VDo _pos mname env stmts) = do
+      v <- withLocalEnvProof env (interpretStmts' mname stmts)
       fromValue v
     fromValue (VBindOnce m1 v2) = ProofScript $ do
       v1 <- unProofScript (fromValue m1)
@@ -1059,8 +1071,8 @@ instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VLLVMCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos env stmts) = do
-      v <- withLocalEnvLLVM env (interpretStmts stmts)
+    fromValue (VDo _pos mname env stmts) = do
+      v <- withLocalEnvLLVM env (interpretStmts' mname stmts)
       fromValue v
     fromValue (VBindOnce m1 v2) = LLVMCrucibleSetupM $ do
       v1 <- runLLVMCrucibleSetupM (fromValue m1)
@@ -1074,8 +1086,8 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos env stmts) = do
-      v <- withLocalEnvJVM env (interpretStmts stmts)
+    fromValue (VDo _pos mname env stmts) = do
+      v <- withLocalEnvJVM env (interpretStmts' mname stmts)
       fromValue v
     fromValue (VBindOnce m1 v2) = JVMSetupM $ do
       v1 <- runJVMSetupM (fromValue m1)
@@ -1089,8 +1101,8 @@ instance IsValue a => IsValue (MIRSetupM a) where
 instance FromValue a => FromValue (MIRSetupM a) where
     fromValue (VMIRSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos env stmts) = do
-      v <- withLocalEnvMIR env (interpretStmts stmts)
+    fromValue (VDo _pos mname env stmts) = do
+      v <- withLocalEnvMIR env (interpretStmts' mname stmts)
       fromValue v
     fromValue (VBindOnce m1 v2) = MIRSetupM $ do
       v1 <- runMIRSetupM (fromValue m1)
