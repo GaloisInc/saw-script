@@ -134,6 +134,9 @@ scWriteExternal t0 =
         Constant nm    ->
             do stashName nm
                pure $ unwords ["Constant", show (nameIndex nm)]
+        Variable ec ->
+           do stashEC ec
+              pure $ unwords ["Variable", show (ecVarIndex ec), show (ecType ec)]
         FTermF ftf     ->
           case ftf of
             UnitValue           -> pure $ unwords ["Unit"]
@@ -174,9 +177,6 @@ scWriteExternal t0 =
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
                                             map show (V.toList v))
             StringLit s         -> pure $ unwords ["String", show s]
-            Variable ec ->
-               do stashEC ec
-                  pure $ unwords ["Variable",show (ecVarIndex ec), show (ecType ec)]
 
 
 -- | During parsing, we maintain two maps used for renumbering: The
@@ -343,5 +343,5 @@ scReadExternal sc input =
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
-        ["Variable", i, t]  -> FTermF <$> (Variable <$> readEC i t)
+        ["Variable", i, t]  -> Variable <$> readEC i t
         _ -> fail $ "Parse error: " ++ unwords tokens

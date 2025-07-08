@@ -484,7 +484,6 @@ typeInferConstant nm =
 -- with special cases for primitives and constants to avoid re-type-checking
 -- their types as we are assuming they were type-checked when they were created
 instance TypeInfer (FlatTermF Term) where
-  typeInfer (Variable ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
     SCTypedTerm <$> liftTCM scFlatTermF ftf
@@ -518,6 +517,9 @@ instance TypeInfer (TermF SCTypedTerm) where
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
   typeInfer (Constant nm) = typeInferConstant nm
+  typeInfer (Variable ec) =
+    -- FIXME: should we check that the type of ecType is a sort?
+    typeCheckWHNF $ typedVal $ ecType ec
 
   typeInferComplete tf =
     SCTypedTerm <$> liftTCM scTermF (fmap typedVal tf)
@@ -572,9 +574,6 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
        forM_ vs $ \v_elem -> checkSubtype v_elem tp'
        liftTCM scVecType n tp'
   typeInfer (StringLit{}) = liftTCM scStringType
-  typeInfer (Variable ec) =
-    -- FIXME: should we check that the type of ecType is a sort?
-    typeCheckWHNF $ typedVal $ ecType ec
 
   typeInferComplete ftf =
     SCTypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf)

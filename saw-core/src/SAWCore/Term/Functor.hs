@@ -233,9 +233,6 @@ data FlatTermF e
   | ArrayValue e (Vector e)
     -- | String literal
   | StringLit !Text
-
-    -- | A named variable with a type.
-  | Variable !(ExtCns e)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
@@ -273,11 +270,6 @@ alistAllFields _ _ = Nothing
 
 zipPair :: (x -> y -> z) -> (x,x) -> (y,y) -> (z,z)
 zipPair f (x1,x2) (y1,y2) = (f x1 y1, f x2 y2)
-
-zipExtCns :: (x -> y -> z) -> ExtCns x -> ExtCns y -> Maybe (ExtCns z)
-zipExtCns f (EC v1 nmi x) (EC v2 _ y)
-  | v1 == v2 = Just (EC v1 nmi (f x y))
-  | otherwise = Nothing
 
 zipName :: Name -> Name -> Maybe Name
 zipName x y
@@ -342,7 +334,6 @@ zipWithFlatTermF f = go
     go (ArrayValue tx vx) (ArrayValue ty vy)
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
-    go (Variable ec1) (Variable ec2) = Variable <$> zipExtCns f ec1 ec2
 
     go _ _ = Nothing
 
@@ -366,6 +357,8 @@ data TermF e
       -- ^ Local variables are referenced by deBruijn index.
     | Constant !Name
       -- ^ A global constant identified by its name.
+    | Variable !(ExtCns e)
+      -- ^ A named variable with a type.
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
 instance (e ~ Term) => Eq (TermF e) where
@@ -390,8 +383,11 @@ instance (e ~ Term) => Ord (TermF e) where
     (LocalVar _, Constant _) -> LT
     (LocalVar l, LocalVar r) -> compare l r
     (LocalVar _, _) -> GT
+    (Constant _, Variable _) -> LT
     (Constant l, Constant r) -> compare l r
     (Constant _, _) -> GT
+    (Variable l, Variable r) -> compare l r
+    (Variable _, _) -> GT
 
 -- See the commentary on 'Hashable Term' for an explanation of this instance
 -- and a note on uniqueness.
@@ -401,7 +397,8 @@ instance (e ~ Term, Hashable e) => Hashable (TermF e) where
   hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
-  hashWithSalt salt (Constant ec) = salt `hashWithSalt` ec
+  hashWithSalt salt (Constant nm) = salt `hashWithSalt` nm
+  hashWithSalt salt (Variable ec) = salt `hashWithSalt` ec
 -- NB: we may someday wish to improve this instance, for a couple reasons.
 --
 -- 1. Improve the default, XOR-based hashing scheme to improve collision
@@ -630,7 +627,8 @@ freesTermF tf =
       Lambda _name tp rhs -> unionBitSets tp (decrBitSet rhs)
       Pi _name lhs rhs -> unionBitSets lhs (decrBitSet rhs)
       LocalVar i -> singletonBitSet i
-      Constant {} -> emptyBitSet -- assume rhs is a closed term
+      Constant {} -> emptyBitSet -- assume type is a closed term
+      Variable ec -> ecType ec
 
 -- | Return a bitset containing indices of all free local variables
 looseVars :: Term -> BitSet

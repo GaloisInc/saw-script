@@ -1015,7 +1015,7 @@ extCnsToFunName ec =
        Just (EVarInfo _ _) -> return $ EVarFunName var
        Just (CallVarInfo _) -> return $ CallSName var
        Nothing
-         | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ Variable ec) ->
+         | Just glob <- asTypedGlobalDef (Unshared $ Variable ec) ->
            return $ GlobalName glob []
        _ -> error "extCnsToFunName: unreachable"
 

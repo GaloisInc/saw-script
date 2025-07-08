@@ -167,7 +167,7 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
-        (FTermF (Variable (ecVarIndex -> i)), _) | IntSet.member i ixs ->
+        (Variable (ecVarIndex -> i), _) | IntSet.member i ixs ->
             case my' of
               Nothing -> Just m'
               Just y' -> if alphaEquiv y y' then Just m' else Nothing
@@ -260,7 +260,7 @@ scMatch sc ctxt pat term =
       where
         go js x =
           case unwrapTermF x of
-            FTermF (Variable ec)
+            Variable ec
               | IntSet.member (ecVarIndex ec) ixs -> Just (ecVarIndex ec, js)
               | otherwise  -> Nothing
             App t (unwrapTermF -> LocalVar j)
@@ -816,6 +816,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
                    _ -> App <$> rewriteAll e1 <*> pure e2
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           Constant{}     -> return tf
+          Variable{}     -> return tf
           _ -> return tf -- traverse rewriteAll tf
 
     rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
@@ -843,7 +844,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
           StringLit{}      -> return ftf
-          Variable{}       -> return ftf
 
     rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                   Term -> IO Term
@@ -1018,6 +1018,7 @@ doHoistIfs sc ss hoistCache = go
 
        goF t (LocalVar _)  = return (t, [])
        goF t (Constant {}) = return (t, [])
+       goF t (Variable {}) = return (t, [])
 
        goF _ (FTermF ftf) = do
                 (ftf', conds) <- runWriterT $ traverse WriterT $ (fmap go ftf)

@@ -346,10 +346,9 @@ asConstant _ = Nothing
 
 asVariable :: Recognizer Term (ExtCns Term)
 asVariable t =
-  do ftf <- asFTermF t
-     case ftf of
-       Variable ec -> pure ec
-       _           -> Nothing
+  case unwrapTermF t of
+    Variable ec -> pure ec
+    _           -> Nothing
 
 asSort :: Recognizer Term Sort
 asSort t = do

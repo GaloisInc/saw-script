@@ -114,8 +114,8 @@ asGlobalFunName _ = Nothing
 
 -- | Convert a 'FunName' to an unshared term, for printing
 funNameTerm :: FunName -> Term
-funNameTerm (CallSName var) = Unshared $ FTermF $ Variable $ unMRVar var
-funNameTerm (EVarFunName var) = Unshared $ FTermF $ Variable $ unMRVar var
+funNameTerm (CallSName var) = Unshared $ Variable $ unMRVar var
+funNameTerm (EVarFunName var) = Unshared $ Variable $ unMRVar var
 funNameTerm (GlobalName gdef []) = globalDefTerm gdef
 funNameTerm (GlobalName gdef (TermProjLeft:projs)) =
   Unshared $ FTermF $ PairLeft $ funNameTerm (GlobalName gdef projs)

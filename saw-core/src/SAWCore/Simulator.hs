@@ -164,6 +164,7 @@ evalTermF cfg lam recEval tf env =
                                   return $ TValue $ VPiType nm v body
 
     LocalVar i              -> force (fst (env !! i))
+
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
                                   let ec' = EC (nameIndex nm) (nameInfo nm) ty'
@@ -184,6 +185,8 @@ evalTermF cfg lam recEval tf env =
                                                 PrimQualifier -> simPrimitive cfg ec'
                                                 AxiomQualifier -> simPrimitive cfg ec'
 
+    Variable ec             -> do ec' <- traverse evalType ec
+                                  simExtCns cfg tf ec'
     FTermF ftf              ->
       case ftf of
         UnitValue           -> return VUnit
@@ -261,9 +264,6 @@ evalTermF cfg lam recEval tf env =
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
 
         StringLit s         -> return $ VString s
-
-        Variable ec         -> do ec' <- traverse evalType ec
-                                  simExtCns cfg tf ec'
   where
     evalType :: Term -> EvalM l (TValue l)
     evalType t = toTValue <$> recEval t
@@ -598,6 +598,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
         Pi _ t1 _       -> go memo t1
         LocalVar _      -> pure memo
         Constant{}      -> pure memo
+        Variable ec     -> go memo (ecType ec)
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
