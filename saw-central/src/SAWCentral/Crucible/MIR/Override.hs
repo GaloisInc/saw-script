@@ -990,8 +990,7 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
      referentVal <- firstPointsToReferent referents
      v <- liftIO $ Mir.readMirRefIO bak globals iTypes
        referenceInnerTpr referenceVal
-     matchArg opts sc cc spec prepost md (MIRVal innerShp v)
-       referenceInnerMirTy referentVal
+     matchArg opts sc cc spec prepost md (MIRVal innerShp v) referentVal
   where
     iTypes = cc ^. mccIntrinsicTypes
 
@@ -1037,7 +1036,6 @@ matchArg ::
   MS.PrePost ->
   MS.ConditionMetadata ->
   MIRVal               {- ^ concrete simulation value -} ->
-  Mir.Ty               {- ^ expected memory type -} ->
   SetupValue           {- ^ expected specification value -} ->
   OverrideMatcher MIR w ()
 matchArg opts sc cc cs prepost md = go False
@@ -1049,21 +1047,21 @@ matchArg opts sc cc cs prepost md = go False
     -- can't just do a recursive call with different types, since we don't know
     -- what the types should be until we get to the SetupVar. So instead we just
     -- pass along the fact that we are recursing inside a SetupCast.
-    go :: Bool -> MIRVal -> Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
+    go :: Bool -> MIRVal -> SetupValue -> OverrideMatcher MIR w ()
 
-    go _ actual expectedTy expected@(MS.SetupTerm expectedTT)
+    go _ actual expected@(MS.SetupTerm expectedTT)
       | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
       = do sym <- Ov.getSymInterface
-           failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+           failMsg  <- mkStructuralMismatch opts cc sc cs actual expected
            realTerm <- valueToSC sym md failMsg tval actual
            matchTerm sc md prepost realTerm (ttTerm expectedTT)
 
-    go inCast actual expectedTy expected =
+    go inCast actual expected =
       mccWithBackend cc $ \bak -> do
       let sym = backendGetSym bak
-      case (actual, expectedTy, expected) of
-        (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var)
+      case (actual, expected) of
+        (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, MS.SetupVar var)
           | inCast ->
             -- When we have a cast, the type inside the Crucible reference may
             -- be different from the pointee type of the SetupValue in SAW after
@@ -1084,50 +1082,37 @@ matchArg opts sc cc cs prepost md = go False
           | otherwise ->
             assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
 
-        (MIRVal (RefShape {}) _, _, MS.SetupCast _ v) ->
+        (MIRVal (RefShape {}) _, MS.SetupCast _ v) ->
           -- Ideally we would pass the "true" type of the underlying reference
           -- here, instead of passing along the post-cast types unchanged, but
           -- we don't know the true type until we get to a SetupVar.
-          go True actual expectedTy v
+          go True actual v
 
         -- match arrays point-wise
-        (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)
+        (MIRVal (ArrayShape _ _ elemShp) xs, MS.SetupArray _elemTy zs)
           | Mir.MirVector_Vector xs' <- xs
           , V.length xs' == length zs ->
             sequence_
-              [ go inCast (MIRVal elemShp x) y z
+              [ go inCast (MIRVal elemShp x) z
               | (x, z) <- zip (V.toList xs') zs ]
 
           | Mir.MirVector_PartialVector xs' <- xs
           , V.length xs' == length zs ->
             do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
                sequence_
-                 [ go inCast (MIRVal elemShp x) y z
+                 [ go inCast (MIRVal elemShp x) z
                  | (x, z) <- zip (V.toList xs'') zs ]
 
         -- match the underlying, non-zero-sized field of a repr(transparent)
         -- struct
-        (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt zs)
+        (MIRVal (TransparentShape _ shp) val, MS.SetupStruct adt zs)
           | Just i <- Mir.findReprTransparentField col adt
-          , Just y <- adt ^? Mir.adtvariants . ix 0 . Mir.vfields . ix i . Mir.fty
           , Just z <- zs ^? ix i ->
-            go inCast (MIRVal shp val) y z
+            go inCast (MIRVal shp val) z
 
         -- match the fields of a struct point-wise
-        (MIRVal (StructShape _ _ xsFldShps) xs, Mir.TyAdt _ _ _, MS.SetupStruct adt zs) ->
-           do let variants = adt ^. Mir.adtvariants
-              variant <-
-                case variants of
-                  [variant] ->
-                    pure variant
-                  _ ->
-                    let len' = Text.pack (show (length variants)) in
-                    panic "matchArg" [
-                        "Encountered struct Adt with " <> len' <> " variants:",
-                        "   " <> Text.pack (show $ adt ^. Mir.adtname)
-                    ]
-              let ys = variant ^.. Mir.vfields . each . Mir.fty
-              matchFields sym xsFldShps xs ys zs
+        (MIRVal (StructShape _ _ xsFldShps) xs, MS.SetupStruct _ zs) ->
+          matchFields sym xsFldShps xs zs
 
         -- In order to match an enum value, we first check to see if the
         -- expected value is a specific enum variant or a symbolic enum...
@@ -1135,7 +1120,6 @@ matchArg opts sc cc cs prepost md = go False
                 (Ctx.Empty
                   Ctx.:> Crucible.RV actualDiscr
                   Ctx.:> Crucible.RV variantAssn),
-         _,
          MS.SetupEnum enum_) ->
             case enum_ of
               -- ...if the expected value is a specific enum variant, then we
@@ -1151,7 +1135,6 @@ matchArg opts sc cc cs prepost md = go False
                   variantIntIndex (adt ^. Mir.adtname) variantIdxInt (Ctx.size variantAssn)
                 VariantShape xsFldShps <- pure $ variantShps Ctx.! variantIdx
                 let Crucible.VB expectedVariant = variantAssn Ctx.! variantIdx
-                let ys = variant ^.. Mir.vfields . each . Mir.fty
 
                 -- Ensure that the discriminant values match.
                 IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
@@ -1171,7 +1154,7 @@ matchArg opts sc cc cs prepost md = go False
                     -- check it anyway to be on the safe side.
                     addAssert xsPred md =<< notEq
                     -- Finally, ensure that the fields match point-wise.
-                    matchFields sym xsFldShps xs ys zs
+                    matchFields sym xsFldShps xs zs
                   W4.Unassigned ->
                     -- If we see `Unassigned`, we immediately know that the
                     -- variant should not be defined. Because we know in advance
@@ -1193,10 +1176,9 @@ matchArg opts sc cc cs prepost md = go False
               -- this approach where we already know that one specific
               -- VariantBranch's predicate should hold, and the predicates in
               -- all other VariantBranches should be false.
-              MirSetupEnumSymbolic adt expectedDiscr variantFlds -> do
+              MirSetupEnumSymbolic _ expectedDiscr variantFlds -> do
                 -- Ensure that the discriminant values match.
-                let discrTp = shapeMirTy discrShp
-                go inCast (MIRVal discrShp actualDiscr) discrTp expectedDiscr
+                go inCast (MIRVal discrShp actualDiscr) expectedDiscr
 
                 sequence_ @_ @_ @()
                   [ case xPE of
@@ -1205,7 +1187,7 @@ matchArg opts sc cc cs prepost md = go False
                         -- variant (xs) match point-wise under the assumption
                         -- that the VariantBranch's predicate (xsPred) holds.
                         withConditionalPred xsPred $
-                          matchFields sym xsFldShps xs ys zs
+                          matchFields sym xsFldShps xs zs
                       W4.Unassigned ->
                         -- If we see `Unassigned`, then we immediately know that
                         -- the variant should not defined. We can skip checking
@@ -1214,21 +1196,19 @@ matchArg opts sc cc cs prepost md = go False
                         -- fail outright, as it is still possible that other
                         -- variants might match.)
                         pure ()
-                  | (Some (Functor.Pair (VariantShape xsFldShps) (Crucible.VB xPE)), ys, zs) <-
-                      zip3
+                  | (Some (Functor.Pair (VariantShape xsFldShps) (Crucible.VB xPE)), zs) <-
+                      zip
                         (FC.toListFC Some (Ctx.zipWith Functor.Pair variantShps variantAssn))
-                        (map (\v -> v ^.. Mir.vfields . each . Mir.fty) (adt ^. Mir.adtvariants))
                         variantFlds
                   ]
 
         -- match the fields of a tuple point-wise
-        (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
-          matchFields sym xsFldShps xs ys zs
+        (MIRVal (TupleShape (Mir.TyTuple _) _ xsFldShps) xs, MS.SetupTuple () zs) ->
+          matchFields sym xsFldShps xs zs
 
         -- See Note [Matching slices in overrides]
-        (MIRVal (SliceShape actualSliceRefTy actualElemTy actualMutbl actualElemTpr)
+        (MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl actualElemTpr)
                 (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
-         Mir.TyRef _ _,
          MS.SetupSlice slice)
            | -- Currently, all slice lengths must be concrete, so the case below
              -- should always succeed.
@@ -1257,7 +1237,6 @@ matchArg opts sc cc cs prepost md = go False
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
                    go inCast
                      (MIRVal actualArrRefShp actualArrRef)
-                     expectedArrRefTy
                      expectedArrRef
 
              actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
@@ -1291,7 +1270,7 @@ matchArg opts sc cc cs prepost md = go False
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
 
-        (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
+        (MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           static <- findStatic colState name
           Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
           let y = staticRefMux sym yGlobalVar
@@ -1301,23 +1280,23 @@ matchArg opts sc cc cs prepost md = go False
               pred_ <- liftIO $
                 Mir.mirRef_eqIO bak x y
               addAssert pred_ md =<< notEq
-        (_, _, MS.SetupGlobalInitializer () name) -> do
+        (MIRVal shp _, MS.SetupGlobalInitializer () name) -> do
           static <- findStatic colState name
           let staticTy = static ^. Mir.sTy
-          unless (checkCompatibleTys expectedTy staticTy) fail_
+          unless (checkCompatibleTys (shapeMirTy shp) staticTy) fail_
           staticInitMirVal <- findStaticInitializer cc static
           pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
           addAssert pred_ md =<< notEq
-        (_, _, MS.SetupMux () c t f) -> do
+        (_, MS.SetupMux () c t f) -> do
           cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
           withConditionalPred cPred $
-            go inCast actual expectedTy t
+            go inCast actual t
           cNegPred <- liftIO $ W4.notPred sym cPred
           withConditionalPred cNegPred $
-            go inCast actual expectedTy f
+            go inCast actual f
 
-        (_, _, MS.SetupNull empty)      -> absurd empty
-        (_, _, MS.SetupUnion empty _ _) -> absurd empty
+        (_, MS.SetupNull empty)      -> absurd empty
+        (_, MS.SetupUnion empty _ _) -> absurd empty
 
         _ -> fail_
 
@@ -1333,17 +1312,16 @@ matchArg opts sc cc cs prepost md = go False
 
         fail_ :: OverrideMatcher MIR w a
         fail_ = failure loc =<<
-                  mkStructuralMismatch opts cc sc cs actual expected expectedTy
+                  mkStructuralMismatch opts cc sc cs actual expected
 
         -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
         matchFields ::
           Sym ->
           Ctx.Assignment FieldShape ctx ->
           Ctx.Assignment (Crucible.RegValue' Sym) ctx ->
-          [Mir.Ty] ->
           [SetupValue] ->
           OverrideMatcher MIR w ()
-        matchFields sym xsFldShps xs ys zs = do
+        matchFields sym xsFldShps xs zs = do
           -- As a sanity check, first ensure that the number of fields matches
           -- what is expected.
           unless (Ctx.sizeInt (Ctx.size xs) == length zs) fail_
@@ -1351,14 +1329,13 @@ matchArg opts sc cc cs prepost md = go False
           sequence_
             [ case xFldShp of
                 ReqField shp ->
-                  go inCast (MIRVal shp x) y z
+                  go inCast (MIRVal shp x) z
                 OptField shp -> do
                   let x' = readMaybeType sym "field" (shapeType shp) x
-                  go inCast (MIRVal shp x') y z
-            | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
-                zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
-                     ys
-                     zs ]
+                  go inCast (MIRVal shp x') z
+            | (Some (Functor.Pair xFldShp (Crucible.RV x)), z) <-
+                zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                    zs ]
 
         -- Check that both the expected and actual values are the same sort of
         -- slice. We don't want to accidentally mix up a &[u8] value with a &str
@@ -1625,10 +1602,10 @@ methodSpecHandler_prestate opts sc cc args cs =
      let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
      let aux ::
            (Mir.Ty, SetupValue) -> Crucible.AnyValue Sym ->
-           IO (MIRVal, Mir.Ty, SetupValue)
+           IO (MIRVal, SetupValue)
          aux (argTy, setupVal) val =
            case decodeMIRVal col argTy val of
-             Just val' -> return (val', argTy, setupVal)
+             Just val' -> return (val', setupVal)
              Nothing -> fail "unexpected type"
 
      -- todo: fail if list lengths mismatch
@@ -1641,7 +1618,7 @@ methodSpecHandler_prestate opts sc cc args cs =
               , MS.conditionContext = ""
               }
 
-     sequence_ [ matchArg opts sc cc cs MS.PreState md x y z | (x, y, z) <- xs]
+     sequence_ [ matchArg opts sc cc cs MS.PreState md x z | (x, z) <- xs]
 
      learnCond opts sc cc cs MS.PreState (cs ^. MS.csPreState)
 
@@ -1654,16 +1631,15 @@ mkStructuralMismatch ::
   CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
   MIRVal {- ^ the value from the simulator -} ->
   SetupValue {- ^ the value from the spec -} ->
-  Mir.Ty     {- ^ the expected type -} ->
   OverrideMatcher MIR w (OverrideFailureReason MIR)
-mkStructuralMismatch _opts cc _sc spec mirVal setupval mty = do
+mkStructuralMismatch _opts cc _sc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
   pure $ StructuralMismatch
             (ppMIRVal sym mirVal)
             (MS.ppSetupValue setupval)
             (Just setupTy)
-            mty
+            (shapeMirTy shp)
 
 -- | Create an error stating that the 'MIRVal' was not equal to the 'SetupValue'
 notEqual ::
