@@ -1,6 +1,16 @@
 # Don't exit randomly
 set +e
 
+# Fail immediately if the two reference outputs have become the
+# same. There's two on purpose, because there's two solutions, and the
+# solver will sometimes return one and sometimes the other.
+
+if diff test.log.1.good test.log.2.good >/dev/null 2>&1; then
+    echo "$0: The two reference outputs are the same." 1>&2
+    echo "$0: Please correct that." 1>&2
+    exit 1
+fi
+
 #
 # This is a hacked subset of what's in support/test-and-diff.sh
 # because we need to be able to check either of two reference outputs.
