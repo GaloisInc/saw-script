@@ -225,7 +225,7 @@ initialState readFileFn =
         then
           (Just <$> JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts))
           `X.catch` \e ->
-            putStrLn (disableJavaWarning "Failed to setup Java" e) >>
+            putStrLn (disableJavaWarning "Failed to set up Java" e) >>
             pure Nothing
         else pure Nothing
      let bic = BuiltinContext { biSharedContext = sc

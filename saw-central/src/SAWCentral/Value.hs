@@ -580,7 +580,7 @@ getCryptolEnv = do
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
-  { roJavaCodebase  :: Maybe JSS.Codebase
+  { roJavaCodebase  :: Maybe JSS.Codebase -- ^ Nothing, if Java is disabled.
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roProxy         :: AIGProxy

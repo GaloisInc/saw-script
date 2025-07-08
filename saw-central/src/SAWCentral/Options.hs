@@ -28,6 +28,9 @@ data Options = Options
   , jarList          :: [FilePath]
   , javaBinDirs      :: [FilePath]
   , javaEnabled      :: Bool
+    -- ^ Do we support Java?  Currently there's not external flag for this.
+    -- It starts off enabled, and we disable it, if we fail to detect a
+    -- working `java` installation.
   , verbLevel        :: Verbosity
   , simVerbose       :: Int
   , detectVacuity    :: Bool
@@ -118,7 +121,7 @@ processEnv opts = do
     addJavaBinDirInducedOpts os@Options{javaBinDirs} = do
       mbJavaPath <- findJavaIn javaBinDirs
       case mbJavaPath of
-        Nothing       -> pure os
+        Nothing       -> pure os { javaEnabled = False }
         Just javaPath -> do
           mbJavaMajorVersion <- try (findJavaMajorVersion javaPath)
           case mbJavaMajorVersion of
@@ -126,7 +129,7 @@ processEnv opts = do
               | v >= 9 -> pure os
               | otherwise -> addRTJar javaPath os
             Left e ->
-              putStrLn (disableJavaWarning "Failed to determinve version."e) >>
+              putStrLn (disableJavaWarning "Failed to determine version."e) >>
               pure os { javaEnabled = False }
 
     -- rt.jar lives in a standard location relative to @java.home@. At least,
