@@ -173,7 +173,7 @@ asTypedGlobalDef t =
     Constant nm ->
       let ty = resolvedNameType (requireNameInMap nm ?mm)
       in Just $ GlobalDef (nameInfo nm) (nameIndex nm) ty t
-    FTermF (ExtCns ec) ->
+    FTermF (Variable ec) ->
       Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     _ -> Nothing
 

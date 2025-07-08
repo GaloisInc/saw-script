@@ -365,7 +365,7 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
-        case SAW.asExtCns $ SAW.ttTerm tt of
+        case SAW.asVariable $ SAW.ttTerm tt of
             Just ec -> do
                 let var = SAW.ecVarIndex ec
                 sub <- use MS.termSub

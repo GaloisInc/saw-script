@@ -394,12 +394,12 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
      lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
        do let value_input_parameters = mapMaybe
-                (\(_, setup_value) -> setupValueAsExtCns setup_value)
+                (\(_, setup_value) -> setupValueAsVariable setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
           let reference_input_parameters = mapMaybe
                 (\case
-                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsExtCns setup_value
-                  LLVMPointsToBitfield _ _ _ val -> setupValueAsExtCns val)
+                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsVariable setup_value
+                  LLVMPointsToBitfield _ _ _ val -> setupValueAsVariable val)
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
@@ -416,13 +416,13 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           let return_output_parameter =
                 case method_spec ^. MS.csRetValue of
-                  Just setup_value -> setupValueAsExtCns setup_value
+                  Just setup_value -> setupValueAsVariable setup_value
                   Nothing -> Nothing
           let reference_output_parameters =
                 mapMaybe
                 (\case
-                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsExtCns setup_value
-                  LLVMPointsToBitfield _ _ _ val -> setupValueAsExtCns val)
+                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsVariable setup_value
+                  LLVMPointsToBitfield _ _ _ val -> setupValueAsVariable val)
                 (method_spec ^. MS.csPostState ^. MS.csPointsTos)
           let output_parameters =
                 nub $ filter (isNothing . (Map.!?) pre_free_variables) $
@@ -458,7 +458,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           extracted_func_const <-
             io $ scConstant' shared_context nmi extracted_func
             =<< scTypeOf shared_context extracted_func
-          input_terms <- io $ traverse (scExtCns shared_context) input_parameters
+          input_terms <- io $ traverse (scVariable shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           applied_extracted_func_selectors <-
             io $ forM [1 .. (length output_parameters)] $ \i ->
@@ -512,17 +512,17 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats vcs lemmaSet diff)
           returnLLVMProof (SomeLLVM ps)
 
-setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
-setupValueAsExtCns =
+setupValueAsVariable :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
+setupValueAsVariable =
   \case
-    SetupTerm term -> asExtCns $ ttTerm term
+    SetupTerm term -> asVariable $ ttTerm term
     _ -> Nothing
 
-llvmPointsToValueAsExtCns :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
-llvmPointsToValueAsExtCns =
+llvmPointsToValueAsVariable :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
+llvmPointsToValueAsVariable =
   \case
-    ConcreteSizeValue val -> setupValueAsExtCns val
-    SymbolicSizeValue arr _sz -> asExtCns $ ttTerm arr
+    ConcreteSizeValue val -> setupValueAsVariable val
+    SymbolicSizeValue arr _sz -> asVariable $ ttTerm arr
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -1599,7 +1599,7 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
            , let ec = tecExt tt ]
-     terms0 <- io $ traverse (scExtCns sc) ecs0
+     terms0 <- io $ traverse (scVariable sc) ecs0
 
      let initialFree =
            Set.fromList
@@ -1888,7 +1888,7 @@ setupArg sc sym ecRef tp = do
          let len = Seq.length ecs
          ec <- scFreshEC sc ("arg_" <> Text.pack (show len)) sc_tp
          writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
-         scFlatTermF sc (ExtCns ec)
+         scVariable sc ec
 
 setupArgs ::
   SharedContext ->

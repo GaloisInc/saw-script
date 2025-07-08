@@ -62,7 +62,6 @@ import           What4.Symbol
 
 import qualified SAWCore.Name as SC
 import qualified SAWCore.SharedTerm as SC
-import qualified SAWCore.Term.Functor as SC
 
 import           SAWCoreWhat4.Panic
 
@@ -156,7 +155,7 @@ sawCreateVar :: SAWCoreState n
 sawCreateVar st nm tp = do
   let sc = saw_ctx st
   ec <- SC.scFreshEC sc nm tp
-  t <- SC.scFlatTermF sc (SC.ExtCns ec)
+  t <- SC.scVariable sc ec
   modifyIORef (saw_inputs st) (\xs -> xs Seq.|> ec)
   return t
 

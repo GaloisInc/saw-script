@@ -330,7 +330,7 @@ exprToTerm sym sc w4VarMapRef val = liftIO $ do
     ty <- SAW.baseSCType sym sc (W4.exprType val)
     ec <- SAW.scFreshEC sc "w4expr" ty
     modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
-    term <- SAW.scExtCns sc ec
+    term <- SAW.scVariable sc ec
     return term
 
 regToTerm :: forall sym t st fs tp0 m.

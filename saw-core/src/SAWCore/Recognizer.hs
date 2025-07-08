@@ -52,7 +52,7 @@ module SAWCore.Recognizer
   , asPiList
   , asLocalVar
   , asConstant
-  , asExtCns
+  , asVariable
   , asSort
   , asSortWithFlags
     -- * Prelude recognizers.
@@ -344,12 +344,12 @@ asConstant :: Recognizer Term Name
 asConstant (unwrapTermF -> Constant nm) = pure nm
 asConstant _ = Nothing
 
-asExtCns :: Recognizer Term (ExtCns Term)
-asExtCns t = do
-  ftf <- asFTermF t
-  case ftf of
-    ExtCns ec -> return ec
-    _         -> Nothing
+asVariable :: Recognizer Term (ExtCns Term)
+asVariable t =
+  do ftf <- asFTermF t
+     case ftf of
+       Variable ec -> pure ec
+       _           -> Nothing
 
 asSort :: Recognizer Term Sort
 asSort t = do

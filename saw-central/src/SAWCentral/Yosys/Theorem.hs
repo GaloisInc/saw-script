@@ -63,7 +63,7 @@ theoremProp ::
   m SC.TypedTerm
 theoremProp sc thm = do
   ec <- liftIO $ SC.scFreshEC sc "r" $ thm ^. theoremInputType
-  r <- liftIO $ SC.scExtCns sc ec
+  r <- liftIO $ SC.scVariable sc ec
   modr <- liftIO $ SC.scApply sc (thm ^. theoremModule) r
   bodyr <- liftIO $ SC.scApply sc (thm ^. theoremBody) r
   equality <- liftIO $ eqBvRecords sc (thm ^. theoremOutputCryptolType) modr bodyr
@@ -88,7 +88,7 @@ theoremReplacement ::
   m SC.Term
 theoremReplacement sc thm = do
   ec <- liftIO $ SC.scFreshEC sc "r" $ thm ^. theoremInputType
-  r <- liftIO $ SC.scExtCns sc ec
+  r <- liftIO $ SC.scVariable sc ec
   body <- case thm ^. theoremPrecond of
     Nothing -> liftIO $ SC.scApply sc (thm ^. theoremBody) r
     Just pc -> do

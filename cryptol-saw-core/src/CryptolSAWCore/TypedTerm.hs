@@ -29,7 +29,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
-import SAWCore.Recognizer (asExtCns)
+import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck (scTypeCheckError)
 import SAWCore.Term.Pretty (ppTerm)
@@ -189,7 +189,7 @@ typedTermOfFirstOrderValue sc fov =
      t <- scFirstOrderValue sc fov
      pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t
 
--- Typed external constants ----------------------------------------------------
+-- Typed named variables -------------------------------------------------------
 
 data TypedExtCns =
   TypedExtCns
@@ -198,17 +198,17 @@ data TypedExtCns =
   }
   deriving Show
 
--- | Recognize 'TypedTerm's that are external constants.
+-- | Recognize 'TypedTerm's that are named variables.
 asTypedExtCns :: TypedTerm -> Maybe TypedExtCns
 asTypedExtCns (TypedTerm tp t) =
   do cty <- ttIsMono tp
-     ec <- asExtCns t
+     ec <- asVariable t
      pure $ TypedExtCns cty ec
 
 -- | Make a 'TypedTerm' from a 'TypedExtCns'.
 typedTermOfExtCns :: SharedContext -> TypedExtCns -> IO TypedTerm
 typedTermOfExtCns sc (TypedExtCns cty ec) =
-  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scExtCns sc ec
+  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scVariable sc ec
 
 abstractTypedExts :: SharedContext -> [TypedExtCns] -> TypedTerm -> IO TypedTerm
 abstractTypedExts sc tecs (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =

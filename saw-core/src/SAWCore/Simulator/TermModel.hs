@@ -129,7 +129,7 @@ replace sc cfg mapref ec = loop [] (ecType ec)
          ty' <- readBackTValue sc cfg ty
          newec <- scFreshEC sc (toShortName (ecName ec)) ty'
          modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))
-         reflectTerm sc cfg ty =<< scFlatTermF sc (ExtCns newec)
+         reflectTerm sc cfg ty =<< scVariable sc newec
 
 normalizeSharedTerm ::
   SharedContext ->
@@ -295,7 +295,7 @@ readBackTValue sc cfg = loop
     do t' <- loop t
        ec <- scFreshEC sc nm t'
        ?recordEC ec
-       ecTm <- scExtCns sc ec
+       ecTm <- scVariable sc ec
        ecVal <- delay (reflectTerm sc cfg t ecTm)
        body <- applyPiBody pibody ecVal
        (ecs,body') <- readBackPis body
@@ -479,7 +479,7 @@ readBackValue sc cfg = loop
       do t' <- readBackTValue sc cfg tv
          ec <- scFreshEC sc nm t'
          ?recordEC ec
-         ecTm <- scExtCns sc ec
+         ecTm <- scVariable sc ec
          ecVal <- delay (reflectTerm sc cfg tv ecTm)
          tbody <- applyPiBody pibody ecVal
          body  <- f ecVal
@@ -871,7 +871,7 @@ prims sc cfg =
       do bvty <- scBitvector sc n
          ec   <- scFreshEC sc "x" bvty
          ?recordEC ec
-         ecTm <- scExtCns sc ec
+         ecTm <- scVariable sc ec
          res  <- f (Left (n,ecTm))
          case res of
            -- computed a constant boolean without consulting the variable, just return it

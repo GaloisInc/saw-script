@@ -179,7 +179,7 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             -- initially , we assert that cycle = 0
             curInternalBindings <- ecBindingsOfFields sym sc "internal_" internalFields stateFields cur
             cycleVal <- case Map.lookup "cycle" curInternalBindings of
-              Just (ec, _) -> SC.scExtCns sc ec
+              Just (ec, _) -> SC.scVariable sc ec
               Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
             zero <- SC.scBvConst sc 8 0
             wnat <- SC.scNat sc 8
@@ -210,9 +210,9 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             inps <- fmap Map.fromList . forM (Map.assocs $ sequential ^. yosysSequentialInputWidths) $ \(nm, _) ->
               let bindings = if Set.member nm fixedInputs then curFixedInputBindings else inputBindings
               in case Map.lookup nm bindings of
-                Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
+                Just (ec, _) -> (nm,) <$> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
-            states <- forM curBindings $ \(ec, _) -> SC.scExtCns sc ec
+            states <- forM curBindings $ \(ec, _) -> SC.scVariable sc ec
             inpst <- cryptolRecord sc states
             domainRec <- cryptolRecord sc $ Map.insert "__state__" inpst inps
             codomainRec <- liftIO $ SC.scApply sc (sequential ^. yosysSequentialTerm . SC.ttTermLens) domainRec
@@ -222,34 +222,34 @@ queryModelChecker sym sc sequential path query fixedInputs = do
               val <- cryptolRecordSelect sc (sequential ^. yosysSequentialStateFields) outst nm
               wnat <- SC.scNat sc w
               new <- case Map.lookup nm nextBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             outputPreds <- forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, w) -> do
               val <- cryptolRecordSelect sc codomainFields codomainRec nm
               wnat <- SC.scNat sc w
               new <- case Map.lookup nm nextOutputBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             fixedInputPreds <- forM (Map.assocs fixedInputWidths) $ \(nm, w) -> do
               wnat <- SC.scNat sc w
               val <- case Map.lookup nm curFixedInputBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               new <- case Map.lookup nm nextFixedInputBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             cycleIncrement <- do
               wnat <- SC.scNat sc 8
               val <- case Map.lookup "cycle" curInternalBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
               one <- SC.scBvConst sc 8 1
               incremented <- SC.scBvAdd sc wnat val one
               new <- case Map.lookup "cycle" nextInternalBindings of
-                Just (ec, _) -> SC.scExtCns sc ec
+                Just (ec, _) -> SC.scVariable sc ec
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
               liftIO $ SC.scBvEq sc wnat new incremented
             identity <- SC.scBool sc True
@@ -284,13 +284,13 @@ queryModelChecker sym sc sequential path query fixedInputs = do
             fixedInps <- fmap Map.fromList . forM (Map.assocs fixedInputWidths) $ \(nm, _) ->
               case Map.lookup nm curFixedInputBindings of
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
-                Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
+                Just (ec, _) -> (nm,) <$> SC.scVariable sc ec
             outputs <- fmap Map.fromList . forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, _) ->
               case Map.lookup nm curOutputBindings of
                 Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
-                Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
+                Just (ec, _) -> (nm,) <$> SC.scVariable sc ec
             cycleVal <- case Map.lookup "cycle" curInternalBindings of
-              Just (ec, _) -> SC.scExtCns sc ec
+              Just (ec, _) -> SC.scVariable sc ec
               Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
             fixedInputRec <- cryptolRecord sc fixedInps
             outputRec <- cryptolRecord sc outputs

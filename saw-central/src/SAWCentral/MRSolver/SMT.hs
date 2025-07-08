@@ -304,7 +304,7 @@ mrProvable bool_tm =
   where -- | Create a new global variable of the given name and type
         instUVar :: LocalName -> Term -> MRM t Term
         instUVar nm =
-          liftSC1 scWhnf >=> liftSC2 scFreshEC nm >=> liftSC1 scExtCns
+          liftSC1 scWhnf >=> liftSC2 scFreshEC nm >=> liftSC1 scVariable
 
 
 ----------------------------------------------------------------------

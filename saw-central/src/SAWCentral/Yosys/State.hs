@@ -131,7 +131,7 @@ convertModuleInline sc m = do
 
   -- convert module into term
   domainRecordEC <- liftIO $ SC.scFreshEC sc "input" domainRecordType
-  domainRecord <- liftIO $ SC.scExtCns sc domainRecordEC
+  domainRecord <- liftIO $ SC.scVariable sc domainRecordEC
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
     t <- liftIO $ cryptolRecordSelect sc domainFields domainRecord nm
@@ -215,7 +215,7 @@ composeYosysSequentialHelper sc s n = do
   extendedInputType <- fieldsToType sc extendedInputFields
   extendedInputCryptolType <- fieldsToCryptolType extendedInputFields
   extendedInputRecordEC <- liftIO $ SC.scFreshEC sc "input" extendedInputType
-  extendedInputRecord <- liftIO $ SC.scExtCns sc extendedInputRecordEC
+  extendedInputRecord <- liftIO $ SC.scVariable sc extendedInputRecordEC
   extendedOutputCryptolType <- fieldsToCryptolType extendedOutputFields
 
   allInputs <- fmap Map.fromList . forM (Map.keys extendedInputFields) $ \nm -> do
@@ -263,7 +263,7 @@ composeYosysSequentialHelper sc s n = do
 
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
   initialStateEC <- liftIO $ SC.scFreshEC sc "initial_state" stateType
-  initialState <- liftIO $ SC.scExtCns sc initialStateEC
+  initialState <- liftIO $ SC.scVariable sc initialStateEC
   (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
 
   outputRecord <- cryptolRecord sc outputs

@@ -758,7 +758,7 @@ extract_uninterp unints opaques tt =
      let tt' = tt{ ttTerm = tm }
 
      let f = traverse $ \(ec,vs) ->
-               do ectm <- scExtCns sc ec
+               do ectm <- scVariable sc ec
                   vs'  <- filterCryTerms sc vs
                   pure (ectm, vs')
      repls' <- io (traverse f repls)
@@ -779,7 +779,7 @@ extract_uninterp unints opaques tt =
      unless (Set.null boundAndUsed)
        (do ppOpts <- getTopLevelPPOpts
            vs <- io $ forM (Set.toList boundAndUsed) $ \ec ->
-                              do pptm <- scPrettyTerm ppOpts <$> scExtCns sc ec
+                              do pptm <- scPrettyTerm ppOpts <$> scVariable sc ec
                                  let ppty = scPrettyTerm ppOpts (ecType ec)
                                  return (pptm <> " : " <> ppty)
            printOutLnTop Warn $ unlines $
@@ -827,8 +827,8 @@ build_congruence sc tm =
        fail "congruence_for: cannot build congruence for dependent functions"
 
   loop [] vars =
-    do lvars <- mapM (scExtCns sc . fst) (reverse vars)
-       rvars <- mapM (scExtCns sc . snd) (reverse vars)
+    do lvars <- mapM (scVariable sc . fst) (reverse vars)
+       rvars <- mapM (scVariable sc . snd) (reverse vars)
        let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
 
        basel <- scApplyAll sc tm lvars
@@ -836,8 +836,8 @@ build_congruence sc tm =
        baseeq <- scEqTrue sc =<< scEq sc basel baser
 
        let f x (l,r) =
-             do l' <- scExtCns sc l
-                r' <- scExtCns sc r
+             do l' <- scVariable sc l
+                r' <- scVariable sc r
                 eq <- scEqTrue sc =<< scEq sc l' r'
                 scFun sc eq x
        finalEq <- foldM f baseeq vars
@@ -1345,7 +1345,7 @@ proveByBVInduction script t =
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
             toNat <- io $ scGlobalDef sc "Prelude.bvToNat"
-            vars  <- io $ mapM (scExtCns sc) pis
+            vars  <- io $ mapM (scVariable sc) pis
             innerVars <-
               io $ sequence $
               [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]

@@ -174,15 +174,15 @@ scWriteExternal t0 =
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
                                             map show (V.toList v))
             StringLit s         -> pure $ unwords ["String", show s]
-            ExtCns ec ->
+            Variable ec ->
                do stashEC ec
-                  pure $ unwords ["ExtCns",show (ecVarIndex ec), show (ecType ec)]
+                  pure $ unwords ["Variable",show (ecVarIndex ec), show (ecType ec)]
 
 
 -- | During parsing, we maintain two maps used for renumbering: The
 -- first is for the 'Int' values that appear in the external core
 -- file, and the second is for the 'VarIndex' values that appear
--- inside 'Constant' and 'ExtCns' constructors. We do not reuse any
+-- inside 'Constant' and 'Variable' constructors. We do not reuse any
 -- such numbers that appear in the external file, but generate fresh
 -- ones that are valid in the current 'SharedContext'.
 type ReadM = State.StateT (Map Int Term, Map VarIndex NameInfo, Map VarIndex VarIndex) IO
@@ -343,5 +343,5 @@ scReadExternal sc input =
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
-        ["ExtCns", i, t] -> FTermF <$> (ExtCns <$> readEC i t)
+        ["Variable", i, t]  -> FTermF <$> (Variable <$> readEC i t)
         _ -> fail $ "Parse error: " ++ unwords tokens

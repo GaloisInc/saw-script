@@ -552,7 +552,7 @@ refreshTerms sc ss =
   where
     freshenTerm (TypedExtCns _cty ec) =
       do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)
-         new <- liftIO $ scExtCns sc ec'
+         new <- liftIO $ scVariable sc ec'
          return (ecVarIndex ec, new)
 
 -- | An override packaged together with its preconditions, labeled with some
@@ -723,7 +723,7 @@ matchTerm sc md prepost real expect =
   do let loc = MS.conditionLoc md
      free <- OM (use osFree)
      case unwrapTermF expect of
-       FTermF (ExtCns ec)
+       FTermF (Variable ec)
          | Set.member (ecVarIndex ec) free ->
          do assignTerm sc md prepost (ecVarIndex ec) real
 

@@ -262,7 +262,7 @@ evalTermF cfg lam recEval tf env =
 
         StringLit s         -> return $ VString s
 
-        ExtCns ec           -> do ec' <- traverse evalType ec
+        Variable ec         -> do ec' <- traverse evalType ec
                                   simExtCns cfg tf ec'
   where
     evalType :: Term -> EvalM l (TValue l)

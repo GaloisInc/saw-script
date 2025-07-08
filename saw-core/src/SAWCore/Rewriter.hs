@@ -167,7 +167,7 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
-        (FTermF (ExtCns (ecVarIndex -> i)), _) | IntSet.member i ixs ->
+        (FTermF (Variable (ecVarIndex -> i)), _) | IntSet.member i ixs ->
             case my' of
               Nothing -> Just m'
               Just y' -> if alphaEquiv y y' then Just m' else Nothing
@@ -260,7 +260,7 @@ scMatch sc ctxt pat term =
       where
         go js x =
           case unwrapTermF x of
-            FTermF (ExtCns ec)
+            FTermF (Variable ec)
               | IntSet.member (ecVarIndex ec) ixs -> Just (ecVarIndex ec, js)
               | otherwise  -> Nothing
             App t (unwrapTermF -> LocalVar j)
@@ -294,7 +294,7 @@ scMatch sc ctxt pat term =
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
                    do ec <- scFreshEC sc nm ty
-                      v <- scExtCns sc ec
+                      v <- scVariable sc ec
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
              let fixVars t [] = return (t, [])
@@ -470,7 +470,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
   scAsLambda sc rhs >>= \case
   Just (ec, body) ->
     do let ctxt' = ctxt ++ [ec]
-       var0 <- scExtCns sc ec
+       var0 <- scVariable sc ec
        lhs' <- scApply sc lhs var0
        pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
   Nothing ->
@@ -481,7 +481,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asExtCns -> Just ec), more))
+     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asVariable -> Just ec), more))
       | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
       do -- ti is the type of the value being scrutinized
          ti <- scWhnf sc (ecType ec)
@@ -492,7 +492,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   ctorT <- piAppType (ctorType ctor) params1
                   argECs <- fst <$> scAsPiList sc ctorT
                   -- Build a fully-applied constructor @c@.
-                  args <- traverse (scExtCns sc) argECs
+                  args <- traverse (scVariable sc) argECs
                   c <- scCtorAppParams sc (ctorName ctor) params1 args
                   -- Define function to substitute the constructor @c@
                   -- in for the old local variable @ec@.
@@ -843,7 +843,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
           StringLit{}      -> return ftf
-          ExtCns{}         -> return ftf
+          Variable{}       -> return ftf
 
     rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
                   Term -> IO Term

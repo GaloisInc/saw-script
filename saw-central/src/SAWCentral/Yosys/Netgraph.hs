@@ -191,7 +191,7 @@ convertModule sc env m = do
   inputRecordType <- cryptolRecordType sc inputFields
   outputRecordType <- cryptolRecordType sc outputFields
   inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
-  inputRecord <- liftIO $ SC.scExtCns sc inputRecordEC
+  inputRecord <- liftIO $ SC.scVariable sc inputRecordEC
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
     t <- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm

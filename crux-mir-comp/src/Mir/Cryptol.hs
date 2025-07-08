@@ -58,7 +58,7 @@ import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
-import qualified SAWCore.Recognizer as SAW (asExtCns)
+import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import SAWCentral.Crucible.MIR.TypeShape
@@ -303,7 +303,7 @@ munge sym shp0 rv0 = do
             visitExprVars visitCache x $ \var -> do
                 let expr = W4.BoundVarExpr var
                 term <- eval' expr
-                ec <- case SAW.asExtCns term of
+                ec <- case SAW.asVariable term of
                     Just ec -> return ec
                     Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
                 modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)

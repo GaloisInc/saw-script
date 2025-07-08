@@ -485,9 +485,9 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
                                                  normCompTerm t'
            _ -> throwMRFailure (MalformedComp t)
 
-    -- For an ExtCns, we have to check what sort of variable it is
+    -- For a Variable, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
-    ((asExtCns -> Just ec), args) ->
+    ((asVariable -> Just ec), args) ->
       do fun_name <- extCnsToFunName ec
          FunBind fun_name args <$> mkCompFunReturn <$>
            mrFunOutType fun_name args
