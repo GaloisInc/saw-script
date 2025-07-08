@@ -652,16 +652,16 @@ interpretStmts stmts =
           -- Execute the expression purely first.
           v1 :: Value <- liftTopLevel $ interpretExpr e
           -- If we got a do-block or similar back, execute it now.
-          v1' :: Value <- force v1
+          v2 :: Value <- force v1
           -- We should now have a VTopLevel/VProofScript/etc with a
           -- TopLevel/ProofScript/etc Value in it that we can execute
           -- in Haskell to get the resultant Value.
-          v1'' :: Value <- actionFromValue v1'
+          v3 :: Value <- actionFromValue v2
           liftTopLevel $ popPosition savepos
           let msg = Text.pack (show pos) <> ": value came from here"
           -- Caution re pos: see StmtLet
           -- this can be simplified a lot, but that's for later (XXX)
-          liftTopLevel $ applyValue msg (VLambda env pat (SS.Block pos ss)) v1''
+          liftTopLevel $ applyValue msg (VLambda env pat (SS.Block pos ss)) v3
       SS.StmtLet pos bs : ss -> do
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
@@ -672,20 +672,22 @@ interpretStmts stmts =
           -- this is the rest of the block, so will always be a VDo value
           force ss'
       SS.StmtCode _ s : ss -> do
-          sc <- liftTopLevel $ getSharedContext
-          rw <- liftTopLevel $ getMergedEnv
+          liftTopLevel $ do
+            sc <- getSharedContext
+            rw <- getMergedEnv
 
-          ce' <- liftTopLevel $ io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
-          -- FIXME: Local bindings get saved into the global cryptol environment here.
-          -- We should change parseDecls to return only the new bindings instead.
-          liftTopLevel $ putTopLevelRW $ rw{rwCryptol = ce'}
+            ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
+            -- FIXME: Local bindings get saved into the global cryptol environment here.
+            -- We should change parseDecls to return only the new bindings instead.
+            putTopLevelRW $ rw{rwCryptol = ce'}
           interpretStmts ss
       SS.StmtImport _ _ : _ ->
           fail "block import unimplemented"
-      SS.StmtTypedef _ name ty : ss -> do
-          env <- liftTopLevel $ getLocalEnv
-          let env' = LocalTypedef (getVal name) ty : env
-          liftTopLevel $ withLocalEnv env' (interpretStmts ss)
+      SS.StmtTypedef _ name ty : ss ->
+          liftTopLevel $ do
+            env <- getLocalEnv
+            let env' = LocalTypedef (getVal name) ty : env
+            withLocalEnv env' (interpretStmts ss)
 
 -- Execute a top-level bind.
 processStmtBind ::
@@ -1441,7 +1443,6 @@ proofScriptSubshell = VBuiltin $ \_ ->
 forValue :: [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn (VArray [])
 forValue (x : xs) f = do
-   --let pos = SS.PosInternal "<for>"
    m1 <- applyValue "(value was in a \"for\")" f x
    m2 <- forValue xs f
    return $ VBindOnce m1 $ VBuiltin $ \v1 ->
