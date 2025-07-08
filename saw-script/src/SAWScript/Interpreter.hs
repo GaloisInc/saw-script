@@ -27,7 +27,6 @@ module SAWScript.Interpreter
   , processFile
   , buildTopLevelEnv
   , primDocEnv
-  , InteractiveMonad(..)
   )
   where
 
@@ -296,28 +295,40 @@ bindPatternEnv pat ms v env =
 
 
 ------------------------------------------------------------
--- InteractiveMonad
+-- InterpreterMonad
 
--- Monad class to allow the interpreter to run in either the TopLevel
--- or ProofScript monads.
+-- Monad class to allow the interpreter to run in the Haskell
+-- projection of the five SAWScript monads.
 
-class (Monad m, MonadFail m) => InteractiveMonad m where
+class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
-  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
   actionFromValue :: FromValue a => Value -> m a
   getMonadContext :: m SS.Context
 
-instance InteractiveMonad TopLevel where
+instance InterpreterMonad TopLevel where
   liftTopLevel m = m
-  withTopLevel f m = f m
   actionFromValue = fromValue
   getMonadContext = return SS.TopLevel
 
-instance InteractiveMonad ProofScript where
+instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
-  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
   actionFromValue = fromValue
   getMonadContext = return SS.ProofScript
+
+instance InterpreterMonad LLVMCrucibleSetupM where
+  liftTopLevel m = llvmTopLevel m
+  actionFromValue = fromValue
+  getMonadContext = return SS.LLVMSetup
+
+instance InterpreterMonad JVMSetupM where
+  liftTopLevel m = jvmTopLevel m
+  actionFromValue = fromValue
+  getMonadContext = return SS.JavaSetup
+
+instance InterpreterMonad MIRSetupM where
+  liftTopLevel m = mirTopLevel m
+  actionFromValue = fromValue
+  getMonadContext = return SS.MIRSetup
 
 
 ------------------------------------------------------------
@@ -330,7 +341,7 @@ instance InteractiveMonad ProofScript where
 --
 -- Usage is processTypeCheck $ checkStmt ...
 type MsgList = [(SS.Pos, String)]
-processTypeCheck :: InteractiveMonad m => (Either MsgList a, MsgList) -> m a
+processTypeCheck :: InterpreterMonad m => (Either MsgList a, MsgList) -> m a
 processTypeCheck (errs_or_output, warns) =
   liftTopLevel $ do
     let issueWarning (pos, msg) =
@@ -598,7 +609,7 @@ interpretStmts stmts =
           withLocalEnv env' (interpretStmts ss)
 
 processStmtBind ::
-  InteractiveMonad m =>
+  InterpreterMonad m =>
   Bool ->
   SS.Pattern ->
   SS.Expr ->
@@ -656,7 +667,7 @@ processStmtBind printBinds pat expr = do -- mx mt
       putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
-interpretStmt :: InteractiveMonad m =>
+interpretStmt :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
   m ()

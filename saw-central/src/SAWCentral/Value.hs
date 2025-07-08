@@ -167,6 +167,9 @@ module SAWCentral.Value (
     runProofScript,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     scriptTopLevel,
+    llvmTopLevel,
+    jvmTopLevel,
+    mirTopLevel,
     -- used in SAWScript.Interpreter
     -- XXX: probably belongs in SAWSupport
     underStateT,
@@ -922,6 +925,11 @@ instance Monad LLVMCrucibleSetupM where
   LLVMCrucibleSetupM m >>= f =
     LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
 
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail LLVMCrucibleSetupM where
+   fail msg = LLVMCrucibleSetupM $ lift $ lift $ fail msg
+
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 
@@ -946,12 +954,22 @@ type JVMSetup = CrucibleSetup CJ.JVM
 newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail JVMSetupM where
+   fail msg = JVMSetupM $ lift $ lift $ fail msg
+
 --
 
 type MIRSetup = CrucibleSetup MIR
 
 newtype MIRSetupM a = MIRSetupM { runMIRSetupM :: MIRSetup a }
   deriving (Applicative, Functor, Monad)
+
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail MIRSetupM where
+   fail msg = MIRSetupM $ lift $ lift $ fail msg
 
 --
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
@@ -985,6 +1003,15 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
+
+llvmTopLevel :: TopLevel a -> LLVMCrucibleSetupM a
+llvmTopLevel m = LLVMCrucibleSetupM (lift (lift m))
+
+jvmTopLevel :: TopLevel a -> JVMSetupM a
+jvmTopLevel m = JVMSetupM (lift (lift m))
+
+mirTopLevel :: TopLevel a -> MIRSetupM a
+mirTopLevel m = MIRSetupM (lift (lift m))
 
 instance MonadIO ProofScript where
   liftIO m = ProofScript (liftIO m)
