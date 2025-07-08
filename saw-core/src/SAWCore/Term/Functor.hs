@@ -234,8 +234,8 @@ data FlatTermF e
     -- | String literal
   | StringLit !Text
 
-    -- | An external constant with a name.
-  | ExtCns !(ExtCns e)
+    -- | A named variable with a type.
+  | Variable !(ExtCns e)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
@@ -342,7 +342,7 @@ zipWithFlatTermF f = go
     go (ArrayValue tx vx) (ArrayValue ty vy)
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
-    go (ExtCns ec1) (ExtCns ec2) = ExtCns <$> zipExtCns f ec1 ec2
+    go (Variable ec1) (Variable ec2) = Variable <$> zipExtCns f ec1 ec2
 
     go _ _ = Nothing
 

@@ -712,7 +712,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
                && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
              uninterpreted_constants
        body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+       implicit_parameters <- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms
 
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
@@ -792,7 +792,7 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
                && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
              uninterpreted_constants
        tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
+       implicit_parameters <- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet tms
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry
        arguments_tuple <- scTuple sc arguments
@@ -875,7 +875,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
              )
              implicit_params
        body_tms <- mapM (viewSome $ toSC sym sawst) filtered_implicit_params
-       implicit_params' <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+       implicit_params' <- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet body_tms
        initial_exprs <-
          forM subst_pairs $
            \ (MapF.Pair _var (SimpleInvariant.InvariantEntry initVal _current)) ->
@@ -1501,7 +1501,7 @@ assertPost path func env premem preregs mdMap = do
       ]
     initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars
 
-  initialTerms <- liftIO $ traverse (scExtCns sc) initialECs
+  initialTerms <- liftIO $ traverse (scVariable sc) initialECs
 
   result <- liftIO
     . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)

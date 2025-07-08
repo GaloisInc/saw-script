@@ -470,7 +470,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    ExtCns ec ->
+    Variable ec ->
       do env <- view namedEnvironment <$> askTR
          let nm = Name (ecVarIndex ec) (ecName ec)
          case Map.lookup nm env of

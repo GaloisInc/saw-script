@@ -46,7 +46,7 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
 import qualified SAWCore.Prelude as SAW
-import qualified SAWCore.Recognizer as SAW (asExtCns)
+import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
@@ -399,7 +399,7 @@ gatherAsserts msb =
         gatherSubsts postOnlyVars vars [] [] asserts'
     substTerms <- forM substs $ \(Pair var expr) -> do
         varTerm <- liftIO $ eval $ W4.BoundVarExpr var
-        varEc <- case SAW.asExtCns varTerm of
+        varEc <- case SAW.asVariable varTerm of
             Just ec -> return ec
             Nothing -> error $ "eval of BoundVarExpr produced non-ExtCns ?" ++ show varTerm
         exprTerm <- liftIO $ eval expr

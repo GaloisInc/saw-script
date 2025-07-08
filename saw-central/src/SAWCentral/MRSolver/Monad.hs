@@ -242,16 +242,16 @@ instance PrettyInCtx MRVarInfo where
 -- | A map from 'MRVar's to their info
 type MRVarMap = Map MRVar MRVarInfo
 
--- | Test if a 'Term' is an application of an 'ExtCns' to some arguments
-asExtCnsApp :: Recognizer Term (ExtCns Term, [Term])
-asExtCnsApp (asApplyAll -> (asExtCns -> Just ec, args)) =
+-- | Test if a 'Term' is an application of a 'Variable' to some arguments
+asVariableApp :: Recognizer Term (ExtCns Term, [Term])
+asVariableApp (asApplyAll -> (asVariable -> Just ec, args)) =
   return (ec, args)
-asExtCnsApp _ = Nothing
+asVariableApp _ = Nothing
 
 -- | Recognize an evar applied to 0 or more arguments relative to a 'MRVarMap'
 -- along with its uvar context length and its instantiation, if any
 asEVarApp :: MRVarMap -> Recognizer Term (MRVar, Int, [Term], Maybe Term)
-asEVarApp var_map (asExtCnsApp -> Just (ec, args))
+asEVarApp var_map (asVariableApp -> Just (ec, args))
   | Just (EVarInfo clen maybe_inst) <- Map.lookup (MRVar ec) var_map =
     Just (MRVar ec, clen, args, maybe_inst)
 asEVarApp _ _ = Nothing
@@ -990,7 +990,7 @@ instantiateUVarsM f a =
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
 mrVarTerm :: MRVar -> MRM t Term
 mrVarTerm (MRVar ec) =
-  do var_tm <- liftSC1 scExtCns ec
+  do var_tm <- liftSC1 scVariable ec
      vars <- getAllUVarTerms
      liftSC2 scApplyAll var_tm vars
 
@@ -1015,7 +1015,7 @@ extCnsToFunName ec =
        Just (EVarInfo _ _) -> return $ EVarFunName var
        Just (CallVarInfo _) -> return $ CallSName var
        Nothing
-         | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
+         | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ Variable ec) ->
            return $ GlobalName glob []
        _ -> error "extCnsToFunName: unreachable"
 
@@ -1069,7 +1069,7 @@ mrCallsFun f t0 =
                  Just body | Set.notMember g seen -> recurse (Set.insert g seen) body
                  _ -> return False
            in case t of
-           (asExtCns -> Just ec) -> extCnsToFunName ec >>= onFunName
+           (asVariable -> Just ec) -> extCnsToFunName ec >>= onFunName
            (asGlobalFunName -> Just g) -> onFunName g
            (unwrapTermF -> tf) ->
              foldM (\b t' -> if b then return b else recurse seen t') False tf
@@ -1239,7 +1239,7 @@ mrSubstLowerEVars t_top =
                   my_panic () =
                     panic "mrSubstLowerEVars"
                     ["Unexpected evar application: " <> T.pack (show t)]
-              let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs
+              let cargs_ec = fromMaybe (my_panic ()) $ mapM asVariable cargs
               t' <- (Map.lookup evar <$> liftIO (readIORef lower_map)) >>= \case
                 Just (y, cargs_expected) ->
                   if cargs_ec == cargs_expected then return y else my_panic ()

@@ -53,7 +53,7 @@ module SAWCore.Conversion
   , asSort
   , asAnyNatLit
   , asAnyVecLit
-  , asExtCns
+  , asVariable
   , asLocalVar
     -- ** Prelude matchers
   , asBoolType
@@ -279,9 +279,9 @@ asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
 asAnyVecLit :: Matcher (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
--- | Match any external constant.
-asExtCns :: Matcher (ExtCns Term)
-asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
+-- | Match any named variable.
+asVariable :: Matcher (ExtCns Term)
+asVariable = asVar R.asVariable
 
 -- | Returns index of local var if any.
 asLocalVar :: Matcher DeBruijnIndex

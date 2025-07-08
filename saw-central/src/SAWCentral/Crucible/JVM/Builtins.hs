@@ -790,7 +790,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
            , let ec = tecExt tt ]
-     terms0 <- io $ traverse (scExtCns sc) ecs0
+     terms0 <- io $ traverse (scVariable sc) ecs0
 
      let initialFree = Set.fromList (map (ecVarIndex . tecExt)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))

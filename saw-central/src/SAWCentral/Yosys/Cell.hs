@@ -151,9 +151,9 @@ primCellToMap sc c args = case c ^. cellType of
   CellTypeReduceXnor -> bvReduce True =<< do
     boolTy <- liftIO $ SC.scBoolType sc
     xEC <- liftIO $ SC.scFreshEC sc "x" boolTy
-    x <- liftIO $ SC.scExtCns sc xEC
+    x <- liftIO $ SC.scVariable sc xEC
     yEC <- liftIO $ SC.scFreshEC sc "y" boolTy
-    y <- liftIO $ SC.scExtCns sc yEC
+    y <- liftIO $ SC.scVariable sc yEC
     r <- liftIO $ SC.scXor sc x y
     res <- liftIO $ SC.scNot sc r
     liftIO $ SC.scAbstractExts sc [xEC, yEC] res
@@ -261,8 +261,8 @@ primCellToMap sc c args = case c ^. cellType of
     bitEC <- liftIO $ SC.scFreshEC sc "bit" bool
     accEC <- liftIO $ SC.scFreshEC sc "acc" accTy
     fun <- liftIO . SC.scAbstractExts sc [bitEC, accEC] =<< do
-      bit <- liftIO $ SC.scExtCns sc bitEC
-      acc <- liftIO $ SC.scExtCns sc accEC
+      bit <- liftIO $ SC.scVariable sc bitEC
+      acc <- liftIO $ SC.scVariable sc accEC
       idx <- liftIO $ SC.scPairLeft sc acc
       aval <- liftIO $ SC.scPairRight sc acc
       bval <- liftIO $ SC.scAtWithDefault sc swidth widthBv aval splitb idx

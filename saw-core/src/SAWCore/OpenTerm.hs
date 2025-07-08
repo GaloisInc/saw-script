@@ -65,7 +65,7 @@ module SAWCore.OpenTerm (
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, variableOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
   piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
@@ -376,9 +376,9 @@ identOpenTerm ident =
   do ident_app <- liftTCM scGlobalDef ident
      typeInferComplete ident_app
 
--- | Build an 'OpenTerm' for an external constant
-extCnsOpenTerm :: ExtCns Term -> OpenTerm
-extCnsOpenTerm ec = OpenTerm (liftTCM scExtCns ec >>= typeInferComplete)
+-- | Build an 'OpenTerm' for a named variable.
+variableOpenTerm :: ExtCns Term -> OpenTerm
+variableOpenTerm ec = OpenTerm (liftTCM scVariable ec >>= typeInferComplete)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
@@ -1198,5 +1198,5 @@ sawLetMinimize sc t_top =
   slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)
 
   slMinFTermF :: FlatTermF Term -> SLMinM Term
-  slMinFTermF ftf@(ExtCns _) = liftIO $ scFlatTermF sc ftf
+  slMinFTermF ftf@(Variable _) = liftIO $ scFlatTermF sc ftf
   slMinFTermF ftf = traverse slMinTerm ftf >>= liftIO . scFlatTermF sc

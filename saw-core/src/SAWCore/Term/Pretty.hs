@@ -441,7 +441,7 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
-    ExtCns cns -> annotate PPS.ExtCnsStyle <$> ppExtCns cns
+    Variable ec -> annotate PPS.ExtCnsStyle <$> ppExtCns ec
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
 ppBitsToHex :: [Bool] -> String
@@ -565,7 +565,7 @@ shouldMemoizeTerm t =
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False
-    FTermF ExtCns{} -> False
+    FTermF Variable{} -> False
     Constant{} -> False
     LocalVar{} -> False
     _ -> True

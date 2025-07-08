@@ -60,7 +60,7 @@ module SAWCore.SharedTerm
   , scFreshGlobal
   , scFreshEC
   , scFreshName
-  , scExtCns
+  , scVariable
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
@@ -436,9 +436,9 @@ restoreSharedContext scc sc =
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
--- | Create a 'Term' from an 'ExtCns'.
-scExtCns :: SharedContext -> ExtCns Term -> IO Term
-scExtCns sc ec = scFlatTermF sc (ExtCns ec)
+-- | Create a named variable 'Term' from an 'ExtCns'.
+scVariable :: SharedContext -> ExtCns Term -> IO Term
+scVariable sc ec = scFlatTermF sc (Variable ec)
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -503,7 +503,7 @@ scFreshEC sc x tp =
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshGlobal :: SharedContext -> Text -> Term -> IO Term
-scFreshGlobal sc x tp = scExtCns sc =<< scFreshEC sc x tp
+scFreshGlobal sc x tp = scVariable sc =<< scFreshEC sc x tp
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -825,7 +825,7 @@ ctxCtorArgBindings sc d_params ((x, arg) : args) =
 -- datatype and its 'CtorArgStruct'
 ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
 ctxCtorType sc d (CtorArgStruct{..}) =
-  do params <- traverse (scExtCns sc) ctorParams
+  do params <- traverse (scVariable sc) ctorParams
      d' <- scTermF sc (Constant d)
      d_params <- scApplyAll sc d' params
      bs <- ctxCtorArgBindings sc d_params ctorArgs
@@ -905,8 +905,8 @@ ctxPRetTp ::
   Sort ->
   IO Term
 ctxPRetTp sc d params ixs s =
-  do param_vars <- traverse (scExtCns sc) params
-     ix_vars <- traverse (scExtCns sc) ixs
+  do param_vars <- traverse (scVariable sc) params
+     ix_vars <- traverse (scVariable sc) ixs
      dt <- scDataTypeAppParams sc d param_vars ix_vars
      ret <- scFun sc dt =<< scSort sc s
      scGeneralizeExts sc ixs ret
@@ -958,7 +958,7 @@ ctxCtorElimType ::
   CtorArgStruct ->
   IO Term
 ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
-  do params <- traverse (scExtCns sc) ctorParams
+  do params <- traverse (scVariable sc) ctorParams
      helper d_top params [] ctorArgs ctorIndices
   where
 
@@ -980,7 +980,7 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
        scApply sc p_ret_ixs appliedCtor
   helper d params prevs ((nm, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
-    do arg <- scExtCns sc (EC (nameIndex nm) (nameInfo nm) tp)
+    do arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)
        rest <- helper d params (prevs ++ [arg]) args ixs
        scGeneralizeTerms sc [arg] rest
   helper d params prevs ((nm, RecursiveArg zs ts) : args) ixs =
@@ -998,10 +998,10 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
     do dt <- scDataTypeAppParams sc d params ts
        -- Build the type of the argument arg
        arg_tp <- scGeneralizeExts sc zs dt
-       arg <- scExtCns sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
+       arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
        -- Build the type of ih
        pret_ts <- scApplyAll sc p_ret ts
-       z_vars <- traverse (scExtCns sc) zs
+       z_vars <- traverse (scVariable sc) zs
        arg_zs <- scApplyAll sc arg z_vars
        ih_ret <- scApply sc pret_ts arg_zs
        ih_tp <- scGeneralizeExts sc zs ih_ret
@@ -1123,7 +1123,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
       IO Term
     mk_rec_arg zs_ctx ixs x =
       -- eta expand over the zs and apply the RecursorApp form
-      do zs <- traverse (scExtCns sc) zs_ctx
+      do zs <- traverse (scVariable sc) zs_ctx
          x_zs <- scApplyAll sc x zs
          body <- scRecursorApp sc rec ixs x_zs
          scAbstractExts sc zs_ctx body
@@ -1523,7 +1523,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           n <- scNat sc (fromIntegral (V.length vs))
           scVecType sc n tp
         StringLit{} -> lift $ scStringType sc
-        ExtCns ec   -> return $ ecType ec
+        Variable ec -> pure $ ecType ec
 
 --------------------------------------------------------------------------------
 
@@ -1590,7 +1590,7 @@ instantiateLocalVars sc f initialLevel t0 =
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
            DeBruijnIndex -> TermF Term -> IO Term
-    go' _ (FTermF tf@(ExtCns _)) = scFlatTermF sc tf
+    go' _ (FTermF tf@(Variable _)) = scFlatTermF sc tf
     go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -1616,7 +1616,7 @@ instantiateVars sc f initialLevel t0 =
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
            DeBruijnIndex -> TermF Term -> IO Term
-    go' l (FTermF (ExtCns ec)) = f (go l) l (Left ec)
+    go' l (FTermF (Variable ec)) = f (go l) l (Left ec)
     go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -1948,7 +1948,7 @@ scConstant sc name rhs ty =
      ty' <- scFunAll sc (map ecType ecs) ty
      nm <- scFreshName sc name
      t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scFlatTermF sc . ExtCns) ecs
+     args <- mapM (scVariable sc) ecs
      scApplyAll sc t args
 
 -- FIXME: Regarding comments,
@@ -1975,7 +1975,7 @@ scConstant' sc nmi rhs ty =
      i <- scRegisterName sc nmi
      let nm = Name i nmi
      t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scFlatTermF sc . ExtCns) ecs
+     args <- mapM (scVariable sc) ecs
      scApplyAll sc t args
 
 
@@ -2816,9 +2816,9 @@ getAllExts t = Set.toList (getAllExtSet t)
 getAllExtSet :: Term -> Set.Set (ExtCns Term)
 getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
     where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | IntSet.member idx is = acc
-          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (ExtCns ec)) }) =
+          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (Variable ec)) }) =
             (IntSet.insert idx is, Set.insert ec a)
-          getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
+          getExtCns (is, a) (Unshared (FTermF (Variable ec))) =
             (is, Set.insert ec a)
           getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc
           getExtCns acc (Unshared (Constant {})) = acc
@@ -2849,8 +2849,8 @@ scInstantiateExt sc vmap = instantiateVars sc fn 0
   where fn _rec l (Left ec) =
             case IntMap.lookup (ecVarIndex ec) vmap of
                Just t  -> incVars sc 0 l t
-               Nothing -> scFlatTermF sc $ ExtCns ec
-        fn _ _ (Right i) = scTermF sc $ LocalVar i
+               Nothing -> scVariable sc ec
+        fn _ _ (Right i) = scLocalVar sc i
 
 {-
 -- RWD: I'm pretty sure the following implementation gets incorrect results when
@@ -2864,14 +2864,14 @@ scInstantiateExt sc vmap t0 = do
       go t@(Unshared tf) =
         case tf of
           -- | Lookup variable in term if it is bound.
-          FTermF (ExtCns ec) ->
+          FTermF (Variable ec) ->
             maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
           -- | Recurse on other terms.
           _ -> whenModified t (scTermF sc) (traverse go tf)
       go t@(STApp idx tf) =
         case tf of
           -- Lookup variable in term if it is bound.
-          FTermF (ExtCns ec) ->
+          FTermF (Variable ec) ->
             maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
           -- Recurse on other terms.
           _ -> useChangeCache tcache idx $
@@ -2893,7 +2893,7 @@ scExtsToLocals sc exts x = instantiateVars sc fn 0 x
         Left ec ->
           case Map.lookup (ecVarIndex ec) m of
             Just k  -> scLocalVar sc (l + k)
-            Nothing -> scFlatTermF sc . ExtCns =<< traverse rec ec
+            Nothing -> scVariable sc =<< traverse rec ec
         Right i ->
           scLocalVar sc (i + length exts)
 
@@ -2927,7 +2927,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
 
 -- | Create a lambda term by abstracting over the list of arguments,
 -- which must all be named variables (e.g. terms generated by
--- 'scExtCns' or 'scFreshGlobal').
+-- 'scVariable' or 'scFreshGlobal').
 scAbstractTerms :: SharedContext -> [Term] -> Term -> IO Term
 scAbstractTerms sc args body =
   do vars <- mapM toEC args
@@ -2935,7 +2935,7 @@ scAbstractTerms sc args body =
   where
     toEC :: Term -> IO (ExtCns Term)
     toEC t =
-      case asExtCns t of
+      case asVariable t of
         Just ec -> pure ec
         Nothing -> fail "scAbstractTerms: expected ExtCns"
 
@@ -2953,7 +2953,7 @@ scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
     -- the final variable to abstract is applied to the
     -- term, and does not appear elsewhere in the term,
     -- so we can eta-collapse.
-    loop (ec:exts) (asApp -> Just (f,asExtCns -> Just ec'))
+    loop (ec:exts) (asApp -> Just (f, asVariable -> Just ec'))
       | ec == ec', not (Set.member ec (getAllExtSet f))
       = loop exts f
 
@@ -2990,7 +2990,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     loop [] = scExtsToLocals sc exts x
 
 -- | Create a pi term by abstracting over the list of arguments, which
--- must all be named variables (e.g. terms generated by 'scExtCns' or
+-- must all be named variables (e.g. terms generated by 'scVariable' or
 -- 'scFreshGlobal').
 scGeneralizeTerms :: SharedContext -> [Term] -> Term -> IO Term
 scGeneralizeTerms sc args body =
@@ -2999,7 +2999,7 @@ scGeneralizeTerms sc args body =
   where
     toEC :: Term -> IO (ExtCns Term)
     toEC t =
-      case asExtCns t of
+      case asVariable t of
         Just ec -> pure ec
         Nothing -> fail "scGeneralizeTerms: expected ExtCns"
 
@@ -3151,7 +3151,7 @@ scOpenTerm :: SharedContext
          -> IO (ExtCns Term, Term)
 scOpenTerm sc nm tp idx body = do
     ec <- scFreshEC sc nm tp
-    ec_term <- scFlatTermF sc (ExtCns ec)
+    ec_term <- scVariable sc ec
     body' <- instantiateVar sc idx ec_term body
     return (ec, body')
 
@@ -3201,7 +3201,7 @@ scAsLambdaList sc = loop [] []
         Just (nm, tp, body) ->
           do tp' <- instantiateVarList sc 0 vs tp
              ec  <- scFreshEC sc nm tp'
-             v   <- scExtCns sc ec
+             v   <- scVariable sc ec
              loop (ec : ecs) (v : vs) body
 
 -- | Deconstruct a pi term into a bound variable and a body, using
@@ -3226,5 +3226,5 @@ scAsPiList sc = loop [] []
         Just (nm, tp, body) ->
           do tp' <- instantiateVarList sc 0 vs tp
              ec  <- scFreshEC sc nm tp'
-             v   <- scExtCns sc ec
+             v   <- scVariable sc ec
              loop (ec : ecs) (v : vs) body

@@ -123,7 +123,7 @@ networkAsSharedTerms ntk sc inputTerms outputLits = do
 -- | Create vector for each input literal from expected types.
 bitblastVarsAsInputLits :: SharedContext -> [ExtCns Term] -> ExceptT String IO (V.Vector Term)
 bitblastVarsAsInputLits sc args = do
-  inputs <- liftIO $ mapM (scExtCns sc) args
+  inputs <- liftIO $ mapM (scVariable sc) args
   fmap snd $ runTypeParser V.empty $ do
     zipWithM_ (bitblastSharedTerm sc) inputs (map ecType args)
 
