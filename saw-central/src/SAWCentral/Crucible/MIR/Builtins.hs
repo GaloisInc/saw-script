@@ -1147,7 +1147,7 @@ verifyPoststate ::
   MethodSpec                                {- ^ specification           -} ->
   Map MS.AllocIndex (Some (MirPointer Sym)) {- ^ allocation substitution -} ->
   Crucible.SymGlobalState Sym               {- ^ global variables        -} ->
-  Maybe (Mir.Ty, MIRVal)                    {- ^ optional return value   -} ->
+  Maybe MIRVal                              {- ^ optional return value   -} ->
   IORef MetadataMap                         {- ^ metadata map            -} ->
   TopLevel [(String, MS.ConditionMetadata, Term)] {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret mdMap =
@@ -1212,14 +1212,14 @@ verifyPoststate cc mspec env0 globals ret mdMap =
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) ->
+        (Just r, Just expect) ->
             let md = MS.ConditionMetadata
                      { MS.conditionLoc = mspec ^. MS.csLoc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "return value matching"
                      , MS.conditionContext = ""
                      } in
-            matchArg opts sc cc mspec MS.PostState md r rty expect
+            matchArg opts sc cc mspec MS.PostState md r expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected mir_return specification"
         _ -> return ()
 
@@ -1301,7 +1301,7 @@ verifySimulate ::
   Crucible.SymGlobalState Sym ->
   Bool {- ^ path sat checking -} ->
   IORef MetadataMap {- ^ metadata map -} ->
-  IO (Maybe (Mir.Ty, MIRVal), Crucible.SymGlobalState Sym)
+  IO (Maybe MIRVal, Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
   mccWithBackend cc $ \bak ->
   do let rm = cc^.mccRustModule
@@ -1345,7 +1345,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
              Crucible.RegEntry ty val ->
                case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
                  Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
-                 Just v -> return (Just (ret_mt, v))
+                 Just v -> return (Just v)
      return (retval', globals1)
 
   where
