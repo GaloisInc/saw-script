@@ -33,7 +33,7 @@ module SAWCore.SharedTerm
   , Term(..)
   , TermIndex
   , looseVars
-  , smallestFreeVar
+  , smallestLooseVar
   , scSharedTerm
   , unshare
   , scImport
@@ -758,7 +758,8 @@ getTerm cache termF =
         i <- getUniqueInt
         let term = STApp { stAppIndex = i
                          , stAppHash = hash termF
-                         , stAppFreeVars = freesTermF (fmap looseVars termF)
+                         , stAppLooseVars = looseTermF (fmap looseVars termF)
+                         , stAppFreeVars = freesTermF (fmap freeVars termF)
                          , stAppTermF = termF
                          }
             s' = insertTFM termF term s
@@ -1541,7 +1542,7 @@ instantiateLocalVars sc f initialLevel t0 =
     go l t =
       case t of
         Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppFreeVars = _, stAppTermF = tf}
+        STApp{ stAppIndex = tidx, stAppTermF = tf }
           | termIsClosed t -> return t -- closed terms map to themselves
           | otherwise -> useCache ?cache (tidx, l) (go' l tf)
 

@@ -2258,7 +2258,7 @@ mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
         collapseEta :: Term -> Term
         collapseEta (asLambdaList -> (lamVars,
-                     asApplyAll -> (t@(smallestFreeVar -> Nothing),
+                     asApplyAll -> (t@(smallestLooseVar -> Nothing),
                                     mapM asLocalVar -> Just argVars)))
           | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
         collapseEta t = t

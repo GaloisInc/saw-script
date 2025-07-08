@@ -45,7 +45,7 @@ module SAWCore.Term.Functor
   , TermF(..)
   , FlatTermF(..)
   , zipWithFlatTermF
-  , freesTermF
+  , looseTermF
   , unwrapTermF
   , termToPat
   , alphaEquiv
@@ -57,12 +57,15 @@ module SAWCore.Term.Functor
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
   , smallestBitSetElem
-  , looseVars, smallestFreeVar, termIsClosed
+  , looseVars, smallestLooseVar, termIsClosed
+  , freesTermF, freeVars
   ) where
 
 import Data.Bits
 import qualified Data.Foldable as Foldable (and, foldl')
 import Data.Hashable
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -408,8 +411,10 @@ data Term
        -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
        -- with this 'Term'. This should be as unique as a hash can be, but is
        -- not guaranteed unique as 'stAppIndex' is.
-     , stAppFreeVars :: !BitSet
-       -- ^ The free variables associated with the 'stAppTermF' field.
+     , stAppLooseVars :: !BitSet
+       -- ^ The loose de Bruijn indices associated with the 'stAppTermF' field.
+     , stAppFreeVars :: !IntSet
+       -- ^ The set of 'VarIndex'es of the free named variables in the term.
      , stAppTermF    :: !(TermF Term)
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
@@ -587,10 +592,10 @@ bitSetElems = go 0 where
     Just i ->
       shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)
 
--- | Compute the free variables of a term given free variables for its immediate
--- subterms
-freesTermF :: TermF BitSet -> BitSet
-freesTermF tf =
+-- | Compute the loose de Bruijn indices of a term given the loose
+-- indices for its immediate subterms.
+looseTermF :: TermF BitSet -> BitSet
+looseTermF tf =
     case tf of
       FTermF ftf -> Foldable.foldl' unionBitSets emptyBitSet ftf
       App l r -> unionBitSets l r
@@ -600,15 +605,37 @@ freesTermF tf =
       Constant {} -> emptyBitSet -- assume type is a closed term
       Variable ec -> ecType ec
 
--- | Return a bitset containing indices of all free local variables
+-- | Return a bitset containing indices of all loose de Bruijn indices.
 looseVars :: Term -> BitSet
-looseVars STApp{ stAppFreeVars = x } = x
-looseVars (Unshared f) = freesTermF (fmap looseVars f)
+looseVars STApp{ stAppLooseVars = x } = x
+looseVars (Unshared f) = looseTermF (fmap looseVars f)
 
 -- | Compute the value of the smallest variable in the term, if any.
-smallestFreeVar :: Term -> Maybe Int
-smallestFreeVar = smallestBitSetElem . looseVars
+smallestLooseVar :: Term -> Maybe Int
+smallestLooseVar = smallestBitSetElem . looseVars
 
--- | Test whether a 'Term' is closed, i.e., has no free variables
+-- | Test whether a 'Term' is closed, i.e., has no loose de Bruijn indices.
 termIsClosed :: Term -> Bool
 termIsClosed t = looseVars t == emptyBitSet
+
+-- Free Named Variables --------------------------------------------------------
+
+-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+-- variables of a term, given the free variables for its immediate
+-- subterms.
+freesTermF :: TermF IntSet -> IntSet
+freesTermF tf =
+  case tf of
+    FTermF ftf -> Foldable.foldl' IntSet.union IntSet.empty ftf
+    App l r -> IntSet.union l r
+    Lambda _name tp rhs -> IntSet.union tp rhs
+    Pi _name lhs rhs -> IntSet.union lhs rhs
+    LocalVar _ -> IntSet.empty
+    Constant {} -> IntSet.empty
+    Variable ec -> IntSet.singleton (ecVarIndex ec)
+
+-- | Return an 'IntSet' containing the 'VarIndex' of all free
+-- variables in the 'Term'.
+freeVars :: Term -> IntSet
+freeVars STApp{ stAppFreeVars = s } = s
+freeVars (Unshared tf) = freesTermF (fmap freeVars tf)

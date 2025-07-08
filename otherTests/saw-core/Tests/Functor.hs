@@ -50,7 +50,8 @@ shared :: TermIndex -> TermF Term -> Term
 shared ix t = STApp {
     stAppIndex = ix,
     stAppHash = hash t,
-    stAppFreeVars = emptyBitSet,
+    stAppLooseVars = emptyBitSet,
+    stAppFreeVars = mempty,
     stAppTermF = t
  }
 

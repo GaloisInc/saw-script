@@ -566,7 +566,7 @@ mkMemoClosed cfg t =
                   ResolvedDef (defBody -> Just body) -> void $ go body
                   _ -> pure ()
            _ -> pure ()
-         freesTermF <$> traverse go tf
+         looseTermF <$> traverse go tf
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
@@ -618,7 +618,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
     go memo (Unshared tf) = goTermF memo tf
-    go memo (t'@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf })
+    go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
       | termIsClosed t' = pure memo
       | otherwise =
         case IMap.lookup i memo of
@@ -662,7 +662,7 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
   where
     lam = evalOpen cfg memoClosed
     recEval (Unshared tf) = evalTermF cfg lam recEval tf env
-    recEval (t@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf }) =
+    recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IMap.lookup i memo of
         Just x -> force x
         Nothing -> evalTermF cfg lam recEval tf env
@@ -691,7 +691,7 @@ evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: Term -> MValue l
       eval (Unshared tf) = evalF tf
-      eval (t'@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf }) =
+      eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf

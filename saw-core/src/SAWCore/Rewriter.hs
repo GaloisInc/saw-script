@@ -273,7 +273,7 @@ scMatch sc ctxt pat term =
     -- saves the names associated with those bound variables.
     match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
              MaybeT IO MatchState
-    match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s
+    match _ _ t@(STApp{stAppIndex = i}) (STApp{stAppIndex = j}) s
       | termIsClosed t && i == j = return s
     match depth env x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>

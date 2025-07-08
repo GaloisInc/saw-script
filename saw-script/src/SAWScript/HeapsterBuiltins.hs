@@ -332,7 +332,7 @@ parseAndInsDef henv nm term_tp term_string =
      typed_term <- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term
      liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp
      case typedVal typed_term of
-       STApp _ _ _ (Constant (Name _ (ModuleIdentifier term_ident))) ->
+       STApp {stAppTermF = Constant (Name _ (ModuleIdentifier term_ident))} ->
          return term_ident
        term -> do
          m <- liftIO $ scFindModule sc mnm
