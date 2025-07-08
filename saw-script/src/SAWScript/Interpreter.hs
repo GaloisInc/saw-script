@@ -566,7 +566,7 @@ interpretDeclGroup (SS.Recursive ds) = do
         env' = foldr addDecl env ds
     return env'
 
-interpretStmts :: [SS.Stmt] -> TopLevel Value
+interpretStmts :: InterpreterMonad m => [SS.Stmt] -> m Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
@@ -574,39 +574,39 @@ interpretStmts stmts =
       [] ->
           fail "empty block"
       [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
-          savepos <- pushPosition pos
-          result <- interpretExpr e
-          popPosition savepos
+          savepos <- liftTopLevel $ pushPosition pos
+          result <- liftTopLevel $ interpretExpr e
+          liftTopLevel $ popPosition savepos
           return result
       SS.StmtBind pos pat e : ss -> do
-          env <- getLocalEnv
-          savepos <- pushPosition pos
-          v1 <- interpretExpr e
-          popPosition savepos
+          env <- liftTopLevel $ getLocalEnv
+          savepos <- liftTopLevel $ pushPosition pos
+          v1 <- liftTopLevel $ interpretExpr e
+          liftTopLevel $ popPosition savepos
           -- Caution re pos: see StmtLet
-          bindValue pos v1 (VLambda env pat (SS.Block pos ss))
+          liftTopLevel $ bindValue pos v1 (VLambda env pat (SS.Block pos ss))
       SS.StmtLet pos bs : ss ->
           -- Caution: the position pos is not the correct position for
           -- the block ss. However, interpret on Block ignores the
           -- position there, so all we need is a placeholder for it to
           -- ignore. Therefore, don't take the trouble to compute the
           -- correct position (the bounding box on the statements ss).
-          interpretExpr (SS.Let pos bs (SS.Block pos ss))
+          liftTopLevel $ interpretExpr (SS.Let pos bs (SS.Block pos ss))
       SS.StmtCode _ s : ss -> do
-          sc <- getSharedContext
-          rw <- getMergedEnv
+          sc <- liftTopLevel $ getSharedContext
+          rw <- liftTopLevel $ getMergedEnv
 
-          ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
+          ce' <- liftTopLevel $ io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
           -- FIXME: Local bindings get saved into the global cryptol environment here.
           -- We should change parseDecls to return only the new bindings instead.
-          putTopLevelRW $ rw{rwCryptol = ce'}
+          liftTopLevel $ putTopLevelRW $ rw{rwCryptol = ce'}
           interpretStmts ss
       SS.StmtImport _ _ : _ ->
           fail "block import unimplemented"
       SS.StmtTypedef _ name ty : ss -> do
-          env <- getLocalEnv
+          env <- liftTopLevel $ getLocalEnv
           let env' = LocalTypedef (getVal name) ty : env
-          withLocalEnv env' (interpretStmts ss)
+          liftTopLevel $ withLocalEnv env' (interpretStmts ss)
 
 processStmtBind ::
   InterpreterMonad m =>
