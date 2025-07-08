@@ -14,6 +14,7 @@ module SAWServer.SAWServer
   ) where
 
 import Prelude hiding (mod)
+import qualified Control.Exception as X
 import Control.Lens ( Lens', view, lens, over )
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
@@ -53,6 +54,7 @@ import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
+import SAWCentral.Exceptions(disableJavaWarning)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType)
@@ -219,7 +221,13 @@ initialState readFileFn =
      mm <- scGetModuleMap sc
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
-     jcb <- JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
+     jcb <- if javaEnabled opts
+        then
+          (Just <$> JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts))
+          `X.catch` \e ->
+            putStrLn (disableJavaWarning "Failed to setup Java" e) >>
+            pure Nothing
+        else pure Nothing
      let bic = BuiltinContext { biSharedContext = sc
                               , biBasicSS = ss
                               }

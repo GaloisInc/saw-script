@@ -580,7 +580,7 @@ getCryptolEnv = do
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
-  { roJavaCodebase  :: JSS.Codebase
+  { roJavaCodebase  :: Maybe JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roProxy         :: AIGProxy
@@ -747,7 +747,12 @@ getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)
 
 getJavaCodebase :: TopLevel JSS.Codebase
-getJavaCodebase = TopLevel_ (asks roJavaCodebase)
+getJavaCodebase = TopLevel_ $
+  do
+    mb <- asks roJavaCodebase
+    case mb of
+      Just a -> pure a
+      Nothing -> liftIO (fail "Java support is not enabled.")
 
 getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = gets rwTheoremDB

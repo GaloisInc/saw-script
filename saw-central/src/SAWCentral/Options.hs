@@ -9,6 +9,7 @@ Stability   : provisional
 
 module SAWCentral.Options where
 
+import Control.Exception(try)
 import Data.List (partition)
 import Data.Time
 import Text.Show.Functions ()
@@ -18,12 +19,15 @@ import System.FilePath
 
 import Lang.JVM.JavaTools
 
+import SAWCentral.Exceptions(disableJavaWarning)
+
 -- | Type we use to track the command-line option settings.
 data Options = Options
   { importPath       :: [FilePath]
   , classPath        :: [FilePath]
   , jarList          :: [FilePath]
   , javaBinDirs      :: [FilePath]
+  , javaEnabled      :: Bool
   , verbLevel        :: Verbosity
   , simVerbose       :: Int
   , detectVacuity    :: Bool
@@ -62,6 +66,7 @@ defaultOptions
     , classPath = ["."]
     , jarList = []
     , javaBinDirs = []
+    , javaEnabled = True
     , verbLevel = Info
     , printShowPos = False
     , printOutFn = printOutWith Info
@@ -109,15 +114,20 @@ processEnv opts = do
     -- Lang.JVM.Codebase in crucible-jvm.)
     -- If Java's path is not specified, return the Options unchanged.
     addJavaBinDirInducedOpts :: Options -> IO Options
+    addJavaBinDirInducedOpts os@Options{javaEnabled=False} = pure os
     addJavaBinDirInducedOpts os@Options{javaBinDirs} = do
       mbJavaPath <- findJavaIn javaBinDirs
       case mbJavaPath of
         Nothing       -> pure os
         Just javaPath -> do
-          javaMajorVersion <- findJavaMajorVersion javaPath
-          if javaMajorVersion >= 9
-             then pure os
-             else addRTJar javaPath os
+          mbJavaMajorVersion <- try (findJavaMajorVersion javaPath)
+          case mbJavaMajorVersion of
+            Right v
+              | v >= 9 -> pure os
+              | otherwise -> addRTJar javaPath os
+            Left e ->
+              putStrLn (disableJavaWarning "Failed to determinve version."e) >>
+              pure os { javaEnabled = False }
 
     -- rt.jar lives in a standard location relative to @java.home@. At least,
     -- this is the case on every operating system I've tested.

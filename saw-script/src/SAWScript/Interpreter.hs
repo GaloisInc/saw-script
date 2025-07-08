@@ -75,7 +75,7 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
-import SAWCentral.Exceptions (failTypecheck)
+import SAWCentral.Exceptions (failTypecheck, disableJavaWarning)
 import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
 import SAWCentral.JavaExpr
@@ -786,7 +786,13 @@ buildTopLevelEnv proxy opts =
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
-       jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
+       jcb <- if javaEnabled opts
+                then
+                  (Just <$> JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts))
+                  `X.catch` \e ->
+                      putStrLn (disableJavaWarning "Failed to setup Java" e) >>
+                      pure Nothing
+                else pure Nothing
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
          Just path | not (null path) -> Just <$> lazyOpenSolverCache path
