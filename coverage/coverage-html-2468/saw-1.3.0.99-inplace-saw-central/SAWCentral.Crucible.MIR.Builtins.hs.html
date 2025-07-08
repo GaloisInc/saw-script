@@ -1166,7 +1166,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1147 </span>  MethodSpec                                {- ^ specification           -} -&gt;
 <span class="lineno"> 1148 </span>  Map MS.AllocIndex (Some (MirPointer Sym)) {- ^ allocation substitution -} -&gt;
 <span class="lineno"> 1149 </span>  Crucible.SymGlobalState Sym               {- ^ global variables        -} -&gt;
-<span class="lineno"> 1150 </span>  Maybe (Mir.Ty, MIRVal)                    {- ^ optional return value   -} -&gt;
+<span class="lineno"> 1150 </span>  Maybe MIRVal                              {- ^ optional return value   -} -&gt;
 <span class="lineno"> 1151 </span>  IORef MetadataMap                         {- ^ metadata map            -} -&gt;
 <span class="lineno"> 1152 </span>  TopLevel [(String, MS.ConditionMetadata, Term)] {- ^ generated labels and verification conditions -}
 <span class="lineno"> 1153 </span><span class="decl"><span class="istickedoff">verifyPoststate cc mspec env0 globals ret mdMap =</span>
@@ -1231,14 +1231,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1212 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1213 </span><span class="spaces">    </span><span class="istickedoff">matchResult opts sc =</span>
 <span class="lineno"> 1214 </span><span class="spaces">      </span><span class="istickedoff">case (ret, mspec ^. MS.csRetValue) of</span>
-<span class="lineno"> 1215 </span><span class="spaces">        </span><span class="istickedoff">(Just (rty,r), Just expect) -&gt;</span>
+<span class="lineno"> 1215 </span><span class="spaces">        </span><span class="istickedoff">(Just r, Just expect) -&gt;</span>
 <span class="lineno"> 1216 </span><span class="spaces">            </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
 <span class="lineno"> 1217 </span><span class="spaces">                     </span><span class="istickedoff">{ MS.conditionLoc = mspec ^. MS.csLoc</span>
 <span class="lineno"> 1218 </span><span class="spaces">                     </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">mempty</span></span>
 <span class="lineno"> 1219 </span><span class="spaces">                     </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;return value matching&quot;</span></span>
 <span class="lineno"> 1220 </span><span class="spaces">                     </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
 <span class="lineno"> 1221 </span><span class="spaces">                     </span><span class="istickedoff">} in</span>
-<span class="lineno"> 1222 </span><span class="spaces">            </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> sc cc mspec MS.PostState md r rty expect</span>
+<span class="lineno"> 1222 </span><span class="spaces">            </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> sc cc mspec MS.PostState md r expect</span>
 <span class="lineno"> 1223 </span><span class="spaces">        </span><span class="istickedoff">(Nothing     , Just _ )     -&gt; <span class="nottickedoff">fail &quot;verifyPoststate: unexpected mir_return specification&quot;</span></span>
 <span class="lineno"> 1224 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; return <span class="nottickedoff">()</span></span></span>
 <span class="lineno"> 1225 </span>
@@ -1320,7 +1320,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1301 </span>  Crucible.SymGlobalState Sym -&gt;
 <span class="lineno"> 1302 </span>  Bool {- ^ path sat checking -} -&gt;
 <span class="lineno"> 1303 </span>  IORef MetadataMap {- ^ metadata map -} -&gt;
-<span class="lineno"> 1304 </span>  IO (Maybe (Mir.Ty, MIRVal), Crucible.SymGlobalState Sym)
+<span class="lineno"> 1304 </span>  IO (Maybe MIRVal, Crucible.SymGlobalState Sym)
 <span class="lineno"> 1305 </span><span class="decl"><span class="istickedoff">verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =</span>
 <span class="lineno"> 1306 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt;</span>
 <span class="lineno"> 1307 </span><span class="spaces">  </span><span class="istickedoff">do let rm = cc^.mccRustModule</span>
@@ -1364,7 +1364,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1345 </span><span class="spaces">             </span><span class="istickedoff">Crucible.RegEntry ty val -&gt;</span>
 <span class="lineno"> 1346 </span><span class="spaces">               </span><span class="istickedoff">case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of</span>
 <span class="lineno"> 1347 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;FIXME: Unsupported return type: &quot; ++ show ret_ty</span></span>
-<span class="lineno"> 1348 </span><span class="spaces">                 </span><span class="istickedoff">Just v -&gt; return (Just (ret_mt, v))</span>
+<span class="lineno"> 1348 </span><span class="spaces">                 </span><span class="istickedoff">Just v -&gt; return (Just v)</span>
 <span class="lineno"> 1349 </span><span class="spaces">     </span><span class="istickedoff">return (retval', globals1)</span>
 <span class="lineno"> 1350 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1351 </span><span class="spaces">  </span><span class="istickedoff">where</span>

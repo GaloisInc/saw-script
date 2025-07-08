@@ -599,7 +599,7 @@ span.spaces    { background: white }
 <span class="lineno">  580 </span>-- | TopLevel Read-Only Environment.
 <span class="lineno">  581 </span>data TopLevelRO =
 <span class="lineno">  582 </span>  TopLevelRO
-<span class="lineno">  583 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">roJavaCodebase</span></span></span>  :: Maybe JSS.Codebase
+<span class="lineno">  583 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">roJavaCodebase</span></span></span>  :: Maybe JSS.Codebase -- ^ Nothing, if Java is disabled.
 <span class="lineno">  584 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roOptions</span></span></span>       :: Options
 <span class="lineno">  585 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roHandleAlloc</span></span></span>   :: Crucible.HandleAllocator
 <span class="lineno">  586 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roProxy</span></span></span>         :: AIGProxy
