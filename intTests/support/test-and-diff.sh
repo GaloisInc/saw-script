@@ -136,12 +136,20 @@ run-tests() {
         # use default Show instances and the saw-core positions carry
         # the directory and filename separately. This becomes
         # "interesting" from a quoting perspective...
+        #
+        # Furthermore, prune the line number from the results of
+        # hitting the Haskell "error" function. SAW isn't supposed to
+        # use "error", but it does, and some things trigger it, and
+        # having the source line number in the reference outputs is
+        # super aggravating because it changes all the time, usually
+        # when you aren't expecting it.
         sed < $TEST.rawlog '
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
             s,'"$CURDIR"'/,,g
             s,"'"$CURDIR"'",".",g
+            /^  error, called at [^ :]*\.hs:[0-9:]* in saw-/s/\.hs:.*/.hs/
         ' | (
             # If there's a custom postprocess script for this test,
             # chain it in.
