@@ -14,7 +14,6 @@ module SAWServer.SAWServer
   ) where
 
 import Prelude hiding (mod)
-import qualified Control.Exception as X
 import Control.Lens ( Lens', view, lens, over )
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
@@ -54,16 +53,15 @@ import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
-import SAWCentral.Exceptions(disableJavaWarning)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType)
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
-import SAWCentral.Options (Options(..), processEnv, defaultOptions)
+import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), SAWSimpset,JavaCodeBase(..))
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -221,13 +219,6 @@ initialState readFileFn =
      mm <- scGetModuleMap sc
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
-     jcb <- if javaEnabled opts
-        then
-          (Just <$> JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts))
-          `X.catch` \e ->
-            putStrLn (disableJavaWarning "Failed to set up Java" e) >>
-            pure Nothing
-        else pure Nothing
      let bic = BuiltinContext { biSharedContext = sc
                               , biBasicSS = ss
                               }
@@ -239,8 +230,7 @@ initialState readFileFn =
        Just path | not (null path) -> Just <$> lazyOpenSolverCache path
        _ -> return Nothing
      let ro = TopLevelRO
-                { roJavaCodebase = jcb
-                , roOptions = opts
+                { roOptions = opts
                 , roHandleAlloc = halloc
 #if USE_BUILTIN_ABC
                 , roProxy = AIGProxy GIA.proxy
@@ -289,6 +279,7 @@ initialState readFileFn =
                 , rwSkipSafetyProofs = False
                 , rwSingleOverrideSpecialCase = False
                 , rwSequentGoals = False
+                , rwJavaCodebase = JavaUnitialized
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

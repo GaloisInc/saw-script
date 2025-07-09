@@ -151,6 +151,8 @@ module SAWCentral.Value (
     JVMSetupM(..),
     -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
     --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
+    JavaCodeBase(..),
+    -- Used to initialize things; probably only need `JavaUnitialized`.
     MIRSetup,
     -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
     MIRSetupM(..),
@@ -205,6 +207,7 @@ import qualified Data.Text as Text
 import Data.Parameterized.Some
 import Data.Typeable
 import qualified Prettyprinter as PP
+import System.FilePath((</>))
 
 import qualified Data.AIG as AIG
 
@@ -227,6 +230,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import SAWCentral.JavaExpr (JavaType(..))
 import SAWCentral.JavaPretty (prettyClass)
 import SAWCentral.Options (Options, printOutLn, Verbosity(..))
+import qualified SAWCentral.Options as Opt
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
@@ -261,6 +265,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
+import qualified Lang.JVM.JavaTools as CJ
 
 import           Lang.Crucible.LLVM.ArraySizeProfile
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
@@ -580,8 +585,7 @@ getCryptolEnv = do
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
-  { roJavaCodebase  :: Maybe JSS.Codebase -- ^ Nothing, if Java is disabled.
-  , roOptions       :: Options
+  { roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
@@ -598,6 +602,11 @@ data TopLevelRO =
 
   }
 
+-- | Current state of the Java sub-system.
+data JavaCodeBase =
+    JavaUnitialized                 -- ^ Not yet initialized
+  | JavaInitialized JSS.Codebase    -- ^ Initialized
+
 data TopLevelRW =
   TopLevelRW
   { rwValueInfo  :: Map SS.LName (SS.PrimitiveLifecycle, SS.Schema, Value)
@@ -611,6 +620,8 @@ data TopLevelRW =
     --   NB, stored with most recent calls on
     --   top of the stack.
   , rwLocalEnv   :: LocalEnv
+
+  , rwJavaCodebase  :: JavaCodeBase -- ^ Current state of Java sub-system.
 
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
@@ -747,12 +758,56 @@ getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)
 
 getJavaCodebase :: TopLevel JSS.Codebase
-getJavaCodebase = TopLevel_ $
+getJavaCodebase =
   do
-    mb <- asks roJavaCodebase
-    case mb of
-      Just a -> pure a
-      Nothing -> liftIO (fail "Java support is not enabled.")
+    status <- TopLevel_ (gets rwJavaCodebase)
+    case status of
+      JavaInitialized s -> pure s
+      JavaUnitialized   ->
+        do
+          opts <- getOptions
+          mb   <- liftIO (X.try (initJava opts))
+          case mb of
+            Right jcb ->
+              TopLevel_ (modify (\s -> s { rwJavaCodebase = JavaInitialized jcb })) >>
+              pure jcb
+            Left err ->
+              fail $ unlines $
+                "Error: failed to initialize Java." :
+                [ "  " ++ l | l <- lines (X.displayException (err :: X.SomeException)) ]
+  where
+  -- If a Java executable's path is specified (either by way of
+  -- --java-bin-dirs or PATH, see the Haddocks for findJavaIn), then use that
+  -- to detect the path to Java's standard rt.jar file and add it to the
+  -- jarList on Java 8 or earlier. (Later versions of Java do not use
+  -- rt.jar—see Note [Loading classes from JIMAGE files] in
+  -- Lang.JVM.Codebase in crucible-jvm.)
+  -- If Java's path is not specified, return the Options unchanged.
+  initJava opts =
+    do
+      mbJavaPath <- CJ.findJavaIn (Opt.javaBinDirs opts)
+      javaPath <-
+        case mbJavaPath of
+          Nothing   -> fail "Failed to find a `java` executable."
+          Just path -> pure path
+      version <- CJ.findJavaMajorVersion javaPath
+      jars <-
+        -- rt.jar lives in a standard location relative to @java.home@. At least,
+        -- this is the case on every operating system I've tested.
+        if version < 9 then
+          do
+            mbJavaHome <- CJ.findJavaProperty javaPath "java.home"
+            case mbJavaHome of
+              Nothing ->
+                fail ("Could not find where rt.jar lives for " ++ javaPath)
+              Just javaHome ->
+                let jar = javaHome </> "lib" </> "rt.jar"
+                in pure (jar : Opt.jarList opts)
+        else pure (Opt.jarList opts)
+      JSS.loadCodebase jars (Opt.classPath opts) (Opt.javaBinDirs opts)
+
+          
+
 
 getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = gets rwTheoremDB

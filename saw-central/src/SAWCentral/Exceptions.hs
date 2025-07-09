@@ -7,7 +7,6 @@ module SAWCentral.Exceptions
   , TraceException(..)
   , topLevelExceptionToException
   , topLevelExceptionFromException
-  , disableJavaWarning
   ) where
 
 import Control.Exception
@@ -72,16 +71,3 @@ instance Show TraceException where
     unlines (["Stack trace:"] ++ msg ++ [displayException ex])
 
 instance Exception TraceException
-
-
--- | Show this when we fail to setup Java properly.
-disableJavaWarning :: String -> SomeException -> String
-disableJavaWarning reason e =
-  unlines $ [
-    "WARNING: Disabling Java support.",
-    "  Reason: " ++ reason,
-    "  Output:"
-  ] ++
-  [ "    " ++ l
-    | l <- lines (displayException e)
-  ]
