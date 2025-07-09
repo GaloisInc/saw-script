@@ -844,7 +844,7 @@ buildTopLevelEnv proxy opts =
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
                    , rwSequentGoals = False
-                   , rwJavaCodebase = JavaUnitialized
+                   , rwJavaCodebase = JavaUninitialized
                    }
        return (bic, ro0, rw0)
 

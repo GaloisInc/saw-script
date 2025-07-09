@@ -151,8 +151,8 @@ module SAWCentral.Value (
     JVMSetupM(..),
     -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
     --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
-    JavaCodeBase(..),
-    -- Used to initialize things; probably only need `JavaUnitialized`.
+    JavaCodebase(..),
+    -- Used to initialize things; probably only need `JavaUninitialized`.
     MIRSetup,
     -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
     MIRSetupM(..),
@@ -603,9 +603,12 @@ data TopLevelRO =
   }
 
 -- | Current state of the Java sub-system.
-data JavaCodeBase =
-    JavaUnitialized                 -- ^ Not yet initialized
-  | JavaInitialized JSS.Codebase    -- ^ Initialized
+data JavaCodebase =
+    JavaUninitialized
+    -- ^ No Java-related commands have been invoked yet.
+  | JavaInitialized JSS.Codebase
+    -- ^ At least one Java-related command has been invoked successfully.
+    -- We cache the resulting 'JSS.Codebase' for subsequent commands.
 
 data TopLevelRW =
   TopLevelRW
@@ -621,7 +624,7 @@ data TopLevelRW =
     --   top of the stack.
   , rwLocalEnv   :: LocalEnv
 
-  , rwJavaCodebase  :: JavaCodeBase -- ^ Current state of Java sub-system.
+  , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
   , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
@@ -760,16 +763,16 @@ getSharedContext = TopLevel_ (rwSharedContext <$> get)
 getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase =
   do
-    status <- TopLevel_ (gets rwJavaCodebase)
+    status <- gets rwJavaCodebase
     case status of
       JavaInitialized s -> pure s
-      JavaUnitialized   ->
+      JavaUninitialized   ->
         do
           opts <- getOptions
           mb   <- liftIO (X.try (initJava opts))
           case mb of
             Right jcb ->
-              TopLevel_ (modify (\s -> s { rwJavaCodebase = JavaInitialized jcb })) >>
+              modifyTopLevelRW (\s -> s { rwJavaCodebase = JavaInitialized jcb }) >>
               pure jcb
             Left err ->
               fail $ unlines $
