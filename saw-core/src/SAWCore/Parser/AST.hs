@@ -4,7 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : SAWCore.UntypedAST
+Module      : SAWCore.Parser.AST
 Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -12,7 +12,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.UntypedAST
+module SAWCore.Parser.AST
   ( Module(..)
   , ModuleName, mkModuleName
   , Decl(..)
@@ -34,7 +34,7 @@ module SAWCore.UntypedAST
   , Sort, mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
   , badTerm
-  , module SAWCore.Position
+  , module SAWCore.Parser.Position
   , moduleName
   , moduleTypedDecls
   , moduleDataDecls
@@ -51,7 +51,7 @@ import Numeric.Natural
 
 import SAWCore.Module (DefQualifier)
 import SAWCore.Name (ModuleName, mkModuleName)
-import SAWCore.Position
+import SAWCore.Parser.Position
 import SAWCore.Term.Functor
   ( Sort, mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList

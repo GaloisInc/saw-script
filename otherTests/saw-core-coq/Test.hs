@@ -28,7 +28,7 @@ import SAWCore.Module
 import SAWCore.Prelude (preludeModule)
 import SAWCore.SharedTerm
 import SAWCore.Typechecker
-import qualified SAWCore.UntypedAST as Un
+import qualified SAWCore.Parser.AST as Un
 import SAWCoreCoq.Coq
 
 configuration :: TranslationConfiguration

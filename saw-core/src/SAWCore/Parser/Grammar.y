@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs #-}
 
 {- |
-Module      : SAWCore.Grammar
+Module      : SAWCore.Parser.Grammar
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -13,7 +13,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.Grammar
+module SAWCore.Parser.Grammar
   ( parseSAW
   , parseSAWTerm
   ) where
@@ -34,10 +34,10 @@ import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
 
-import SAWCore.Panic
-import SAWCore.UntypedAST
 import SAWCore.Module (DefQualifier(..))
-import SAWCore.Lexer
+import SAWCore.Panic
+import SAWCore.Parser.AST
+import SAWCore.Parser.Lexer
 
 }
 

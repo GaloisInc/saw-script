@@ -74,10 +74,10 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
+import SAWCore.Parser.Position
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
-import SAWCore.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
 

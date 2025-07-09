@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveLift #-}
 
 {- |
-Module      : SAWCore.Position
+Module      : SAWCore.Parser.Position
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -10,7 +10,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.Position
+module SAWCore.Parser.Position
   ( Pos(..)
   , ppPos
   , incLine

@@ -39,8 +39,8 @@ import System.Directory
 import qualified Language.Haskell.TH.Syntax as TH (lift)
 
 import SAWCore.Name (ModuleName, moduleNamePieces)
-import qualified SAWCore.UntypedAST as Un
-import qualified SAWCore.Grammar as Un
+import qualified SAWCore.Parser.AST as Un
+import qualified SAWCore.Parser.Grammar as Un
 import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule)
 
