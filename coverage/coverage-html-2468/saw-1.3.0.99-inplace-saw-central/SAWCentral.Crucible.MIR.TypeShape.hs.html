@@ -294,7 +294,7 @@ span.spaces    { background: white }
 <span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">goRef ty ty' mutbl | Some tpr &lt;- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr</span>
 <span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">goFnPtr :: M.Ty -&gt; M.FnSig -&gt; Some TypeShape</span>
-<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goFnPtr ty (M.FnSig args ret _abi _spread) =</span></span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">goFnPtr ty (M.FnSig args ret _abi) =</span></span>
 <span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tyListToCtx col args $ \argsr  -&gt;</span></span>
 <span class="lineno">  280 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tyToReprCont col ret $ \retr -&gt;</span></span>
 <span class="lineno">  281 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Some (FnPtrShape ty argsr retr)</span></span>
