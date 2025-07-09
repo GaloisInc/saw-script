@@ -5,8 +5,6 @@ registering assumptions
  Stack trace:
    (builtin) in jvm_verify
    jvm.saw:16:1-16:42 (at top level)
-Legacy stack trace:
-"jvm_verify" (jvm.saw:16:1-16:11)
 Symbolic execution failed.
 Abort due to assertion failure:
   internal: error: in _SAW_JVM_verifyPrestate

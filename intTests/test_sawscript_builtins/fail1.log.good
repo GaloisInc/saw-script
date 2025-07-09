@@ -1,7 +1,6 @@
  Loading file "fail1.saw"
  Stack trace:
    (builtin) (at top level)
-Legacy stack trace:
 Not a monomorphic type: t.3
 
 FAILED

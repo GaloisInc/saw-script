@@ -33,7 +33,6 @@ module SAWScript.Interpreter
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask, asks)
-import Control.Monad.State (gets, modify)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe)
@@ -239,7 +238,7 @@ insertRefChain :: SS.Pos -> SS.Name -> Value -> Value
 insertRefChain pos name v =
   let insert chain = (pos, name) : chain in
   case v of
-    VDo chain mLegacyName env body -> VDo (insert chain) mLegacyName env body
+    VDo chain env body -> VDo (insert chain) env body
     VBindOnce bindpos chain v1 v2 -> VBindOnce bindpos (insert chain) v1 v2
     VTopLevel vpos chain f -> VTopLevel vpos (insert chain) f
     VProofScript vpos chain f -> VProofScript vpos (insert chain) f
@@ -257,7 +256,7 @@ propagateRefChain chain1 v =
         chain2 ++ chain1
   in
   case v of
-    VDo chain2 mLegacyName env body -> VDo (insert chain2) mLegacyName env body
+    VDo chain2 env body -> VDo (insert chain2) env body
     VBindOnce pos chain2 v1 v2 -> VBindOnce pos (insert chain2) v1 v2
     VTopLevel pos chain2 f -> VTopLevel pos (insert chain2) f
     VProofScript pos chain2 f -> VProofScript pos (insert chain2) f
@@ -425,110 +424,6 @@ processTypeCheck (errs_or_output, warns) =
 
 
 ------------------------------------------------------------
--- Stack tracing
-
--- | Implement stack tracing by wrapping every function-shaped value
---   in sight in another closure that manipulates the interpreter's
---   current stack trace.
---
--- XXX this is the wrong way to do this.
-withStackTraceFrame :: String -> Value -> Value
-withStackTraceFrame str val =
-  let doTopLevel :: TopLevel a -> TopLevel a
-      doTopLevel action = do
-        trace <- gets rwStackTrace
-        let trace' = Trace.legacyPush str trace
-        modify (\rw -> rw { rwStackTrace = trace' })
-        result <- action
-        modify (\rw -> rw { rwStackTrace = trace })
-        return result
-      doProofScript :: ProofScript a -> ProofScript a
-      doProofScript (ProofScript m) =
-        let m' =
-              underExceptT (underStateT doTopLevel) m
-        in
-        ProofScript m'
-      doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
-      doLLVM (LLVMCrucibleSetupM m) =
-        LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
-      doJVM :: JVMSetupM a -> JVMSetupM a
-      doJVM (JVMSetupM m) =
-        JVMSetupM (underReaderT (underStateT doTopLevel) m)
-      doMIR :: MIRSetupM a -> MIRSetupM a
-      doMIR (MIRSetupM m) =
-        MIRSetupM (underReaderT (underStateT doTopLevel) m)
-  in
-  case val of
-    VLambda env mname pat e ->
-      -- This is gross. The point of having VLambda is that it's _not_
-      -- a closure, but in order to handle stack traces by wrapping
-      -- everything in closures, we have to wrap it in a closure
-      -- anyway.
-      --
-      -- But, since this is the wrong way to do stack traces anyway,
-      -- with luck we'll be able to remove the lot before much longer.
-      let info = "(stack trace thunk for lambda)"
-          wrap pos v2 =
-            withStackTraceFrame str `fmap` doTopLevel (applyValue pos info (VLambda env mname pat e) v2)
-      in
-      VClosure wrap
-    VBuiltin name args wf -> case wf of
-      OneMoreArg f ->
-        let wrap pos v =
-              -- This needs to do the same things as the corresponding
-              -- case of applyValue, because we're dropping the
-              -- VBuiltin.
-              let wrap' = do
-                    pushNewTraceFrame pos name
-                    v' <- f v
-                    popNewTraceFrame
-                    return $ insertRefChain pos name v'
-              in
-              withStackTraceFrame str `fmap` doTopLevel wrap'
-        in
-        VClosure wrap
-      ManyMoreArgs f ->
-        let wrap _pos x = do
-              (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
-        in
-        VClosure wrap
-    VTopLevel pos chain m ->
-      let m' =
-            withStackTraceFrame str `fmap` doTopLevel m
-      in
-      VTopLevel pos chain m'
-    VProofScript pos chain m ->
-      let m' =
-            withStackTraceFrame str `fmap` doProofScript m
-      in
-      VProofScript pos chain m'
-    VDo chain _mLegacyName env stmts ->
-      VDo chain (Just str) env stmts
-    VBindOnce pos chain v1 v2 ->
-      let v1' = withStackTraceFrame str v1
-          v2' = withStackTraceFrame str v2
-      in
-      VBindOnce pos chain v1' v2'
-    VLLVMCrucibleSetup pos chain m ->
-      let m' =
-            withStackTraceFrame str `fmap` doLLVM m
-      in
-      VLLVMCrucibleSetup pos chain m'
-    VJVMSetup pos chain m ->
-      let m' =
-            withStackTraceFrame str `fmap` doJVM m
-      in
-      VJVMSetup pos chain m'
-    VMIRSetup pos chain m ->
-      let m' =
-            withStackTraceFrame str `fmap` doMIR m
-      in
-      VMIRSetup pos chain m'
-    _ ->
-      val
-
-
-------------------------------------------------------------
 -- Interpreter core
 
 -- | Apply an argument value to a function value.
@@ -619,7 +514,7 @@ interpretExpr expr =
           VArray <$> traverse interpretExpr es
       SS.Block _pos stmts -> do
           env <- getLocalEnv
-          return $ VDo [] Nothing env stmts
+          return $ VDo [] env stmts
       SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _pos bs ->
@@ -647,7 +542,7 @@ interpretExpr expr =
                    let pos = SS.getPos x
                        v' = injectPositionIntoMonadicValue pos v
                        v'' = insertRefChain pos (SS.getVal x) v'
-                   return (withStackTraceFrame (show x) v'')
+                   return v''
               | otherwise ->
                    -- This case is also rejected by the typechecker
                    panic "interpretExpr" [
@@ -723,14 +618,14 @@ interpretMonadAction fromHow v = case v of
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
     return $ mkValue pos chain v''
-  VDo chain mLegacyName env body -> do
+  VDo chain env body -> do
     liftTopLevel $ do
       case fromHow of
           FromInterpreter -> pure ()
           FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
       pushNewTraceFrames chain
 
-    r <- withLocalEnvAny env (interpretDoStmts' mLegacyName body)
+    r <- withLocalEnvAny env (interpretDoStmts body)
 
     liftTopLevel $ do
       popNewTraceFrames chain
@@ -910,20 +805,6 @@ interpretDoStmts (stmts, lastexpr) =
           env' <- interpretDoStmt stmt
           -- Run the rest of the block with the updated environment
           withLocalEnvAny env' (interpretDoStmts (more, lastexpr))
-
--- Wrapper around interpretDoStmts for inserting a stack trace frame, in the
--- old style. XXX remove along with the old stack trace code...
-interpretDoStmts' :: InterpreterMonad m => Maybe String -> ([SS.Stmt], SS.Expr) -> m Value
-interpretDoStmts' mLegacyName body = do
-  trace <- liftTopLevel $ gets rwStackTrace
-  case mLegacyName of
-    Nothing -> pure ()
-    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = Trace.legacyPush name trace })
-  v <- interpretDoStmts body
-  case mLegacyName of
-    Nothing -> pure ()
-    Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
-  return v
 
 -- Execute a top-level bind.
 processStmtBind ::

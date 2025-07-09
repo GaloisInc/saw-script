@@ -1,7 +1,6 @@
  Loading file "test0.saw"
  Stack trace:
    (builtin) (at top level)
-Legacy stack trace:
 test0.saw:1:2-1:4: Invalid character escape in string
 
 FAILED

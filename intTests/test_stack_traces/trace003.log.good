@@ -9,10 +9,6 @@ Stack trace:
    trace003.saw:18:8-18:42 in (callback)
    (builtin) in fails
    trace003.saw:18:1-18:42 (at top level)
-Legacy stack trace:
-"fails" (trace003.saw:18:1-18:6)
-"prove_print" (trace003.saw:18:8-18:19)
-"proof_stack" (trace003.saw:18:20-18:31)
 
 == Anticipated failure message ==
 Stack trace:
@@ -20,9 +16,6 @@ Stack trace:
    trace003.saw:18:8-18:42 in (callback)
    (builtin) in fails
    trace003.saw:18:1-18:42 (at top level)
-Legacy stack trace:
-"fails" (trace003.saw:18:1-18:6)
-"prove_print" (trace003.saw:18:8-18:19)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
@@ -37,11 +30,6 @@ Stack trace:
    trace003.saw:26:8-26:33 in (callback)
    (builtin) in fails
    trace003.saw:26:1-26:33 (at top level)
-Legacy stack trace:
-"fails" (trace003.saw:26:1-26:6)
-"prove_print" (trace003.saw:26:8-26:19)
-"pf" (trace003.saw:26:20-26:22)
-"proof_stack" (trace003.saw:25:10-25:21)
 
 == Anticipated failure message ==
 Stack trace:
@@ -49,9 +37,6 @@ Stack trace:
    trace003.saw:26:8-26:33 in (callback)
    (builtin) in fails
    trace003.saw:26:1-26:33 (at top level)
-Legacy stack trace:
-"fails" (trace003.saw:26:1-26:6)
-"prove_print" (trace003.saw:26:8-26:19)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
@@ -63,18 +48,12 @@ Stack trace:
    trace003.saw:32:19-32:30 in (callback)
    (builtin) in prove_print
    trace003.saw:32:1-32:49 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:32:1-32:12)
-"proof_stack" (trace003.saw:32:19-32:30)
 
 Stack trace:
    (builtin) in proof_stack
    trace003.saw:33:23-33:34 in (callback)
    (builtin) in prove_print
    trace003.saw:33:1-33:49 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:33:1-33:12)
-"proof_stack" (trace003.saw:33:23-33:34)
 
  
  ------------------------------------------------------------
@@ -85,10 +64,6 @@ Stack trace:
    trace003.saw:41:13-41:19 in (callback)
    (builtin) in prove_print
    trace003.saw:41:1-41:30 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:41:1-41:12)
-"prove1" (trace003.saw:41:13-41:19)
-"proof_stack" (trace003.saw:39:19-39:30)
 
 Stack trace:
    (builtin) in proof_stack
@@ -96,10 +71,6 @@ Stack trace:
    trace003.saw:42:13-42:19 in (callback)
    (builtin) in prove_print
    trace003.saw:42:1-42:30 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:42:1-42:12)
-"prove2" (trace003.saw:42:13-42:19)
-"proof_stack" (trace003.saw:40:23-40:34)
 
  
  ------------------------------------------------------------
@@ -110,10 +81,6 @@ Stack trace:
    trace003.saw:50:14-50:23 in (callback)
    (builtin) in prove_print
    trace003.saw:50:1-50:35 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:50:1-50:12)
-"prove3" (trace003.saw:50:14-50:20)
-"proof_stack" (trace003.saw:48:22-48:33)
 
 Stack trace:
    (builtin) in proof_stack
@@ -121,9 +88,5 @@ Stack trace:
    trace003.saw:51:14-51:23 in (callback)
    (builtin) in prove_print
    trace003.saw:51:1-51:35 (at top level)
-Legacy stack trace:
-"prove_print" (trace003.saw:51:1-51:12)
-"prove4" (trace003.saw:51:14-51:20)
-"proof_stack" (trace003.saw:49:26-49:37)
 
  

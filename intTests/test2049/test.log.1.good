@@ -31,8 +31,6 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
    test.saw:60:49-60:51 in (callback)
    (builtin) in llvm_verify
    test.saw:60:1-60:51 (at top level)
-Legacy stack trace:
-"llvm_verify" (test.saw:60:1-60:12)
 Proof failed.
 
 FAILED

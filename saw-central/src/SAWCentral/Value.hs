@@ -531,11 +531,7 @@ data Value
     -- | Returned value in unspecified monad.
   | VReturn SS.Pos RefChain Value
     -- | Not-yet-executed do-block in unspecified monad.
-    --
-    --   The string is a hack hook for the legacy implementation of
-    --   stack traces. See the commit message that added it for further
-    --   information. XXX: to be removed along with the stack trace code
-  | VDo RefChain (Maybe String) LocalEnv ([SS.Stmt], SS.Expr)
+  | VDo RefChain LocalEnv ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
     --
     --   This exists only to support the "for" builtin; see notes there
@@ -730,7 +726,7 @@ showsPrecValue opts nenv p v =
     VType sig -> showString (pretty sig)
     VReturn _pos _chain v' ->
       showString "return " . showsPrecValue opts nenv (p + 1) v'
-    VDo _chain _mLegacyName _env body ->
+    VDo _chain _env body ->
       -- The printer for expressions doesn't print positions, so we can
       -- feed in a dummy.
       let pos = SS.PosInternal "<<do-block>>"

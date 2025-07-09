@@ -2,8 +2,6 @@
  Stack trace:
    (builtin) in fail
    fail3.saw:5:3-5:27 (at top level)
-Legacy stack trace:
-"fail" (fail3.saw:5:3-5:7)
 requested failure
 
 FAILED

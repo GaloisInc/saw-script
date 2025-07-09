@@ -4,8 +4,6 @@
  Stack trace:
    (builtin) in mir_verify
    mir.saw:16:1-16:49 (at top level)
-Legacy stack trace:
-"mir_verify" (mir.saw:16:1-16:11)
 Symbolic execution failed.
 Abort due to assertion failure:
   internal: error: in _SAW_MIR_verifyPrestate

@@ -5,16 +5,9 @@ Stack trace:
    (builtin) in run
    trace007.saw:6:32-6:47 in foo
    trace007.saw:7:9-7:20 (at top level)
-Legacy stack trace:
-"foo" (trace007.saw:7:9-7:12)
-"run" (trace007.saw:6:32-6:35)
-"print_stack" (trace007.saw:6:36-6:47)
 
 Stack trace:
    (builtin) in print_stack
    trace007.saw:9:24-9:35 in bar
    trace007.saw:10:1-10:12 (at top level)
-Legacy stack trace:
-"bar" (trace007.saw:10:1-10:4)
-"print_stack" (trace007.saw:9:24-9:35)
 

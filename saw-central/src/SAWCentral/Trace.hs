@@ -14,8 +14,6 @@ Stability   : provisional
 module SAWCentral.Trace (
     Trace(),
     empty,
-    legacyPush,
-    legacyPop,
     newPush,
     newPop,
     ppTrace
@@ -87,47 +85,26 @@ data TraceFrame = TraceFrame Pos TraceFunc
 
 -- A stack trace is a list of frames, with the most recent frame at
 -- the head of the list.
---
--- In the legacy implementation, each frame is an arbitrary string as
--- cooked up upstream.
---
--- In the new implementation, we use the above TraceFrame type.
-data Trace = Trace [String] [TraceFrame]
+data Trace = Trace [TraceFrame]
 
 -- | The starting trace.
 empty :: Trace
-empty = Trace [] []
-
-
--- | Push a fresh frame on the legacy part of a trace.
---   The new and legacy sides operate independently.
-legacyPush :: String -> Trace -> Trace
-legacyPush f (Trace legacyframes newframes) =
-  Trace (f : legacyframes) newframes
-
--- | Pop a frame off the legacy part of a trace.
---   The new and legacy sides operate independently.
-legacyPop :: Trace -> Trace
-legacyPop (Trace legacyframes newframes) = case legacyframes of
-  [] -> panic "Trace.legacyPop" ["Popping empty stack"]
-  _ : legacyframes' -> Trace legacyframes' newframes
+empty = Trace []
 
 
 -- | Push a fresh frame on the new part of a trace.
---   The new and legacy sides operate independently.
 newPush :: Pos -> Text -> Trace -> Trace
-newPush callpos func (Trace legacyframes newframes) =
+newPush callpos func (Trace newframes) =
   let func' = TraceFunc func
       frame = TraceFrame callpos func'
   in
-  Trace legacyframes (frame : newframes)
+  Trace (frame : newframes)
 
 -- | Pop a frame off the new part of a trace.
---   The new and legacy sides operate independently.
 newPop :: Trace -> Trace
-newPop (Trace legacyframes newframes) = case newframes of
+newPop (Trace newframes) = case newframes of
   [] -> panic "Trace.newPop" ["Popping empty stack"]
-  _ : newframes' -> Trace legacyframes newframes'
+  _ : newframes' -> Trace newframes'
 
 
 -- | Print a TraceFunc. Simple for now, but we're going to want more
@@ -176,13 +153,9 @@ prepareTrace curpos tfs = case tfs of
 -- | Pretty-print a trace. This also takes the current position
 --   to print at the bottom.
 --
---   The legacy trace just packs the strings. We reverse the frames
---   first so the most recent call comes out at the bottom, like
---   Python.
---
---   For the new trace, we don't reverse the frame so the most recent
---   call comes out at the top, like gdb and most debuggers. Shift the
---   current position into the trace as described above before printing.
+--   We don't reverse the frame, so the most recent call comes out at
+--   the top, like gdb and most debuggers. Shift the current position
+--   into the trace as described above before printing.
 --
 --   Takes the current position as well as the trace.  Note that the
 --   "current position" should be read as "what's currently
@@ -191,10 +164,8 @@ prepareTrace curpos tfs = case tfs of
 --   in a confusingly messed-up trace.
 --
 ppTrace :: Trace -> Pos -> Text
-ppTrace (Trace legacyframes newframes) curpos =
-  let legacyframes' =
-        map Text.pack $ reverse legacyframes
-      newframes' =
+ppTrace (Trace newframes) curpos =
+  let newframes' =
         let ppEntry (pos, mfunc) =
               let pos' = Text.pack (show pos)
                   mfunc' = case mfunc of
@@ -205,4 +176,4 @@ ppTrace (Trace legacyframes newframes) curpos =
         in
         map ppEntry $ prepareTrace curpos newframes
   in
-  Text.unlines $ newframes' ++ ["Legacy stack trace:"] ++ legacyframes'
+  Text.unlines newframes'

@@ -23,8 +23,6 @@ Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#1580
    err001.saw:13:38-13:40 in (callback)
    (builtin) in llvm_verify
    err001.saw:13:1-13:40 (at top level)
-Legacy stack trace:
-"llvm_verify" (err001.saw:13:1-13:12)
 Proof failed.
 
 FAILED
