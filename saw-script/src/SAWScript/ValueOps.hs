@@ -22,8 +22,6 @@ module SAWScript.ValueOps (
     -- used by SAWScript.Interpreter
     tupleLookupValue,
     -- used by SAWScript.Interpreter
-    bindValue,
-    -- used by SAWScript.Interpreter
     emptyLocal,
     -- used by SAWScript.Interpreter
     extendLocal,
@@ -41,8 +39,10 @@ module SAWScript.ValueOps (
     proof_checkpoint,
     -- used by SAWScript.Interpreter
     withLocalEnv,
-    -- used by SAWScript.Interpreter
     withLocalEnvProof,
+    withLocalEnvLLVM,
+    withLocalEnvJVM,
+    withLocalEnvMIR,
     -- used in SAWScript.Interpreter
     withOptions,
  ) where
@@ -66,7 +66,6 @@ import SAWCore.SharedTerm
 import CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified SAWCentral.AST as SS
-import qualified SAWCentral.Position as SS
 --import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
 --import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
 import SAWCentral.Options (Options, Verbosity(..))
@@ -98,9 +97,6 @@ tupleLookupValue (VTuple vs) i
   | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
-
-bindValue :: SS.Pos -> Value -> Value -> TopLevel Value
-bindValue pos v1 v2 = return (VBind pos v1 v2)
 
 emptyLocal :: LocalEnv
 emptyLocal = []
@@ -174,6 +170,18 @@ withLocalEnv env m = do
 withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
 withLocalEnvProof env (ProofScript m) = do
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
+
+withLocalEnvLLVM :: LocalEnv -> LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
+withLocalEnvLLVM env (LLVMCrucibleSetupM m) = do
+  LLVMCrucibleSetupM (underReaderT (underStateT (withLocalEnv env)) m)
+
+withLocalEnvJVM :: LocalEnv -> JVMSetupM a -> JVMSetupM a
+withLocalEnvJVM env (JVMSetupM m) = do
+  JVMSetupM (underReaderT (underStateT (withLocalEnv env)) m)
+
+withLocalEnvMIR :: LocalEnv -> MIRSetupM a -> MIRSetupM a
+withLocalEnvMIR env (MIRSetupM m) = do
+  MIRSetupM (underReaderT (underStateT (withLocalEnv env)) m)
 
 withOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 withOptions f (TopLevel_ m) =

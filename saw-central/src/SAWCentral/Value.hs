@@ -167,6 +167,9 @@ module SAWCentral.Value (
     runProofScript,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     scriptTopLevel,
+    llvmTopLevel,
+    jvmTopLevel,
+    mirTopLevel,
     -- used in SAWScript.Interpreter
     -- XXX: probably belongs in SAWSupport
     underStateT,
@@ -295,10 +298,18 @@ data Value
   | VBuiltin (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
-  | VReturn Value -- Returned value in unspecified monad
-  | VBind SS.Pos Value Value
-    -- ^ Monadic bind in unspecified monad. Requires a source position because
-    -- operations in these monads can fail at runtime.
+    -- | Returned value in unspecified monad
+  | VReturn Value
+    -- | Not-yet-executed do-block in unspecified monad
+    --
+    --   The string is a hack hook for the current implementation of
+    --   stack traces. See the commit message that added it for further
+    --   information. XXX: to be removed along with the stack trace code
+  | VDo SS.Pos (Maybe String) LocalEnv [SS.Stmt]
+    -- | Single monadic bind in unspecified monad.
+    --   This exists only to support the "for" builtin; see notes there
+    --   for why this is so. XXX: remove it once that's no longer needed
+  | VBindOnce Value Value
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
   | VSimpset SAWSimpset
@@ -443,6 +454,7 @@ showRefnset opts ss =
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
       SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
 
+-- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
@@ -467,8 +479,15 @@ showsPrecValue opts nenv p v =
     VBuiltin {} -> showString "<<builtin>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
-    VReturn {} -> showString "<<monadic>>"
-    VBind {} -> showString "<<monadic>>"
+    VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
+    VDo pos _name _env stmts ->
+      let e = SS.Block pos stmts in
+      shows (PP.pretty e)
+    VBindOnce v1 v2 ->
+      let v1' = showsPrecValue opts nenv 0 v1
+          v2' = showsPrecValue opts nenv 0 v2
+      in
+      v1' . showString " >>= " . v2'
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VRefnset ss -> showString (showRefnset opts ss)
@@ -922,6 +941,11 @@ instance Monad LLVMCrucibleSetupM where
   LLVMCrucibleSetupM m >>= f =
     LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
 
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail LLVMCrucibleSetupM where
+   fail msg = LLVMCrucibleSetupM $ lift $ lift $ fail msg
+
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 
@@ -946,12 +970,22 @@ type JVMSetup = CrucibleSetup CJ.JVM
 newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail JVMSetupM where
+   fail msg = JVMSetupM $ lift $ lift $ fail msg
+
 --
 
 type MIRSetup = CrucibleSetup MIR
 
 newtype MIRSetupM a = MIRSetupM { runMIRSetupM :: MIRSetup a }
   deriving (Applicative, Functor, Monad)
+
+-- XXX this is required for the moment in the interpreter, and should
+-- be removed when we clean out error handling.
+instance MonadFail MIRSetupM where
+   fail msg = MIRSetupM $ lift $ lift $ fail msg
 
 --
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
@@ -985,6 +1019,15 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
+
+llvmTopLevel :: TopLevel a -> LLVMCrucibleSetupM a
+llvmTopLevel m = LLVMCrucibleSetupM (lift (lift m))
+
+jvmTopLevel :: TopLevel a -> JVMSetupM a
+jvmTopLevel m = JVMSetupM (lift (lift m))
+
+mirTopLevel :: TopLevel a -> MIRSetupM a
+mirTopLevel m = MIRSetupM (lift (lift m))
 
 instance MonadIO ProofScript where
   liftIO m = ProofScript (liftIO m)

@@ -1,12 +1,9 @@
-// The current behavior of this is gross. Hopefully at some point
-// it'll change, so don't rely on it.
-//
-// We execute into do-blocks until the first actual bind, at which
-// point nothing further happens until the monad action is applied.
+// As of 20250707, we no longer execute partway into do-blocks at the
+// time they're let-bound. So these cases should not crash.
 
 let m1 = do { undefined; return (); };
 print "not dead yet";
 let m2 = do { _ <- return 3; let x = undefined; return (); };
 print "still not dead";
 let m3 = do { let x = undefined; return (); };
-print "oops we didn't die";
+print "still still not dead";
