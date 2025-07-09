@@ -523,6 +523,7 @@ alphaEquiv = term
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
     termf (Constant x1) (Constant x2) = x1 == x2
+    termf (Variable x1) (Variable x2) = x1 == x2
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
