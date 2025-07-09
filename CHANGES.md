@@ -84,6 +84,11 @@ support compositional verification using techniques similar to SAW.
 
 ## Bug fixes
 
+* We now initialize Java on demand, instead of when starting SAW.
+  This makes it possible to run SAW on systems without a functional Java
+  installation (e.g., it would appear that `java` on Mac OS is missing a
+  runtime by default).
+
 * A number of SAWScript builtins were found to have wrong return types declared.
   These have been corrected; minor adjustments to existing code might be needed.
   (Any actual _use_ of the returned values would have triggered a panic and been
