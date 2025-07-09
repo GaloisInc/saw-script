@@ -186,7 +186,7 @@ span.spaces    { background: white }
 <span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">match :: Term -&gt; Term -&gt; IntMap Term -&gt; Maybe (IntMap Term)</span>
 <span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">match x y m =</span>
 <span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">case (unwrapTermF x, unwrapTermF y) of</span>
-<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">(FTermF (Variable (ecVarIndex -&gt; i)), _) | IntSet.member i ixs -&gt;</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff">(Variable (ecVarIndex -&gt; i), _) | IntSet.member i ixs -&gt;</span>
 <span class="lineno">  171 </span><span class="spaces">            </span><span class="istickedoff">case my' of</span>
 <span class="lineno">  172 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; Just m'</span>
 <span class="lineno">  173 </span><span class="spaces">              </span><span class="istickedoff">Just y' -&gt; <span class="nottickedoff">if alphaEquiv y y' then Just m' else Nothing</span></span>
@@ -279,7 +279,7 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces">      </span><span class="istickedoff">where</span>
 <span class="lineno">  261 </span><span class="spaces">        </span><span class="istickedoff">go js x =</span>
 <span class="lineno">  262 </span><span class="spaces">          </span><span class="istickedoff">case unwrapTermF x of</span>
-<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">FTermF (Variable ec)</span>
+<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">Variable ec</span>
 <span class="lineno">  264 </span><span class="spaces">              </span><span class="istickedoff">| IntSet.member (ecVarIndex ec) ixs -&gt; Just (ecVarIndex ec, js)</span>
 <span class="lineno">  265 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>  -&gt; Nothing</span>
 <span class="lineno">  266 </span><span class="spaces">            </span><span class="istickedoff">App t (unwrapTermF -&gt; LocalVar j)</span>
@@ -835,34 +835,34 @@ span.spaces    { background: white }
 <span class="lineno">  816 </span><span class="spaces">                   </span><span class="nottickedoff">_ -&gt; App &lt;$&gt; rewriteAll e1 &lt;*&gt; pure e2</span>
 <span class="lineno">  817 </span><span class="spaces">          </span><span class="nottickedoff">Lambda pat t e -&gt; Lambda pat t &lt;$&gt; rewriteAll e</span>
 <span class="lineno">  818 </span><span class="spaces">          </span><span class="nottickedoff">Constant{}     -&gt; return tf</span>
-<span class="lineno">  819 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; return tf -- traverse rewriteAll tf</span>
-<span class="lineno">  820 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  821 </span><span class="spaces">    </span><span class="nottickedoff">rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =&gt;</span>
-<span class="lineno">  822 </span><span class="spaces">                     </span><span class="nottickedoff">FlatTermF Term -&gt; IO (FlatTermF Term)</span>
-<span class="lineno">  823 </span><span class="spaces">    </span><span class="nottickedoff">rewriteFTermF ftf =</span>
-<span class="lineno">  824 </span><span class="spaces">        </span><span class="nottickedoff">case ftf of</span>
-<span class="lineno">  825 </span><span class="spaces">          </span><span class="nottickedoff">UnitValue        -&gt; return ftf</span>
-<span class="lineno">  826 </span><span class="spaces">          </span><span class="nottickedoff">UnitType         -&gt; return ftf</span>
-<span class="lineno">  827 </span><span class="spaces">          </span><span class="nottickedoff">PairValue{}      -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  828 </span><span class="spaces">          </span><span class="nottickedoff">PairType{}       -&gt; return ftf -- doesn't matter</span>
-<span class="lineno">  829 </span><span class="spaces">          </span><span class="nottickedoff">PairLeft{}       -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  830 </span><span class="spaces">          </span><span class="nottickedoff">PairRight{}      -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  831 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  832 </span><span class="spaces">          </span><span class="nottickedoff">-- NOTE: we don't rewrite arguments of constructors, datatypes, or</span>
-<span class="lineno">  833 </span><span class="spaces">          </span><span class="nottickedoff">-- recursors because of dependent types, as we could potentially cause</span>
-<span class="lineno">  834 </span><span class="spaces">          </span><span class="nottickedoff">-- a term to become ill-typed</span>
-<span class="lineno">  835 </span><span class="spaces">          </span><span class="nottickedoff">RecursorType{}   -&gt; return ftf</span>
-<span class="lineno">  836 </span><span class="spaces">          </span><span class="nottickedoff">Recursor{}       -&gt; return ftf</span>
-<span class="lineno">  837 </span><span class="spaces">          </span><span class="nottickedoff">RecursorApp{}    -&gt; return ftf -- could treat same as CtorApp</span>
-<span class="lineno">  838 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  839 </span><span class="spaces">          </span><span class="nottickedoff">RecordType{}     -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  840 </span><span class="spaces">          </span><span class="nottickedoff">RecordValue{}    -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  841 </span><span class="spaces">          </span><span class="nottickedoff">RecordProj{}     -&gt; traverse rewriteAll ftf</span>
-<span class="lineno">  842 </span><span class="spaces">          </span><span class="nottickedoff">Sort{}           -&gt; return ftf -- doesn't matter</span>
-<span class="lineno">  843 </span><span class="spaces">          </span><span class="nottickedoff">NatLit{}         -&gt; return ftf -- doesn't matter</span>
-<span class="lineno">  844 </span><span class="spaces">          </span><span class="nottickedoff">ArrayValue t es  -&gt; ArrayValue t &lt;$&gt; traverse rewriteAll es</span>
-<span class="lineno">  845 </span><span class="spaces">          </span><span class="nottickedoff">StringLit{}      -&gt; return ftf</span>
-<span class="lineno">  846 </span><span class="spaces">          </span><span class="nottickedoff">Variable{}       -&gt; return ftf</span>
+<span class="lineno">  819 </span><span class="spaces">          </span><span class="nottickedoff">Variable{}     -&gt; return tf</span>
+<span class="lineno">  820 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; return tf -- traverse rewriteAll tf</span>
+<span class="lineno">  821 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  822 </span><span class="spaces">    </span><span class="nottickedoff">rewriteFTermF :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =&gt;</span>
+<span class="lineno">  823 </span><span class="spaces">                     </span><span class="nottickedoff">FlatTermF Term -&gt; IO (FlatTermF Term)</span>
+<span class="lineno">  824 </span><span class="spaces">    </span><span class="nottickedoff">rewriteFTermF ftf =</span>
+<span class="lineno">  825 </span><span class="spaces">        </span><span class="nottickedoff">case ftf of</span>
+<span class="lineno">  826 </span><span class="spaces">          </span><span class="nottickedoff">UnitValue        -&gt; return ftf</span>
+<span class="lineno">  827 </span><span class="spaces">          </span><span class="nottickedoff">UnitType         -&gt; return ftf</span>
+<span class="lineno">  828 </span><span class="spaces">          </span><span class="nottickedoff">PairValue{}      -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  829 </span><span class="spaces">          </span><span class="nottickedoff">PairType{}       -&gt; return ftf -- doesn't matter</span>
+<span class="lineno">  830 </span><span class="spaces">          </span><span class="nottickedoff">PairLeft{}       -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  831 </span><span class="spaces">          </span><span class="nottickedoff">PairRight{}      -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  832 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  833 </span><span class="spaces">          </span><span class="nottickedoff">-- NOTE: we don't rewrite arguments of constructors, datatypes, or</span>
+<span class="lineno">  834 </span><span class="spaces">          </span><span class="nottickedoff">-- recursors because of dependent types, as we could potentially cause</span>
+<span class="lineno">  835 </span><span class="spaces">          </span><span class="nottickedoff">-- a term to become ill-typed</span>
+<span class="lineno">  836 </span><span class="spaces">          </span><span class="nottickedoff">RecursorType{}   -&gt; return ftf</span>
+<span class="lineno">  837 </span><span class="spaces">          </span><span class="nottickedoff">Recursor{}       -&gt; return ftf</span>
+<span class="lineno">  838 </span><span class="spaces">          </span><span class="nottickedoff">RecursorApp{}    -&gt; return ftf -- could treat same as CtorApp</span>
+<span class="lineno">  839 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  840 </span><span class="spaces">          </span><span class="nottickedoff">RecordType{}     -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  841 </span><span class="spaces">          </span><span class="nottickedoff">RecordValue{}    -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  842 </span><span class="spaces">          </span><span class="nottickedoff">RecordProj{}     -&gt; traverse rewriteAll ftf</span>
+<span class="lineno">  843 </span><span class="spaces">          </span><span class="nottickedoff">Sort{}           -&gt; return ftf -- doesn't matter</span>
+<span class="lineno">  844 </span><span class="spaces">          </span><span class="nottickedoff">NatLit{}         -&gt; return ftf -- doesn't matter</span>
+<span class="lineno">  845 </span><span class="spaces">          </span><span class="nottickedoff">ArrayValue t es  -&gt; ArrayValue t &lt;$&gt; traverse rewriteAll es</span>
+<span class="lineno">  846 </span><span class="spaces">          </span><span class="nottickedoff">StringLit{}      -&gt; return ftf</span>
 <span class="lineno">  847 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  848 </span><span class="spaces">    </span><span class="nottickedoff">rewriteTop :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =&gt;</span>
 <span class="lineno">  849 </span><span class="spaces">                  </span><span class="nottickedoff">Term -&gt; IO Term</span>
@@ -1037,31 +1037,32 @@ span.spaces    { background: white }
 <span class="lineno"> 1018 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1019 </span><span class="spaces">       </span><span class="istickedoff">goF t (LocalVar _)  = <span class="nottickedoff">return (t, [])</span></span>
 <span class="lineno"> 1020 </span><span class="spaces">       </span><span class="istickedoff">goF t (Constant {}) = return (t, [])</span>
-<span class="lineno"> 1021 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1022 </span><span class="spaces">       </span><span class="istickedoff">goF _ (FTermF ftf) = do</span>
-<span class="lineno"> 1023 </span><span class="spaces">                </span><span class="istickedoff">(ftf', conds) &lt;- runWriterT $ traverse WriterT $ (fmap go ftf)</span>
-<span class="lineno"> 1024 </span><span class="spaces">                </span><span class="istickedoff">t' &lt;- scFlatTermF sc ftf'</span>
-<span class="lineno"> 1025 </span><span class="spaces">                </span><span class="istickedoff">return (t', conds)</span>
-<span class="lineno"> 1026 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1027 </span><span class="spaces">       </span><span class="istickedoff">goF _ (App f x) = do</span>
-<span class="lineno"> 1028 </span><span class="spaces">           </span><span class="istickedoff">(f', conds1) &lt;- go f</span>
-<span class="lineno"> 1029 </span><span class="spaces">           </span><span class="istickedoff">(x', conds2) &lt;- go x</span>
-<span class="lineno"> 1030 </span><span class="spaces">           </span><span class="istickedoff">t' &lt;- scApply sc f' x'</span>
-<span class="lineno"> 1031 </span><span class="spaces">           </span><span class="istickedoff">return (t', conds1 ++ conds2)</span>
-<span class="lineno"> 1032 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1033 </span><span class="spaces">       </span><span class="istickedoff">goF _ (Lambda nm tp body) = <span class="nottickedoff">goBinder scLambda nm tp body</span></span>
-<span class="lineno"> 1034 </span><span class="spaces">       </span><span class="istickedoff">goF _ (Pi nm tp body) = <span class="nottickedoff">goBinder scPi nm tp body</span></span>
-<span class="lineno"> 1035 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1036 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">goBinder close nm tp body = do</span></span>
-<span class="lineno"> 1037 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">(ec, body') &lt;- scOpenTerm sc nm tp 0 body</span></span>
-<span class="lineno"> 1038 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">(body'', conds) &lt;- go body'</span></span>
-<span class="lineno"> 1039 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">let (stuck, float) = List.partition (\(_,ecs) -&gt; Set.member ec ecs) conds</span></span>
-<span class="lineno"> 1040 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno"> 1041 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">stuck' &lt;- orderTerms sc (map fst stuck)</span></span>
-<span class="lineno"> 1042 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">body''' &lt;- splitConds sc ss stuck' body''</span></span>
-<span class="lineno"> 1043 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno"> 1044 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- scCloseTerm close sc ec body'''</span></span>
-<span class="lineno"> 1045 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">return (t', float)</span></span></span>
+<span class="lineno"> 1021 </span><span class="spaces">       </span><span class="istickedoff">goF t (Variable {}) = return (t, [])</span>
+<span class="lineno"> 1022 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1023 </span><span class="spaces">       </span><span class="istickedoff">goF _ (FTermF ftf) = <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1024 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">(ftf', conds) &lt;- runWriterT $ traverse WriterT $ (fmap go ftf)</span></span>
+<span class="lineno"> 1025 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- scFlatTermF sc ftf'</span></span>
+<span class="lineno"> 1026 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">return (t', conds)</span></span>
+<span class="lineno"> 1027 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1028 </span><span class="spaces">       </span><span class="istickedoff">goF _ (App f x) = do</span>
+<span class="lineno"> 1029 </span><span class="spaces">           </span><span class="istickedoff">(f', conds1) &lt;- go f</span>
+<span class="lineno"> 1030 </span><span class="spaces">           </span><span class="istickedoff">(x', conds2) &lt;- go x</span>
+<span class="lineno"> 1031 </span><span class="spaces">           </span><span class="istickedoff">t' &lt;- scApply sc f' x'</span>
+<span class="lineno"> 1032 </span><span class="spaces">           </span><span class="istickedoff">return (t', conds1 ++ conds2)</span>
+<span class="lineno"> 1033 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1034 </span><span class="spaces">       </span><span class="istickedoff">goF _ (Lambda nm tp body) = <span class="nottickedoff">goBinder scLambda nm tp body</span></span>
+<span class="lineno"> 1035 </span><span class="spaces">       </span><span class="istickedoff">goF _ (Pi nm tp body) = <span class="nottickedoff">goBinder scPi nm tp body</span></span>
+<span class="lineno"> 1036 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1037 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">goBinder close nm tp body = do</span></span>
+<span class="lineno"> 1038 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">(ec, body') &lt;- scOpenTerm sc nm tp 0 body</span></span>
+<span class="lineno"> 1039 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">(body'', conds) &lt;- go body'</span></span>
+<span class="lineno"> 1040 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">let (stuck, float) = List.partition (\(_,ecs) -&gt; Set.member ec ecs) conds</span></span>
+<span class="lineno"> 1041 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno"> 1042 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">stuck' &lt;- orderTerms sc (map fst stuck)</span></span>
+<span class="lineno"> 1043 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">body''' &lt;- splitConds sc ss stuck' body''</span></span>
+<span class="lineno"> 1044 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno"> 1045 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- scCloseTerm close sc ec body'''</span></span>
+<span class="lineno"> 1046 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">return (t', float)</span></span></span>
 
 </pre>
 </body>

@@ -459,60 +459,60 @@ span.spaces    { background: white }
 <span class="lineno">  440 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return $ pretty (&quot;0b&quot; ++ map (\b -&gt; if b then '1' else '0') bits)</span></span>
 <span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue _ args   -&gt;</span>
 <span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">ppArrayValue &lt;$&gt; mapM (ppTerm' PrecTerm) (V.toList args)</span>
-<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt; <span class="nottickedoff">return $ viaShow s</span></span>
-<span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; annotate <span class="nottickedoff">PPS.ExtCnsStyle</span> &lt;$&gt; ppExtCns ec</span></span>
-<span class="lineno">  445 </span>
-<span class="lineno">  446 </span>-- | Pretty-print a big endian list of bit values as a hexadecimal number
-<span class="lineno">  447 </span>ppBitsToHex :: [Bool] -&gt; String
-<span class="lineno">  448 </span><span class="decl"><span class="nottickedoff">ppBitsToHex (b8:b4:b2:b1:bits') =</span>
-<span class="lineno">  449 </span><span class="spaces">  </span><span class="nottickedoff">intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :</span>
-<span class="lineno">  450 </span><span class="spaces">  </span><span class="nottickedoff">ppBitsToHex bits'</span>
-<span class="lineno">  451 </span><span class="spaces">  </span><span class="nottickedoff">where toInt True = 1</span>
-<span class="lineno">  452 </span><span class="spaces">        </span><span class="nottickedoff">toInt False = 0</span>
-<span class="lineno">  453 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex [] = &quot;&quot;</span>
-<span class="lineno">  454 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex bits =</span>
-<span class="lineno">  455 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;ppBitsToHex&quot; [</span>
-<span class="lineno">  456 </span><span class="spaces">      </span><span class="nottickedoff">&quot;length of bit list &quot; &lt;&gt; bits' &lt;&gt; &quot; is not a multiple of 4&quot;</span>
-<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  458 </span><span class="spaces">  </span><span class="nottickedoff">where bits' = Text.pack (show bits)</span></span>
+<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">StringLit s -&gt; <span class="nottickedoff">return $ viaShow s</span></span></span>
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>-- | Pretty-print a big endian list of bit values as a hexadecimal number
+<span class="lineno">  446 </span>ppBitsToHex :: [Bool] -&gt; String
+<span class="lineno">  447 </span><span class="decl"><span class="nottickedoff">ppBitsToHex (b8:b4:b2:b1:bits') =</span>
+<span class="lineno">  448 </span><span class="spaces">  </span><span class="nottickedoff">intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="nottickedoff">ppBitsToHex bits'</span>
+<span class="lineno">  450 </span><span class="spaces">  </span><span class="nottickedoff">where toInt True = 1</span>
+<span class="lineno">  451 </span><span class="spaces">        </span><span class="nottickedoff">toInt False = 0</span>
+<span class="lineno">  452 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex [] = &quot;&quot;</span>
+<span class="lineno">  453 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex bits =</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;ppBitsToHex&quot; [</span>
+<span class="lineno">  455 </span><span class="spaces">      </span><span class="nottickedoff">&quot;length of bit list &quot; &lt;&gt; bits' &lt;&gt; &quot; is not a multiple of 4&quot;</span>
+<span class="lineno">  456 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">where bits' = Text.pack (show bits)</span></span>
+<span class="lineno">  458 </span>
 <span class="lineno">  459 </span>
-<span class="lineno">  460 </span>
-<span class="lineno">  461 </span>-- | Pretty-print an 'ExtCns', using the best unambiguous alias from
-<span class="lineno">  462 </span>-- the naming environment.
-<span class="lineno">  463 </span>ppExtCns :: ExtCns e -&gt; PPM PPS.Doc
-<span class="lineno">  464 </span><span class="decl"><span class="istickedoff">ppExtCns ec =</span>
-<span class="lineno">  465 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
-<span class="lineno">  466 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (ecVarIndex ec) of</span>
-<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
-<span class="lineno">  468 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecName ec)</span></span>
-<span class="lineno">  469 </span>
-<span class="lineno">  470 </span>-- | Pretty-print a 'Name', using the best unambiguous alias from the
-<span class="lineno">  471 </span>-- naming environment.
-<span class="lineno">  472 </span>ppBestName :: Name -&gt; PPM PPS.Doc
-<span class="lineno">  473 </span><span class="decl"><span class="istickedoff">ppBestName nm =</span>
-<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
-<span class="lineno">  475 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (nameIndex nm) of</span>
-<span class="lineno">  476 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
-<span class="lineno">  477 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (nameInfo nm)</span></span>
-<span class="lineno">  478 </span>
-<span class="lineno">  479 </span>ppName :: NameInfo -&gt; PPS.Doc
-<span class="lineno">  480 </span><span class="decl"><span class="istickedoff">ppName (ModuleIdentifier i) = ppIdent i</span>
-<span class="lineno">  481 </span><span class="spaces"></span><span class="istickedoff">ppName (ImportedName absName _) = pretty (render absName)</span></span>
-<span class="lineno">  482 </span>
-<span class="lineno">  483 </span>-- | Pretty-print a non-shared term
-<span class="lineno">  484 </span>ppTermF :: Prec -&gt; TermF Term -&gt; PPM PPS.Doc
-<span class="lineno">  485 </span><span class="decl"><span class="istickedoff">ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf</span>
-<span class="lineno">  486 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (App e1 e2) =</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">ppAppList prec &lt;$&gt; ppTerm' PrecApp e1 &lt;*&gt; mapM (ppTerm' PrecArg) [e2]</span>
-<span class="lineno">  488 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Lambda x tp body) =</span>
-<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
-<span class="lineno">  490 </span><span class="spaces">  </span><span class="istickedoff">(ppLambda &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt; ppTermInBinder PrecLambda x body)</span>
-<span class="lineno">  491 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Pi x tp body) =</span>
-<span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
-<span class="lineno">  493 </span><span class="spaces">  </span><span class="istickedoff">(ppPi &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt;</span>
-<span class="lineno">  494 </span><span class="spaces">   </span><span class="istickedoff">ppTermInBinder PrecLambda x body)</span>
-<span class="lineno">  495 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (LocalVar x) = annotate <span class="nottickedoff">PPS.LocalVarStyle</span> &lt;$&gt; pretty &lt;$&gt; varLookupM x</span>
-<span class="lineno">  496 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Constant nm) = annotate <span class="nottickedoff">PPS.ConstantStyle</span> &lt;$&gt; ppBestName nm</span></span>
+<span class="lineno">  460 </span>-- | Pretty-print an 'ExtCns', using the best unambiguous alias from
+<span class="lineno">  461 </span>-- the naming environment.
+<span class="lineno">  462 </span>ppExtCns :: ExtCns e -&gt; PPM PPS.Doc
+<span class="lineno">  463 </span><span class="decl"><span class="istickedoff">ppExtCns ec =</span>
+<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
+<span class="lineno">  465 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (ecVarIndex ec) of</span>
+<span class="lineno">  466 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
+<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecName ec)</span></span>
+<span class="lineno">  468 </span>
+<span class="lineno">  469 </span>-- | Pretty-print a 'Name', using the best unambiguous alias from the
+<span class="lineno">  470 </span>-- naming environment.
+<span class="lineno">  471 </span>ppBestName :: Name -&gt; PPM PPS.Doc
+<span class="lineno">  472 </span><span class="decl"><span class="istickedoff">ppBestName nm =</span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
+<span class="lineno">  474 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (nameIndex nm) of</span>
+<span class="lineno">  475 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
+<span class="lineno">  476 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (nameInfo nm)</span></span>
+<span class="lineno">  477 </span>
+<span class="lineno">  478 </span>ppName :: NameInfo -&gt; PPS.Doc
+<span class="lineno">  479 </span><span class="decl"><span class="istickedoff">ppName (ModuleIdentifier i) = ppIdent i</span>
+<span class="lineno">  480 </span><span class="spaces"></span><span class="istickedoff">ppName (ImportedName absName _) = pretty (render absName)</span></span>
+<span class="lineno">  481 </span>
+<span class="lineno">  482 </span>-- | Pretty-print a non-shared term
+<span class="lineno">  483 </span>ppTermF :: Prec -&gt; TermF Term -&gt; PPM PPS.Doc
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf</span>
+<span class="lineno">  485 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (App e1 e2) =</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">ppAppList prec &lt;$&gt; ppTerm' PrecApp e1 &lt;*&gt; mapM (ppTerm' PrecArg) [e2]</span>
+<span class="lineno">  487 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Lambda x tp body) =</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">(ppLambda &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt; ppTermInBinder PrecLambda x body)</span>
+<span class="lineno">  490 </span><span class="spaces"></span><span class="istickedoff">ppTermF prec (Pi x tp body) =</span>
+<span class="lineno">  491 </span><span class="spaces">  </span><span class="istickedoff">ppParensPrec prec PrecLambda &lt;$&gt;</span>
+<span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">(ppPi &lt;$&gt; ppTerm' PrecApp tp &lt;*&gt;</span>
+<span class="lineno">  493 </span><span class="spaces">   </span><span class="istickedoff">ppTermInBinder PrecLambda x body)</span>
+<span class="lineno">  494 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (LocalVar x) = annotate <span class="nottickedoff">PPS.LocalVarStyle</span> &lt;$&gt; pretty &lt;$&gt; varLookupM x</span>
+<span class="lineno">  495 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Constant nm) = annotate <span class="nottickedoff">PPS.ConstantStyle</span> &lt;$&gt; ppBestName nm</span>
+<span class="lineno">  496 </span><span class="spaces"></span><span class="istickedoff">ppTermF _ (Variable ec) = annotate <span class="nottickedoff">PPS.ExtCnsStyle</span> &lt;$&gt; ppExtCns ec</span></span>
 <span class="lineno">  497 </span>
 <span class="lineno">  498 </span>
 <span class="lineno">  499 </span>-- | Internal function to recursively pretty-print a term
@@ -584,9 +584,9 @@ span.spaces    { background: white }
 <span class="lineno">  565 </span><span class="spaces">    </span><span class="istickedoff">FTermF NatLit{} -&gt; False</span>
 <span class="lineno">  566 </span><span class="spaces">    </span><span class="istickedoff">FTermF (ArrayValue _ v) | <span class="nottickedoff">V.length v == 0</span> -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">FTermF StringLit{} -&gt; <span class="nottickedoff">False</span></span>
-<span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">FTermF Variable{} -&gt; False</span>
-<span class="lineno">  569 </span><span class="spaces">    </span><span class="istickedoff">Constant{} -&gt; False</span>
-<span class="lineno">  570 </span><span class="spaces">    </span><span class="istickedoff">LocalVar{} -&gt; False</span>
+<span class="lineno">  568 </span><span class="spaces">    </span><span class="istickedoff">Constant{} -&gt; False</span>
+<span class="lineno">  569 </span><span class="spaces">    </span><span class="istickedoff">LocalVar{} -&gt; False</span>
+<span class="lineno">  570 </span><span class="spaces">    </span><span class="istickedoff">Variable{} -&gt; False</span>
 <span class="lineno">  571 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; True</span></span>
 <span class="lineno">  572 </span>
 <span class="lineno">  573 </span>-- | Compute a memoization table for a term, and pretty-print the term using the

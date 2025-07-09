@@ -365,81 +365,80 @@ span.spaces    { background: white }
 <span class="lineno">  346 </span>
 <span class="lineno">  347 </span>asVariable :: Recognizer Term (ExtCns Term)
 <span class="lineno">  348 </span><span class="decl"><span class="istickedoff">asVariable t =</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">do ftf &lt;- asFTermF t</span>
-<span class="lineno">  350 </span><span class="spaces">     </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  351 </span><span class="spaces">       </span><span class="istickedoff">Variable ec -&gt; pure ec</span>
-<span class="lineno">  352 </span><span class="spaces">       </span><span class="istickedoff">_           -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>asSort :: Recognizer Term Sort
-<span class="lineno">  355 </span><span class="decl"><span class="istickedoff">asSort t = do</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">Sort s _ -&gt; return s</span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">_      -&gt; Nothing</span></span>
-<span class="lineno">  360 </span>
-<span class="lineno">  361 </span>asSortWithFlags :: Recognizer Term (Sort, SortFlags)
-<span class="lineno">  362 </span><span class="decl"><span class="nottickedoff">asSortWithFlags t = do</span>
-<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">ftf &lt;- asFTermF t</span>
-<span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">case ftf of</span>
-<span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">Sort s h -&gt; return (s, h)</span>
-<span class="lineno">  366 </span><span class="spaces">    </span><span class="nottickedoff">_      -&gt; Nothing</span></span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; pure ec</span>
+<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">_           -&gt; Nothing</span></span>
+<span class="lineno">  352 </span>
+<span class="lineno">  353 </span>asSort :: Recognizer Term Sort
+<span class="lineno">  354 </span><span class="decl"><span class="istickedoff">asSort t = do</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">ftf &lt;- asFTermF t</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">case ftf of</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">Sort s _ -&gt; return s</span>
+<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">_      -&gt; Nothing</span></span>
+<span class="lineno">  359 </span>
+<span class="lineno">  360 </span>asSortWithFlags :: Recognizer Term (Sort, SortFlags)
+<span class="lineno">  361 </span><span class="decl"><span class="nottickedoff">asSortWithFlags t = do</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">ftf &lt;- asFTermF t</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">case ftf of</span>
+<span class="lineno">  364 </span><span class="spaces">    </span><span class="nottickedoff">Sort s h -&gt; return (s, h)</span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">_      -&gt; Nothing</span></span>
+<span class="lineno">  366 </span>
 <span class="lineno">  367 </span>
 <span class="lineno">  368 </span>
-<span class="lineno">  369 </span>
-<span class="lineno">  370 </span>-- | Returns term as a constant Boolean if it is one.
-<span class="lineno">  371 </span>asBool :: Recognizer Term Bool
-<span class="lineno">  372 </span><span class="decl"><span class="istickedoff">asBool (isGlobalDef &quot;Prelude.True&quot; -&gt; Just ()) = <span class="nottickedoff">return True</span></span>
-<span class="lineno">  373 </span><span class="spaces"></span><span class="istickedoff">asBool (isGlobalDef &quot;Prelude.False&quot; -&gt; Just ()) = <span class="nottickedoff">return False</span></span>
-<span class="lineno">  374 </span><span class="spaces"></span><span class="istickedoff">asBool _ = Nothing</span></span>
-<span class="lineno">  375 </span>
-<span class="lineno">  376 </span>asBoolType :: Recognizer Term ()
-<span class="lineno">  377 </span><span class="decl"><span class="istickedoff">asBoolType = isGlobalDef &quot;Prelude.Bool&quot;</span></span>
-<span class="lineno">  378 </span>
-<span class="lineno">  379 </span>asNatType :: Recognizer Term ()
-<span class="lineno">  380 </span><span class="decl"><span class="nottickedoff">asNatType (asConstant -&gt; Just o)</span>
-<span class="lineno">  381 </span><span class="spaces">  </span><span class="nottickedoff">| nameInfo o == ModuleIdentifier preludeNatIdent = pure ()</span>
-<span class="lineno">  382 </span><span class="spaces"></span><span class="nottickedoff">asNatType _ = Nothing</span></span>
-<span class="lineno">  383 </span>
-<span class="lineno">  384 </span>asIntegerType :: Recognizer Term ()
-<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">asIntegerType = isGlobalDef &quot;Prelude.Integer&quot;</span></span>
-<span class="lineno">  386 </span>
-<span class="lineno">  387 </span>asIntModType :: Recognizer Term Natural
-<span class="lineno">  388 </span><span class="decl"><span class="nottickedoff">asIntModType = isGlobalDef &quot;Prelude.IntMod&quot; @&gt; asNat</span></span>
-<span class="lineno">  389 </span>
-<span class="lineno">  390 </span>asVectorType :: Recognizer Term (Term, Term)
-<span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">asVectorType = fmap toPair . ((isGlobalDef &quot;Prelude.Vec&quot; @&gt; return) &lt;@&gt; return)</span></span>
-<span class="lineno">  392 </span>
-<span class="lineno">  393 </span>isVecType :: Recognizer Term a -&gt; Recognizer Term (Natural :*: a)
-<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">isVecType tp = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@&gt; tp</span></span>
-<span class="lineno">  395 </span>
-<span class="lineno">  396 </span>asVecType :: Recognizer Term (Natural :*: Term)
-<span class="lineno">  397 </span><span class="decl"><span class="istickedoff">asVecType = isVecType return</span></span>
-<span class="lineno">  398 </span>
-<span class="lineno">  399 </span>asBitvectorType :: Recognizer Term Natural
-<span class="lineno">  400 </span><span class="decl"><span class="istickedoff">asBitvectorType = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@ asBoolType</span></span>
-<span class="lineno">  401 </span>
-<span class="lineno">  402 </span>asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
-<span class="lineno">  403 </span><span class="decl"><span class="nottickedoff">asMux = isGlobalDef &quot;Prelude.ite&quot; @&gt; return &lt;@&gt; return &lt;@&gt; return &lt;@&gt; return</span></span>
-<span class="lineno">  404 </span>
-<span class="lineno">  405 </span>asEq :: Recognizer Term (Term, Term, Term)
-<span class="lineno">  406 </span><span class="decl"><span class="istickedoff">asEq t =</span>
-<span class="lineno">  407 </span><span class="spaces">  </span><span class="istickedoff">do l &lt;- asGlobalApply &quot;Prelude.Eq&quot; t</span>
-<span class="lineno">  408 </span><span class="spaces">     </span><span class="istickedoff">case l of</span>
-<span class="lineno">  409 </span><span class="spaces">       </span><span class="istickedoff">[a, x, y] -&gt; Just (a, x, y)</span>
-<span class="lineno">  410 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  411 </span>
-<span class="lineno">  412 </span>asEqTrue :: Recognizer Term Term
-<span class="lineno">  413 </span><span class="decl"><span class="istickedoff">asEqTrue t =</span>
-<span class="lineno">  414 </span><span class="spaces">  </span><span class="istickedoff">case (isGlobalDef &quot;Prelude.EqTrue&quot; @&gt; return) t of</span>
-<span class="lineno">  415 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; Just x</span>
-<span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  417 </span><span class="spaces">      </span><span class="istickedoff">do (a,x,y) &lt;- asEq t</span>
-<span class="lineno">  418 </span><span class="spaces">         </span><span class="istickedoff">isGlobalDef &quot;Prelude.Bool&quot; a</span>
-<span class="lineno">  419 </span><span class="spaces">         </span><span class="istickedoff">isGlobalDef &quot;Prelude.True&quot; y</span>
-<span class="lineno">  420 </span><span class="spaces">         </span><span class="istickedoff">return x</span></span>
-<span class="lineno">  421 </span>
-<span class="lineno">  422 </span>asArrayType :: Recognizer Term (Term :*: Term)
-<span class="lineno">  423 </span><span class="decl"><span class="nottickedoff">asArrayType = (isGlobalDef &quot;Prelude.Array&quot; @&gt; return) &lt;@&gt; return</span></span>
+<span class="lineno">  369 </span>-- | Returns term as a constant Boolean if it is one.
+<span class="lineno">  370 </span>asBool :: Recognizer Term Bool
+<span class="lineno">  371 </span><span class="decl"><span class="istickedoff">asBool (isGlobalDef &quot;Prelude.True&quot; -&gt; Just ()) = <span class="nottickedoff">return True</span></span>
+<span class="lineno">  372 </span><span class="spaces"></span><span class="istickedoff">asBool (isGlobalDef &quot;Prelude.False&quot; -&gt; Just ()) = <span class="nottickedoff">return False</span></span>
+<span class="lineno">  373 </span><span class="spaces"></span><span class="istickedoff">asBool _ = Nothing</span></span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>asBoolType :: Recognizer Term ()
+<span class="lineno">  376 </span><span class="decl"><span class="istickedoff">asBoolType = isGlobalDef &quot;Prelude.Bool&quot;</span></span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>asNatType :: Recognizer Term ()
+<span class="lineno">  379 </span><span class="decl"><span class="nottickedoff">asNatType (asConstant -&gt; Just o)</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">| nameInfo o == ModuleIdentifier preludeNatIdent = pure ()</span>
+<span class="lineno">  381 </span><span class="spaces"></span><span class="nottickedoff">asNatType _ = Nothing</span></span>
+<span class="lineno">  382 </span>
+<span class="lineno">  383 </span>asIntegerType :: Recognizer Term ()
+<span class="lineno">  384 </span><span class="decl"><span class="nottickedoff">asIntegerType = isGlobalDef &quot;Prelude.Integer&quot;</span></span>
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>asIntModType :: Recognizer Term Natural
+<span class="lineno">  387 </span><span class="decl"><span class="nottickedoff">asIntModType = isGlobalDef &quot;Prelude.IntMod&quot; @&gt; asNat</span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>asVectorType :: Recognizer Term (Term, Term)
+<span class="lineno">  390 </span><span class="decl"><span class="nottickedoff">asVectorType = fmap toPair . ((isGlobalDef &quot;Prelude.Vec&quot; @&gt; return) &lt;@&gt; return)</span></span>
+<span class="lineno">  391 </span>
+<span class="lineno">  392 </span>isVecType :: Recognizer Term a -&gt; Recognizer Term (Natural :*: a)
+<span class="lineno">  393 </span><span class="decl"><span class="istickedoff">isVecType tp = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@&gt; tp</span></span>
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span>asVecType :: Recognizer Term (Natural :*: Term)
+<span class="lineno">  396 </span><span class="decl"><span class="istickedoff">asVecType = isVecType return</span></span>
+<span class="lineno">  397 </span>
+<span class="lineno">  398 </span>asBitvectorType :: Recognizer Term Natural
+<span class="lineno">  399 </span><span class="decl"><span class="istickedoff">asBitvectorType = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@ asBoolType</span></span>
+<span class="lineno">  400 </span>
+<span class="lineno">  401 </span>asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
+<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">asMux = isGlobalDef &quot;Prelude.ite&quot; @&gt; return &lt;@&gt; return &lt;@&gt; return &lt;@&gt; return</span></span>
+<span class="lineno">  403 </span>
+<span class="lineno">  404 </span>asEq :: Recognizer Term (Term, Term, Term)
+<span class="lineno">  405 </span><span class="decl"><span class="istickedoff">asEq t =</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="istickedoff">do l &lt;- asGlobalApply &quot;Prelude.Eq&quot; t</span>
+<span class="lineno">  407 </span><span class="spaces">     </span><span class="istickedoff">case l of</span>
+<span class="lineno">  408 </span><span class="spaces">       </span><span class="istickedoff">[a, x, y] -&gt; Just (a, x, y)</span>
+<span class="lineno">  409 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  410 </span>
+<span class="lineno">  411 </span>asEqTrue :: Recognizer Term Term
+<span class="lineno">  412 </span><span class="decl"><span class="istickedoff">asEqTrue t =</span>
+<span class="lineno">  413 </span><span class="spaces">  </span><span class="istickedoff">case (isGlobalDef &quot;Prelude.EqTrue&quot; @&gt; return) t of</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; Just x</span>
+<span class="lineno">  415 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  416 </span><span class="spaces">      </span><span class="istickedoff">do (a,x,y) &lt;- asEq t</span>
+<span class="lineno">  417 </span><span class="spaces">         </span><span class="istickedoff">isGlobalDef &quot;Prelude.Bool&quot; a</span>
+<span class="lineno">  418 </span><span class="spaces">         </span><span class="istickedoff">isGlobalDef &quot;Prelude.True&quot; y</span>
+<span class="lineno">  419 </span><span class="spaces">         </span><span class="istickedoff">return x</span></span>
+<span class="lineno">  420 </span>
+<span class="lineno">  421 </span>asArrayType :: Recognizer Term (Term :*: Term)
+<span class="lineno">  422 </span><span class="decl"><span class="nottickedoff">asArrayType = (isGlobalDef &quot;Prelude.Array&quot; @&gt; return) &lt;@&gt; return</span></span>
 
 </pre>
 </body>

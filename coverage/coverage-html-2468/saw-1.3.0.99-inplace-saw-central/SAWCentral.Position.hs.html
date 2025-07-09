@@ -333,7 +333,7 @@ span.spaces    { background: white }
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">FileAndFunctionPos f fn -&gt; <span class="nottickedoff">mkLoc (fnm &lt;&gt; &quot; &quot; &lt;&gt; Text.pack f &lt;&gt; &quot; &quot; &lt;&gt; Text.pack fn) W4.InternalPos</span></span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Unknown -&gt; <span class="nottickedoff">mkLoc fnm W4.InternalPos</span></span>
 <span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">PosREPL -&gt; <span class="nottickedoff">mkLoc (fnm &lt;&gt; &quot; &lt;REPL&gt;&quot;) W4.InternalPos</span></span>
-<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">PosInternal nm -&gt; mkLoc (fnm &lt;&gt; &quot; &quot; &lt;&gt; Text.pack nm) W4.InternalPos</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">PosInternal nm -&gt; <span class="nottickedoff">mkLoc (fnm &lt;&gt; &quot; &quot; &lt;&gt; Text.pack nm) W4.InternalPos</span></span>
 <span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">PosInferred _ p -&gt; <span class="nottickedoff">toW4Loc fnm p</span></span>
 <span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">Range file sl sc _el _ec -&gt;</span>
 <span class="lineno">  320 </span><span class="spaces">      </span><span class="istickedoff">mkLoc fnm (W4.SourcePos (Text.pack file) sl sc)</span>

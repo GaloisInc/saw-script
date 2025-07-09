@@ -132,7 +132,7 @@ span.spaces    { background: white }
 <span class="lineno">  113 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- typeInferComplete (LocalVar i :: TermF SCTypedTerm)</span>
 <span class="lineno">  114 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll t args</span>
 <span class="lineno">  115 </span><span class="spaces">       </span><span class="istickedoff">(_, Just ec, _) -&gt;</span>
-<span class="lineno">  116 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- typeInferComplete (FTermF (Variable ec))</span>
+<span class="lineno">  116 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- typeInferComplete (Variable ec)</span>
 <span class="lineno">  117 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll t args</span>
 <span class="lineno">  118 </span><span class="spaces">       </span><span class="istickedoff">(_, _, Just (ResolvedCtor ctor)) -&gt;</span>
 <span class="lineno">  119 </span><span class="spaces">         </span><span class="istickedoff">do let c = ctorName ctor</span>
