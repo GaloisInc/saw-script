@@ -275,7 +275,7 @@ tyToShape col = go
     goRef ty ty' mutbl | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr
 
     goFnPtr :: M.Ty -> M.FnSig -> Some TypeShape
-    goFnPtr ty (M.FnSig args ret _abi _spread) =
+    goFnPtr ty (M.FnSig args ret _abi) =
         tyListToCtx col args $ \argsr  ->
         tyToReprCont col ret $ \retr ->
            Some (FnPtrShape ty argsr retr)

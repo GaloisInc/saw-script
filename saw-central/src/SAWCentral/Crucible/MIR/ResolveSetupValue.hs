@@ -1360,7 +1360,6 @@ data FnSigView = FnSigView {
     _fsvarg_tys    :: ![TyView]
   , _fsvreturn_ty  :: !TyView
   , _fsvabi        :: Mir.Abi
-  , _fsvspreadarg  :: Maybe Int
   }
   deriving Eq
 
@@ -1423,8 +1422,8 @@ substsView (Mir.Substs tys) = SubstsView (map tyView tys)
 
 -- | Convert a 'Mir.FnSig' value to a 'FnSigView' value.
 fnSigView :: Mir.FnSig -> FnSigView
-fnSigView (Mir.FnSig argTys retTy abi spreadarg) =
-  FnSigView (map tyView argTys) (tyView retTy) abi spreadarg
+fnSigView (Mir.FnSig argTys retTy abi) =
+  FnSigView (map tyView argTys) (tyView retTy) abi
 
 -- | Read the value out of a 'MaybeType' expression that is assumed to be
 -- assigned to a value. If this assumption does not hold (i.e., if the value is
