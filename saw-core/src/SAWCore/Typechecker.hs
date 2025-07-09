@@ -113,7 +113,7 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
             inferApplyAll t args
        (_, Just ec, _) ->
-         do t <- typeInferComplete (FTermF (Variable ec))
+         do t <- typeInferComplete (Variable ec)
             inferApplyAll t args
        (_, _, Just (ResolvedCtor ctor)) ->
          do let c = ctorName ctor

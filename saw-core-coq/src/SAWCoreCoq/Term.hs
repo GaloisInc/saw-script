@@ -470,13 +470,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    Variable ec ->
-      do env <- view namedEnvironment <$> askTR
-         let nm = Name (ecVarIndex ec) (ecName ec)
-         case Map.lookup nm env of
-           Just ident -> pure (Coq.Var ident)
-           Nothing -> translateConstant nm
-
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
     -- Note that SAW core equates record types up to reordering, so we sort our
@@ -799,6 +792,13 @@ translateTermUnshared t = do
 
     -- Constants
     Constant n -> translateConstant n
+
+    Variable ec ->
+      do nenv <- view namedEnvironment <$> askTR
+         let nm = Name (ecVarIndex ec) (ecName ec)
+         case Map.lookup nm nenv of
+           Just ident -> pure (Coq.Var ident)
+           Nothing -> translateConstant nm
 
   where
     badTerm          = Except.throwError $ BadTerm t

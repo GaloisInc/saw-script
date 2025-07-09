@@ -1196,7 +1196,7 @@ sawLetMinimize sc t_top =
   slMinTermF' tf@(LocalVar i) =
     tell (varOccs1 i) >> liftIO (scTermF sc tf)
   slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)
+  slMinTermF' tf@(Variable _) = liftIO (scTermF sc tf)
 
   slMinFTermF :: FlatTermF Term -> SLMinM Term
-  slMinFTermF ftf@(Variable _) = liftIO $ scFlatTermF sc ftf
   slMinFTermF ftf = traverse slMinTerm ftf >>= liftIO . scFlatTermF sc

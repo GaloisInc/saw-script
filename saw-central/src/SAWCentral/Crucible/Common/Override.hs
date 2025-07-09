@@ -111,7 +111,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 import           SAWCore.Name (toShortName)
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
-import           SAWCore.Term.Functor (FlatTermF(..), unwrapTermF)
+import           SAWCore.Term.Functor (unwrapTermF)
 import           SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
@@ -723,7 +723,7 @@ matchTerm sc md prepost real expect =
   do let loc = MS.conditionLoc md
      free <- OM (use osFree)
      case unwrapTermF expect of
-       FTermF (Variable ec)
+       Variable ec
          | Set.member (ecVarIndex ec) free ->
          do assignTerm sc md prepost (ecVarIndex ec) real
 

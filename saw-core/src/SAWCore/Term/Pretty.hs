@@ -441,7 +441,6 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
-    Variable ec -> annotate PPS.ExtCnsStyle <$> ppExtCns ec
 
 -- | Pretty-print a big endian list of bit values as a hexadecimal number
 ppBitsToHex :: [Bool] -> String
@@ -494,6 +493,7 @@ ppTermF prec (Pi x tp body) =
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = annotate PPS.LocalVarStyle <$> pretty <$> varLookupM x
 ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
+ppTermF _ (Variable ec) = annotate PPS.ExtCnsStyle <$> ppExtCns ec
 
 
 -- | Internal function to recursively pretty-print a term
@@ -565,9 +565,9 @@ shouldMemoizeTerm t =
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False
-    FTermF Variable{} -> False
     Constant{} -> False
     LocalVar{} -> False
+    Variable{} -> False
     _ -> True
 
 -- | Compute a memoization table for a term, and pretty-print the term using the

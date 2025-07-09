@@ -438,7 +438,7 @@ scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
 -- | Create a named variable 'Term' from an 'ExtCns'.
 scVariable :: SharedContext -> ExtCns Term -> IO Term
-scVariable sc ec = scFlatTermF sc (Variable ec)
+scVariable sc ec = scTermF sc (Variable ec)
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
@@ -1376,6 +1376,9 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
        goF c (Pi _ ty1 body1) (Pi _ ty2 body2) =
               pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
 
+       goF c (Variable ec1) (Variable ec2)
+           | ecVarIndex ec1 == ecVarIndex ec2 = go c (ecType ec1) (ecType ec2)
+
        -- final catch-all case
        goF _c _x _y = return False
 
@@ -1465,6 +1468,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
              case lookupVarIndexInMap (nameIndex nm) mm of
                Just r -> pure $ resolvedNameType r
                _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
+        Variable ec -> pure $ ecType ec
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
@@ -1523,7 +1527,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           n <- scNat sc (fromIntegral (V.length vs))
           scVecType sc n tp
         StringLit{} -> lift $ scStringType sc
-        Variable ec -> pure $ ecType ec
 
 --------------------------------------------------------------------------------
 
@@ -1590,7 +1593,6 @@ instantiateLocalVars sc f initialLevel t0 =
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
            DeBruijnIndex -> TermF Term -> IO Term
-    go' _ (FTermF tf@(Variable _)) = scFlatTermF sc tf
     go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -1599,6 +1601,7 @@ instantiateLocalVars sc f initialLevel t0 =
       | i < l     = scTermF sc (LocalVar i)
       | otherwise = f l i
     go' _ tf@(Constant {}) = scTermF sc tf
+    go' _ tf@(Variable {}) = scTermF sc tf
 
 instantiateVars :: SharedContext
                 -> ((Term -> IO Term) -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term)
@@ -1616,7 +1619,7 @@ instantiateVars sc f initialLevel t0 =
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
            DeBruijnIndex -> TermF Term -> IO Term
-    go' l (FTermF (Variable ec)) = f (go l) l (Left ec)
+    go' l (Variable ec)     = f (go l) l (Left ec)
     go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -2816,9 +2819,9 @@ getAllExts t = Set.toList (getAllExtSet t)
 getAllExtSet :: Term -> Set.Set (ExtCns Term)
 getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
     where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | IntSet.member idx is = acc
-          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (Variable ec)) }) =
+          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (Variable ec) }) =
             (IntSet.insert idx is, Set.insert ec a)
-          getExtCns (is, a) (Unshared (FTermF (Variable ec))) =
+          getExtCns (is, a) (Unshared (Variable ec)) =
             (is, Set.insert ec a)
           getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc
           getExtCns acc (Unshared (Constant {})) = acc
