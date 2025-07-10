@@ -609,8 +609,8 @@ interpretMonadAction v = case v of
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
     return $ mkValue v''
-  VDo _blkpos mname env stmts' ->
-    withLocalEnvAny env (interpretDoStmts' mname stmts')
+  VDo _blkpos mname env body ->
+    withLocalEnvAny env (interpretDoStmts' mname body)
   VBindOnce m1 v2 -> do
     v1 <- actionFromValue m1
     m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via interpretMonadAction" v2 v1
@@ -676,18 +676,18 @@ interpretDoStmt stmt =
 -- as a bind of _. The typechecker enforces that we won't see a block
 -- with something else at the end.
 --
--- FUTURE: improve the representation to separate the last expression
--- out of the list so we don't need so much goop here.
+-- FUTURE: after fixing the environment handling this should be able
+-- to just use mapM on the statements and not need to nest the last
+-- expression inside recursing on the statements.
 --
-interpretDoStmts :: forall m. InterpreterMonad m => [SS.Stmt] -> m Value
-interpretDoStmts stmts =
+interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Value
+interpretDoStmts (stmts, lastexpr) =
     case stmts of
-      [] ->
-          panic "interpretDoStmts" ["Got empty block"]
-      [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
+      [] -> do
+          let pos = SS.getPos lastexpr
           savepos <- liftTopLevel $ pushPosition pos
           -- Execute the expression purely first.
-          result :: Value <- liftTopLevel $ interpretExpr e
+          result :: Value <- liftTopLevel $ interpretExpr lastexpr
           -- If we got a do-block or similar back, execute it now.
           result' :: Value <- interpretMonadAction result
           -- This gives us a VTopLevel/VProofScript/etc with a
@@ -698,21 +698,21 @@ interpretDoStmts stmts =
           -- will go downhill.)
           liftTopLevel $ popPosition savepos
           return result'
-      stmt : stmts' -> do
+      stmt : more -> do
           -- Execute the expression and get the updated environment
           env' <- interpretDoStmt stmt
           -- Run the rest of the block with the updated environment
-          withLocalEnvAny env' (interpretDoStmts stmts')
+          withLocalEnvAny env' (interpretDoStmts (more, lastexpr))
 
 -- Wrapper around interpretDoStmts for inserting a stack trace frame, in the
 -- old style. XXX remove along with the old stack trace code...
-interpretDoStmts' :: InterpreterMonad m => Maybe String -> [SS.Stmt] -> m Value
-interpretDoStmts' mname stmts = do
+interpretDoStmts' :: InterpreterMonad m => Maybe String -> ([SS.Stmt], SS.Expr) -> m Value
+interpretDoStmts' mname body = do
   trace <- liftTopLevel $ gets rwStackTrace
   case mname of
     Nothing -> pure ()
     Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = name : trace })
-  v <- interpretDoStmts stmts
+  v <- interpretDoStmts body
   case mname of
     Nothing -> pure ()
     Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
@@ -834,7 +834,12 @@ interpretTopStmt printBinds stmt = do
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
-  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretDoStmts stmts)) ro rw
+  -- What AutoMatch provides is supposed to be a full script for the
+  -- syntactic top level, not a do-block. Run it with interpretTopStmt
+  -- so as to (a) get the right behavior (as long as interpretTopStmt
+  -- and interpretDoStmt are different, which they are) and (b) avoid
+  -- needing to provide a block result value.
+  fst <$> runTopLevel (withLocalEnv emptyLocal (mapM_ (interpretTopStmt False) stmts)) ro rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =

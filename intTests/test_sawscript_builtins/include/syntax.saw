@@ -19,6 +19,7 @@ do {
   let (d, e) = (b, c);
 
   typedef t = Int;
+  return ();
 };
 
 return (concat "x" 3);

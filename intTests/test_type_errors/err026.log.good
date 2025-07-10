@@ -1,3 +1,3 @@
  Loading file "err026.saw"
- err026.saw:3:9-5:2: do block must end with expression at "x" (err026.saw:3:5-3:6)
+ err026.saw:3:9-5:2: do block must end with expression
 FAILED

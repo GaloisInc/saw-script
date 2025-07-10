@@ -44,10 +44,6 @@ import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
--- should probably move this to AST
-tUnit :: Pos -> Type
-tUnit pos = tTuple pos []
-
 
 -- short names for the environment types we use
 type VarEnv = Map LName (PrimitiveLifecycle, Schema)
@@ -201,7 +197,7 @@ instance AppSubst Expr where
     Code _                 -> expr
     CType _                -> expr
     Array pos es           -> Array pos (appSubst s es)
-    Block pos bs           -> Block pos (appSubst s bs)
+    Block pos (bs, e)      -> Block pos (appSubst s bs, appSubst s e)
     Tuple pos es           -> Tuple pos (appSubst s es)
     Record pos fs          -> Record pos (appSubst s fs)
     Index pos ar ix        -> Index pos (appSubst s ar) (appSubst s ix)
@@ -967,10 +963,12 @@ inferExpr (ln, expr) = case expr of
        es' <- mapM (flip (checkExpr ln) t) es
        return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
 
-  Block pos bs ->
+  Block pos body ->
     do ctx <- getFreshTyVar pos
-       (bs',t') <- inferStmts ln pos ctx bs
-       return (Block pos bs', tBlock (PosInferred InfTerm pos) ctx t')
+       tyResult <- getFreshTyVar pos
+       let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
+       body' <- inferBlock ln pos ctx ty body
+       return (Block pos body', ty)
 
   Tuple pos es ->
     do (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
@@ -1161,14 +1159,6 @@ withTypedef n t m =
       in  ro { tyEnv = M.insert (getVal n) (Current, ConcreteType t') $ tyEnv ro })
     $ unTI m
 
--- Check if a statement is an allowable one for the end of a do-block.
--- The last thing in a do-block should be an expression, which manifests
--- as a bind-statement of the form _ <- e.
-legalEndOfBlock :: Stmt -> Bool
-legalEndOfBlock s = case s of
-    StmtBind _spos (PWild _patpos _mt) _e -> True
-    _ -> False
-
 -- break a monadic type down into its monad and value types, if it is one
 --
 --    monadType (TopLevel Int) gives Just (TopLevel, Int)
@@ -1203,7 +1193,7 @@ wrapReturn e =
 --
 -- returns a wrapper for checking subsequent statements as well as
 -- an updated statement and a type.
-inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
+inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
 inferStmt ln atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
@@ -1322,48 +1312,66 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
 
             let s' = StmtBind spos pat' e''
             let wrapper = withPattern pat'
-            return (wrapper, s', pty)
+            return (wrapper, s')
         StmtLet spos dg -> do
             dg' <- inferDeclGroup dg
             let s' = StmtLet spos dg'
             let wrapper = withDeclGroup dg'
-            return (wrapper, s', tUnit $ PosInferred InfTerm spos)
-        StmtCode spos _ ->
-            return (id, s, tUnit $ PosInferred InfTerm spos)
-        StmtImport spos _ ->
-            return (id, s, tUnit $ PosInferred InfTerm spos)
+            return (wrapper, s')
+        StmtCode _spos _ ->
+            return (id, s)
+        StmtImport _spos _ ->
+            return (id, s)
         StmtTypedef spos name ty -> do
             ty' <- checkType kindStar ty
             let s' = StmtTypedef spos name ty'
             let wrapper = withTypedef name ty'
-            return (wrapper, s', tUnit $ PosInferred InfTerm spos)
+            return (wrapper, s')
 
--- the passed-in position should be the position for the whole statement block
--- the first type argument (ctx) is the monad type for the block
-inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
-inferStmts ln blockpos ctx stmts = case stmts of
-    [] -> do
-        recordError blockpos ("do block must include at least one " ++
-                              "expression at " ++ show ln)
-        t <- getErrorTyVar blockpos
-        return ([], t)
+-- Inference for a do-block.
+--
+-- The passed-in position should be the position for the whole
+-- statement block.
+--
+-- The first type argument (ctx) is the monad type for the block.
+--
+-- The second type argument (ty) is the expected full result type for
+-- the block (including the monad) to be unified with the result type
+-- found.
+--
+inferBlock :: LName -> Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
+inferBlock ln blockpos ctx ty (stmts0, lastexpr) = do
+  let atSyntacticTopLevel = False
 
-    s : more -> do
-        let atSyntacticTopLevel = False
-        (wrapper, s', t) <- inferStmt ln atSyntacticTopLevel blockpos ctx s
-        case more of
-            [] ->
-                if legalEndOfBlock s then
-                    return ([s'], t)
-                else do
-                    recordError blockpos ("do block must end with " ++
-                                          "expression at " ++ show ln)
-                    t' <- getErrorTyVar blockpos
-                    -- XXX this has been throwing away s' but probably shouldn't
-                    return ([], t')
-            _ : _ -> do
-               (more', t') <- wrapper $ inferStmts ln blockpos ctx more
-               return (s' : more', t')
+  -- Check the statements in order, left first, passing through the
+  -- wrapper produced by inferStmt.
+  --
+  -- XXX: this should really use foldlM on the statement list, except
+  -- it doesn't typecheck that way because the type of the wrapper
+  -- goes ... off the rails.
+  --
+  -- XXX: those wrappers should go away anyhow; it's a messy way of
+  -- updating the typing environment by pretending that each statement
+  -- in a do-block is nested inside the previous one. Things should
+  -- get rearranged so we just update the environment in the monad
+  -- context, instead of pretending that's not what we're doing.
+  --
+  -- XXX: Because of this rubbish we have to check the last expression
+  -- _inside_ the loop when we get to the end of the list, instead of
+  -- just doing it afterwards. Blegh.
+  --
+  let go stmts = case stmts of
+        [] -> do
+          -- Check the final expression.
+          -- This produces the result type for the block.
+          (lastexpr', ty') <- inferExpr (ln, lastexpr)
+          unify ln ty (getPos lastexpr) ty'
+          return ([], lastexpr')
+        stmt : more -> do
+          (wrapper, stmt') <- inferStmt ln atSyntacticTopLevel blockpos ctx stmt
+          (more', lastexpr') <- wrapper $ go more
+          return (stmt' : more', lastexpr')
+  go stmts0
 
 -- Wrapper around inferStmt suitable for checking one statement at a
 -- time. This is temporary scaffolding for the interpreter while
@@ -1389,7 +1397,7 @@ inferSingleStmt ln pos ctx s = do
   -- currently we are always at the syntactic top level here because
   -- that's how the interpreter works
   let atSyntacticTopLevel = True
-  (_wrapper, s', _ty') <- inferStmt ln atSyntacticTopLevel pos ctx s
+  (_wrapper, s') <- inferStmt ln atSyntacticTopLevel pos ctx s
   s'' <- applyCurrentSubst s'
   return s''
 

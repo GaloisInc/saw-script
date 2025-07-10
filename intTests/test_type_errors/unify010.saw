@@ -7,4 +7,5 @@
 
 let _ = do {
    (x : Int) <- return "abc";
+   return ();
 };
