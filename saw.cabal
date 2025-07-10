@@ -186,7 +186,6 @@ library saw-core
     SAWCore.Change
   other-modules:
     SAWCore.Panic
-    SAWCore.UnionFind
 
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
