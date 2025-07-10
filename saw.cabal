@@ -149,7 +149,6 @@ library saw-core
   hs-source-dirs: saw-core/src
   exposed-modules:
     SAWCore.SAWCore
-    SAWCore.Constant
     SAWCore.ExternalFormat
     SAWCore.Conversion
     SAWCore.Cache
