@@ -335,7 +335,22 @@ zipWithFlatTermF f = go
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
-    go _ _ = Nothing
+    go UnitValue      _ = Nothing
+    go UnitType       _ = Nothing
+    go PairValue{}    _ = Nothing
+    go PairType{}     _ = Nothing
+    go PairLeft{}     _ = Nothing
+    go PairRight{}    _ = Nothing
+    go RecursorType{} _ = Nothing
+    go Recursor{}     _ = Nothing
+    go RecursorApp{}  _ = Nothing
+    go RecordType{}   _ = Nothing
+    go RecordValue{}  _ = Nothing
+    go RecordProj{}   _ = Nothing
+    go Sort{}         _ = Nothing
+    go NatLit{}       _ = Nothing
+    go ArrayValue{}   _ = Nothing
+    go StringLit{}    _ = Nothing
 
 
 -- Term Functor ----------------------------------------------------------------
@@ -524,7 +539,13 @@ alphaEquiv = term
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
     termf (Constant x1) (Constant x2) = x1 == x2
     termf (Variable x1) (Variable x2) = x1 == x2
-    termf _ _ = False
+    termf FTermF{}   _ = False
+    termf App{}      _ = False
+    termf Lambda{}   _ = False
+    termf Pi{}       _ = False
+    termf LocalVar{} _ = False
+    termf Constant{} _ = False
+    termf Variable{} _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
