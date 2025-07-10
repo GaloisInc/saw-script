@@ -1192,7 +1192,7 @@ wrapReturn e =
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
 -- returns a wrapper for checking subsequent statements as well as
--- an updated statement and a type.
+-- an updated statement.
 inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt)
 inferStmt ln atSyntacticTopLevel blockpos ctx s =
     case s of
