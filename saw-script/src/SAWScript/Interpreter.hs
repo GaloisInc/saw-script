@@ -35,7 +35,6 @@ import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (gets, modify)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (MonadTrans(lift))
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe)
 import Data.List (genericLength)
@@ -601,6 +600,23 @@ interpretDeclGroup (SS.Recursive ds) = do
         env' = foldr addDecl env ds
     return env'
 
+-- Execute a monad action. This happens in any of the interpreter
+-- monads.
+interpretMonadAction :: forall m. InterpreterMonad m => Value -> m Value
+interpretMonadAction v = case v of
+  VReturn v' -> do
+    -- VReturn v' -> VProofScript (return v')
+    -- (or whichever value for whichever monad)
+    let v'' :: m Value = return v'
+    return $ mkValue v''
+  VDo _blkpos mname env stmts' ->
+    withLocalEnvAny env (interpretStmts' mname stmts')              
+  VBindOnce m1 v2 -> do
+    v1 <- actionFromValue m1
+    m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via interpretMonadAction" v2 v1
+    interpretMonadAction m2
+  _ -> pure v
+
 -- Eval some statements. This happens in some monad; we only come here
 -- once the monad action is executed. Therefore, we can execute binds:
 -- if we get a do-block back, execute it recursively. (Such a do-block
@@ -611,21 +627,6 @@ interpretDeclGroup (SS.Recursive ds) = do
 interpretStmts :: forall m. InterpreterMonad m => [SS.Stmt] -> m Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
-    let force :: Value -> m Value
-        force v = case v of
-          VReturn v' -> do
-            -- VReturn v' -> VProofScript (return v')
-            -- (or whichever value for whichever monad)
-            let v'' :: m Value = return v'
-            return $ mkValue v''
-          VDo _blkpos mname env stmts' ->
-            withLocalEnvAny env (interpretStmts' mname stmts')              
-          VBindOnce m1 v2 -> do
-            v1 <- actionFromValue m1
-            m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via force" v2 v1
-            force m2
-          _ -> pure v
-    in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmts of
       [] ->
@@ -635,7 +636,7 @@ interpretStmts stmts =
           -- Execute the expression purely first.
           result :: Value <- liftTopLevel $ interpretExpr e
           -- If we got a do-block or similar back, execute it now.
-          result' :: Value <- force result
+          result' :: Value <- interpretMonadAction result
           -- This gives us a VTopLevel/VProofScript/etc with a
           -- TopLevel/ProofScript/etc Value in it.
           -- Return that as the result of the block; let the caller
@@ -648,7 +649,7 @@ interpretStmts stmts =
           -- Execute the expression purely first.
           v1 :: Value <- liftTopLevel $ interpretExpr e
           -- If we got a do-block or similar back, execute it now.
-          v2 :: Value <- force v1
+          v2 :: Value <- interpretMonadAction v1
           -- We should now have a VTopLevel/VProofScript/etc with a
           -- TopLevel/ProofScript/etc Value in it that we can execute
           -- in Haskell to get the resultant Value.
@@ -1028,80 +1029,61 @@ instance IsValue a => IsValue (TopLevel a) where
     toValue action = VTopLevel (fmap toValue action)
 
 instance FromValue a => FromValue (TopLevel a) where
-    fromValue (VTopLevel action) = fmap fromValue action
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos mname env stmts) = do
-      v <- withLocalEnv env (interpretStmts' mname stmts)
-      fromValue v
-    fromValue (VBindOnce m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- applyValue "Value in a VBindOnce, via TopLevel fromValue" v2 v1
-      fromValue m2
-    fromValue v = error $ "fromValue TopLevel:" <> show v
+    fromValue v = do
+      v' <- interpretMonadAction v
+      case v' of
+        VTopLevel action -> fmap fromValue action
+        _ -> panic "fromValue (TopLevel)" [
+                 "Invalid/ill-typed value: " <> Text.pack (show v')
+             ]
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)
 
 instance FromValue a => FromValue (ProofScript a) where
-    fromValue (VProofScript m) = fmap fromValue m
-    -- Inject top-level computations automatically into proof scripts.
-    -- This should really only possible in interactive subshell mode; otherwise
-    --  the type system should keep this from happening.
-    fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos mname env stmts) = do
-      v <- withLocalEnvProof env (interpretStmts' mname stmts)
-      fromValue v
-    fromValue (VBindOnce m1 v2) = ProofScript $ do
-      v1 <- unProofScript (fromValue m1)
-      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via ProofScript fromValue" v2 v1
-      unProofScript (fromValue m2)
-    fromValue _ = error "fromValue ProofScript"
+    fromValue v = do
+      v' <- interpretMonadAction v
+      case v' of
+        VProofScript action -> fmap fromValue action
+        _ -> panic "fromValue (ProofScript)" [
+                 "Invalid/ill-typed value: " <> Text.pack (show v')
+             ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
     toValue m = VLLVMCrucibleSetup (fmap toValue m)
 
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
-    fromValue (VLLVMCrucibleSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos mname env stmts) = do
-      v <- withLocalEnvLLVM env (interpretStmts' mname stmts)
-      fromValue v
-    fromValue (VBindOnce m1 v2) = LLVMCrucibleSetupM $ do
-      v1 <- runLLVMCrucibleSetupM (fromValue m1)
-      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via LLVMSetup fromValue" v2 v1
-      runLLVMCrucibleSetupM (fromValue m2)
-    fromValue _ = error "fromValue CrucibleSetup"
+    fromValue v = do
+      v' <- interpretMonadAction v
+      case v' of
+        VLLVMCrucibleSetup action -> fmap fromValue action
+        _ -> panic "fromValue (LLVMSetup)" [
+                 "Invalid/ill-typed value: " <> Text.pack (show v')
+             ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
     toValue m = VJVMSetup (fmap toValue m)
 
 instance FromValue a => FromValue (JVMSetupM a) where
-    fromValue (VJVMSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos mname env stmts) = do
-      v <- withLocalEnvJVM env (interpretStmts' mname stmts)
-      fromValue v
-    fromValue (VBindOnce m1 v2) = JVMSetupM $ do
-      v1 <- runJVMSetupM (fromValue m1)
-      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via JVMSetup fromValue" v2 v1
-      runJVMSetupM (fromValue m2)
-    fromValue _ = error "fromValue JVMSetup"
+    fromValue v = do
+      v' <- interpretMonadAction v
+      case v' of
+        VJVMSetup action -> fmap fromValue action
+        _ -> panic "fromValue (JVMSetup)" [
+                 "Invalid/ill-typed value: " <> Text.pack (show v')
+             ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
     toValue m = VMIRSetup (fmap toValue m)
 
 instance FromValue a => FromValue (MIRSetupM a) where
-    fromValue (VMIRSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VDo _pos mname env stmts) = do
-      v <- withLocalEnvMIR env (interpretStmts' mname stmts)
-      fromValue v
-    fromValue (VBindOnce m1 v2) = MIRSetupM $ do
-      v1 <- runMIRSetupM (fromValue m1)
-      m2 <- lift $ lift $ applyValue "Value in a VBindOnce, via MIRSetup fromValue" v2 v1
-      runMIRSetupM (fromValue m2)
-    fromValue _ = error "fromValue MIRSetup"
+    fromValue v = do
+      v' <- interpretMonadAction v
+      case v' of
+        VMIRSetup action -> fmap fromValue action
+        _ -> panic "fromValue (MIRSetup)" [
+                 "Invalid/ill-typed value: " <> Text.pack (show v')
+             ]
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
   toValue = VLLVMCrucibleSetupValue
