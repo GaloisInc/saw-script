@@ -156,9 +156,9 @@ Stmt :: { Stmt }
  | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (toLName $2) $4 }
 
 Declaration :: { Decl }
- : Arg list(Arg) '=' Expression         { Decl (maxSpan' $1 $4) $1 Nothing (buildFunction $2 $4) }
+ : Arg list(Arg) '=' Expression         { Decl (maxSpan' $1 $4) $1 Nothing (buildFunction (Just $1) $2 $4) }
  | Arg list(Arg) ':' Type '=' Expression
-                                        { Decl (maxSpan' $1 $6) $1 Nothing (buildFunction $2 (TSig (maxSpan' $4 $6) $6 $4)) }
+                                        { Decl (maxSpan' $1 $6) $1 Nothing (buildFunction (Just $1) $2 (TSig (maxSpan' $4 $6) $6 $4)) }
 
 Pattern :: { Pattern }
  : Arg                                  { $1 }
@@ -172,7 +172,7 @@ Arg :: { Pattern }
 Expression :: { Expr }
  : IExpr                                { $1 }
  | IExpr ':' Type                       { TSig (maxSpan' $1 $3) $1 $3 }
- | '\\' list1(Arg) '->' Expression      { buildFunction $2 $4 }
+ | '\\' list1(Arg) '->' Expression      { buildFunction Nothing $2 $4 }
  | 'let' Declaration 'in' Expression    { Let (maxSpan [tokPos $1, getPos $4]) (NonRecursive $2) $4 }
  | 'rec' sepBy1(Declaration, 'and')
    'in' Expression                      { Let (maxSpan [tokPos $1, getPos $4]) (Recursive $2) $4 }
@@ -356,10 +356,35 @@ parseError toks = case toks of
   []    -> Left UnexpectedEOF
   t : _ -> Left (UnexpectedToken t)
 
-buildFunction :: [Pattern] -> Expr -> Expr
-buildFunction args e =
-  let once :: Pattern -> Expr -> Expr
-      once pat e = Function (maxSpan' pat e) pat e
+-- | As seen by the parser, a "function name" is an arbitrary pattern.
+--   This is because we use the same syntax for function and value bindings:
+--   in "let (a, b) = e" the "(a, b)" can and should be an arbitrary pattern.
+--   For functions it doesn't make sense for it to be anything but a plain
+--   name, as in "let f () = e". You can write "let (a, b) () = e" and the
+--   parser will accept it, but it won't typecheck.
+--
+--   This function extracts the actual name, if any, for annotating
+--   the lambda expressions we turn further arguments into. It will
+--   return Nothing if the name is something other than an actual
+--   name, which is fine for value bindings since the result won't be
+--   used and also fine for nonsense like "let (a, b) () = e" that'll
+--   be rejected by the typechecker. The annotations in question are
+--   used only at eval time.
+--
+--   Runs in the Maybe monad for convenience.
+fixFunctionName :: Maybe Pattern -> Maybe Text
+fixFunctionName mname = do
+  name <- mname
+  case name of
+      PWild {} -> Nothing
+      PVar _pos name _ty -> Just $ getVal name
+      PTuple {} -> Nothing
+
+buildFunction :: Maybe Pattern -> [Pattern] -> Expr -> Expr
+buildFunction mname args e =
+  let mname' = fixFunctionName mname
+      once :: Pattern -> Expr -> Expr
+      once pat e = Lambda (maxSpan' pat e) mname' pat e
   in
   foldr once e args
 

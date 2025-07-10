@@ -541,7 +541,7 @@ interpretExpr expr =
                    panic "interpretExpr" [
                        "Read of inaccessible variable " <> SS.getVal x
                    ]
-      SS.Function _ pat e -> do
+      SS.Lambda _ _mname pat e -> do
           env <- getLocalEnv
           return $ VLambda env pat e
       SS.Application _ e1 e2 -> do
@@ -579,7 +579,7 @@ interpretDecl env (SS.Decl _ pat mt expr) = do
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
-      SS.Function _ pat e -> VLambda env pat e
+      SS.Lambda _ _mname pat e -> VLambda env pat e
       SS.TSig _ e _ -> interpretFunction env e
       _ ->
         panic "interpretFunction" [
