@@ -654,19 +654,15 @@ interpretStmts stmts =
           -- in Haskell to get the resultant Value.
           v3 :: Value <- actionFromValue v2
           liftTopLevel $ popPosition savepos
-          let msg = Text.pack (show pos) <> ": value came from here"
-          -- Caution re pos: see StmtLet
-          -- this can be simplified a lot, but that's for later (XXX)
-          liftTopLevel $ applyValue msg (VLambda env pat (SS.Block pos ss)) v3
-      SS.StmtLet pos bs : ss -> do
-          -- Caution: the position pos is not the correct position for
-          -- the block ss. However, interpret on Block ignores the
-          -- position there, so all we need is a placeholder for it to
-          -- ignore. Therefore, don't take the trouble to compute the
-          -- correct position (the bounding box on the statements ss).
-          ss' <- liftTopLevel $ interpretExpr (SS.Let pos bs (SS.Block pos ss))
-          -- this is the rest of the block, so will always be a VDo value
-          force ss'
+          -- Bind the value to the pattern
+          let env' = bindPatternLocal pat Nothing v3 env
+          -- Run the rest of the block with the updated environment
+          withLocalEnvAny env' (interpretStmts ss)
+      SS.StmtLet _pos dg : ss -> do
+          -- Process the declarations
+          env' <- liftTopLevel $ interpretDeclGroup dg
+          -- Run the rest of the block with the updated environment
+          withLocalEnvAny env' (interpretStmts ss)
       SS.StmtCode _ s : ss -> do
           liftTopLevel $ do
             sc <- getSharedContext
