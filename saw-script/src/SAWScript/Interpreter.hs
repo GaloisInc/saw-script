@@ -406,12 +406,15 @@ withStackTraceFrame str val =
           wrap v2 =
             withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env mname pat e) v2)
       in
-      VBuiltin wrap
-    VBuiltin f ->
-      let wrap x =
+      VBuiltin (OneMoreArg wrap)
+    VBuiltin wf ->
+      let f :: Value -> TopLevel Value = case wf of
+            OneMoreArg f' -> f'
+            ManyMoreArgs f' -> fmap VBuiltin . f'
+          wrap x =
             withStackTraceFrame str `fmap` doTopLevel (f x)
       in
-      VBuiltin wrap
+      VBuiltin $ OneMoreArg wrap
     VTopLevel m ->
       let m' =
             withStackTraceFrame str `fmap` doTopLevel m
@@ -459,8 +462,9 @@ applyValue :: Text -> Value -> Value -> TopLevel Value
 applyValue v1info v1 v2 = case v1 of
     VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
-    VBuiltin f ->
-        f v2
+    VBuiltin wf -> case wf of
+        OneMoreArg f -> f v2
+        ManyMoreArgs f -> VBuiltin <$> f v2
     _ ->
         panic "applyValue" [
             "Called object is not a function",
@@ -1011,7 +1015,14 @@ class FromValue a where
     fromValue :: Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue f = VBuiltin (\v -> return (toValue (f (fromValue v))))
+    toValue f =
+        -- Note: we can't distinguish OneMoreArg from ManyMoreArgs
+        -- without more infrastructure, so stick to OneMoreArg for all
+        -- cases for now.
+        let f' v = return (toValue (f (fromValue v)))
+            wrapper = OneMoreArg f'
+        in
+        VBuiltin wrapper
 
 instance FromValue Value where
     fromValue x = x
@@ -1407,19 +1418,20 @@ toValueCase :: (FromValue b) =>
                (b -> Value -> Value -> TopLevel Value)
             -> Value
 toValueCase prim =
-  VBuiltin $ \b -> return $
-  VBuiltin $ \v1 -> return $
-  VBuiltin $ \v2 ->
+  VBuiltin $
+    ManyMoreArgs $ \b -> return $
+    ManyMoreArgs $ \v1 -> return $
+    OneMoreArg $ \v2 ->
   prim (fromValue b) v1 v2
 
 toplevelSubshell :: Value
-toplevelSubshell = VBuiltin $ \_ ->
+toplevelSubshell = VBuiltin $ OneMoreArg $ \_ ->
   do m <- roSubshell <$> ask
      env <- getLocalEnv
      return (VTopLevel (toValue <$> withLocalEnv env m))
 
 proofScriptSubshell :: Value
-proofScriptSubshell = VBuiltin $ \_ ->
+proofScriptSubshell = VBuiltin $ OneMoreArg $ \_ ->
   do m <- roProofSubshell <$> ask
      env <- getLocalEnv
      return (VProofScript (toValue <$> withLocalEnvProof env m))
@@ -1457,8 +1469,8 @@ forValue [] _ = return $ VReturn (VArray [])
 forValue (x : xs) f = do
    m1 <- applyValue "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce m1 $ VBuiltin $ \v1 ->
-     return $ VBindOnce m2 $ VBuiltin $ \v2 ->
+   return $ VBindOnce m1 $ VBuiltin $ OneMoreArg $ \v1 ->
+     return $ VBindOnce m2 $ VBuiltin $ OneMoreArg $ \v2 ->
        return $ VReturn (VArray (v1 : fromValue v2))
 
 caseProofResultPrim ::
@@ -2169,7 +2181,7 @@ primitives = Map.fromList
     [ "A boolean value." ]
 
   , prim "for"                 "{m, a, b} [a] -> (a -> m b) -> m [b]"
-    (pureVal (VBuiltin . forValue))
+    (funVal2 forValue)
     Current
     [ "Apply the given command in sequence to the given list. Return"
     , "the list containing the result returned by the command at each"
@@ -6385,16 +6397,26 @@ primitives = Map.fromList
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal1 f _ _ = VBuiltin $ \a -> fmap toValue (f (fromValue a))
+    funVal1 f _ _ =
+      VBuiltin $
+        OneMoreArg $ \a ->
+        fmap toValue (f (fromValue a))
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal2 f _ _ = VBuiltin $ \a -> return $ VBuiltin $ \b ->
+    funVal2 f _ _ =
+      VBuiltin $
+        ManyMoreArgs $ \a -> return $
+        OneMoreArg $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Options -> BuiltinContext -> Value
-    funVal3 f _ _ = VBuiltin $ \a -> return $ VBuiltin $ \b -> return $ VBuiltin $ \c ->
+    funVal3 f _ _ =
+      VBuiltin $
+        ManyMoreArgs $ \a -> return $
+        ManyMoreArgs $ \b -> return $
+        OneMoreArg $ \c ->
       fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>

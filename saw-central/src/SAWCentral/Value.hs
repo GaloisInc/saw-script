@@ -26,6 +26,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 
 module SAWCentral.Value (
+    BuiltinWrapper(..),
     Value(..),
 
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
@@ -284,6 +285,10 @@ import Heapster.SAWTranslation (ChecksFlag,SomeTypedCFG(..))
 
 -- Values ----------------------------------------------------------------------
 
+data BuiltinWrapper
+  = OneMoreArg (Value -> TopLevel Value)
+  | ManyMoreArgs (Value -> TopLevel BuiltinWrapper)
+
 data Value
   = VBool Bool
   | VString Text
@@ -300,7 +305,7 @@ data Value
     -- which includes not just builtins but also the closures used to
     -- implement stack traces and possibly other messes, all of which
     -- should be removed.
-  | VBuiltin (Value -> TopLevel Value)
+  | VBuiltin BuiltinWrapper
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad
