@@ -69,7 +69,7 @@ import SAWCentral.Exceptions
 import SAWScript.Panic
 import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
-import SAWScript.Interpreter (interpretStmt)
+import SAWScript.Interpreter (interpretTopStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWCentral.TopLevel (TopLevelRW(..))
@@ -406,8 +406,8 @@ sawScriptCmd str = do
     Right stmt ->
       do mr <- getProofStateRef
          case mr of
-           Nothing -> void $ liftTopLevel (interpretStmt True stmt)
-           Just r  -> void $ liftProofScript (interpretStmt True stmt) r
+           Nothing -> void $ liftTopLevel (interpretTopStmt True stmt)
+           Just r  -> void $ liftProofScript (interpretTopStmt True stmt) r
 
 replFileName :: String
 replFileName = "<stdin>"

@@ -22,7 +22,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretStmt
+  ( interpretTopStmt
   , interpretFile
   , processFile
   , buildTopLevelEnv
@@ -756,11 +756,11 @@ processStmtBind printBinds pat expr = do -- mx mt
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
 --   This duplicates the logic in interpretStmts for no particularly good reason.
-interpretStmt :: InterpreterMonad m =>
+interpretTopStmt :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
   m ()
-interpretStmt printBinds stmt = do
+interpretTopStmt printBinds stmt = do
   let ?fileReader = BS.readFile
 
   ctx <- getMonadContext
@@ -834,9 +834,9 @@ interpretFile file runMain =
         let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
             withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
         in                                              
-        withOptions withPrint (interpretStmt False s)
+        withOptions withPrint (interpretTopStmt False s)
       else
-        interpretStmt False s
+        interpretTopStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
