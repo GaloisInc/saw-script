@@ -209,7 +209,9 @@ mir_alloc_internal pkind mut mty = do
       pure ()
 
   loc <- getW4Position "mir_alloc"
-  Some tpr <- pure $ Mir.tyToRepr col mty
+  Some tpr <- case Mir.tyToRepr col mty of
+    Left err -> fail ("Unsupported type in mir_alloc: " ++ err)
+    Right x -> return x
   n <- Setup.csVarCounter <<%= MS.nextAllocIndex
   tags <- view Setup.croTags
   let md = MS.ConditionMetadata

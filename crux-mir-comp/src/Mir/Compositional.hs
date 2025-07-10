@@ -156,7 +156,9 @@ compositionalOverrides _symOnline cs name cfg
                   "Expected Substs value with a single type, but found: " ++
                   show (PP.pretty tys) in
 
-      tyToRepr col instSubstTy
+      case tyToRepr col instSubstTy of
+        Left err -> panic ("Type not supported: " ++ err)
+        Right x -> x
 
     panic :: String -> a
     panic msg = error $ "compositionalOverrides: " ++ msg
