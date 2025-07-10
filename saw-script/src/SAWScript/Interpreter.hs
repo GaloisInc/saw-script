@@ -610,40 +610,32 @@ interpretMonadAction v = case v of
     let v'' :: m Value = return v'
     return $ mkValue v''
   VDo _blkpos mname env stmts' ->
-    withLocalEnvAny env (interpretStmts' mname stmts')              
+    withLocalEnvAny env (interpretDoStmts' mname stmts')
   VBindOnce m1 v2 -> do
     v1 <- actionFromValue m1
     m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via interpretMonadAction" v2 v1
     interpretMonadAction m2
   _ -> pure v
 
--- Eval some statements. This happens in some monad; we only come here
--- once the monad action is executed. Therefore, we can execute binds:
--- if we get a do-block back, execute it recursively. (Such a do-block
--- must be in the same monad in order to be well typed.)
+
+-- Eval a statement from a do-block. This happens in some monad; we
+-- only come here once the monad action is executed. Therefore, we can
+-- execute binds: if we get a do-block back, execute it recursively.
+-- (Such a do-block must be in the same monad in order to be well
+-- typed.)
 --
 -- In let-bindings the RHS is evaluated purely.
 --
-interpretStmts :: forall m. InterpreterMonad m => [SS.Stmt] -> m Value
-interpretStmts stmts =
+-- Returns the updated local environment.
+-- (XXX: should that be stored into the monad context or not? Apparently
+-- not, currently.)
+--
+interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m LocalEnv
+interpretDoStmt stmt =
     let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
-    case stmts of
-      [] ->
-          fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
-          savepos <- liftTopLevel $ pushPosition pos
-          -- Execute the expression purely first.
-          result :: Value <- liftTopLevel $ interpretExpr e
-          -- If we got a do-block or similar back, execute it now.
-          result' :: Value <- interpretMonadAction result
-          -- This gives us a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it.
-          -- Return that as the result of the block; let the caller
-          -- execute it.
-          liftTopLevel $ popPosition savepos
-          return result'
-      SS.StmtBind pos pat e : ss -> do
+    case stmt of
+      SS.StmtBind pos pat e -> do
           env <- liftTopLevel getLocalEnv
           savepos <- liftTopLevel $ pushPosition pos
           -- Execute the expression purely first.
@@ -656,15 +648,11 @@ interpretStmts stmts =
           v3 :: Value <- actionFromValue v2
           liftTopLevel $ popPosition savepos
           -- Bind the value to the pattern
-          let env' = bindPatternLocal pat Nothing v3 env
-          -- Run the rest of the block with the updated environment
-          withLocalEnvAny env' (interpretStmts ss)
-      SS.StmtLet _pos dg : ss -> do
+          return $ bindPatternLocal pat Nothing v3 env
+      SS.StmtLet _pos dg -> do
           -- Process the declarations
-          env' <- liftTopLevel $ interpretDeclGroup dg
-          -- Run the rest of the block with the updated environment
-          withLocalEnvAny env' (interpretStmts ss)
-      SS.StmtCode _ s : ss -> do
+          liftTopLevel $ interpretDeclGroup dg
+      SS.StmtCode _ s -> do
           liftTopLevel $ do
             sc <- getSharedContext
             rw <- getMergedEnv
@@ -673,24 +661,58 @@ interpretStmts stmts =
             -- FIXME: Local bindings get saved into the global cryptol environment here.
             -- We should change parseDecls to return only the new bindings instead.
             putTopLevelRW $ rw{rwCryptol = ce'}
-          interpretStmts ss
-      SS.StmtImport _ _ : _ ->
+          -- return the current local environment unchanged
+          liftTopLevel getLocalEnv
+      SS.StmtImport _ _ ->
           fail "block import unimplemented"
-      SS.StmtTypedef _ name ty : ss ->
-          liftTopLevel $ do
-            env <- getLocalEnv
-            let env' = LocalTypedef (getVal name) ty : env
-            withLocalEnv env' (interpretStmts ss)
+      SS.StmtTypedef _ name ty -> do
+          env <- liftTopLevel $ getLocalEnv
+          return $ LocalTypedef (getVal name) ty : env
 
--- Wrapper around interpretStmts for inserting a stack trace frame, in the
+-- Eval some statements from a do-block.
+--
+-- The last statement is special because it produces the value of the
+-- do-block; it is just an expression and not a statement, and appears
+-- as a bind of _. The typechecker enforces that we won't see a block
+-- with something else at the end.
+--
+-- FUTURE: improve the representation to separate the last expression
+-- out of the list so we don't need so much goop here.
+--
+interpretDoStmts :: forall m. InterpreterMonad m => [SS.Stmt] -> m Value
+interpretDoStmts stmts =
+    case stmts of
+      [] ->
+          panic "interpretDoStmts" ["Got empty block"]
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> do
+          savepos <- liftTopLevel $ pushPosition pos
+          -- Execute the expression purely first.
+          result :: Value <- liftTopLevel $ interpretExpr e
+          -- If we got a do-block or similar back, execute it now.
+          result' :: Value <- interpretMonadAction result
+          -- This gives us a VTopLevel/VProofScript/etc with a
+          -- TopLevel/ProofScript/etc Value in it.
+          -- Return that as the result of the block; let the caller
+          -- execute it. (If we execute it now, the Value we return
+          -- will have SAWScript type a instead of m a, and things
+          -- will go downhill.)
+          liftTopLevel $ popPosition savepos
+          return result'
+      stmt : stmts' -> do
+          -- Execute the expression and get the updated environment
+          env' <- interpretDoStmt stmt
+          -- Run the rest of the block with the updated environment
+          withLocalEnvAny env' (interpretDoStmts stmts')
+
+-- Wrapper around interpretDoStmts for inserting a stack trace frame, in the
 -- old style. XXX remove along with the old stack trace code...
-interpretStmts' :: InterpreterMonad m => Maybe String -> [SS.Stmt] -> m Value
-interpretStmts' mname stmts = do
+interpretDoStmts' :: InterpreterMonad m => Maybe String -> [SS.Stmt] -> m Value
+interpretDoStmts' mname stmts = do
   trace <- liftTopLevel $ gets rwStackTrace
   case mname of
     Nothing -> pure ()
     Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = name : trace })
-  v <- interpretStmts stmts
+  v <- interpretDoStmts stmts
   case mname of
     Nothing -> pure ()
     Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
@@ -756,7 +778,7 @@ processStmtBind printBinds pat expr = do -- mx mt
       putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
---   This duplicates the logic in interpretStmts for no particularly good reason.
+--   This duplicates the logic in interpretDoStmt for no particularly good reason.
 interpretTopStmt :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
@@ -812,7 +834,7 @@ interpretTopStmt printBinds stmt = do
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
-  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
+  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretDoStmts stmts)) ro rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain =
