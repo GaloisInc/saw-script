@@ -1,6 +1,5 @@
  Loading file "unify010.saw"
- Type errors:
-  unify010.saw:9:17-9:29: Type mismatch.
+ unify010.saw:9:17-9:29: Type mismatch.
     Mismatch of type constructors. Expected: Int but got String
     unify010.saw:9:9-9:12: The type Int arises from this type annotation
     unify010.saw:9:24-9:29: The type String arises from the type of this term
@@ -9,10 +8,8 @@
     Found:    String
     
     Expected: t.0 Int
-    Found:    t.3 String
+    Found:    t.4 String
     
     within "_" (unify010.saw:8:5-8:6)
-
-  unify010.saw:8:9-10:2: do block must end with expression at "_" (unify010.saw:8:5-8:6)
 
 FAILED

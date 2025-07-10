@@ -310,7 +310,7 @@ data Value
     --   The string is a hack hook for the current implementation of
     --   stack traces. See the commit message that added it for further
     --   information. XXX: to be removed along with the stack trace code
-  | VDo SS.Pos (Maybe String) LocalEnv [SS.Stmt]
+  | VDo SS.Pos (Maybe String) LocalEnv ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
     --   This exists only to support the "for" builtin; see notes there
     --   for why this is so. XXX: remove it once that's no longer needed
@@ -485,8 +485,8 @@ showsPrecValue opts nenv p v =
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
-    VDo pos _name _env stmts ->
-      let e = SS.Block pos stmts in
+    VDo pos _name _env body ->
+      let e = SS.Block pos body in
       shows (PP.pretty e)
     VBindOnce v1 v2 ->
       let v1' = showsPrecValue opts nenv 0 v1

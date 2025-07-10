@@ -32,7 +32,7 @@ module SAWCentral.AST
        , Schema(..)
        , SchemaPattern(..)
        , NamedType(..)
-       , tMono, tForall, tTuple, tRecord, tArray, tFun
+       , tMono, tForall, tUnit, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tJVMSpec, tLLVMSpec, tMIRSpec
        , tBlock, tContext, tVar
@@ -138,7 +138,10 @@ data Expr
   | CType (Located Text)
   -- Structures
   | Array  Pos [Expr]
-  | Block  Pos [Stmt]
+    -- | A do-block, with zero or more statements and a final expression.
+    --   The body is a pair so it can be carried around as a single object,
+    --   which is convenient in a few places.
+  | Block  Pos ([Stmt], Expr)
   | Tuple  Pos [Expr]
   | Record Pos (Map Name Expr)
   -- Accessors
@@ -315,10 +318,13 @@ instance Pretty Expr where
     Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
     CType (Located string _ _) -> PP.braces . PP.pretty $ "|" <> string <> "|"
     Array _ xs -> PP.list (map PP.pretty xs)
-    Block _ stmts ->
-      "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<>
-      (PP.indent 3 $ (PP.align . vcatWithSemi . map PP.pretty $ stmts)) PP.<>
-      PP.line' PP.<> PP.rbrace
+    Block _ (stmts, lastexpr) ->
+      let stmts' = map PP.pretty stmts
+          lastexpr' = PP.pretty lastexpr
+          body = PP.align $ vcatWithSemi (stmts' ++ [lastexpr'])
+          body' = PP.indent 3 body
+      in
+      "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<> body' PP.<> PP.line' PP.<> PP.rbrace
     Tuple _ exprs -> PP.tupled (map PP.pretty exprs)
     Record _ mapping ->
       PP.braces . (PP.space PP.<>) . (PP.<> PP.space) . PP.align . PP.sep . PP.punctuate PP.comma $
@@ -490,6 +496,9 @@ tMono = Forall []
 
 tForall :: [(Pos, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
+
+tUnit :: Pos -> Type
+tUnit pos = tTuple pos []
 
 tTuple :: Pos -> [Type] -> Type
 tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts

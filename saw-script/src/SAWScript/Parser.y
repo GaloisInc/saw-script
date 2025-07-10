@@ -197,7 +197,7 @@ AExpr :: { Expr }
  | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '[' commas(Expression) ']'           { Array (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '{' commas(Field) '}'                { Record (maxSpan [tokPos $1, tokPos $3]) (Map.fromList $2) }
- | 'do' '{' termBy(Stmt, ';') '}'       { Block (maxSpan [tokPos $1, tokPos $4]) $3 }
+ | 'do' '{' termBy(Stmt, ';') '}'       {% buildBlock (maxSpan [tokPos $1, tokPos $4]) $3 }
  | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
@@ -336,6 +336,8 @@ data ParseError
   = UnexpectedEOF
   | UnexpectedToken (Token Pos)
   | InvalidPattern Expr
+  | EmptyBlock Pos
+  | InvalidBlock Pos
 
 instance Exception ParseError
 
@@ -346,6 +348,8 @@ instance Show ParseError where
       UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ unpack (tokStr t) ++ "'"
         where Range _ sl sc el ec = tokPos t -- TODO show token span consistently
       InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
+      EmptyBlock pos -> show pos ++ ": do block must include at least one expression"
+      InvalidBlock pos -> show pos ++ ": do block must end with expression"
 
 parseError :: [Token Pos] -> Either ParseError b
 parseError toks = case toks of
@@ -362,6 +366,17 @@ buildFunction args e =
 buildApplication :: [Expr] -> Expr
 buildApplication es =
   foldl1 (\e body -> Application (maxSpan' e body) e body) es
+
+-- | Pop off the last statement in a do-block, which is required to
+--   be a plain expression, and unpack it to an expression.
+buildBlock :: Pos -> [Stmt] -> Either ParseError Expr
+buildBlock pos stmts = case reverse stmts of
+  StmtBind _spos (PWild _patpos _noty) e : revstmts' ->
+    Right $ Block pos (reverse revstmts', e)
+  [] ->
+    Left $ EmptyBlock pos
+  _ ->
+    Left $ InvalidBlock pos
 
 toPattern :: Expr -> Either ParseError Pattern
 toPattern expr =

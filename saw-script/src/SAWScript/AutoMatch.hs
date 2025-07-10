@@ -293,7 +293,7 @@ data MatchResult =
                , afterMatchExecute :: Bool }
 
 -- | The type of the line-by-line interpreter, which needs to be passed in another module to avoid circularity
-type StmtInterpreter = TopLevelRO -> TopLevelRW -> [SAWScript.Stmt] -> IO Value
+type StmtInterpreter = TopLevelRO -> TopLevelRW -> [SAWScript.Stmt] -> IO ()
 
 -- | How to interpret a MatchResult to the TopLevel monad
 actAfterMatch :: StmtInterpreter -> MatchResult -> TopLevel ()
