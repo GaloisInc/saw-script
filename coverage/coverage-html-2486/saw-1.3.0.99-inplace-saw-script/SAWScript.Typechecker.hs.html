@@ -1211,7 +1211,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1192 </span>-- the first type argument (ctx) is the monad type for any binds that occur
 <span class="lineno"> 1193 </span>--
 <span class="lineno"> 1194 </span>-- returns a wrapper for checking subsequent statements as well as
-<span class="lineno"> 1195 </span>-- an updated statement and a type.
+<span class="lineno"> 1195 </span>-- an updated statement.
 <span class="lineno"> 1196 </span>inferStmt :: LName -&gt; Bool -&gt; Pos -&gt; Type -&gt; Stmt -&gt; TI (TI a -&gt; TI a, Stmt)
 <span class="lineno"> 1197 </span><span class="decl"><span class="istickedoff">inferStmt ln atSyntacticTopLevel blockpos ctx s =</span>
 <span class="lineno"> 1198 </span><span class="spaces">    </span><span class="istickedoff">case s of</span>
