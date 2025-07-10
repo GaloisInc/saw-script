@@ -53,6 +53,7 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
+import Mir.Language(HasMirState, getMirState)
 
 import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -65,11 +66,12 @@ import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)
-
+import Mir.State
 
 cryptolOverrides ::
     forall sym bak p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+      HasMirState (p sym) CompMirState) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
@@ -133,7 +135,8 @@ cryptolOverrides _symOnline cs name cfg
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState (p sym) CompMirState) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
@@ -174,7 +177,8 @@ loadString str desc = getString str >>= \x -> case x of
 
 cryptolOverride ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState (p sym) CompMirState) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
@@ -209,7 +213,8 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
 -- used to run the function.
 loadCryptolFunc ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState (p sym) CompMirState) =>
     M.Collection ->
     M.FnSig ->
     Text ->
@@ -219,18 +224,19 @@ loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
 
-    -- TODO share a single SharedContext across all calls
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    liftIO $ SAW.scLoadCryptolModule sc
-    let ?fileReader = BS.readFile
-    ce <- liftIO $ SAW.initCryptolEnv sc
-    let modName = Cry.textToModName modulePath
-    ce' <- liftIO $ SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
-    -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
-    -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
-    tt <- liftIO $ SAW.parseTypedTerm sc ce' $
-        SAW.InputText name "<string>" 1 1
+    st <- getMirState
+    let sc = crySharedContext st
+
+    tt <- liftIO $
+      do 
+        ce <- readIORef (cryEnv st)
+        let modName = Cry.textToModName modulePath
+        let ?fileReader = BS.readFile
+        ce' <- SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
+        writeIORef (cryEnv st) ce'
+        -- (m, _ce') <- SAW.loadCryptolModule sc ce (Text.unpack modulePath)
+        -- tt <- SAW.lookupCryptolModule m (Text.unpack name)
+        SAW.parseTypedTerm sc ce' (SAW.InputText name "<string>" 1 1)
 
     case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
