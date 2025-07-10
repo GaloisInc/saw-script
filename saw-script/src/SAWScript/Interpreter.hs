@@ -1013,10 +1013,6 @@ class FromValue a where
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
     toValue f = VBuiltin (\v -> return (toValue (f (fromValue v))))
 
-instance (IsValue a, FromValue b) => FromValue (a -> TopLevel b) where
-    fromValue (VBuiltin f) = \x -> fromValue <$> f (toValue x)
-    fromValue _ = error "fromValue (->)"
-
 instance FromValue Value where
     fromValue x = x
 
