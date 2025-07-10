@@ -394,7 +394,7 @@ withStackTraceFrame str val =
         MIRSetupM (underReaderT (underStateT doTopLevel) m)
   in
   case val of
-    VLambda env pat e ->
+    VLambda env mname pat e ->
       -- This is gross. The point of having VLambda is that it's _not_
       -- a closure, but in order to handle stack traces by wrapping
       -- everything in closures, we have to wrap it in a closure
@@ -404,7 +404,7 @@ withStackTraceFrame str val =
       -- with luck we'll be able to remove the lot before much longer.
       let info = "(stack trace thunk for lambda)"
           wrap v2 =
-            withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env pat e) v2)
+            withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env mname pat e) v2)
       in
       VBuiltin wrap
     VBuiltin f ->
@@ -457,7 +457,7 @@ withStackTraceFrame str val =
 --   turns out not to be a function value.
 applyValue :: Text -> Value -> Value -> TopLevel Value
 applyValue v1info v1 v2 = case v1 of
-    VLambda env pat e ->
+    VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
     VBuiltin f ->
         f v2
@@ -541,9 +541,9 @@ interpretExpr expr =
                    panic "interpretExpr" [
                        "Read of inaccessible variable " <> SS.getVal x
                    ]
-      SS.Lambda _ _mname pat e -> do
+      SS.Lambda _ mname pat e -> do
           env <- getLocalEnv
-          return $ VLambda env pat e
+          return $ VLambda env mname pat e
       SS.Application _ e1 e2 -> do
           let v1info = "Expression: " <> PPS.pShowText e1
           v1 <- interpretExpr e1
@@ -579,7 +579,7 @@ interpretDecl env (SS.Decl _ pat mt expr) = do
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
-      SS.Lambda _ _mname pat e -> VLambda env pat e
+      SS.Lambda _ mname pat e -> VLambda env mname pat e
       SS.TSig _ e _ -> interpretFunction env e
       _ ->
         panic "interpretFunction" [

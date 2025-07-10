@@ -291,7 +291,7 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda LocalEnv SS.Pattern SS.Expr
+  | VLambda LocalEnv (Maybe SS.Name) SS.Pattern SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear.
     --
@@ -475,7 +475,7 @@ showsPrecValue opts nenv p v =
           showFld (n, fv) =
             showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
-    VLambda _env pat e ->
+    VLambda _env _mname pat e ->
       let pat' = PP.pretty pat
           e' = PP.pretty e
       in
