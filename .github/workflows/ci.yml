@@ -991,8 +991,7 @@ jobs:
           - bike
           - tls
           - hmac-failure
-          # 20250328: disabled temporarily because it now tickles #1094 (see #2273)
-          # - awslc
+          - awslc
           - blst
         os: [ubuntu-24.04]
         ghc: ["9.4.8"]
