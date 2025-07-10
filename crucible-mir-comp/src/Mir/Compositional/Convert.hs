@@ -146,10 +146,11 @@ termToExpr :: forall sym t st fs.
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
+    Set SAW.VarIndex ->
     SAW.Term ->
     IO (Some (W4.SymExpr sym))
-termToExpr sym sc varMap term = do
-    sv <- termToSValue sym sc varMap term
+termToExpr sym sc varMap uninterp term = do
+    sv <- termToSValue sym sc varMap uninterp term
     case SAW.valueToSymExpr sv of
         Just x -> return x
         Nothing -> error $ "termToExpr: failed to convert SValue"
@@ -162,11 +163,12 @@ termToReg :: forall sym t st fs tp.
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
+    Set SAW.VarIndex ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym sc varMap term shp0 = do
-    sv <- termToSValue sym sc varMap term
+termToReg sym sc varMap uninterp term shp0 = do
+    sv <- termToSValue sym sc varMap uninterp term
     go shp0 sv
   where
     go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
@@ -269,16 +271,17 @@ termToSValue :: forall sym t st fs.
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
+    Set SAW.VarIndex ->
     SAW.Term ->
     IO (SAW.SValue sym)
-termToSValue sym sc varMap term = do
+termToSValue sym sc varMap uninterp term = do
     let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
             Just x -> return x
             Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
                 show (W4.exprType expr)
     ecMap <- mapM convert varMap
     ref <- newIORef mempty
-    SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
+    SAW.w4SolveBasic sym sc mempty ecMap ref uninterp term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.
@@ -287,10 +290,11 @@ termToPred :: forall sym t st fs.
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
+    Set SAW.VarIndex ->
     SAW.Term ->
     IO (W4.Pred sym)
-termToPred sym sc varMap term = do
-    Some expr <- termToExpr sym sc varMap term
+termToPred sym sc varMap uninterp term = do
+    Some expr <- termToExpr sym sc varMap uninterp term
     case W4.exprType expr of
         BaseBoolRepr -> return expr
         btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"

@@ -11,5 +11,5 @@ import Mir.Cryptol (cryptolOverrides)
 main :: IO ()
 main = do
     setLocaleEncoding utf8
-    Mir.mainWithExtraOverrides $
+    Mir.mainWithExtraOverrides () $
       compositionalOverrides `Mir.orOverride` cryptolOverrides

@@ -270,6 +270,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     sym <- getSymInterface
 
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
+    let uninterp = mempty -- XXX
 
     RegMap argsCtx <- getOverrideArgs
     argTermsCtx <- Ctx.zipWithM
@@ -280,7 +281,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
-    liftIO $ termToReg sym sc w4VarMap appTerm retShp
+    liftIO $ termToReg sym sc w4VarMap uninterp appTerm retShp
 
 munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
@@ -292,6 +293,7 @@ munge sym shp0 rv0 = do
     scs <- SAW.newSAWCoreState sc
     visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef Map.empty
+    let uninterp = mempty -- XXX
 
     let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval' x = SAW.toSC sym scs x
@@ -311,7 +313,7 @@ munge sym shp0 rv0 = do
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
             w4VarMap <- readIORef w4VarMapRef
-            termToReg sym sc w4VarMap t shp
+            termToReg sym sc w4VarMap uninterp t shp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()

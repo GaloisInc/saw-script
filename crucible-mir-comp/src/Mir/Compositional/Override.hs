@@ -26,6 +26,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Map (Map)
+import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
@@ -150,6 +151,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.ExtCns`) to what4 ones (`W4.ExprBoundVar`).
     w4VarMapRef <- liftIO $ newIORef Map.empty
+    let uninterp = Set.empty -- XXX
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = exprToTerm sym sc w4VarMapRef x
 
@@ -259,7 +261,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (ms ^. MS.csPreState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            pred_ <- liftIO $ termToPred sym sc w4VarMap uninterp term
             MS.addAssert pred_ md $
                 SimError loc (AssertFailureSimError (show $ W4.printSymExpr pred_) "")
 
@@ -267,7 +269,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (ms ^. MS.csPostState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            pred_ <- liftIO $ termToPred sym sc w4VarMap uninterp term
             MS.addAssume pred_ md
 
     ((), os) <- case result of
@@ -303,7 +305,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     let termSub = os ^. MS.termSub
     retVal <- case ms ^. MS.csRetValue of
-        Just sv -> liftIO $ setupToReg sym sc termSub w4VarMap allocMap retShp sv
+        Just sv -> liftIO $ setupToReg sym sc termSub w4VarMap uninterp allocMap retShp sv
         Nothing -> case testEquality retTpr UnitRepr of
             Just Refl -> return ()
             Nothing -> error $ "no return value, but return type is " ++ show retTpr
@@ -331,7 +333,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym
-            rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
+            rv <- liftIO $ setupToReg sym sc termSub w4VarMap uninterp allocMap shp sv
             writeMirRefSim (ptr ^. mpType) ref' rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
@@ -383,7 +385,7 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
                 -- would be nice to allow any longer slice length, but it's not
                 -- clear how to do that soundly (the function might branch on
                 -- the length of the slice, for instance).
-                Some val <- liftIO $ termToExpr sym sc mempty (SAW.ttTerm tt)
+                Some val <- liftIO $ termToExpr sym sc mempty mempty{-uninterp:XXX-} (SAW.ttTerm tt)
                 Refl <- case testEquality (W4.exprType expr) (W4.exprType val) of
                     Just x -> return x
                     Nothing -> error $ "type mismatch: concrete argument type " ++
@@ -510,17 +512,18 @@ setupToReg :: forall sym t st fs tp0.
     -- | `myRegMap`: maps `VarIndex`es in the context's namespace to the
     -- corresponding W4 variables in the context's namespace.
     Map SAW.VarIndex (Some (W4.Expr t)) ->
+    Set SAW.VarIndex ->
     Map MS.AllocIndex (Some (MirPointer sym)) ->
     TypeShape tp0 ->
     MS.SetupValue MIR ->
     IO (RegValue sym tp0)
-setupToReg sym sc termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
+setupToReg sym sc termSub myRegMap uninterp allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
-        Some expr <- termToExpr sym sc myRegMap term
+        Some expr <- termToExpr sym sc myRegMap uninterp term
         Refl <- case testEquality (W4.exprType expr) btpr of
             Just x -> return x
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
