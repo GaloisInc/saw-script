@@ -1947,7 +1947,13 @@ scConstant sc name rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
      unless (null (getAllExts rhs)) $
-       fail "scConstant: term contains free variables"
+       fail $ unlines
+       [ "scConstant: term contains free variables"
+       , "name: " ++ Text.unpack name
+       , "ty: " ++ showTerm ty
+       , "rhs: " ++ showTerm rhs
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
 
@@ -1968,9 +1974,15 @@ scConstant' :: SharedContext
             -> IO Term
 scConstant' sc nmi rhs ty =
   do unless (termIsClosed rhs) $
-       fail "scConstant: term contains loose variables"
+       fail "scConstant': term contains loose variables"
      unless (null (getAllExts rhs)) $
-       fail "scConstant: term contains free variables"
+       fail $ unlines
+       [ "scConstant': term contains free variables"
+       , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
+       , "ty: " ++ showTerm ty
+       , "rhs: " ++ showTerm rhs
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       ]
      i <- scRegisterName sc nmi
      let nm = Name i nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
