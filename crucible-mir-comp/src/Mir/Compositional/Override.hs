@@ -151,7 +151,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.ExtCns`) to what4 ones (`W4.ExprBoundVar`).
     w4VarMapRef <- liftIO $ newIORef Map.empty
-    let uninterp = Set.empty -- XXX
+    let uninterp = Set.empty -- XXX: Do we need to uninterpreted stuff here?
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = exprToTerm sym sc w4VarMapRef x
 

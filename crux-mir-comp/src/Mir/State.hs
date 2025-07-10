@@ -1,11 +1,12 @@
 {-# Language ImplicitParams #-}
+{-# Language TemplateHaskell #-}
 
 -- | Custom state we maintin during symbolic simulation.
 module Mir.State where
 
+import Control.Lens (makeLenses,(^.))
 import Data.Text(Text)
 import qualified Data.ByteString as BS
-import Data.IORef
 
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -14,9 +15,11 @@ import qualified CryptolSAWCore.Cryptol as SAW
 
 
 data CompMirState = CompMirState {
-  crySharedContext :: SAW.SharedContext,
-  cryEnv           :: IORef SAW.CryptolEnv
+  _crySharedContext :: SAW.SharedContext,
+  _cryEnv           :: SAW.CryptolEnv
 }
+
+makeLenses ''CompMirState
 
 newMirState :: IO CompMirState
 newMirState =
@@ -25,10 +28,10 @@ newMirState =
     SAW.scLoadPreludeModule sc
     SAW.scLoadCryptolModule sc
     let ?fileReader = BS.readFile
-    ref <- newIORef =<< SAW.initCryptolEnv sc
+    env <- SAW.initCryptolEnv sc
     pure CompMirState {
-      crySharedContext = sc,
-      cryEnv = ref
+      _crySharedContext = sc,
+      _cryEnv = env
     }
 
 -- | This is a modified version of `resolveName` in `SAWCentral.Builtins`
@@ -37,8 +40,8 @@ newMirState =
 resolveName :: CompMirState -> Text -> IO [SAW.VarIndex]
 resolveName s nm =
   do
-    cenv <- readIORef (cryEnv s)
-    let sc = crySharedContext s
+    let cenv = s ^. cryEnv
+    let sc   = s ^. crySharedContext
     scnms <- SAW.scResolveName sc nm
     let ?fileReader = BS.readFile
     res <- SAW.resolveIdentifier cenv nm

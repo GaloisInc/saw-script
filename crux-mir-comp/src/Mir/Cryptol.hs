@@ -14,7 +14,7 @@
 module Mir.Cryptol
 where
 
-import Control.Lens (use, (^.), (^?), _Wrapped, ix)
+import Control.Lens (use, (.=), (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
@@ -53,7 +53,7 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
-import Mir.Language(HasMirState, getMirState)
+import Mir.Language(HasMirState, mirState)
 
 import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -223,20 +223,16 @@ loadCryptolFunc ::
 loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
+    let ?fileReader = BS.readFile
 
-    st <- getMirState
-    let sc = crySharedContext st
-
-    tt <- liftIO $
-      do 
-        ce <- readIORef (cryEnv st)
-        let modName = Cry.textToModName modulePath
-        let ?fileReader = BS.readFile
-        ce' <- SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
-        writeIORef (cryEnv st) ce'
-        -- (m, _ce') <- SAW.loadCryptolModule sc ce (Text.unpack modulePath)
-        -- tt <- SAW.lookupCryptolModule m (Text.unpack name)
-        SAW.parseTypedTerm sc ce' (SAW.InputText name "<string>" 1 1)
+    sc <- use (mirState.crySharedContext)
+    ce <- use (mirState.cryEnv)
+    let modName = Cry.textToModName modulePath
+    ce' <- liftIO (SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing)    
+    mirState.cryEnv .= ce' 
+    -- (m, _ce') <- SAW.loadCryptolModule sc ce (Text.unpack modulePath)
+    -- tt <- SAW.lookupCryptolModule m (Text.unpack name)
+    tt <- liftIO (SAW.parseTypedTerm sc ce' (SAW.InputText name "<string>" 1 1))
 
     case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
@@ -289,6 +285,8 @@ cryptolRun sc name argShps retShp funcTerm = do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     liftIO $ termToReg sym sc w4VarMap uninterp appTerm retShp
 
+
+-- XXX: Do uninterpred functions here
 munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
@@ -299,7 +297,6 @@ munge sym shp0 rv0 = do
     scs <- SAW.newSAWCoreState sc
     visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef Map.empty
-    let uninterp = mempty -- XXX
 
     let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval' x = SAW.toSC sym scs x
@@ -319,7 +316,7 @@ munge sym shp0 rv0 = do
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
             w4VarMap <- readIORef w4VarMapRef
-            termToReg sym sc w4VarMap uninterp t shp
+            termToReg sym sc w4VarMap mempty t shp -- XXX: Uninterp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
