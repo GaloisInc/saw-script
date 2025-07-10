@@ -97,8 +97,8 @@ import SAWCore.OpenTerm
 import SAWCore.Typechecker
 import SAWCore.SCTypeCheck
 import qualified SAWCore.Term.Pretty as Pretty (scPrettyTerm, scPrettyTermInCtx)
-import qualified SAWCore.UntypedAST as Un
-import qualified SAWCore.Grammar as Un
+import qualified SAWCore.Parser.AST as Un
+import qualified SAWCore.Parser.Grammar as Un
 
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle

@@ -153,12 +153,13 @@ library saw-core
     SAWCore.Conversion
     SAWCore.Cache
     SAWCore.FiniteValue
-    SAWCore.Grammar
-    SAWCore.Lexer
     SAWCore.Module
     SAWCore.Name
+    SAWCore.Parser.AST
+    SAWCore.Parser.Grammar
+    SAWCore.Parser.Lexer
+    SAWCore.Parser.Position
     SAWCore.ParserUtils
-    SAWCore.Position
     SAWCore.Prelude
     SAWCore.Prelude.Constants
     SAWCore.Prim
@@ -182,7 +183,6 @@ library saw-core
     SAWCore.Testing.Random
     SAWCore.Typechecker
     SAWCore.Unique
-    SAWCore.UntypedAST
     SAWCore.Change
   other-modules:
     SAWCore.Panic

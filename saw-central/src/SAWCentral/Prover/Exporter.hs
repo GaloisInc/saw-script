@@ -93,7 +93,7 @@ import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 
-import qualified SAWCore.UntypedAST as Un
+import qualified SAWCore.Parser.AST as Un
 
 import SAWCentral.Crucible.Common
 import SAWCentral.Proof

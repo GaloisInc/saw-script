@@ -14,7 +14,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs #-}
 
 {- |
-Module      : SAWCore.Lexer
+Module      : SAWCore.Parser.Lexer
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -22,7 +22,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.Lexer
+module SAWCore.Parser.Lexer
   ( Token(..)
   , LexerMessage(..)
   , LexerState
@@ -39,7 +39,7 @@ import Data.Bits
 import qualified Data.Char as Char
 import Numeric.Natural
 
-import SAWCore.Position
+import SAWCore.Parser.Position
 
 }
 

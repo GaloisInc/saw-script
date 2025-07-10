@@ -55,14 +55,14 @@ import SAWCore.Module
   , DefQualifier(..)
   , ResolvedName(..)
   )
-import SAWCore.Position
+import qualified SAWCore.Parser.AST as Un
+import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import SAWCore.SCTypeCheck
-import qualified SAWCore.UntypedAST as Un
 
 import Debug.Trace
 

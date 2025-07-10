@@ -64,7 +64,7 @@ import qualified CryptolSAWCore.Monadify as Monadify
 import qualified SAWSupport.Pretty as PPS (Doc, MemoStyle(..), Opts(..), defaultOpts, render, pShow)
 
 -- saw-core
-import SAWCore.Grammar (parseSAWTerm)
+import SAWCore.Parser.Grammar (parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
