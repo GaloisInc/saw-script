@@ -108,8 +108,6 @@ import SAWCore.SharedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import qualified CryptolSAWCore.Monadify as Monadify
 
-import qualified Lang.JVM.Codebase as JCB
-
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 
 -- Crucible
@@ -892,15 +890,13 @@ buildTopLevelEnv proxy opts =
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
-       jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
          Just path | not (null path) -> Just <$> lazyOpenSolverCache path
          _ -> return Nothing
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
-                   { roJavaCodebase = jcb
-                   , roOptions = opts
+                   { roOptions = opts
                    , roHandleAlloc = halloc
                    , roProxy = proxy
                    , roInitWorkDir = currDir
@@ -954,6 +950,7 @@ buildTopLevelEnv proxy opts =
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
                    , rwSequentGoals = False
+                   , rwJavaCodebase = JavaUninitialized
                    }
        return (bic, ro0, rw0)
 
