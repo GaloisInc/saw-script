@@ -878,42 +878,6 @@ scBuildCtor sc d c arg_struct =
       , ctorIotaReduction = iota_fun
       }
 
--- | Build the type of the @p_ret@ function, also known as the "motive"
--- function, of a recursor on datatype @d@. This type has the form
---
--- > (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s
---
--- where the @pi@ are free variables for the parameters of @d@, the @ixj@
--- are the indices of @d@, and @s@ is any sort supplied as an argument.
-ctxPRetTp ::
-  SharedContext -> Name ->
-  [ExtCns Term] ->
-  [ExtCns Term] ->
-  Sort ->
-  IO Term
-ctxPRetTp sc d params ixs s =
-  do param_vars <- traverse (scVariable sc) params
-     ix_vars <- traverse (scVariable sc) ixs
-     dt <- scConstApply sc d (param_vars ++ ix_vars)
-     ret <- scFun sc dt =<< scSort sc s
-     scGeneralizeExts sc ixs ret
-
--- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
--- for the parameter variables returned by that function
-mkPRetTp ::
-  SharedContext ->
-  Name ->
-  [ExtCns Term] ->
-  [ExtCns Term] ->
-  [Term] ->
-  Sort ->
-  IO Term
-mkPRetTp sc d p_ctx ix_ctx params s =
-  do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
-     let subst = IntMap.fromList (zip (map ecVarIndex p_ctx) params)
-     scInstantiateExt sc subst p_ret
-
-
 -- | Compute the type of an eliminator function for a constructor from the name
 -- of its datatype, its name, and its 'CtorArgStruct'. This type has, as free
 -- variables, both the parameters of the datatype and a "motive" function from
@@ -1131,11 +1095,24 @@ scRecursorElimTypes sc d params p_ret =
          panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
 
 
--- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
--- given @d@, @params@, and the sort @s@
+-- | Build the type of the @p_ret@ function, also known as the "motive"
+-- function, of a recursor on datatype @d@. This type has the form
+--
+-- > (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s
+--
+-- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
+-- of @d@, and @s@ is any sort supplied as an argument.
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  mkPRetTp sc (dtName dt) (dtParams dt) (dtIndices dt) params s
+  do param_vars <- traverse (scVariable sc) (dtParams dt)
+     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+     d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
+     ret <- scFun sc d =<< scSort sc s
+     p_ret <- scGeneralizeExts sc (dtIndices dt) ret
+     -- Note that dtIndices may refer to variables from dtParams, so
+     -- we can't just use params directly; the substitution is necessary.
+     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     scInstantiateExt sc subst p_ret
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
