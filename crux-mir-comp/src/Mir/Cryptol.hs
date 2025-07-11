@@ -71,12 +71,12 @@ import Mir.State
 cryptolOverrides ::
     forall sym bak p t st fs args ret blocks rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
-      HasMirState (p sym) CompMirState) =>
+      HasMirState p CompMirState) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
-    Maybe (OverrideSim (p sym) sym MIR rtp a r ())
+    Maybe (OverrideSim p sym MIR rtp a r ())
 cryptolOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
@@ -136,13 +136,13 @@ cryptolOverrides _symOnline cs name cfg
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
-     HasMirState (p sym) CompMirState) =>
+     HasMirState p CompMirState) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
     RegValue sym MirSlice ->
     RegValue sym MirSlice ->
-    OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
+    OverrideSim p sym MIR rtp a r (RegValue sym tp)
 cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"
     name <- loadString nameStr "cryptol::load function name"
@@ -169,7 +169,7 @@ loadString ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     RegValue sym MirSlice ->
     String ->
-    OverrideSim (p sym) sym MIR rtp a r Text
+    OverrideSim p sym MIR rtp a r Text
 loadString str desc = getString str >>= \x -> case x of
     Just s -> return s
     Nothing -> fail $ desc ++ " must not be symbolic"
@@ -178,12 +178,12 @@ loadString str desc = getString str >>= \x -> case x of
 cryptolOverride ::
     forall sym p t st fs rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
-     HasMirState (p sym) CompMirState) =>
+     HasMirState p CompMirState) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
     RegValue sym MirSlice ->
-    OverrideSim (p sym) sym MIR rtp a r ()
+    OverrideSim p sym MIR rtp a r ()
 cryptolOverride col (MirHandle _ sig fh) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"
     name <- loadString nameStr "cryptol::load function name"
@@ -206,7 +206,7 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
     { _lcfArgs :: Assignment TypeShape args
     , _lcfRet :: TypeShape ret
     , _lcfRun :: forall p rtp r.
-        OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+        OverrideSim p sym MIR rtp args r (RegValue sym ret)
     }
 
 -- | Load a Cryptol function, returning an `OverrideSim` action that can be
@@ -214,12 +214,12 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
 loadCryptolFunc ::
     forall sym p t st fs rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
-     HasMirState (p sym) CompMirState) =>
+     HasMirState p CompMirState) =>
     M.Collection ->
     M.FnSig ->
     Text ->
     Text ->
-    OverrideSim (p sym) sym MIR rtp a r (LoadedCryptolFunc sym)
+    OverrideSim p sym MIR rtp a r (LoadedCryptolFunc sym)
 loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
@@ -267,7 +267,7 @@ cryptolRun ::
     Assignment TypeShape args ->
     TypeShape ret ->
     SAW.Term ->
-    OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+    OverrideSim p sym MIR rtp args r (RegValue sym ret)
 cryptolRun sc name argShps retShp funcTerm = do
     sym <- getSymInterface
 

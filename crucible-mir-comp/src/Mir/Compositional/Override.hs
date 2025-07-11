@@ -67,7 +67,7 @@ import Mir.Compositional.Convert
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
-    MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
+    MS.OverrideMatcher' sym MIR rorw (OverrideSim p sym MIR rtp args ret) a
 
 data MethodSpec = MethodSpec
     { _msCollectionState :: CollectionState
@@ -86,7 +86,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 printSpec ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     MethodSpec ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
+    OverrideSim p sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
     let bytes = Text.encodeUtf8 $ Text.pack str
@@ -110,7 +110,7 @@ printSpec ms = do
 enable ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     MethodSpec ->
-    OverrideSim (p sym) sym MIR rtp args ret ()
+    OverrideSim p sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
     MirHandle _name _sig mh <- case myCS ^? handleMap . ix funcName of
@@ -130,7 +130,7 @@ enable ms = do
 runSpec :: forall sym p t st fs args ret rtp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
-    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
+    OverrideSim p sym MIR rtp args ret (RegValue sym ret)
 runSpec myCS mh ms = ovrWithBackend $ \bak ->
  do let col = myCS ^. collection
     sym <- getSymInterface

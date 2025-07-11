@@ -40,7 +40,7 @@ compositionalOverrides ::
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
-    Maybe (OverrideSim (p sym) sym MIR rtp a r ())
+    Maybe (OverrideSim p sym MIR rtp a r ())
 compositionalOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "method_spec", "raw", "builder_new"] explodedName
