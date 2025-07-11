@@ -254,9 +254,9 @@ scReadExternal sc input =
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ Name vi' nmi
                  Nothing ->
-                   do vi' <- lift $ scRegisterName sc nmi
-                      State.put (ts, nms, Map.insert vi vi' vs)
-                      pure $ Name vi' nmi
+                   do nm <- lift $ scRegisterName sc nmi
+                      State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
+                      pure nm
 
     readName :: String -> ReadM Name
     readName i =
@@ -280,9 +280,9 @@ scReadExternal sc input =
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ EC vi' nmi t'
                  Nothing ->
-                   do vi' <- lift $ scRegisterName sc nmi
-                      State.put (ts, nms, Map.insert vi vi' vs)
-                      pure $ EC vi' nmi t'
+                   do nm <- lift $ scRegisterName sc nmi
+                      State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
+                      pure $ EC (nameIndex nm) nmi t'
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =

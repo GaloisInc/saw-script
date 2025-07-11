@@ -471,15 +471,16 @@ scRegisterNameWithIndex sc i nmi =
      modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
 
 
--- | Generate a fresh 'VarIndex' for the given 'NameInfo' and register
--- them together in the naming environment of the 'SharedContext'.
+-- | Generate a 'Name' with a fresh 'VarIndex' for the given
+-- 'NameInfo' and register everything together in the naming
+-- environment of the 'SharedContext'.
 -- Throws 'DuplicateNameException' if the URI in the 'NameInfo' is
 -- already registered.
-scRegisterName :: SharedContext -> NameInfo -> IO VarIndex
+scRegisterName :: SharedContext -> NameInfo -> IO Name
 scRegisterName sc nmi =
   do i <- scFreshVarIndex sc
      scRegisterNameWithIndex sc i nmi
-     pure i
+     pure (Name i nmi)
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
@@ -623,8 +624,7 @@ scDeclareDef sc nm q ty body =
 scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
 scDeclarePrim sc ident q def_tp =
   do let nmi = ModuleIdentifier ident
-     i <- scRegisterName sc nmi
-     let nm = Name i nmi
+     nm <- scRegisterName sc nmi
      _ <- scDeclareDef sc nm q def_tp Nothing
      pure ()
 
@@ -674,9 +674,10 @@ scBeginDataType ::
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  do dtVarIndex <- scRegisterName sc (ModuleIdentifier dtIdent)
+  do nm <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scGeneralizeExts sc (dtParams ++ dtIndices) =<< scSort sc dtSort
      let dtNameInfo = ModuleIdentifier dtIdent
+     let dtVarIndex = nameIndex nm
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
@@ -684,7 +685,7 @@ scBeginDataType sc dtIdent dtParams dtIndices dtSort =
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
      scRegisterGlobal sc dtIdent =<< scConst sc (dtName dt)
-     pure $ Name dtVarIndex (ModuleIdentifier dtIdent)
+     pure nm
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
@@ -833,12 +834,11 @@ scBuildCtor sc d c arg_struct =
   do
     -- Step 0: allocate a fresh unique variable index for this constructor
     -- and register its name in the naming environment
-    varidx <- scRegisterName sc (ModuleIdentifier c)
+    cname <- scRegisterName sc (ModuleIdentifier c)
 
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    let cname = Name varidx (ModuleIdentifier c)
     elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
@@ -858,7 +858,7 @@ scBuildCtor sc d c arg_struct =
     -- Step 4: build the API function that shuffles the terms around in the
     -- correct way.
     let iota_fun rec cs_fs args =
-          do let elim = case Map.lookup varidx cs_fs of
+          do let elim = case Map.lookup (nameIndex cname) cs_fs of
                    Just e -> e
                    Nothing ->
                      panic "ctorIotaReduction" [
@@ -869,7 +869,7 @@ scBuildCtor sc d c arg_struct =
     -- Finally, return the required Ctor record
     return $ Ctor
       { ctorNameInfo = ModuleIdentifier c
-      , ctorVarIndex = varidx
+      , ctorVarIndex = nameIndex cname
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
@@ -1923,8 +1923,7 @@ scConstant' sc nmi rhs ty =
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
-     i <- scRegisterName sc nmi
-     let nm = Name i nmi
+     nm <- scRegisterName sc nmi
      t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
      args <- mapM (scVariable sc) ecs
      scApplyAll sc t args
@@ -1939,8 +1938,7 @@ scOpaqueConstant ::
   Term {- ^ type of the constant -} ->
   IO Term
 scOpaqueConstant sc nmi ty =
-  do i <- scRegisterName sc nmi
-     let nm = Name i nmi
+  do nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
