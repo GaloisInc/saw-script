@@ -838,8 +838,8 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    let cec = EC varidx (ModuleIdentifier c) tp
-    elim_tp_fun <- mkCtorElimTypeFun sc d cec arg_struct
+    let cname = Name varidx (ModuleIdentifier c)
+    elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
     -- constructor argument variables
@@ -940,14 +940,13 @@ mkPRetTp sc d p_ctx ix_ctx params s =
 ctxCtorElimType ::
   SharedContext ->
   Name {- ^ data type name -} ->
-  ExtCns Term {- ^ constructor name -} ->
+  Name {- ^ constructor name -} ->
   Term {- ^ motive function -} ->
   CtorArgStruct ->
   IO Term
 ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
   do params <- traverse (scVariable sc) ctorParams
      d_params <- scConstApply sc d params
-     let cname = Name (ecVarIndex c) (ecName c)
      let helper :: [Term] -> [(Name, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
@@ -983,7 +982,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            -- If we are finished with our arguments, construct the final result type
            -- (p_ret ret_ixs (c params prevs))
            do p_ret_ixs <- scApplyAll sc p_ret ctorIndices
-              appliedCtor <- scConstApply sc cname (params ++ prevs)
+              appliedCtor <- scConstApply sc c (params ++ prevs)
               scApply sc p_ret_ixs appliedCtor
      helper [] ctorArgs
 
@@ -994,8 +993,8 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
 mkCtorElimTypeFun ::
   SharedContext ->
-  Name {- ^ data type -} ->
-  ExtCns Term {- ^ constructor type -} ->
+  Name {- ^ data type name -} ->
+  Name {- ^ constructor name -} ->
   CtorArgStruct ->
   IO ([Term] -> Term -> IO Term)
 mkCtorElimTypeFun sc d c argStruct =
