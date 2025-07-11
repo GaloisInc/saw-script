@@ -944,33 +944,31 @@ ctxCtorElimType ::
   Term ->
   CtorArgStruct ->
   IO Term
-ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
+ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
   do params <- traverse (scVariable sc) ctorParams
-     helper d_top params [] ctorArgs ctorIndices
+     helper params [] ctorArgs
   where
 
   -- Iterate through the argument types of the constructor, building up a
   -- function from those arguments to the result type of the p_ret function.
   helper ::
-    Name ->
     [Term] ->
     [Term] ->
     [(Name, CtorArg)] ->
-    [Term] ->
     IO Term
-  helper _d params prevs [] ret_ixs =
+  helper params prevs [] =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
     do let cname = Name (ecVarIndex c) (ecName c)
-       p_ret_ixs <- scApplyAll sc p_ret ret_ixs
+       p_ret_ixs <- scApplyAll sc p_ret ctorIndices
        appliedCtor <- scConstApply sc cname (params ++ prevs)
        scApply sc p_ret_ixs appliedCtor
-  helper d params prevs ((nm, ConstArg tp) : args) ixs =
+  helper params prevs ((nm, ConstArg tp) : args) =
     -- For a constant argument type, just abstract it and continue
     do arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)
-       rest <- helper d params (prevs ++ [arg]) args ixs
+       rest <- helper params (prevs ++ [arg]) args
        scGeneralizeTerms sc [arg] rest
-  helper d params prevs ((nm, RecursiveArg zs ts) : args) ixs =
+  helper params prevs ((nm, RecursiveArg zs ts) : args) =
     -- For a recursive argument type of the form
     --
     -- (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk
@@ -993,7 +991,7 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
        ih_ret <- scApply sc pret_ts arg_zs
        ih_tp <- scGeneralizeExts sc zs ih_ret
        -- Finally, build the pi-abstraction for arg and ih around the rest
-       rest <- helper d params (prevs ++ [arg]) args ixs
+       rest <- helper params (prevs ++ [arg]) args
        scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
 
 -- | Build a function that substitutes parameters and a @p_ret@ return type
