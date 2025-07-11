@@ -61,7 +61,7 @@ compositionalOverrides _symOnline cs name cfg
         -- The TypeRepr for the reference's pointee type cannot be obtained from
         -- getOverrideArgs, so we must compute it indirectly by looking at the
         -- type substitution in the instantiated function.
-        Some tpr <- pure $ substedTypeRepr nameIntrinsic
+        Some tpr <- substedTypeRepr nameIntrinsic
         msb' <- msbAddArg tpr argRef msb
         return $ MethodSpecBuilder msb'
 
@@ -75,7 +75,7 @@ compositionalOverrides _symOnline cs name cfg
         -- The TypeRepr for the reference's pointee type cannot be obtained from
         -- getOverrideArgs, so we must compute it indirectly by looking at the
         -- type substitution in the instantiated function.
-        Some tpr <- pure $ substedTypeRepr nameIntrinsic
+        Some tpr <- substedTypeRepr nameIntrinsic
         msb' <- msbSetReturn tpr argRef msb
         return $ MethodSpecBuilder msb'
 
@@ -146,7 +146,7 @@ compositionalOverrides _symOnline cs name cfg
     -- exactly one type argument, look in the Intrinsic's Substs and convert the
     -- substituted type to a TypeRepr. This function will panic if the supplied
     -- Intrinsic has a Subst with a number of type substitutions other than one.
-    substedTypeRepr :: Intrinsic -> Some TypeRepr
+    substedTypeRepr :: Intrinsic -> OverrideSim (p sym) sym MIR rtp a r (Some TypeRepr)
     substedTypeRepr intr =
       let instSubstTy =
             case intr ^. intrInst . inSubsts of
@@ -157,8 +157,8 @@ compositionalOverrides _symOnline cs name cfg
                   show (PP.pretty tys) in
 
       case tyToRepr col instSubstTy of
-        Left err -> panic ("Type not supported: " ++ err)
-        Right x -> x
+        Left err -> fail ("Type not supported: " ++ err)
+        Right x -> pure x
 
     panic :: String -> a
     panic msg = error $ "compositionalOverrides: " ++ msg

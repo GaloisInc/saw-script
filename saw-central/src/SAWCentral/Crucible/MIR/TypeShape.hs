@@ -207,10 +207,10 @@ tyToShape col = go
     goPrim :: M.Ty -> Some TypeShape
     goPrim ty =
       case tyToRepr col ty of
-        Left err -> error ("tyToShape: type " ++ show ty ++ " not supported: " ++ err)
+        Left err -> error ("goPrim: type " ++ show ty ++ " not supported: " ++ err)
         Right (Some tpr)
           | AsBaseType btpr <- asBaseType tpr -> Some (PrimShape ty btpr)
-          | otherwise -> error ("tyToShape: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
+          | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
     goUnit :: M.Ty -> Some TypeShape
     goUnit ty = Some $ UnitShape ty
@@ -269,7 +269,7 @@ tyToShape col = go
     goRef ty ty' mutbl
       | M.TySlice slicedTy <- ty' =
         case tyToRepr col slicedTy of
-          Left err -> error ("tyToShape: " ++ err)
+          Left err -> error ("goRef: " ++ err)
           Right (Some tpr) -> Some (SliceShape ty slicedTy mutbl tpr)
       | M.TyStr <- ty'
       = Some $ SliceShape ty (M.TyUint M.B8) mutbl (BVRepr (knownNat @8))
@@ -277,7 +277,7 @@ tyToShape col = go
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
     goRef ty ty' mutbl =
       case tyToRepr col ty' of
-        Left err -> error ("tyToShape: " ++ err)
+        Left err -> error ("goRef: " ++ err)
         Right (Some tpr) -> Some (RefShape ty ty' mutbl tpr)
 
     goFnPtr :: M.Ty -> M.FnSig -> Some TypeShape
@@ -285,7 +285,7 @@ tyToShape col = go
         case tyListToCtx col args $ \argsr  ->
              tyToReprCont col ret $ \retr ->
              Right (Some (FnPtrShape ty argsr retr)) of
-          Left err -> error ("tyToShape: " ++ err)
+          Left err -> error ("goFnPtr: " ++ err)
           Right x -> x
 
     -- Retrieve the field types in a variant. This used for both struct and enum
