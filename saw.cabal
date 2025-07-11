@@ -16,8 +16,8 @@ Description:
 -- extra files for saw-core
 extra-source-files:
   saw-core/prelude/Prelude.sawcore
-  saw-core/src/SAWCore/Grammar.y
-  saw-core/src/SAWCore/Lexer.x
+  saw-core/src/SAWCore/Parser/Grammar.y
+  saw-core/src/SAWCore/Parser/Lexer.x
 
 -- extra files for cryptol-saw-core
 extra-source-files:
