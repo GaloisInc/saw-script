@@ -14,7 +14,7 @@
 module Mir.Cryptol
 where
 
-import Control.Lens (use, (.=), (^.), (^?), _Wrapped, ix)
+import Control.Lens (use, (.=), (^.), (^?), _Wrapped, ix, (%=))
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
@@ -23,6 +23,7 @@ import Data.IORef
 import qualified Data.Kind as Kind
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -129,6 +130,17 @@ cryptolOverrides _symOnline cs name cfg
         RegMap (Empty :> RegEntry _ rv) <- getOverrideArgs
         liftIO $ munge sym shp rv
 
+  | ["crucible", "cryptol", "uninterp" ] == explodedName
+  , Empty :> MirSliceRepr <- cfgArgTypes cfg
+  , UnitRepr <- cfgReturnType cfg
+   = Just $
+    bindFnHandle (cfgHandle cfg) $ UseOverride $
+      mkOverride' "cryptol_uninterp" (cfgReturnType cfg) $
+      do
+        RegMap (Empty :> RegEntry _tpr' nameStr) <- getOverrideArgs
+        cryName <- loadString nameStr "cryptol::uninterp function name"
+        mirState . keepUninterp %= Set.insert cryName
+
   | otherwise = Nothing
   where
     explodedName = textIdKey name
@@ -206,6 +218,7 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
     { _lcfArgs :: Assignment TypeShape args
     , _lcfRet :: TypeShape ret
     , _lcfRun :: forall p rtp r.
+        HasMirState p CompMirState =>
         OverrideSim p sym MIR rtp args r (RegValue sym ret)
     }
 
@@ -261,7 +274,8 @@ loadCryptolFunc col sig modulePath name = do
 
 cryptolRun ::
     forall sym p t st fs rtp r args ret .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState p CompMirState) =>
     SAW.SharedContext ->
     String ->
     Assignment TypeShape args ->
@@ -272,7 +286,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     sym <- getSymInterface
 
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
-    let uninterp = mempty -- XXX
+    uninterp <- liftIO . resolveUninterp =<< use mirState
 
     RegMap argsCtx <- getOverrideArgs
     argTermsCtx <- Ctx.zipWithM

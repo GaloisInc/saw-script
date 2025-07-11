@@ -10,6 +10,5 @@ import Mir.State (newMirState)
 main :: IO ()
 main = do
     setLocaleEncoding utf8
-    s <- newMirState
-    Mir.mainWithExtraOverrides s $
+    Mir.mainWithExtraOverrides newMirState $
       compositionalOverrides `Mir.orOverride` cryptolOverrides

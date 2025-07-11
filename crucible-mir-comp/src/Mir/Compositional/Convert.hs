@@ -116,7 +116,7 @@ visitExprVars cache e0 f = go Set.empty e0
             W4.ArrayFromFn _ -> error "unexpected ArrayFromFn"
             W4.MapOverArrays _ _ _ -> error "unexpected MapOverArrays"
             W4.ArrayTrueOnEntries _ _ -> error "unexpected ArrayTrueOnEntries"
-            W4.FnApp _ _ -> error "unexpected FnApp"
+            W4.FnApp _ asgn -> traverseFC_ (go bound) asgn
         W4.AppExpr ae ->
             void $ W4.traverseApp (\e' -> go bound e' >> return e') $ W4.appExprApp ae
         W4.FloatExpr _ _ _ -> return ()

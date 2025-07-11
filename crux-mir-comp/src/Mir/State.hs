@@ -5,18 +5,24 @@
 module Mir.State where
 
 import Control.Lens (makeLenses,(^.))
-import Data.Text(Text)
+import Control.Monad(foldM)
 import qualified Data.ByteString as BS
+import Data.Set(Set)
+import qualified Data.Set as Set
+import Data.Text(Text)
+import qualified Data.Text as Text
 
+
+import qualified SAWCentral.Builtins as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified CryptolSAWCore.Prelude as SAW
-import qualified CryptolSAWCore.Cryptol as SAW
 
 
 data CompMirState = CompMirState {
   _crySharedContext :: SAW.SharedContext,
-  _cryEnv           :: SAW.CryptolEnv
+  _cryEnv           :: SAW.CryptolEnv,
+  _keepUninterp     :: Set Text
 }
 
 makeLenses ''CompMirState
@@ -31,28 +37,20 @@ newMirState =
     env <- SAW.initCryptolEnv sc
     pure CompMirState {
       _crySharedContext = sc,
-      _cryEnv = env
+      _cryEnv = env,
+      _keepUninterp = mempty
     }
 
--- | This is a modified version of `resolveName` in `SAWCentral.Builtins`
--- Given a user supplied name, we try to figure out SAW Core variable
--- it might refere to.
-resolveName :: CompMirState -> Text -> IO [SAW.VarIndex]
-resolveName s nm =
-  do
-    let cenv = s ^. cryEnv
-    let sc   = s ^. crySharedContext
-    scnms <- SAW.scResolveName sc nm
-    let ?fileReader = BS.readFile
-    res <- SAW.resolveIdentifier cenv nm
-    case res of
-      Just cnm ->
-        do importedName <- SAW.importName cnm
-           case importedName of
-             SAW.ImportedName uri _ ->
-               do resolvedName <- SAW.scResolveNameByURI sc uri
-                  case resolvedName of
-                    Just vi -> pure (vi : scnms)
-                    Nothing -> pure scnms
-             _ -> pure []
-      Nothing -> pure []
+
+-- | Resolve the given name and add it mark it as an uninterpreted function.
+-- Throws an exception if the name does not refer to anything.  If it
+-- refers to multiple things, they are all uninterpreted.
+resolveUninterp :: CompMirState -> IO (Set SAW.VarIndex)
+resolveUninterp s = foldM resolve Set.empty (s ^. keepUninterp)
+  where
+  resolve done nm =
+    do
+      vars <- SAW.resolveNameIO (s ^. crySharedContext) (s ^. cryEnv) nm
+      case vars of
+        [] -> fail ("uninterp: unndefined name `" ++ Text.unpack nm ++ "`")
+        _  -> pure (Set.union (Set.fromList vars) done)
