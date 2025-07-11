@@ -487,7 +487,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
               -- Ensure that the discriminant has an integral type and build
               -- a symbolic bitvector from it.
-              Some discrTpr <- pure $ Mir.tyToRepr col discrTp
+              Some discrTpr <- case Mir.tyToRepr col discrTp of
+                Left err -> panic "resolveSetupVal" ["Unsupported type", Text.pack err]
+                Right x -> return x
               let discrShp = tyToShapeEq col discrTp discrTpr
               IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
               let discr = getEnumVariantDiscr variant
@@ -671,7 +673,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
       case oldShp of
         RefShape (Mir.TyRawPtr _ _) _ mutbl _ -> do
           let newPtrTy = Mir.TyRawPtr newPointeeTy mutbl
-          Some newPointeeTpr <- pure $ Mir.tyToRepr col newPointeeTy
+          Some newPointeeTpr <- case Mir.tyToRepr col newPointeeTy of
+            Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
+            Right x -> return x
           -- Due to the cast, here the type in the RefShape does not necessarily
           -- match the actual type that the ref is pointing to!
           --
@@ -1464,7 +1468,9 @@ doAlloc cc globals (Some ma) =
      let halloc = cc^.mccHandleAllocator
      let sym = backendGetSym bak
      let iTypes = cc^.mccIntrinsicTypes
-     Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
+     Some tpr <- case Mir.tyToRepr col (ma^.maMirType) of
+       Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
+       Right x -> return x
 
      -- Create an uninitialized `MirVector_PartialVector` of length 1 and
      -- return a pointer to its element.

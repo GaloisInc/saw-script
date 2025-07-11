@@ -205,10 +205,12 @@ tyToShape col = go
         _ -> error $ "tyToShape: " ++ show ty ++ " NYI"
 
     goPrim :: M.Ty -> Some TypeShape
-    goPrim ty | Some tpr <- tyToRepr col ty, AsBaseType btpr <- asBaseType tpr =
-        Some $ PrimShape ty btpr
-    goPrim ty | Some tpr <- tyToRepr col ty =
-        error $ "tyToShape: type " ++ show ty ++ " produced non-primitive type " ++ show tpr
+    goPrim ty =
+      case tyToRepr col ty of
+        Left err -> error ("goPrim: type " ++ show ty ++ " not supported: " ++ err)
+        Right (Some tpr)
+          | AsBaseType btpr <- asBaseType tpr -> Some (PrimShape ty btpr)
+          | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
     goUnit :: M.Ty -> Some TypeShape
     goUnit ty = Some $ UnitShape ty
@@ -265,20 +267,26 @@ tyToShape col = go
 
     goRef :: M.Ty -> M.Ty -> M.Mutability -> Some TypeShape
     goRef ty ty' mutbl
-      | M.TySlice slicedTy <- ty'
-      , Some tpr <- tyToRepr col slicedTy
-      = Some $ SliceShape ty slicedTy mutbl tpr
+      | M.TySlice slicedTy <- ty' =
+        case tyToRepr col slicedTy of
+          Left err -> error ("goRef: " ++ err)
+          Right (Some tpr) -> Some (SliceShape ty slicedTy mutbl tpr)
       | M.TyStr <- ty'
       = Some $ SliceShape ty (M.TyUint M.B8) mutbl (BVRepr (knownNat @8))
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
-    goRef ty ty' mutbl | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr
+    goRef ty ty' mutbl =
+      case tyToRepr col ty' of
+        Left err -> error ("goRef: " ++ err)
+        Right (Some tpr) -> Some (RefShape ty ty' mutbl tpr)
 
     goFnPtr :: M.Ty -> M.FnSig -> Some TypeShape
     goFnPtr ty (M.FnSig args ret _abi) =
-        tyListToCtx col args $ \argsr  ->
-        tyToReprCont col ret $ \retr ->
-           Some (FnPtrShape ty argsr retr)
+        case tyListToCtx col args $ \argsr  ->
+             tyToReprCont col ret $ \retr ->
+             Right (Some (FnPtrShape ty argsr retr)) of
+          Left err -> error ("goFnPtr: " ++ err)
+          Right x -> x
 
     -- Retrieve the field types in a variant. This used for both struct and enum
     -- variants.
