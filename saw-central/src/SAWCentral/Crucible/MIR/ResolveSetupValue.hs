@@ -674,7 +674,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
         RefShape (Mir.TyRawPtr _ _) _ mutbl _ -> do
           let newPtrTy = Mir.TyRawPtr newPointeeTy mutbl
           Some newPointeeTpr <- case Mir.tyToRepr col newPointeeTy of
-            Left err -> panic "resolveSetupValue" ["unsupported type", Text.pack err]
+            Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
             Right x -> return x
           -- Due to the cast, here the type in the RefShape does not necessarily
           -- match the actual type that the ref is pointing to!
