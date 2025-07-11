@@ -838,8 +838,8 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    let cec = EC varidx (ModuleIdentifier c) tp
-    elim_tp_fun <- mkCtorElimTypeFun sc d cec arg_struct
+    let cname = Name varidx (ModuleIdentifier c)
+    elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
     -- constructor argument variables
@@ -878,42 +878,6 @@ scBuildCtor sc d c arg_struct =
       , ctorIotaReduction = iota_fun
       }
 
--- | Build the type of the @p_ret@ function, also known as the "motive"
--- function, of a recursor on datatype @d@. This type has the form
---
--- > (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s
---
--- where the @pi@ are free variables for the parameters of @d@, the @ixj@
--- are the indices of @d@, and @s@ is any sort supplied as an argument.
-ctxPRetTp ::
-  SharedContext -> Name ->
-  [ExtCns Term] ->
-  [ExtCns Term] ->
-  Sort ->
-  IO Term
-ctxPRetTp sc d params ixs s =
-  do param_vars <- traverse (scVariable sc) params
-     ix_vars <- traverse (scVariable sc) ixs
-     dt <- scConstApply sc d (param_vars ++ ix_vars)
-     ret <- scFun sc dt =<< scSort sc s
-     scGeneralizeExts sc ixs ret
-
--- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
--- for the parameter variables returned by that function
-mkPRetTp ::
-  SharedContext ->
-  Name ->
-  [ExtCns Term] ->
-  [ExtCns Term] ->
-  [Term] ->
-  Sort ->
-  IO Term
-mkPRetTp sc d p_ctx ix_ctx params s =
-  do p_ret <- ctxPRetTp sc d p_ctx ix_ctx s
-     let subst = IntMap.fromList (zip (map ecVarIndex p_ctx) params)
-     scInstantiateExt sc subst p_ret
-
-
 -- | Compute the type of an eliminator function for a constructor from the name
 -- of its datatype, its name, and its 'CtorArgStruct'. This type has, as free
 -- variables, both the parameters of the datatype and a "motive" function from
@@ -939,62 +903,52 @@ mkPRetTp sc d p_ctx ix_ctx params s =
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType ::
   SharedContext ->
-  Name ->
-  ExtCns Term ->
-  Term ->
+  Name {- ^ data type name -} ->
+  Name {- ^ constructor name -} ->
+  Term {- ^ motive function -} ->
   CtorArgStruct ->
   IO Term
-ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
+ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
   do params <- traverse (scVariable sc) ctorParams
-     helper d_top params [] ctorArgs ctorIndices
-  where
-
-  -- Iterate through the argument types of the constructor, building up a
-  -- function from those arguments to the result type of the p_ret function.
-  helper ::
-    Name ->
-    [Term] ->
-    [Term] ->
-    [(Name, CtorArg)] ->
-    [Term] ->
-    IO Term
-  helper _d params prevs [] ret_ixs =
-    -- If we are finished with our arguments, construct the final result type
-    -- (p_ret ret_ixs (c params prevs))
-    do let cname = Name (ecVarIndex c) (ecName c)
-       p_ret_ixs <- scApplyAll sc p_ret ret_ixs
-       appliedCtor <- scConstApply sc cname (params ++ prevs)
-       scApply sc p_ret_ixs appliedCtor
-  helper d params prevs ((nm, ConstArg tp) : args) ixs =
-    -- For a constant argument type, just abstract it and continue
-    do arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)
-       rest <- helper d params (prevs ++ [arg]) args ixs
-       scGeneralizeTerms sc [arg] rest
-  helper d params prevs ((nm, RecursiveArg zs ts) : args) ixs =
-    -- For a recursive argument type of the form
-    --
-    -- (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk
-    --
-    -- form the type abstraction
-    --
-    -- (arg:: (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk) ->
-    -- (ih :: (z1::Z1) -> .. -> (zm::Zm) -> p_ret t1 .. tk (arg z1 .. zm)) ->
-    -- rest
-    --
-    -- where rest is the result of a recursive call
-    do dt <- scConstApply sc d (params ++ ts)
-       -- Build the type of the argument arg
-       arg_tp <- scGeneralizeExts sc zs dt
-       arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
-       -- Build the type of ih
-       pret_ts <- scApplyAll sc p_ret ts
-       z_vars <- traverse (scVariable sc) zs
-       arg_zs <- scApplyAll sc arg z_vars
-       ih_ret <- scApply sc pret_ts arg_zs
-       ih_tp <- scGeneralizeExts sc zs ih_ret
-       -- Finally, build the pi-abstraction for arg and ih around the rest
-       rest <- helper d params (prevs ++ [arg]) args ixs
-       scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
+     d_params <- scConstApply sc d params
+     let helper :: [Term] -> [(Name, CtorArg)] -> IO Term
+         helper prevs ((nm, ConstArg tp) : args) =
+           -- For a constant argument type, just abstract it and continue
+           do arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)
+              rest <- helper (prevs ++ [arg]) args
+              scGeneralizeTerms sc [arg] rest
+         helper prevs ((nm, RecursiveArg zs ts) : args) =
+           -- For a recursive argument type of the form
+           --
+           -- (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk
+           --
+           -- form the type abstraction
+           --
+           -- (arg:: (z1::Z1) -> .. -> (zm::Zm) -> d params t1 .. tk) ->
+           -- (ih :: (z1::Z1) -> .. -> (zm::Zm) -> p_ret t1 .. tk (arg z1 .. zm)) ->
+           -- rest
+           --
+           -- where rest is the result of a recursive call
+           do d_params_ts <- scApplyAll sc d_params ts
+              -- Build the type of the argument arg
+              arg_tp <- scGeneralizeExts sc zs d_params_ts
+              arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
+              -- Build the type of ih
+              pret_ts <- scApplyAll sc p_ret ts
+              z_vars <- traverse (scVariable sc) zs
+              arg_zs <- scApplyAll sc arg z_vars
+              ih_ret <- scApply sc pret_ts arg_zs
+              ih_tp <- scGeneralizeExts sc zs ih_ret
+              -- Finally, build the pi-abstraction for arg and ih around the rest
+              rest <- helper (prevs ++ [arg]) args
+              scGeneralizeTerms sc [arg] =<< scFun sc ih_tp rest
+         helper prevs [] =
+           -- If we are finished with our arguments, construct the final result type
+           -- (p_ret ret_ixs (c params prevs))
+           do p_ret_ixs <- scApplyAll sc p_ret ctorIndices
+              appliedCtor <- scConstApply sc c (params ++ prevs)
+              scApply sc p_ret_ixs appliedCtor
+     helper [] ctorArgs
 
 -- | Build a function that substitutes parameters and a @p_ret@ return type
 -- function into the type of an eliminator, as returned by 'ctxCtorElimType',
@@ -1003,8 +957,8 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
 mkCtorElimTypeFun ::
   SharedContext ->
-  Name {- ^ data type -} ->
-  ExtCns Term {- ^ constructor type -} ->
+  Name {- ^ data type name -} ->
+  Name {- ^ constructor name -} ->
   CtorArgStruct ->
   IO ([Term] -> Term -> IO Term)
 mkCtorElimTypeFun sc d c argStruct =
@@ -1141,11 +1095,24 @@ scRecursorElimTypes sc d params p_ret =
          panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
 
 
--- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
--- given @d@, @params@, and the sort @s@
+-- | Build the type of the @p_ret@ function, also known as the "motive"
+-- function, of a recursor on datatype @d@. This type has the form
+--
+-- > (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s
+--
+-- where the @pi@ are the parameters of @d@, the @ixj@ are the indices
+-- of @d@, and @s@ is any sort supplied as an argument.
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  mkPRetTp sc (dtName dt) (dtParams dt) (dtIndices dt) params s
+  do param_vars <- traverse (scVariable sc) (dtParams dt)
+     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+     d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
+     ret <- scFun sc d =<< scSort sc s
+     p_ret <- scGeneralizeExts sc (dtIndices dt) ret
+     -- Note that dtIndices may refer to variables from dtParams, so
+     -- we can't just use params directly; the substitution is necessary.
+     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     scInstantiateExt sc subst p_ret
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
