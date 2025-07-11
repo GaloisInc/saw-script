@@ -191,7 +191,7 @@ builderNew :: forall sym p t st fs rtp.
     -- have one type argument, which is the `TyFnDef` of the function that the
     -- spec applies to.
     DefId ->
-    OverrideSim (p sym) sym MIR rtp
+    OverrideSim p sym MIR rtp
         EmptyCtx MethodSpecBuilderType (MethodSpecBuilder sym t)
 builderNew cs defId =
   ovrWithBackend $ \bak -> do
@@ -230,7 +230,7 @@ builderNew cs defId =
 addArg :: forall sym p t st fs rtp args ret tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
-    OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
+    OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb =
   ovrWithBackend $ \bak ->
   execBuilderT msb $ do

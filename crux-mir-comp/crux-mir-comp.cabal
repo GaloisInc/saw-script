@@ -51,6 +51,7 @@ library
   exposed-modules:
     Mir.Compositional
     Mir.Cryptol
+    Mir.State
   other-modules:
     Mir.Compositional.DefId
 

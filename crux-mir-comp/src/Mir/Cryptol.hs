@@ -14,7 +14,7 @@
 module Mir.Cryptol
 where
 
-import Control.Lens (use, (^.), (^?), _Wrapped, ix)
+import Control.Lens (use, (.=), (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
@@ -53,6 +53,7 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
+import Mir.Language(HasMirState, mirState)
 
 import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -65,16 +66,17 @@ import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)
-
+import Mir.State
 
 cryptolOverrides ::
     forall sym bak p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+      HasMirState p CompMirState) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
-    Maybe (OverrideSim (p sym) sym MIR rtp a r ())
+    Maybe (OverrideSim p sym MIR rtp a r ())
 cryptolOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
@@ -133,13 +135,14 @@ cryptolOverrides _symOnline cs name cfg
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState p CompMirState) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
     RegValue sym MirSlice ->
     RegValue sym MirSlice ->
-    OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
+    OverrideSim p sym MIR rtp a r (RegValue sym tp)
 cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"
     name <- loadString nameStr "cryptol::load function name"
@@ -166,7 +169,7 @@ loadString ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     RegValue sym MirSlice ->
     String ->
-    OverrideSim (p sym) sym MIR rtp a r Text
+    OverrideSim p sym MIR rtp a r Text
 loadString str desc = getString str >>= \x -> case x of
     Just s -> return s
     Nothing -> fail $ desc ++ " must not be symbolic"
@@ -174,12 +177,13 @@ loadString str desc = getString str >>= \x -> case x of
 
 cryptolOverride ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState p CompMirState) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
     RegValue sym MirSlice ->
-    OverrideSim (p sym) sym MIR rtp a r ()
+    OverrideSim p sym MIR rtp a r ()
 cryptolOverride col (MirHandle _ sig fh) modulePathStr nameStr = do
     modulePath <- loadString modulePathStr "cryptol::load module path"
     name <- loadString nameStr "cryptol::load function name"
@@ -202,35 +206,33 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
     { _lcfArgs :: Assignment TypeShape args
     , _lcfRet :: TypeShape ret
     , _lcfRun :: forall p rtp r.
-        OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+        OverrideSim p sym MIR rtp args r (RegValue sym ret)
     }
 
 -- | Load a Cryptol function, returning an `OverrideSim` action that can be
 -- used to run the function.
 loadCryptolFunc ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs,
+     HasMirState p CompMirState) =>
     M.Collection ->
     M.FnSig ->
     Text ->
     Text ->
-    OverrideSim (p sym) sym MIR rtp a r (LoadedCryptolFunc sym)
+    OverrideSim p sym MIR rtp a r (LoadedCryptolFunc sym)
 loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
-
-    -- TODO share a single SharedContext across all calls
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    liftIO $ SAW.scLoadCryptolModule sc
     let ?fileReader = BS.readFile
-    ce <- liftIO $ SAW.initCryptolEnv sc
+
+    sc <- use (mirState.crySharedContext)
+    ce <- use (mirState.cryEnv)
     let modName = Cry.textToModName modulePath
-    ce' <- liftIO $ SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
-    -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
-    -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
-    tt <- liftIO $ SAW.parseTypedTerm sc ce' $
-        SAW.InputText name "<string>" 1 1
+    ce' <- liftIO (SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing)    
+    mirState.cryEnv .= ce' 
+    -- (m, _ce') <- SAW.loadCryptolModule sc ce (Text.unpack modulePath)
+    -- tt <- SAW.lookupCryptolModule m (Text.unpack name)
+    tt <- liftIO (SAW.parseTypedTerm sc ce' (SAW.InputText name "<string>" 1 1))
 
     case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
@@ -265,11 +267,12 @@ cryptolRun ::
     Assignment TypeShape args ->
     TypeShape ret ->
     SAW.Term ->
-    OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+    OverrideSim p sym MIR rtp args r (RegValue sym ret)
 cryptolRun sc name argShps retShp funcTerm = do
     sym <- getSymInterface
 
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
+    let uninterp = mempty -- XXX
 
     RegMap argsCtx <- getOverrideArgs
     argTermsCtx <- Ctx.zipWithM
@@ -280,8 +283,10 @@ cryptolRun sc name argShps retShp funcTerm = do
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
-    liftIO $ termToReg sym sc w4VarMap appTerm retShp
+    liftIO $ termToReg sym sc w4VarMap uninterp appTerm retShp
 
+
+-- XXX: Do uninterpred functions here
 munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
@@ -311,7 +316,7 @@ munge sym shp0 rv0 = do
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
             w4VarMap <- readIORef w4VarMapRef
-            termToReg sym sc w4VarMap t shp
+            termToReg sym sc w4VarMap mempty t shp -- XXX: Uninterp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
