@@ -409,7 +409,7 @@ neutralToSharedTerm sc = loop
     do tm <- loop nt
        scFlatTermF sc (RecursorApp r ixs tm)
   loop (NeutralConstant nm) =
-    do scTermF sc (Constant nm)
+    do scConst sc nm
 
 ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
 ppNeutral opts = ppTerm opts . neutralToTerm

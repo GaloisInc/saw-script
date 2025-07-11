@@ -1819,7 +1819,7 @@ mkArgTerm sc ty val =
              _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (ecName i)]
          ps' <- traverse (termOfSValue sc <=< force) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
-         x   <- scCtorAppParams sc (ctorName ctor) ps' vv'
+         x   <- scConstApply sc (ctorName ctor) (ps' ++ vv')
          return (ArgTermConst x)
 
     (_, TValue tval) ->
