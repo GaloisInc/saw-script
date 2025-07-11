@@ -123,7 +123,7 @@ span.spaces    { background: white }
 <span class="lineno">  104 </span><span class="spaces">    </span><span class="nottickedoff">primHandler cfg ec _msg env tp =</span>
 <span class="lineno">  105 </span><span class="spaces">      </span><span class="nottickedoff">do let nm = Name (ecVarIndex ec) (ecName ec)</span>
 <span class="lineno">  106 </span><span class="spaces">         </span><span class="nottickedoff">args &lt;- reverse &lt;$&gt; traverse (\(x,ty) -&gt; readBackValue sc cfg ty =&lt;&lt; force x) env</span>
-<span class="lineno">  107 </span><span class="spaces">         </span><span class="nottickedoff">prim &lt;- scTermF sc (Constant nm)</span>
+<span class="lineno">  107 </span><span class="spaces">         </span><span class="nottickedoff">prim &lt;- scConst sc nm</span>
 <span class="lineno">  108 </span><span class="spaces">         </span><span class="nottickedoff">f    &lt;- foldM (scApply sc) prim args</span>
 <span class="lineno">  109 </span><span class="spaces">         </span><span class="nottickedoff">reflectTerm sc cfg tp f</span></span>
 <span class="lineno">  110 </span>
@@ -206,7 +206,7 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span><span class="spaces">      </span><span class="istickedoff">do let ?recordEC = <span class="nottickedoff">\_ec -&gt; return ()</span></span>
 <span class="lineno">  188 </span><span class="spaces">         </span><span class="istickedoff">let nm = Name (ecVarIndex ec) (ecName ec)</span>
 <span class="lineno">  189 </span><span class="spaces">         </span><span class="istickedoff">args &lt;- reverse &lt;$&gt; traverse (\(x,ty) -&gt; readBackValue sc <span class="nottickedoff">cfg</span> <span class="nottickedoff">ty</span> =&lt;&lt; force x) env</span>
-<span class="lineno">  190 </span><span class="spaces">         </span><span class="istickedoff">prim &lt;- scTermF sc (Constant nm)</span>
+<span class="lineno">  190 </span><span class="spaces">         </span><span class="istickedoff">prim &lt;- scConst sc nm</span>
 <span class="lineno">  191 </span><span class="spaces">         </span><span class="istickedoff">f    &lt;- foldM (scApply sc) prim args</span>
 <span class="lineno">  192 </span><span class="spaces">         </span><span class="istickedoff">reflectTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">cfg</span> tp f</span></span>
 <span class="lineno">  193 </span>
@@ -283,8 +283,8 @@ span.spaces    { background: white }
 <span class="lineno">  264 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scRecordType sc fs'</span></span>
 <span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">VDataType nm ps vs -&gt;</span>
 <span class="lineno">  266 </span><span class="spaces">        </span><span class="istickedoff">do let nm' = Name (ecVarIndex nm) (ecName nm)</span>
-<span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackDataTypeParams (ecType nm) (ps++vs)</span>
-<span class="lineno">  268 </span><span class="spaces">           </span><span class="istickedoff">scDataTypeAppParams sc nm' ps' vs'</span>
+<span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">args &lt;- readBackDataTypeParams (ecType nm) (ps++vs)</span>
+<span class="lineno">  268 </span><span class="spaces">           </span><span class="istickedoff">scConstApply sc nm' args</span>
 <span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff">VPiType{} -&gt;</span>
 <span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">do (ecs, tm) &lt;- readBackPis tv</span>
 <span class="lineno">  271 </span><span class="spaces">           </span><span class="istickedoff">scGeneralizeExts sc ecs tm</span>
@@ -444,8 +444,8 @@ span.spaces    { background: white }
 <span class="lineno">  425 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff">loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =</span>
 <span class="lineno">  427 </span><span class="spaces">      </span><span class="istickedoff">do let nm = Name (ecVarIndex cnm) (ecName cnm)</span>
-<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">(ps',vs') &lt;- splitAt (length ps) &lt;$&gt; readBackCtorArgs <span class="nottickedoff">cnm</span> (ecType cnm) (ps++vs)</span>
-<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff">scCtorAppParams sc nm ps' vs'</span>
+<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">args &lt;- readBackCtorArgs <span class="nottickedoff">cnm</span> (ecType cnm) (ps++vs)</span>
+<span class="lineno">  429 </span><span class="spaces">         </span><span class="istickedoff">scConstApply sc nm args</span>
 <span class="lineno">  430 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">loop (VRecordType fs) (VRecordValue vs) =</span>
 <span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let fm = Map.fromList fs</span></span>

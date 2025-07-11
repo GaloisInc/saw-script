@@ -512,7 +512,7 @@ span.spaces    { background: white }
 <span class="lineno">  493 </span><span class="spaces">                  </span><span class="istickedoff">argECs &lt;- fst &lt;$&gt; scAsPiList sc ctorT</span>
 <span class="lineno">  494 </span><span class="spaces">                  </span><span class="istickedoff">-- Build a fully-applied constructor @c@.</span>
 <span class="lineno">  495 </span><span class="spaces">                  </span><span class="istickedoff">args &lt;- traverse (scVariable sc) argECs</span>
-<span class="lineno">  496 </span><span class="spaces">                  </span><span class="istickedoff">c &lt;- scCtorAppParams sc (ctorName ctor) params1 args</span>
+<span class="lineno">  496 </span><span class="spaces">                  </span><span class="istickedoff">c &lt;- scConstApply sc (ctorName ctor) (params1 ++ args)</span>
 <span class="lineno">  497 </span><span class="spaces">                  </span><span class="istickedoff">-- Define function to substitute the constructor @c@</span>
 <span class="lineno">  498 </span><span class="spaces">                  </span><span class="istickedoff">-- in for the old local variable @ec@.</span>
 <span class="lineno">  499 </span><span class="spaces">                  </span><span class="istickedoff">let subst = IntMap.singleton (ecVarIndex ec) c</span>
