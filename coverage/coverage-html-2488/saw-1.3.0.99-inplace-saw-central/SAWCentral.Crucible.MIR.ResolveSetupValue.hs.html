@@ -693,7 +693,7 @@ span.spaces    { background: white }
 <span class="lineno">  674 </span><span class="spaces">        </span><span class="istickedoff">RefShape (Mir.TyRawPtr _ _) _ mutbl _ -&gt; do</span>
 <span class="lineno">  675 </span><span class="spaces">          </span><span class="istickedoff">let newPtrTy = Mir.TyRawPtr newPointeeTy mutbl</span>
 <span class="lineno">  676 </span><span class="spaces">          </span><span class="istickedoff">Some newPointeeTpr &lt;- case Mir.tyToRepr <span class="nottickedoff">col</span> newPointeeTy of</span>
-<span class="lineno">  677 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">panic &quot;resolveSetupValue&quot; [&quot;unsupported type&quot;, Text.pack err]</span></span>
+<span class="lineno">  677 </span><span class="spaces">            </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">panic &quot;resolveSetupValue&quot; [&quot;Unsupported type&quot;, Text.pack err]</span></span>
 <span class="lineno">  678 </span><span class="spaces">            </span><span class="istickedoff">Right x -&gt; return x</span>
 <span class="lineno">  679 </span><span class="spaces">          </span><span class="istickedoff">-- Due to the cast, here the type in the RefShape does not necessarily</span>
 <span class="lineno">  680 </span><span class="spaces">          </span><span class="istickedoff">-- match the actual type that the ref is pointing to!</span>
