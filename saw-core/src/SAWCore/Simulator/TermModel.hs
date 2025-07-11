@@ -264,8 +264,8 @@ readBackTValue sc cfg = loop
            scRecordType sc fs'
       VDataType nm ps vs ->
         do let nm' = Name (ecVarIndex nm) (ecName nm)
-           (ps',vs') <- splitAt (length ps) <$> readBackDataTypeParams (ecType nm) (ps++vs)
-           scDataTypeAppParams sc nm' ps' vs'
+           args <- readBackDataTypeParams (ecType nm) (ps++vs)
+           scConstApply sc nm' args
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
@@ -425,8 +425,8 @@ readBackValue sc cfg = loop
 
     loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
       do let nm = Name (ecVarIndex cnm) (ecName cnm)
-         (ps',vs') <- splitAt (length ps) <$> readBackCtorArgs cnm (ecType cnm) (ps++vs)
-         scCtorAppParams sc nm ps' vs'
+         args <- readBackCtorArgs cnm (ecType cnm) (ps++vs)
+         scConstApply sc nm args
 
     loop (VRecordType fs) (VRecordValue vs) =
       do let fm = Map.fromList fs

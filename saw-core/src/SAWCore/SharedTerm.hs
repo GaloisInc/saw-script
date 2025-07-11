@@ -64,7 +64,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scDataTypeAppParams
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
@@ -92,9 +91,7 @@ module SAWCore.SharedTerm
   , scBeginDataType
   , scCompleteDataType
     -- ** Term construction
-    -- *** Datatypes and constructors
-  , scCtorAppParams
-  , scApplyCtor
+    -- *** Sorts
   , scSort
   , scISort
   , scSortWithFlags
@@ -557,26 +554,6 @@ scApply :: SharedContext
         -> IO Term
 scApply sc f = scTermF sc . App f
 
--- | Applies the constructor with the given name to the list of parameters and
--- arguments. This version does no checking against the module.
-scDataTypeAppParams :: SharedContext
-                    -> Name -- ^ The data type
-                    -> [Term] -- ^ The parameters
-                    -> [Term] -- ^ The arguments
-                    -> IO Term
-scDataTypeAppParams sc d params args =
-  scConstApply sc d (params ++ args)
-
--- | Applies the constructor with the given name to the list of parameters and
--- arguments. This version does no checking against the module.
-scCtorAppParams :: SharedContext
-                -> Name  -- ^ The constructor name
-                -> [Term] -- ^ The parameters
-                -> [Term] -- ^ The arguments
-                -> IO Term
-scCtorAppParams sc c params args =
-  scConstApply sc c (params ++ args)
-
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
 scGetNamingEnv sc = readIORef (scDisplayNameEnv sc)
@@ -917,7 +894,7 @@ ctxPRetTp ::
 ctxPRetTp sc d params ixs s =
   do param_vars <- traverse (scVariable sc) params
      ix_vars <- traverse (scVariable sc) ixs
-     dt <- scDataTypeAppParams sc d param_vars ix_vars
+     dt <- scConstApply sc d (param_vars ++ ix_vars)
      ret <- scFun sc dt =<< scSort sc s
      scGeneralizeExts sc ixs ret
 
@@ -986,7 +963,7 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
     -- (p_ret ret_ixs (c params prevs))
     do let cname = Name (ecVarIndex c) (ecName c)
        p_ret_ixs <- scApplyAll sc p_ret ret_ixs
-       appliedCtor <- scCtorAppParams sc cname params prevs
+       appliedCtor <- scConstApply sc cname (params ++ prevs)
        scApply sc p_ret_ixs appliedCtor
   helper d params prevs ((nm, ConstArg tp) : args) ixs =
     -- For a constant argument type, just abstract it and continue
@@ -1005,7 +982,7 @@ ctxCtorElimType sc d_top c p_ret (CtorArgStruct{..}) =
     -- rest
     --
     -- where rest is the result of a recursive call
-    do dt <- scDataTypeAppParams sc d params ts
+    do dt <- scConstApply sc d (params ++ ts)
        -- Build the type of the argument arg
        arg_tp <- scGeneralizeExts sc zs dt
        arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
@@ -1761,12 +1738,6 @@ scDefTerm sc Def{..} = scConst sc (Name defVarIndex defNameInfo)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
-
--- | Deprecated. Use scCtorApp instead.
-scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
-scApplyCtor sc ctor args =
-  let (params, args') = splitAt (ctorNumParams ctor) args
-  in scCtorAppParams sc (ctorName ctor) params args'
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term

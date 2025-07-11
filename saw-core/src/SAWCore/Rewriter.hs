@@ -493,7 +493,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   argECs <- fst <$> scAsPiList sc ctorT
                   -- Build a fully-applied constructor @c@.
                   args <- traverse (scVariable sc) argECs
-                  c <- scCtorAppParams sc (ctorName ctor) params1 args
+                  c <- scConstApply sc (ctorName ctor) (params1 ++ args)
                   -- Define function to substitute the constructor @c@
                   -- in for the old local variable @ec@.
                   let subst = IntMap.singleton (ecVarIndex ec) c
