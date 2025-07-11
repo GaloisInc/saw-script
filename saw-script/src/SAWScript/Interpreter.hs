@@ -32,7 +32,7 @@ module SAWScript.Interpreter
 
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
-import Control.Monad.Reader (ask)
+import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (gets, modify)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
@@ -406,15 +406,18 @@ withStackTraceFrame str val =
           wrap v2 =
             withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env mname pat e) v2)
       in
-      VBuiltin (OneMoreArg wrap)
-    VBuiltin wf ->
-      let f :: Value -> TopLevel Value = case wf of
-            OneMoreArg f' -> f'
-            ManyMoreArgs f' -> fmap VBuiltin . f'
-          wrap x =
-            withStackTraceFrame str `fmap` doTopLevel (f x)
-      in
-      VBuiltin $ OneMoreArg wrap
+      VClosure wrap
+    VBuiltin wf -> case wf of
+      OneMoreArg f ->
+        let wrap v =
+              withStackTraceFrame str `fmap` doTopLevel (f v)
+        in
+        VClosure wrap
+      ManyMoreArgs f ->
+        let wrap x = do
+              (withStackTraceFrame str . VBuiltin) <$> doTopLevel (f x)
+        in
+        VClosure wrap
     VTopLevel m ->
       let m' =
             withStackTraceFrame str `fmap` doTopLevel m
@@ -463,8 +466,12 @@ applyValue v1info v1 v2 = case v1 of
     VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
     VBuiltin wf -> case wf of
-        OneMoreArg f -> f v2
-        ManyMoreArgs f -> VBuiltin <$> f v2
+        OneMoreArg f ->
+            f v2
+        ManyMoreArgs f ->
+            VBuiltin <$> f v2
+    VClosure f ->
+        f v2
     _ ->
         panic "applyValue" [
             "Called object is not a function",
@@ -1007,22 +1014,149 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 ------------------------------------------------------------
 -- IsValue and FromValue
 
--- | Used for encoding primitive operations in the Value type.
+-- | Class for injecting Haskell values into SAWScript values. This
+--   is straightforward for scalars. For functions, it gets a bit
+--   wibbly.
+--
+--   First, some history. Until July 2025 there was a relatively
+--   straightforward IsValue instance for (a -> b) that matched any
+--   argument type a supporting FromValue, and any result type
+--   supporting IsValue, including functions. Thus, because Haskell
+--   functions are curried, functions of more than one argument would
+--   generate a Value that took one argument and produced a result
+--   recursively using the IsValue instance for the rest of the
+--   function. This produced a chain of Values, each being a closure
+--   of type Value -> TopLevel Value, and the interpreter could call
+--   them by applying argument Values one at a time.
+--
+--   This is fine as long as you're ok with blindly applying arguments
+--   until you get something else back, which is fine as long as all
+--   the interpreter does is execute. However, there are some other
+--   things we'd like to have: correct stack traces require knowing
+--   the name of the function being called at the application of the
+--   last argument. Nice stack traces also involve having the
+--   arguments to the function at that point. Furthermore, if all you
+--   have in the Value is a closure, and someone wants to print it for
+--   debugging, all you can print is "<<closure>>" or "<<function>>"
+--   or similar. It would be much nicer to at least be able to print
+--   the name of the builtin hiding in the closure.
+--
+--   For all of these things, one wants additional info in the Value
+--   besides just the closure, and critically, that info needs to be
+--   carried over when an argument is applied. It is really ugly to do
+--   that if you just have a closure that returns an arbitrary Value;
+--   you have to apply the argument, unwrap the result and then try to
+--   guess if you just applied the last argument and got a return
+--   value (which might also be a lambda from somewhere else) or you
+--   didn't and you should cary the metadata over. That really won't
+--   do.
+--
+--   Therefore, in July 2025, we added another type BuiltinWrapper to
+--   hold the closure chain. There are two cases of BuiltinWrapper,
+--   one where you apply the last arg and get a Value back, and one
+--   where you apply something less than the last arg and get a new
+--   BuiltinWrapper back. Therefore, when applying an argument to a
+--   value holding a builtin function, you can branch on the cases,
+--   and if what you have is still a partly applied builtin, you can
+--   carry over the metadata and update it accordingly. Furthermore,
+--   for the purposes of managing the stack trace, you can know when
+--   you're applying the last argument, because that's the time when
+--   you need to add a frame to the trace.
+--
+
+--   In this environment, IsValue for a function must generate a chain
+--   of BuiltinWrappers rather than a chain of Values. This turns out
+--   to be problematic. A tidy way to do it would be to have a
+--   separate IsFuncValue class that recursively collects that chain,
+--   then have a single flat IsValue instance for functions that
+--   splices it in. Or, alternatively, make IsFuncValue and
+--   IsBaseValue classes, and then an umbrella IsValue class that
+--   pulls them both in. None of this works. You can't have instances
+--   of the form "instance IsBaseValue a => IsValue a"; Haskell treats
+--   this as one instance for all types a, rather than as a derivation
+--   rule to generate an instance for any type a that matches the
+--   constraints.
+--
+--   Instead, we keep a single `IsValue` class and instead add more
+--   members to it.
+--
+--   The `toValue` member produces a Value; this is the external entry
+--   point, so it gets called on scalars and all full complete
+--   function types in the builtins table.
+--
+--   The `isFunction` member returns a boolean indicating whether the
+--   value type we're handling is a function. This function requires a
+--   value of the appropriate type in order to allow the typeclass to
+--   match, but doesn't use it. The class provides a default
+--   implementation of False, which is overridden explicitly only in
+--   the instance for functions.
+--
+--   The `toWrapper` member produces a `BuiltinWrapper`. The instance
+--   for functions uses this to recurse and produce the chain of
+--   `BuiltinWrapper` values containing closures. It uses
+--   `isBaseValue` on the function return type to check whether it's
+--   on the last argument or not, and constructs the wrapper
+--   accordingly. A default implementation that panics is provided;
+--   only the function instance overrides that.
+--
+--   Be careful: there's a possible hole in this logic, which is that
+--   we treat Value itself as a non-function value. There needs to be
+--   an IsValue instance for Value, because there are a number of
+--   builtins whose Haskell type involves Value, generally in order to
+--   be polymorphic at the SAWScript level. Any builtin that _returns_
+--   Value (arguments use FromValue and are safe from these concerns),
+--   and want that Value to wrap a Haskell function, need to cons up
+--   the proper BuiltinWrapper chain by hand. A few examples exist.
+--
+--   (Also note that it must work this way; we _cannot_ examine the
+--   argument to `isFunction` because the `toWrapper` logic for
+--   functions must decide which case it's looking at without calling
+--   its function to get a value of the proper type and there isn't
+--   any other concrete one to use.)
+--
+--   There is no FromValue instance for functions. If we want to have
+--   builtins taking callback arguments, we'll need to do something
+--   about that, and it'll probably get complicated. (Currently
+--   everything that looks like a callback is a monadic action taking
+--   no arguments.)
+--
+--   Note if working on this code that any change to the logic that
+--   involves additional annotations or explicitly distinguishing
+--   functions from scalars will require touching ~every entry in the
+--   builtins table, and there are a _lot_ of builtins.
+--
+--   Also be aware that there are a handful of builtins that _execute_
+--   in TopLevel when applied, rather than returning a SAWScript
+--   TopLevel action.  As things stand these _must_ circumvent this
+--   logic and not use toValue directly; there is no way to get the
+--   function values generated herein to behave that way, because
+--   there's no difference in the types to work from.
+--
 class IsValue a where
     toValue :: a -> Value
+    -- these will be overridden on the function instance
+    isFunction :: a -> Bool
+    isFunction _ = False
+    toWrapper :: a -> BuiltinWrapper
+    toWrapper _ = panic "toWrapper" ["Invalid call on base value"]
 
 class FromValue a where
     fromValue :: Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue f =
-        -- Note: we can't distinguish OneMoreArg from ManyMoreArgs
-        -- without more infrastructure, so stick to OneMoreArg for all
-        -- cases for now.
-        let f' v = return (toValue (f (fromValue v)))
-            wrapper = OneMoreArg f'
-        in
-        VBuiltin wrapper
+    toValue f = VBuiltin $ toWrapper f
+    isFunction _ = True
+    toWrapper f =
+        -- | isFunction needs a value of type b, which we don't have,
+        --   but doesn't look at it, so we can use a placeholder, and
+        --   it's ok for it to be a bomb.
+        let hook :: b = panic "toWrapper" ["isFunction must have used its argument"] in
+        if isFunction hook then
+          let f' v = return $ toWrapper (f (fromValue v)) in
+          ManyMoreArgs f'
+        else
+          let f' v = return $ toValue (f (fromValue v)) in
+          OneMoreArg f'
 
 instance FromValue Value where
     fromValue x = x
@@ -1422,19 +1556,19 @@ toValueCase prim =
     ManyMoreArgs $ \b -> return $
     ManyMoreArgs $ \v1 -> return $
     OneMoreArg $ \v2 ->
-  prim (fromValue b) v1 v2
+      prim (fromValue b) v1 v2
 
 toplevelSubshell :: Value
-toplevelSubshell = VBuiltin $ OneMoreArg $ \_ ->
-  do m <- roSubshell <$> ask
+toplevelSubshell = VBuiltin $ OneMoreArg $ \_ -> return $ VTopLevel $ do
+     m <- roSubshell <$> ask
      env <- getLocalEnv
-     return (VTopLevel (toValue <$> withLocalEnv env m))
+     toValue <$> withLocalEnv env m
 
 proofScriptSubshell :: Value
-proofScriptSubshell = VBuiltin $ OneMoreArg $ \_ ->
-  do m <- roProofSubshell <$> ask
-     env <- getLocalEnv
-     return (VProofScript (toValue <$> withLocalEnvProof env m))
+proofScriptSubshell = VBuiltin $ OneMoreArg $ \_ -> return $ VProofScript $ do
+     m <- scriptTopLevel $ asks roProofSubshell
+     env <- scriptTopLevel $ getLocalEnv
+     toValue <$> withLocalEnvProof env m
 
 -- The "for" builtin.
 --
@@ -6400,7 +6534,7 @@ primitives = Map.fromList
     funVal1 f _ _ =
       VBuiltin $
         OneMoreArg $ \a ->
-        fmap toValue (f (fromValue a))
+          toValue <$> f (fromValue a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Options -> BuiltinContext -> Value
@@ -6408,7 +6542,7 @@ primitives = Map.fromList
       VBuiltin $
         ManyMoreArgs $ \a -> return $
         OneMoreArg $ \b ->
-      fmap toValue (f (fromValue a) (fromValue b))
+          toValue <$> f (fromValue a) (fromValue b)
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Options -> BuiltinContext -> Value
@@ -6417,7 +6551,7 @@ primitives = Map.fromList
         ManyMoreArgs $ \a -> return $
         ManyMoreArgs $ \b -> return $
         OneMoreArg $ \c ->
-      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
+          toValue <$> f (fromValue a) (fromValue b) (fromValue c)
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value

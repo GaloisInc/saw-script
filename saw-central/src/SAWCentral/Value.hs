@@ -306,6 +306,7 @@ data Value
     -- implement stack traces and possibly other messes, all of which
     -- should be removed.
   | VBuiltin BuiltinWrapper
+  | VClosure (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad
@@ -487,6 +488,7 @@ showsPrecValue opts nenv p v =
       shows $ PP.sep ["\\", pat', "->", e']
 
     VBuiltin {} -> showString "<<builtin>>"
+    VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
