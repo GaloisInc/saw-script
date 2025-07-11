@@ -1,0 +1,291 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DeriveFunctor    #-}
+<span class="lineno">    2 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>module SAWScript.AutoMatch.Interaction where
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>import System.IO
+<span class="lineno">    7 </span>import qualified System.Console.Terminal.Size as Window
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>import SAWScript.AutoMatch.ArgMapping
+<span class="lineno">   10 </span>import SAWScript.AutoMatch.Declaration
+<span class="lineno">   11 </span>import SAWScript.AutoMatch.Util
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>import Data.Map   (Map)
+<span class="lineno">   14 </span>import Data.Set   (Set)
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>import Control.Monad (forM_, when)
+<span class="lineno">   17 </span>import Control.Monad.Fix (fix)
+<span class="lineno">   18 </span>import Control.Monad.Free
+<span class="lineno">   19 </span>import Control.Monad.IO.Class (MonadIO(..))
+<span class="lineno">   20 </span>import Control.Monad.Reader (ReaderT(..))
+<span class="lineno">   21 </span>import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
+<span class="lineno">   22 </span>import Control.Monad.Trans (MonadTrans(..))
+<span class="lineno">   23 </span>import Control.Monad.Trans.Maybe
+<span class="lineno">   24 </span>import Control.Monad.Writer (MonadWriter(..), WriterT(..))
+<span class="lineno">   25 </span>import Control.Arrow ((***), second)
+<span class="lineno">   26 </span>import Text.Read (readMaybe)
+<span class="lineno">   27 </span>import Data.Maybe
+<span class="lineno">   28 </span>import Data.Char
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>-- | A pure description of a user interaction by means of a free monad
+<span class="lineno">   31 </span>type Interaction = Free InteractionF
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>data InteractionF a =
+<span class="lineno">   34 </span>  -- output:
+<span class="lineno">   35 </span>    Info (Maybe String) String a
+<span class="lineno">   36 </span>  | Warning String a
+<span class="lineno">   37 </span>  | Choice String [String] a
+<span class="lineno">   38 </span>  | OutOfBounds Int (Int,Int) a
+<span class="lineno">   39 </span>  | Failure Bool String a
+<span class="lineno">   40 </span>  | Bulleted [String] a
+<span class="lineno">   41 </span>  | Separator Separator a
+<span class="lineno">   42 </span>  -- input:
+<span class="lineno">   43 </span>  | Confirm String (Bool -&gt; a)
+<span class="lineno">   44 </span>  | GetInt String (Int -&gt; a)
+<span class="lineno">   45 </span>  | GetString String (String -&gt; a)
+<span class="lineno">   46 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>-- | The obvious interpretation of an interaction into IO
+<span class="lineno">   49 </span>--   The only real complexity here is that we collapse horizontal separators together
+<span class="lineno">   50 </span>--   so that multiple adjacent separators will be printed as a single separator as thick
+<span class="lineno">   51 </span>--   as the largest one called for by the interaction.
+<span class="lineno">   52 </span>interactIO :: Interaction a -&gt; IO a
+<span class="lineno">   53 </span><span class="decl"><span class="nottickedoff">interactIO program = do</span>
+<span class="lineno">   54 </span><span class="spaces">   </span><span class="nottickedoff">hSetBuffering stdin  NoBuffering</span>
+<span class="lineno">   55 </span><span class="spaces">   </span><span class="nottickedoff">hSetBuffering stdout NoBuffering</span>
+<span class="lineno">   56 </span><span class="spaces">   </span><span class="nottickedoff">flip evalStateT Nothing $ interactIO' program</span>
+<span class="lineno">   57 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">   58 </span><span class="spaces">      </span><span class="nottickedoff">checkSep :: StateT (Maybe Separator) IO ()</span>
+<span class="lineno">   59 </span><span class="spaces">      </span><span class="nottickedoff">checkSep = do</span>
+<span class="lineno">   60 </span><span class="spaces">         </span><span class="nottickedoff">maybe (return ()) (liftIO . printSeparator) =&lt;&lt; get</span>
+<span class="lineno">   61 </span><span class="spaces">         </span><span class="nottickedoff">put Nothing</span>
+<span class="lineno">   62 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   63 </span><span class="spaces">      </span><span class="nottickedoff">putSep :: Separator -&gt; StateT (Maybe Separator) IO ()</span>
+<span class="lineno">   64 </span><span class="spaces">      </span><span class="nottickedoff">putSep sep = modify $ maybe (Just sep) (Just . (max sep))</span>
+<span class="lineno">   65 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   66 </span><span class="spaces">      </span><span class="nottickedoff">checkThenIOWithCont :: Interaction a -&gt; IO b -&gt;  StateT (Maybe Separator) IO a</span>
+<span class="lineno">   67 </span><span class="spaces">      </span><span class="nottickedoff">checkThenIOWithCont k action = checkSep &gt;&gt; liftIO action &gt;&gt; interactIO' k</span>
+<span class="lineno">   68 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="nottickedoff">interactIO' :: Interaction a -&gt; StateT (Maybe Separator) IO a</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="nottickedoff">interactIO' interaction =</span>
+<span class="lineno">   71 </span><span class="spaces">         </span><span class="nottickedoff">case interaction of</span>
+<span class="lineno">   72 </span><span class="spaces">            </span><span class="nottickedoff">Pure a -&gt; checkSep &gt;&gt; return a</span>
+<span class="lineno">   73 </span><span class="spaces">            </span><span class="nottickedoff">Free a -&gt; case a of</span>
+<span class="lineno">   74 </span><span class="spaces">               </span><span class="nottickedoff">Separator sep k -&gt;</span>
+<span class="lineno">   75 </span><span class="spaces">                  </span><span class="nottickedoff">putSep sep &gt;&gt; interactIO' k</span>
+<span class="lineno">   76 </span><span class="spaces">               </span><span class="nottickedoff">Info title str k -&gt;</span>
+<span class="lineno">   77 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k $ putStrLn (fromMaybe &quot;Info&quot; title ++ &quot;: &quot; ++ str)</span>
+<span class="lineno">   78 </span><span class="spaces">               </span><span class="nottickedoff">Warning str k -&gt;</span>
+<span class="lineno">   79 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k $ putStrLn (&quot;Warning: &quot; ++ str)</span>
+<span class="lineno">   80 </span><span class="spaces">               </span><span class="nottickedoff">Bulleted strs k -&gt;</span>
+<span class="lineno">   81 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k . forM_ strs $ putStrLn . (&quot;*  &quot; ++)</span>
+<span class="lineno">   82 </span><span class="spaces">               </span><span class="nottickedoff">Choice str opts k -&gt;</span>
+<span class="lineno">   83 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k $ do</span>
+<span class="lineno">   84 </span><span class="spaces">                     </span><span class="nottickedoff">putStrLn str</span>
+<span class="lineno">   85 </span><span class="spaces">                     </span><span class="nottickedoff">forM_ (zip [1..] opts) $ \(i, opt) -&gt;</span>
+<span class="lineno">   86 </span><span class="spaces">                        </span><span class="nottickedoff">putStrLn $ show (i :: Int) ++ &quot;. &quot; ++ opt</span>
+<span class="lineno">   87 </span><span class="spaces">               </span><span class="nottickedoff">OutOfBounds _ (l,h) k -&gt; do</span>
+<span class="lineno">   88 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k $ putStrLn (&quot;Please enter an integer between &quot; ++ show l ++ &quot; and &quot; ++ show h ++ &quot;.&quot;)</span>
+<span class="lineno">   89 </span><span class="spaces">               </span><span class="nottickedoff">Failure printFailure str k -&gt;</span>
+<span class="lineno">   90 </span><span class="spaces">                  </span><span class="nottickedoff">checkThenIOWithCont k $ putStrLn ((if printFailure then &quot;Failure: &quot; else &quot;&quot;) ++ str)</span>
+<span class="lineno">   91 </span><span class="spaces">               </span><span class="nottickedoff">Confirm str f -&gt; do</span>
+<span class="lineno">   92 </span><span class="spaces">                  </span><span class="nottickedoff">checkSep</span>
+<span class="lineno">   93 </span><span class="spaces">                  </span><span class="nottickedoff">liftIO $ putStr (&quot;Confirm: &quot; ++ str ++ &quot; &quot;)</span>
+<span class="lineno">   94 </span><span class="spaces">                  </span><span class="nottickedoff">fix $ \loop -&gt; do</span>
+<span class="lineno">   95 </span><span class="spaces">                     </span><span class="nottickedoff">input &lt;- liftIO $ map toLower &lt;$&gt; getLine</span>
+<span class="lineno">   96 </span><span class="spaces">                     </span><span class="nottickedoff">case filter snd . map (second $ elem input)</span>
+<span class="lineno">   97 </span><span class="spaces">                          </span><span class="nottickedoff">. zip [True, False] $ [yes, no] of</span>
+<span class="lineno">   98 </span><span class="spaces">                        </span><span class="nottickedoff">(b,_):_ -&gt; interactIO' (f b)</span>
+<span class="lineno">   99 </span><span class="spaces">                        </span><span class="nottickedoff">[]      -&gt; liftIO (putStr &quot;Please enter either 'yes' or 'no': &quot;) &gt;&gt; loop</span>
+<span class="lineno">  100 </span><span class="spaces">               </span><span class="nottickedoff">GetInt str f -&gt; do</span>
+<span class="lineno">  101 </span><span class="spaces">                  </span><span class="nottickedoff">checkSep</span>
+<span class="lineno">  102 </span><span class="spaces">                  </span><span class="nottickedoff">result &lt;- fix $ \loop -&gt; do</span>
+<span class="lineno">  103 </span><span class="spaces">                     </span><span class="nottickedoff">liftIO $ putStr (str ++ &quot; &quot;)</span>
+<span class="lineno">  104 </span><span class="spaces">                     </span><span class="nottickedoff">maybe (liftIO (putStr &quot;Please enter an integer: &quot;) &gt;&gt; loop) (interactIO' . f) . readMaybe =&lt;&lt; liftIO getLine</span>
+<span class="lineno">  105 </span><span class="spaces">                  </span><span class="nottickedoff">return result</span>
+<span class="lineno">  106 </span><span class="spaces">               </span><span class="nottickedoff">GetString str f -&gt; do</span>
+<span class="lineno">  107 </span><span class="spaces">                  </span><span class="nottickedoff">checkSep</span>
+<span class="lineno">  108 </span><span class="spaces">                  </span><span class="nottickedoff">liftIO $ putStr (str ++ &quot; &quot;)</span>
+<span class="lineno">  109 </span><span class="spaces">                  </span><span class="nottickedoff">interactIO' . f =&lt;&lt; liftIO getLine</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>-- | A list of assignments between the arguments of two declarations
+<span class="lineno">  112 </span>type Assignments = [((Arg, Int), (Arg, Int))]
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>-- | A pair of ArgMappings
+<span class="lineno">  115 </span>type Mappings    = (ArgMapping, ArgMapping)
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>-- | The monad stack in which we write most of our interaction code
+<span class="lineno">  118 </span>--   We can read the initial declarations we're working with (ReaderT),
+<span class="lineno">  119 </span>--   write out matches we've identified (WriterT),
+<span class="lineno">  120 </span>--   remove things from consideration (StateT),
+<span class="lineno">  121 </span>--   and possibly terminate early (MaybeT),
+<span class="lineno">  122 </span>--   all while being able to talk to the user (Interaction)
+<span class="lineno">  123 </span>type Match r w s a =
+<span class="lineno">  124 </span>   ReaderT r                                   -- information about initial declarations
+<span class="lineno">  125 </span>      (MaybeT                                  -- possible early termination
+<span class="lineno">  126 </span>         (WriterT [w]                          -- append-only output of matched results
+<span class="lineno">  127 </span>                  (StateT s                    -- remaining arguments on each side
+<span class="lineno">  128 </span>                          Interaction))) a     -- free monad of instructions to execute
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>-- | Boil off the monad stack to get down to an Interaction
+<span class="lineno">  131 </span>--   Needs starting read-only and writeable states
+<span class="lineno">  132 </span>runMatch :: r -&gt; s -&gt; Match r w s a -&gt; Interaction (Maybe a, ([w], s))
+<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">runMatch r s =</span>
+<span class="lineno">  134 </span><span class="spaces">   </span><span class="nottickedoff">fmap rassoc</span>
+<span class="lineno">  135 </span><span class="spaces">   </span><span class="nottickedoff">. flip runStateT s</span>
+<span class="lineno">  136 </span><span class="spaces">   </span><span class="nottickedoff">. runWriterT</span>
+<span class="lineno">  137 </span><span class="spaces">   </span><span class="nottickedoff">. runMaybeT</span>
+<span class="lineno">  138 </span><span class="spaces">   </span><span class="nottickedoff">. flip runReaderT r</span>
+<span class="lineno">  139 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="nottickedoff">rassoc ((x,y),z) = (x,(y,z))</span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>-- | An ArgMatch is a computation which is sourced from two declarations,
+<span class="lineno">  143 </span>--   produces a stream of pairs of index-paired Args,
+<span class="lineno">  144 </span>--   and removes arguments from a pair of ArgMappings as it goes.
+<span class="lineno">  145 </span>type ArgMatch a = Match (Decl,Decl) ((Arg,Int),(Arg,Int)) (ArgMapping,ArgMapping) a
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>-- | A DeclMatch is a computation which produces a stream of triples:
+<span class="lineno">  148 </span>--   two decls and a list of argument assignments between them,
+<span class="lineno">  149 </span>--   and removes declarations from a collection of signatures multi-mapped to declarations.
+<span class="lineno">  150 </span>type DeclMatch a = Match () (Decl,Decl,Assignments) (Map Sig (Set Decl),Map Sig (Set Decl)) a
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>-- | Match two declarations together with the given assignments of arguments
+<span class="lineno">  153 </span>--   Removes the two of them from consideration and dumps the matching into the output stream
+<span class="lineno">  154 </span>matchDecls :: Decl -&gt; Decl -&gt; Assignments -&gt; DeclMatch ()
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">matchDecls ld rd as = do</span>
+<span class="lineno">  156 </span><span class="spaces">   </span><span class="nottickedoff">modify (deleteFromSetMap (declSig ld) ld *** deleteFromSetMap (declSig rd) rd)</span>
+<span class="lineno">  157 </span><span class="spaces">   </span><span class="nottickedoff">tell [(ld, rd, as)]</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>-- | If the Match has no interesting information, boil the layers off to get an Interaction
+<span class="lineno">  160 </span>runVoidMatch :: Match () () () a -&gt; Interaction (Maybe a)
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">runVoidMatch = fmap fst . runMatch () ()</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>-- | Given two lists of declarations representing modules and a computation which computes their
+<span class="lineno">  164 </span>--   matches, run the computation and produce an interaction giving the result.
+<span class="lineno">  165 </span>runMatchModules :: [Decl] -&gt; [Decl] -&gt; DeclMatch a -&gt; Interaction [(Decl,Decl,Assignments)]
+<span class="lineno">  166 </span><span class="decl"><span class="nottickedoff">runMatchModules leftModule rightModule =</span>
+<span class="lineno">  167 </span><span class="spaces">   </span><span class="nottickedoff">fmap (fst . snd) . runMatch () (both (tabulateBy declSig) (leftModule, rightModule))</span></span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>-- | Given two declarations and a computation which computes their matches, run the computation
+<span class="lineno">  170 </span>--   and produce an interaction giving the result.
+<span class="lineno">  171 </span>runMatchDecls :: (Decl, Decl) -&gt; ArgMatch a -&gt; Interaction (Maybe a, (Assignments, Mappings))
+<span class="lineno">  172 </span><span class="decl"><span class="nottickedoff">runMatchDecls (l,r) = runMatch (l,r) (both (makeArgMapping . declArgs) (l,r))</span></span>
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>-- | Like runMatchDecls but we don't care about what the ArgMatch computation returned
+<span class="lineno">  175 </span>execMatchDecls :: (Decl, Decl) -&gt; ArgMatch a -&gt; Interaction (Assignments, Mappings)
+<span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">execMatchDecls (l,r) = fmap snd . runMatchDecls (l,r)</span></span>
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>-- | Match two arguments at given indices together
+<span class="lineno">  179 </span>--   Removes the two of them from consideration and dumps the matching into the output stream
+<span class="lineno">  180 </span>matchArgs :: (Arg, Int) -&gt; (Arg, Int) -&gt; ArgMatch ()
+<span class="lineno">  181 </span><span class="decl"><span class="nottickedoff">matchArgs (Arg ln lt, li) (Arg rn rt, ri) = do</span>
+<span class="lineno">  182 </span><span class="spaces">   </span><span class="nottickedoff">modify (removeName ln *** removeName rn)</span>
+<span class="lineno">  183 </span><span class="spaces">   </span><span class="nottickedoff">tell [((Arg ln lt, li), (Arg rn rt, ri))]</span></span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>-- Smart constructors for match actions...
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>-- | Print information to the user
+<span class="lineno">  188 </span>info :: MonadFree InteractionF m =&gt; Maybe String -&gt; String -&gt; m ()
+<span class="lineno">  189 </span><span class="decl"><span class="nottickedoff">info title string = liftF $ Info title string ()</span></span>
+<span class="lineno">  190 </span>
+<span class="lineno">  191 </span>-- | Print a bulleted list of the given strings
+<span class="lineno">  192 </span>bulleted :: MonadFree InteractionF m =&gt; [String] -&gt; m ()
+<span class="lineno">  193 </span><span class="decl"><span class="nottickedoff">bulleted strings = liftF $ Bulleted strings ()</span></span>
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>-- | Warn the user about something
+<span class="lineno">  196 </span>warning :: MonadFree InteractionF m =&gt; String -&gt; m ()
+<span class="lineno">  197 </span><span class="decl"><span class="nottickedoff">warning string = liftF $ Warning string ()</span></span>
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>-- | Ask the user for confirmation of some question
+<span class="lineno">  200 </span>confirm :: MonadFree InteractionF m =&gt; String -&gt; m Bool
+<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">confirm string = liftF $ Confirm string id</span></span>
+<span class="lineno">  202 </span>
+<span class="lineno">  203 </span>-- | Offer the user multiple choices and execute the action which corresponds to their selection
+<span class="lineno">  204 </span>offerChoice :: MonadFree InteractionF m =&gt; String -&gt; [(String, m a)] -&gt; m a
+<span class="lineno">  205 </span><span class="decl"><span class="nottickedoff">offerChoice str opts =</span>
+<span class="lineno">  206 </span><span class="spaces">   </span><span class="nottickedoff">let (descriptions, actions) = unzip opts</span>
+<span class="lineno">  207 </span><span class="spaces">       </span><span class="nottickedoff">numOpts = length opts</span>
+<span class="lineno">  208 </span><span class="spaces">   </span><span class="nottickedoff">in do liftF $ Choice str descriptions ()</span>
+<span class="lineno">  209 </span><span class="spaces">         </span><span class="nottickedoff">userChoice &lt;- getInBounds (1, numOpts)</span>
+<span class="lineno">  210 </span><span class="spaces">         </span><span class="nottickedoff">actions !! (userChoice - 1)</span></span>
+<span class="lineno">  211 </span>
+<span class="lineno">  212 </span>-- | Report an out-of-bounds error to the user (internal use only)
+<span class="lineno">  213 </span>outOfBounds :: MonadFree InteractionF m =&gt; Int -&gt; (Int,Int) -&gt; m ()
+<span class="lineno">  214 </span><span class="decl"><span class="nottickedoff">outOfBounds i (l,h) = liftF $ OutOfBounds i (l,h) ()</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>-- | Get an integer from the user
+<span class="lineno">  217 </span>getInt :: MonadFree InteractionF m =&gt; m Int
+<span class="lineno">  218 </span><span class="decl"><span class="nottickedoff">getInt = liftF $ GetInt &quot;?&quot; id</span></span>
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>-- | Get a string from the user, showing a particular prompt
+<span class="lineno">  221 </span>getString :: MonadFree InteractionF m =&gt; String -&gt; m String
+<span class="lineno">  222 </span><span class="decl"><span class="nottickedoff">getString str = liftF $ GetString str id</span></span>
+<span class="lineno">  223 </span>
+<span class="lineno">  224 </span>-- | Get an integer from the user in a particular range, asking again and again until they comply
+<span class="lineno">  225 </span>getInBounds :: MonadFree InteractionF m =&gt; (Int,Int) -&gt; m Int
+<span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">getInBounds (l,h) = do</span>
+<span class="lineno">  227 </span><span class="spaces">   </span><span class="nottickedoff">i &lt;- getInt</span>
+<span class="lineno">  228 </span><span class="spaces">   </span><span class="nottickedoff">if i &lt;= h &amp;&amp; i &gt;= l</span>
+<span class="lineno">  229 </span><span class="spaces">      </span><span class="nottickedoff">then return i</span>
+<span class="lineno">  230 </span><span class="spaces">      </span><span class="nottickedoff">else do outOfBounds i (l,h)</span>
+<span class="lineno">  231 </span><span class="spaces">              </span><span class="nottickedoff">getInBounds (l,h)</span></span>
+<span class="lineno">  232 </span>
+<span class="lineno">  233 </span>-- | Terminate the interaction, printing an error message
+<span class="lineno">  234 </span>--   The printFailure flag indicates whether or not to use the word &quot;Failure&quot; in the message
+<span class="lineno">  235 </span>--   (sometimes we don't really want to castigate the user!)
+<span class="lineno">  236 </span>failure :: (Monad m, MonadTrans t, MonadFree InteractionF (t (MaybeT m))) =&gt; Bool -&gt; String -&gt; t (MaybeT m) b
+<span class="lineno">  237 </span><span class="decl"><span class="nottickedoff">failure printFailure string =</span>
+<span class="lineno">  238 </span><span class="spaces">   </span><span class="nottickedoff">liftF (Failure printFailure string ()) &gt;&gt; lift (MaybeT (return Nothing))</span></span>
+<span class="lineno">  239 </span>
+<span class="lineno">  240 </span>-- | Terminate the interaction because the user said to do so in some manner
+<span class="lineno">  241 </span>userQuit :: (Monad m, MonadTrans t, MonadFree InteractionF (t (MaybeT m))) =&gt; t (MaybeT m) b
+<span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">userQuit = failure False &quot;Matching terminated by user.&quot;</span></span>
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>-- | Ask the user whether they want to continue (phrasing up to the programmer) and quit if not
+<span class="lineno">  245 </span>confirmOrQuit :: (Monad m, MonadTrans t, MonadFree InteractionF (t (MaybeT m)), Functor (t (MaybeT m))) =&gt; String -&gt; t (MaybeT m) ()
+<span class="lineno">  246 </span><span class="decl"><span class="nottickedoff">confirmOrQuit str = do</span>
+<span class="lineno">  247 </span><span class="spaces">   </span><span class="nottickedoff">r &lt;- confirm str</span>
+<span class="lineno">  248 </span><span class="spaces">   </span><span class="nottickedoff">when (not r) userQuit</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>-- | Symbolic representation of horizontal separators printable during interaction
+<span class="lineno">  251 </span>data Separator = SuperThinSep | ThinSep | ThickSep | SuperThickSep deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>-- | Print a separator of the given thickness
+<span class="lineno">  254 </span>separator :: MonadFree InteractionF m =&gt; Separator -&gt; m ()
+<span class="lineno">  255 </span><span class="decl"><span class="nottickedoff">separator = liftF . flip Separator ()</span></span>
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>-- | Actually print a separator in IO -- separators assume the width of the terminal,
+<span class="lineno">  258 </span>--   or 80 characters if we can't figure out what width the terminal is.
+<span class="lineno">  259 </span>printSeparator :: Separator -&gt; IO ()
+<span class="lineno">  260 </span><span class="decl"><span class="nottickedoff">printSeparator sep =</span>
+<span class="lineno">  261 </span><span class="spaces">   </span><span class="nottickedoff">printSeparatorWith $ case sep of</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="nottickedoff">SuperThinSep  -&gt; &quot;. &quot;</span>
+<span class="lineno">  263 </span><span class="spaces">      </span><span class="nottickedoff">ThinSep       -&gt; &quot;- &quot;</span>
+<span class="lineno">  264 </span><span class="spaces">      </span><span class="nottickedoff">ThickSep      -&gt; &quot;=&quot;</span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="nottickedoff">SuperThickSep -&gt; &quot;#&quot;</span>
+<span class="lineno">  266 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">  267 </span><span class="spaces">      </span><span class="nottickedoff">printSeparatorWith string =</span>
+<span class="lineno">  268 </span><span class="spaces">         </span><span class="nottickedoff">putStrLn . flip take (cycle string) =&lt;&lt; fromMaybe 80 &lt;$&gt; fmap Window.width &lt;$&gt; Window.size</span></span>
+
+</pre>
+</body>
+</html>
