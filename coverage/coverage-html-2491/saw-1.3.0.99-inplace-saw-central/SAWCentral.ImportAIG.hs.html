@@ -1,0 +1,228 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.ImportAIG
+<span class="lineno">    3 </span>Description : And-Inverter Graphs.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    9 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   10 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   11 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">   12 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>module SAWCentral.ImportAIG
+<span class="lineno">   15 </span>  ( readAIG
+<span class="lineno">   16 </span>  , loadAIG
+<span class="lineno">   17 </span>  , verifyAIGCompatible
+<span class="lineno">   18 </span>  ) where
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import Control.Exception
+<span class="lineno">   21 </span>import Control.Monad
+<span class="lineno">   22 </span>import Control.Monad.State.Strict
+<span class="lineno">   23 </span>import Control.Monad.Trans.Except
+<span class="lineno">   24 </span>import qualified Data.Vector as V
+<span class="lineno">   25 </span>import Prettyprinter
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>import qualified Data.AIG as AIG
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import SAWCore.Prelude
+<span class="lineno">   32 </span>import SAWCore.Recognizer
+<span class="lineno">   33 </span>import SAWCore.SharedTerm hiding (scNot, scAnd, scOr)
+<span class="lineno">   34 </span>import SAWCore.Term.Pretty (ppTerm)
+<span class="lineno">   35 </span>import SAWCentral.Options
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>throwTP :: String -&gt; TypeParser a
+<span class="lineno">   40 </span><span class="decl"><span class="nottickedoff">throwTP = lift . throwE</span></span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>runTypeParser :: V.Vector Term
+<span class="lineno">   43 </span>              -&gt; TypeParser a
+<span class="lineno">   44 </span>              -&gt; ExceptT String IO (a, V.Vector Term)
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">runTypeParser v m = runStateT m v</span></span>
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>bitblastSharedTerm :: SharedContext
+<span class="lineno">   48 </span>                   -&gt; Term -- ^ Term for input variable
+<span class="lineno">   49 </span>                   -&gt; Term -- ^ Term for type.
+<span class="lineno">   50 </span>                   -&gt; TypeParser ()
+<span class="lineno">   51 </span><span class="decl"><span class="istickedoff">bitblastSharedTerm _ v (asBoolType -&gt; Just ()) = <span class="nottickedoff">do</span></span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">modify (`V.snoc` v)</span></span>
+<span class="lineno">   53 </span><span class="spaces"></span><span class="istickedoff">bitblastSharedTerm sc v (asBitvectorType -&gt; Just w) = do</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">inputs &lt;- liftIO $ do</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">wt &lt;- scNat sc w</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">boolType &lt;- scApplyPrelude_Bool sc</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">V.generateM (fromIntegral w) $ \i -&gt; do</span>
+<span class="lineno">   58 </span><span class="spaces">      </span><span class="istickedoff">scApplyPrelude_at sc wt boolType v =&lt;&lt; scNat sc (fromIntegral i)</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">modify (V.++ inputs)</span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">bitblastSharedTerm _ _ tp = <span class="nottickedoff">throwTP $ show $</span></span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">vcat</span></span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not parse AIG input type:&quot;</span></span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">, indent 2 (ppTerm PPS.defaultOpts tp)</span></span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>parseAIGResultType :: SharedContext
+<span class="lineno">   67 </span>                   -&gt; Term -- ^ Term for type
+<span class="lineno">   68 </span>                   -&gt; TypeParser Term
+<span class="lineno">   69 </span><span class="decl"><span class="istickedoff">parseAIGResultType _ (asBoolType -&gt; Just ()) = <span class="nottickedoff">do</span></span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">outputs &lt;- get</span></span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">when (V.length outputs == 0) $ do</span></span>
+<span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">throwTP &quot;Not enough output bits for Bool result.&quot;</span></span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">put (V.drop 1 outputs)</span></span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">-- Return remaining as a vector.</span></span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return (outputs V.! 0)</span></span>
+<span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff">parseAIGResultType sc (asBitvectorType -&gt; Just w) = do</span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">outputs &lt;- get</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">when (fromIntegral (V.length outputs) &lt; w) $ <span class="nottickedoff">do</span></span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">throwTP &quot;Not enough output bits for type.&quot;</span></span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">let (base,remaining) = V.splitAt (fromIntegral w) outputs</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">put remaining</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">-- Return remaining as a vector.</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ do</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">boolType &lt;- scApplyPrelude_Bool sc</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">scVector sc boolType (V.toList base)</span>
+<span class="lineno">   86 </span><span class="spaces"></span><span class="istickedoff">parseAIGResultType _ _ = <span class="nottickedoff">throwTP &quot;Could not parse AIG output type.&quot;</span></span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- |
+<span class="lineno">   90 </span>networkAsSharedTerms
+<span class="lineno">   91 </span>    :: AIG.IsAIG l g
+<span class="lineno">   92 </span>    =&gt; g x
+<span class="lineno">   93 </span>    -&gt; SharedContext
+<span class="lineno">   94 </span>    -&gt; V.Vector Term -- ^ Input terms for AIG
+<span class="lineno">   95 </span>    -&gt; V.Vector (l x) -- ^ Outputs
+<span class="lineno">   96 </span>    -&gt; IO (V.Vector Term)
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">networkAsSharedTerms ntk sc inputTerms outputLits = do</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">-- Get evaluator</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">let scNot = scApplyPrelude_not sc</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">let scAnd = scApplyPrelude_and sc</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">let scOr = scApplyPrelude_or sc</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">let scImpl = scApplyPrelude_implies sc</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">scFalse &lt;- scApplyPrelude_False sc</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="istickedoff">-- Left is nonnegated, Right is negated</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">let viewAnd inj _ (Left x)  (Left y)  = fmap inj $ scAnd x y</span>
+<span class="lineno">  107 </span><span class="spaces">      </span><span class="istickedoff">viewAnd _ inj (Left x)  (Right y) = fmap inj $ scImpl x y</span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff">viewAnd _ inj (Right x) (Left y)  = fmap inj $ scImpl y x</span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff">viewAnd _ inj (Right x) (Right y) = fmap inj $ scOr x y</span>
+<span class="lineno">  110 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">let viewFinish (Left x)  = return x</span>
+<span class="lineno">  112 </span><span class="spaces">      </span><span class="istickedoff">viewFinish (Right x) = scNot x</span>
+<span class="lineno">  113 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">let viewFn (AIG.And x y)    = viewAnd Left  Right x y</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">viewFn (AIG.NotAnd x y) = viewAnd Right Left  x y</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">viewFn (AIG.Input i)    = return (Left (inputTerms V.! i))</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">viewFn (AIG.NotInput i) = return (Right (inputTerms V.! i))</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">viewFn (AIG.FalseLit)   = return (Left scFalse)</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">viewFn (AIG.TrueLit)    = return (Right scFalse)</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">evalFn &lt;- AIG.abstractEvaluateAIG ntk viewFn</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">traverse (viewFinish &lt;=&lt; evalFn) outputLits</span></span>
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>-- | Create vector for each input literal from expected types.
+<span class="lineno">  124 </span>bitblastVarsAsInputLits :: SharedContext -&gt; [ExtCns Term] -&gt; ExceptT String IO (V.Vector Term)
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">bitblastVarsAsInputLits sc args = do</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">inputs &lt;- liftIO $ mapM (scVariable sc) args</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">fmap snd $ runTypeParser V.empty $ do</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">zipWithM_ (bitblastSharedTerm sc) inputs (map ecType args)</span></span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>withReadAiger :: (AIG.IsAIG l g) =&gt;
+<span class="lineno">  131 </span>                 AIG.Proxy l g
+<span class="lineno">  132 </span>              -&gt; FilePath
+<span class="lineno">  133 </span>              -&gt; (forall g' l'. AIG.IsAIG l' g' =&gt; AIG.Network l' g' -&gt; IO (Either String a))
+<span class="lineno">  134 </span>              -&gt; IO (Either String a)
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">withReadAiger proxy path action = do</span>
+<span class="lineno">  136 </span><span class="spaces">   </span><span class="istickedoff">mntk &lt;- try (AIG.aigerNetwork <span class="nottickedoff">proxy</span> path)</span>
+<span class="lineno">  137 </span><span class="spaces">   </span><span class="istickedoff">case mntk of</span>
+<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff">Left e -&gt; <span class="nottickedoff">return (Left (show (e :: IOException)))</span></span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">Right ntk -&gt; action ntk</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>translateNetwork :: AIG.IsAIG l g
+<span class="lineno">  142 </span>                 =&gt; Options          -- ^ Options to control user feedback
+<span class="lineno">  143 </span>                 -&gt; SharedContext    -- ^ Context to build in term.
+<span class="lineno">  144 </span>                 -&gt; g x              -- ^ Network to bitblast
+<span class="lineno">  145 </span>                 -&gt; [l x]            -- ^ Outputs for network.
+<span class="lineno">  146 </span>                 -&gt; [ExtCns Term]    -- ^ Expected types
+<span class="lineno">  147 </span>                 -&gt; Term             -- ^ Expected output type.
+<span class="lineno">  148 </span>                 -&gt; ExceptT String IO Term
+<span class="lineno">  149 </span><span class="decl"><span class="istickedoff">translateNetwork opts sc ntk outputLits args resultType = do</span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">lift $ printOutLn opts Debug <span class="nottickedoff">&quot;inputTerms&quot;</span></span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">inputTerms &lt;- bitblastVarsAsInputLits sc args</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">-- Check number of inputs to network matches expected inputs.</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">do let expectedInputCount = V.length inputTerms</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">aigCount &lt;- liftIO $ AIG.inputCount ntk</span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">unless (expectedInputCount == aigCount) $ <span class="nottickedoff">do</span></span>
+<span class="lineno">  156 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">throwE $ &quot;AIG has &quot; ++ show aigCount</span></span>
+<span class="lineno">  157 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">++ &quot; inputs, while expected type has &quot;</span></span>
+<span class="lineno">  158 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">++ show expectedInputCount ++ &quot; inputs.&quot;</span></span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">lift $ printOutLn opts Debug <span class="nottickedoff">&quot;Output vars&quot;</span></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">-- Get outputs as SAWCore terms.</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">outputVars &lt;- liftIO $</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">networkAsSharedTerms ntk sc inputTerms (V.fromList outputLits)</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">lift $ printOutLn opts Debug <span class="nottickedoff">&quot;Type parser&quot;</span></span>
+<span class="lineno">  164 </span><span class="spaces">   </span><span class="istickedoff">-- Join output lits into result type.</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">(res,rargs) &lt;- runTypeParser outputVars $ parseAIGResultType sc resultType</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">unless (V.null rargs) $</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">throwE &quot;AIG contains more outputs than expected.&quot;</span></span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">lift $ scAbstractExts sc args res</span></span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>loadAIG :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g  -&gt; FilePath -&gt; IO (Either String (AIG.Network l g))
+<span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">loadAIG p f = do</span>
+<span class="lineno">  172 </span><span class="spaces">   </span><span class="nottickedoff">mntk &lt;- try (AIG.aigerNetwork p f)</span>
+<span class="lineno">  173 </span><span class="spaces">   </span><span class="nottickedoff">case mntk of</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; return (Left (show (e :: IOException)))</span>
+<span class="lineno">  175 </span><span class="spaces">      </span><span class="nottickedoff">Right ntk -&gt; return $ Right ntk</span></span>
+<span class="lineno">  176 </span>
+<span class="lineno">  177 </span>-- | The return tuple consists of (input bits, output bits, term).
+<span class="lineno">  178 </span>readAIG :: (AIG.IsAIG l g) =&gt;
+<span class="lineno">  179 </span>           AIG.Proxy l g
+<span class="lineno">  180 </span>        -&gt; Options
+<span class="lineno">  181 </span>        -&gt; SharedContext
+<span class="lineno">  182 </span>        -&gt; FilePath
+<span class="lineno">  183 </span>        -&gt; IO (Either String (Int, Int, Term))
+<span class="lineno">  184 </span><span class="decl"><span class="istickedoff">readAIG proxy opts sc f =</span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="istickedoff">withReadAiger <span class="nottickedoff">proxy</span> f $ \(AIG.Network ntk outputLits) -&gt; do</span>
+<span class="lineno">  186 </span><span class="spaces">    </span><span class="istickedoff">inLen &lt;- AIG.inputCount ntk</span>
+<span class="lineno">  187 </span><span class="spaces">    </span><span class="istickedoff">let outLen = length outputLits</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">inType &lt;- scBitvector sc (fromIntegral inLen)</span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff">outType &lt;- scBitvector sc (fromIntegral outLen)</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">arg &lt;- scFreshEC sc &quot;x&quot; inType</span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">fmap (fmap (\t -&gt; (inLen, outLen, t))) $ runExceptT $</span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">translateNetwork opts sc ntk outputLits [arg] outType</span></span>
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>-- | Check that the input and output counts of the given
+<span class="lineno">  195 </span>--   networks are equal.
+<span class="lineno">  196 </span>verifyAIGCompatible :: AIG.Network l g -&gt; AIG.Network l g -&gt; IO ()
+<span class="lineno">  197 </span><span class="decl"><span class="nottickedoff">verifyAIGCompatible x y = do</span>
+<span class="lineno">  198 </span><span class="spaces">   </span><span class="nottickedoff">inx &lt;- AIG.networkInputCount x</span>
+<span class="lineno">  199 </span><span class="spaces">   </span><span class="nottickedoff">iny &lt;- AIG.networkInputCount y</span>
+<span class="lineno">  200 </span><span class="spaces">   </span><span class="nottickedoff">let outx = AIG.networkOutputCount x</span>
+<span class="lineno">  201 </span><span class="spaces">   </span><span class="nottickedoff">let outy = AIG.networkOutputCount y</span>
+<span class="lineno">  202 </span><span class="spaces">   </span><span class="nottickedoff">when (inx /= iny) $ do</span>
+<span class="lineno">  203 </span><span class="spaces">       </span><span class="nottickedoff">fail $ unwords [&quot;AIG input counts do not match:&quot;, show inx, show iny]</span>
+<span class="lineno">  204 </span><span class="spaces">   </span><span class="nottickedoff">when (outx /= outy) $ do</span>
+<span class="lineno">  205 </span><span class="spaces">       </span><span class="nottickedoff">fail $ unwords [&quot;AIG output counts do not match:&quot;, show outx, show outy]</span></span>
+
+</pre>
+</body>
+</html>
