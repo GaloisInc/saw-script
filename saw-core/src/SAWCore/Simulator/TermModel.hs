@@ -104,7 +104,7 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
     primHandler cfg ec _msg env tp =
       do let nm = Name (ecVarIndex ec) (ecName ec)
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scTermF sc (Constant nm)
+         prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 
@@ -187,7 +187,7 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
       do let ?recordEC = \_ec -> return ()
          let nm = Name (ecVarIndex ec) (ecName ec)
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
-         prim <- scTermF sc (Constant nm)
+         prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
 
