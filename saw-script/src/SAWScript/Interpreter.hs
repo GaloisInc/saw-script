@@ -794,12 +794,11 @@ interpretTopStmt printBinds stmt = do
 
   case stmt' of
 
-    SS.StmtBind pos pat expr ->
-      liftTopLevel $ do
-        savepos <- pushPosition pos
-        result <- processStmtBind printBinds pat expr
-        popPosition savepos
-        return result
+    SS.StmtBind pos pat expr -> do
+      savepos <- liftTopLevel $ pushPosition pos
+      result <- processStmtBind printBinds pat expr
+      liftTopLevel $ popPosition savepos
+      return result
 
     SS.StmtLet _pos dg ->
       liftTopLevel $ do
