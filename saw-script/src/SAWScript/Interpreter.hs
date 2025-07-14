@@ -1553,27 +1553,14 @@ add_primitives lc _bic _opts = do
     rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
-toValueCase :: (FromValue b) =>
-               SS.Name ->
-               (b -> Value -> Value -> TopLevel Value)
-            -> Value
-toValueCase name prim =
-  VBuiltin name Seq.empty $
-    ManyMoreArgs $ \b -> return $
-    ManyMoreArgs $ \v1 -> return $
-    OneMoreArg $ \v2 ->
-      prim (fromValue b) v1 v2
-
-toplevelSubshell :: Value
-toplevelSubshell = VBuiltin "toplevelSubshell" Seq.empty $
-  OneMoreArg $ \_ -> return $ VTopLevel $ do
+toplevelSubshell :: () -> TopLevel Value
+toplevelSubshell () = do
      m <- roSubshell <$> ask
      env <- getLocalEnv
      toValue <$> withLocalEnv env m
 
-proofScriptSubshell :: Value
-proofScriptSubshell = VBuiltin "proofScriptSubshell" Seq.empty $
-  OneMoreArg $ \_ -> return $ VProofScript $ do
+proofScriptSubshell :: () -> ProofScript Value
+proofScriptSubshell () = do
      m <- scriptTopLevel $ asks roProofSubshell
      env <- scriptTopLevel $ getLocalEnv
      toValue <$> withLocalEnvProof env m
@@ -2390,7 +2377,7 @@ primitives = Map.fromList
     ]
 
   , prim "subshell"            "() -> TopLevel ()"
-    (\ _ _ _ -> toplevelSubshell)
+    (pureVal toplevelSubshell)
     Experimental
     [ "Open an interactive subshell instance in the context where"
     , "'subshell' was called. This works either from within execution"
@@ -2410,7 +2397,7 @@ primitives = Map.fromList
     ]
 
   , prim "proof_subshell"      "() -> ProofScript ()"
-    (\ _ _ _ -> proofScriptSubshell)
+    (pureVal proofScriptSubshell)
     Experimental
     [ "Open an interactive subshell instance in the context of the current proof."
     , "This allows the user to interactively execute 'ProofScript' tactic commands"
@@ -4302,7 +4289,7 @@ primitives = Map.fromList
     -- Some misc commands
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
-    (\name _ _ -> toValueCase name caseSatResultPrim)
+    (funVal3 caseSatResultPrim)
     Current
     [ "Branch on the result of SAT solving."
     , ""
@@ -4321,7 +4308,7 @@ primitives = Map.fromList
     ]
 
   , prim "caseProofResult"     "{b} ProofResult -> (Theorem -> b) -> (Term -> b) -> b"
-    (\name _ _ -> toValueCase name caseProofResultPrim)
+    (funVal3 caseProofResultPrim)
     Current
     [ "Branch on the result of proving."
     , ""
@@ -4341,6 +4328,10 @@ primitives = Map.fromList
     ]
 
   , prim "undefined"           "{a} a"
+    -- In order to work as expected this has to be "error" in place of
+    -- a Value and not a Value (of whatever kind) wrapping "error". So
+    -- there must be no toValue and none of the pureVal/funVal/etc.
+    -- ops are suitable.
     (\_ _ _ -> error "interpret: undefined")
     Current
     [ "An undefined value of any type. Evaluating 'undefined' makes the"
