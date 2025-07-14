@@ -1,0 +1,7 @@
+// Simple smoke test for proof_subshell.
+// Run with saw test.saw < input.txt (input.txt contains "z3")
+
+enable_experimental;
+prove_print (proof_subshell ()) {{ True }};
+print "finished";
+
