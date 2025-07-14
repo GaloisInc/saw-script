@@ -795,6 +795,9 @@ interpretTopStmt printBinds stmt = do
   case stmt' of
 
     SS.StmtBind pos pat expr -> do
+      -- Note that while liftTopLevel $ processStmtBind will typecheck,
+      -- that runs it in TopLevel and not the current monad, which might
+      -- be ProofScript, and then things come unstuck. See #2494.
       savepos <- liftTopLevel $ pushPosition pos
       result <- processStmtBind printBinds pat expr
       liftTopLevel $ popPosition savepos
