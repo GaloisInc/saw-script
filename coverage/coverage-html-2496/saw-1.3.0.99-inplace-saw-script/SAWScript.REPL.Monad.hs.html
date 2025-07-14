@@ -187,25 +187,25 @@ span.spaces    { background: white }
 <span class="lineno">  168 </span><span class="spaces">     </span><span class="nottickedoff">put rw'</span></span>
 <span class="lineno">  169 </span>
 <span class="lineno">  170 </span>proof_subshell :: REPL () -&gt; ProofScript ()
-<span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">proof_subshell (REPL m) =</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">ProofScript $ ExceptT $ StateT $ \proofSt -&gt;</span>
-<span class="lineno">  173 </span><span class="spaces">  </span><span class="nottickedoff">do ro &lt;- ask</span>
-<span class="lineno">  174 </span><span class="spaces">     </span><span class="nottickedoff">rw &lt;- get</span>
-<span class="lineno">  175 </span><span class="spaces">     </span><span class="nottickedoff">(rw', outProofSt) &lt;- liftIO $</span>
-<span class="lineno">  176 </span><span class="spaces">       </span><span class="nottickedoff">do contRef &lt;- newIORef True</span>
-<span class="lineno">  177 </span><span class="spaces">          </span><span class="nottickedoff">rwRef &lt;- newIORef rw</span>
-<span class="lineno">  178 </span><span class="spaces">          </span><span class="nottickedoff">proofRef &lt;- newIORef proofSt</span>
-<span class="lineno">  179 </span><span class="spaces">          </span><span class="nottickedoff">let refs = Refs</span>
-<span class="lineno">  180 </span><span class="spaces">                     </span><span class="nottickedoff">{ eContinue = contRef</span>
-<span class="lineno">  181 </span><span class="spaces">                     </span><span class="nottickedoff">, eIsBatch  = False</span>
-<span class="lineno">  182 </span><span class="spaces">                     </span><span class="nottickedoff">, eTopLevelRO = ro</span>
-<span class="lineno">  183 </span><span class="spaces">                     </span><span class="nottickedoff">, environment = rwRef</span>
-<span class="lineno">  184 </span><span class="spaces">                     </span><span class="nottickedoff">, proofState  = Just proofRef</span>
-<span class="lineno">  185 </span><span class="spaces">                     </span><span class="nottickedoff">}</span>
-<span class="lineno">  186 </span><span class="spaces">          </span><span class="nottickedoff">m refs</span>
-<span class="lineno">  187 </span><span class="spaces">          </span><span class="nottickedoff">(,) &lt;$&gt; readIORef rwRef &lt;*&gt; readIORef proofRef</span>
-<span class="lineno">  188 </span><span class="spaces">     </span><span class="nottickedoff">put rw'</span>
-<span class="lineno">  189 </span><span class="spaces">     </span><span class="nottickedoff">return (Right (), outProofSt)</span></span>
+<span class="lineno">  171 </span><span class="decl"><span class="istickedoff">proof_subshell (REPL m) =</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">ProofScript $ ExceptT $ StateT $ \proofSt -&gt;</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">do ro &lt;- ask</span>
+<span class="lineno">  174 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- get</span>
+<span class="lineno">  175 </span><span class="spaces">     </span><span class="istickedoff">(rw', outProofSt) &lt;- liftIO $</span>
+<span class="lineno">  176 </span><span class="spaces">       </span><span class="istickedoff">do contRef &lt;- newIORef True</span>
+<span class="lineno">  177 </span><span class="spaces">          </span><span class="istickedoff">rwRef &lt;- newIORef rw</span>
+<span class="lineno">  178 </span><span class="spaces">          </span><span class="istickedoff">proofRef &lt;- newIORef proofSt</span>
+<span class="lineno">  179 </span><span class="spaces">          </span><span class="istickedoff">let refs = Refs</span>
+<span class="lineno">  180 </span><span class="spaces">                     </span><span class="istickedoff">{ eContinue = contRef</span>
+<span class="lineno">  181 </span><span class="spaces">                     </span><span class="istickedoff">, eIsBatch  = False</span>
+<span class="lineno">  182 </span><span class="spaces">                     </span><span class="istickedoff">, eTopLevelRO = ro</span>
+<span class="lineno">  183 </span><span class="spaces">                     </span><span class="istickedoff">, environment = rwRef</span>
+<span class="lineno">  184 </span><span class="spaces">                     </span><span class="istickedoff">, proofState  = Just proofRef</span>
+<span class="lineno">  185 </span><span class="spaces">                     </span><span class="istickedoff">}</span>
+<span class="lineno">  186 </span><span class="spaces">          </span><span class="istickedoff">m refs</span>
+<span class="lineno">  187 </span><span class="spaces">          </span><span class="istickedoff">(,) &lt;$&gt; readIORef rwRef &lt;*&gt; readIORef proofRef</span>
+<span class="lineno">  188 </span><span class="spaces">     </span><span class="istickedoff">put rw'</span>
+<span class="lineno">  189 </span><span class="spaces">     </span><span class="istickedoff">return (Right <span class="nottickedoff">()</span>, outProofSt)</span></span>
 <span class="lineno">  190 </span>
 <span class="lineno">  191 </span>instance <span class="decl"><span class="istickedoff">Functor REPL</span></span> where
 <span class="lineno">  192 </span>  {-# INLINE fmap #-}
@@ -337,16 +337,16 @@ span.spaces    { background: white }
 <span class="lineno">  318 </span><span class="spaces">             </span><span class="istickedoff">return <span class="nottickedoff">a</span></span></span>
 <span class="lineno">  319 </span>
 <span class="lineno">  320 </span>liftProofScript :: ProofScript a -&gt; IORef ProofState -&gt; REPL a
-<span class="lineno">  321 </span><span class="decl"><span class="nottickedoff">liftProofScript m ref =</span>
-<span class="lineno">  322 </span><span class="spaces">  </span><span class="nottickedoff">liftTopLevel $</span>
-<span class="lineno">  323 </span><span class="spaces">  </span><span class="nottickedoff">do st &lt;- liftIO $ readIORef ref</span>
-<span class="lineno">  324 </span><span class="spaces">     </span><span class="nottickedoff">(res, st') &lt;- runStateT (runExceptT (unProofScript m)) st</span>
-<span class="lineno">  325 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ writeIORef ref st'</span>
-<span class="lineno">  326 </span><span class="spaces">     </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  327 </span><span class="spaces">       </span><span class="nottickedoff">Left (stats, cex) -&gt;</span>
-<span class="lineno">  328 </span><span class="spaces">         </span><span class="nottickedoff">do ppOpts &lt;- rwPPOpts &lt;$&gt; get</span>
-<span class="lineno">  329 </span><span class="spaces">            </span><span class="nottickedoff">fail (showsProofResult ppOpts (InvalidProof stats cex st') &quot;&quot;)</span>
-<span class="lineno">  330 </span><span class="spaces">       </span><span class="nottickedoff">Right x -&gt; return x</span></span>
+<span class="lineno">  321 </span><span class="decl"><span class="istickedoff">liftProofScript m ref =</span>
+<span class="lineno">  322 </span><span class="spaces">  </span><span class="istickedoff">liftTopLevel $</span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">do st &lt;- liftIO $ readIORef ref</span>
+<span class="lineno">  324 </span><span class="spaces">     </span><span class="istickedoff">(res, st') &lt;- runStateT (runExceptT (unProofScript m)) st</span>
+<span class="lineno">  325 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ writeIORef ref st'</span>
+<span class="lineno">  326 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
+<span class="lineno">  327 </span><span class="spaces">       </span><span class="istickedoff">Left (stats, cex) -&gt;</span>
+<span class="lineno">  328 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do ppOpts &lt;- rwPPOpts &lt;$&gt; get</span></span>
+<span class="lineno">  329 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">fail (showsProofResult ppOpts (InvalidProof stats cex st') &quot;&quot;)</span></span>
+<span class="lineno">  330 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; return <span class="nottickedoff">x</span></span></span>
 <span class="lineno">  331 </span>
 <span class="lineno">  332 </span>-- Primitives ------------------------------------------------------------------
 <span class="lineno">  333 </span>
@@ -371,8 +371,8 @@ span.spaces    { background: white }
 <span class="lineno">  352 </span><span class="spaces">       </span><span class="istickedoff">getProofStateRef &gt;&gt;= \case</span>
 <span class="lineno">  353 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; return &quot;sawscript&gt; &quot;</span>
 <span class="lineno">  354 </span><span class="spaces">         </span><span class="istickedoff">Just psr -&gt;</span>
-<span class="lineno">  355 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do ps &lt;- io (readIORef psr)</span></span>
-<span class="lineno">  356 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">return (&quot;proof (&quot;++show (length (psGoals ps))++&quot;)&gt; &quot;)</span></span></span>
+<span class="lineno">  355 </span><span class="spaces">           </span><span class="istickedoff">do ps &lt;- io (readIORef psr)</span>
+<span class="lineno">  356 </span><span class="spaces">              </span><span class="istickedoff">return (&quot;proof (&quot;++show (length (psGoals ps))++&quot;)&gt; &quot;)</span></span>
 <span class="lineno">  357 </span>
 <span class="lineno">  358 </span>shouldContinue :: REPL Bool
 <span class="lineno">  359 </span><span class="decl"><span class="istickedoff">shouldContinue = readRef eContinue</span></span>

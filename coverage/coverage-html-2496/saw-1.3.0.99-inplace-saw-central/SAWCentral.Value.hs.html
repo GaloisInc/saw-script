@@ -633,7 +633,7 @@ span.spaces    { background: white }
 <span class="lineno">  614 </span>    --   may raise an error if the current execution
 <span class="lineno">  615 </span>    --   mode doesn't support subshells (e.g., the remote API)
 <span class="lineno">  616 </span>
-<span class="lineno">  617 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">roProofSubshell</span></span></span> :: ProofScript ()
+<span class="lineno">  617 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">roProofSubshell</span></span></span> :: ProofScript ()
 <span class="lineno">  618 </span>    -- ^ An action for entering a subshell in proof mode.  This
 <span class="lineno">  619 </span>    --   may raise an error if the current execution
 <span class="lineno">  620 </span>    --   mode doesn't support subshells (e.g., the remote API)
@@ -710,7 +710,7 @@ span.spaces    { background: white }
 <span class="lineno">  691 </span>  TopLevel_ (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
 <span class="lineno">  692 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff">MonadThrow</span></span>, <span class="decl"><span class="istickedoff">MonadCatch</span></span>)
 <span class="lineno">  693 </span>
-<span class="lineno">  694 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance MonadReader TopLevelRO TopLevel</span></span></span></span></span></span>
+<span class="lineno">  694 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance MonadReader TopLevelRO TopLevel</span></span></span></span></span></span>
 <span class="lineno">  695 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">deriving instance MonadState TopLevelRW TopLevel</span></span></span></span></span></span>
 <span class="lineno">  696 </span>
 <span class="lineno">  697 </span>instance MonadFail TopLevel where
@@ -1070,7 +1070,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1051 </span>   <span class="decl"><span class="nottickedoff">fail msg = MIRSetupM $ lift $ lift $ fail msg</span></span>
 <span class="lineno"> 1052 </span>
 <span class="lineno"> 1053 </span>--
-<span class="lineno"> 1054 </span>newtype ProofScript a = ProofScript { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unProofScript</span></span></span> :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
+<span class="lineno"> 1054 </span>newtype ProofScript a = ProofScript { <span class="istickedoff"><span class="decl"><span class="istickedoff">unProofScript</span></span></span> :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
 <span class="lineno"> 1055 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>)
 <span class="lineno"> 1056 </span>
 <span class="lineno"> 1057 </span>-- TODO: remove the &quot;reason&quot; parameter and compute it from the
