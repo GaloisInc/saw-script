@@ -209,6 +209,7 @@ import Data.Set ( Set )
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Parameterized.Some
+import Data.Sequence (Seq)
 import Data.Typeable
 import qualified Prettyprinter as PP
 import System.FilePath((</>))
@@ -298,14 +299,13 @@ data Value
   | VRecord (Map SS.Name Value)
   | VLambda LocalEnv (Maybe SS.Name) SS.Pattern SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
-    --   is how builtins appear.
-    --
-    -- XXX: Calling this "VBuiltin" was optimistic. It actually covers
-    -- everything function-shaped that isn't a SAWScript-level lambda,
-    -- which includes not just builtins but also the closures used to
-    -- implement stack traces and possibly other messes, all of which
-    -- should be removed.
-  | VBuiltin BuiltinWrapper
+    --   is how builtins appear. Includes the name of the builtin and
+    --   the list of arguments applied so far, as a Seq to allow
+    --   appending to the end reasonably.
+  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+    -- XXX: This should go away. Fortunately, it's only used by the
+    -- closures that implement stack traces, which are scheduled for
+    -- removal soon.
   | VClosure (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
@@ -487,7 +487,10 @@ showsPrecValue opts nenv p v =
       in
       shows $ PP.sep ["\\", pat', "->", e']
 
-    VBuiltin {} -> showString "<<builtin>>"
+    VBuiltin name _args _wrapper ->
+      let name' = PP.pretty name in
+      shows $ PP.sep ["<<", "builtin", name', ">>"]
+
     VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)

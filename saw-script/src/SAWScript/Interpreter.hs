@@ -40,6 +40,8 @@ import Data.Maybe (fromMaybe)
 import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
+import Data.Sequence (Seq( (:|>) ))
+import qualified Data.Sequence as Seq (empty)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -407,7 +409,7 @@ withStackTraceFrame str val =
             withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env mname pat e) v2)
       in
       VClosure wrap
-    VBuiltin wf -> case wf of
+    VBuiltin name args wf -> case wf of
       OneMoreArg f ->
         let wrap v =
               withStackTraceFrame str `fmap` doTopLevel (f v)
@@ -415,7 +417,7 @@ withStackTraceFrame str val =
         VClosure wrap
       ManyMoreArgs f ->
         let wrap x = do
-              (withStackTraceFrame str . VBuiltin) <$> doTopLevel (f x)
+              (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
         in
         VClosure wrap
     VTopLevel m ->
@@ -465,11 +467,11 @@ applyValue :: Text -> Value -> Value -> TopLevel Value
 applyValue v1info v1 v2 = case v1 of
     VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
-    VBuiltin wf -> case wf of
+    VBuiltin name args wf -> case wf of
         OneMoreArg f ->
             f v2
         ManyMoreArgs f ->
-            VBuiltin <$> f v2
+            VBuiltin name (args :|> v2) <$> f v2
     VClosure f ->
         f v2
     _ ->
@@ -1144,7 +1146,10 @@ class FromValue a where
     fromValue :: Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue f = VBuiltin $ toWrapper f
+    -- XXX for now stuff ??? in the name field here and the caller (in
+    -- the builtin table infrastructure) will reinsert the real name.
+    -- In the future this should be tidied.    
+    toValue f = VBuiltin "???" Seq.empty $ toWrapper f
     isFunction _ = True
     toWrapper f =
         -- | isFunction needs a value of type b, which we don't have,
@@ -1549,23 +1554,26 @@ add_primitives lc _bic _opts = do
   }
 
 toValueCase :: (FromValue b) =>
+               SS.Name ->
                (b -> Value -> Value -> TopLevel Value)
             -> Value
-toValueCase prim =
-  VBuiltin $
+toValueCase name prim =
+  VBuiltin name Seq.empty $
     ManyMoreArgs $ \b -> return $
     ManyMoreArgs $ \v1 -> return $
     OneMoreArg $ \v2 ->
       prim (fromValue b) v1 v2
 
 toplevelSubshell :: Value
-toplevelSubshell = VBuiltin $ OneMoreArg $ \_ -> return $ VTopLevel $ do
+toplevelSubshell = VBuiltin "toplevelSubshell" Seq.empty $
+  OneMoreArg $ \_ -> return $ VTopLevel $ do
      m <- roSubshell <$> ask
      env <- getLocalEnv
      toValue <$> withLocalEnv env m
 
 proofScriptSubshell :: Value
-proofScriptSubshell = VBuiltin $ OneMoreArg $ \_ -> return $ VProofScript $ do
+proofScriptSubshell = VBuiltin "proofScriptSubshell" Seq.empty $
+  OneMoreArg $ \_ -> return $ VProofScript $ do
      m <- scriptTopLevel $ asks roProofSubshell
      env <- scriptTopLevel $ getLocalEnv
      toValue <$> withLocalEnvProof env m
@@ -1603,8 +1611,8 @@ forValue [] _ = return $ VReturn (VArray [])
 forValue (x : xs) f = do
    m1 <- applyValue "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce m1 $ VBuiltin $ OneMoreArg $ \v1 ->
-     return $ VBindOnce m2 $ VBuiltin $ OneMoreArg $ \v2 ->
+   return $ VBindOnce m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
+     return $ VBindOnce m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
        return $ VReturn (VArray (v1 : fromValue v2))
 
 caseProofResultPrim ::
@@ -2382,7 +2390,7 @@ primitives = Map.fromList
     ]
 
   , prim "subshell"            "() -> TopLevel ()"
-    (\_ _ -> toplevelSubshell)
+    (\ _ _ _ -> toplevelSubshell)
     Experimental
     [ "Open an interactive subshell instance in the context where"
     , "'subshell' was called. This works either from within execution"
@@ -2402,7 +2410,7 @@ primitives = Map.fromList
     ]
 
   , prim "proof_subshell"      "() -> ProofScript ()"
-    (\ _ _ -> proofScriptSubshell)
+    (\ _ _ _ -> proofScriptSubshell)
     Experimental
     [ "Open an interactive subshell instance in the context of the current proof."
     , "This allows the user to interactively execute 'ProofScript' tactic commands"
@@ -3217,7 +3225,7 @@ primitives = Map.fromList
     ]
 
   , prim "qc_print"            "Int -> Term -> TopLevel ()"
-    (\a -> scVal (quickCheckPrintPrim a) a)
+    (scVal' quickCheckPrintPrim)
     Current
     [ "Quick Check a term by applying it to a sequence of random inputs"
     , "and print the results. The 'Int' arg specifies how many tests to run."
@@ -4294,7 +4302,7 @@ primitives = Map.fromList
     -- Some misc commands
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
-    (\_ _ -> toValueCase caseSatResultPrim)
+    (\name _ _ -> toValueCase name caseSatResultPrim)
     Current
     [ "Branch on the result of SAT solving."
     , ""
@@ -4313,7 +4321,7 @@ primitives = Map.fromList
     ]
 
   , prim "caseProofResult"     "{b} ProofResult -> (Theorem -> b) -> (Term -> b) -> b"
-    (\_ _ -> toValueCase caseProofResultPrim)
+    (\name _ _ -> toValueCase name caseProofResultPrim)
     Current
     [ "Branch on the result of proving."
     , ""
@@ -4333,7 +4341,7 @@ primitives = Map.fromList
     ]
 
   , prim "undefined"           "{a} a"
-    (\_ _ -> error "interpret: undefined")
+    (\_ _ _ -> error "interpret: undefined")
     Current
     [ "An undefined value of any type. Evaluating 'undefined' makes the"
     , "program crash."
@@ -4347,12 +4355,12 @@ primitives = Map.fromList
     ]
 
   , prim "fail" "{a} String -> TopLevel a"
-    (\_ _ -> toValue failPrim)
+    (pureVal failPrim)
     Current
     [ "Throw an exception in the top level monad." ]
 
   , prim "fails"               "{a} TopLevel a -> TopLevel ()"
-    (\_ _ -> toValue failsPrim)
+    (pureVal failsPrim)
     Current
     [ "Run the given inner action and convert failure into success.  Fail"
     , "if the inner action does NOT raise an exception. This is primarily used"
@@ -4361,19 +4369,19 @@ primitives = Map.fromList
     ]
 
   , prim "time"                "{a} TopLevel a -> TopLevel a"
-    (\_ _ -> toValue timePrim)
+    (pureVal timePrim)
     Current
     [ "Print the CPU time used by the given TopLevel command." ]
 
   , prim "with_time"           "{a} TopLevel a -> TopLevel (Int, a)"
-    (\_ _ -> toValue withTimePrim)
+    (pureVal withTimePrim)
     Current
-    [ "Run the given toplevel command.  Return the number of milliseconds"
+    [ "Run the given TopLevel command.  Return the number of milliseconds"
     , "elapsed during the execution of the command and its result."
     ]
 
   , prim "exec"               "String -> [String] -> String -> TopLevel String"
-    (\_ _ -> toValue exec)
+    (pureVal exec)
     Current
     [ "Execute an external process with the given executable"
     , "name, arguments, and standard input. Returns standard"
@@ -5272,23 +5280,23 @@ primitives = Map.fromList
     , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
-    (\_ _ -> toValue llvm_spec_solvers)
+    (pureVal llvm_spec_solvers)
     Current
     [ "Extract a list of all the solvers used when verifying the given method spec."
     ]
   , prim "crucible_spec_solvers"  "LLVMSpec -> [String]"
-    (\_ _ -> toValue llvm_spec_solvers)
+    (pureVal llvm_spec_solvers)
     Current
     [ "Legacy alternative name for `llvm_spec_solvers`." ]
 
   , prim "llvm_spec_size"  "LLVMSpec -> Int"
-    (\_ _ -> toValue llvm_spec_size)
+    (pureVal llvm_spec_size)
     Current
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
   , prim "crucible_spec_size"  "LLVMSpec -> Int"
-    (\_ _ -> toValue llvm_spec_size)
+    (pureVal llvm_spec_size)
     Current
     [ "Legacy alternative name for `llvm_spec_size`." ]
 
@@ -6503,19 +6511,19 @@ primitives = Map.fromList
   ]
 
   where
-    prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
+    prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
                                      { primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
-                                     , primitiveFn   = fn
+                                     , primitiveFn   = fn name
                                      , primitiveLife = lc
                                      })
       where qname = qualify name
             fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
-    pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
-    pureVal x _ _ = toValue x
+    pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
+    pureVal x name _ _ = stuffName name $ toValue x
 
     -- pureVal can be used for anything with an IsValue instance,
     -- including functions. However, functions in TopLevel need to use
@@ -6530,36 +6538,50 @@ primitives = Map.fromList
     -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
-               -> Options -> BuiltinContext -> Value
-    funVal1 f _ _ =
-      VBuiltin $
+               -> Text -> Options -> BuiltinContext -> Value
+    funVal1 f name _ _ =
+      VBuiltin name Seq.empty $
         OneMoreArg $ \a ->
           toValue <$> f (fromValue a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
-               -> Options -> BuiltinContext -> Value
-    funVal2 f _ _ =
-      VBuiltin $
+               -> Text -> Options -> BuiltinContext -> Value
+    funVal2 f name _ _ =
+      VBuiltin name Seq.empty $
         ManyMoreArgs $ \a -> return $
         OneMoreArg $ \b ->
           toValue <$> f (fromValue a) (fromValue b)
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
-               -> Options -> BuiltinContext -> Value
-    funVal3 f _ _ =
-      VBuiltin $
+               -> Text -> Options -> BuiltinContext -> Value
+    funVal3 f name _ _ =
+      VBuiltin name Seq.empty $
         ManyMoreArgs $ \a -> return $
         ManyMoreArgs $ \b -> return $
         OneMoreArg $ \c ->
           toValue <$> f (fromValue a) (fromValue b) (fromValue c)
 
     scVal :: forall t. IsValue t =>
-             (SharedContext -> t) -> Options -> BuiltinContext -> Value
-    scVal f _ bic = toValue (f (biSharedContext bic))
+             (SharedContext -> t) -> Text -> Options -> BuiltinContext -> Value
+    scVal f name _ bic = stuffName name $ toValue (f (biSharedContext bic))
+
+    scVal' :: forall t. IsValue t =>
+             (SharedContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
+    scVal' f name opts bic = stuffName name $ toValue (f (biSharedContext bic) opts)
 
     bicVal :: forall t. IsValue t =>
-              (BuiltinContext -> Options -> t) -> Options -> BuiltinContext -> Value
-    bicVal f opts bic = toValue (f bic opts)
+              (BuiltinContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
+    bicVal f name opts bic = stuffName name $ toValue (f bic opts)
+
+
+    -- | Insert the name, passed through from the table entry, into
+    --   the VBuiltin for the builtin.
+    --
+    --   Does nothing for values that aren't VBuiltin, like constants.
+    stuffName :: SS.Name -> Value -> Value
+    stuffName name v = case v of
+        VBuiltin _ args wrap -> VBuiltin name args wrap
+        _ -> v
 
 
 -- FUTURE: extract here is now functionally a nop, so if things don't

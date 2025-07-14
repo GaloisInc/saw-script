@@ -1548,8 +1548,8 @@ satPrintPrim script t = do
 
 -- | Quick check (random test) a term and print the result. The
 -- 'Integer' parameter is the number of random tests to run.
-quickCheckPrintPrim :: Options -> SharedContext -> Integer -> TypedTerm -> IO ()
-quickCheckPrintPrim opts sc numTests tt =
+quickCheckPrintPrim :: SharedContext -> Options -> Integer -> TypedTerm -> IO ()
+quickCheckPrintPrim sc opts numTests tt =
   do prop <- predicateToProp sc Universal (ttTerm tt)
      satq <- propToSATQuery sc mempty prop
      testGen <- prepareSATQuery sc satq
