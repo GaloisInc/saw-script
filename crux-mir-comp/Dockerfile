@@ -31,34 +31,8 @@ ENV LANG=C.UTF-8 \
 COPY cabal.GHC-9.4.8.config cabal.project.freeze
 ENV PATH=/home/crux-mir-comp/rootfs/usr/local/bin:/home/crux-mir-comp/.cargo/bin:/home/crux-mir-comp/.local/bin:/home/crux-mir-comp/ghcup-download/bin:/home/crux-mir-comp/.ghcup/bin:$PATH
 
-WORKDIR /home/crux-mir-comp/deps/mir-json
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN}
-RUN rustup component add --toolchain ${RUST_TOOLCHAIN} rustc-dev rust-src
-RUN cargo install --locked && \
-    mir-json-translate-libs
-# Define `CRUX_RUST_LIBRARY_PATH` this for the benefit of
-# `cabal v2-test crux-mir-comp` below.
-ENV CRUX_RUST_LIBRARY_PATH=/home/crux-mir-comp/deps/mir-json/rlibs
-
-RUN mkdir -p /home/crux-mir-comp/rootfs/usr/local/bin
-WORKDIR /home/crux-mir-comp/rootfs/usr/local/bin
-# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
-# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to Ubuntu.
-# If updating the snapshot version, update ci.yml and crux-mir-comp/Dockerfile too.
-ARG TARGETPLATFORM
-RUN case ${TARGETPLATFORM} in \
-      "linux/amd64") \
-        WHAT4_SOLVERS_ARCH=X64 ;; \
-      "linux/arm64" | "linux/arm64/v8") \
-        WHAT4_SOLVERS_ARCH=ARM64 ;; \
-      *) \
-        printf "Unsupported architecture: %s\n" "${TARGETPLATFORM}" >&2 \
-        exit 1 ;; \
-    esac && \
-    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250606/ubuntu-22.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
-RUN unzip solvers.zip && rm solvers.zip && chmod +x *
-
 WORKDIR /home/crux-mir-comp
+ARG TARGETPLATFORM
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64") \
         GHCUP_ARCH=x86_64 ;; \
@@ -77,6 +51,33 @@ RUN mkdir -p /home/crux-mir-comp/.ghcup && \
     ghcup install ghc 9.4.8 && \
     ghcup set ghc 9.4.8
 
+RUN mkdir -p /home/crux-mir-comp/rootfs/usr/local/bin
+WORKDIR /home/crux-mir-comp/rootfs/usr/local/bin
+# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
+# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to Ubuntu.
+# If updating the snapshot version, update ci.yml and crux-mir-comp/Dockerfile too.
+RUN case ${TARGETPLATFORM} in \
+      "linux/amd64") \
+        WHAT4_SOLVERS_ARCH=X64 ;; \
+      "linux/arm64" | "linux/arm64/v8") \
+        WHAT4_SOLVERS_ARCH=ARM64 ;; \
+      *) \
+        printf "Unsupported architecture: %s\n" "${TARGETPLATFORM}" >&2 \
+        exit 1 ;; \
+    esac && \
+    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250606/ubuntu-22.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
+RUN unzip solvers.zip && rm solvers.zip && chmod +x *
+
+WORKDIR /home/crux-mir-comp/deps/mir-json
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN}
+RUN rustup component add --toolchain ${RUST_TOOLCHAIN} rustc-dev rust-src
+RUN cargo install --locked && \
+    mir-json-translate-libs
+# Define `CRUX_RUST_LIBRARY_PATH` this for the benefit of
+# `cabal v2-test crux-mir-comp` below.
+ENV CRUX_RUST_LIBRARY_PATH=/home/crux-mir-comp/deps/mir-json/rlibs
+
+WORKDIR /home/crux-mir-comp
 # Make sure GitRev.hs exists in case it wasn't created outside the
 # container and copied in. Since we don't have .git in here, this will
 # not overwrite an existing GitRev.hs, but it will create a blank one
