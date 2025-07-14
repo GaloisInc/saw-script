@@ -416,13 +416,21 @@ instance Pretty Stmt where
         --ppName n = ppIdent (P.nameIdent n)
 
 prettyDef :: Decl -> PP.Doc ann
-prettyDef (Decl _ pat _ def) =
-   PP.pretty pat PP.<+>
-   let (args, body) = dissectLambda def
-   in (if not (null args)
-          then PP.hsep (map PP.pretty args) PP.<> PP.space
-          else PP.emptyDoc) PP.<>
-      "=" PP.<+> PP.pretty body
+prettyDef (Decl _ pat0 _ def) =
+   let dissectLambda :: Expr -> ([Pattern], Expr)
+       dissectLambda = \case
+          Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
+          expr -> ([], expr)
+       (args, body) = dissectLambda def
+       pat0' = PP.pretty pat0
+       args' =
+           if not (null args) then
+               PP.hsep (map PP.pretty args) PP.<> PP.space
+           else
+               PP.emptyDoc
+       body' = PP.pretty body
+   in
+   pat0' PP.<+> args' PP.<> "=" PP.<+> body'
 
 prettyMaybeTypedArg :: (Name, Maybe Type) -> PP.Doc ann
 prettyMaybeTypedArg (name,Nothing) =
@@ -430,10 +438,6 @@ prettyMaybeTypedArg (name,Nothing) =
 prettyMaybeTypedArg (name,Just typ) =
    PP.parens $ PP.pretty name PP.<+> PP.colon PP.<+> PPS.prettyPrec 0 typ
 
-dissectLambda :: Expr -> ([Pattern], Expr)
-dissectLambda = \case
-  Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
-  expr -> ([], expr)
 
 instance PPS.PrettyPrec Schema where
   prettyPrec _ (Forall ns t) = case ns of
