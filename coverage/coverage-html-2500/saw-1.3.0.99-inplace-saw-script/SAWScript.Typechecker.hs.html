@@ -223,7 +223,7 @@ span.spaces    { background: white }
 <span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">Lookup pos rec fld     -&gt; <span class="nottickedoff">Lookup pos (appSubst s rec) fld</span></span>
 <span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">TLookup pos tpl idx    -&gt; <span class="nottickedoff">TLookup pos (appSubst s tpl) idx</span></span>
 <span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">Var _                  -&gt; expr</span>
-<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname pat body -&gt; Lambda <span class="nottickedoff">pos</span> mname (appSubst s pat) (appSubst <span class="nottickedoff">s</span> body)</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname pat body -&gt; Lambda <span class="nottickedoff">pos</span> <span class="nottickedoff">mname</span> (appSubst s pat) (appSubst <span class="nottickedoff">s</span> body)</span>
 <span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">Application pos f v    -&gt; Application pos (appSubst <span class="nottickedoff">s</span> f) (appSubst s v)</span>
 <span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">Let pos dg e           -&gt; Let <span class="nottickedoff">pos</span> (appSubst <span class="nottickedoff">s</span> dg) (appSubst <span class="nottickedoff">s</span> e)</span>
 <span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse pos e e2 e3 -&gt; IfThenElse <span class="nottickedoff">pos</span> (appSubst <span class="nottickedoff">s</span> e) (appSubst <span class="nottickedoff">s</span> e2) (appSubst <span class="nottickedoff">s</span> e3)</span></span>
@@ -1088,7 +1088,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1069 </span><span class="spaces">  </span><span class="istickedoff">Lambda pos mname pat body -&gt;</span>
 <span class="lineno"> 1070 </span><span class="spaces">    </span><span class="istickedoff">do (pt, pat') &lt;- inferPattern pat</span>
 <span class="lineno"> 1071 </span><span class="spaces">       </span><span class="istickedoff">(body', t) &lt;- withPattern pat' $ inferExpr (ln, body)</span>
-<span class="lineno"> 1072 </span><span class="spaces">       </span><span class="istickedoff">return (Lambda <span class="nottickedoff">pos</span> mname pat' body', tFun (PosInferred InfContext (getPos body)) pt t)</span>
+<span class="lineno"> 1072 </span><span class="spaces">       </span><span class="istickedoff">return (Lambda <span class="nottickedoff">pos</span> <span class="nottickedoff">mname</span> pat' body', tFun (PosInferred InfContext (getPos body)) pt t)</span>
 <span class="lineno"> 1073 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1074 </span><span class="spaces">  </span><span class="istickedoff">Application pos f arg -&gt;</span>
 <span class="lineno"> 1075 </span><span class="spaces">    </span><span class="istickedoff">do argtype &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
