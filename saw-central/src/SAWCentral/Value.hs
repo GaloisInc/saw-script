@@ -310,7 +310,7 @@ data Value
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad
-  | VReturn Value
+  | VReturn SS.Pos Value
     -- | Not-yet-executed do-block in unspecified monad
     --
     --   The string is a hack hook for the current implementation of
@@ -321,22 +321,22 @@ data Value
     --   This exists only to support the "for" builtin; see notes there
     --   for why this is so. XXX: remove it once that's no longer needed
   | VBindOnce Value Value
-  | VTopLevel (TopLevel Value)
-  | VProofScript (ProofScript Value)
+  | VTopLevel SS.Pos (TopLevel Value)
+  | VProofScript SS.Pos (ProofScript Value)
   | VSimpset SAWSimpset
   | VRefnset SAWRefnset
   | VTheorem Theorem
   | VBisimTheorem BisimTheorem
   -----
-  | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
+  | VLLVMCrucibleSetup SS.Pos !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
-  | VJVMSetup !(JVMSetupM Value)
+  | VJVMSetup SS.Pos !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
-  | VMIRSetup !(MIRSetupM Value)
+  | VMIRSetup SS.Pos !(MIRSetupM Value)
   | VMIRMethodSpec !(CMS.ProvedSpec MIR)
   | VMIRSetupValue !(CMS.SetupValue MIR)
   -----
@@ -494,7 +494,7 @@ showsPrecValue opts nenv p v =
     VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
-    VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
+    VReturn _pos v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
     VDo pos _name _env body ->
       let e = SS.Block pos body in
       shows (PP.pretty e)
@@ -539,7 +539,7 @@ showsPrecValue opts nenv p v =
     VYosysImport _ -> showString "<<Yosys import>>"
     VYosysSequential _ -> showString "<<Yosys sequential>>"
     VYosysTheorem _ -> showString "<<Yosys theorem>>"
-    VJVMSetup _      -> showString "<<JVM Setup>>"
+    VJVMSetup{}      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
     VMIRSetup{} -> showString "<<MIR Setup>>"

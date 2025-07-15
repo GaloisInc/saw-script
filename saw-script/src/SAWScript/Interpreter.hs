@@ -207,6 +207,26 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
 
+-- | Default placeholder position for plain monadic values.
+--
+--   Used in toValue so it'll appear in the builtin table. However,
+--   it should always be replaced when the value is retrieved and
+--   before it's returned out or passed on by the interpreter for
+--   execution.
+dummyMonadicPos :: SS.Pos
+dummyMonadicPos = SS.PosInternal "<<placeholder position for monadic action>>"
+
+-- | Update the position in a plain monadic value.
+injectPositionIntoMonadicValue :: SS.Pos -> Value -> Value
+injectPositionIntoMonadicValue pos v = case v of
+    VTopLevel _oldpos f -> VTopLevel pos f
+    VProofScript _oldpos f -> VProofScript pos f
+    VLLVMCrucibleSetup _oldpos f -> VLLVMCrucibleSetup pos f
+    VJVMSetup _oldpos f -> VJVMSetup pos f
+    VMIRSetup _oldpos f -> VMIRSetup pos f
+    _ -> v
+
+
 ------------------------------------------------------------
 -- Environment updates
 
@@ -302,42 +322,42 @@ bindPatternEnv pat ms v env =
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
   actionFromValue :: FromValue a => Value -> m a
-  mkValue :: m Value -> Value
+  mkValue :: SS.Pos -> m Value -> Value
   getMonadContext :: m SS.Context
   withLocalEnvAny :: LocalEnv -> m a -> m a
 
 instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
-  mkValue = VTopLevel
+  mkValue pos m = VTopLevel pos m
   getMonadContext = return SS.TopLevel
   withLocalEnvAny = withLocalEnv
 
 instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
-  mkValue = VProofScript
+  mkValue pos m = VProofScript pos m
   getMonadContext = return SS.ProofScript
   withLocalEnvAny = withLocalEnvProof
 
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
-  mkValue = VLLVMCrucibleSetup
+  mkValue pos m = VLLVMCrucibleSetup pos m
   getMonadContext = return SS.LLVMSetup
   withLocalEnvAny = withLocalEnvLLVM
 
 instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
-  mkValue = VJVMSetup
+  mkValue pos m = VJVMSetup pos m
   getMonadContext = return SS.JavaSetup
   withLocalEnvAny = withLocalEnvJVM
 
 instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
-  mkValue = VMIRSetup
+  mkValue pos m = VMIRSetup pos m
   getMonadContext = return SS.MIRSetup
   withLocalEnvAny = withLocalEnvMIR
 
@@ -420,16 +440,16 @@ withStackTraceFrame str val =
               (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
         in
         VClosure wrap
-    VTopLevel m ->
+    VTopLevel pos m ->
       let m' =
             withStackTraceFrame str `fmap` doTopLevel m
       in
-      VTopLevel m'
-    VProofScript m ->
+      VTopLevel pos m'
+    VProofScript pos m ->
       let m' =
             withStackTraceFrame str `fmap` doProofScript m
       in
-      VProofScript m'
+      VProofScript pos m'
     VDo pos _ env stmts ->
       VDo pos (Just str) env stmts
     VBindOnce v1 v2 ->
@@ -437,21 +457,21 @@ withStackTraceFrame str val =
           v2' = withStackTraceFrame str v2
       in
       VBindOnce v1' v2'
-    VLLVMCrucibleSetup m ->
+    VLLVMCrucibleSetup pos m ->
       let m' =
             withStackTraceFrame str `fmap` doLLVM m
       in
-      VLLVMCrucibleSetup m'
-    VJVMSetup m ->
+      VLLVMCrucibleSetup pos m'
+    VJVMSetup pos m ->
       let m' =
             withStackTraceFrame str `fmap` doJVM m
       in
-      VJVMSetup m'
-    VMIRSetup m ->
+      VJVMSetup pos m'
+    VMIRSetup pos m ->
       let m' =
             withStackTraceFrame str `fmap` doMIR m
       in
-      VMIRSetup m'
+      VMIRSetup pos m'
     _ ->
       val
 
@@ -548,7 +568,8 @@ interpretExpr expr =
                 ]
             Just (lc, _ty, v)
               | Set.member lc (rwPrimsAvail rw) ->
-                   return (withStackTraceFrame (show x) v)
+                   let v' = injectPositionIntoMonadicValue (SS.getPos x) v in
+                   return (withStackTraceFrame (show x) v')
               | otherwise ->
                    -- This case is also rejected by the typechecker
                    panic "interpretExpr" [
@@ -557,11 +578,12 @@ interpretExpr expr =
       SS.Lambda _ mname pat e -> do
           env <- getLocalEnv
           return $ VLambda env mname pat e
-      SS.Application _ e1 e2 -> do
+      SS.Application pos e1 e2 -> do
           let v1info = "Expression: " <> PPS.pShowText e1
           v1 <- interpretExpr e1
           v2 <- interpretExpr e2
-          applyValue v1info v1 v2
+          let v2' = injectPositionIntoMonadicValue pos v2
+          applyValue v1info v1 v2'
       SS.Let _ dg e -> do
           env' <- interpretDeclGroup dg
           withLocalEnv env' (interpretExpr e)
@@ -617,11 +639,11 @@ interpretDeclGroup (SS.Recursive ds) = do
 -- monads.
 interpretMonadAction :: forall m. InterpreterMonad m => Value -> m Value
 interpretMonadAction v = case v of
-  VReturn v' -> do
-    -- VReturn v' -> VProofScript (return v')
+  VReturn pos v' -> do
+    -- VReturn pos v' -> VProofScript pos (return v')
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
-    return $ mkValue v''
+    return $ mkValue pos v''
   VDo _blkpos mname env body ->
     withLocalEnvAny env (interpretDoStmts' mname body)
   VBindOnce m1 v2 -> do
@@ -710,7 +732,13 @@ interpretDoStmts (stmts, lastexpr) =
           -- will have SAWScript type a instead of m a, and things
           -- will go downhill.)
           liftTopLevel $ popPosition savepos
-          return result'
+
+          -- Insert the position in the result if it's a plain monadic
+          -- value. This is its call site as far as things like stack
+          -- traces are concerned, and now's the last opportunity to
+          -- record that. If it's another do-block, this will do
+          -- nothing but we'll come back here when it's executed.
+          return $ injectPositionIntoMonadicValue pos result'
       stmt : more -> do
           -- Execute the expression and get the updated environment
           env' <- interpretDoStmt stmt
@@ -1065,7 +1093,6 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 --   you're applying the last argument, because that's the time when
 --   you need to add a frame to the trace.
 --
-
 --   In this environment, IsValue for a function must generate a chain
 --   of BuiltinWrappers rather than a chain of Values. This turns out
 --   to be problematic. A tidy way to do it would be to have a
@@ -1201,61 +1228,61 @@ instance IsValue a => IsValue (IO a) where
     toValue action = toValue (io action)
 
 instance IsValue a => IsValue (TopLevel a) where
-    toValue action = VTopLevel (fmap toValue action)
+    toValue action = VTopLevel dummyMonadicPos (fmap toValue action)
 
 instance FromValue a => FromValue (TopLevel a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VTopLevel action -> fmap fromValue action
+        VTopLevel _pos action -> fmap fromValue action
         _ -> panic "fromValue (TopLevel)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
 
 instance IsValue a => IsValue (ProofScript a) where
-    toValue m = VProofScript (fmap toValue m)
+    toValue m = VProofScript dummyMonadicPos (fmap toValue m)
 
 instance FromValue a => FromValue (ProofScript a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VProofScript action -> fmap fromValue action
+        VProofScript _pos action -> fmap fromValue action
         _ -> panic "fromValue (ProofScript)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
-    toValue m = VLLVMCrucibleSetup (fmap toValue m)
+    toValue m = VLLVMCrucibleSetup dummyMonadicPos (fmap toValue m)
 
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VLLVMCrucibleSetup action -> fmap fromValue action
+        VLLVMCrucibleSetup _pos action -> fmap fromValue action
         _ -> panic "fromValue (LLVMSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
-    toValue m = VJVMSetup (fmap toValue m)
+    toValue m = VJVMSetup dummyMonadicPos (fmap toValue m)
 
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VJVMSetup action -> fmap fromValue action
+        VJVMSetup _pos action -> fmap fromValue action
         _ -> panic "fromValue (JVMSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
-    toValue m = VMIRSetup (fmap toValue m)
+    toValue m = VMIRSetup dummyMonadicPos (fmap toValue m)
 
 instance FromValue a => FromValue (MIRSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VMIRSetup action -> fmap fromValue action
+        VMIRSetup _pos action -> fmap fromValue action
         _ -> panic "fromValue (MIRSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1594,13 +1621,13 @@ proofScriptSubshell () = do
 -- likely to be quite messy.
 --
 forValue :: [Value] -> Value -> TopLevel Value
-forValue [] _ = return $ VReturn (VArray [])
+forValue [] _ = return $ VReturn dummyMonadicPos (VArray [])
 forValue (x : xs) f = do
    m1 <- applyValue "(value was in a \"for\")" f x
    m2 <- forValue xs f
    return $ VBindOnce m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
      return $ VBindOnce m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
-       return $ VReturn (VArray (v1 : fromValue v2))
+       return $ VReturn dummyMonadicPos (VArray (v1 : fromValue v2))
 
 caseProofResultPrim ::
   ProofResult ->
@@ -2291,7 +2318,7 @@ primTypes = Map.fromList
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
   [ prim "return"              "{m, a} a -> m a"
-    (pureVal VReturn)
+    (pureVal (VReturn dummyMonadicPos))
     Current
     [ "Yield a value in a command context. The command"
     , "    x <- return e"
