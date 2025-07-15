@@ -149,7 +149,7 @@ import           SAWCentral.Crucible.Common.Setup.Value
 import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWCentral.Crucible.JVM.Setup.Value ()
 import           SAWCentral.Crucible.MIR.Setup.Value
-  (MirSetupEnum(..), MirSetupSlice(..))
+  (MirSetupEnum(..), MirSetupSlice(..), MirIndexingMode(..))
 import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
@@ -228,7 +228,23 @@ ppSetupValue setupval = case setupval of
       (MIRExt, slice) ->
         ppMirSetupSlice slice
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
-  SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
+  SetupElem x v i  ->
+    case (ext, x) of
+      (LLVMExt, ()) ->
+        ppv PP.<> PP.pretty ("." ++ show i)
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, m) ->
+        case m of
+          MirIndexIntoVal ->
+            ppv PP.<> PP.brackets (PP.pretty i)
+          MirIndexIntoRef ->
+            ppv PP.<> ".add" PP.<> PP.parens (PP.pretty i)
+          MirIndexOffsetRef ->
+            ppv PP.<> ".offset" PP.<> PP.parens (PP.pretty i)
+    where
+      ppv :: PP.Doc ann
+      ppv = PP.parens (ppSetupValue v)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> f)
   SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." <> u)
   SetupCast x v ->

@@ -64,6 +64,9 @@ support compositional verification using techniques similar to SAW.
   These are like `goal_eval` and `goal_eval_unint` proof tactics
   but work on arbitrary terms rather than proof goals.
 
+* Add new SAWScript MIR commands `mir_elem_value` and `mir_elem_ref` for
+  indexing into arrays and references to arrays.
+
 * Support writing MIR specifications involving raw pointers. This is done with
   the new SAWScript commands `mir_raw_ptr_const`, `mir_raw_ptr_mut`,
   `mir_alloc_raw_ptr_const`, and `mir_alloc_raw_ptr_mut`, which are similar to

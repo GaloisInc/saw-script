@@ -741,7 +741,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                 M.TyRef _ M.Immut -> M.Immut
                 _ -> M.Mut
         alloc <- refToAlloc bak pp (tyToPtrKind refTy) mutbl ty' tpr startRef len
-        let offsetSv sv = if idx == 0 then sv else MS.SetupElem () sv idx
+        let offsetSv sv = if idx == 0 then sv else MS.SetupElem MirIndexOffsetRef sv idx
         return $ offsetSv $ MS.SetupVar alloc
     go (SliceShape _ ty mutbl tpr) (Empty :> RV refRV :> RV lenRV) = do
         let (refShp, lenShp) = sliceShapeParts ty mutbl tpr

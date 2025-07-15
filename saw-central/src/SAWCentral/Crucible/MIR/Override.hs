@@ -27,10 +27,12 @@ module SAWCentral.Crucible.MIR.Override
   , decodeMIRVal
   ) where
 
+import qualified Control.Applicative as Applicative
 import qualified Control.Exception as X
 import Control.Lens
 import Control.Monad (filterM, forM, forM_, unless, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
 import Data.Either (partitionEithers)
 import qualified Data.Text as Text
@@ -890,7 +892,7 @@ instantiateSetupValue sc s v =
     MS.SetupSlice slice               -> MS.SetupSlice <$> instantiateSetupSlice slice
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal _ _                -> return v
-    MS.SetupElem _ _ _                -> return v
+    MS.SetupElem m a i                -> MS.SetupElem m <$> instantiateSetupValue sc s a <*> pure i
     MS.SetupField _ _ _               -> return v
     MS.SetupCast _ _                  -> return v
     MS.SetupUnion empty _ _           -> absurd empty
@@ -1026,6 +1028,11 @@ learnSetupCondition opts sc cc spec prepost cond =
     MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
     MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
+-- | Which part of a 'SetupValue' to match against.
+data MatchProj
+  -- | Match against the given index of the array 'SetupValue'.
+  = MatchIndex Int
+
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   forall w.
@@ -1038,30 +1045,43 @@ matchArg ::
   MIRVal               {- ^ concrete simulation value -} ->
   SetupValue           {- ^ expected specification value -} ->
   OverrideMatcher MIR w ()
-matchArg opts sc cc cs prepost md = go False
+matchArg opts sc cc cs prepost md = go False []
   where
 
+  go ::
     -- The internal Bool argument is to keep track of whether the given
-    -- SetupValue is inside a SetupCast. The SetupVar case uses different types
-    -- depending on whether it is in a SetupCast or not, but the SetupCast case
-    -- can't just do a recursive call with different types, since we don't know
-    -- what the types should be until we get to the SetupVar. So instead we just
-    -- pass along the fact that we are recursing inside a SetupCast.
-    go :: Bool -> MIRVal -> SetupValue -> OverrideMatcher MIR w ()
+    -- SetupValue is inside a SetupCast. The SetupVar case uses different
+    -- types depending on whether it is in a SetupCast or not, but the
+    -- SetupCast case can't just do a recursive call with different types,
+    -- since we don't know what the types should be until we get to the
+    -- SetupVar. So instead we just pass along the fact that we are recursing
+    -- inside a SetupCast.
+    Bool ->
+    -- Due to projection SetupValue constructors like SetupElem, which may be
+    -- arbitrarily nested, we keep a stack of MatchProjs to track which part
+    -- of the given SetupValue we are trying to match against. For instance,
+    -- [MatchIndex 3, MatchIndex 7] means we are trying to match the MIRVal
+    -- against index 7 of index 3 of the SetupValue.
+    [MatchProj] ->
+    MIRVal ->
+    SetupValue ->
+    OverrideMatcher MIR w ()
 
-    go _ actual expected@(MS.SetupTerm expectedTT)
-      | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
-      , Right tval <- Cryptol.evalType mempty tyexpr
-      = do sym <- Ov.getSymInterface
-           failMsg  <- mkStructuralMismatch opts cc sc cs actual expected
-           realTerm <- valueToSC sym md failMsg tval actual
-           matchTerm sc md prepost realTerm (ttTerm expectedTT)
+  go inCast projStack actual expected
+    | MS.SetupTerm expectedTT <- expected
+    , TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
+    , Right tval <- Cryptol.evalType mempty tyexpr
+    = do sym <- Ov.getSymInterface
+         (tval', expectedTerm') <-
+           applyProjToTerm sym fail_ projStack tval (ttTerm expectedTT)
+         realTerm <- valueToSC sym fail_ tval' actual
+         matchTerm sc md prepost realTerm expectedTerm'
 
-    go inCast actual expected =
+    | otherwise =
       mccWithBackend cc $ \bak -> do
       let sym = backendGetSym bak
-      case (actual, expected) of
-        (MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, MS.SetupVar var)
+      case (projStack, actual, expected) of
+        ([], MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, MS.SetupVar var)
           | inCast ->
             -- When we have a cast, the type inside the Crucible reference may
             -- be different from the pointee type of the SetupValue in SAW after
@@ -1082,41 +1102,81 @@ matchArg opts sc cc cs prepost md = go False
           | otherwise ->
             assignVar cc md var (Some (MirPointer tpr (tyToPtrKind refTy) mutbl pointeeTy ref))
 
-        (MIRVal (RefShape {}) _, MS.SetupCast _ v) ->
+        ([], MIRVal (RefShape {}) _, MS.SetupCast _ v) ->
           -- Ideally we would pass the "true" type of the underlying reference
           -- here, instead of passing along the post-cast types unchanged, but
           -- we don't know the true type until we get to a SetupVar.
-          go True actual v
+          go True [] actual v
 
         -- match arrays point-wise
-        (MIRVal (ArrayShape _ _ elemShp) xs, MS.SetupArray _elemTy zs)
+        ([], MIRVal (ArrayShape _ _ elemShp) xs, MS.SetupArray _elemTy zs)
           | Mir.MirVector_Vector xs' <- xs
           , V.length xs' == length zs ->
             sequence_
-              [ go inCast (MIRVal elemShp x) z
+              [ go inCast [] (MIRVal elemShp x) z
               | (x, z) <- zip (V.toList xs') zs ]
 
           | Mir.MirVector_PartialVector xs' <- xs
           , V.length xs' == length zs ->
             do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
                sequence_
-                 [ go inCast (MIRVal elemShp x) z
+                 [ go inCast [] (MIRVal elemShp x) z
                  | (x, z) <- zip (V.toList xs'') zs ]
+
+        -- match an index of a SetupArray by just indexing into it
+        (MatchIndex i : restProjStack, _, MS.SetupArray _ zs)
+          | Just z <- zs ^? ix i ->
+            go inCast restProjStack actual z
+
+        -- match value SetupElem by pushing MatchIndex onto the projection stack
+        (_, _, MS.SetupElem MirIndexIntoVal setupArr i) ->
+          go inCast (MatchIndex i : projStack) actual setupArr
+
+        -- match reference SetupElem by getting the reference to the containing
+        -- vector
+        ([],
+         MIRVal (RefShape elemRefTy elemTy elemMutbl elemTpr) elemRef,
+         MS.SetupElem MirIndexIntoRef setupArrRef i) -> do
+            arrRefTy <- typeOfSetupValue cc tyenv nameEnv setupArrRef
+            case tyToShape col arrRefTy of
+              Some arrRefShp@(RefShape _
+                                       (Mir.TyArray elemTy' _)
+                                       arrMutbl
+                                       (Mir.MirVectorRepr elemTpr'))
+                -- check that the expected and actual types match
+                | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
+                , checkCompatibleTys elemTy elemTy'
+                , elemMutbl == arrMutbl
+                , Just Refl <- W4.testEquality elemTpr elemTpr' -> do
+                  -- get the reference to the containing vector and the index of
+                  -- the current reference within it
+                  Ctx.Empty Ctx.:> Crucible.RV arrRef
+                            Ctx.:> Crucible.RV i'_sym <-
+                    liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef
+                  -- the index should be concrete
+                  case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
+                    Just i'
+                      -- make sure the expected and actual indices match
+                      | i == i' ->
+                        go inCast [] (MIRVal arrRefShp arrRef) setupArrRef
+                    _ -> fail_
+              _ -> fail_
 
         -- match the underlying, non-zero-sized field of a repr(transparent)
         -- struct
-        (MIRVal (TransparentShape _ shp) val, MS.SetupStruct adt zs)
+        ([], MIRVal (TransparentShape _ shp) val, MS.SetupStruct adt zs)
           | Just i <- Mir.findReprTransparentField col adt
           , Just z <- zs ^? ix i ->
-            go inCast (MIRVal shp val) z
+            go inCast [] (MIRVal shp val) z
 
         -- match the fields of a struct point-wise
-        (MIRVal (StructShape _ _ xsFldShps) xs, MS.SetupStruct _ zs) ->
+        ([], MIRVal (StructShape _ _ xsFldShps) xs, MS.SetupStruct _ zs) ->
           matchFields sym xsFldShps xs zs
 
         -- In order to match an enum value, we first check to see if the
         -- expected value is a specific enum variant or a symbolic enum...
-        (MIRVal (EnumShape _ _ variantShps _ discrShp)
+        ([],
+         MIRVal (EnumShape _ _ variantShps _ discrShp)
                 (Ctx.Empty
                   Ctx.:> Crucible.RV actualDiscr
                   Ctx.:> Crucible.RV variantAssn),
@@ -1178,7 +1238,7 @@ matchArg opts sc cc cs prepost md = go False
               -- all other VariantBranches should be false.
               MirSetupEnumSymbolic _ expectedDiscr variantFlds -> do
                 -- Ensure that the discriminant values match.
-                go inCast (MIRVal discrShp actualDiscr) expectedDiscr
+                go inCast [] (MIRVal discrShp actualDiscr) expectedDiscr
 
                 sequence_ @_ @_ @()
                   [ case xPE of
@@ -1203,11 +1263,12 @@ matchArg opts sc cc cs prepost md = go False
                   ]
 
         -- match the fields of a tuple point-wise
-        (MIRVal (TupleShape (Mir.TyTuple _) _ xsFldShps) xs, MS.SetupTuple () zs) ->
+        ([], MIRVal (TupleShape (Mir.TyTuple _) _ xsFldShps) xs, MS.SetupTuple () zs) ->
           matchFields sym xsFldShps xs zs
 
         -- See Note [Matching slices in overrides]
-        (MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl actualElemTpr)
+        ([],
+         MIRVal (SliceShape actualSliceRefTy@(Mir.TyRef _ _) actualElemTy actualMutbl actualElemTpr)
                 (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
          MS.SetupSlice slice)
            | -- Currently, all slice lengths must be concrete, so the case below
@@ -1235,7 +1296,7 @@ matchArg opts sc cc cs prepost md = go False
                    let actualArrTpr = Mir.MirVectorRepr actualElemTpr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
-                   go inCast
+                   go inCast []
                      (MIRVal actualArrRefShp actualArrRef)
                      expectedArrRef
 
@@ -1270,7 +1331,7 @@ matchArg opts sc cc cs prepost md = go False
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
 
-        (MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
+        ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           static <- findStatic colState name
           Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
           let y = staticRefMux sym yGlobalVar
@@ -1280,71 +1341,77 @@ matchArg opts sc cc cs prepost md = go False
               pred_ <- liftIO $
                 Mir.mirRef_eqIO bak x y
               addAssert pred_ md =<< notEq
-        (MIRVal shp _, MS.SetupGlobalInitializer () name) -> do
+        (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
           static <- findStatic colState name
-          let staticTy = static ^. Mir.sTy
-          unless (checkCompatibleTys (shapeMirTy shp) staticTy) fail_
           staticInitMirVal <- findStaticInitializer cc static
-          pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
-          addAssert pred_ md =<< notEq
-        (_, MS.SetupMux () c t f) -> do
+          projRes <- runMaybeT $ applyProjToMIRVal sym projStack staticInitMirVal
+          case projRes of
+            Just staticInitMirVal'@(MIRVal expectedShp _)
+              | checkCompatibleTys (shapeMirTy actualShp) (shapeMirTy expectedShp) -> do
+                pred_ <- liftIO $ equalValsPred cc staticInitMirVal' actual
+                addAssert pred_ md =<< notEq
+            _ -> fail_
+        (_, _, MS.SetupMux () c t f) -> do
           cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
           withConditionalPred cPred $
-            go inCast actual t
+            go inCast projStack actual t
           cNegPred <- liftIO $ W4.notPred sym cPred
           withConditionalPred cNegPred $
-            go inCast actual f
+            go inCast projStack actual f
 
-        (_, MS.SetupNull empty)      -> absurd empty
-        (_, MS.SetupUnion empty _ _) -> absurd empty
+        (_, _, MS.SetupNull empty)      -> absurd empty
+        (_, _, MS.SetupUnion empty _ _) -> absurd empty
 
         _ -> fail_
 
-      where
+    where
 
-        colState = cc ^. mccRustModule . Mir.rmCS
-        col      = colState ^. Mir.collection
-        iTypes   = cc ^. mccIntrinsicTypes
-        tyenv    = MS.csAllocations cs
-        nameEnv  = MS.csTypeNames cs
+      colState = cc ^. mccRustModule . Mir.rmCS
+      col      = colState ^. Mir.collection
+      iTypes   = cc ^. mccIntrinsicTypes
+      tyenv    = MS.csAllocations cs
+      nameEnv  = MS.csTypeNames cs
 
-        loc   = MS.conditionLoc md
+      loc   = MS.conditionLoc md
 
-        fail_ :: OverrideMatcher MIR w a
-        fail_ = failure loc =<<
-                  mkStructuralMismatch opts cc sc cs actual expected
+      fail_ :: OverrideMatcher MIR w a
+      fail_ = failure loc =<<
+                mkStructuralMismatch opts cc sc cs actual
+                  (applyProjToSetupValue projStack expected)
 
-        -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
-        matchFields ::
-          Sym ->
-          Ctx.Assignment FieldShape ctx ->
-          Ctx.Assignment (Crucible.RegValue' Sym) ctx ->
-          [SetupValue] ->
-          OverrideMatcher MIR w ()
-        matchFields sym xsFldShps xs zs = do
-          -- As a sanity check, first ensure that the number of fields matches
-          -- what is expected.
-          unless (Ctx.sizeInt (Ctx.size xs) == length zs) fail_
-          -- Then match the fields point-wise.
-          sequence_
-            [ case xFldShp of
-                ReqField shp ->
-                  go inCast (MIRVal shp x) z
-                OptField shp -> do
-                  let x' = readMaybeType sym "field" (shapeType shp) x
-                  go inCast (MIRVal shp x') z
-            | (Some (Functor.Pair xFldShp (Crucible.RV x)), z) <-
-                zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
-                    zs ]
+      -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
+      matchFields ::
+        Sym ->
+        Ctx.Assignment FieldShape ctx ->
+        Ctx.Assignment (Crucible.RegValue' Sym) ctx ->
+        [SetupValue] ->
+        OverrideMatcher MIR w ()
+      matchFields sym xsFldShps xs zs = do
+        -- As a sanity check, first ensure that the number of fields matches
+        -- what is expected.
+        unless (Ctx.sizeInt (Ctx.size xs) == length zs) fail_
+        -- Then match the fields point-wise.
+        sequence_
+          [ case xFldShp of
+              ReqField shp ->
+                go inCast [] (MIRVal shp x) z
+              OptField shp -> do
+                let x' = readMaybeType sym "field" (shapeType shp) x
+                go inCast [] (MIRVal shp x') z
+          | (Some (Functor.Pair xFldShp (Crucible.RV x)), z) <-
+              zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                  zs ]
 
-        -- Check that both the expected and actual values are the same sort of
-        -- slice. We don't want to accidentally mix up a &[u8] value with a &str
-        -- value, as both have the same crucible-mir representation.
-        matchSliceInfos :: MirSliceInfo -> MirSliceInfo -> OverrideMatcher MIR w ()
-        matchSliceInfos expectedSliceInfo actualSliceInfo =
-          unless (expectedSliceInfo == actualSliceInfo) fail_
+      -- Check that both the expected and actual values are the same sort of
+      -- slice. We don't want to accidentally mix up a &[u8] value with a &str
+      -- value, as both have the same crucible-mir representation.
+      matchSliceInfos :: MirSliceInfo -> MirSliceInfo -> OverrideMatcher MIR w ()
+      matchSliceInfos expectedSliceInfo actualSliceInfo =
+        unless (expectedSliceInfo == actualSliceInfo) fail_
 
-        notEq = notEqual prepost opts loc cc sc cs expected actual
+      notEq = notEqual prepost opts loc cc sc cs
+        (applyProjToSetupValue projStack expected)
+        actual
 
 {-
 Note [Matching slices in overrides]
@@ -1722,13 +1789,13 @@ typeOfSetupValueMIR cc spec sval =
      liftIO $ typeOfSetupValue cc tyenv nameEnv sval
 
 valueToSC ::
+  forall w.
   Sym ->
-  MS.ConditionMetadata ->
-  OverrideFailureReason MIR ->
+  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} ->
   Cryptol.TValue ->
   MIRVal ->
   OverrideMatcher MIR w Term
-valueToSC sym md failMsg tval (MIRVal shp val) =
+valueToSC sym fail_ tval (MIRVal shp val) =
   case (tval, shp) of
     (Cryptol.TVBit, PrimShape _ W4.BaseBoolRepr) ->
       liftIO (toSC sym st val)
@@ -1756,7 +1823,7 @@ valueToSC sym md failMsg tval (MIRVal shp val) =
       |  Mir.MirVector_Vector vals <- val
       ,  toInteger (V.length vals) == n
       -> do terms <- V.toList <$>
-              traverse (\v -> valueToSC sym md failMsg cryty (MIRVal arrShp v)) vals
+              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals
             t <- shapeToTerm sc arrShp
             liftIO (scVectorReduced sc t terms)
       |  Mir.MirVector_PartialVector vals <- val
@@ -1764,13 +1831,13 @@ valueToSC sym md failMsg tval (MIRVal shp val) =
       -> do let vals' = V.toList $
                         V.map (readMaybeType sym "vector element" (shapeType arrShp)) vals
             terms <-
-              traverse (\v -> valueToSC sym md failMsg cryty (MIRVal arrShp v)) vals'
+              traverse (\v -> valueToSC sym fail_ cryty (MIRVal arrShp v)) vals'
             t <- shapeToTerm sc arrShp
             liftIO (scVectorReduced sc t terms)
       |  Mir.MirVector_Array{} <- val
       -> fail "valueToSC: Symbolic arrays not supported"
     _ ->
-      failure (MS.conditionLoc md) failMsg
+      fail_
   where
     st = sym ^. W4.userState
     sc = saw_ctx st
@@ -1786,4 +1853,47 @@ valueToSC sym md failMsg tval (MIRVal shp val) =
           OptField shp' ->
             pure $ MIRVal shp'
                  $ readMaybeType sym "field" (shapeType shp') tm
-      valueToSC sym md failMsg ty mirVal
+      valueToSC sym fail_ ty mirVal
+
+-- | Apply a stack of projections to a 'Term'.
+applyProjToTerm ::
+  Sym ->
+  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} ->
+  [MatchProj] {- ^ stack of projections -} ->
+  Cryptol.TValue {- ^ Cryptol type of the term argument -} ->
+  Term ->
+  OverrideMatcher MIR w (Cryptol.TValue, Term)
+    -- ^ result term and its Cryptol type
+applyProjToTerm sym fail_ = go
+  where
+    go [] tp term = pure (tp, term)
+    go (MatchIndex i : projStack) (Cryptol.TVSeq sz tp) term
+      | i >= 0 && fromIntegral i < sz = do
+        doIndex <- liftIO $ indexSeqTerm sym (sz, tp) term
+        go projStack tp =<< liftIO (doIndex i)
+    go _ _ _ = fail_
+
+-- | Apply a stack of projections to a 'MIRVal'.
+applyProjToMIRVal ::
+  MonadIO m =>
+  Sym ->
+  [MatchProj] {- ^ stack of projections -} ->
+  MIRVal ->
+  MaybeT m MIRVal
+applyProjToMIRVal _ [] mv = pure mv
+applyProjToMIRVal sym
+                  (MatchIndex i : projStack)
+                  (MIRVal (ArrayShape _ _ elemShp) vec) =
+  applyProjToMIRVal sym projStack =<< indexMirVector sym i elemShp vec
+applyProjToMIRVal _ _ _ = Applicative.empty
+
+-- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
+-- anything from the given 'SetupValue', but rather just applies projection
+-- 'SetupValue' constructors to it.
+applyProjToSetupValue ::
+  [MatchProj] {- ^ stack of projections -}->
+  SetupValue ->
+  SetupValue
+applyProjToSetupValue = flip (foldl projToCtor)
+  where
+    projToCtor sv (MatchIndex i) = MS.SetupElem MirIndexIntoVal sv i

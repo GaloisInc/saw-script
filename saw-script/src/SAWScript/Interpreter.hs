@@ -5461,6 +5461,25 @@ primitives = Map.fromList
     , "mir_points_to."
     ]
 
+  , prim "mir_elem_ref" "MIRValue -> Int -> MIRValue"
+    (pureVal mir_elem_ref)
+    Experimental
+    [ "Given a reference (or raw pointer) to a MIR array, and an index, return"
+    , "a reference (resp. raw pointer) to the element in that array at that"
+    , "index."
+    , ""
+    , "Note: If the given reference (or raw pointer) has been created with"
+    , "`mir_alloc(_raw_ptr)`, the whole reference (resp. raw pointer) must be"
+    , "initialized with mir_points_to before mir_elem_ref can be used on it."
+    ]
+
+  , prim "mir_elem_value" "MIRValue -> Int -> MIRValue"
+    (pureVal mir_elem_value)
+    Experimental
+    [ "Given a MIR array value and an index, return the MIR value in the array"
+    , "at that index."
+    ]
+
   , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
     (funVal3 mir_enum_value)
     Experimental

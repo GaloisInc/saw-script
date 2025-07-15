@@ -62,6 +62,9 @@ module SAWCentral.Crucible.MIR.Setup.Value
     -- * @MirSetupSlice@
   , MirSetupSlice(..)
   , MirSliceInfo(..)
+
+    -- * @MirIndexingMode@
+  , MirIndexingMode(..)
   ) where
 
 import Control.Lens (makeLenses)
@@ -89,7 +92,7 @@ type instance MS.XSetupTuple MIR = ()
 type instance MS.XSetupSlice MIR = MirSetupSlice
 -- The 'M.Ty' represents the type of array elements.
 type instance MS.XSetupArray MIR = M.Ty
-type instance MS.XSetupElem MIR = ()
+type instance MS.XSetupElem MIR = MirIndexingMode
 type instance MS.XSetupField MIR = ()
 -- The 'M.Ty' represents the pointee type after the cast.
 -- See Note [Raw pointer casts].
@@ -167,7 +170,7 @@ data MirPointer sym tp = MirPointer
 data MirPointerKind
   = MirPointerRef -- ^ a reference
   | MirPointerRaw -- ^ a raw pointer
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | A enum-related MIR 'SetupValue'.
 data MirSetupEnum where
@@ -262,6 +265,20 @@ data MirSliceInfo
     MirArraySlice
   | -- | @str@
     MirStrSlice
+  deriving (Eq, Show)
+
+-- | How to do array indexing.
+data MirIndexingMode
+  -- | Take a MIR array value and return the value of one of its elements.
+  = MirIndexIntoVal
+  -- | Take a reference/pointer to a MIR array and return a reference/pointer to
+  -- one of its elements.
+  | MirIndexIntoRef
+  -- | Take a reference/pointer to an element within a MIR array and return a
+  -- reference/pointer to another element within the same MIR array.
+  --
+  -- Only used by @crucible-mir-comp@ for now.
+  | MirIndexOffsetRef
   deriving (Eq, Show)
 
 makeLenses ''MIRCrucibleContext
