@@ -8,7 +8,7 @@
  Branching on 1 override variants of assign...
  Applied override! assign
  Checking proof obligations zero...
- Subgoal failed: zero test.saw:60:1: error: in ghost_value
+ Subgoal failed: zero test.saw:52:4: error: in ghost_value
 Literal equality postcondition
 Expected term: 
 let { x@1 = Prelude.Vec 8 Prelude.Bool

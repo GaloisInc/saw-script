@@ -256,9 +256,10 @@ bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _pos _ ->
       env
-    SS.PVar _pos _x Nothing ->
+    SS.PVar pos _x Nothing ->
       panic "bindPatternLocal" [
           "Found pattern with no type in it",
+          "Source position: " <> Text.pack (show pos),
           "Pattern: " <> Text.pack (show pat)
       ]
     SS.PVar _pos x (Just ty) ->
@@ -287,9 +288,10 @@ bindPatternEnv pat ms v env =
   case pat of
     SS.PWild _pos _   ->
         pure env
-    SS.PVar _pos _x Nothing ->
+    SS.PVar pos _x Nothing ->
         panic "bindPatternEnv" [
             "Found pattern with no type in it",
+            "Source position: " <> Text.pack (show pos),
             "Pattern: " <> Text.pack (show pat)
         ]
     SS.PVar _pos x (Just ty) -> do
@@ -425,18 +427,18 @@ withStackTraceFrame str val =
       -- But, since this is the wrong way to do stack traces anyway,
       -- with luck we'll be able to remove the lot before much longer.
       let info = "(stack trace thunk for lambda)"
-          wrap v2 =
-            withStackTraceFrame str `fmap` doTopLevel (applyValue info (VLambda env mname pat e) v2)
+          wrap pos v2 =
+            withStackTraceFrame str `fmap` doTopLevel (applyValue pos info (VLambda env mname pat e) v2)
       in
       VClosure wrap
     VBuiltin name args wf -> case wf of
       OneMoreArg f ->
-        let wrap v =
+        let wrap _pos v =
               withStackTraceFrame str `fmap` doTopLevel (f v)
         in
         VClosure wrap
       ManyMoreArgs f ->
-        let wrap x = do
+        let wrap _pos x = do
               (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
         in
         VClosure wrap
@@ -452,11 +454,11 @@ withStackTraceFrame str val =
       VProofScript pos m'
     VDo pos _ env stmts ->
       VDo pos (Just str) env stmts
-    VBindOnce v1 v2 ->
+    VBindOnce pos v1 v2 ->
       let v1' = withStackTraceFrame str v1
           v2' = withStackTraceFrame str v2
       in
-      VBindOnce v1' v2'
+      VBindOnce pos v1' v2'
     VLLVMCrucibleSetup pos m ->
       let m' =
             withStackTraceFrame str `fmap` doLLVM m
@@ -481,10 +483,12 @@ withStackTraceFrame str val =
 
 -- | Apply an argument value to a function value.
 --   v1 must have type a -> b; v2 must have type a.
---   The first (Text) argument is printed as part of the panic if v1
+--   The first (position) argument is the position where the
+--   application happens.
+--   The second (Text) argument is printed as part of the panic if v1
 --   turns out not to be a function value.
-applyValue :: Text -> Value -> Value -> TopLevel Value
-applyValue v1info v1 v2 = case v1 of
+applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
+applyValue pos v1info v1 v2 = case v1 of
     VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
     VBuiltin name args wf -> case wf of
@@ -493,7 +497,7 @@ applyValue v1info v1 v2 = case v1 of
         ManyMoreArgs f ->
             VBuiltin name (args :|> v2) <$> f v2
     VClosure f ->
-        f v2
+        f pos v2
     _ ->
         panic "applyValue" [
             "Called object is not a function",
@@ -539,25 +543,25 @@ interpretExpr expr =
           s <- io $ CEnv.parseSchema cenv
                   $ locToInput str
           return (toValue s)
-      SS.Array _ es ->
+      SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
       SS.Block pos stmts -> do
           env <- getLocalEnv
           return $ VDo pos Nothing env stmts
-      SS.Tuple _ es ->
+      SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
-      SS.Record _ bs ->
+      SS.Record _pos bs ->
           VRecord <$> traverse interpretExpr bs
-      SS.Index _ e1 e2 -> do
+      SS.Index pos e1 e2 -> do
           a <- interpretExpr e1
           i <- interpretExpr e2
-          return (indexValue a i)
-      SS.Lookup _ e n -> do
+          return (indexValue pos a i)
+      SS.Lookup pos e n -> do
           a <- interpretExpr e
-          return (lookupValue a n)
-      SS.TLookup _ e i -> do
+          return (lookupValue pos a n)
+      SS.TLookup pos e i -> do
           a <- interpretExpr e
-          return (tupleLookupValue a i)
+          return (tupleLookupValue pos a i)
       SS.Var x -> do
           rw <- getMergedEnv
           case Map.lookup x (rwValueInfo rw) of
@@ -575,21 +579,21 @@ interpretExpr expr =
                    panic "interpretExpr" [
                        "Read of inaccessible variable " <> SS.getVal x
                    ]
-      SS.Lambda _ mname pat e -> do
+      SS.Lambda _pos mname pat e -> do
           env <- getLocalEnv
           return $ VLambda env mname pat e
       SS.Application pos e1 e2 -> do
           let v1info = "Expression: " <> PPS.pShowText e1
           v1 <- interpretExpr e1
           v2 <- interpretExpr e2
-          let v2' = injectPositionIntoMonadicValue pos v2
-          applyValue v1info v1 v2'
+          let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
+          applyValue pos v1info v1 v2'
       SS.Let _ dg e -> do
           env' <- interpretDeclGroup dg
           withLocalEnv env' (interpretExpr e)
       SS.TSig _ e _ ->
           interpretExpr e
-      SS.IfThenElse _ e1 e2 e3 -> do
+      SS.IfThenElse pos e1 e2 e3 -> do
           v1 <- interpretExpr e1
           case v1 of
             VBool b ->
@@ -597,6 +601,7 @@ interpretExpr expr =
             _ ->
               panic "interpretExpr" [
                   "Ill-typed value in if-expression (should be Bool)",
+                  "Source position: " <> Text.pack (show pos),
                   "Value found: " <> Text.pack (show v1),
                   "Expression: " <> PPS.pShowText e1
               ]
@@ -646,9 +651,10 @@ interpretMonadAction v = case v of
     return $ mkValue pos v''
   VDo _blkpos mname env body ->
     withLocalEnvAny env (interpretDoStmts' mname body)
-  VBindOnce m1 v2 -> do
-    v1 <- actionFromValue m1
-    m2 <- liftTopLevel $ applyValue "Value in a VBindOnce, via interpretMonadAction" v2 v1
+  VBindOnce pos m1 v2 -> do
+    let m1' = injectPositionIntoMonadicValue pos m1
+    v1 <- actionFromValue m1'
+    m2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" v2 v1
     interpretMonadAction m2
   _ -> pure v
 
@@ -672,16 +678,16 @@ interpretDoStmt stmt =
     case stmt of
       SS.StmtBind pos pat e -> do
           env <- liftTopLevel getLocalEnv
-          savepos <- liftTopLevel $ pushPosition pos
-          -- Execute the expression purely first.
+          -- Execute the expression purely first. ("purely")
           v1 :: Value <- liftTopLevel $ interpretExpr e
           -- If we got a do-block or similar back, execute it now.
           v2 :: Value <- interpretMonadAction v1
           -- We should now have a VTopLevel/VProofScript/etc with a
           -- TopLevel/ProofScript/etc Value in it that we can execute
-          -- in Haskell to get the resultant Value.
-          v3 :: Value <- actionFromValue v2
-          liftTopLevel $ popPosition savepos
+          -- in Haskell to get the resultant Value. Insert the call
+          -- position into it.
+          let v2' = injectPositionIntoMonadicValue pos v2
+          v3 :: Value <- actionFromValue v2'
           -- Bind the value to the pattern
           return $ bindPatternLocal pat Nothing v3 env
       SS.StmtLet _pos dg -> do
@@ -699,7 +705,7 @@ interpretDoStmt stmt =
           -- return the current local environment unchanged
           liftTopLevel getLocalEnv
       SS.StmtImport _ _ ->
-          fail "block import unimplemented"
+          fail "block-level import unimplemented"
       SS.StmtTypedef _ name ty -> do
           env <- liftTopLevel $ getLocalEnv
           return $ LocalTypedef (getVal name) ty : env
@@ -719,25 +725,24 @@ interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Va
 interpretDoStmts (stmts, lastexpr) =
     case stmts of
       [] -> do
-          let pos = SS.getPos lastexpr
-          savepos <- liftTopLevel $ pushPosition pos
           -- Execute the expression purely first.
           result :: Value <- liftTopLevel $ interpretExpr lastexpr
           -- If we got a do-block or similar back, execute it now.
           result' :: Value <- interpretMonadAction result
+
           -- This gives us a VTopLevel/VProofScript/etc with a
           -- TopLevel/ProofScript/etc Value in it.
           -- Return that as the result of the block; let the caller
           -- execute it. (If we execute it now, the Value we return
           -- will have SAWScript type a instead of m a, and things
           -- will go downhill.)
-          liftTopLevel $ popPosition savepos
-
+          --
           -- Insert the position in the result if it's a plain monadic
           -- value. This is its call site as far as things like stack
           -- traces are concerned, and now's the last opportunity to
           -- record that. If it's another do-block, this will do
-          -- nothing but we'll come back here when it's executed.
+          -- nothing, but we'll come back here when it's executed.
+          let pos = SS.getPos lastexpr
           return $ injectPositionIntoMonadicValue pos result'
       stmt : more -> do
           -- Execute the expression and get the updated environment
@@ -763,10 +768,11 @@ interpretDoStmts' mname body = do
 processStmtBind ::
   InterpreterMonad m =>
   Bool ->
+  SS.Pos ->
   SS.Pattern ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat expr = do -- mx mt
+processStmtBind printBinds pos pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
   val <- liftTopLevel $ interpretExpr expr
@@ -784,7 +790,14 @@ processStmtBind printBinds pat expr = do -- mx mt
   when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ PPS.pShow ty
 
   -- Run the resulting TopLevel (or ProofScript) action.
-  result <- actionFromValue val
+  --
+  -- Insert the bind position into the monadic value before executing
+  -- it. The fromValue call (inside actionFromValue) is the point that
+  -- sets the exposed position for real. (It has to be, because it can
+  -- get triggered from places that don't come directly from the
+  -- interpreter.)
+  let val' = injectPositionIntoMonadicValue pos val
+  result <- actionFromValue val'
 
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
@@ -839,10 +852,7 @@ interpretTopStmt printBinds stmt = do
       -- Note that while liftTopLevel $ processStmtBind will typecheck,
       -- that runs it in TopLevel and not the current monad, which might
       -- be ProofScript, and then things come unstuck. See #2494.
-      savepos <- liftTopLevel $ pushPosition pos
-      result <- processStmtBind printBinds pat expr
-      liftTopLevel $ popPosition savepos
-      return result
+      processStmtBind printBinds pos pat expr
 
     SS.StmtLet _pos dg ->
       liftTopLevel $ do
@@ -1234,7 +1244,10 @@ instance FromValue a => FromValue (TopLevel a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VTopLevel _pos action -> fmap fromValue action
+        VTopLevel pos action -> do
+          setPosition pos
+          ret <- action
+          return $ fromValue ret
         _ -> panic "fromValue (TopLevel)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1246,7 +1259,10 @@ instance FromValue a => FromValue (ProofScript a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VProofScript _pos action -> fmap fromValue action
+        VProofScript pos action -> do
+          scriptTopLevel $ setPosition pos
+          ret <- action
+          return $ fromValue ret
         _ -> panic "fromValue (ProofScript)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1258,7 +1274,10 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VLLVMCrucibleSetup _pos action -> fmap fromValue action
+        VLLVMCrucibleSetup pos action -> do
+          llvmTopLevel $ setPosition pos
+          ret <- action
+          return $ fromValue ret
         _ -> panic "fromValue (LLVMSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1270,7 +1289,10 @@ instance FromValue a => FromValue (JVMSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VJVMSetup _pos action -> fmap fromValue action
+        VJVMSetup pos action -> do
+          jvmTopLevel $ setPosition pos
+          ret <- action
+          return $ fromValue ret
         _ -> panic "fromValue (JVMSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1282,7 +1304,10 @@ instance FromValue a => FromValue (MIRSetupM a) where
     fromValue v = do
       v' <- interpretMonadAction v
       case v' of
-        VMIRSetup _pos action -> fmap fromValue action
+        VMIRSetup pos action -> do
+          mirTopLevel $ setPosition pos
+          ret <- action
+          return $ fromValue ret
         _ -> panic "fromValue (MIRSetup)" [
                  "Invalid/ill-typed value: " <> Text.pack (show v')
              ]
@@ -1623,10 +1648,11 @@ proofScriptSubshell () = do
 forValue :: [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn dummyMonadicPos (VArray [])
 forValue (x : xs) f = do
-   m1 <- applyValue "(value was in a \"for\")" f x
+   let pos = SS.PosInternal "<for>"
+   m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+   return $ VBindOnce pos m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
+     return $ VBindOnce pos m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
        return $ VReturn dummyMonadicPos (VArray (v1 : fromValue v2))
 
 caseProofResultPrim ::
@@ -1638,16 +1664,18 @@ caseProofResultPrim pr vValid vInvalid = do
   let infoValid = "(value was the valid case of caseProofResult)"
   let infoInvalid = "(value was the invalid case of caseProofResult)"
   sc <- getSharedContext
+  -- This is a builtin; we can use the posted global position
+  pos <- getPosition
   case pr of
     ValidProof _ thm ->
-      applyValue infoValid vValid (toValue thm)
+      applyValue pos infoValid vValid (toValue thm)
     InvalidProof _ pairs _pst -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue infoInvalid vInvalid (toValue tt)
+      applyValue pos infoInvalid vInvalid (toValue tt)
     UnfinishedProof _ -> do
       tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
-      applyValue infoInvalid vInvalid (toValue tt)
+      applyValue pos infoInvalid vInvalid (toValue tt)
 
 caseSatResultPrim ::
   SatResult ->
@@ -1657,16 +1685,18 @@ caseSatResultPrim ::
 caseSatResultPrim sr vUnsat vSat = do
   let info = "(value was the sat case of caseSatResult)"
   sc <- getSharedContext
+  -- This is a builtin; we can use the posted global position
+  pos <- getPosition
   case sr of
     Unsat _ -> return vUnsat
     Sat _ pairs -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue info vSat (toValue tt)
+      applyValue pos info vSat (toValue tt)
     SatUnknown -> do
       let fov = FOVTuple []
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue info vSat (toValue tt)
+      applyValue pos info vSat (toValue tt)
 
 enable_safety_proofs :: TopLevel ()
 enable_safety_proofs = do

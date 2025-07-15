@@ -56,7 +56,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (local)
 
 import Data.Text (Text)
-import qualified Data.Text as Text (unpack)
+import qualified Data.Text as Text (pack, unpack)
 --import Data.Map ( Map )
 import qualified Data.Map as M
 --import Data.Set ( Set )
@@ -65,6 +65,7 @@ import SAWCore.SharedTerm
 
 import CryptolSAWCore.CryptolEnv as CEnv
 
+import qualified SAWCentral.Position as SS
 import qualified SAWCentral.AST as SS
 --import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
 --import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
@@ -72,31 +73,50 @@ import SAWCentral.Options (Options, Verbosity(..))
 
 import SAWCentral.Value
 
+import SAWScript.Panic (panic)
 
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
 isVUnit _ = False
 
-indexValue :: Value -> Value -> Value
-indexValue (VArray vs) (VInteger x)
+indexValue :: SS.Pos -> Value -> Value -> Value
+indexValue pos (VArray vs) (VInteger x)
     | i < length vs = vs !! i
-    | otherwise = error "array index out of bounds"
+    | otherwise = error $ show pos ++ ": Array index out of bounds"
     where i = fromInteger x
-indexValue _ _ = error "indexValue"
+indexValue pos v1 v2 =
+    panic "indexValue" [
+        "Type error that escaped the typechecker",
+        "Source position: " <> Text.pack (show pos),
+        "Array value: " <> Text.pack (show v1),
+        "Index value: " <> Text.pack (show v2)
+    ]
 
-lookupValue :: Value -> Text -> Value
-lookupValue (VRecord vm) name =
+lookupValue :: SS.Pos -> Value -> Text -> Value
+lookupValue pos (VRecord vm) name =
     case M.lookup name vm of
-      Nothing -> error $ "no such record field: " ++ Text.unpack name
+      Nothing -> error $ show pos ++ ": No such record field: " ++ Text.unpack name
       Just x -> x
-lookupValue _ _ = error "lookupValue"
+lookupValue pos v1 v2 =
+    panic "lookupValue" [
+        "Type error that escaped the typechecker",
+        "Source position: " <> Text.pack (show pos),
+        "Array value: " <> Text.pack (show v1),
+        "Index value: " <> Text.pack (show v2)
+    ]
 
-tupleLookupValue :: Value -> Integer -> Value
-tupleLookupValue (VTuple vs) i
+tupleLookupValue :: SS.Pos -> Value -> Integer -> Value
+tupleLookupValue pos (VTuple vs) i
   | 0 <= i && fromIntegral i < length vs = vs !! fromIntegral i
-  | otherwise = error $ "no such tuple index: " ++ show i
-tupleLookupValue _ _ = error "tupleLookupValue"
+  | otherwise = error $ show pos ++ ": No such tuple index: " ++ show i
+tupleLookupValue pos v1 v2 =
+    panic "tupleLookupValue" [
+        "Type error that escaped the typechecker",
+        "Source position: " <> Text.pack (show pos),
+        "Array value: " <> Text.pack (show v1),
+        "Index value: " <> Text.pack (show v2)
+    ]
 
 emptyLocal :: LocalEnv
 emptyLocal = []

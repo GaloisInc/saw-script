@@ -81,11 +81,12 @@ module SAWCentral.Value (
     io,
     -- used in various places in SAWCentral
     throwTopLevel,
-    -- used by SAWScript.Interpreter plus locally in a bunch of GetValue instances
-    pushPosition, popPosition,
+    -- used by SAWScript.Interpreter
+    setPosition,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
     getLocalEnv,
-    -- used in various places in SAWCentral
+    -- used in various places in SAWCentral, and in selected builtins in
+    -- SAWScript.Interpreter
     getPosition,
     -- used all over the place
     getSharedContext,
@@ -306,7 +307,7 @@ data Value
     -- XXX: This should go away. Fortunately, it's only used by the
     -- closures that implement stack traces, which are scheduled for
     -- removal soon.
-  | VClosure (Value -> TopLevel Value)
+  | VClosure (SS.Pos -> Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad
@@ -320,7 +321,7 @@ data Value
     -- | Single monadic bind in unspecified monad.
     --   This exists only to support the "for" builtin; see notes there
     --   for why this is so. XXX: remove it once that's no longer needed
-  | VBindOnce Value Value
+  | VBindOnce SS.Pos Value Value
   | VTopLevel SS.Pos (TopLevel Value)
   | VProofScript SS.Pos (ProofScript Value)
   | VSimpset SAWSimpset
@@ -498,7 +499,7 @@ showsPrecValue opts nenv p v =
     VDo pos _name _env body ->
       let e = SS.Block pos body in
       shows (PP.pretty e)
-    VBindOnce v1 v2 ->
+    VBindOnce _pos v1 v2 ->
       let v1' = showsPrecValue opts nenv 0 v1
           v2' = showsPrecValue opts nenv 0 v2
       in
@@ -645,12 +646,17 @@ data TopLevelRW =
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
-  , rwPosition   :: SS.Pos
+
+    -- | The current execution position. This is only valid when the
+    --   interpreter is calling out into saw-central to execute a
+    --   builtin. Within the interpreter, the current position is
+    --   either passed around or the position in the current AST
+    --   element, and those positions should be used instead.
+  , rwPosition :: SS.Pos
+  
+    -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: [String]
-    -- ^ SAWScript-internal backtrace for use
-    --   when displaying exceptions and such
-    --   NB, stored with most recent calls on
-    --   top of the stack.
+
   , rwLocalEnv   :: LocalEnv
 
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
@@ -754,34 +760,21 @@ throwTopLevel msg = do
   stk <- getStackTrace
   throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
 
--- deprecated
---withPosition :: SS.Pos -> TopLevel a -> TopLevel a
---withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
-
--- | Replacement pair for withPosition.
---   Usage:
---      savepos = pushPosition newpos
---      ...
---      popPosition savepos
---
-pushPosition :: SS.Pos -> TopLevel SS.Pos
-pushPosition newpos = do
-  oldpos <- gets rwPosition
+-- | Set the current execution position.
+setPosition :: SS.Pos -> TopLevel ()
+setPosition newpos = do
   modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
-  return oldpos
-
-popPosition :: SS.Pos -> TopLevel ()
-popPosition restorepos = do
-  modifyTopLevelRW (\rw -> rw { rwPosition = restorepos })
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv =
   gets rwLocalEnv
 
+-- | Get the current execution position.
 getPosition :: TopLevel SS.Pos
 getPosition =
   gets rwPosition
 
+-- | Get the current stack trace.
 getStackTrace :: TopLevel [String]
 getStackTrace =
   reverse <$> gets rwStackTrace
