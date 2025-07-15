@@ -53,7 +53,7 @@ import           Control.Lens
 import           Control.Monad (guard, unless, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Maybe (MaybeT(..), hoistMaybe)
+import           Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
@@ -1137,9 +1137,9 @@ indexMirVector sym i elemShp vec =
   MIRVal elemShp <$>
     case vec of
       Mir.MirVector_Vector vs ->
-        hoistMaybe $ vs V.!? i
+        MaybeT $ pure $ vs V.!? i
       Mir.MirVector_PartialVector vs ->
-        hoistMaybe $
+        MaybeT $ pure $
           readMaybeType sym "vector element" (shapeType elemShp) <$> vs V.!? i
       Mir.MirVector_Array array -> liftIO $ do
         i_sym <- usizeBvLit sym i
