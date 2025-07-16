@@ -278,7 +278,8 @@ termToSValue sym varMap term = do
     ecMap <- mapM convert varMap
     let sc  = mirSharedContext ?mirState
     let ref = mirUninterpFunCache ?mirState
-    SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
+    uninterp <- resolveUninterp ?mirState
+    SAW.w4SolveBasic sym sc mempty ecMap ref uninterp term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.
@@ -296,12 +297,12 @@ termToPred sym varMap term = do
 
 -- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
 termToType :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
-    SAW.SharedContext ->
     SAW.Term ->
     IO (Some W4.BaseTypeRepr)
-termToType sym sc term = do
+termToType sym term = do
+    let sc = mirSharedContext ?mirState
     ref <- newIORef mempty
     sv <- SAW.w4SolveBasic sym sc mempty mempty ref mempty term
     tv <- case sv of

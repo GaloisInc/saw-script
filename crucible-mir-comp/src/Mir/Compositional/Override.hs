@@ -171,7 +171,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         let ec = SAW.tecExt tec
         let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecName ec
         let nameSymbol = W4.safeSymbol nameStr
-        Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
+        Some btpr <- liftIO $ termToType sym (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
         liftIO $ addAssumptions bak (singleEvent ev)

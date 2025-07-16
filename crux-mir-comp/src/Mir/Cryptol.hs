@@ -26,6 +26,7 @@ import qualified Data.Map as Map
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Set as Set
 
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
@@ -54,7 +55,6 @@ import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
-import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
@@ -114,6 +114,16 @@ cryptolOverrides state _symOnline cs name cfg
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
         let ?mirState = state
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
+
+  | ["crucible","cryptol","uninterp"] == explodedName
+  , Empty :> MirSliceRepr <- cfgArgTypes cfg
+  , UnitRepr <- cfgReturnType cfg
+  = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
+    mkOverride' "cryptol_uninterp" UnitRepr $
+    do RegMap (Empty :> RegEntry _tpr' nameStr) <- getOverrideArgs
+       fun <- loadString nameStr "cryptol::uninterp function name"
+       liftIO (modifyIORef (mirKeepUninterp state) (Set.insert fun))
+
 
   | hasInstPrefix ["crucible", "cryptol", "munge"] explodedName
   , Empty :> tpr <- cfgArgTypes cfg
@@ -224,14 +234,12 @@ loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
 
-    -- TODO share a single SharedContext across all calls
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    liftIO $ SAW.scLoadCryptolModule sc
+    let sc = mirSharedContext ?mirState
     let ?fileReader = BS.readFile
-    ce <- liftIO $ SAW.initCryptolEnv sc
+    ce <- liftIO (readIORef (mirCryEnv ?mirState))
     let modName = Cry.textToModName modulePath
     ce' <- liftIO $ SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
+    liftIO (writeIORef (mirCryEnv ?mirState) ce')
     -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
     -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
@@ -291,9 +299,8 @@ munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    sc <- SAW.mkSharedContext
-    SAW.scLoadPreludeModule sc
-
+    let sc = mirSharedContext ?mirState
+    
     scs <- SAW.newSAWCoreState sc
     visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef Map.empty
