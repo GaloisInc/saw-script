@@ -1029,7 +1029,7 @@ learnSetupCondition opts sc cc spec prepost cond =
     MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
 -- | Which part of a 'SetupValue' to match against.
-data MatchProj
+newtype MatchProj
   -- | Match against the given index of the array 'SetupValue'.
   = MatchIndex Int
 
