@@ -65,17 +65,19 @@ import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)
+import Mir.Compositional.State
 
 
 cryptolOverrides ::
     forall sym bak p t st fs args ret blocks rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    MirState sym ->
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
-cryptolOverrides _symOnline cs name cfg
+cryptolOverrides state _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
   , Empty :> MirSliceRepr :> MirSliceRepr
@@ -89,6 +91,7 @@ cryptolOverrides _symOnline cs name cfg
             _ -> error $ "expected TyFnPtr argument, but got " ++ show tyArg
 
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
+        let ?mirState = state
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
   | hasInstPrefix ["crucible", "cryptol", "override_"] explodedName
@@ -109,6 +112,7 @@ cryptolOverrides _symOnline cs name cfg
           :> RegEntry _ ()
           :> RegEntry _tpr modulePathStr
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
+        let ?mirState = state
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
 
   | hasInstPrefix ["crucible", "cryptol", "munge"] explodedName
@@ -117,6 +121,7 @@ cryptolOverrides _symOnline cs name cfg
   , Just Refl <- testEquality tpr tpr'
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_munge" tpr $ do
+        let ?mirState = state
         let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
                 M.intrInst . M.inSubsts . _Wrapped . ix 0
         shp <- case tyArg of
@@ -133,7 +138,7 @@ cryptolOverrides _symOnline cs name cfg
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
@@ -174,7 +179,7 @@ loadString str desc = getString str >>= \x -> case x of
 
 cryptolOverride ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
@@ -209,7 +214,7 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
 -- used to run the function.
 loadCryptolFunc ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     M.Collection ->
     M.FnSig ->
     Text ->
@@ -259,7 +264,7 @@ loadCryptolFunc col sig modulePath name = do
 
 cryptolRun ::
     forall sym p t st fs rtp r args ret .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     SAW.SharedContext ->
     String ->
     Assignment TypeShape args ->
@@ -283,7 +288,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     liftIO $ termToReg sym sc w4VarMap appTerm retShp
 
 munge :: forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
     sc <- SAW.mkSharedContext

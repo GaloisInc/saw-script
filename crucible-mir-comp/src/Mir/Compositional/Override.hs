@@ -2,6 +2,7 @@
 {-# Language FlexibleContexts #-}
 {-# Language FlexibleInstances #-}
 {-# Language GADTs #-}
+{-# Language ImplicitParams #-}
 {-# Language MultiParamTypeClasses #-}
 {-# Language OverloadedStrings #-}
 {-# Language PatternSynonyms #-}
@@ -63,19 +64,21 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
+import Mir.Compositional.State
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
     MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
 
-data MethodSpec = MethodSpec
+data MethodSpec sym = MethodSpec
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
+    , _msMirState :: MirState sym
     }
 
 makeLenses ''MethodSpec
 
-instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sym MethodSpec where
+instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sym (MethodSpec sym) where
     msPrettyPrint = printSpec
     msEnable = enable
 
@@ -84,7 +87,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 -- result as a Rust string.
 printSpec ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MethodSpec ->
+    MethodSpec sym ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
@@ -108,7 +111,7 @@ printSpec ms = do
 -- `runSpec`.
 enable ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MethodSpec ->
+    MethodSpec sym ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
@@ -118,7 +121,7 @@ enable ms = do
             show (ms ^. msSpec . MS.csMethod) ++ "?"
 
     -- TODO: handle multiple specs for the same function
-
+    let ?mirState = ms ^. msMirState
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
         runSpec myCS mh (ms ^. msSpec)
   where
@@ -127,7 +130,7 @@ enable ms = do
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym p t st fs args ret rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec myCS mh ms = ovrWithBackend $ \bak ->
@@ -349,7 +352,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
     forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
@@ -502,7 +505,7 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
 -- namely the return value and any post-state PointsTos.
 setupToReg :: forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s

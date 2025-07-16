@@ -83,7 +83,8 @@ executable crux-mir-comp
     what4,
 
     -- this package's own library
-    crux-mir-comp
+    crux-mir-comp,
+    crucible-mir-comp
 
   hs-source-dirs: exe
   main-is: Main.hs

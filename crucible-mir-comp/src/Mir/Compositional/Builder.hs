@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Mir.Compositional.Builder
 where
@@ -64,10 +65,12 @@ import qualified Mir.Mir as M
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
 import Mir.Compositional.Override (MethodSpec(..))
+import Mir.Compositional.State
 
 
 data MethodSpecBuilder sym t = MethodSpecBuilder
     { _msbCollectionState :: CollectionState
+    , _msbMirState :: MirState sym
     , _msbSharedContext :: SAW.SharedContext
     , _msbEval :: forall tp. W4.Expr t tp -> IO SAW.Term
 
@@ -98,6 +101,7 @@ data FoundRef sym tp = FoundRef
     }
 
 initMethodSpecBuilder ::
+    UsesMirState sym =>
     CollectionState ->
     SAW.SharedContext ->
     (forall tp. W4.Expr t tp -> IO SAW.Term) ->
@@ -116,6 +120,7 @@ initMethodSpecBuilder cs sc eval spec snap cache = MethodSpecBuilder
     , _msbSnapshotFrame = snap
     , _msbVisitCache = cache
     , _msbSubsts = []
+    , _msbMirState = ?mirState
     }
 
 initStateExtra :: StateExtra sym t
@@ -185,7 +190,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
 -- Rust invokes `msb.add_arg(...)` or similar.
 
 builderNew :: forall sym p t st fs rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     CollectionState ->
     -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
     -- have one type argument, which is the `TyFnDef` of the function that the
@@ -558,7 +563,7 @@ finish msb =
     ms' <- liftIO $ substMethodSpec (msb ^. msbSharedContext) sm ms
 
     nonce <- liftIO $ freshNonce ng
-    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms') (indexValue nonce)
+    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms' (msb ^. msbMirState)) (indexValue nonce)
 
   where
     sc = msb ^. msbSharedContext

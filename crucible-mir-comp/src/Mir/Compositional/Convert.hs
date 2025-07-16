@@ -50,6 +50,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
+import Mir.Compositional.State
 
 
 -- | Run `f` on each `SymExpr` in `v`.
@@ -142,7 +143,7 @@ readPartExprMaybe _sym (W4.PE p v)
 
 -- | Convert a `SAW.Term` into a `W4.Expr`.
 termToExpr :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
@@ -158,7 +159,7 @@ termToExpr sym sc varMap term = do
 -- giving the expected MIR/Crucible type in order to distinguish cases like
 -- `(A, (B, C))` vs `(A, B, C)` (these are the same type in saw-core).
 termToReg :: forall sym t st fs tp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
@@ -265,7 +266,7 @@ termToReg sym sc varMap term shp0 = do
 
 -- | Common code for termToExpr and termToReg
 termToSValue :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
@@ -283,7 +284,7 @@ termToSValue sym sc varMap term = do
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.
 termToPred :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
     SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
