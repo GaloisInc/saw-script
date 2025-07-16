@@ -70,6 +70,9 @@ import SAWCore.FiniteValue (FirstOrderValue(..))
 
 import CryptolSAWCore.TypedTerm
 
+--import SAWCentral.Trace (Trace)
+import qualified SAWCentral.Trace as Trace
+
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..), defaultAvailable)
@@ -397,7 +400,8 @@ withStackTraceFrame str val =
   let doTopLevel :: TopLevel a -> TopLevel a
       doTopLevel action = do
         trace <- gets rwStackTrace
-        modify (\rw -> rw { rwStackTrace = str : trace })
+        let trace' = Trace.push str trace
+        modify (\rw -> rw { rwStackTrace = trace' })
         result <- action
         modify (\rw -> rw { rwStackTrace = trace })
         return result
@@ -758,7 +762,7 @@ interpretDoStmts' mname body = do
   trace <- liftTopLevel $ gets rwStackTrace
   case mname of
     Nothing -> pure ()
-    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = name : trace })
+    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = Trace.push name trace })
   v <- interpretDoStmts body
   case mname of
     Nothing -> pure ()
@@ -997,7 +1001,7 @@ buildTopLevelEnv proxy opts =
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwPosition = SS.Unknown
-                   , rwStackTrace = []
+                   , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
                    , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv

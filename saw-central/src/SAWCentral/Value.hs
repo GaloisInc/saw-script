@@ -219,6 +219,8 @@ import qualified Data.AIG as AIG
 
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
+import SAWCentral.Trace (Trace)
+
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
 import SAWCentral.BisimulationTheorem (BisimTheorem)
@@ -655,7 +657,7 @@ data TopLevelRW =
   , rwPosition :: SS.Pos
   
     -- | The current stack trace. The most recent frame is at the front.
-  , rwStackTrace :: [String]
+  , rwStackTrace :: Trace
 
   , rwLocalEnv   :: LocalEnv
 
@@ -775,9 +777,8 @@ getPosition =
   gets rwPosition
 
 -- | Get the current stack trace.
-getStackTrace :: TopLevel [String]
-getStackTrace =
-  reverse <$> gets rwStackTrace
+getStackTrace :: TopLevel Trace
+getStackTrace = gets rwStackTrace
 
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)
