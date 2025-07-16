@@ -1062,6 +1062,19 @@ matchArg opts sc cc cs prepost md = go False []
     -- of the given SetupValue we are trying to match against. For instance,
     -- [MatchIndex 3, MatchIndex 7] means we are trying to match the MIRVal
     -- against index 7 of index 3 of the SetupValue.
+    --
+    -- At a high level, we are peeling off value projection SetupValue
+    -- constructors from `expected` when we encounter them and pushing them onto
+    -- the projStack as MatchProjs as we recurse. Eventually they have to all
+    -- come off of the projStack, which is done in a few ways:
+    -- * When we reach the base case of SetupTerm, we apply the MatchProjs to
+    --   the SAWCore term.
+    -- * When we reach a base case where the expected value is a MIRVal, such as
+    --   SetupGlobalInitializer, we apply the MatchProjs to the MIRVal.
+    -- * When we reach a SetupArray case, we can index into the SetupArray.
+    -- * When we have a match failure, we reapply the projStack back onto
+    --   `expected` as value projection SetupValue constructors, for the error
+    --   message to make sense.
     [MatchProj] ->
     MIRVal ->
     SetupValue ->
