@@ -1103,6 +1103,17 @@ have a fresh value:</p>
 fresh symbolic variables. The <code class="docutils literal notranslate"><span class="pre">MIRType</span></code> can be any type, with the exception of
 reference types (or compound types that contain references as elements or
 fields), which are not currently supported.</p>
+<p>The following functions extract components of compound MIR values:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_elem_value</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> takes an array value and an
+index, and returns the value in the array at that index.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_elem_ref</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span></code> takes a reference (or raw
+pointer) to an array, and an index, and returns a reference (resp. raw
+pointer) to the element in the array at that index.</p></li>
+</ul>
+<p>Note that unlike <code class="docutils literal notranslate"><span class="pre">llvm_elem</span></code>, <code class="docutils literal notranslate"><span class="pre">mir_elem_ref</span></code> cannot be used to specify the value
+of a specific index of an array reference without the whole array reference
+already being initialized.</p>
 <section id="mir-slices">
 <h3>MIR slices<a class="headerlink" href="#mir-slices" title="Link to this heading"></a></h3>
 <p>Slices are a unique form of compound type that is currently only used during
