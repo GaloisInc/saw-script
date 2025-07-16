@@ -14,8 +14,8 @@ Stability   : provisional
 module SAWCentral.Trace (
     Trace(),
     empty,
-    push,
-    pop,
+    legacyPush,
+    legacyPop,
     ppTrace
  ) where
 
@@ -36,13 +36,13 @@ empty :: Trace
 empty = Trace []
 
 -- | Push a new frame on a trace.
-push :: String -> Trace -> Trace
-push f (Trace fs) = Trace (f : fs)
+legacyPush :: String -> Trace -> Trace
+legacyPush f (Trace fs) = Trace (f : fs)
 
 -- | Pop a frame off a trace.
-pop :: Trace -> Trace
-pop (Trace t) = case t of
-  [] -> panic "Trace.pop" ["Popping empty stack"]
+legacyPop :: Trace -> Trace
+legacyPop (Trace t) = case t of
+  [] -> panic "Trace.legacyPop" ["Popping empty stack"]
   _ : t' -> Trace t'
 
 -- | Pretty-print a trace. For now, just unlines the strings.

@@ -437,7 +437,7 @@ withStackTraceFrame str val =
   let doTopLevel :: TopLevel a -> TopLevel a
       doTopLevel action = do
         trace <- gets rwStackTrace
-        let trace' = Trace.push str trace
+        let trace' = Trace.legacyPush str trace
         modify (\rw -> rw { rwStackTrace = trace' })
         result <- action
         modify (\rw -> rw { rwStackTrace = trace })
@@ -866,7 +866,7 @@ interpretDoStmts' mLegacyName body = do
   trace <- liftTopLevel $ gets rwStackTrace
   case mLegacyName of
     Nothing -> pure ()
-    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = Trace.push name trace })
+    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = Trace.legacyPush name trace })
   v <- interpretDoStmts body
   case mLegacyName of
     Nothing -> pure ()
