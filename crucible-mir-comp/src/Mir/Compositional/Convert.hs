@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# Language FlexibleContexts #-}
 {-# Language GADTs #-}
+{-# Language ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -145,12 +146,11 @@ readPartExprMaybe _sym (W4.PE p v)
 termToExpr :: forall sym t st fs.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
-    SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (Some (W4.SymExpr sym))
-termToExpr sym sc varMap term = do
-    sv <- termToSValue sym sc varMap term
+termToExpr sym varMap term = do
+    sv <- termToSValue sym varMap term
     case SAW.valueToSymExpr sv of
         Just x -> return x
         Nothing -> error $ "termToExpr: failed to convert SValue"
@@ -161,13 +161,12 @@ termToExpr sym sc varMap term = do
 termToReg :: forall sym t st fs tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
-    SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym sc varMap term shp0 = do
-    sv <- termToSValue sym sc varMap term
+termToReg sym varMap term shp0 = do
+    sv <- termToSValue sym varMap term
     go shp0 sv
   where
     go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
@@ -268,17 +267,17 @@ termToReg sym sc varMap term shp0 = do
 termToSValue :: forall sym t st fs.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
-    SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (SAW.SValue sym)
-termToSValue sym sc varMap term = do
+termToSValue sym varMap term = do
     let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
             Just x -> return x
             Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
                 show (W4.exprType expr)
     ecMap <- mapM convert varMap
-    ref <- newIORef mempty
+    let sc  = mirSharedContext ?mirState
+    let ref = mirUninterpFunCache ?mirState
     SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
@@ -286,12 +285,11 @@ termToSValue sym sc varMap term = do
 termToPred :: forall sym t st fs.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
     sym ->
-    SAW.SharedContext ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
     IO (W4.Pred sym)
-termToPred sym sc varMap term = do
-    Some expr <- termToExpr sym sc varMap term
+termToPred sym varMap term = do
+    Some expr <- termToExpr sym varMap term
     case W4.exprType expr of
         BaseBoolRepr -> return expr
         btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"

@@ -243,7 +243,7 @@ loadCryptolFunc col sig modulePath name = do
 
     let fnName = "cryptol_" <> modulePath <> "_" <> name
     return $ LoadedCryptolFunc argShps retShp $
-        cryptolRun sc (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
+        cryptolRun (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
 
   where
     listToCtx :: forall k0 (f0 :: k0 -> Kind.Type). [Some f0] -> Some (Assignment f0)
@@ -265,18 +265,18 @@ loadCryptolFunc col sig modulePath name = do
 cryptolRun ::
     forall sym p t st fs rtp r args ret .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
-    SAW.SharedContext ->
     String ->
     Assignment TypeShape args ->
     TypeShape ret ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
-cryptolRun sc name argShps retShp funcTerm = do
+cryptolRun name argShps retShp funcTerm = do
     sym <- getSymInterface
 
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
+    let sc = mirSharedContext ?mirState
     argTermsCtx <- Ctx.zipWithM
         (\shp (RegEntry _ val) ->
             Const <$> regToTerm sym sc name w4VarMapRef shp val)
@@ -285,7 +285,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
-    liftIO $ termToReg sym sc w4VarMap appTerm retShp
+    liftIO $ termToReg sym w4VarMap appTerm retShp
 
 munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
@@ -316,7 +316,7 @@ munge sym shp0 rv0 = do
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
         uneval shp t = do
             w4VarMap <- readIORef w4VarMapRef
-            termToReg sym sc w4VarMap t shp
+            termToReg sym w4VarMap t shp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
