@@ -204,7 +204,7 @@ instance AppSubst Expr where
     Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
     TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
     Var _                  -> expr
-    Function pos pat body  -> Function pos (appSubst s pat) (appSubst s body)
+    Lambda pos mname pat body -> Lambda pos mname (appSubst s pat) (appSubst s body)
     Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
     Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
     IfThenElse pos e e2 e3 -> IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
@@ -796,8 +796,8 @@ matches t1 t2 = do
 --    Decl _pos <function-name-pattern> Nothing <expr>
 --
 -- where <expr> is
---    zero or more times, Function _pos <arg-pattern> <expr'>
---    optionally, TSig _pos <expr''> <return-type>
+--    zero or more times, Lambda _pos <arg-pattern> <expr'>
+--    then optionally, TSig _pos <expr''> <return-type>
 --
 -- so we need any free type variables in
 --    - <function-name-pattern>
@@ -837,12 +837,12 @@ inspectPatternFTVs pat = case pat of
     PTuple _pos subpats ->
         M.unions <$> mapM inspectPatternFTVs subpats
 
--- Get the free type variables found in a chain of Function Exprs.
+-- Get the free type variables found in a chain of Lambda Exprs.
 -- Also return the body expression found on the inside of the chain
 -- for possible further analysis.
 inspectLambdaFTVs :: Expr -> TI (Expr, Map Name Pos)
 inspectLambdaFTVs e0 = case e0 of
-    Function _fpos pat e1 -> do
+    Lambda _fpos _mname pat e1 -> do
         hereFTVs <- inspectPatternFTVs pat
         (e1', moreFTVs) <- inspectLambdaFTVs e1
         return (e1', M.union hereFTVs moreFTVs)
@@ -1066,10 +1066,10 @@ inferExpr (ln, expr) = case expr of
            t' <- getFreshTyVar (getPos x)
            return (Var x, t')
 
-  Function pos pat body ->
+  Lambda pos mname pat body ->
     do (pt, pat') <- inferPattern pat
        (body', t) <- withPattern pat' $ inferExpr (ln, body)
-       return (Function pos pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
+       return (Lambda pos mname pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
 
   Application pos f arg ->
     do argtype <- getFreshTyVar pos
@@ -1533,9 +1533,10 @@ requireFunction pos ty = do
 
 -- Type inference for a declaration.
 --
--- Note that the type schema slot in Decl is always Nothing as we get
--- it from the parser; if there's an explicit type annotation on the
--- declaration that shows up as a type signature in the expression.
+-- Note that the type schema slot in Decl is always Nothing the way it
+-- comes from the parser; if there's an explicit type annotation on
+-- the declaration that shows up as a type signature in the
+-- expression.
 inferDecl :: Decl -> TI Decl
 inferDecl d@(Decl pos pat _ e) = do
   let n = patternLName pat

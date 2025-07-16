@@ -150,7 +150,10 @@ data Expr
   | TLookup Pos Expr Integer
   -- LC
   | Var (Located Name)
-  | Function Pos Pattern Expr
+  -- | All functions are handled as lambdas. We hang onto the name
+  --   from the function declaration (if there was one) for use in
+  --   stack traces.
+  | Lambda Pos (Maybe Name) Pattern Expr
   | Application Pos Expr Expr
   -- Sugar
   | Let Pos DeclGroup Expr
@@ -172,7 +175,7 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var n) = getPos n
-  getPos (Function pos _ _) = pos
+  getPos (Lambda pos _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
@@ -335,7 +338,7 @@ instance Pretty Expr where
     TLookup _ expr int -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty int
     Var (Located name _ _) ->
       PP.pretty name
-    Function _ pat expr ->
+    Lambda _ _mname pat expr ->
       "\\" PP.<+> PP.pretty pat PP.<+> "->" PP.<+> PP.pretty expr
     -- FIXME, use precedence to minimize parentheses
     Application _ f a -> PP.parens (PP.pretty f PP.<+> PP.pretty a)
@@ -413,13 +416,21 @@ instance Pretty Stmt where
         --ppName n = ppIdent (P.nameIdent n)
 
 prettyDef :: Decl -> PP.Doc ann
-prettyDef (Decl _ pat _ def) =
-   PP.pretty pat PP.<+>
-   let (args, body) = dissectLambda def
-   in (if not (null args)
-          then PP.hsep (map PP.pretty args) PP.<> PP.space
-          else PP.emptyDoc) PP.<>
-      "=" PP.<+> PP.pretty body
+prettyDef (Decl _ pat0 _ def) =
+   let dissectLambda :: Expr -> ([Pattern], Expr)
+       dissectLambda = \case
+          Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
+          expr -> ([], expr)
+       (args, body) = dissectLambda def
+       pat0' = PP.pretty pat0
+       args' =
+           if not (null args) then
+               PP.hsep (map PP.pretty args) PP.<> PP.space
+           else
+               PP.emptyDoc
+       body' = PP.pretty body
+   in
+   pat0' PP.<+> args' PP.<> "=" PP.<+> body'
 
 prettyMaybeTypedArg :: (Name, Maybe Type) -> PP.Doc ann
 prettyMaybeTypedArg (name,Nothing) =
@@ -427,10 +438,6 @@ prettyMaybeTypedArg (name,Nothing) =
 prettyMaybeTypedArg (name,Just typ) =
    PP.parens $ PP.pretty name PP.<+> PP.colon PP.<+> PPS.prettyPrec 0 typ
 
-dissectLambda :: Expr -> ([Pattern], Expr)
-dissectLambda = \case
-  Function _ pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
-  expr -> ([], expr)
 
 instance PPS.PrettyPrec Schema where
   prettyPrec _ (Forall ns t) = case ns of

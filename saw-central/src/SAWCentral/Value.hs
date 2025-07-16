@@ -26,6 +26,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 
 module SAWCentral.Value (
+    BuiltinWrapper(..),
     Value(..),
 
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
@@ -80,11 +81,12 @@ module SAWCentral.Value (
     io,
     -- used in various places in SAWCentral
     throwTopLevel,
-    -- used by SAWScript.Interpreter plus locally in a bunch of GetValue instances
-    pushPosition, popPosition,
+    -- used by SAWScript.Interpreter
+    setPosition,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
     getLocalEnv,
-    -- used in various places in SAWCentral
+    -- used in various places in SAWCentral, and in selected builtins in
+    -- SAWScript.Interpreter
     getPosition,
     -- used all over the place
     getSharedContext,
@@ -208,6 +210,7 @@ import Data.Set ( Set )
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Parameterized.Some
+import Data.Sequence (Seq)
 import Data.Typeable
 import qualified Prettyprinter as PP
 import System.FilePath((</>))
@@ -284,6 +287,10 @@ import Heapster.SAWTranslation (ChecksFlag,SomeTypedCFG(..))
 
 -- Values ----------------------------------------------------------------------
 
+data BuiltinWrapper
+  = OneMoreArg (Value -> TopLevel Value)
+  | ManyMoreArgs (Value -> TopLevel BuiltinWrapper)
+
 data Value
   = VBool Bool
   | VString Text
@@ -291,20 +298,20 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda LocalEnv SS.Pattern SS.Expr
+  | VLambda LocalEnv (Maybe SS.Name) SS.Pattern SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
-    --   is how builtins appear.
-    --
-    -- XXX: Calling this "VBuiltin" was optimistic. It actually covers
-    -- everything function-shaped that isn't a SAWScript-level lambda,
-    -- which includes not just builtins but also the closures used to
-    -- implement stack traces and possibly other messes, all of which
-    -- should be removed.
-  | VBuiltin (Value -> TopLevel Value)
+    --   is how builtins appear. Includes the name of the builtin and
+    --   the list of arguments applied so far, as a Seq to allow
+    --   appending to the end reasonably.
+  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+    -- XXX: This should go away. Fortunately, it's only used by the
+    -- closures that implement stack traces, which are scheduled for
+    -- removal soon.
+  | VClosure (SS.Pos -> Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad
-  | VReturn Value
+  | VReturn SS.Pos Value
     -- | Not-yet-executed do-block in unspecified monad
     --
     --   The string is a hack hook for the current implementation of
@@ -314,23 +321,23 @@ data Value
     -- | Single monadic bind in unspecified monad.
     --   This exists only to support the "for" builtin; see notes there
     --   for why this is so. XXX: remove it once that's no longer needed
-  | VBindOnce Value Value
-  | VTopLevel (TopLevel Value)
-  | VProofScript (ProofScript Value)
+  | VBindOnce SS.Pos Value Value
+  | VTopLevel SS.Pos (TopLevel Value)
+  | VProofScript SS.Pos (ProofScript Value)
   | VSimpset SAWSimpset
   | VRefnset SAWRefnset
   | VTheorem Theorem
   | VBisimTheorem BisimTheorem
   -----
-  | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
+  | VLLVMCrucibleSetup SS.Pos !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
-  | VJVMSetup !(JVMSetupM Value)
+  | VJVMSetup SS.Pos !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
-  | VMIRSetup !(MIRSetupM Value)
+  | VMIRSetup SS.Pos !(MIRSetupM Value)
   | VMIRMethodSpec !(CMS.ProvedSpec MIR)
   | VMIRSetupValue !(CMS.SetupValue MIR)
   -----
@@ -475,20 +482,24 @@ showsPrecValue opts nenv p v =
           showFld (n, fv) =
             showString (Text.unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
-    VLambda _env pat e ->
+    VLambda _env _mname pat e ->
       let pat' = PP.pretty pat
           e' = PP.pretty e
       in
       shows $ PP.sep ["\\", pat', "->", e']
 
-    VBuiltin {} -> showString "<<builtin>>"
+    VBuiltin name _args _wrapper ->
+      let name' = PP.pretty name in
+      shows $ PP.sep ["<<", "builtin", name', ">>"]
+
+    VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
-    VReturn v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
+    VReturn _pos v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
     VDo pos _name _env body ->
       let e = SS.Block pos body in
       shows (PP.pretty e)
-    VBindOnce v1 v2 ->
+    VBindOnce _pos v1 v2 ->
       let v1' = showsPrecValue opts nenv 0 v1
           v2' = showsPrecValue opts nenv 0 v2
       in
@@ -529,7 +540,7 @@ showsPrecValue opts nenv p v =
     VYosysImport _ -> showString "<<Yosys import>>"
     VYosysSequential _ -> showString "<<Yosys sequential>>"
     VYosysTheorem _ -> showString "<<Yosys theorem>>"
-    VJVMSetup _      -> showString "<<JVM Setup>>"
+    VJVMSetup{}      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
     VMIRSetup{} -> showString "<<MIR Setup>>"
@@ -635,12 +646,17 @@ data TopLevelRW =
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
-  , rwPosition   :: SS.Pos
+
+    -- | The current execution position. This is only valid when the
+    --   interpreter is calling out into saw-central to execute a
+    --   builtin. Within the interpreter, the current position is
+    --   either passed around or the position in the current AST
+    --   element, and those positions should be used instead.
+  , rwPosition :: SS.Pos
+  
+    -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: [String]
-    -- ^ SAWScript-internal backtrace for use
-    --   when displaying exceptions and such
-    --   NB, stored with most recent calls on
-    --   top of the stack.
+
   , rwLocalEnv   :: LocalEnv
 
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
@@ -744,34 +760,21 @@ throwTopLevel msg = do
   stk <- getStackTrace
   throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
 
--- deprecated
---withPosition :: SS.Pos -> TopLevel a -> TopLevel a
---withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
-
--- | Replacement pair for withPosition.
---   Usage:
---      savepos = pushPosition newpos
---      ...
---      popPosition savepos
---
-pushPosition :: SS.Pos -> TopLevel SS.Pos
-pushPosition newpos = do
-  oldpos <- gets rwPosition
+-- | Set the current execution position.
+setPosition :: SS.Pos -> TopLevel ()
+setPosition newpos = do
   modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
-  return oldpos
-
-popPosition :: SS.Pos -> TopLevel ()
-popPosition restorepos = do
-  modifyTopLevelRW (\rw -> rw { rwPosition = restorepos })
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv =
   gets rwLocalEnv
 
+-- | Get the current execution position.
 getPosition :: TopLevel SS.Pos
 getPosition =
   gets rwPosition
 
+-- | Get the current stack trace.
 getStackTrace :: TopLevel [String]
 getStackTrace =
   reverse <$> gets rwStackTrace
