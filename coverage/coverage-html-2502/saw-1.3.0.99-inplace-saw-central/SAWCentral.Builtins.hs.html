@@ -1567,8 +1567,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1548 </span>
 <span class="lineno"> 1549 </span>-- | Quick check (random test) a term and print the result. The
 <span class="lineno"> 1550 </span>-- 'Integer' parameter is the number of random tests to run.
-<span class="lineno"> 1551 </span>quickCheckPrintPrim :: Options -&gt; SharedContext -&gt; Integer -&gt; TypedTerm -&gt; IO ()
-<span class="lineno"> 1552 </span><span class="decl"><span class="nottickedoff">quickCheckPrintPrim opts sc numTests tt =</span>
+<span class="lineno"> 1551 </span>quickCheckPrintPrim :: SharedContext -&gt; Options -&gt; Integer -&gt; TypedTerm -&gt; IO ()
+<span class="lineno"> 1552 </span><span class="decl"><span class="nottickedoff">quickCheckPrintPrim sc opts numTests tt =</span>
 <span class="lineno"> 1553 </span><span class="spaces">  </span><span class="nottickedoff">do prop &lt;- predicateToProp sc Universal (ttTerm tt)</span>
 <span class="lineno"> 1554 </span><span class="spaces">     </span><span class="nottickedoff">satq &lt;- propToSATQuery sc mempty prop</span>
 <span class="lineno"> 1555 </span><span class="spaces">     </span><span class="nottickedoff">testGen &lt;- prepareSATQuery sc satq</span>
