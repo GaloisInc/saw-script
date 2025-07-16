@@ -1414,7 +1414,7 @@ matchArg opts sc cc cs prepost md = go False []
       fail_ :: OverrideMatcher MIR w a
       fail_ = failure loc =<<
                 mkStructuralMismatch opts cc sc cs actual
-                  (applyProjToSetupValue projStack expected)
+                  (reapplyProjToSetupValue projStack expected)
 
       -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
       matchFields ::
@@ -1447,7 +1447,7 @@ matchArg opts sc cc cs prepost md = go False []
         unless (expectedSliceInfo == actualSliceInfo) fail_
 
       notEq = notEqual prepost opts loc cc sc cs
-        (applyProjToSetupValue projStack expected)
+        (reapplyProjToSetupValue projStack expected)
         actual
 
 {-
@@ -1931,10 +1931,10 @@ applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
 -- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
 -- anything from the given 'SetupValue', but rather just applies projection
 -- 'SetupValue' constructors to it.
-applyProjToSetupValue ::
+reapplyProjToSetupValue ::
   [MatchProj] {- ^ stack of projections -}->
   SetupValue ->
   SetupValue
-applyProjToSetupValue = flip (foldl projToCtor)
+reapplyProjToSetupValue = flip (foldl projToCtor)
   where
     projToCtor sv (MatchIndex i) = MS.SetupElem MirIndexIntoVal sv i
