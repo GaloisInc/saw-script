@@ -1080,6 +1080,15 @@ matchArg opts sc cc cs prepost md = go False []
     | otherwise =
       mccWithBackend cc $ \bak -> do
       let sym = backendGetSym bak
+      -- The top of the `projStack` represents the projection to apply to
+      -- `expected`. So, for instance, if there is a case where
+      -- `typeOfSetupValue expected` might be `Mir.TyArray`, then it should
+      -- handle the possibility of the top of the `projStack` being
+      -- `MatchIndex`, since it is valid to apply `SetupElem MirIndexIntoVal` on
+      -- `expected`. On the other hand, for cases where `expected` can never be
+      -- an array type, `projStack` should be matched to `[]`, so if the user
+      -- attempted to index into it, the pattern match would fail and an error
+      -- would be reported.
       case (projStack, actual, expected) of
         ([], MIRVal (RefShape refTy pointeeTy mutbl tpr) ref, MS.SetupVar var)
           | inCast ->
