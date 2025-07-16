@@ -1117,59 +1117,74 @@ matchArg opts sc cc cs prepost md = go False []
           -- we don't know the true type until we get to a SetupVar.
           go True [] actual v
 
-        -- match arrays point-wise
-        ([], MIRVal (ArrayShape _ _ elemShp) xs, MS.SetupArray _elemTy zs)
-          | Mir.MirVector_Vector xs' <- xs
-          , V.length xs' == length zs ->
-            sequence_
-              [ go inCast [] (MIRVal elemShp x) z
-              | (x, z) <- zip (V.toList xs') zs ]
+        (_, _, MS.SetupArray _elemTy zs) ->
+          case projStack of
 
-          | Mir.MirVector_PartialVector xs' <- xs
-          , V.length xs' == length zs ->
-            do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
-               sequence_
-                 [ go inCast [] (MIRVal elemShp x) z
-                 | (x, z) <- zip (V.toList xs'') zs ]
+            -- match an index of a SetupArray by just indexing into it
+            MatchIndex i : restProjStack ->
+              case zs ^? ix i of
+                Just z -> go inCast restProjStack actual z
+                Nothing -> fail_
 
-        -- match an index of a SetupArray by just indexing into it
-        (MatchIndex i : restProjStack, _, MS.SetupArray _ zs)
-          | Just z <- zs ^? ix i ->
-            go inCast restProjStack actual z
+            -- match arrays point-wise
+            [] ->
+              case actual of
+                MIRVal (ArrayShape _ _ elemShp) xs
+                  | Mir.MirVector_Vector xs' <- xs
+                  , V.length xs' == length zs ->
+                    sequence_
+                      [ go inCast [] (MIRVal elemShp x) z
+                      | (x, z) <- zip (V.toList xs') zs ]
 
-        -- match value SetupElem by pushing MatchIndex onto the projection stack
-        (_, _, MS.SetupElem MirIndexIntoVal setupArr i) ->
-          go inCast (MatchIndex i : projStack) actual setupArr
+                  | Mir.MirVector_PartialVector xs' <- xs
+                  , V.length xs' == length zs ->
+                    do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
+                       sequence_
+                         [ go inCast [] (MIRVal elemShp x) z
+                         | (x, z) <- zip (V.toList xs'') zs ]
 
-        -- match reference SetupElem by getting the reference to the containing
-        -- vector
-        ([],
-         MIRVal (RefShape elemRefTy elemTy elemMutbl elemTpr) elemRef,
-         MS.SetupElem MirIndexIntoRef setupArrRef i) -> do
-            arrRefTy <- typeOfSetupValue cc tyenv nameEnv setupArrRef
-            case tyToShape col arrRefTy of
-              Some arrRefShp@(RefShape _
-                                       (Mir.TyArray elemTy' _)
-                                       arrMutbl
-                                       (Mir.MirVectorRepr elemTpr'))
-                -- check that the expected and actual types match
-                | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
-                , checkCompatibleTys elemTy elemTy'
-                , elemMutbl == arrMutbl
-                , Just Refl <- W4.testEquality elemTpr elemTpr' -> do
-                  -- get the reference to the containing vector and the index of
-                  -- the current reference within it
-                  Ctx.Empty Ctx.:> Crucible.RV arrRef
-                            Ctx.:> Crucible.RV i'_sym <-
-                    liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef
-                  -- the index should be concrete
-                  case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
-                    Just i'
-                      -- make sure the expected and actual indices match
-                      | i == i' ->
-                        go inCast [] (MIRVal arrRefShp arrRef) setupArrRef
+                _ -> fail_
+
+        (_, _, MS.SetupElem mode z i) ->
+          case mode of
+
+            -- match value SetupElem by pushing MatchIndex onto the projection
+            -- stack
+            MirIndexIntoVal ->
+              go inCast (MatchIndex i : projStack) actual z
+
+            -- match reference SetupElem by getting the reference to the
+            -- containing vector
+            MirIndexIntoRef ->
+              case actual of
+                MIRVal (RefShape elemRefTy elemTy elemMutbl elemTpr) elemRef -> do
+                  arrRefTy <- typeOfSetupValue cc tyenv nameEnv z
+                  case tyToShape col arrRefTy of
+                    Some arrRefShp@(RefShape _
+                                             (Mir.TyArray elemTy' _)
+                                             arrMutbl
+                                             (Mir.MirVectorRepr elemTpr'))
+                      | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
+                      , checkCompatibleTys elemTy elemTy'
+                      , elemMutbl == arrMutbl
+                      , Just Refl <- W4.testEquality elemTpr elemTpr' -> do
+                        -- get the reference to the containing vector and the
+                        -- index of the current reference within it
+                        Ctx.Empty Ctx.:> Crucible.RV arrRef
+                                  Ctx.:> Crucible.RV i'_sym <-
+                          liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef
+                        -- the index should be concrete
+                        case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
+                          Just i'
+                            -- make sure the expected and actual indices match
+                            | i == i' ->
+                              go inCast [] (MIRVal arrRefShp arrRef) z
+                          _ -> fail_
                     _ -> fail_
-              _ -> fail_
+                _ -> fail_
+
+            MirIndexOffsetRef ->
+              panic "matchArg" ["MirIndexOffsetRef not yet implemented"]
 
         -- match the underlying, non-zero-sized field of a repr(transparent)
         -- struct
@@ -1873,14 +1888,17 @@ applyProjToTerm ::
   Term ->
   OverrideMatcher MIR w (Cryptol.TValue, Term)
     -- ^ result term and its Cryptol type
-applyProjToTerm sym fail_ = go
-  where
-    go [] tp term = pure (tp, term)
-    go (MatchIndex i : projStack) (Cryptol.TVSeq sz tp) term
-      | i >= 0 && fromIntegral i < sz = do
-        doIndex <- liftIO $ indexSeqTerm sym (sz, tp) term
-        go projStack tp =<< liftIO (doIndex i)
-    go _ _ _ = fail_
+applyProjToTerm sym fail_ projStack tp term =
+  case projStack of
+    [] -> pure (tp, term)
+    MatchIndex i : restProjStack ->
+      case tp of
+        Cryptol.TVSeq sz elemTp
+          | i >= 0 && fromIntegral i < sz -> do
+            doIndex <- liftIO $ indexSeqTerm sym (sz, elemTp) term
+            term' <- liftIO $ doIndex i
+            applyProjToTerm sym fail_ restProjStack elemTp term'
+        _ -> fail_
 
 -- | Apply a stack of projections to a 'MIRVal'.
 applyProjToMIRVal ::
@@ -1890,11 +1908,12 @@ applyProjToMIRVal ::
   MIRVal ->
   MaybeT m MIRVal
 applyProjToMIRVal _ [] mv = pure mv
-applyProjToMIRVal sym
-                  (MatchIndex i : projStack)
-                  (MIRVal (ArrayShape _ _ elemShp) vec) =
-  applyProjToMIRVal sym projStack =<< indexMirVector sym i elemShp vec
-applyProjToMIRVal _ _ _ = Applicative.empty
+applyProjToMIRVal sym (MatchIndex i : projStack) (MIRVal shp vec) =
+  case shp of
+    ArrayShape _ _ elemShp ->
+      applyProjToMIRVal sym projStack =<< indexMirVector sym i elemShp vec
+    _ ->
+      Applicative.empty
 
 -- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
 -- anything from the given 'SetupValue', but rather just applies projection
