@@ -19,6 +19,8 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , resolveTypedTerm
   , resolveBoolTerm
   , resolveSAWPred
+  , indexSeqTerm
+  , indexMirVector
   , equalRefsPred
   , equalValsPred
   , checkCompatibleTys
@@ -226,6 +228,11 @@ data MIRTypeOfError
   | MIRMuxNonBoolCondition Mir.Ty
   | MIRMuxDifferentBranchTypes Mir.Ty Mir.Ty
   | MIRCastNonRawPtr Mir.Ty
+  | MIRIndexOutOfBounds
+      Mir.Ty -- ^ sequence type
+      Int    -- ^ sequence length
+      Int    -- ^ attempted index
+  | MIRIndexWrongTy MirIndexingMode Mir.Ty
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -286,6 +293,24 @@ instance Show MIRTypeOfError where
     , "Expected a raw pointer (*const T or *mut T), but got"
     , show (PP.pretty ty)
     ]
+  show (MIRIndexOutOfBounds xsTy len i) =
+    unlines
+    [ "Index out of bounds:"
+    , "Indexing into: " ++ show (PP.pretty xsTy)
+    , "with length:   " ++ show len
+    , "at index:      " ++ show i
+    ]
+  show (MIRIndexWrongTy ixMode ty) =
+    unlines
+    [ "Expected " ++ expected ++ ", but got"
+    , show (PP.pretty ty)
+    ]
+    where
+      expected =
+        case ixMode of
+          MirIndexIntoVal -> "an array"
+          MirIndexIntoRef -> "a reference (or raw pointer) to an array"
+          MirIndexOffsetRef -> "a reference or raw pointer"
 
 staticNotFoundErr :: Mir.DefId -> String
 staticNotFoundErr did =
@@ -361,8 +386,25 @@ typeOfSetupValue mcc env nameEnv val =
           pure $ Mir.TyRawPtr newPointeeTy mutbl
         _ -> X.throwM $ MIRCastNonRawPtr oldPtrTy
 
-    MS.SetupElem _ _ _ ->
-      panic "MIRSetup (in typeOfSetupValue)" ["elems not yet implemented"]
+    MS.SetupElem ixMode xs i -> do
+      xsTy <- typeOfSetupValue mcc env nameEnv xs
+      let boundsCheck len res
+            | i >= 0 && i < len = pure res
+            | otherwise = X.throwM $ MIRIndexOutOfBounds xsTy len i
+          throwWrongTy = X.throwM $ MIRIndexWrongTy ixMode xsTy
+      case ixMode of
+        MirIndexIntoVal ->
+          case xsTy of
+            Mir.TyArray elemTy len -> boundsCheck len elemTy
+            _ -> throwWrongTy
+        MirIndexIntoRef ->
+          case tyToShape col xsTy of
+            Some (RefShape ptrTy (Mir.TyArray elemTy len) mutbl _) ->
+              boundsCheck len $ ptrKindToTy (tyToPtrKind ptrTy) elemTy mutbl
+            _ -> throwWrongTy
+        MirIndexOffsetRef ->
+          panic "MIRSetup (in typeOfSetupValue)"
+            ["MirIndexOffsetRef not yet implemented"]
     MS.SetupField _ _ _ ->
       panic "MIRSetup (in typeOfSetupValue)" ["fields not yet implemented"]
 
@@ -370,6 +412,7 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupUnion empty _ _           -> absurd empty
   where
     cs = mcc ^. mccRustModule . Mir.rmCS
+    col = cs ^. Mir.collection
 
     typeOfSliceFromArrayRef :: MirSliceInfo -> SetupValue -> m Mir.Ty
     typeOfSliceFromArrayRef sliceInfo arrRef = do
@@ -666,7 +709,33 @@ resolveSetupVal mcc env tyenv nameEnv val =
                         vals
       return $ MIRVal (ArrayShape (Mir.TyArray elemTy (V.length vals)) elemTy shp)
                       (Mir.MirVector_Vector vals')
-    MS.SetupElem _ _ _                -> panic "resolveSetupValue" ["elems not yet implemented"]
+    MS.SetupElem ixMode xs i -> do
+      MIRVal xsShp xsVal <- resolveSetupVal mcc env tyenv nameEnv xs
+      case ixMode of
+        MirIndexIntoVal
+          | ArrayShape arrTy@(Mir.TyArray _ len) _ elemShp <- xsShp -> do
+            res <- runMaybeT $ indexMirVector sym i elemShp xsVal
+            case res of
+              Just mv -> pure mv
+              Nothing -> X.throwM $ MIRIndexOutOfBounds arrTy len i
+        MirIndexIntoRef
+          | RefShape ptrTy
+                     (Mir.TyArray elemTy len)
+                     mutbl
+                     (Mir.MirVectorRepr elemTpr)
+              <- xsShp ->
+            if i >= 0 && i < len
+              then do
+                let elemPtrTy = ptrKindToTy (tyToPtrKind ptrTy) elemTy mutbl
+                i_sym <- usizeBvLit sym i
+                MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
+                  Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym
+              else
+                X.throwM $ MIRIndexOutOfBounds ptrTy len i
+        MirIndexOffsetRef ->
+          panic "resolveSetupValue" ["MirIndexOffsetRef not yet implemented"]
+        _ ->
+          X.throwM $ MIRIndexWrongTy ixMode (shapeMirTy xsShp)
     MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
     MS.SetupCast newPointeeTy oldPtrSetupVal -> do
       MIRVal oldShp ref <- resolveSetupVal mcc env tyenv nameEnv oldPtrSetupVal
@@ -723,9 +792,6 @@ resolveSetupVal mcc env tyenv nameEnv val =
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
     iTypes = mcc ^. mccIntrinsicTypes
-
-    usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
-    usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
 
     -- Perform a light amount of typechecking on the fields in a struct or enum
     -- variant. This ensures that the variant receives the expected number of
@@ -920,10 +986,7 @@ resolveSAWTerm mcc tp tm =
          MIRVal (PrimShape (Mir.TyUint b) (W4.BaseBVRepr n)) <$>
          resolveBitvectorTerm sym n tm
     Cryptol.TVSeq sz tp' -> do
-      st <- sawCoreState sym
-      let sc = saw_ctx st
-      sz_tm <- scNat sc (fromIntegral sz)
-      tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
+      doIndex <- indexSeqTerm sym (sz, tp') tm
       case toMIRType tp' of
         Left e -> fail ("In resolveSAWTerm: " ++ toMIRTypeErrToString e)
         Right mirTy -> do
@@ -933,8 +996,7 @@ resolveSAWTerm mcc tp tm =
 
               f :: Int -> IO (RegValue Sym tp)
               f i = do
-                i_tm <- scNat sc (fromIntegral i)
-                tm' <- scAt sc sz_tm tp_tm tm i_tm
+                tm' <- doIndex i
                 MIRVal shp' val <- resolveSAWTerm mcc tp' tm'
                 Refl <- case W4.testEquality shp shp' of
                           Just r -> pure r
@@ -1044,6 +1106,48 @@ toMIRType tp =
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
     Cryptol.TVNominal {} -> Left (Impossible "nominal")
+
+-- | Index into a 'Term' which has a Cryptol sequence type. Curried so that we
+-- can save some work if we want to index multiple times into the same term.
+indexSeqTerm ::
+  Sym ->
+  (Integer, Cryptol.TValue)
+    {- ^ length and Cryptol element type of the sequence -} ->
+  Term {- ^ term to index into -} ->
+  IO (Int -> IO Term) -- ^ the indexing function
+indexSeqTerm sym (sz, elemTp) tm = do
+  st <- sawCoreState sym
+  let sc = saw_ctx st
+  sz_tm <- scNat sc (fromInteger sz)
+  elemTp_tm <- importType sc emptyEnv (Cryptol.tValTy elemTp)
+  pure $ \i -> do
+    i_tm <- scNat sc (fromIntegral i)
+    scAt sc sz_tm elemTp_tm tm i_tm
+
+-- | Index into a 'MIRVal' with an 'ArrayShape' 'TypeShape'. Returns 'Nothing'
+-- if the index is out of bounds.
+indexMirVector ::
+  MonadIO m =>
+  Sym ->
+  Int {- ^ the index -} ->
+  TypeShape elemTp {- ^ 'TypeShape' of the array elements -} ->
+  Mir.MirVector Sym elemTp {- ^ 'RegValue' of the 'MIRVal' -} ->
+  MaybeT m MIRVal
+indexMirVector sym i elemShp vec =
+  MIRVal elemShp <$>
+    case vec of
+      Mir.MirVector_Vector vs ->
+        MaybeT $ pure $ vs V.!? i
+      Mir.MirVector_PartialVector vs ->
+        MaybeT $ pure $
+          readMaybeType sym "vector element" (shapeType elemShp) <$> vs V.!? i
+      Mir.MirVector_Array array -> liftIO $ do
+        i_sym <- usizeBvLit sym i
+        W4.arrayLookup sym array (Ctx.Empty Ctx.:> i_sym)
+
+-- | Create a symbolic @usize@ from an 'Int'.
+usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
+usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
 
 -- | Check if two MIR references are equal.
 equalRefsPred ::
@@ -1732,7 +1836,7 @@ containsCast (MS.SetupTerm _) = False
 containsCast (MS.SetupNull empty) = absurd empty
 containsCast (MS.SetupStruct _ vs) = any containsCast vs
 containsCast (MS.SetupArray _ vs) = any containsCast vs
-containsCast (MS.SetupElem () v _) = containsCast v
+containsCast (MS.SetupElem _ v _) = containsCast v
 containsCast (MS.SetupField () v _) = containsCast v
 containsCast (MS.SetupCast _ _) = True
 containsCast (MS.SetupUnion empty _ _) = absurd empty

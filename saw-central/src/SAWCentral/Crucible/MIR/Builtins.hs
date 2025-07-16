@@ -39,6 +39,9 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_slice_range_value
   , mir_str_slice_value
   , mir_str_slice_range_value
+    -- ** MIR projections
+  , mir_elem_value
+  , mir_elem_ref
     -- ** MIR muxing
   , mir_mux_values
     -- ** MIR types
@@ -869,6 +872,16 @@ mir_str_slice_range_value ::
   MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
 mir_str_slice_range_value arrRef start end =
   MS.SetupSlice (MirSetupSliceRange MirStrSlice arrRef start end)
+
+-----
+-- MIR projections
+-----
+
+mir_elem_value :: MS.SetupValue MIR -> Int -> MS.SetupValue MIR
+mir_elem_value = MS.SetupElem MirIndexIntoVal
+
+mir_elem_ref :: MS.SetupValue MIR -> Int -> MS.SetupValue MIR
+mir_elem_ref = MS.SetupElem MirIndexIntoRef
 
 -----
 -- MIR muxing

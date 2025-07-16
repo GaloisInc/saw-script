@@ -1013,6 +1013,18 @@ fresh symbolic variables. The `MIRType` can be any type, with the exception of
 reference types (or compound types that contain references as elements or
 fields), which are not currently supported.
 
+The following functions extract components of compound MIR values:
+
+- `mir_elem_value : MIRValue -> Int -> MIRValue` takes an array value and an
+  index, and returns the value in the array at that index.
+- `mir_elem_ref : MIRValue -> Int -> MIRValue` takes a reference (or raw
+  pointer) to an array, and an index, and returns a reference (resp. raw
+  pointer) to the element in the array at that index.
+
+Note that unlike `llvm_elem`, `mir_elem_ref` cannot be used to specify the value
+of a specific index of an array reference without the whole array reference
+already being initialized.
+
 ### MIR slices
 
 Slices are a unique form of compound type that is currently only used during

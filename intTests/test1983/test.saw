@@ -1,0 +1,68 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let get_3_spec = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_i32);
+    mir_execute_func [mir_term xs];
+    mir_return (mir_elem_value (mir_term xs) 3);
+};
+
+get_3_ov <- mir_verify m "test::get_3" [] false get_3_spec z3;
+
+let get_3_ref_spec = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_i32);
+    r <- mir_ref_of (mir_term xs);
+    mir_execute_func [r];
+    mir_return (mir_elem_ref r 3);
+};
+
+get_3_ref_ov <- mir_verify m "test::get_3_ref" [] false get_3_ref_spec z3;
+
+let get_19_3_spec = do {
+    xss <- mir_fresh_var "xss" (mir_array 20 (mir_array 10 mir_i32));
+    mir_execute_func [mir_term xss];
+    mir_return (mir_elem_value (mir_elem_value (mir_term xss) 19) 3);
+};
+
+get_19_3_ov <- mir_verify m "test::get_19_3" [get_3_ov] false get_19_3_spec z3;
+
+let get_19_3_ref_spec = do {
+    xss <- mir_fresh_var "xss" (mir_array 20 (mir_array 10 mir_i32));
+    r <- mir_ref_of (mir_term xss);
+    mir_execute_func [r];
+    mir_return (mir_elem_ref (mir_elem_ref r 19) 3);
+};
+
+get_19_3_ref_ov <- mir_verify m "test::get_19_3_ref" [get_3_ref_ov] false get_19_3_ref_spec z3;
+
+let get_25_19_3_spec = do {
+    xsss <- mir_fresh_var "xsss" (mir_array 30 (mir_array 20 (mir_array 10 mir_i32)));
+    mir_execute_func [mir_term xsss];
+    mir_return (mir_elem_value (mir_elem_value (mir_elem_value (mir_term xsss) 25) 19) 3);
+};
+
+mir_verify m "test::get_25_19_3" [get_19_3_ov] false get_25_19_3_spec z3;
+
+let get_25_19_3_ref_spec = do {
+    xsss <- mir_fresh_var "xsss" (mir_array 30 (mir_array 20 (mir_array 10 mir_i32)));
+    r <- mir_ref_of (mir_term xsss);
+    mir_execute_func [r];
+    mir_return (mir_elem_ref (mir_elem_ref (mir_elem_ref r 25) 19) 3);
+};
+
+mir_verify m "test::get_25_19_3_ref" [get_19_3_ref_ov] false get_25_19_3_ref_spec z3;
+
+let get_static_2_spec = do {
+    mir_execute_func [];
+    mir_return (mir_elem_value (mir_static_initializer "test::ARRAY") 2);
+};
+
+mir_verify m "test::get_static_2" [] false get_static_2_spec z3;
+
+let get_static_2_ref_spec = do {
+    mir_execute_func [];
+    mir_return (mir_elem_ref (mir_static "test::ARRAY") 2);
+};
+
+mir_verify m "test::get_static_2_ref" [] false get_static_2_ref_spec z3;

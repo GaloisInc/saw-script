@@ -406,7 +406,8 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (TransparentShape _ shp) rv sv = go shp rv sv
     go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
         goRef refTy pointeeTy mutbl tpr ref alloc 0
-    go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
+    go (RefShape refTy pointeeTy mutbl tpr) ref
+            (MS.SetupElem MirIndexOffsetRef (MS.SetupVar alloc) idx) =
         goRef refTy pointeeTy mutbl tpr ref alloc idx
     go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len)
                                    (MS.SetupSlice (MirSetupSliceRaw refSV lenSV)) = do
