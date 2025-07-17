@@ -1,0 +1,84 @@
+ Loading file "trace004.saw"
+ 
+ ------------------------------------------------------------
+ just llvm_stack
+Stack trace:
+"llvm_verify" (trace004.saw:15:1-15:12)
+"llvm_stack" (trace004.saw:15:32-15:42)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+ 
+ ------------------------------------------------------------
+ llvm_stack via let
+Stack trace:
+"llvm_verify" (trace004.saw:23:1-23:12)
+"spec0" (trace004.saw:23:32-23:37)
+"llvm_stack" (trace004.saw:22:13-22:23)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+ 
+ ------------------------------------------------------------
+ do-block
+Stack trace:
+"llvm_verify" (trace004.saw:29:1-29:12)
+"llvm_stack" (trace004.saw:29:38-29:48)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+Stack trace:
+"llvm_verify" (trace004.saw:30:1-30:12)
+"llvm_stack" (trace004.saw:30:60-30:70)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+ 
+ ------------------------------------------------------------
+ action
+Stack trace:
+"llvm_verify" (trace004.saw:38:1-38:12)
+"spec1" (trace004.saw:38:32-38:37)
+"llvm_stack" (trace004.saw:36:18-36:28)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+Stack trace:
+"llvm_verify" (trace004.saw:39:1-39:12)
+"llvm_stack" (trace004.saw:37:40-37:50)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+ 
+ ------------------------------------------------------------
+ function
+Stack trace:
+"llvm_verify" (trace004.saw:47:1-47:12)
+"spec3" (trace004.saw:47:33-47:38)
+"llvm_stack" (trace004.saw:45:21-45:31)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+Stack trace:
+"llvm_verify" (trace004.saw:48:1-48:12)
+"llvm_stack" (trace004.saw:46:43-46:53)
+
+ Verifying foo...
+ Simulating foo...
+ Checking proof obligations foo...
+ Proof succeeded! foo
+ 

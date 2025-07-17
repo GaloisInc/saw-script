@@ -1,0 +1,4 @@
+enable_experimental;
+
+// most basic case
+print_stack;

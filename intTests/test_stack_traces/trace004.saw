@@ -1,0 +1,49 @@
+enable_experimental;
+mod <- llvm_load_module "test.bc";
+print "";
+
+// calls in LLVMSetup
+//
+// This is basically like trace003, for the same reasons, except in
+// LLVMSetup.
+
+
+// Test just llvm_stack by itself.
+// This probably should not actually verify, but it does...
+print "------------------------------------------------------------";
+print "just llvm_stack";
+llvm_verify mod "foo" [] false llvm_stack z3;
+print "";
+
+// Test just llvm_stack via a let-binding.
+// This probably should not actually verify, but it does...
+print "------------------------------------------------------------";
+print "llvm_stack via let";
+let spec0 = llvm_stack;
+llvm_verify mod "foo" [] false spec0 z3;
+print "";
+
+// Test with an inline do-block.
+print "------------------------------------------------------------";
+print "do-block";
+llvm_verify mod "foo" [] false (do { llvm_stack; llvm_execute_func []; }) z3;
+llvm_verify mod "foo" [] false (do { llvm_execute_func []; llvm_stack; }) z3;
+print "";
+
+// Test with an action that doesn't take arguments.
+print "------------------------------------------------------------";
+print "action";
+let spec1 = do { llvm_stack; llvm_execute_func []; };
+let spec2 = do { llvm_execute_func []; llvm_stack; };
+llvm_verify mod "foo" [] false spec1 z3;
+llvm_verify mod "foo" [] false spec2 z3;
+print "";
+
+// Test with an action that does take arguments.
+print "------------------------------------------------------------";
+print "function";
+let spec3 () = do { llvm_stack; llvm_execute_func []; };
+let spec4 () = do { llvm_execute_func []; llvm_stack; };
+llvm_verify mod "foo" [] false (spec3 ()) z3;
+llvm_verify mod "foo" [] false (spec4 ()) z3;
+print "";

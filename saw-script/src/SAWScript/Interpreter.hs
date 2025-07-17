@@ -45,6 +45,7 @@ import qualified Data.Sequence as Seq (empty)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
+import qualified Data.Text.IO as TextIO
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
@@ -1703,6 +1704,25 @@ caseSatResultPrim sr vUnsat vSat = do
       tt <- io $ typedTermOfFirstOrderValue sc fov
       applyValue pos info vSat (toValue tt)
 
+print_stack :: TopLevel ()
+print_stack = do
+  trace <- getStackTrace
+  let trace' = Trace.ppTrace trace
+  io $ TextIO.putStrLn "Stack trace:"
+  io $ TextIO.putStrLn trace'
+
+proof_stack :: ProofScript ()
+proof_stack = scriptTopLevel print_stack
+
+llvm_stack :: LLVMCrucibleSetupM ()
+llvm_stack = llvmTopLevel print_stack
+
+jvm_stack :: JVMSetupM ()
+jvm_stack = jvmTopLevel print_stack
+
+mir_stack :: MIRSetupM ()
+mir_stack = mirTopLevel print_stack
+
 enable_safety_proofs :: TopLevel ()
 enable_safety_proofs = do
   rw <- getTopLevelRW
@@ -2378,6 +2398,34 @@ primitives = Map.fromList
     , "the list containing the result returned by the command at each"
     , "iteration."
     ]
+
+    -- In principle we could have one monad-polymorphic builtin, but
+    -- monad-polymorphic builtins don't currently work.
+    --
+    -- FUTURE: because these are only intended for use by the test
+    -- suite, it might make sense to add a different category for that
+    -- instead of Experimental, to make it extra clear that third
+    -- parties shouldn't use these.
+  , prim "print_stack"         "TopLevel ()"
+    (pureVal print_stack)
+    Experimental
+    [ "Print the SAWScript interpreter's current stack trace, for testing." ]
+  , prim "proof_stack"         "ProofScript ()"
+    (pureVal proof_stack)
+    Experimental
+    [ "ProofScript version of print_stack." ]
+  , prim "llvm_stack"          "LLVMSetup ()"
+    (pureVal llvm_stack)
+    Experimental
+    [ "LLVMSetup version of print_stack." ]
+  , prim "jvm_stack"           "JVMSetup ()"
+    (pureVal jvm_stack)
+    Experimental
+    [ "JVMSetup version of print_stack." ]
+  , prim "mir_stack"           "MIRSetup ()"
+    (pureVal mir_stack)
+    Experimental
+    [ "MIRSetup version of print_stack." ]
 
   , prim "run"                 "{a} TopLevel a -> a"
     (funVal1 (id :: TopLevel Value -> TopLevel Value))

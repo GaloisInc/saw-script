@@ -83,6 +83,8 @@ module SAWCentral.Value (
     throwTopLevel,
     -- used by SAWScript.Interpreter
     setPosition,
+    -- used by SAWScript.Interpreter
+    getStackTrace,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
     getLocalEnv,
     -- used in various places in SAWCentral, and in selected builtins in

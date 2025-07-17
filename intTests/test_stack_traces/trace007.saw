@@ -1,0 +1,11 @@
+enable_experimental;
+
+// Try with lots of arguments, just in case there's anything funny
+// in the argument handling.
+
+let foo a b c d = (a, b, c, d, run print_stack);
+return (foo 1 2 3 4);
+
+let bar a b c d = do { print_stack; return (a, b, c, d); };
+bar 1 2 3 4;
+
