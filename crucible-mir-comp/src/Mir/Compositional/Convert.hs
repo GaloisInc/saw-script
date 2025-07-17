@@ -118,7 +118,7 @@ visitExprVars cache e0 f = go Set.empty e0
             W4.ArrayFromFn _ -> error "unexpected ArrayFromFn"
             W4.MapOverArrays _ _ _ -> error "unexpected MapOverArrays"
             W4.ArrayTrueOnEntries _ _ -> error "unexpected ArrayTrueOnEntries"
-            W4.FnApp _ _ -> error "unexpected FnApp"
+            W4.FnApp _ es -> traverseFC_ (go bound) es
         W4.AppExpr ae ->
             void $ W4.traverseApp (\e' -> go bound e' >> return e') $ W4.appExprApp ae
         W4.FloatExpr _ _ _ -> return ()
@@ -278,8 +278,10 @@ termToSValue sym varMap term = do
     ecMap <- mapM convert varMap
     let sc  = mirSharedContext ?mirState
     let ref = mirUninterpFunCache ?mirState
+    let scs = mirSAWCoreState ?mirState
     uninterp <- resolveUninterp ?mirState
-    SAW.w4SolveBasic sym sc mempty ecMap ref uninterp term
+    m <- SAW.scGetModuleMap sc
+    SAW.w4EvalBasic sym scs sc m mempty ecMap ref uninterp term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.

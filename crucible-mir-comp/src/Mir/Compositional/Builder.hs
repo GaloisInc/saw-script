@@ -46,7 +46,6 @@ import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
-import qualified SAWCore.Prelude as SAW
 import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
@@ -217,9 +216,8 @@ builderNew cs defId =
             (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) loc cs
     visitCache <- W4.newIdxCache
 
-    sc <- liftIO $ SAW.mkSharedContext
-    liftIO $ SAW.scLoadPreludeModule sc
-    scs <- liftIO $ SAW.newSAWCoreState sc
+    let sc = mirSharedContext ?mirState
+        scs = mirSAWCoreState ?mirState
 
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = SAW.toSC sym scs x

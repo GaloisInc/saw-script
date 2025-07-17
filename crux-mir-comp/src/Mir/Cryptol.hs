@@ -299,9 +299,8 @@ munge :: forall sym t st fs tp0.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    let sc = mirSharedContext ?mirState
-    
-    scs <- SAW.newSAWCoreState sc
+    let scs = mirSAWCoreState ?mirState
+
     visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef Map.empty
 

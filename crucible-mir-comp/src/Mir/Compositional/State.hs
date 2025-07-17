@@ -1,5 +1,6 @@
 {-# Language ConstraintKinds #-}
 {-# Language ImplicitParams #-}
+{-# Language TypeFamilies #-}
 module Mir.Compositional.State where
 
 import Control.Monad(foldM)
@@ -15,6 +16,9 @@ import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified CryptolSAWCore.Prelude as SAW
 import qualified SAWCoreWhat4.What4 as SAW
+import qualified SAWCoreWhat4.ReturnTrip as SAW
+import qualified What4.Expr as W4
+
 
 data MirState sym = MirState {
   mirSharedContext   :: SAW.SharedContext,
@@ -27,12 +31,18 @@ data MirState sym = MirState {
   -- ^ Set of names we'd like to keep uninterpreted;
   -- we use `_cryEnv` to compute what they refer to.
 
-  mirUninterpFunCache :: IORef (SAW.SymFnCache sym)
+  mirUninterpFunCache :: IORef (SAW.SymFnCache sym),
   -- ^ A cache used by translation to What4, to keep track of
   -- which uninterpred functions we've already made.
+
+  mirSAWCoreState :: SAW.SAWCoreState (SymScope sym)
 }
 
 type UsesMirState sym = (?mirState :: MirState sym)
+
+type family SymScope sym
+type instance SymScope (W4.ExprBuilder n st fs) = n
+
 
 newMirState :: IO (MirState sym)
 newMirState =
@@ -44,11 +54,13 @@ newMirState =
     env <- newIORef =<< SAW.initCryptolEnv sc
     cache <- newIORef mempty
     unintRef <- newIORef mempty
+    sawcoreState <- SAW.newSAWCoreState sc
     pure MirState {
       mirSharedContext = sc,
       mirCryEnv = env,
       mirKeepUninterp = unintRef,
-      mirUninterpFunCache = cache
+      mirUninterpFunCache = cache,
+      mirSAWCoreState = sawcoreState
     }
 
 -- | Resolve the given name and add it mark it as an uninterpreted function.

@@ -1387,7 +1387,7 @@ w4EvalTerm ::
 w4EvalTerm sym st sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
-     let eval = w4EvalBasic sym st sc modmap ps ref unintSet
+     let eval = w4EvalBasic sym st sc modmap ps mempty ref unintSet
      ty <- eval =<< scTypeOf sc t
      -- evaluate term to an SValue
      val <- eval t
@@ -1490,7 +1490,7 @@ w4EvalAny ::
 w4EvalAny sym st sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
-     let eval = w4EvalBasic sym st sc modmap ps ref unintSet
+     let eval = w4EvalBasic sym st sc modmap ps mempty ref unintSet
      ty <- eval =<< scTypeOf sc t
 
      -- get the names of the arguments to the function
@@ -1540,12 +1540,15 @@ w4EvalBasic ::
   SharedContext ->
   ModuleMap ->
   Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
+  Map VarIndex (SValue (B.ExprBuilder n st fs)) {- ^ bindings for ExtCns values -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue (B.ExprBuilder n st fs))
-w4EvalBasic sym st sc m addlPrims ref unintSet t =
-  do let extcns tf (EC ix nm ty) =
+w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
+  do let extcns tf (EC ix nm ty)
+           | Just v <- Map.lookup ix ecCons = pure v
+           | otherwise =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
                  (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
