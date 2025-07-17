@@ -27,6 +27,8 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
    zero::k: 1
  ----------------------------------
  Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (test.saw:60:1-60:12)
 Proof failed.
 

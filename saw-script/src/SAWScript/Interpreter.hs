@@ -1832,8 +1832,10 @@ caseSatResultPrim sr vUnsat vSat = do
 
 print_stack :: TopLevel ()
 print_stack = do
+  -- We are inside a builtin here, namely print_stack.
+  let pos = SS.PosInsideBuiltin
   trace <- getStackTrace
-  let trace' = Trace.ppTrace trace
+  let trace' = Trace.ppTrace trace pos
   io $ TextIO.putStrLn "Stack trace:"
   io $ TextIO.putStrLn trace'
 

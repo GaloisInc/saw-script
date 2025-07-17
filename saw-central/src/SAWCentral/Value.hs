@@ -85,6 +85,8 @@ module SAWCentral.Value (
     setPosition,
     -- used by SAWScript.Interpreter
     getStackTrace,
+    pushNewTraceFrame, popNewTraceFrame,
+    pushNewTraceFrames, popNewTraceFrames,
     -- used by SAWScript.Interpreter
     RefChain,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
@@ -224,6 +226,7 @@ import qualified Data.AIG as AIG
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
 import SAWCentral.Trace (Trace)
+import qualified SAWCentral.Trace as Trace
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
@@ -967,7 +970,11 @@ io f = (TopLevel_ (liftIO f))
     rethrow :: X.Exception ex => ex -> TopLevel a
     rethrow ex =
       do stk <- getStackTrace
-         throwM (SS.TraceException stk (X.SomeException ex))
+         -- XXX: assumes the exception came from inside a builtin somewhere,
+         -- and hardwires PosInsideBuiltin. This is not going to always be
+         -- true and this logic should be reworked when we're doing the error
+         -- printing cleanup.
+         throwM (SS.TraceException stk SS.PosInsideBuiltin (X.SomeException ex))
 
     handleTopLevel :: SS.TopLevelException -> TopLevel a
     handleTopLevel e = rethrow e
@@ -991,14 +998,50 @@ io f = (TopLevel_ (liftIO f))
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
-  pos <- getPosition
   stk <- getStackTrace
-  throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
+  -- All current uses of throwTopLevel are inside builtins.
+  let pos = SS.PosInsideBuiltin
+  throwM (SS.TraceException stk pos (X.SomeException (SS.TopLevelException pos msg)))
 
 -- | Set the current execution position.
 setPosition :: SS.Pos -> TopLevel ()
 setPosition newpos = do
   modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
+
+-- | Add a stack trace frame. Takes the call site position and the
+--   function name.
+pushNewTraceFrame :: SS.Pos -> Text -> TopLevel ()
+pushNewTraceFrame pos func =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.newPush pos func (rwStackTrace rw) })
+
+-- | Add multiple stack trace frames. Takes a list of call site and
+--   function name pairs.
+--
+--   The topmost entry in the argument list goes onto the stack first
+--   and becomes the deepest entry and thus the caller of the rest.
+--
+--   This is backwards from what one might expect if the list were
+--   itself a call stack. However, the use case we have produces
+--   entries in that order naturally (it is a chain of references to /
+--   assignments of monadic values, with the most recent and therefore
+--   first/deepest when run at the top of the list), so I'm not
+--   inclined to reverse the list both here and in the caller to match
+--   a rather vague expectation.
+--
+pushNewTraceFrames :: [(SS.Pos, Text)] -> TopLevel ()
+pushNewTraceFrames frames =
+  mapM_ (\(pos, name) -> pushNewTraceFrame pos name) frames
+
+-- | Drop a stack trace frame.
+popNewTraceFrame :: TopLevel ()
+popNewTraceFrame =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.newPop (rwStackTrace rw) })
+
+-- | Drop multiple stack trace frames. Takes a list of the corresponding
+--   length for caller convenience.
+popNewTraceFrames :: [a] -> TopLevel ()
+popNewTraceFrames frames =
+  mapM_ (\_ -> popNewTraceFrame) frames
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv =

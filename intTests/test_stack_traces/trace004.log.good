@@ -3,6 +3,8 @@
  ------------------------------------------------------------
  just llvm_stack
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:15:1-15:12)
 "llvm_stack" (trace004.saw:15:32-15:42)
 
@@ -14,6 +16,8 @@ Stack trace:
  ------------------------------------------------------------
  llvm_stack via let
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:23:1-23:12)
 "spec0" (trace004.saw:23:32-23:37)
 "llvm_stack" (trace004.saw:22:13-22:23)
@@ -26,6 +30,8 @@ Stack trace:
  ------------------------------------------------------------
  do-block
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:29:1-29:12)
 "llvm_stack" (trace004.saw:29:38-29:48)
 
@@ -34,6 +40,8 @@ Stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:30:1-30:12)
 "llvm_stack" (trace004.saw:30:60-30:70)
 
@@ -45,6 +53,8 @@ Stack trace:
  ------------------------------------------------------------
  action
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:38:1-38:12)
 "spec1" (trace004.saw:38:32-38:37)
 "llvm_stack" (trace004.saw:36:18-36:28)
@@ -54,6 +64,8 @@ Stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:39:1-39:12)
 "spec2" (trace004.saw:39:32-39:37)
 "llvm_stack" (trace004.saw:37:40-37:50)
@@ -66,6 +78,8 @@ Stack trace:
  ------------------------------------------------------------
  function
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:47:1-47:12)
 "spec3" (trace004.saw:47:33-47:38)
 "llvm_stack" (trace004.saw:45:21-45:31)
@@ -75,6 +89,8 @@ Stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "llvm_verify" (trace004.saw:48:1-48:12)
 "spec4" (trace004.saw:48:33-48:38)
 "llvm_stack" (trace004.saw:46:43-46:53)

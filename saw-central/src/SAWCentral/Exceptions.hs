@@ -67,11 +67,24 @@ topLevelExceptionFromException x =
 instance Exception TopLevelException
 
 -- | Wrapper exception that adds a stack trace.
-data TraceException = TraceException Trace SomeException
+--   The position should be what's currently executing that threw the
+--   exception. For exceptions coming from builtins, this should be
+--   PosInsideBuiltin. (And _not_ the result of calling getPosition to
+--   fetch the interpreter's last execution position.) For exceptions
+--   coming from inside the SAWScript interpreter, it should be the
+--   current execution position.
+--
+--   XXX: the current infrastructure that throws TraceException
+--   assumes it's coming from a builtin and hardwires
+--   PosInsideBuiltin. There mostly aren't exceptions from inside the
+--   interpreter, and they're all wired up wrong right now anyhow.
+--   This should get cleaned out as part of the error printing
+--   cleanup.
+data TraceException = TraceException Trace Pos SomeException
 
 instance Show TraceException where
-  show (TraceException trace ex) =
-    let trace' = lines $ Text.unpack $ ppTrace trace
+  show (TraceException trace curpos ex) =
+    let trace' = lines $ Text.unpack $ ppTrace trace curpos
         ex' = displayException ex
     in
     unlines (["Stack trace:"] ++ trace' ++ [ex'])

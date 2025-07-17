@@ -1,5 +1,7 @@
  Loading file "lexer004.saw"
  Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 lexer004.saw:2:9-2:11: Unclosed Cryptol block
 
 FAILED

@@ -1,10 +1,14 @@
  Loading file "trace007.saw"
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "foo" (trace007.saw:7:9-7:12)
 "run" (trace007.saw:6:32-6:35)
 "print_stack" (trace007.saw:6:36-6:47)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "bar" (trace007.saw:10:1-10:4)
 "print_stack" (trace007.saw:9:24-9:35)
 

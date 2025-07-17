@@ -1,5 +1,7 @@
  Loading file "err043.saw"
  Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 Not a monomorphic type: t.7 -> t.7
 
 FAILED

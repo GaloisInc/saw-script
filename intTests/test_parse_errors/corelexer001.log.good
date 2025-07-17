@@ -1,5 +1,7 @@
  Loading file "corelexer001.saw"
  Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "load_sawcore_from_file" (corelexer001.saw:2:1-2:23)
 Module parsing failed:
 PosPair {_pos = Pos {posBase = ".", posPath = "corelexer001.sawcore", posLine = 1, posCol = 46}, val = UnexpectedToken TEnd}

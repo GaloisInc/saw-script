@@ -1,4 +1,6 @@
  Loading file "trace001.saw"
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "print_stack" (trace001.saw:4:1-4:12)
 

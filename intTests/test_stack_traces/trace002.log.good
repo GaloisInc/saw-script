@@ -1,12 +1,16 @@
  Loading file "trace002.saw"
  p1
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "p1" (trace002.saw:62:21-62:23)
 "run" (trace002.saw:6:13-6:16)
 "print_stack" (trace002.saw:6:18-6:29)
 
  p2
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "p2" (trace002.saw:63:21-63:23)
 "p1" (trace002.saw:7:13-7:15)
 "run" (trace002.saw:6:13-6:16)
@@ -14,6 +18,8 @@ Stack trace:
 
  p3
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "p3" (trace002.saw:64:21-64:23)
 "p2" (trace002.saw:8:13-8:15)
 "p1" (trace002.saw:7:13-7:15)
@@ -22,12 +28,16 @@ Stack trace:
 
  p22
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "p22" (trace002.saw:65:22-65:25)
 "p1" (trace002.saw:9:23-9:25)
 "run" (trace002.saw:6:13-6:16)
 "print_stack" (trace002.saw:6:18-6:29)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "p22" (trace002.saw:65:22-65:25)
 "p1" (trace002.saw:9:32-9:34)
 "run" (trace002.saw:6:13-6:16)
@@ -35,145 +45,197 @@ Stack trace:
 
  m1a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1a" (trace002.saw:67:14-67:17)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m1b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1b" (trace002.saw:68:14-68:17)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m1c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1c" (trace002.saw:69:14-69:17)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m1d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1d" (trace002.saw:70:14-70:17)
 "print_stack" (trace002.saw:19:27-19:38)
 
  m2a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2a" (trace002.saw:72:14-72:17)
 "m1a" (trace002.saw:21:11-21:14)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m2b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2b" (trace002.saw:73:14-73:17)
 "m1a" (trace002.saw:22:16-22:19)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m2c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2c" (trace002.saw:74:14-74:17)
 "m1a" (trace002.saw:23:16-23:19)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m2d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2d" (trace002.saw:75:14-75:17)
 "m1a" (trace002.saw:24:27-24:30)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m2e
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2e" (trace002.saw:76:14-76:17)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2f
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2f" (trace002.saw:77:14-77:17)
 "m1b" (trace002.saw:26:16-26:19)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2g
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2g" (trace002.saw:78:14-78:17)
 "m1b" (trace002.saw:27:16-27:19)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2h
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2h" (trace002.saw:79:14-79:17)
 "m1b" (trace002.saw:28:27-28:30)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2i
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2i" (trace002.saw:80:14-80:17)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m2j
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2j" (trace002.saw:81:14-81:17)
 "m1c" (trace002.saw:30:16-30:19)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m2k
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2k" (trace002.saw:82:14-82:17)
 "m1c" (trace002.saw:31:16-31:19)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m2l
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m2l" (trace002.saw:83:14-83:17)
 "m1c" (trace002.saw:32:27-32:30)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m22a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22a" (trace002.saw:85:15-85:19)
 "m1a" (trace002.saw:34:17-34:20)
 "print_stack" (trace002.saw:16:11-16:22)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22a" (trace002.saw:85:15-85:19)
 "m1a" (trace002.saw:34:22-34:25)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m22b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22b" (trace002.saw:86:15-86:19)
 "m1a" (trace002.saw:35:17-35:20)
 "print_stack" (trace002.saw:16:11-16:22)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22b" (trace002.saw:86:15-86:19)
 "m1a" (trace002.saw:35:22-35:25)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m22c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22c" (trace002.saw:87:15-87:19)
 "m1b" (trace002.saw:36:17-36:20)
 "print_stack" (trace002.saw:17:16-17:27)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22c" (trace002.saw:87:15-87:19)
 "m1b" (trace002.saw:36:22-36:25)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m22d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22d" (trace002.saw:88:15-88:19)
 "m1c" (trace002.saw:37:17-37:20)
 "print_stack" (trace002.saw:18:16-18:27)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m22d" (trace002.saw:88:15-88:19)
 "m1c" (trace002.saw:37:22-37:25)
 "print_stack" (trace002.saw:18:16-18:27)
 
  m1p1a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1a" (trace002.saw:90:16-90:21)
 "m1a" (trace002.saw:39:18-39:21)
 "print_stack" (trace002.saw:16:11-16:22)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1a" (trace002.saw:90:16-90:21)
 "p1" (trace002.saw:39:31-39:33)
 "run" (trace002.saw:6:13-6:16)
@@ -181,23 +243,31 @@ Stack trace:
 
  m1p1b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1b" (trace002.saw:91:16-91:21)
 "p1" (trace002.saw:40:26-40:28)
 "run" (trace002.saw:6:13-6:16)
 "print_stack" (trace002.saw:6:18-6:29)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1b" (trace002.saw:91:16-91:21)
 "m1a" (trace002.saw:40:33-40:36)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m1p1c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1c" (trace002.saw:92:16-92:21)
 "m1a" (trace002.saw:41:18-41:21)
 "print_stack" (trace002.saw:16:11-16:22)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1c" (trace002.saw:92:16-92:21)
 "p1" (trace002.saw:41:31-41:33)
 "run" (trace002.saw:6:13-6:16)
@@ -205,79 +275,107 @@ Stack trace:
 
  m1p1d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1d" (trace002.saw:93:16-93:21)
 "p1" (trace002.saw:42:26-42:28)
 "run" (trace002.saw:6:13-6:16)
 "print_stack" (trace002.saw:6:18-6:29)
 
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "m1p1d" (trace002.saw:93:16-93:21)
 "m1a" (trace002.saw:42:33-42:36)
 "print_stack" (trace002.saw:16:11-16:22)
 
  ma1a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma1a" (trace002.saw:95:15-95:19)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma1b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma1b" (trace002.saw:96:15-96:19)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma1c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma1c" (trace002.saw:97:15-97:19)
 "print_stack" (trace002.saw:48:20-48:31)
 
  ma1d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma1d" (trace002.saw:98:15-98:19)
 "print_stack" (trace002.saw:49:31-49:42)
 
  ma2a
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2a" (trace002.saw:100:15-100:19)
 "ma1a" (trace002.saw:51:15-51:19)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma2b
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2b" (trace002.saw:101:15-101:19)
 "ma1a" (trace002.saw:52:20-52:24)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma2c
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2c" (trace002.saw:102:15-102:19)
 "ma1a" (trace002.saw:53:20-53:24)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma2d
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2d" (trace002.saw:103:15-103:19)
 "ma1a" (trace002.saw:54:31-54:35)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma2e
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2e" (trace002.saw:104:15-104:19)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2f
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2f" (trace002.saw:105:15-105:19)
 "ma1b" (trace002.saw:56:20-56:24)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2g
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2g" (trace002.saw:106:15-106:19)
 "ma1b" (trace002.saw:57:20-57:24)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2h
 Stack trace:
+   (builtin) (at top level)
+Legacy stack trace:
 "ma2h" (trace002.saw:107:15-107:19)
 "ma1b" (trace002.saw:58:31-58:35)
 "print_stack" (trace002.saw:47:20-47:31)
