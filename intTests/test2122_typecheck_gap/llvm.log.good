@@ -2,7 +2,8 @@
  Verifying f...
  Simulating f...
  Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_verify
+   llvm.saw:16:1-16:44 (at top level)
 Legacy stack trace:
 "llvm_verify" (llvm.saw:16:1-16:12)
 Symbolic execution failed.

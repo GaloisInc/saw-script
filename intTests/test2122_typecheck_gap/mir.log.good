@@ -2,7 +2,8 @@
  Verifying test/c6dc65fc::f[0] ...
  Simulating test/c6dc65fc::f[0] ...
  Stack trace:
-   (builtin) (at top level)
+   (builtin) in mir_verify
+   mir.saw:16:1-16:49 (at top level)
 Legacy stack trace:
 "mir_verify" (mir.saw:16:1-16:11)
 Symbolic execution failed.

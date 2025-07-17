@@ -1,6 +1,8 @@
  Loading file "trace008.saw"
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace008.saw:5:17-5:28 in main
+   [internal:entry] (at top level)
 Legacy stack trace:
 "print_stack" (trace008.saw:5:17-5:28)
 

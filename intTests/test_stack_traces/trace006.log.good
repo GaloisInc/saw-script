@@ -1,39 +1,63 @@
  Loading file "trace006.saw"
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:9:1-9:4)
 "p1" (trace006.saw:9:13-9:15)
 "print_stack" (trace006.saw:6:12-6:23)
 
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:9:1-9:4)
 "p1" (trace006.saw:9:13-9:15)
 "print_stack" (trace006.saw:6:12-6:23)
 
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:9:1-9:4)
 "p1" (trace006.saw:9:13-9:15)
 "print_stack" (trace006.saw:6:12-6:23)
 
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:10:1-10:4)
 "print_stack" (trace006.saw:7:17-7:28)
 
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:10:1-10:4)
 "print_stack" (trace006.saw:7:17-7:28)
 
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
 Legacy stack trace:
 "for" (trace006.saw:10:1-10:4)
 "print_stack" (trace006.saw:7:17-7:28)

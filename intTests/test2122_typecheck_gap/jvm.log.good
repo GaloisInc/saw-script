@@ -3,7 +3,8 @@ registering standard overrides
 registering user-provided overrides
 registering assumptions
  Stack trace:
-   (builtin) (at top level)
+   (builtin) in jvm_verify
+   jvm.saw:16:1-16:42 (at top level)
 Legacy stack trace:
 "jvm_verify" (jvm.saw:16:1-16:11)
 Symbolic execution failed.

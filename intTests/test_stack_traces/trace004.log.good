@@ -3,7 +3,10 @@
  ------------------------------------------------------------
  just llvm_stack
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:15:32-15:42 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:15:1-15:45 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:15:1-15:12)
 "llvm_stack" (trace004.saw:15:32-15:42)
@@ -16,7 +19,11 @@ Legacy stack trace:
  ------------------------------------------------------------
  llvm_stack via let
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:22:13-22:23 in spec0
+   trace004.saw:23:32-23:37 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:23:1-23:40 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:23:1-23:12)
 "spec0" (trace004.saw:23:32-23:37)
@@ -30,7 +37,10 @@ Legacy stack trace:
  ------------------------------------------------------------
  do-block
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:29:38-29:48 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:29:1-29:77 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:29:1-29:12)
 "llvm_stack" (trace004.saw:29:38-29:48)
@@ -40,7 +50,10 @@ Legacy stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:30:60-30:70 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:30:1-30:77 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:30:1-30:12)
 "llvm_stack" (trace004.saw:30:60-30:70)
@@ -53,7 +66,11 @@ Legacy stack trace:
  ------------------------------------------------------------
  action
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:36:18-36:28 in spec1
+   trace004.saw:38:32-38:37 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:38:1-38:40 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:38:1-38:12)
 "spec1" (trace004.saw:38:32-38:37)
@@ -64,7 +81,11 @@ Legacy stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:37:40-37:50 in spec2
+   trace004.saw:39:32-39:37 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:39:1-39:40 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:39:1-39:12)
 "spec2" (trace004.saw:39:32-39:37)
@@ -78,7 +99,11 @@ Legacy stack trace:
  ------------------------------------------------------------
  function
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:45:21-45:31 in spec3
+   trace004.saw:47:33-47:41 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:47:1-47:45 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:47:1-47:12)
 "spec3" (trace004.saw:47:33-47:38)
@@ -89,7 +114,11 @@ Legacy stack trace:
  Checking proof obligations foo...
  Proof succeeded! foo
 Stack trace:
-   (builtin) (at top level)
+   (builtin) in llvm_stack
+   trace004.saw:46:43-46:53 in spec4
+   trace004.saw:48:33-48:41 in (callback)
+   (builtin) in llvm_verify
+   trace004.saw:48:1-48:45 (at top level)
 Legacy stack trace:
 "llvm_verify" (trace004.saw:48:1-48:12)
 "spec4" (trace004.saw:48:33-48:38)
