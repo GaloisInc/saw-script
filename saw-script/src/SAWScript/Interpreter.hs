@@ -736,20 +736,45 @@ interpretDoStmts (stmts, lastexpr) =
           -- If we got a do-block or similar back, execute it now.
           result' :: Value <- interpretMonadAction result
 
-          -- This gives us a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it.
-          -- Return that as the result of the block; let the caller
-          -- execute it. (If we execute it now, the Value we return
-          -- will have SAWScript type a instead of m a, and things
-          -- will go downhill.)
-          --
           -- Insert the position in the result if it's a plain monadic
           -- value. This is its call site as far as things like stack
           -- traces are concerned, and now's the last opportunity to
           -- record that. If it's another do-block, this will do
           -- nothing, but we'll come back here when it's executed.
           let pos = SS.getPos lastexpr
-          return $ injectPositionIntoMonadicValue pos result'
+              result'' = injectPositionIntoMonadicValue pos result'
+
+          -- This gives us a VTopLevel/VProofScript/etc with a
+          -- TopLevel/ProofScript/etc Value in it.
+          --
+          -- In principle we should return this as the result of the
+          -- block and let the caller execute it. That's correct, and
+          -- doesn't violate the semantics. However, it's akin to a
+          -- tail call: when it executes, the do-block it belonged to
+          -- has gone away and disappeared from the stack trace. This
+          -- causes confusion and consternation and would need to be
+          -- special-cased to get the right stack trace out. Instead,
+          -- we'll execute it, get the value it produces, and wrap
+          -- that in a return.
+          --
+          -- Thus do { m1; mr; } becomes do { m1; r <- mr; return r; }
+          -- which is perfectly sound.
+          --
+          -- FUTURE: do this transform on the AST upstream before
+          -- executing; that can more readily avoid doing the
+          -- transform if the last expression is already a return.
+
+          -- As elsewhere, don't make a frame around this because the
+          -- frame happens in fromValue.
+          ret <- actionFromValue result''
+
+          -- Don't return a VReturn here, because there isn't
+          -- necessarily a following call to interpretMonadAction to
+          -- unfold it. Instead, produce the unfolded form directly.
+          -- Which requires some gyrations to feed the monad type in.
+          let ret' :: m Value = return ret
+          return $ mkValue pos ret'
+
       stmt : more -> do
           -- Execute the expression and get the updated environment
           env' <- interpretDoStmt stmt

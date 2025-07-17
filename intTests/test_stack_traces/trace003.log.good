@@ -51,6 +51,7 @@ Stack trace:
 
 Stack trace:
 "prove_print" (trace003.saw:42:1-42:12)
+"prove2" (trace003.saw:42:13-42:19)
 "proof_stack" (trace003.saw:40:23-40:34)
 
  
@@ -63,6 +64,7 @@ Stack trace:
 
 Stack trace:
 "prove_print" (trace003.saw:51:1-51:12)
+"prove4" (trace003.saw:51:14-51:20)
 "proof_stack" (trace003.saw:49:26-49:37)
 
  

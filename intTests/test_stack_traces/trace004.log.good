@@ -55,6 +55,7 @@ Stack trace:
  Proof succeeded! foo
 Stack trace:
 "llvm_verify" (trace004.saw:39:1-39:12)
+"spec2" (trace004.saw:39:32-39:37)
 "llvm_stack" (trace004.saw:37:40-37:50)
 
  Verifying foo...
@@ -75,6 +76,7 @@ Stack trace:
  Proof succeeded! foo
 Stack trace:
 "llvm_verify" (trace004.saw:48:1-48:12)
+"spec4" (trace004.saw:48:33-48:38)
 "llvm_stack" (trace004.saw:46:43-46:53)
 
  Verifying foo...

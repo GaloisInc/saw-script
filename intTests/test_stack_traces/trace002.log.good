@@ -40,6 +40,7 @@ Stack trace:
 
  m1b
 Stack trace:
+"m1b" (trace002.saw:68:14-68:17)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m1c
@@ -49,6 +50,7 @@ Stack trace:
 
  m1d
 Stack trace:
+"m1d" (trace002.saw:70:14-70:17)
 "print_stack" (trace002.saw:19:27-19:38)
 
  m2a
@@ -59,6 +61,7 @@ Stack trace:
 
  m2b
 Stack trace:
+"m2b" (trace002.saw:73:14-73:17)
 "m1a" (trace002.saw:22:16-22:19)
 "print_stack" (trace002.saw:16:11-16:22)
 
@@ -70,24 +73,31 @@ Stack trace:
 
  m2d
 Stack trace:
+"m2d" (trace002.saw:75:14-75:17)
 "m1a" (trace002.saw:24:27-24:30)
 "print_stack" (trace002.saw:16:11-16:22)
 
  m2e
 Stack trace:
+"m2e" (trace002.saw:76:14-76:17)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2f
 Stack trace:
+"m2f" (trace002.saw:77:14-77:17)
+"m1b" (trace002.saw:26:16-26:19)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2g
 Stack trace:
 "m2g" (trace002.saw:78:14-78:17)
+"m1b" (trace002.saw:27:16-27:19)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2h
 Stack trace:
+"m2h" (trace002.saw:79:14-79:17)
+"m1b" (trace002.saw:28:27-28:30)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m2i
@@ -120,6 +130,7 @@ Stack trace:
 "print_stack" (trace002.saw:16:11-16:22)
 
 Stack trace:
+"m22a" (trace002.saw:85:15-85:19)
 "m1a" (trace002.saw:34:22-34:25)
 "print_stack" (trace002.saw:16:11-16:22)
 
@@ -137,9 +148,12 @@ Stack trace:
  m22c
 Stack trace:
 "m22c" (trace002.saw:87:15-87:19)
+"m1b" (trace002.saw:36:17-36:20)
 "print_stack" (trace002.saw:17:16-17:27)
 
 Stack trace:
+"m22c" (trace002.saw:87:15-87:19)
+"m1b" (trace002.saw:36:22-36:25)
 "print_stack" (trace002.saw:17:16-17:27)
 
  m22d
@@ -173,6 +187,7 @@ Stack trace:
 "print_stack" (trace002.saw:6:18-6:29)
 
 Stack trace:
+"m1p1b" (trace002.saw:91:16-91:21)
 "m1a" (trace002.saw:40:33-40:36)
 "print_stack" (trace002.saw:16:11-16:22)
 
@@ -207,6 +222,7 @@ Stack trace:
 
  ma1b
 Stack trace:
+"ma1b" (trace002.saw:96:15-96:19)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma1c
@@ -216,6 +232,7 @@ Stack trace:
 
  ma1d
 Stack trace:
+"ma1d" (trace002.saw:98:15-98:19)
 "print_stack" (trace002.saw:49:31-49:42)
 
  ma2a
@@ -226,6 +243,7 @@ Stack trace:
 
  ma2b
 Stack trace:
+"ma2b" (trace002.saw:101:15-101:19)
 "ma1a" (trace002.saw:52:20-52:24)
 "print_stack" (trace002.saw:46:15-46:26)
 
@@ -237,23 +255,30 @@ Stack trace:
 
  ma2d
 Stack trace:
+"ma2d" (trace002.saw:103:15-103:19)
 "ma1a" (trace002.saw:54:31-54:35)
 "print_stack" (trace002.saw:46:15-46:26)
 
  ma2e
 Stack trace:
+"ma2e" (trace002.saw:104:15-104:19)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2f
 Stack trace:
+"ma2f" (trace002.saw:105:15-105:19)
+"ma1b" (trace002.saw:56:20-56:24)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2g
 Stack trace:
 "ma2g" (trace002.saw:106:15-106:19)
+"ma1b" (trace002.saw:57:20-57:24)
 "print_stack" (trace002.saw:47:20-47:31)
 
  ma2h
 Stack trace:
+"ma2h" (trace002.saw:107:15-107:19)
+"ma1b" (trace002.saw:58:31-58:35)
 "print_stack" (trace002.saw:47:20-47:31)
 
