@@ -564,6 +564,8 @@ resolveNames nms =
 -- fresh uninterpreted constant.
 -- The given name is searched for in both the local Cryptol environment
 -- and the SAWCore naming environment.
+-- Pulling this out of `TopLevel` is useful so we can use it in other
+-- contexts (e.g., `crucible-mir-comp`)
 resolveNameIO :: SharedContext -> CEnv.CryptolEnv -> Text -> IO [VarIndex]
 resolveNameIO sc cenv nm =
   do scnms <- scResolveName sc nm
