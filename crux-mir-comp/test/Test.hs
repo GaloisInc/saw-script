@@ -32,7 +32,9 @@ import           Text.Regex.Posix.ByteString.Lazy ( Regex )
 import qualified Mir.Language as Mir
 
 import qualified Mir.Compositional as Mir
+import qualified Mir.Compositional.State as Mir
 import qualified Mir.Cryptol as Mir
+
 
 import qualified Crux as Crux
 import qualified Crux.Config.Common as Crux
@@ -100,10 +102,11 @@ runCrux rustFile outHandle mode = Mir.withMirLogging $ do
     let ?outputConfig = Crux.mkOutputConfig (outHandle, False) (outHandle, False)
             Mir.mirLoggingToSayWhat (Just $ Crux.outputOptions $ fst options)
     setEnv "CRYPTOLPATH" "."
-    _exitCode <- Mir.runTestsWithExtraOverrides overrides options
+    let newState = Mir.InitUserState Mir.newMirState
+    _exitCode <- Mir.runTestsWithExtraOverrides newState overrides options
     return ()
   where
-    overrides :: Mir.BindExtraOverridesFn
+    overrides :: Mir.BindExtraOverridesFn Mir.MirState
     overrides = Mir.compositionalOverrides `Mir.orOverride` Mir.cryptolOverrides
 
 getOutputDir :: FilePath -> FilePath
