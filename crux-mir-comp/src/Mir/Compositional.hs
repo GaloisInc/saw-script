@@ -5,7 +5,6 @@
 {-# Language GADTs #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeOperators #-}
-{-# Language ImplicitParams #-}
 
 module Mir.Compositional
 where
@@ -18,8 +17,6 @@ import qualified Prettyprinter as PP
 import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.Simulator
-
-import qualified What4.Expr.Builder as W4
 
 import Crux
 
@@ -36,22 +33,20 @@ import Mir.Compositional.State
 
 
 compositionalOverrides ::
-    forall sym bak p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MirState sym ->
+    forall sym bak p t fs args ret blocks rtp a r .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
-compositionalOverrides state _symOnline cs name cfg
+compositionalOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "method_spec", "raw", "builder_new"] explodedName
   , Empty <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_new" MethodSpecBuilderRepr $ do
-        let ?mirState = state
         msb <- builderNew cs (textId name)
         return $ MethodSpecBuilder msb
 

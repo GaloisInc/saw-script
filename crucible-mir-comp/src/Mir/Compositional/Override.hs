@@ -70,15 +70,14 @@ import Mir.Compositional.State
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
     MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
 
-data MethodSpec sym = MethodSpec
+data MethodSpec = MethodSpec
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
-    , _msMirState :: MirState sym
     }
 
 makeLenses ''MethodSpec
 
-instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sym (MethodSpec sym) where
+instance (IsSymInterface sym, sym ~ Sym t fs) => MethodSpecImpl sym MethodSpec where
     msPrettyPrint = printSpec
     msEnable = enable
 
@@ -86,8 +85,8 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 -- | Pretty-print a MethodSpec.  This wraps `ppMethodSpec` and returns the
 -- result as a Rust string.
 printSpec ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MethodSpec sym ->
+    (IsSymInterface sym, sym ~ Sym t fs) =>
+    MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
@@ -110,8 +109,8 @@ printSpec ms = do
 -- the current test, calls to the subject function will be replaced with
 -- `runSpec`.
 enable ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MethodSpec sym ->
+    (IsSymInterface sym, sym ~ Sym t fs) =>
+    MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
@@ -121,7 +120,6 @@ enable ms = do
             show (ms ^. msSpec . MS.csMethod) ++ "?"
 
     -- TODO: handle multiple specs for the same function
-    let ?mirState = ms ^. msMirState
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
         runSpec myCS mh (ms ^. msSpec)
   where
@@ -129,8 +127,8 @@ enable ms = do
 
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
-runSpec :: forall sym p t st fs args ret rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+runSpec :: forall sym p t fs args ret rtp.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec myCS mh ms = ovrWithBackend $ \bak ->
@@ -351,8 +349,8 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 -- this may update `termSub` and `setupValueSub` with new bindings for the
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
-    forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+    forall sym t fs tp0.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
@@ -503,8 +501,8 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
 -- namely the return value and any post-state PointsTos.
-setupToReg :: forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+setupToReg :: forall sym t fs tp0.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
@@ -521,7 +519,7 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
-        let sc = mirSharedContext ?mirState
+        let sc = mirSharedContext (sym ^. W4.userState)
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
         Some expr <- termToExpr sym myRegMap term
         Refl <- case testEquality (W4.exprType expr) btpr of

@@ -69,15 +69,14 @@ import Mir.Compositional.State
 
 
 cryptolOverrides ::
-    forall sym bak p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    MirState sym ->
+    forall sym bak p t fs args ret blocks rtp a r .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
-cryptolOverrides state _symOnline cs name cfg
+cryptolOverrides _symOnline cs name cfg
 
   | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
   , Empty :> MirSliceRepr :> MirSliceRepr
@@ -91,7 +90,6 @@ cryptolOverrides state _symOnline cs name cfg
             _ -> error $ "expected TyFnPtr argument, but got " ++ show tyArg
 
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
-        let ?mirState = state
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
   | hasInstPrefix ["crucible", "cryptol", "override_"] explodedName
@@ -112,7 +110,6 @@ cryptolOverrides state _symOnline cs name cfg
           :> RegEntry _ ()
           :> RegEntry _tpr modulePathStr
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
-        let ?mirState = state
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
 
   | ["crucible","cryptol","uninterp"] == explodedName
@@ -122,6 +119,8 @@ cryptolOverrides state _symOnline cs name cfg
     mkOverride' "cryptol_uninterp" UnitRepr $
     do RegMap (Empty :> RegEntry _tpr' nameStr) <- getOverrideArgs
        fun <- loadString nameStr "cryptol::uninterp function name"
+       sym <- getSymInterface
+       let state = sym ^. W4.userState
        liftIO (modifyIORef (mirKeepUninterp state) (Set.insert fun))
 
 
@@ -131,7 +130,6 @@ cryptolOverrides state _symOnline cs name cfg
   , Just Refl <- testEquality tpr tpr'
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_munge" tpr $ do
-        let ?mirState = state
         let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
                 M.intrInst . M.inSubsts . _Wrapped . ix 0
         shp <- case tyArg of
@@ -147,8 +145,8 @@ cryptolOverrides state _symOnline cs name cfg
     explodedName = textIdKey name
 
 cryptolLoad ::
-    forall sym p t st fs rtp a r tp .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+    forall sym p t fs rtp a r tp .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
@@ -178,7 +176,7 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
 cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 loadString ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     RegValue sym MirSlice ->
     String ->
     OverrideSim (p sym) sym MIR rtp a r Text
@@ -188,8 +186,8 @@ loadString str desc = getString str >>= \x -> case x of
 
 
 cryptolOverride ::
-    forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+    forall sym p t fs rtp a r .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
@@ -223,8 +221,8 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
 -- | Load a Cryptol function, returning an `OverrideSim` action that can be
 -- used to run the function.
 loadCryptolFunc ::
-    forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+    forall sym p t fs rtp a r .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     M.Collection ->
     M.FnSig ->
     Text ->
@@ -234,12 +232,14 @@ loadCryptolFunc col sig modulePath name = do
     Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
     Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
 
-    let sc = mirSharedContext ?mirState
+    sym <- getSymInterface
+    let mirState = sym ^. W4.userState
+    let sc = mirSharedContext mirState
     let ?fileReader = BS.readFile
-    ce <- liftIO (readIORef (mirCryEnv ?mirState))
+    ce <- liftIO (readIORef (mirCryEnv mirState))
     let modName = Cry.textToModName modulePath
     ce' <- liftIO $ SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
-    liftIO (writeIORef (mirCryEnv ?mirState) ce')
+    liftIO (writeIORef (mirCryEnv mirState) ce')
     -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
     -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
@@ -271,8 +271,8 @@ loadCryptolFunc col sig modulePath name = do
 
 
 cryptolRun ::
-    forall sym p t st fs rtp r args ret .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+    forall sym p t fs rtp r args ret .
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     String ->
     Assignment TypeShape args ->
     TypeShape ret ->
@@ -284,7 +284,7 @@ cryptolRun name argShps retShp funcTerm = do
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
-    let sc = mirSharedContext ?mirState
+    let sc = mirSharedContext (sym ^. W4.userState)
     argTermsCtx <- Ctx.zipWithM
         (\shp (RegEntry _ val) ->
             Const <$> regToTerm sym sc name w4VarMapRef shp val)
@@ -295,11 +295,11 @@ cryptolRun name argShps retShp funcTerm = do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     liftIO $ termToReg sym w4VarMap appTerm retShp
 
-munge :: forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+munge :: forall sym t fs tp0.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    let scs = mirSAWCoreState ?mirState
+    let scs = mirSAWCoreState (sym ^. W4.userState)
 
     visitCache <- W4.newIdxCache
     w4VarMapRef <- newIORef Map.empty

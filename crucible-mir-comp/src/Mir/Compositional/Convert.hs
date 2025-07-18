@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# Language FlexibleContexts #-}
 {-# Language GADTs #-}
-{-# Language ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -14,6 +13,7 @@
 module Mir.Compositional.Convert
 where
 
+import Control.Lens((^.))
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
@@ -143,8 +143,8 @@ readPartExprMaybe _sym (W4.PE p v)
 
 
 -- | Convert a `SAW.Term` into a `W4.Expr`.
-termToExpr :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+termToExpr :: forall sym t fs.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
@@ -158,8 +158,8 @@ termToExpr sym varMap term = do
 -- | Convert a `SAW.Term` into a Crucible `RegValue`.  Requires a `TypeShape`
 -- giving the expected MIR/Crucible type in order to distinguish cases like
 -- `(A, (B, C))` vs `(A, B, C)` (these are the same type in saw-core).
-termToReg :: forall sym t st fs tp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+termToReg :: forall sym t fs tp.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
@@ -264,8 +264,8 @@ termToReg sym varMap term shp0 = do
             goBV (addNat iw (knownNat @1)) bv' bs
 
 -- | Common code for termToExpr and termToReg
-termToSValue :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+termToSValue :: forall sym t fs.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
@@ -276,17 +276,18 @@ termToSValue sym varMap term = do
             Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
                 show (W4.exprType expr)
     ecMap <- mapM convert varMap
-    let sc  = mirSharedContext ?mirState
-    let ref = mirUninterpFunCache ?mirState
-    let scs = mirSAWCoreState ?mirState
-    uninterp <- resolveUninterp ?mirState
+    let mirState = sym ^. W4.userState
+    let sc  = mirSharedContext mirState
+    let ref = sym ^. W4.uninterpFnCache
+    let scs = mirSAWCoreState mirState
+    uninterp <- resolveUninterp mirState
     m <- SAW.scGetModuleMap sc
     SAW.w4EvalBasic sym scs sc m mempty ecMap ref uninterp term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.
-termToPred :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+termToPred :: forall sym t fs.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     Map SAW.VarIndex (Some (W4.Expr t)) ->
     SAW.Term ->
@@ -298,13 +299,13 @@ termToPred sym varMap term = do
         btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"
 
 -- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
-termToType :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, UsesMirState sym) =>
+termToType :: forall sym t fs.
+    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
     sym ->
     SAW.Term ->
     IO (Some W4.BaseTypeRepr)
 termToType sym term = do
-    let sc = mirSharedContext ?mirState
+    let sc = mirSharedContext (sym ^. W4.userState)
     ref <- newIORef mempty
     sv <- SAW.w4SolveBasic sym sc mempty mempty ref mempty term
     tv <- case sv of
@@ -321,8 +322,8 @@ termToType sym term = do
         _ -> error $ "termToType: bad SValue"
 
 
-exprToTerm :: forall sym t st fs tp m.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m, MonadFail m) =>
+exprToTerm :: forall sym t fs tp m.
+    (IsSymInterface sym, sym ~ Sym t fs, MonadIO m, MonadFail m) =>
     sym ->
     SAW.SharedContext ->
     IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
@@ -335,8 +336,8 @@ exprToTerm sym sc w4VarMapRef val = liftIO $ do
     term <- SAW.scVariable sc ec
     return term
 
-regToTerm :: forall sym t st fs tp0 m.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m, MonadFail m) =>
+regToTerm :: forall sym t fs tp0 m.
+    (IsSymInterface sym, sym ~ Sym t fs, MonadIO m, MonadFail m) =>
     sym ->
     SAW.SharedContext ->
     String ->

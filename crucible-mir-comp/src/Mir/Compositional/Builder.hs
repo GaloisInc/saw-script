@@ -8,7 +8,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ImplicitParams #-}
 
 module Mir.Compositional.Builder
 where
@@ -69,7 +68,6 @@ import Mir.Compositional.State
 
 data MethodSpecBuilder sym t = MethodSpecBuilder
     { _msbCollectionState :: CollectionState
-    , _msbMirState :: MirState sym
     , _msbSharedContext :: SAW.SharedContext
     , _msbEval :: forall tp. W4.Expr t tp -> IO SAW.Term
 
@@ -100,7 +98,6 @@ data FoundRef sym tp = FoundRef
     }
 
 initMethodSpecBuilder ::
-    UsesMirState sym =>
     CollectionState ->
     SAW.SharedContext ->
     (forall tp. W4.Expr t tp -> IO SAW.Term) ->
@@ -119,7 +116,6 @@ initMethodSpecBuilder cs sc eval spec snap cache = MethodSpecBuilder
     , _msbSnapshotFrame = snap
     , _msbVisitCache = cache
     , _msbSubsts = []
-    , _msbMirState = ?mirState
     }
 
 initStateExtra :: StateExtra sym t
@@ -176,7 +172,7 @@ execBuilderT s f = execStateT f s
 data MethodSpecValue sym tp = MethodSpecValue (TypeRepr tp) (RegValue sym tp)
 
 
-instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+instance (IsSymInterface sym, sym ~ Sym t fs) =>
         MethodSpecBuilderImpl sym (MethodSpecBuilder sym t) where
     msbAddArg = addArg
     msbSetReturn = setReturn
@@ -188,8 +184,8 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
 -- MethodSpecBuilder implementation.  This is the code that actually runs when
 -- Rust invokes `msb.add_arg(...)` or similar.
 
-builderNew :: forall sym p t st fs rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, UsesMirState sym) =>
+builderNew :: forall sym p t fs rtp.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     CollectionState ->
     -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
     -- have one type argument, which is the `TyFnDef` of the function that the
@@ -216,8 +212,9 @@ builderNew cs defId =
             (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) loc cs
     visitCache <- W4.newIdxCache
 
-    let sc = mirSharedContext ?mirState
-        scs = mirSAWCoreState ?mirState
+    let mirState = sym ^. W4.userState
+        sc = mirSharedContext mirState
+        scs = mirSAWCoreState mirState
 
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = SAW.toSC sym scs x
@@ -230,8 +227,8 @@ builderNew cs defId =
 -- As a side effect, this clobbers any mutable memory reachable through the
 -- argument.  For example, if `argRef` points to an `&mut i32`, the `i32` will
 -- be overwritten with a fresh symbolic variable.
-addArg :: forall sym p t st fs rtp args ret tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+addArg :: forall sym p t fs rtp args ret tp0.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb =
@@ -284,8 +281,8 @@ addArg tpr argRef msb =
 
 -- | Set the MethodSpec's return value.  The value to use is obtained by
 -- dereferencing `argRef`.
-setReturn :: forall sym t st fs p rtp args ret tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+setReturn :: forall sym t fs p rtp args ret tp0.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 setReturn tpr argRef msb =
@@ -325,8 +322,8 @@ setReturn tpr argRef msb =
 -- preconditions.  We only include assumptions that constrain symbolic
 -- variables seen in the function's inputs (arguments and memory reachable
 -- through arguments).
-gatherAssumes :: forall sym t st fs p rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+gatherAssumes :: forall sym t fs p rtp args ret.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 gatherAssumes msb =
@@ -372,8 +369,8 @@ gatherAssumes msb =
 -- postconditions.  We only include assertions that constraint symbolic
 -- variables seen in the functions inputs or outputs (arguments, return value,
 -- and memory reachable through either).
-gatherAsserts :: forall sym t st fs p rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+gatherAsserts :: forall sym t fs p rtp args ret.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 gatherAsserts msb =
@@ -474,7 +471,7 @@ gatherAsserts msb =
 
 -- | Collect all the symbolic variables that appear in `vals`.
 gatherVars ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     sym ->
     [Some (MethodSpecValue sym)] ->
     IO (Set (Some (W4.ExprBoundVar t)))
@@ -491,8 +488,8 @@ gatherVars sym vals = do
 -- in `vars`.  Return `Left (pred, info, badVar)` if it finds a predicate
 -- `pred` that mentions at least one variable in `vars` along with some
 -- `badVar` not in `vars`.
-relevantPreds :: forall sym t st fs a.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+relevantPreds :: forall sym t fs a.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     sym ->
     Set (Some (W4.ExprBoundVar t)) ->
     [(W4.Pred sym, a)] ->
@@ -526,8 +523,8 @@ relevantPreds _sym vars preds = runExceptT $ filterM check preds
 -- use for them.  Plus, they will almost certainly fail - we don't actually
 -- invoke the subject function during MethodSpec building, so all its outputs
 -- contain arbitrary (symbolic) values.
-finish :: forall sym t st fs p rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+finish :: forall sym t fs p rtp args ret.
+    (IsSymInterface sym, sym ~ Sym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (M.MethodSpec sym)
 finish msb =
@@ -561,7 +558,7 @@ finish msb =
     ms' <- liftIO $ substMethodSpec (msb ^. msbSharedContext) sm ms
 
     nonce <- liftIO $ freshNonce ng
-    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms' (msb ^. msbMirState)) (indexValue nonce)
+    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms') (indexValue nonce)
 
   where
     sc = msb ^. msbSharedContext
@@ -679,8 +676,8 @@ substMethodSpec sc sm ms = do
 -- RegValue will be converted into fresh variables in the MethodSpec (in either
 -- the pre or post state, depending on the pre/post flag `p`), and any
 -- MirReferences will be converted into MethodSpec allocations/pointers.
-regToSetup :: forall sym bak t st fs tp0 p rtp args ret.
-    (IsSymBackend sym bak, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+regToSetup :: forall sym bak t fs tp0 p rtp args ret.
+    (IsSymBackend sym bak, sym ~ Sym t fs, HasCallStack) =>
     bak -> PrePost ->
     (forall tp'. BaseTypeRepr tp' -> W4.Expr t tp' -> IO SAW.TypedTerm) ->
     TypeShape tp0 -> RegValue sym tp0 ->
@@ -770,8 +767,8 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                 OptField shp -> liftIO (readMaybeType sym "field" (shapeType shp) rv) >>= go shp
             loop flds rvs (sv : svs)
 
-refToAlloc :: forall sym bak t st fs tp p rtp args ret.
-    (IsSymBackend sym bak, sym ~ W4.ExprBuilder t st fs) =>
+refToAlloc :: forall sym bak t fs tp p rtp args ret.
+    (IsSymBackend sym bak, sym ~ Sym t fs) =>
     bak -> PrePost -> MirPointerKind -> M.Mutability -> M.Ty -> TypeRepr tp ->
     MirReferenceMux sym -> Int ->
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex

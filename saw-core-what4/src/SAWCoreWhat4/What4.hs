@@ -96,7 +96,7 @@ import SAWCore.Term.Functor (FieldName)
 -- what4
 import qualified What4.Expr.Builder as B
 import           What4.Expr.GroundEval
-import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
+import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr, SymFnWrapper(..),
                                  IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
@@ -894,9 +894,10 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
 ----------------------------------------------------------------------
 -- Uninterpreted function cache
 
+{-
 data SymFnWrapper sym :: Ctx.Ctx BaseType -> Type where
   SymFnWrapper :: !(W.SymFn sym args ret) -> SymFnWrapper sym (args Ctx.::> ret)
-
+-}
 type SymFnCache sym = Map W.SolverSymbol (MapF (Assignment BaseTypeRepr) (SymFnWrapper sym))
 
 lookupSymFn ::
