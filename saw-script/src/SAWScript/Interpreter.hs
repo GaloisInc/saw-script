@@ -211,23 +211,58 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
 
--- | Default placeholder position for plain monadic values.
+-- | "Position of last reference" for values that haven't been
+--   referenced.
 --
 --   Used in toValue so it'll appear in the builtin table. However,
 --   it should always be replaced when the value is retrieved and
 --   before it's returned out or passed on by the interpreter for
---   execution.
-dummyMonadicPos :: SS.Pos
-dummyMonadicPos = SS.PosInternal "<<placeholder position for monadic action>>"
+--   execution. So users should never see it.
+--
+--   FUTURE: might make sense to set this to a panic.
+atRestPos :: SS.Pos
+atRestPos = SS.PosInternal "<<position of value at rest; shouldn't be seen>>"
 
 -- | Update the position in a plain monadic value.
 injectPositionIntoMonadicValue :: SS.Pos -> Value -> Value
 injectPositionIntoMonadicValue pos v = case v of
-    VTopLevel _oldpos f -> VTopLevel pos f
-    VProofScript _oldpos f -> VProofScript pos f
-    VLLVMCrucibleSetup _oldpos f -> VLLVMCrucibleSetup pos f
-    VJVMSetup _oldpos f -> VJVMSetup pos f
-    VMIRSetup _oldpos f -> VMIRSetup pos f
+    VTopLevel _oldpos chain f -> VTopLevel pos chain f
+    VProofScript _oldpos chain f -> VProofScript pos chain f
+    VLLVMCrucibleSetup _oldpos chain f -> VLLVMCrucibleSetup pos chain f
+    VJVMSetup _oldpos chain f -> VJVMSetup pos chain f
+    VMIRSetup _oldpos chain f -> VMIRSetup pos chain f
+    _ -> v
+
+-- | Insert an entry in a plain monadic value's RefChain.
+insertRefChain :: SS.Pos -> SS.Name -> Value -> Value
+insertRefChain pos name v =
+  let insert chain = (pos, name) : chain in
+  case v of
+    VDo chain mLegacyName env body -> VDo (insert chain) mLegacyName env body
+    VBindOnce bindpos chain v1 v2 -> VBindOnce bindpos (insert chain) v1 v2
+    VTopLevel vpos chain f -> VTopLevel vpos (insert chain) f
+    VProofScript vpos chain f -> VProofScript vpos (insert chain) f
+    VLLVMCrucibleSetup vpos chain f -> VLLVMCrucibleSetup vpos (insert chain) f
+    VJVMSetup vpos chain f -> VJVMSetup vpos (insert chain) f
+    VMIRSetup vpos chain f -> VMIRSetup vpos (insert chain) f
+    _ -> v
+
+-- | Merge an ancestor RefChain (e.g. from a generating do block) into
+--   a downstream one.
+propagateRefChain :: RefChain -> Value -> Value
+propagateRefChain chain1 v =
+  let insert chain2 =
+        -- concatenate the chain (older goes at the end)
+        chain2 ++ chain1
+  in
+  case v of
+    VDo chain2 mLegacyName env body -> VDo (insert chain2) mLegacyName env body
+    VBindOnce pos chain2 v1 v2 -> VBindOnce pos (insert chain2) v1 v2
+    VTopLevel pos chain2 f -> VTopLevel pos (insert chain2) f
+    VProofScript pos chain2 f -> VProofScript pos (insert chain2) f
+    VLLVMCrucibleSetup pos chain2 f -> VLLVMCrucibleSetup pos (insert chain2) f
+    VJVMSetup pos chain2 f -> VJVMSetup pos (insert chain2) f
+    VMIRSetup pos chain2 f -> VMIRSetup pos (insert chain2) f
     _ -> v
 
 
@@ -328,42 +363,42 @@ bindPatternEnv pat ms v env =
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
   actionFromValue :: FromValue a => FromValueHow -> Value -> m a
-  mkValue :: SS.Pos -> m Value -> Value
+  mkValue :: SS.Pos -> RefChain -> m Value -> Value
   getMonadContext :: m SS.Context
   withLocalEnvAny :: LocalEnv -> m a -> m a
 
 instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
-  mkValue pos m = VTopLevel pos m
+  mkValue pos chain m = VTopLevel pos chain m
   getMonadContext = return SS.TopLevel
   withLocalEnvAny = withLocalEnv
 
 instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VProofScript pos m
+  mkValue pos chain m = VProofScript pos chain m
   getMonadContext = return SS.ProofScript
   withLocalEnvAny = withLocalEnvProof
 
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VLLVMCrucibleSetup pos m
+  mkValue pos chain m = VLLVMCrucibleSetup pos chain m
   getMonadContext = return SS.LLVMSetup
   withLocalEnvAny = withLocalEnvLLVM
 
 instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VJVMSetup pos m
+  mkValue pos chain m = VJVMSetup pos chain m
   getMonadContext = return SS.JavaSetup
   withLocalEnvAny = withLocalEnvJVM
 
 instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VMIRSetup pos m
+  mkValue pos chain m = VMIRSetup pos chain m
   getMonadContext = return SS.MIRSetup
   withLocalEnvAny = withLocalEnvMIR
 
@@ -438,8 +473,15 @@ withStackTraceFrame str val =
       VClosure wrap
     VBuiltin name args wf -> case wf of
       OneMoreArg f ->
-        let wrap _pos v =
-              withStackTraceFrame str `fmap` doTopLevel (f v)
+        let wrap pos v =
+              -- This needs to do the same things as the corresponding
+              -- case of applyValue, because we're dropping the
+              -- VBuiltin.
+              let wrap' = do
+                    v' <- f v
+                    return $ insertRefChain pos name v'
+              in
+              withStackTraceFrame str `fmap` doTopLevel wrap'
         in
         VClosure wrap
       ManyMoreArgs f ->
@@ -447,38 +489,38 @@ withStackTraceFrame str val =
               (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
         in
         VClosure wrap
-    VTopLevel pos m ->
+    VTopLevel pos chain m ->
       let m' =
             withStackTraceFrame str `fmap` doTopLevel m
       in
-      VTopLevel pos m'
-    VProofScript pos m ->
+      VTopLevel pos chain m'
+    VProofScript pos chain m ->
       let m' =
             withStackTraceFrame str `fmap` doProofScript m
       in
-      VProofScript pos m'
-    VDo pos _ env stmts ->
-      VDo pos (Just str) env stmts
-    VBindOnce pos v1 v2 ->
+      VProofScript pos chain m'
+    VDo chain _mLegacyName env stmts ->
+      VDo chain (Just str) env stmts
+    VBindOnce pos chain v1 v2 ->
       let v1' = withStackTraceFrame str v1
           v2' = withStackTraceFrame str v2
       in
-      VBindOnce pos v1' v2'
-    VLLVMCrucibleSetup pos m ->
+      VBindOnce pos chain v1' v2'
+    VLLVMCrucibleSetup pos chain m ->
       let m' =
             withStackTraceFrame str `fmap` doLLVM m
       in
-      VLLVMCrucibleSetup pos m'
-    VJVMSetup pos m ->
+      VLLVMCrucibleSetup pos chain m'
+    VJVMSetup pos chain m ->
       let m' =
             withStackTraceFrame str `fmap` doJVM m
       in
-      VJVMSetup pos m'
-    VMIRSetup pos m ->
+      VJVMSetup pos chain m'
+    VMIRSetup pos chain m ->
       let m' =
             withStackTraceFrame str `fmap` doMIR m
       in
-      VMIRSetup pos m'
+      VMIRSetup pos chain m'
     _ ->
       val
 
@@ -494,12 +536,15 @@ withStackTraceFrame str val =
 --   turns out not to be a function value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 = case v1 of
-    VLambda env _mname pat e ->
-        withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+    VLambda env mname pat e -> do
+        let name = fromMaybe "(lambda)" mname
+        r <- withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+        return $ insertRefChain pos name r
     VBuiltin name args wf -> case wf of
         OneMoreArg f -> do
             setPosition pos
-            f v2
+            r <- f v2
+            return $ insertRefChain pos name r
         ManyMoreArgs f ->
             VBuiltin name (args :|> v2) <$> f v2
     VClosure f ->
@@ -551,9 +596,9 @@ interpretExpr expr =
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
-      SS.Block pos stmts -> do
+      SS.Block _pos stmts -> do
           env <- getLocalEnv
-          return $ VDo pos Nothing env stmts
+          return $ VDo [] Nothing env stmts
       SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _pos bs ->
@@ -577,9 +622,11 @@ interpretExpr expr =
                     "Read of unknown variable " <> SS.getVal x
                 ]
             Just (lc, _ty, v)
-              | Set.member lc (rwPrimsAvail rw) ->
-                   let v' = injectPositionIntoMonadicValue (SS.getPos x) v in
-                   return (withStackTraceFrame (show x) v')
+              | Set.member lc (rwPrimsAvail rw) -> do
+                   let pos = SS.getPos x
+                       v' = injectPositionIntoMonadicValue pos v
+                       v'' = insertRefChain pos (SS.getVal x) v'
+                   return (withStackTraceFrame (show x) v'')
               | otherwise ->
                    -- This case is also rejected by the typechecker
                    panic "interpretExpr" [
@@ -650,14 +697,15 @@ interpretDeclGroup (SS.Recursive ds) = do
 -- monads.
 interpretMonadAction :: forall m. InterpreterMonad m => FromValueHow -> Value -> m Value
 interpretMonadAction _fromHow v = case v of
-  VReturn pos v' -> do
-    -- VReturn pos v' -> VProofScript pos (return v')
+  VReturn pos chain v' -> do
+    -- VReturn ... v' -> VProofScript ... (return v')
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
-    return $ mkValue pos v''
-  VDo _blkpos mname env body ->
-    withLocalEnvAny env (interpretDoStmts' mname body)
-  VBindOnce pos baseVal1 val2 -> do
+    return $ mkValue pos chain v''
+  VDo chain mLegacyName env body -> do
+    r <- withLocalEnvAny env (interpretDoStmts' mLegacyName body)
+    return $ propagateRefChain chain r
+  VBindOnce pos chain baseVal1 val2 -> do
     -- baseVal1 is a monadic value of the same class as returned by
     -- interpretExpr (that is, it might be a VDo or a VBindOnce).
     -- Bind it.
@@ -673,7 +721,17 @@ interpretMonadAction _fromHow v = case v of
     -- val2 is a lambda or equivalent that expects the result as an
     -- argument (the traditional >>= form of monad bind)
     result2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" val2 result1
-    interpretMonadAction FromInterpreter result2
+    result3 <- interpretMonadAction FromInterpreter result2
+    -- Handle the RefChain the same way as a do-block. Note that with
+    -- luck we don't have to worry about unwanted additional RefChain
+    -- entries in the second and subsequent VBindOnce values in a
+    -- sequence of them; they should never have the opportunity to
+    -- grow their own references. If we had an explicit bind operator
+    -- in the language, that might be a problem, but we don't and we
+    -- aren't getting one. So the only bind sequences we have are
+    -- canned. (And in particular there's only one, in the "for"
+    -- builtin.)
+    return $ propagateRefChain chain result3
   _ -> pure v
 
 
@@ -792,7 +850,7 @@ interpretDoStmts (stmts, lastexpr) =
           -- unfold it. Instead, produce the unfolded form directly.
           -- Which requires some gyrations to feed the monad type in.
           let result' :: m Value = return result
-          return $ mkValue pos result'
+          return $ mkValue pos [] result'
 
       stmt : more -> do
           -- Execute the expression and get the updated environment
@@ -803,13 +861,13 @@ interpretDoStmts (stmts, lastexpr) =
 -- Wrapper around interpretDoStmts for inserting a stack trace frame, in the
 -- old style. XXX remove along with the old stack trace code...
 interpretDoStmts' :: InterpreterMonad m => Maybe String -> ([SS.Stmt], SS.Expr) -> m Value
-interpretDoStmts' mname body = do
+interpretDoStmts' mLegacyName body = do
   trace <- liftTopLevel $ gets rwStackTrace
-  case mname of
+  case mLegacyName of
     Nothing -> pure ()
     Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = Trace.push name trace })
   v <- interpretDoStmts body
-  case mname of
+  case mLegacyName of
     Nothing -> pure ()
     Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
   return v
@@ -1301,79 +1359,89 @@ instance IsValue a => IsValue (IO a) where
     toValue name action = toValue name (io action)
 
 instance IsValue a => IsValue (TopLevel a) where
-    toValue name action = VTopLevel dummyMonadicPos (fmap (toValue name) action)
+    toValue name action =
+      VTopLevel atRestPos [] (fmap (toValue name) action)
 
 instance FromValue a => FromValue (TopLevel a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VTopLevel pos action -> do
+        VTopLevel pos _chain action -> do
           setPosition pos
           ret <- action
           return $ fromValue how ret
-        _ -> panic "fromValue (TopLevel)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        _ ->
+          panic "fromValue (TopLevel)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (ProofScript a) where
-    toValue name m = VProofScript dummyMonadicPos (fmap (toValue name) m)
+    toValue name m =
+      VProofScript atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (ProofScript a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VProofScript pos action -> do
+        VProofScript pos _chain action -> do
           scriptTopLevel $ setPosition pos
           ret <- action
           return $ fromValue how ret
-        _ -> panic "fromValue (ProofScript)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        _ ->
+          panic "fromValue (ProofScript)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
-    toValue name m = VLLVMCrucibleSetup dummyMonadicPos (fmap (toValue name) m)
+    toValue name m =
+      VLLVMCrucibleSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VLLVMCrucibleSetup pos action -> do
+        VLLVMCrucibleSetup pos _chain action -> do
           llvmTopLevel $ setPosition pos
           ret <- action
           return $ fromValue how ret
-        _ -> panic "fromValue (LLVMSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        _ ->
+          panic "fromValue (LLVMSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
-    toValue name m = VJVMSetup dummyMonadicPos (fmap (toValue name) m)
+    toValue name m =
+      VJVMSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VJVMSetup pos action -> do
+        VJVMSetup pos _chain action -> do
           jvmTopLevel $ setPosition pos
           ret <- action
           return $ fromValue how ret
-        _ -> panic "fromValue (JVMSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        _ ->
+          panic "fromValue (JVMSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
-    toValue name m = VMIRSetup dummyMonadicPos (fmap (toValue name) m)
+    toValue name m =
+      VMIRSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (MIRSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VMIRSetup pos action -> do
+        VMIRSetup pos _chain action -> do
           mirTopLevel $ setPosition pos
           ret <- action
           return $ fromValue how ret
-        _ -> panic "fromValue (MIRSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        _ ->
+          panic "fromValue (MIRSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
   toValue _name v = VLLVMCrucibleSetupValue v
@@ -1709,14 +1777,14 @@ proofScriptSubshell () = do
 -- likely to be quite messy.
 --
 forValue :: [Value] -> Value -> TopLevel Value
-forValue [] _ = return $ VReturn dummyMonadicPos (VArray [])
+forValue [] _ = return $ VReturn atRestPos [] (VArray [])
 forValue (x : xs) f = do
    let pos = SS.PosInternal "<for>"
    m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce pos m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce pos m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
-       return $ VReturn dummyMonadicPos (VArray (v1 : fromValue FromArgument v2))
+   return $ VBindOnce pos [] m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
+     return $ VBindOnce pos [] m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+       return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
 
 caseProofResultPrim ::
   ProofResult ->
@@ -2430,7 +2498,7 @@ primTypes = Map.fromList
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
   [ prim "return"              "{m, a} a -> m a"
-    (pureVal (VReturn dummyMonadicPos))
+    (pureVal (\v -> VReturn atRestPos [] v))
     Current
     [ "Yield a value in a command context. The command"
     , "    x <- return e"
