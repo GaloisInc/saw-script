@@ -649,7 +649,7 @@ interpretDeclGroup (SS.Recursive ds) = do
 -- Execute a monad action. This happens in any of the interpreter
 -- monads.
 interpretMonadAction :: forall m. InterpreterMonad m => FromValueHow -> Value -> m Value
-interpretMonadAction fromHow v = case v of
+interpretMonadAction _fromHow v = case v of
   VReturn pos v' -> do
     -- VReturn pos v' -> VProofScript pos (return v')
     -- (or whichever value for whichever monad)
@@ -657,11 +657,23 @@ interpretMonadAction fromHow v = case v of
     return $ mkValue pos v''
   VDo _blkpos mname env body ->
     withLocalEnvAny env (interpretDoStmts' mname body)
-  VBindOnce pos m1 v2 -> do
-    let m1' = injectPositionIntoMonadicValue pos m1
-    v1 <- actionFromValue fromHow m1'
-    m2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" v2 v1
-    interpretMonadAction fromHow m2
+  VBindOnce pos baseVal1 val2 -> do
+    -- baseVal1 is a monadic value of the same class as returned by
+    -- interpretExpr (that is, it might be a VDo or a VBindOnce).
+    -- Bind it.
+    --
+    -- Note that even if the _bind_ is triggered with FromArgument,
+    -- the contents are executed right here from the interpreter.
+    --
+    -- We therefore don't need _fromHow here right now, but we will
+    -- shortly. (So don't rip it out just yet.)
+    plainVal1 <- interpretMonadAction FromInterpreter baseVal1
+    let plainVal1' = injectPositionIntoMonadicValue pos plainVal1
+    result1 <- actionFromValue FromInterpreter plainVal1'
+    -- val2 is a lambda or equivalent that expects the result as an
+    -- argument (the traditional >>= form of monad bind)
+    result2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" val2 result1
+    interpretMonadAction FromInterpreter result2
   _ -> pure v
 
 
@@ -685,17 +697,21 @@ interpretDoStmt stmt =
       SS.StmtBind pos pat e -> do
           env <- liftTopLevel getLocalEnv
           -- Execute the expression purely first. ("purely")
-          v1 :: Value <- liftTopLevel $ interpretExpr e
-          -- If we got a do-block or similar back, execute it now.
-          v2 :: Value <- interpretMonadAction FromInterpreter v1
-          -- We should now have a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it that we can execute
-          -- in Haskell to get the resultant Value. Insert the call
-          -- position into it.
-          let v2' = injectPositionIntoMonadicValue pos v2
-          v3 :: Value <- actionFromValue FromInterpreter v2'
-          -- Bind the value to the pattern
-          return $ bindPatternLocal pat Nothing v3 env
+          baseVal :: Value <- liftTopLevel $ interpretExpr e
+          -- Now bind the resulting value to execute it:
+          --    - run it in the interpreter with interpretMonadAction
+          --    - update the value metadata
+          --    - fetch the Haskell-level monadic action with fromValue
+          --      and bind that in Haskell to execute it.
+          --
+          -- plainVal should be a plain monadic value with a Haskell
+          -- monadic action in it.
+          plainVal :: Value <- interpretMonadAction FromInterpreter baseVal
+          let plainVal' = injectPositionIntoMonadicValue pos plainVal
+          result :: Value <- actionFromValue FromInterpreter plainVal'
+          -- Bind (in the name-binding, not monad-binding sense) the
+          -- result to the pattern.
+          return $ bindPatternLocal pat Nothing result env
       SS.StmtLet _pos dg -> do
           -- Process the declarations
           liftTopLevel $ interpretDeclGroup dg
@@ -731,49 +747,52 @@ interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Va
 interpretDoStmts (stmts, lastexpr) =
     case stmts of
       [] -> do
-          -- Execute the expression purely first.
-          result :: Value <- liftTopLevel $ interpretExpr lastexpr
-          -- If we got a do-block or similar back, execute it now.
-          result' :: Value <- interpretMonadAction FromInterpreter result
-
-          -- Insert the position in the result if it's a plain monadic
-          -- value. This is its call site as far as things like stack
-          -- traces are concerned, and now's the last opportunity to
-          -- record that. If it's another do-block, this will do
-          -- nothing, but we'll come back here when it's executed.
+          -- The position for the bind we're about to do will be the
+          -- source position of the expression.
           let pos = SS.getPos lastexpr
-              result'' = injectPositionIntoMonadicValue pos result'
 
-          -- This gives us a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it.
+          -- Execute the expression purely first.
+          baseVal :: Value <- liftTopLevel $ interpretExpr lastexpr
+
+          -- Now (monad-)bind the resulting value and execute it.
+
+          -- If we got a do-block or similar back, execute it now.
+          --    - Run it in the interpreter with interpretMonadAction,
+          --      in case it's a do-block. This gives us a plain
+          --      monadic value back.
+          --    - Update the value metadata; we're at its call site as
+          --      far as things like stack traces are concerned, and
+          --      this is the last opportunity to record it. If it's
+          --      another do-block (someone might have done somethng
+          --      like "return (do {...})")  this will have no effect,
+          --      but we'll be back here when it gets executed later.
+          --    - Then extract the resulting Haskell-level monadic
+          --      action and bind it in Haskell to execute it.
           --
-          -- In principle we should return this as the result of the
-          -- block and let the caller execute it. That's correct, and
-          -- doesn't violate the semantics. However, it's akin to a
-          -- tail call: when it executes, the do-block it belonged to
-          -- has gone away and disappeared from the stack trace. This
-          -- causes confusion and consternation and would need to be
-          -- special-cased to get the right stack trace out. Instead,
-          -- we'll execute it, get the value it produces, and wrap
-          -- that in a return.
-          --
-          -- Thus do { m1; mr; } becomes do { m1; r <- mr; return r; }
-          -- which is perfectly sound.
+          -- In principle we should return the plain monadic value as
+          -- the result of the block and let the caller execute
+          -- it. Instead, bind it now and construct a return of the
+          -- result. (As in: replace "do { ...; e; }" with "do { ...;
+          -- r <- e; return r; }".) In the common case where the last
+          -- expression is just a return, this has no effect, and
+          -- these are semantically equivalent; but if it actually
+          -- does something, letting the caller execute it is akin to
+          -- tail-call optimization and breaks stack traces.
           --
           -- FUTURE: do this transform on the AST upstream before
           -- executing; that can more readily avoid doing the
           -- transform if the last expression is already a return.
-
-          -- As elsewhere, don't make a frame around this because the
-          -- frame happens in fromValue.
-          ret <- actionFromValue FromInterpreter result''
+          --
+          plainVal :: Value <- interpretMonadAction FromInterpreter baseVal
+          let plainVal' = injectPositionIntoMonadicValue pos plainVal
+          result <- actionFromValue FromInterpreter plainVal'
 
           -- Don't return a VReturn here, because there isn't
           -- necessarily a following call to interpretMonadAction to
           -- unfold it. Instead, produce the unfolded form directly.
           -- Which requires some gyrations to feed the monad type in.
-          let ret' :: m Value = return ret
-          return $ mkValue pos ret'
+          let result' :: m Value = return result
+          return $ mkValue pos result'
 
       stmt : more -> do
           -- Execute the expression and get the updated environment
@@ -806,7 +825,8 @@ processStmtBind ::
 processStmtBind printBinds pos pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
-  val <- liftTopLevel $ interpretExpr expr
+  -- Eval the expression
+  baseVal <- liftTopLevel $ interpretExpr expr
 
   -- Fetch the type from updated pattern, since the typechecker will
   -- have filled it in there.
@@ -820,15 +840,25 @@ processStmtBind printBinds pos pat expr = do -- mx mt
   -- be inside the typechecker or restricted to the repl.
   when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ PPS.pShow ty
 
-  -- Run the resulting TopLevel (or ProofScript) action.
+  -- Now bind the resulting value:
+  --    - run it in the interpreter with interpretMonadAction,
+  --      in case it's a do-block
+  --    - update the value metadata (specifically: insert the bind
+  --      position into the plain monadic value we get back from
+  --      the interpreter as its position of last reference)
+  --    - fetch the Haskell-level monadic action with fromValue and
+  --      bind that in Haskell to execute it.
   --
-  -- Insert the bind position into the monadic value before executing
-  -- it. The fromValue call (inside actionFromValue) is the point that
-  -- sets the exposed position for real. (It has to be, because it can
-  -- get triggered from places that don't come directly from the
-  -- interpreter.)
-  let val' = injectPositionIntoMonadicValue pos val
-  result <- actionFromValue FromInterpreter val'
+  -- Note that calling interpretMonadAction here is necessary for the
+  -- moment (even though it's also called from fromValue /
+  -- actionFromValue) because we need the result to do the position
+  -- update.
+  --
+  -- Also, there are four copies of this logic and I want them to all
+  -- be as close as possible to the same.
+  plainVal <- interpretMonadAction FromInterpreter baseVal
+  let plainVal' = injectPositionIntoMonadicValue pos plainVal
+  result <- actionFromValue FromInterpreter plainVal'
 
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
