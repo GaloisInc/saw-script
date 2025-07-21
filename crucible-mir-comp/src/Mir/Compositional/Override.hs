@@ -77,7 +77,7 @@ data MethodSpec = MethodSpec
 
 makeLenses ''MethodSpec
 
-instance (IsSymInterface sym, sym ~ Sym t fs) => MethodSpecImpl sym MethodSpec where
+instance (IsSymInterface sym, sym ~ MirSym t fs) => MethodSpecImpl sym MethodSpec where
     msPrettyPrint = printSpec
     msEnable = enable
 
@@ -85,7 +85,7 @@ instance (IsSymInterface sym, sym ~ Sym t fs) => MethodSpecImpl sym MethodSpec w
 -- | Pretty-print a MethodSpec.  This wraps `ppMethodSpec` and returns the
 -- result as a Rust string.
 printSpec ::
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
@@ -109,7 +109,7 @@ printSpec ms = do
 -- the current test, calls to the subject function will be replaced with
 -- `runSpec`.
 enable ::
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
@@ -128,7 +128,7 @@ enable ms = do
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym p t fs args ret rtp.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec myCS mh ms = ovrWithBackend $ \bak ->
@@ -350,7 +350,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
     forall sym t fs tp0.
-    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
@@ -502,7 +502,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
 -- namely the return value and any post-state PointsTos.
 setupToReg :: forall sym t fs tp0.
-    (IsSymInterface sym, sym ~ Sym t fs, HasCallStack) =>
+    (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.

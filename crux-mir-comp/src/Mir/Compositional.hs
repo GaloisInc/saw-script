@@ -34,7 +34,7 @@ import Mir.Compositional.State
 
 compositionalOverrides ::
     forall sym bak p t fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->

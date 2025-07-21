@@ -70,7 +70,7 @@ import Mir.Compositional.State
 
 cryptolOverrides ::
     forall sym bak p t fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
@@ -146,7 +146,7 @@ cryptolOverrides _symOnline cs name cfg
 
 cryptolLoad ::
     forall sym p t fs rtp a r tp .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
@@ -176,7 +176,7 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
 cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 loadString ::
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     RegValue sym MirSlice ->
     String ->
     OverrideSim (p sym) sym MIR rtp a r Text
@@ -187,7 +187,7 @@ loadString str desc = getString str >>= \x -> case x of
 
 cryptolOverride ::
     forall sym p t fs rtp a r .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     M.Collection ->
     MirHandle ->
     RegValue sym MirSlice ->
@@ -222,7 +222,7 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
 -- used to run the function.
 loadCryptolFunc ::
     forall sym p t fs rtp a r .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     M.Collection ->
     M.FnSig ->
     Text ->
@@ -272,7 +272,7 @@ loadCryptolFunc col sig modulePath name = do
 
 cryptolRun ::
     forall sym p t fs rtp r args ret .
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     String ->
     Assignment TypeShape args ->
     TypeShape ret ->
@@ -296,7 +296,7 @@ cryptolRun name argShps retShp funcTerm = do
     liftIO $ termToReg sym w4VarMap appTerm retShp
 
 munge :: forall sym t fs tp0.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
     let scs = mirSAWCoreState (sym ^. W4.userState)

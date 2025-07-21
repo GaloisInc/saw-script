@@ -172,7 +172,7 @@ execBuilderT s f = execStateT f s
 data MethodSpecValue sym tp = MethodSpecValue (TypeRepr tp) (RegValue sym tp)
 
 
-instance (IsSymInterface sym, sym ~ Sym t fs) =>
+instance (IsSymInterface sym, sym ~ MirSym t fs) =>
         MethodSpecBuilderImpl sym (MethodSpecBuilder sym t) where
     msbAddArg = addArg
     msbSetReturn = setReturn
@@ -185,7 +185,7 @@ instance (IsSymInterface sym, sym ~ Sym t fs) =>
 -- Rust invokes `msb.add_arg(...)` or similar.
 
 builderNew :: forall sym p t fs rtp.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     CollectionState ->
     -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
     -- have one type argument, which is the `TyFnDef` of the function that the
@@ -228,7 +228,7 @@ builderNew cs defId =
 -- argument.  For example, if `argRef` points to an `&mut i32`, the `i32` will
 -- be overwritten with a fresh symbolic variable.
 addArg :: forall sym p t fs rtp args ret tp0.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb =
@@ -282,7 +282,7 @@ addArg tpr argRef msb =
 -- | Set the MethodSpec's return value.  The value to use is obtained by
 -- dereferencing `argRef`.
 setReturn :: forall sym t fs p rtp args ret tp0.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     TypeRepr tp0 -> MirReferenceMux sym -> MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 setReturn tpr argRef msb =
@@ -323,7 +323,7 @@ setReturn tpr argRef msb =
 -- variables seen in the function's inputs (arguments and memory reachable
 -- through arguments).
 gatherAssumes :: forall sym t fs p rtp args ret.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 gatherAssumes msb =
@@ -370,7 +370,7 @@ gatherAssumes msb =
 -- variables seen in the functions inputs or outputs (arguments, return value,
 -- and memory reachable through either).
 gatherAsserts :: forall sym t fs p rtp args ret.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (MethodSpecBuilder sym t)
 gatherAsserts msb =
@@ -471,7 +471,7 @@ gatherAsserts msb =
 
 -- | Collect all the symbolic variables that appear in `vals`.
 gatherVars ::
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym ->
     [Some (MethodSpecValue sym)] ->
     IO (Set (Some (W4.ExprBoundVar t)))
@@ -489,7 +489,7 @@ gatherVars sym vals = do
 -- `pred` that mentions at least one variable in `vars` along with some
 -- `badVar` not in `vars`.
 relevantPreds :: forall sym t fs a.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym ->
     Set (Some (W4.ExprBoundVar t)) ->
     [(W4.Pred sym, a)] ->
@@ -524,7 +524,7 @@ relevantPreds _sym vars preds = runExceptT $ filterM check preds
 -- invoke the subject function during MethodSpec building, so all its outputs
 -- contain arbitrary (symbolic) values.
 finish :: forall sym t fs p rtp args ret.
-    (IsSymInterface sym, sym ~ Sym t fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpecBuilder sym t ->
     OverrideSim p sym MIR rtp args ret (M.MethodSpec sym)
 finish msb =
@@ -677,7 +677,7 @@ substMethodSpec sc sm ms = do
 -- the pre or post state, depending on the pre/post flag `p`), and any
 -- MirReferences will be converted into MethodSpec allocations/pointers.
 regToSetup :: forall sym bak t fs tp0 p rtp args ret.
-    (IsSymBackend sym bak, sym ~ Sym t fs, HasCallStack) =>
+    (IsSymBackend sym bak, sym ~ MirSym t fs, HasCallStack) =>
     bak -> PrePost ->
     (forall tp'. BaseTypeRepr tp' -> W4.Expr t tp' -> IO SAW.TypedTerm) ->
     TypeShape tp0 -> RegValue sym tp0 ->
@@ -768,7 +768,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
             loop flds rvs (sv : svs)
 
 refToAlloc :: forall sym bak t fs tp p rtp args ret.
-    (IsSymBackend sym bak, sym ~ Sym t fs) =>
+    (IsSymBackend sym bak, sym ~ MirSym t fs) =>
     bak -> PrePost -> MirPointerKind -> M.Mutability -> M.Ty -> TypeRepr tp ->
     MirReferenceMux sym -> Int ->
     BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex

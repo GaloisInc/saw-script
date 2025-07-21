@@ -19,7 +19,7 @@ import qualified SAWCoreWhat4.ReturnTrip as SAW
 import qualified What4.Expr as W4
 
 
-type Sym t fs = W4.ExprBuilder t MirState fs
+type MirSym t fs = W4.ExprBuilder t MirState fs
 
 data MirState t = MirState {
   mirSharedContext   :: SAW.SharedContext,
