@@ -1,0 +1,21 @@
+module test::symb_eval::cryptol::uninterp where
+
+type U64 = [64]
+
+pow : U64 -> U64 -> U64
+pow n k = last vals where
+    sq x = mult x x
+    vals = [1]
+         # [ if i then mult n acc else acc
+           | acc <- map sq vals
+           | i   <- k ]
+
+irreducible : [65]
+irreducible = <| x^^64 + x^^4 + x^^3 + x + 1 |>
+
+/**
+ * Multiply two elements in GF28. [FIPS-197u1] Section 4.2.
+ */
+mult : U64 -> U64 -> U64
+// mult x y = pmod (pmult x y) irreducible
+mult = undefined // definition replaced to check that uninterp is doing something in the test

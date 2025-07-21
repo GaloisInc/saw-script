@@ -563,30 +563,39 @@ resolveNames nms =
 -- 'ExtCns' that each represent an unfoldable 'Constant' value or a
 -- fresh uninterpreted constant.
 -- The given name is searched for in both the local Cryptol environment
+-- and the SAWCore naming environment.
+-- Pulling this out of `TopLevel` is useful so we can use it in other
+-- contexts (e.g., `crucible-mir-comp`)
+resolveNameIO :: SharedContext -> CEnv.CryptolEnv -> Text -> IO [VarIndex]
+resolveNameIO sc cenv nm =
+  do scnms <- scResolveName sc nm
+     let ?fileReader = StrictBS.readFile
+     res <- CEnv.resolveIdentifier cenv nm
+     case res of
+       Just cnm ->
+         do importedName <- Cryptol.importName cnm
+            case importedName of
+              ImportedName uri _ ->
+                do resolvedName <- scResolveNameByURI sc uri
+                   case resolvedName of
+                     Just vi -> pure (vi : scnms)
+                     Nothing -> pure scnms
+              _ -> pure scnms
+       Nothing -> pure scnms
+
+-- | Given a user-provided name, resolve it to (potentially several)
+-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- fresh uninterpreted constant.
+-- The given name is searched for in both the local Cryptol environment
 -- and the SAWCore naming environment. If it is found in neither, an
 -- exception is thrown.
 resolveName :: SharedContext -> Text -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
-     scnms <- io (scResolveName sc nm)
-     let ?fileReader = StrictBS.readFile
-     res <- io $ CEnv.resolveIdentifier cenv nm
-     case res of
-       Just cnm ->
-         do importedName <- io $ Cryptol.importName cnm
-            case importedName of
-              ImportedName uri _ ->
-                do resolvedName <- io $ scResolveNameByURI sc uri
-                   case resolvedName of
-                     Just vi -> pure $ vi:scnms
-                     Nothing -> fallback scnms
-              _ -> fallback scnms
-       Nothing -> fallback scnms
-
- where
- fallback [] = fail $ Text.unpack $ "Could not resolve name: " <> nm
- fallback scnms = pure scnms
-
+     scnms <- io (resolveNameIO sc cenv nm)
+     case scnms of
+       [] -> fail $ Text.unpack $ "Could not resolve name: " <> nm
+       _  -> pure scnms
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
 normalize_term tt = normalize_term_opaque [] tt

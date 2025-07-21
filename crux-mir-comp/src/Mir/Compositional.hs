@@ -18,8 +18,6 @@ import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.Simulator
 
-import qualified What4.Expr.Builder as W4
-
 import Crux
 
 import Mir.DefId
@@ -31,11 +29,12 @@ import Mir.TransTy (tyToRepr)
 import Mir.Compositional.Builder (builderNew)
 import Mir.Compositional.Clobber (clobberGlobalsOverride)
 import Mir.Compositional.DefId (hasInstPrefix)
+import Mir.Compositional.State
 
 
 compositionalOverrides ::
-    forall sym bak p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    forall sym bak p t fs args ret blocks rtp a r .
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->

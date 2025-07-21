@@ -83,7 +83,8 @@ executable crux-mir-comp
     what4,
 
     -- this package's own library
-    crux-mir-comp
+    crux-mir-comp,
+    crucible-mir-comp
 
   hs-source-dirs: exe
   main-is: Main.hs
@@ -126,7 +127,8 @@ test-suite crux-mir-comp-tests
     crux-mir,
 
     -- this package's own library
-    crux-mir-comp
+    crux-mir-comp,
+    crucible-mir-comp
 
   type: exitcode-stdio-1.0
   hs-source-dirs: test

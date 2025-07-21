@@ -2,6 +2,7 @@
 {-# Language FlexibleContexts #-}
 {-# Language FlexibleInstances #-}
 {-# Language GADTs #-}
+{-# Language ImplicitParams #-}
 {-# Language MultiParamTypeClasses #-}
 {-# Language OverloadedStrings #-}
 {-# Language PatternSynonyms #-}
@@ -63,6 +64,7 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
+import Mir.Compositional.State
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
@@ -75,7 +77,7 @@ data MethodSpec = MethodSpec
 
 makeLenses ''MethodSpec
 
-instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sym MethodSpec where
+instance (IsSymInterface sym, sym ~ MirSym t fs) => MethodSpecImpl sym MethodSpec where
     msPrettyPrint = printSpec
     msEnable = enable
 
@@ -83,7 +85,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 -- | Pretty-print a MethodSpec.  This wraps `ppMethodSpec` and returns the
 -- result as a Rust string.
 printSpec ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = do
@@ -107,7 +109,7 @@ printSpec ms = do
 -- the current test, calls to the subject function will be replaced with
 -- `runSpec`.
 enable ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
@@ -118,7 +120,6 @@ enable ms = do
             show (ms ^. msSpec . MS.csMethod) ++ "?"
 
     -- TODO: handle multiple specs for the same function
-
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
         runSpec myCS mh (ms ^. msSpec)
   where
@@ -126,8 +127,8 @@ enable ms = do
 
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
-runSpec :: forall sym p t st fs args ret rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+runSpec :: forall sym p t fs args ret rtp.
+    (IsSymInterface sym, sym ~ MirSym t fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec myCS mh ms = ovrWithBackend $ \bak ->
@@ -168,7 +169,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         let ec = SAW.tecExt tec
         let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecName ec
         let nameSymbol = W4.safeSymbol nameStr
-        Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
+        Some btpr <- liftIO $ termToType sym (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
         liftIO $ addAssumptions bak (singleEvent ev)
@@ -200,7 +201,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
                      , MS.conditionType = "formal argument matching"
                      , MS.conditionContext = ""
                      }
-            matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -226,7 +227,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+                matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
 
@@ -259,7 +260,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (ms ^. MS.csPreState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            pred_ <- liftIO $ termToPred sym w4VarMap term
             MS.addAssert pred_ md $
                 SimError loc (AssertFailureSimError (show $ W4.printSymExpr pred_) "")
 
@@ -267,7 +268,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (ms ^. MS.csPostState . MS.csConditions) $ \cond -> do
             (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
-            pred_ <- liftIO $ termToPred sym sc w4VarMap term
+            pred_ <- liftIO $ termToPred sym w4VarMap term
             MS.addAssume pred_ md
 
     ((), os) <- case result of
@@ -303,7 +304,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     let termSub = os ^. MS.termSub
     retVal <- case ms ^. MS.csRetValue of
-        Just sv -> liftIO $ setupToReg sym sc termSub w4VarMap allocMap retShp sv
+        Just sv -> liftIO $ setupToReg sym termSub w4VarMap allocMap retShp sv
         Nothing -> case testEquality retTpr UnitRepr of
             Just Refl -> return ()
             Nothing -> error $ "no return value, but return type is " ++ show retTpr
@@ -331,7 +332,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym
-            rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
+            rv <- liftIO $ setupToReg sym termSub w4VarMap allocMap shp sv
             writeMirRefSim (ptr ^. mpType) ref' rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
@@ -348,16 +349,15 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
 -- this may update `termSub` and `setupValueSub` with new bindings for the
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
-    forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    forall sym t fs tp0.
+    (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    SAW.SharedContext ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
     MS.ConditionMetadata ->
     TypeShape tp0 -> RegValue sym tp0 -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
+matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -383,7 +383,7 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
                 -- would be nice to allow any longer slice length, but it's not
                 -- clear how to do that soundly (the function might branch on
                 -- the length of the slice, for instance).
-                Some val <- liftIO $ termToExpr sym sc mempty (SAW.ttTerm tt)
+                Some val <- liftIO $ termToExpr sym mempty (SAW.ttTerm tt)
                 Refl <- case testEquality (W4.exprType expr) (W4.exprType val) of
                     Just x -> return x
                     Nothing -> error $ "type mismatch: concrete argument type " ++
@@ -501,10 +501,9 @@ matchArg sym sc eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
 -- namely the return value and any post-state PointsTos.
-setupToReg :: forall sym t st fs tp0.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+setupToReg :: forall sym t fs tp0.
+    (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    SAW.SharedContext ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
     IntMap SAW.Term ->
@@ -515,13 +514,14 @@ setupToReg :: forall sym t st fs tp0.
     TypeShape tp0 ->
     MS.SetupValue MIR ->
     IO (RegValue sym tp0)
-setupToReg sym sc termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
+setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
+        let sc = mirSharedContext (sym ^. W4.userState)
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
-        Some expr <- termToExpr sym sc myRegMap term
+        Some expr <- termToExpr sym myRegMap term
         Refl <- case testEquality (W4.exprType expr) btpr of
             Just x -> return x
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
