@@ -310,7 +310,7 @@ span.spaces    { background: white }
 <span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vWord lv = VWord lv</span></span>
 <span class="lineno">  292 </span>
 <span class="lineno">  293 </span>vBool :: SBool -&gt; SValue
-<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">vBool l = VBool l</span></span>
+<span class="lineno">  294 </span><span class="decl"><span class="istickedoff">vBool l = VBool l</span></span>
 <span class="lineno">  295 </span>
 <span class="lineno">  296 </span>vInteger :: SInteger -&gt; SValue
 <span class="lineno">  297 </span><span class="decl"><span class="nottickedoff">vInteger x = VInt x</span></span>
@@ -741,9 +741,9 @@ span.spaces    { background: white }
 <span class="lineno">  722 </span><span class="spaces">                </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>                           = Nothing</span>
 <span class="lineno">  723 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">neutral _env nt = fail (&quot;sbvSATQuery: could not evaluate neutral term: &quot; ++ show nt)</span></span>
 <span class="lineno">  724 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">primHandler = Sim.defaultPrimHandler</span></span>
-<span class="lineno">  725 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">mux = Prims.lazyMuxValue prims</span></span>
+<span class="lineno">  725 </span><span class="spaces">          </span><span class="istickedoff">let mux = Prims.lazyMuxValue prims</span>
 <span class="lineno">  726 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  727 </span><span class="spaces">          </span><span class="istickedoff">cfg  &lt;- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted <span class="nottickedoff">neutral</span> <span class="nottickedoff">primHandler</span> <span class="nottickedoff">mux</span>)</span>
+<span class="lineno">  727 </span><span class="spaces">          </span><span class="istickedoff">cfg  &lt;- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted <span class="nottickedoff">neutral</span> <span class="nottickedoff">primHandler</span> mux)</span>
 <span class="lineno">  728 </span><span class="spaces">          </span><span class="istickedoff">bval &lt;- liftIO (Sim.evalSharedTerm cfg t)</span>
 <span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  730 </span><span class="spaces">          </span><span class="istickedoff">case bval of</span>
@@ -779,7 +779,7 @@ span.spaces    { background: white }
 <span class="lineno">  760 </span><span class="decl"><span class="istickedoff">newVars nm fot =</span>
 <span class="lineno">  761 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
 <span class="lineno">  762 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt;</span>
-<span class="lineno">  763 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (BoolLabel s, vBool &lt;$&gt; existsSBool s)</span></span>
+<span class="lineno">  763 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">BoolLabel s</span>, vBool &lt;$&gt; existsSBool s)</span>
 <span class="lineno">  764 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt;</span>
 <span class="lineno">  765 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, vInteger &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  766 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>

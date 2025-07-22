@@ -1371,11 +1371,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1352 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VRecordValue &lt;$&gt; traverse build fs</span></span>
 <span class="lineno"> 1353 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1354 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)</span>
-<span class="lineno"> 1355 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">i == j</span> = <span class="nottickedoff">VCtorApp i ps &lt;$&gt; ctorArgs (ecType i) ps xv yv</span></span>
-<span class="lineno"> 1356 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno"> 1357 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do b' &lt;- bpNot bp b</span></span>
-<span class="lineno"> 1358 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">pure $ VCtorMux ps $ IntMap.fromList $</span></span>
-<span class="lineno"> 1359 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">[(ecVarIndex i, (b, i, xv)), (ecVarIndex j, (b', j, yv))]</span></span>
+<span class="lineno"> 1355 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlyfalse">i == j</span> = <span class="nottickedoff">VCtorApp i ps &lt;$&gt; ctorArgs (ecType i) ps xv yv</span></span>
+<span class="lineno"> 1356 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1357 </span><span class="spaces">        </span><span class="istickedoff">do b' &lt;- bpNot bp <span class="nottickedoff">b</span></span>
+<span class="lineno"> 1358 </span><span class="spaces">           </span><span class="istickedoff">pure $ VCtorMux ps $ IntMap.fromList $</span>
+<span class="lineno"> 1359 </span><span class="spaces">             </span><span class="istickedoff">[(ecVarIndex i, (b, i, xv)), (ecVarIndex j, (<span class="nottickedoff">b'</span>, j, yv))]</span>
 <span class="lineno"> 1360 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorMux _ ym) =</span>
 <span class="lineno"> 1361 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let xm = IntMap.singleton (ecVarIndex i) (bpTrue bp, i, xv)</span></span>
 <span class="lineno"> 1362 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VCtorMux ps &lt;$&gt; branches ps xm ym</span></span>
