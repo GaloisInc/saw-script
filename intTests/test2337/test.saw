@@ -1,0 +1,3 @@
+import "test.cry";
+
+prove_print z3 {{\(x : Bit) -> (eqLetter l l where l = letterA x) }};
