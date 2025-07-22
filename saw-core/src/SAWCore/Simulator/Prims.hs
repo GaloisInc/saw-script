@@ -47,6 +47,7 @@ module SAWCore.Simulator.Prims
 , vRotateR
 , vShiftL
 , vShiftR
+, lazyMuxValue
 , muxValue
 , shifter
 ) where
@@ -65,6 +66,8 @@ import Data.Maybe (fromMaybe)
 import Data.Bitraversable
 import Data.Bits
 import Data.Char (chr)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -1350,8 +1353,18 @@ muxValue bp tp0 b = value tp0
 
     value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)
       | i == j = VCtorApp i ps <$> ctorArgs (ecType i) ps xv yv
-      | otherwise = unsupportedPrimitive "muxValue"
-          ("cannot mux different data constructors " <> show i <> " " <> show j)
+      | otherwise =
+        do b' <- bpNot bp b
+           pure $ VCtorMux ps $ IntMap.fromList $
+             [(ecVarIndex i, (b, i, xv)), (ecVarIndex j, (b', j, yv))]
+    value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorMux _ ym) =
+      do let xm = IntMap.singleton (ecVarIndex i) (bpTrue bp, i, xv)
+         VCtorMux ps <$> branches ps xm ym
+    value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorApp j _ yv) =
+      do let ym = IntMap.singleton (ecVarIndex j) (bpTrue bp, j, yv)
+         VCtorMux ps <$> branches ps xm ym
+    value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =
+      do VCtorMux ps <$> branches ps xm ym
 
     value (VVecType _ tp) (VVector xv) (VVector yv) =
       VVector <$> thunks tp xv yv
@@ -1381,6 +1394,26 @@ muxValue bp tp0 b = value tp0
          "Malformed arguments: " <> Text.pack (show x) <> " " <> Text.pack (show y),
          "Type: " <> Text.pack (show tp)
       ]
+
+    branches ::
+      [Thunk l] ->
+      IntMap (VBool l, ExtCns (TValue l), [Thunk l]) ->
+      IntMap (VBool l, ExtCns (TValue l), [Thunk l]) ->
+      EvalM l (IntMap (VBool l, ExtCns (TValue l), [Thunk l]))
+    branches ps xm ym =
+      do b' <- bpNot bp b
+         let andPred p1 (p2, c, args) =
+               do p <- bpAnd bp p1 p2
+                  pure (p, c, args)
+         let merge x y =
+               do (xp, i, xv) <- x
+                  (yp, _, yv) <- y
+                  zp <- bpOr bp xp yp
+                  zv <- ctorArgs (ecType i) ps xv yv
+                  pure (zp, i, zv)
+         let xm' = fmap (andPred b) xm
+         let ym' = fmap (andPred b') ym
+         sequenceA (IntMap.unionWith merge xm' ym')
 
     ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
 

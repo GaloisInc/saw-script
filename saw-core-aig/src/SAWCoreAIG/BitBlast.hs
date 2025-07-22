@@ -467,6 +467,7 @@ bitBlastBasic be m addlPrims ecMap t = do
          (const Nothing)
          neutral
          primHandler
+         (Prims.lazyMuxValue (prims be))
   Sim.evalSharedTerm cfg t
 
 bitBlastExtCns ::

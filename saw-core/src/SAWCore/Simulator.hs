@@ -44,6 +44,7 @@ import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.IntMap as IMap
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -110,6 +111,7 @@ data SimulatorConfig l =
   --   this is just an error condition; for others, sensible action can
   --   be taken.
   , simModMap :: ModuleMap
+  , simLazyMux :: TValue l -> VBool l -> MValue l -> MValue l -> MValue l
   }
 
 ------------------------------------------------------------
@@ -244,7 +246,15 @@ evalTermF cfg lam recEval tf env =
                               lam (ctorIotaTemplate ctor) allArgs
 
                         | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
-                      Nothing -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
+                      Nothing ->
+                        case argv of
+                          VCtorMux _ps branches ->
+                            do alts <- traverse (evalCtorMuxBranch r) (IntMap.elems branches)
+                               -- compute return type of recursor application
+                               ixvs <- traverse recEval ixs
+                               retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
+                               combineAlts retTy alts
+                          _ -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
                _ -> simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)
 
         RecordType elem_tps ->
@@ -271,6 +281,28 @@ evalTermF cfg lam recEval tf env =
     toTValue :: HasCallStack => Value l -> TValue l
     toTValue (TValue x) = x
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
+
+    evalCtorMuxBranch ::
+      Value l ->
+      (VBool l, ExtCns (TValue l), [Thunk l]) ->
+      EvalM l (VBool l, EvalM l (Value l))
+    evalCtorMuxBranch r (p, c, args) =
+      case r of
+        VRecursor d ps motive motiveTy ps_fs ->
+          do let i = ecVarIndex c
+             let rTy = VRecursorType d ps motive motiveTy
+             case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
+               (Just (ResolvedCtor ctor), Just (elim, elimTy)) ->
+                 do allArgs <- processRecArgs ps args (ecType c) [(elim, elimTy), (ready r, rTy)]
+                    pure (p, lam (ctorIotaTemplate ctor) allArgs)
+               _ -> panic "evalTermF / evalCtorMuxBranch"
+                    ["could not find info for constructor: " <> toAbsoluteName (ecName c)]
+        _ -> panic "evalTermF / evalCtorMuxBranch" ["expected VRecursor"]
+
+    combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
+    combineAlts _ [] = panic "evalTermF / combineAlts" ["no alternatives"]
+    combineAlts _ [(_, x)] = x
+    combineAlts tp ((p, x) : alts) = simLazyMux cfg tp p x (combineAlts tp alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _ps args) =
@@ -346,6 +378,7 @@ processRecArgs _ _ ty _ =
   (ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   (ExtCns (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
+  (TValueIn Id l -> VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
@@ -355,6 +388,7 @@ processRecArgs _ _ ty _ =
   (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   (ExtCns (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
+  (TValueIn IO l -> VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap ->
@@ -363,9 +397,10 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               (ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
               (Env l -> NeutralTerm -> MValue l) ->
               (ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
+              (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted neutral primHandler =
-  evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral primHandler
+evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
+  evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -375,6 +410,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler =
   (TermF Term -> ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   (ExtCns (TValue (WithM Id l)) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
+  (TValue (WithM Id l) -> VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -384,6 +420,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler =
   (TermF Term -> ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   (ExtCns (TValue (WithM IO l)) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
+  (TValueIn IO l -> VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -400,10 +437,12 @@ evalGlobal' ::
   (Env l -> NeutralTerm -> MValue l) ->
   -- | Handler for stuck primitives
   (ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l) ->
+  -- | Lazy mux operation
+  (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns constant neutral primHandler =
+evalGlobal' modmap prims extcns constant neutral primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' ctors neutral modmap)
+     return (SimulatorConfig primitive extcns constant' ctors neutral modmap lazymux)
   where
     constant' :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
     constant' tf ec =
