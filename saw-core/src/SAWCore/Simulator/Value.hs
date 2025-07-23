@@ -25,6 +25,7 @@ import Prelude hiding (mapM)
 
 import Control.Monad (foldM, mapM)
 import Data.Kind (Type)
+import Data.IntMap (IntMap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -57,6 +58,12 @@ data Value l
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !(ExtCns (TValue l)) ![Thunk l] ![Thunk l]
+  | VCtorMux ![Thunk l] !(IntMap (VBool l, ExtCns (TValue l), [Thunk l]))
+    -- ^ A mux tree of possible constructor values of a data type.
+    -- The list of data type parameters is kept outside the mux.
+    -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
+    -- The 'VBool' predicates must be mutually-exclusive and one
+    -- must always be true.
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
@@ -180,6 +187,7 @@ instance Show (Extra l) => Show (Value l) where
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
       VCtorApp s _ps _xv -> shows (toAbsoluteName (ecName s))
+      VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"

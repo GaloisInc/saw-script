@@ -1,0 +1,17 @@
+enum Letter = A | B
+
+eqLetter : Letter -> Letter -> Bit
+eqLetter l1 l2 =
+  case l1 of
+    A ->
+      case l2 of
+        A -> True
+        B -> False
+    B ->
+      case l2 of
+        A -> False
+        B -> True
+
+letterA : Bool -> Letter
+letterA x =
+  if x then A else B

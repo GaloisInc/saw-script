@@ -71,7 +71,8 @@ extractUninterp ::
 extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
   do mapref <- newIORef mempty
      cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union addlPrims (constMap sc cfg))
-                             (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg) (primHandler cfg))
+                             (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg)
+                             (primHandler cfg) (lazymux cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
      t' <- readBackValue sc cfg tv v
@@ -107,6 +108,8 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
          prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
+
+    lazymux cfg = Prims.lazyMuxValue (prims sc cfg)
 
 replace ::
   (?recordEC :: BoundECRecorder) =>
@@ -154,7 +157,8 @@ normalizeSharedTerm' ::
 normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
   do let ?recordEC = \_ec -> return ()
      cfg <- mfix (\cfg -> Sim.evalGlobal' m (primsFn cfg (constMap sc cfg))
-                              (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg))
+                              (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg)
+                              (Prims.lazyMuxValue (prims sc cfg)))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
      readBackValue sc cfg tv v

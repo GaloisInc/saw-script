@@ -59,6 +59,7 @@ evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
            extcns (const Nothing) neutral primHandler
+           (Prims.lazyMuxValue prims)
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
@@ -415,6 +416,7 @@ bitBlastBasic m addlPrims ecMap t = runIdentity $ do
          (const Nothing)
          neutral
          primHandler
+         (Prims.lazyMuxValue prims)
   Sim.evalSharedTerm cfg t
 
 
