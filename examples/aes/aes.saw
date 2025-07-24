@@ -1,135 +1,94 @@
-import "../../deps/cryptol-specs/Common/GF28.cry";
-import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/AES.cry";
+/**
+ * Cryptol AES property verification.
+ *
+ * This module efficiently checks that decrypt is the inverse of encrypt.
+ *
+ * @copyright Galois Inc.
+ * @author Eric Mertens <emertens@galois.com>
+ */
 
-print "Proving encrypt_lemma...";
-encrypt_lemma <-
-  time (prove_print (unint_z3 ["AESRound"])
-  (rewrite (cryptol_ss())
-  {{ \(state0 : State) (ks : [13]RoundKey) ->
-      (rounds where rounds = [state0] # [ AESRound (rk, s) | rk <- ks | s <- rounds ]) ! 0 ==
-        AESRound(ks@12,AESRound(ks@11,AESRound(ks@10,AESRound(ks@9,
-          AESRound(ks@8,AESRound(ks@7,AESRound(ks@6,AESRound(ks@5,AESRound(ks@4,
-            AESRound(ks@3,AESRound(ks@2,AESRound(ks@1,AESRound(ks@0,state0)))))))))))))
-  }}));
+import "../../deps/cryptol-specs/Common/GF28.cry" as GF28;
+import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/AES/Instantiations/AES256.cry";
 
-print "Proving decrypt_lemma...";
-decrypt_lemma <-
-  time (prove_print (unint_z3 ["AESInvRound"])
-  (rewrite (cryptol_ss())
-  {{ \(state0 : State) (ks : [13]RoundKey) ->
-      (rounds where rounds = [state0] # [ AESInvRound (rk, s) | rk <- reverse ks | s <- rounds ]) ! 0 ==
-        AESInvRound(ks@0,AESInvRound(ks@1,AESInvRound(ks@2,AESInvRound(ks@3,AESInvRound(ks@4,
-          AESInvRound(ks@5,AESInvRound(ks@6,AESInvRound(ks@7,AESInvRound(ks@8,
-            AESInvRound(ks@9,AESInvRound(ks@10,AESInvRound(ks@11,AESInvRound(ks@12,state0)))))))))))))
-  }}));
+let ss0 = cryptol_ss ();
 
-print "Proving msgToState_stateToMsg(rme)...";
-msgToState_stateToMsg <-
-  time (prove_print rme
-  {{ \st -> msgToState (stateToMsg st) == st }});
+print "Verifying that cipher unrolls";
+unroll_cipher <- prove_print
+    (w4_unint_z3 ["AddRoundKey", "MixColumns", "SubBytes", "ShiftRows"])
+    {{ \w pt -> cipher w pt ==
+    (stateToMsg (AddRoundKey (w@14) (ShiftRows (SubBytes (t 13 (t 12 (t 11 (t 10 (t 9 (t 8 (t 7 (t 6 (t 5 (t 4 (t 3 (t 2 (t 1 (AddRoundKey (w@0) (msgToState pt))))))))))))))))))
+        where
+        t i state = AddRoundKey (w@i) (MixColumns (ShiftRows (SubBytes state))))
+    }};
 
-print "Proving stateToMsg_msgToState(rme)...";
-stateToMsg_msgToState <-
-  time (prove_print rme
-  {{ \msg -> stateToMsg (msgToState msg) == msg }});
+print "Verifying that invCipher unrolls";
+unroll_invCipher <- prove_print
+    (w4_unint_z3 ["AddRoundKey", "InvMixColumns", "InvSubBytes", "InvShiftRows"])
+    {{ \w ct -> invCipher w ct ==
+    (stateToMsg (AddRoundKey (w@0) (InvSubBytes (InvShiftRows (t 1 (t 2 (t 3 (t 4 (t 5 (t 6 (t 7 (t 8 (t 9 (t 10 (t 11 (t 12 (t 13 (AddRoundKey (w@14) ( msgToState ct))))))))))))))))))
+        where
+        t i state = InvMixColumns (AddRoundKey (w@i) (InvSubBytes (InvShiftRows state))))
+    }};
 
-print "Proving AddRoundKey_cancel(rme)...";
-AddRoundKey_cancel <-
-  time (prove_print rme
-  {{ \rk s -> AddRoundKey (rk, AddRoundKey (rk, s)) == s }});
+print "Verifying that SBox unfolds";
+/* This performance trick is necessary because SAW doesn't memoize sboxTable */
+unfold_SBox <- prove_print (unint_z3 ["inverse", "add", "rotateR"])
+  {{ \i -> (SBox i == GF28::add [b, b >>> 4, b >>> 5, b >>> 6, b >>> 7, 0x63] where b = GF28::inverse i) }};
 
-print "Proving InvShiftRows_ShiftRows(rme)...";
-InvShiftRows_ShiftRows <-
-  time (prove_print rme
-  {{ \s -> InvShiftRows (ShiftRows s) == s }});
+print "Verifying that InvSBox unfolds";
+/* This performance trick is necessary because SAW doesn't memoize sboxInvTable */
+unfold_SBoxInv <- prove_print (unint_z3 ["inverse", "add", "rotateR"])
+  {{ \i -> SBoxInv i == GF28::inverse (GF28::add [i >>> 2, i >>> 5, i >>> 7, 0x05]) }};
 
-print "Proving InvSubByte_SubByte'(rme)...";
-InvSubByte_SubByte' <-
-  time (prove_print rme
-  {{ \x -> InvSubByte (SubByte' x) == x }});
+print "Verifying that SBoxInv inverts SBox";
+invert_SBox <- prove_print
+    do {
+        simplify (addsimps [unfold_SBox, unfold_SBoxInv] ss0);
+        rme;
+    }
+    {{ \s -> SBoxInv (SBox s) == s }};
 
-print "Proving InvSubBytes_SubBytes(rewriting,rme)...";
-InvSubBytes_SubBytes <-
-  time (prove_print do {
-    unfolding ["InvSubBytes", "SubBytes"];
-    simplify (add_prelude_eqs ["map_map"]
-             (addsimps [InvSubByte_SubByte']
-             (cryptol_ss())));
+print "Verifying that InvSubBytes inverts SubBytes";
+invert_SubBytes <- prove_print
+    do {
+        unfolding ["InvSubBytes", "SubBytes"];
+        simplify (add_prelude_eqs ["map_map"] (addsimps [invert_SBox] ss0));
+        rme;
+    }
+    {{ \s -> InvSubBytes (SubBytes s) == s }};
+
+print "Verifying that InvShiftRows inverts ShiftRows";
+invert_ShiftRows <- prove_print rme
+    {{ \s -> InvShiftRows (ShiftRows s) == s }};
+
+print "Verifying that InvMixColumns inverts MixColumns";
+invert_MixColumns <- prove_print rme
+    {{ \s -> InvMixColumns (MixColumns s) == s }};
+
+print "Verifying that msgToState inverts stateToMsg";
+invert_stateToMsg <- prove_print rme {{\s -> msgToState (stateToMsg s) == s}};
+
+print "Verifying that stateToMsg inverts msgToState";
+invert_msgToState <- prove_print rme {{\s -> stateToMsg (msgToState s) == s}};
+
+print "Verifying that AddRoundKey is involutive";
+invert_AddRoundKey <- prove_print rme
+    {{ \x y -> AddRoundKey x (AddRoundKey x y) == y }};
+
+print "Verifying that invCipher inverts cipher";
+invert_cipher <- prove_print do {
+    simplify (addsimps
+        [unroll_cipher, unroll_invCipher, invert_ShiftRows,
+         invert_MixColumns, invert_SubBytes, invert_msgToState,
+         invert_stateToMsg, invert_msgToState, invert_AddRoundKey] ss0);
     rme;
-  }
-  {{ \s -> InvSubBytes (SubBytes s) == s }});
+   }
+   {{ \w pt -> invCipher w (cipher w pt) == pt }};
 
-print "Proving InvMixColumns_MixColumns(rme)...";
-InvMixColumns_MixColumns <-
-  time (prove_print rme
-  {{ \s -> InvMixColumns (MixColumns s) == s }});
-
-print "Proving aesDecrypt_aesEncrypt(rewriting)...";
-dec_enc <-
-  time (prove_print do {
-    unfolding ["aesEncrypt", "aesEncryptWithKeySchedule", "aesDecrypt"];
-    simplify (addsimps [encrypt_lemma,
-                        decrypt_lemma]
-              (cryptol_ss()));
-    unfolding ["AESRound", "AESInvRound", "AESFinalRound", "AESFinalInvRound"];
-    simplify (add_cryptol_defs ["ecEq"]
-             (add_prelude_eqs ["bvEq_refl"]
-             (addsimps [msgToState_stateToMsg,
-                        AddRoundKey_cancel,
-                        InvShiftRows_ShiftRows,
-                        InvSubBytes_SubBytes,
-                        InvMixColumns_MixColumns,
-                        stateToMsg_msgToState]
-              (cryptol_ss()))));
-    trivial;
-  }
-  {{ \msg key -> aesDecrypt (aesEncrypt (msg, key), key) == msg }});
-
-print "Proving ShiftRows_InvShiftRows(rme)...";
-ShiftRows_InvShiftRows <-
-  time (prove_print rme
-  {{ \s -> ShiftRows (InvShiftRows s) == s }});
-
-print "Proving SubByte'_InvSubByte(rme)...";
-SubByte'_InvSubByte <-
-  time (prove_print rme
-  {{ \x -> SubByte' (InvSubByte x) == x }});
-
-print "Proving InvSubBytes_SubBytes(rewriting,rme)...";
-SubBytes_InvSubBytes <-
-  time (prove_print do {
-    unfolding ["InvSubBytes", "SubBytes"];
-    simplify (add_prelude_eqs ["map_map"]
-             (addsimps [SubByte'_InvSubByte]
-             (cryptol_ss())));
+print "Verifying that decrypt inverts encrypt";
+prove_print do {
+    unfolding ["aesIsCorrect", "encrypt", "decrypt"];
+    simplify (addsimps [invert_cipher] ss0);
     rme;
-  }
-  {{ \s -> SubBytes (InvSubBytes s) == s }});
-
-print "Proving MixColumns_InvMixColumns(rme)...";
-MixColumns_InvMixColumns <-
-  time (prove_print rme
-  {{ \s -> MixColumns (InvMixColumns s) == s }});
-
-print "Proving aesEncrypt_aesDecrypt(rewriting)...";
-enc_dec <-
-  time (prove_print do {
-    unfolding ["aesEncrypt", "aesEncryptWithKeySchedule", "aesDecrypt"];
-    simplify (addsimps [encrypt_lemma,
-                        decrypt_lemma]
-              (cryptol_ss()));
-    unfolding ["AESRound", "AESInvRound", "AESFinalRound", "AESFinalInvRound"];
-    simplify (add_cryptol_defs ["ecEq"]
-             (add_prelude_eqs ["bvEq_refl"]
-             (addsimps [msgToState_stateToMsg,
-                        AddRoundKey_cancel,
-                        ShiftRows_InvShiftRows,
-                        SubBytes_InvSubBytes,
-                        MixColumns_InvMixColumns,
-                        stateToMsg_msgToState]
-              (cryptol_ss()))));
-    trivial;
-  }
-  {{ \msg key -> aesEncrypt (aesDecrypt (msg, key), key) == msg }});
-
-exit 0;
+   }
+   {{ aesIsCorrect }};
