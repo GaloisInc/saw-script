@@ -834,6 +834,27 @@ allocated space, which can be used wherever a pointer-valued
 <p>In the initial state, <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
 specifies that the function itself performs an allocation.</p>
+<p>In LLVM, it’s also possible to construct fresh pointers that do not
+point to allocated memory (which can be useful for functions that
+manipulate pointers but not the values they point to):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_pointer</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+</ul>
+<p>The NULL pointer is called <code class="docutils literal notranslate"><span class="pre">llvm_null</span></code> in LLVM and <code class="docutils literal notranslate"><span class="pre">jvm_null</span></code> in
+JVM:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_null</span> <span class="pre">:</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jvm_null</span> <span class="pre">:</span> <span class="pre">JVMValue</span></code></p></li>
+</ul>
+<p>One final, slightly more obscure command is the following:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+</ul>
+<p>This works like <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> except that writes to the space
+allocated are forbidden. This can be useful for specifying that a
+function should take as an argument a pointer to allocated space that it
+will not modify. Unlike <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code>, regions allocated with
+<code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span></code> are allowed to alias other read-only regions.</p>
 <p>When using the experimental Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:</p>
 <ul class="simple">
@@ -859,27 +880,28 @@ and <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_p
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_const</span> <span class="pre">:</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_mut</span> <span class="pre">:</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
 </ul>
-<p>In LLVM, it’s also possible to construct fresh pointers that do not
-point to allocated memory (which can be useful for functions that
-manipulate pointers but not the values they point to):</p>
+<p>In low-level Rust code, it is possible to get a raw pointer into an allocation
+of multiple values, do pointer arithmetic on it, and then read from or write to
+various values within the allocation. The <code class="docutils literal notranslate"><span class="pre">crucible-mir</span></code> memory model keeps
+track of these allocation sizes to check the validity of these pointer
+operations. <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_const</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_mut</span></code> create
+single-value allocations which don’t allow for pointer arithmetic. To model
+pointers which point to allocations containing multiple values, there are the
+<code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_const_multi</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_mut_multi</span></code> commands:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_fresh_pointer</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_const_multi</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_mut_multi</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
 </ul>
-<p>The NULL pointer is called <code class="docutils literal notranslate"><span class="pre">llvm_null</span></code> in LLVM and <code class="docutils literal notranslate"><span class="pre">jvm_null</span></code> in
-JVM:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_null</span> <span class="pre">:</span> <span class="pre">SetupValue</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">jvm_null</span> <span class="pre">:</span> <span class="pre">JVMValue</span></code></p></li>
-</ul>
-<p>One final, slightly more obscure command is the following:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span> <span class="pre">:</span> <span class="pre">LLVMType</span> <span class="pre">-&gt;</span> <span class="pre">LLVMSetup</span> <span class="pre">SetupValue</span></code></p></li>
-</ul>
-<p>This works like <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code> except that writes to the space
-allocated are forbidden. This can be useful for specifying that a
-function should take as an argument a pointer to allocated space that it
-will not modify. Unlike <code class="docutils literal notranslate"><span class="pre">llvm_alloc</span></code>, regions allocated with
-<code class="docutils literal notranslate"><span class="pre">llvm_alloc_readonly</span></code> are allowed to alias other read-only regions.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">Int</span></code> argument specifies how many values of the given type there are (<em>not</em>
+the size in bytes). If <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_{const,mut}_multi</span> <span class="pre">n</span></code> is used in the
+pre-state section of a specification (before <code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>), it will create
+an allocation of <code class="docutils literal notranslate"><span class="pre">n</span></code> values, with the pointer pointing to the first value in
+that allocation. However, if used in the post-state section (after
+<code class="docutils literal notranslate"><span class="pre">mir_execute_func</span></code>), the raw pointer <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> is able to be matched against a
+raw pointer into a larger allocation produced by the function. The only
+requirement is that the pointer points to a contiguous sequence of <code class="docutils literal notranslate"><span class="pre">n</span></code> values
+within some allocation; the allocation is allowed to contain more values before
+or after those <code class="docutils literal notranslate"><span class="pre">n</span></code> values.</p>
 </section>
 <section id="specifying-heap-values">
 <h2>Specifying Heap Values<a class="headerlink" href="#specifying-heap-values" title="Link to this heading"></a></h2>
@@ -952,7 +974,7 @@ value.</p>
 </section>
 <section id="mir-heap-values">
 <h3>MIR heap values<a class="headerlink" href="#mir-heap-values" title="Link to this heading"></a></h3>
-<p>MIR verification has a single <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> command:</p>
+<p>MIR verification primarily uses the <code class="docutils literal notranslate"><span class="pre">mir_points_to</span></code> command:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">mir_points_to</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code> takes two <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>
 arguments, the first of which must be a reference or raw pointer, and states
@@ -986,6 +1008,21 @@ pointer, so that the value in the second argument matches the type passed to the
 <code class="docutils literal notranslate"><span class="pre">mir_cast_raw_ptr</span></code> can be used, though, whenever some Rust signature is
 expecting a pointer whose static pointee type does not match its “true” type at
 runtime.</p>
+<p>For raw pointers to contiguous sequences of multiple values, created by
+<code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_const_multi</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_alloc_raw_ptr_mut_multi</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">mir_points_to_multi</span></code> command can be used to specify the multiple values.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_points_to_multi</span> <span class="pre">:</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">()</span></code></p></li>
+</ul>
+<p>The second argument must have a MIR array type, and it specifies the sequence of
+pointed-to values as a MIR array. Specifically, if the first argument is a raw
+pointer to a contiguous sequence of <code class="docutils literal notranslate"><span class="pre">n</span></code> values of type <code class="docutils literal notranslate"><span class="pre">ty</span></code>, the second argument
+must have the MIR type <code class="docutils literal notranslate"><span class="pre">mir_array</span> <span class="pre">m</span> <span class="pre">ty</span></code> where <code class="docutils literal notranslate"><span class="pre">m</span> <span class="pre">&lt;=</span> <span class="pre">n</span></code>. Note that the second
+argument need not be constructed with <code class="docutils literal notranslate"><span class="pre">mir_array_value</span></code>; it can also be derived
+from a fresh variable or a Cryptol sequence expression. Also note that the
+pointed-to values are not (necessarily) the contents of an array in the actual
+MIR semantics; their corresponding <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>s are just represented as an array
+in SAWScript specs, for ease of conversion from Cryptol sequences.</p>
 </section>
 </section>
 <section id="working-with-compound-types">
