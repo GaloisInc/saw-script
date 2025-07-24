@@ -21,13 +21,13 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , resolveSAWPred
   , indexSeqTerm
   , indexMirVector
+  , usizeBvLit
   , equalRefsPred
   , equalValsPred
   , checkCompatibleTys
   , readMaybeType
   , doAlloc
   , doPointsTo
-  , firstPointsToReferent
   , mirAdtToTy
   , findDefId
   , findDefIdEither
@@ -1576,13 +1576,13 @@ doAlloc cc globals (Some ma) =
        Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
        Right x -> return x
 
-     -- Create an uninitialized `MirVector_PartialVector` of length 1 and
-     -- return a pointer to its element.
+     -- Create an uninitialized `MirVector_PartialVector` of the allocation's
+     -- length and return a pointer to its first element.
      let vecRepr = Mir.MirVectorRepr tpr
      ref <- Mir.newMirRefIO sym halloc vecRepr
 
-     one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
-     vec <- Mir.mirVector_uninitIO bak one
+     len_sym <- usizeBvLit sym (ma^.maLen)
+     vec <- Mir.mirVector_uninitIO bak len_sym
      globals' <- Mir.writeMirRefIO bak globals iTypes vecRepr ref vec
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
@@ -1604,14 +1604,15 @@ doPointsTo ::
   -> SymGlobalState Sym
   -> MirPointsTo
   -> IO (SymGlobalState Sym)
-doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
+doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
   mccWithBackend cc $ \bak -> do
+    let sym = backendGetSym bak
     MIRVal referenceShp referenceVal <-
       resolveSetupVal cc env tyenv nameEnv reference
     -- By the time we reach here, we have already checked (in mir_points_to)
     -- that we are in fact dealing with a reference value, so the call to
     -- `testRefShape` below should always succeed.
-    IsRefShape _ _ _ referenceInnerTy <-
+    IsRefShape _ _ _ (referenceInnerTy :: TypeRepr referenceInnerTp) <-
       case testRefShape referenceShp of
         Just irs -> pure irs
         Nothing ->
@@ -1619,38 +1620,64 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
               "Unexpected non-reference type: ",
               "   " <> Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)
           ]
-    referent <- firstPointsToReferent referents
-    MIRVal referentShp referentVal <-
-      resolveSetupVal cc env tyenv nameEnv referent
     -- By the time we reach here, we have already checked (in mir_points_to)
     -- that the type of the reference is compatible with the right-hand side
     -- value, so the equality check below should never fail.
-    Refl <-
-      case W4.testEquality referenceInnerTy (shapeType referentShp) of
-        Just r -> pure r
-        Nothing ->
-          panic "doPointsTo" [
-              "Unexpected type mismatch between reference and referent",
-              "Reference type: " <> Text.pack (show referenceInnerTy),
-              "Referent type:  " <> Text.pack (show (shapeType referentShp))
+    let testReferentShp ::
+          TypeShape referentTp ->
+          IO (referenceInnerTp :~: referentTp)
+        testReferentShp referentShp =
+          case W4.testEquality referenceInnerTy (shapeType referentShp) of
+            Just r -> pure r
+            Nothing ->
+              panic "doPointsTo" [
+                  "Unexpected type mismatch between reference and referent",
+                  "Reference type: " <> Text.pack (show referenceInnerTy),
+                  "Referent type:  " <> Text.pack (show (shapeType referentShp))
+              ]
+    case target of
+      CrucibleMirCompPointsToTarget {} ->
+        panic "doPointsTo"
+          [ "CrucibleMirCompPointsToTarget not implemented in SAW"
           ]
-    Mir.writeMirRefIO bak globals iTypes referenceInnerTy referenceVal referentVal
+      MirPointsToSingleTarget referent -> do
+        MIRVal referentShp referentVal <-
+          resolveSetupVal cc env tyenv nameEnv referent
+        Refl <- testReferentShp referentShp
+        Mir.writeMirRefIO bak globals iTypes referenceInnerTy
+          referenceVal referentVal
+      MirPointsToMultiTarget referentArray -> do
+        MIRVal referentVecShp referentVecVal <-
+          resolveSetupVal cc env tyenv nameEnv referentArray
+        case referentVecShp of
+          -- mir_points_to_multi should check that the RHS type is TyArray, so
+          -- this case should always match.
+          ArrayShape _ _ referentElemShp -> do
+            let write globals' i referentVal = do
+                  i_sym <- usizeBvLit sym i
+                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+                  Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
+                    referenceVal' referentVal
+            Refl <- testReferentShp referentElemShp
+            V.ifoldM' write globals $
+              case referentVecVal of
+                Mir.MirVector_Vector referentVals ->
+                  referentVals
+                Mir.MirVector_PartialVector referentMaybeVals ->
+                  V.map (readMaybeType sym "vector element" (shapeType referentElemShp))
+                        referentMaybeVals
+                Mir.MirVector_Array {} ->
+                  panic "doPointsTo"
+                    [ "Unexpected MirVector_Array as output of resolveSetupVal"
+                    ]
+          _ -> panic "doPointsTo"
+            [ "Unexpected non-array shape resolved from MirPointsToMultiTarget:"
+            , Text.pack (show referentVecShp)
+            ]
   where
     iTypes = cc ^. mccIntrinsicTypes
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-
--- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
--- referent on the right-hand side. As a result, this function should never
--- fail.
-firstPointsToReferent ::
-  MonadFail m => [MS.SetupValue MIR] -> m (MS.SetupValue MIR)
-firstPointsToReferent referents =
-  case referents of
-    [referent] -> pure referent
-    _ -> fail $
-      "Unexpected mir_points_to statement with " ++ show (length referents) ++
-      " referent(s)"
 
 -- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
 mirAdtToTy :: Mir.Adt -> Mir.Ty

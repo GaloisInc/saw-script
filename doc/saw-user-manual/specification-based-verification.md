@@ -734,6 +734,28 @@ In the initial state, `llvm_alloc` specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
 specifies that the function itself performs an allocation.
 
+In LLVM, it's also possible to construct fresh pointers that do not
+point to allocated memory (which can be useful for functions that
+manipulate pointers but not the values they point to):
+
+- `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
+
+The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
+JVM:
+
+- `llvm_null : SetupValue`
+- `jvm_null : JVMValue`
+
+One final, slightly more obscure command is the following:
+
+- `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
+
+This works like `llvm_alloc` except that writes to the space
+allocated are forbidden. This can be useful for specifying that a
+function should take as an argument a pointer to allocated space that it
+will not modify. Unlike `llvm_alloc`, regions allocated with
+`llvm_alloc_readonly` are allowed to alias other read-only regions.
+
 When using the experimental Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:
 
@@ -763,27 +785,29 @@ and `mir_alloc_raw_ptr_mut` respectively.
 
 - `mir_alloc_raw_ptr_mut : MIRType -> MIRSetup MIRValue`
 
-In LLVM, it's also possible to construct fresh pointers that do not
-point to allocated memory (which can be useful for functions that
-manipulate pointers but not the values they point to):
+In low-level Rust code, it is possible to get a raw pointer into an allocation
+of multiple values, do pointer arithmetic on it, and then read from or write to
+various values within the allocation. The `crucible-mir` memory model keeps
+track of these allocation sizes to check the validity of these pointer
+operations. `mir_alloc_raw_ptr_const` and `mir_alloc_raw_ptr_mut` create
+single-value allocations which don't allow for pointer arithmetic. To model
+pointers which point to allocations containing multiple values, there are the
+`mir_alloc_raw_ptr_const_multi` and `mir_alloc_raw_ptr_mut_multi` commands:
 
-- `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
+- `mir_alloc_raw_ptr_const_multi : Int -> MIRType -> MIRSetup MIRValue`
 
-The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
-JVM:
+- `mir_alloc_raw_ptr_mut_multi : Int -> MIRType -> MIRSetup MIRValue`
 
-- `llvm_null : SetupValue`
-- `jvm_null : JVMValue`
-
-One final, slightly more obscure command is the following:
-
-- `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
-
-This works like `llvm_alloc` except that writes to the space
-allocated are forbidden. This can be useful for specifying that a
-function should take as an argument a pointer to allocated space that it
-will not modify. Unlike `llvm_alloc`, regions allocated with
-`llvm_alloc_readonly` are allowed to alias other read-only regions.
+The `Int` argument specifies how many values of the given type there are (*not*
+the size in bytes). If `mir_alloc_raw_ptr_{const,mut}_multi n` is used in the
+pre-state section of a specification (before `mir_execute_func`), it will create
+an allocation of `n` values, with the pointer pointing to the first value in
+that allocation. However, if used in the post-state section (after
+`mir_execute_func`), the raw pointer `MIRValue` is able to be matched against a
+raw pointer into a larger allocation produced by the function. The only
+requirement is that the pointer points to a contiguous sequence of `n` values
+within some allocation; the allocation is allowed to contain more values before
+or after those `n` values.
 
 ## Specifying Heap Values
 
@@ -857,7 +881,7 @@ value.
 
 ### MIR heap values
 
-MIR verification has a single `mir_points_to` command:
+MIR verification primarily uses the `mir_points_to` command:
 
 - `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()` takes two `MIRValue`
   arguments, the first of which must be a reference or raw pointer, and states
@@ -892,6 +916,22 @@ pointer, so that the value in the second argument matches the type passed to the
 `mir_cast_raw_ptr` can be used, though, whenever some Rust signature is
 expecting a pointer whose static pointee type does not match its "true" type at
 runtime.
+
+For raw pointers to contiguous sequences of multiple values, created by
+`mir_alloc_raw_ptr_const_multi` and `mir_alloc_raw_ptr_mut_multi`, the
+`mir_points_to_multi` command can be used to specify the multiple values.
+
+- `mir_points_to_multi : MIRValue -> MIRValue -> MIRSetup ()`
+
+The second argument must have a MIR array type, and it specifies the sequence of
+pointed-to values as a MIR array. Specifically, if the first argument is a raw
+pointer to a contiguous sequence of `n` values of type `ty`, the second argument
+must have the MIR type `mir_array m ty` where `m <= n`. Note that the second
+argument need not be constructed with `mir_array_value`; it can also be derived
+from a fresh variable or a Cryptol sequence expression. Also note that the
+pointed-to values are not (necessarily) the contents of an array in the actual
+MIR semantics; their corresponding `MIRValue`s are just represented as an array
+in SAWScript specs, for ease of conversion from Cryptol sequences.
 
 ## Working with Compound Types
 

@@ -73,6 +73,11 @@ support compositional verification using techniques similar to SAW.
   the existing `mir_ref`, `mir_ref_mut`, `mir_alloc`, and `mir_alloc_mut`
   commands for reference types. There is also `mir_cast_raw_ptr`.
 
+* Support writing MIR specifications involving raw pointers to contiguous
+  sequences of multiple values, with the new SAWScript commands
+  `mir_alloc_raw_ptr_const_multi`, `mir_alloc_raw_ptr_mut_multi`, and
+  `mir_points_to_multi`.
+
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 
 * Vacuity checking (`--detect-vacuity`) now correctly reports contradictions in specifications

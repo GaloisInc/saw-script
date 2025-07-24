@@ -269,8 +269,10 @@ addArg tpr argRef msb =
             return (sv, sv')
 
         let (svs, svs') = unzip svPairs
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs' :)
+        msbSpec . MS.csPreState . MS.csPointsTos %=
+            (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) (CrucibleMirCompPointsToTarget svs) :)
+        msbSpec . MS.csPostState . MS.csPointsTos %=
+            (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) (CrucibleMirCompPointsToTarget svs') :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv0)
   where
@@ -309,7 +311,8 @@ setReturn tpr argRef msb =
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %=
+            (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) (CrucibleMirCompPointsToTarget svs) :)
 
     msbSpec . MS.csRetValue .= Just sv0
   where
@@ -620,7 +623,14 @@ substMethodSpec sc sm ms = do
         sv' <- goSetupValue sv
         return (ty, sv')
 
-    goPointsTo (MirPointsTo md alloc svs) = MirPointsTo md alloc <$> mapM goSetupValue svs
+    goPointsTo (MirPointsTo md alloc tar) = MirPointsTo md alloc <$> goPointsToTarget tar
+
+    goPointsToTarget (CrucibleMirCompPointsToTarget svs) =
+        CrucibleMirCompPointsToTarget <$> mapM goSetupValue svs
+    goPointsToTarget (MirPointsToSingleTarget sv) =
+        MirPointsToSingleTarget <$> goSetupValue sv
+    goPointsToTarget (MirPointsToMultiTarget svArr) =
+        MirPointsToMultiTarget <$> goSetupValue svArr
 
     goSetupValue sv = case sv of
         MS.SetupVar _ -> return sv
