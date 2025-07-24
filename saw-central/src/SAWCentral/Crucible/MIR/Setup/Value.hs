@@ -142,7 +142,7 @@ data MirPointsToTarget
   -- list of 'MS.SetupValue's. For slices, there will be multiple values in the
   -- list, while for regular references, there will only be a single value.
   --
-  -- This is only used in @crucible-mir-comp@.
+  -- This is only used by @crucible-mir-comp@.
   = CrucibleMirCompPointsToTarget [MS.SetupValue MIR]
   -- | The reference points to a single value.
   --
