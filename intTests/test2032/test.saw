@@ -1,0 +1,65 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let GlobalAlloc = mir_find_adt m "alloc::alloc::Global" [];
+let Vec_i32 = mir_find_adt m "alloc::vec::Vec" [mir_i32, mir_adt GlobalAlloc];
+let RawVec_i32 = mir_find_adt m "alloc::raw_vec::RawVec" [mir_i32, mir_adt GlobalAlloc];
+let TypedAllocator_i32 = mir_find_adt m "crucible::alloc::TypedAllocator" [mir_i32];
+let RawVecInner_i32 = mir_find_adt m "alloc::raw_vec::RawVecInner" [mir_adt TypedAllocator_i32];
+let Unique_u8 = mir_find_adt m "core::ptr::unique::Unique" [mir_u8];
+let NonNull_u8 = mir_find_adt m "core::ptr::non_null::NonNull" [mir_u8];
+let PhantomData = mir_find_adt m "core::marker::PhantomData";
+let PhantomData_u8 = PhantomData [mir_u8];
+let PhantomData_i32 = PhantomData [mir_i32]; 
+let UsizeNoHighBit = mir_find_adt m "core::num::niche_types::UsizeNoHighBit" [];
+
+let mk_vec_i32 len contents = do {
+    ptr <- mir_alloc_raw_ptr_const_multi len mir_i32;
+    cap <- mir_fresh_var "cap" mir_usize;
+    mir_assert {{ cap <= 0x7fff_ffff_ffff_ffff / (32 / 8) }};
+    mir_assert {{ cap >= `len }};
+    orig_alloc <- mir_fresh_expanded_value "orig_alloc" (mir_adt GlobalAlloc);
+    mir_points_to_multi ptr contents;
+    return (mir_struct_value Vec_i32 [
+        mir_struct_value RawVec_i32 [
+            mir_struct_value RawVecInner_i32 [
+                mir_struct_value Unique_u8 [
+                    mir_struct_value NonNull_u8 [
+                        mir_cast_raw_ptr ptr mir_u8
+                    ],
+                    mir_struct_value PhantomData_u8 []
+                ],
+                mir_struct_value UsizeNoHighBit [
+                    mir_term cap
+                ],
+                mir_struct_value TypedAllocator_i32 [
+                    mir_struct_value PhantomData_i32 []
+                ]
+            ],
+            orig_alloc,
+            mir_struct_value PhantomData_i32 []
+        ],
+        mir_term {{ `len : [64] }}
+    ]);
+};
+
+let rev_spec len = do {
+    contents <- mir_fresh_var "contents" (mir_array len mir_i32);
+    in_vec <- mk_vec_i32 len (mir_term contents);
+    mir_execute_func [in_vec];
+    out_vec <- mk_vec_i32 len (mir_term {{ reverse contents }});
+    mir_return out_vec;
+};
+
+rev_ov <- mir_verify m "test::rev" [] false (rev_spec 10) z3;
+
+let rev_rev_spec len = do {
+    contents <- mir_fresh_var "contents" (mir_array len mir_i32);
+    in_vec <- mk_vec_i32 len (mir_term contents);
+    mir_execute_func [in_vec];
+    out_vec <- mk_vec_i32 len (mir_term contents);
+    mir_return out_vec;
+};
+
+mir_verify m "test::rev_rev" [rev_ov] false (rev_rev_spec 10) z3;

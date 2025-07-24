@@ -35,6 +35,7 @@ module SAWCentral.Crucible.MIR.Setup.Value
 
     -- * @MirPointsTo@
   , MirPointsTo(..)
+  , MirPointsToTarget(..)
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
@@ -131,14 +132,29 @@ type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 -- created.
 type MirStaticInitializerMap = MapF GlobalVar (RegValue' Sym)
 
--- | Unlike @LLVMPointsTo@ and @JVMPointsTo@, 'MirPointsTo' contains a /list/ of
--- 'MS.SetupValue's on the right-hand side. This is due to how slices are
--- represented in @crucible-mir-comp@, which stores the list of values
--- referenced by the slice. The @mir_points_to@ command, on the other hand,
--- always creates 'MirPointsTo' values with exactly one value in the list (see
--- the @firstPointsToReferent@ function in "SAWCentral.Crucible.MIR.Override").
-data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.SetupValue MIR]
+data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) MirPointsToTarget
     deriving (Show)
+
+-- | Unlike @LLVMPointsTo@ and @JVMPointsTo@, 'MirPointsTo' may have multiple
+-- 'MS.SetupValue's on the right-hand side.
+data MirPointsToTarget
+  -- | The reference points to a contiguous sequence of values, represented by a
+  -- list of 'MS.SetupValue's. For slices, there will be multiple values in the
+  -- list, while for regular references, there will only be a single value.
+  --
+  -- This is only used by @crucible-mir-comp@.
+  = CrucibleMirCompPointsToTarget [MS.SetupValue MIR]
+  -- | The reference points to a single value.
+  --
+  -- This is created by the @mir_points_to@ command.
+  | MirPointsToSingleTarget (MS.SetupValue MIR)
+  -- | The reference points to a contiguous sequence of values, represented by a
+  -- single 'MS.SetupValue' of array type. The 'MS.SetupValue' argument must
+  -- have the 'M.TyArray' MIR type.
+  --
+  -- This is created by the @mir_points_to_multi@ command.
+  | MirPointsToMultiTarget (MS.SetupValue MIR)
+  deriving (Show)
 
 data MirAllocSpec tp = MirAllocSpec
     { _maConditionMetadata :: MS.ConditionMetadata

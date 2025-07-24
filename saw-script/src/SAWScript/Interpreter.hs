@@ -5620,6 +5620,18 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "mir_alloc_raw_ptr_const_multi" "Int -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_raw_ptr_const_multi)
+    Experimental
+    [ "Declare that an immutable raw pointer to a contiguous sequence of values"
+    , "should be allocated in a MIR specification. The first argument specifies"
+    , "the number of values and the second argument specifies the type of each"
+    , "value. Before `mir_execute_func`, this states that the function expects"
+    , "the memory to be allocated before it runs. After `mir_execute_func`, it"
+    , "states that the function being verified is expected to perform the"
+    , "allocation."
+    ]
+
   , prim "mir_alloc_raw_ptr_mut" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_raw_ptr_mut)
     Experimental
@@ -5628,6 +5640,18 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    ]
+
+  , prim "mir_alloc_raw_ptr_mut_multi" "Int -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_raw_ptr_mut_multi)
+    Experimental
+    [ "Declare that an mutable raw pointer to a contiguous sequence of values"
+    , "should be allocated in a MIR specification. The first argument specifies"
+    , "the number of values and the second argument specifies the type of each"
+    , "value. Before `mir_execute_func`, this states that the function expects"
+    , "the memory to be allocated before it runs. After `mir_execute_func`, it"
+    , "states that the function being verified is expected to perform the"
+    , "allocation."
     ]
 
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
@@ -5758,8 +5782,29 @@ primitives = Map.fromList
   , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
     (pureVal mir_points_to)
     Experimental
-    [ "Declare that the memory location indicated by the given reference (first"
-    , "argument) contains the given value (second argument)."
+    [ "Declare that the memory location indicated by the given reference or raw"
+    , "pointer (first argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before `mir_execute_func`) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after `mir_execute_func`), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "mir_points_to_multi" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_points_to_multi)
+    Experimental
+    [ "Declare that the memory location indicated by the given raw pointer"
+    , "(first argument) contains the given contiguous sequence of values"
+    , "(second argument, which must have a MIR array type). If the sequence has"
+    , "more than one element, then the raw pointer must be allocated with"
+    , "`mir_alloc_raw_ptr_{const,mut}_multi` with at least as many elements as"
+    , "in the sequence."
+    , ""
+    , "Note that this is different from a raw pointer pointing to an array of"
+    , "multiple values with the regular `mir_alloc_raw_ptr_{const,mut}` and"
+    , "`mir_points_to` commands. Here, the pointee type of the pointer is the"
+    , "type of each individual element, not an array type."
     , ""
     , "In the pre-state section (before `mir_execute_func`) this specifies"
     , "the initial memory layout before function execution. In the post-state"

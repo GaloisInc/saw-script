@@ -870,9 +870,17 @@ instantiateMirPointsTo ::
   IntMap Term       ->
   MirPointsTo       ->
   IO MirPointsTo
-instantiateMirPointsTo sc s (MirPointsTo md reference referents) =
+instantiateMirPointsTo sc s (MirPointsTo md reference target) =
   MirPointsTo md <$> instantiateSetupValue sc s reference
-                 <*> traverse (instantiateSetupValue sc s) referents
+                 <*> instantiateMirPointsToTarget target
+  where
+    instantiateMirPointsToTarget (CrucibleMirCompPointsToTarget referents) =
+      CrucibleMirCompPointsToTarget <$> traverse (instantiateSetupValue sc s) referents
+    instantiateMirPointsToTarget (MirPointsToSingleTarget referent) =
+      MirPointsToSingleTarget <$> instantiateSetupValue sc s referent
+    instantiateMirPointsToTarget (MirPointsToMultiTarget referentArray) =
+      MirPointsToMultiTarget <$> instantiateSetupValue sc s referentArray
+
 
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'SetupValue'.
@@ -971,9 +979,10 @@ learnPointsTo ::
   MS.PrePost                 ->
   MirPointsTo                ->
   OverrideMatcher MIR w ()
-learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
+learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
   mccWithBackend cc $ \bak ->
   do let col = cc ^. mccRustModule . Mir.rmCS ^. Mir.collection
+         sym = backendGetSym bak
      globals <- OM (use overrideGlobals)
      MIRVal referenceShp referenceVal <-
        resolveSetupValueMIR opts cc sc spec reference
@@ -989,10 +998,34 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
                "   " <> Text.pack (show $ PP.pretty $ shapeMirTy referenceShp)
            ]
      let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
-     referentVal <- firstPointsToReferent referents
-     v <- liftIO $ Mir.readMirRefIO bak globals iTypes
-       referenceInnerTpr referenceVal
-     matchArg opts sc cc spec prepost md (MIRVal innerShp v) referentVal
+     case target of
+       CrucibleMirCompPointsToTarget {} ->
+         panic "learnPointsTo"
+           [ "CrucibleMirCompPointsToTarget not implemented in SAW"
+           ]
+       MirPointsToSingleTarget referent -> do
+         v <- liftIO $ Mir.readMirRefIO bak globals iTypes
+           referenceInnerTpr referenceVal
+         matchArg opts sc cc spec prepost md (MIRVal innerShp v) referent
+       MirPointsToMultiTarget referentArray -> do
+         referentArrayMirTy <- typeOfSetupValueMIR cc spec referentArray
+         case referentArrayMirTy of
+           -- mir_points_to_multi should check that the RHS type is TyArray, so
+           -- this case should always match.
+           Mir.TyArray _ len -> do
+             vs <- liftIO $ V.generateM len $ \i -> do
+               i_sym <- usizeBvLit sym i
+               referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+               Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
+             matchArg opts sc cc spec prepost md
+               (MIRVal (ArrayShape referentArrayMirTy referenceInnerMirTy innerShp)
+                       (Mir.MirVector_Vector vs))
+               referentArray
+           _ ->
+             panic "learnPointsTo"
+               [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
+               , Text.pack (show referentArray)
+               ]
   where
     iTypes = cc ^. mccIntrinsicTypes
 

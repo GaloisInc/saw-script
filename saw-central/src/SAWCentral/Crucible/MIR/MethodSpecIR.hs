@@ -26,6 +26,7 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
 
     -- * @MirPointsTo@
   , MirPointsTo(..)
+  , MirPointsToTarget(..)
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
@@ -111,8 +112,15 @@ mccSym :: Getter MIRCrucibleContext Sym
 mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
 instance PP.Pretty MirPointsTo where
-    pretty (MirPointsTo _md ref sv) = PP.parens $
-        MS.ppSetupValue ref PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
+    pretty (MirPointsTo _md ref tar) = PP.parens $
+        MS.ppSetupValue ref PP.<+>
+          case tar of
+            CrucibleMirCompPointsToTarget svs ->
+              "->" PP.<+> PP.list (map MS.ppSetupValue svs)
+            MirPointsToSingleTarget sv ->
+              "->" PP.<+> MS.ppSetupValue sv
+            MirPointsToMultiTarget svArr ->
+              "->*" PP.<+> MS.ppSetupValue svArr
 
 mutIso :: Iso' M.Mutability Bool
 mutIso =

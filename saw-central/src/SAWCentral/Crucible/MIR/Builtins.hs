@@ -14,6 +14,8 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_alloc_mut
   , mir_alloc_raw_ptr_const
   , mir_alloc_raw_ptr_mut
+  , mir_alloc_raw_ptr_const_multi
+  , mir_alloc_raw_ptr_mut_multi
   , mir_ref_of
   , mir_ref_of_mut
   , mir_assert
@@ -27,6 +29,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_ghost_value
   , mir_load_module
   , mir_points_to
+  , mir_points_to_multi
   , mir_postcond
   , mir_precond
   , mir_return
@@ -98,6 +101,7 @@ import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Set as Set
+import Data.String (IsString)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
@@ -173,21 +177,31 @@ ppMIRAbortedResult = ppAbortedResult (\_gp -> mempty)
 -----
 
 mir_alloc :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Immut
+mir_alloc = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Immut 1
 
 mir_alloc_mut :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_mut = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Mut
+mir_alloc_mut = MIRSetupM . mir_alloc_internal MirPointerRef Mir.Mut 1
 
 mir_alloc_raw_ptr_const :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_raw_ptr_const = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Immut
+mir_alloc_raw_ptr_const = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Immut 1
 
 mir_alloc_raw_ptr_mut :: Mir.Ty -> MIRSetupM SetupValue
-mir_alloc_raw_ptr_mut = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Mut
+mir_alloc_raw_ptr_mut = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Mut 1
 
--- | The workhorse for 'mir_alloc', 'mir_alloc_mut', 'mir_alloc_raw_ptr_const',
--- and 'mir_alloc_raw_ptr_mut'.
-mir_alloc_internal :: MirPointerKind -> Mir.Mutability -> Mir.Ty -> CrucibleSetup MIR SetupValue
-mir_alloc_internal pkind mut mty = do
+mir_alloc_raw_ptr_const_multi :: Int -> Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_const_multi len = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Immut len
+
+mir_alloc_raw_ptr_mut_multi :: Int -> Mir.Ty -> MIRSetupM SetupValue
+mir_alloc_raw_ptr_mut_multi len = MIRSetupM . mir_alloc_internal MirPointerRaw Mir.Mut len
+
+-- | The workhorse for the @mir_alloc@ family of commands.
+mir_alloc_internal ::
+  MirPointerKind ->
+  Mir.Mutability ->
+  Int ->
+  Mir.Ty ->
+  CrucibleSetup MIR SetupValue
+mir_alloc_internal pkind mut len mty = do
   st <- get
   let mcc = st ^. Setup.csCrucibleContext
       col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
@@ -229,7 +243,7 @@ mir_alloc_internal pkind mut mty = do
                       , _maPtrKind = pkind
                       , _maMutbl = mut
                       , _maMirType = mty
-                      , _maLen = 1
+                      , _maLen = len
                       })
   return (MS.SetupVar n)
 
@@ -256,7 +270,7 @@ mir_ref_of_internal label mut val = MIRSetupM $ do
       nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
 
   ty  <- typeOfSetupValue cc env nameEnv val
-  ptr <- mir_alloc_internal MirPointerRef mut ty
+  ptr <- mir_alloc_internal MirPointerRef mut 1 ty
 
   tags <- view Setup.croTags
   let md = MS.ConditionMetadata
@@ -266,7 +280,7 @@ mir_ref_of_internal label mut val = MIRSetupM $ do
             , MS.conditionContext = ""
             }
 
-  Setup.addPointsTo (MirPointsTo md ptr [val])
+  Setup.addPointsTo (MirPointsTo md ptr (MirPointsToSingleTarget val))
   return ptr
 
 mir_execute_func :: [SetupValue] -> MIRSetupM ()
@@ -657,27 +671,56 @@ mir_cast_raw_ptr ::
   SetupValue
 mir_cast_raw_ptr ptr mty = MS.SetupCast mty ptr
 
+-- | Which kind of @mir_points_to@.
+data MirPointsToMode = PointsToSingle | PointsToMulti
+
+mirPointsToCommandName :: IsString a => MirPointsToMode -> a
+mirPointsToCommandName PointsToSingle = "mir_points_to"
+mirPointsToCommandName PointsToMulti = "mir_points_to_multi"
+
 mir_points_to ::
   SetupValue {- ^ LHS reference/pointer -} ->
   SetupValue {- ^ RHS value -} ->
   MIRSetupM ()
-mir_points_to ref val =
+mir_points_to = mir_points_to_internal PointsToSingle
+
+mir_points_to_multi ::
+  SetupValue {- ^ LHS raw pointer -} ->
+  SetupValue {- ^ RHS array value -} ->
+  MIRSetupM ()
+mir_points_to_multi = mir_points_to_internal PointsToMulti
+
+mir_points_to_internal ::
+  MirPointsToMode {- ^ Which kind of @mir_points_to@ -} ->
+  SetupValue {- ^ LHS reference/pointer -} ->
+  SetupValue {- ^ RHS value -} ->
+  MIRSetupM ()
+mir_points_to_internal mode ref val =
   MIRSetupM $
   do cc <- getMIRCrucibleContext
-     loc <- getW4Position "mir_points_to"
+     loc <- getW4Position $ mirPointsToCommandName mode
      st <- lift get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
 
-     referentTy <- mir_points_to_check_lhs_validity ref loc
+     referentTy <- mir_points_to_check_lhs_validity ref loc mode
      valTy <- typeOfSetupValue cc env nameEnv val
-     unless (checkCompatibleTys referentTy valTy) $
-       fail $ unlines
-         [ "Referent type incompatible with value in `mir_points_to` statement:"
-         , "  Referent type: " ++ show (PP.pretty referentTy)
-         , "  Value type:    " ++ show (PP.pretty valTy)
-         ]
 
+     target <-
+       case mode of
+         PointsToSingle -> do
+           checkTypes referentTy valTy
+           pure $ MirPointsToSingleTarget val
+         PointsToMulti ->
+           case valTy of
+             Mir.TyArray elemTy _ -> do
+               checkTypes referentTy elemTy
+               pure $ MirPointsToMultiTarget val
+             _ ->
+              fail $ unlines
+                [ "Second argument of `mir_points_to_multi` must be an array, but got type:"
+                , show (PP.pretty valTy)
+                ]
      tags <- view Setup.croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -685,33 +728,54 @@ mir_points_to ref val =
               , MS.conditionType = "MIR points-to"
               , MS.conditionContext = ""
               }
-     Setup.addPointsTo (MirPointsTo md ref [val])
+     Setup.addPointsTo (MirPointsTo md ref target)
+
+  where
+    checkTypes referentTy valTy =
+      unless (checkCompatibleTys referentTy valTy) $
+        fail $ unlines
+          [ "Referent type incompatible with value in `"
+            ++ mirPointsToCommandName mode ++ "` statement:"
+           , "  Referent type: " ++ show (PP.pretty referentTy)
+           , "  Value type:    " ++ show (PP.pretty valTy)
+           ]
 
 -- | Perform a set of validity checks on the LHS reference or pointer value in a
--- 'mir_points_to' command. In particular:
+-- 'mir_points_to' or 'mir_points_to_multi' command. In particular:
 --
--- * Check that the LHS is in fact a valid reference or pointer type.
+-- * Check that the LHS is the expected type (reference or raw pointer for
+--   'mir_points_to', and only raw pointer for 'mir_points_to_multi').
 -- * Make sure that it does not contain any casts.
 --
 -- Returns the 'Mir.Ty' that the LHS points to.
 mir_points_to_check_lhs_validity ::
   SetupValue {- ^ LHS reference/pointer -} ->
   W4.ProgramLoc {- ^ The location in the program -} ->
+  MirPointsToMode {- ^ Which kind of @mir_points_to@ -} ->
   Setup.CrucibleSetupT MIR TopLevel Mir.Ty
-mir_points_to_check_lhs_validity ref loc =
+mir_points_to_check_lhs_validity ref loc mode =
   do cc <- getMIRCrucibleContext
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      refTy <- typeOfSetupValue cc env nameEnv ref
      when (containsCast ref) $
-       throwCrucibleSetup loc
-         "The first argument of mir_points_to must not contain any casts"
-     case refTy of
-       Mir.TyRef referentTy _ -> pure referentTy
-       Mir.TyRawPtr referentTy _ -> pure referentTy
-       _ -> throwCrucibleSetup loc $ "lhs not a reference or pointer type: "
-                                  ++ show (PP.pretty refTy)
+       throwCrucibleSetup loc $
+         "The first argument of " ++ mirPointsToCommandName mode
+         ++ " must not contain any casts"
+     let throwWrongType acceptedType =
+           throwCrucibleSetup loc $ "lhs not a " ++ acceptedType ++ ": "
+                                 ++ show (PP.pretty refTy)
+     case mode of
+       PointsToSingle ->
+         case refTy of
+           Mir.TyRef referentTy _ -> pure referentTy
+           Mir.TyRawPtr referentTy _ -> pure referentTy
+           _ -> throwWrongType "reference or raw pointer type"
+       PointsToMulti ->
+         case refTy of
+           Mir.TyRawPtr referentTy _ -> pure referentTy
+           _ -> throwWrongType "raw pointer type"
 
 mir_unsafe_assume_spec ::
   Mir.RustModule ->

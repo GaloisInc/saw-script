@@ -211,7 +211,8 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md ref svs) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md ref tar) -> do
+            let svs = pointsToTargetSetupValues tar
             alloc <- setupVarAllocIndex ref
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
@@ -316,7 +317,8 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md ref svs) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md ref tar) -> do
+        let svs = pointsToTargetSetupValues tar
         alloc <- setupVarAllocIndex ref
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
@@ -604,6 +606,18 @@ checkDisjoint bak refs = go refs
             assert bak disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest
+
+-- | Take a 'MirPointsToTarget' that is assumed to be a
+-- 'CrucibleMirCompPointsToTarget' and extract its list of 'SetupValue's. If
+-- this assumption does not hold, this function will raise an error.
+--
+-- Other parts of SAW use other variants of 'MirPointsToTarget', but
+-- @crucible-mir-comp@ should only ever use 'CrucibleMirCompPointsToTarget'.
+pointsToTargetSetupValues :: MirPointsToTarget -> [MS.SetupValue MIR]
+pointsToTargetSetupValues (CrucibleMirCompPointsToTarget svs) = svs
+pointsToTargetSetupValues target =
+    error $ "pointsToTargetSetupValues: Expected CrucibleMirCompPointsToTarget, received: "
+         ++ show target
 
 -- | Take a 'MS.SetupValue' that is assumed to be a bare 'MS.SetupVar' and
 -- extract the underlying 'MS.AllocIndex'. If this assumption does not hold,
