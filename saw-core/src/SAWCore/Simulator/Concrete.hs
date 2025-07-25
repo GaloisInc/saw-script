@@ -12,12 +12,16 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Simulator.Concrete
        ( evalSharedTerm
-       , CValue, Concrete, Value(..), TValue(..)
+       , Concrete
+       , CPrim
+       , CValue
        , CExtra(..)
        , toBool
        , toWord
        , runIdentity
        , constMap
+         -- * Re-exports
+       , Value(..), TValue(..)
        ) where
 
 import Control.Monad.Identity
