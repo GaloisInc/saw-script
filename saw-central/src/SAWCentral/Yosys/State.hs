@@ -264,7 +264,7 @@ composeYosysSequentialHelper sc s n = do
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
   initialStateEC <- liftIO $ SC.scFreshEC sc "initial_state" stateType
   initialState <- liftIO $ SC.scVariable sc initialStateEC
-  (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
+  (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n-1]
 
   outputRecord <- cryptolRecord sc outputs
   res <- liftIO $ SC.scAbstractExts sc [initialStateEC, extendedInputRecordEC] outputRecord
