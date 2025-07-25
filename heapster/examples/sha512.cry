@@ -4,9 +4,12 @@ module SHA512 where
 import SpecPrims
 
 // ============================================================================
-// Definitions from cryptol-specs/Primitive/Keyless/Hash/SHA512.cry, with some
-// type annotations added to SIGMA_0, SIGMA_1, sigma_0, and sigma_1 to get
-// monadification to go through
+// These definitions are modified from an outdated version of cryptol-specs's
+// SHA512 implementation.
+// @see https://github.com/GaloisInc/cryptol-specs/blob/4a0cc3ea4adfa5cffb1ba0fe12076389f0098eae/Primitive/Keyless/Hash/SHA512.cry
+//
+// The primary changes are type annotations added to SIGMA_0, SIGMA_1,
+// sigma_0, and sigma_1 to get monadification to go through.
 // ============================================================================
 
 type w = 64
@@ -49,7 +52,8 @@ sigma_1 x = (x >>> (19 : [w])) ^ (x >>> (61 : [w])) ^ (x >> (6 : [w]))
 
 
 // ============================================================================
-// Definitions from cryptol-specs/Primitive/Keyless/Hash/SHA.cry
+// Definitions from an outdated common module for SHA.
+// @see https://github.com/GaloisInc/cryptol-specs/blob/4a0cc3ea4adfa5cffb1ba0fe12076389f0098eae/Primitive/Keyless/Hash/SHA.cry
 // ============================================================================
 
 Ch : [w] -> [w] -> [w] -> [w]
@@ -119,7 +123,7 @@ processBlock_loop_spec : [w] ->
 processBlock_loop_spec i a b c d e f g h X T1 in =
   if i < 80 then processBlock_loop_spec (i+16) aF bF cF dF eF fF gF hF XF T1F in
             else (a,b,c,d,e,f,g,h,in)
-  where (a0,b0,c0,d0,e0,f0,g0,h0,X0,_,_,T10) = round_16_80_spec i  0 a  b  c  d  e  f  g  h  X  T1 
+  where (a0,b0,c0,d0,e0,f0,g0,h0,X0,_,_,T10) = round_16_80_spec i  0 a  b  c  d  e  f  g  h  X  T1
         (h1,a1,b1,c1,d1,e1,f1,g1,X1,_,_,T11) = round_16_80_spec i  1 h0 a0 b0 c0 d0 e0 f0 g0 X0 T10
         (g2,h2,a2,b2,c2,d2,e2,f2,X2,_,_,T12) = round_16_80_spec i  2 g1 h1 a1 b1 c1 d1 e1 f1 X1 T11
         (f3,g3,h3,a3,b3,c3,d3,e3,X3,_,_,T13) = round_16_80_spec i  3 f2 g2 h2 a2 b2 c2 d2 e2 X2 T12
