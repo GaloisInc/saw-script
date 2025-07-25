@@ -35,6 +35,9 @@ env:
   # ./saw-remote-api/Dockerfile
   SOLVER_PKG_VERSION: "snapshot-20250606"
 
+  # Set `CRYPTOLPATH` to always include the cryptol-specs submodule.
+  CRYPTOLPATH: "$GITHUB_WORKSPACE/deps/cryptol-specs"
+
 jobs:
   config:
     runs-on: ubuntu-24.04
