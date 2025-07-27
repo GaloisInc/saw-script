@@ -208,6 +208,7 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
+      SS.PosInsideBuiltin -> ("(builtin)", 1, 1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
 
