@@ -515,10 +515,12 @@ ppTerm' prec = atNextDepthM "..." . ppTerm'' where
 -- times that term occurred
 type OccurrenceMap = IntMap (Term, Int)
 
--- | Returns map that associates each term index appearing in the term to the
--- number of occurrences in the shared term. Subterms that are on the left-hand
--- side of an application are excluded. (FIXME: why?) The boolean flag indicates
--- whether to descend under lambdas and other binders.
+-- | Returns map that associates each term index appearing in the term
+-- to the number of occurrences in the shared term.
+-- Partially-applied functions are excluded, because let-binding such
+-- subterms makes terms harder to read.
+-- The boolean flag indicates whether to descend under lambdas and
+-- other binders.
 scTermCount :: Bool -> Term -> OccurrenceMap
 scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
 
@@ -541,7 +543,8 @@ scTermCountAux doBinders = go
           where
             recurse = go (r ++ argsAndSubterms t)
 
-        argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
+        argsAndSubterms :: Term -> [Term]
+        argsAndSubterms (asApplyAll -> (f, args)) | not (null args) = f : args
         argsAndSubterms h =
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders  -> [t1]
