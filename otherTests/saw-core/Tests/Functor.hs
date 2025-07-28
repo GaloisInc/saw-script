@@ -22,8 +22,8 @@ import SAWCore.Term.Functor
 
 -- There are three properties of Term/TermF/FlatTermF that the
 -- Eq, Ord, and Hashable instances are supposed to respect:
---    1. Comparison is up to alpha equivalence.
---    2. The STApp (shared) and Unshared cases of Term are not
+--    1. Comparison is up to structural equality.
+--    2. The STApp (shared) and Unshared cases of Term are
 --       distinguished.
 --
 -- And of course Eq, Ord, and Hashable need to be mutually consistent:
@@ -148,8 +148,8 @@ instance TestIt (TermF Term) where
           u = Unshared f
       testOne depth s
       testOne depth u
-      -- shared and unshared compare equal
-      testTwo depth EQ s u
+      -- shared and unshared compare unequal
+      testTwo depth LT s u
 
   testTwo depth comp f1 f2 = do
       -- check that they compare as expected
@@ -161,9 +161,9 @@ instance TestIt (TermF Term) where
           u2 = Unshared f2
       testTwo depth comp s1 s2
       testTwo depth comp u1 u2
-      -- shared and unshared compare the same
-      testTwo depth comp s1 u2
-      testTwo depth comp u1 s2
+      -- shared and unshared compare as different
+      testTwo depth LT s1 u2
+      testTwo depth GT u1 s2
 
 instance TestIt Term where
   testOne depth t = do
@@ -185,9 +185,9 @@ instance TestIt Term where
         testOne depth' $ Lambda lnBar t localvar
         testOne depth' $ Pi lnFoo t t
         testOne depth' $ Pi lnBar t localvar
-        testTwo depth' EQ (Lambda lnFoo t t) (Lambda lnBar t t)
-        testTwo depth' EQ (Pi lnFoo t t) (Pi lnBar t t)
-        testTwo depth' EQ (Constant nmFoo) (Constant nmFoo)
+        testTwo depth' GT (Lambda lnFoo t t) (Lambda lnBar t t)
+        testTwo depth' GT (Pi lnFoo t t) (Pi lnBar t t)
+        testTwo depth' EQ (Constant nmFoo :: TermF Term) (Constant nmFoo :: TermF Term)
 
   testTwo depth comp t1 t2 = do
       -- check that they compare as expected
@@ -195,13 +195,13 @@ instance TestIt Term where
       -- build and test more stuff
       when (depth < 2 && comp /= EQ) $ do
         let depth' = depth + 1
-        -- check that the variable name doesn't affect the comparison
+        -- check that the variable name affects the comparison
         testTwo depth' comp (Lambda lnFoo t1 t1) (Lambda lnFoo t2 t2)
-        testTwo depth' comp (Lambda lnFoo t1 t1) (Lambda lnBar t2 t2)
-        testTwo depth' comp (Lambda lnBar t1 t1) (Lambda lnFoo t2 t2)
+        testTwo depth' GT (Lambda lnFoo t1 t1) (Lambda lnBar t2 t2)
+        testTwo depth' LT (Lambda lnBar t1 t1) (Lambda lnFoo t2 t2)
         testTwo depth' comp (Pi lnFoo t1 t1) (Pi lnFoo t2 t2)
-        testTwo depth' comp (Pi lnFoo t1 t1) (Pi lnBar t2 t2)
-        testTwo depth' comp (Pi lnBar t1 t1) (Pi lnFoo t2 t2)
+        testTwo depth' GT (Pi lnFoo t1 t1) (Pi lnBar t2 t2)
+        testTwo depth' LT (Pi lnBar t1 t1) (Pi lnFoo t2 t2)
         pure ()
 
 -- | Run some tests
