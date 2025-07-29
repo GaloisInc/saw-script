@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : Language.Coq.AST
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2018
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : atomb@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : portable
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>module Language.Coq.AST where
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>type Ident = String
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>data Sort
+<span class="lineno">   15 </span>  = Prop
+<span class="lineno">   16 </span>  | Set
+<span class="lineno">   17 </span>  | Type
+<span class="lineno">   18 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>data Term
+<span class="lineno">   21 </span>  = Lambda [Binder] Term
+<span class="lineno">   22 </span>  | Fix Ident [Binder] Term Term
+<span class="lineno">   23 </span>  | Pi [PiBinder] Term
+<span class="lineno">   24 </span>  | Let Ident [Binder] (Maybe Type) Term Term
+<span class="lineno">   25 </span>  | If Term Term Term
+<span class="lineno">   26 </span>  | App Term [Term]
+<span class="lineno">   27 </span>  | Sort Sort
+<span class="lineno">   28 </span>  | Var Ident
+<span class="lineno">   29 </span>    -- | A variable that needs to be printed with a leading at sign in order to
+<span class="lineno">   30 </span>    -- make all arguments explicit
+<span class="lineno">   31 </span>  | ExplVar Ident
+<span class="lineno">   32 </span>    -- | A ascription @tm : tp@ of a type to a term
+<span class="lineno">   33 </span>  | Ascription Term Term
+<span class="lineno">   34 </span>  | NatLit Integer
+<span class="lineno">   35 </span>  | ZLit Integer
+<span class="lineno">   36 </span>  | List [Term]
+<span class="lineno">   37 </span>  | StringLit String
+<span class="lineno">   38 </span>  | Scope Term String
+<span class="lineno">   39 </span>  | Ltac String
+<span class="lineno">   40 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- | Type synonym useful for indicating when a term is used as a type.
+<span class="lineno">   43 </span>type Type = Term
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- | An 'Ident' with an optional 'Type', which may be explicit or implicit.
+<span class="lineno">   46 </span>-- For use representing the bound variables in 'Lambda's, 'Let's, etc.
+<span class="lineno">   47 </span>data Binder
+<span class="lineno">   48 </span>  = Binder Ident (Maybe Type)
+<span class="lineno">   49 </span>  | ImplicitBinder Ident (Maybe Type)
+<span class="lineno">   50 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- | An 'Type' with an optional 'Ident', which may be explicit or implicit.
+<span class="lineno">   53 </span>-- For use representing arguments in 'Pi' types.
+<span class="lineno">   54 </span>data PiBinder
+<span class="lineno">   55 </span>  = PiBinder (Maybe Ident) Type
+<span class="lineno">   56 </span>  | PiImplicitBinder (Maybe Ident) Type
+<span class="lineno">   57 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>-- Because saw-core does not give very helpful access to the parameters and
+<span class="lineno">   60 </span>-- indices, we just follow their style and define the constructor by its fully
+<span class="lineno">   61 </span>-- applied return type.
+<span class="lineno">   62 </span>data Constructor = Constructor
+<span class="lineno">   63 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">constructorName</span></span></span>    :: Ident
+<span class="lineno">   64 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">constructorType</span></span></span>    :: Term
+<span class="lineno">   65 </span>  }
+<span class="lineno">   66 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>data Inductive = Inductive
+<span class="lineno">   69 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveName</span></span></span>         :: Ident
+<span class="lineno">   70 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveParameters</span></span></span>   :: [Binder]
+<span class="lineno">   71 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveIndices</span></span></span>      :: [PiBinder]
+<span class="lineno">   72 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveSort</span></span></span>         :: Sort
+<span class="lineno">   73 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveConstructors</span></span></span> :: [Constructor]
+<span class="lineno">   74 </span>  }
+<span class="lineno">   75 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>data Decl
+<span class="lineno">   78 </span>  = Axiom Ident Type
+<span class="lineno">   79 </span>  | Comment String
+<span class="lineno">   80 </span>  | Definition Ident [Binder] (Maybe Type) Term
+<span class="lineno">   81 </span>  | Parameter Ident Type
+<span class="lineno">   82 </span>  | Variable Ident Type
+<span class="lineno">   83 </span>  | InductiveDecl Inductive
+<span class="lineno">   84 </span>  | Section Ident [Decl]
+<span class="lineno">   85 </span>  | Snippet String
+<span class="lineno">   86 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+
+</pre>
+</body>
+</html>
