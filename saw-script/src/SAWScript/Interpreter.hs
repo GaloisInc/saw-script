@@ -492,7 +492,8 @@ applyValue pos v1info v1 v2 = case v1 of
     VLambda env _mname pat e ->
         withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
     VBuiltin name args wf -> case wf of
-        OneMoreArg f ->
+        OneMoreArg f -> do
+            setPosition pos
             f v2
         ManyMoreArgs f ->
             VBuiltin name (args :|> v2) <$> f v2
