@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
 <span class="lineno">   66 </span>  tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
 <span class="lineno">   67 </span>  recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-<span class="lineno">   68 </span>  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
+<span class="lineno">   68 </span>  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, variableOpenTerm,
 <span class="lineno">   69 </span>  applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
 <span class="lineno">   70 </span>  applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
 <span class="lineno">   71 </span>  piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
@@ -143,8 +143,8 @@ span.spaces    { background: white }
 <span class="lineno">  124 </span>import SAWCore.SharedTerm
 <span class="lineno">  125 </span>import SAWCore.SCTypeCheck
 <span class="lineno">  126 </span>import SAWCore.Module
-<span class="lineno">  127 </span>  ( ctorExtCns
-<span class="lineno">  128 </span>  , dtExtCns
+<span class="lineno">  127 </span>  ( ctorName
+<span class="lineno">  128 </span>  , dtName
 <span class="lineno">  129 </span>  )
 <span class="lineno">  130 </span>import SAWCore.Recognizer
 <span class="lineno">  131 </span>
@@ -366,7 +366,7 @@ span.spaces    { background: white }
 <span class="lineno">  347 </span><span class="spaces">         </span><span class="istickedoff">ctor &lt;- case maybe_ctor of</span>
 <span class="lineno">  348 </span><span class="spaces">                   </span><span class="istickedoff">Just ctor -&gt; pure ctor</span>
 <span class="lineno">  349 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchCtor (ModuleIdentifier c)</span></span>
-<span class="lineno">  350 </span><span class="spaces">         </span><span class="istickedoff">typeInferComplete $ Constant (ctorExtCns ctor)</span></span>
+<span class="lineno">  350 </span><span class="spaces">         </span><span class="istickedoff">typeInferComplete (Constant (ctorName ctor) :: TermF Term)</span></span>
 <span class="lineno">  351 </span>
 <span class="lineno">  352 </span>-- | Build an 'OpenTerm' for a datatype applied to its arguments
 <span class="lineno">  353 </span>dataTypeOpenTerm :: Ident -&gt; [OpenTerm] -&gt; OpenTerm
@@ -378,7 +378,7 @@ span.spaces    { background: white }
 <span class="lineno">  359 </span><span class="spaces">         </span><span class="nottickedoff">dt &lt;- case maybe_dt of</span>
 <span class="lineno">  360 </span><span class="spaces">                 </span><span class="nottickedoff">Just dt -&gt; pure dt</span>
 <span class="lineno">  361 </span><span class="spaces">                 </span><span class="nottickedoff">Nothing -&gt; throwTCError $ NoSuchDataType (ModuleIdentifier d)</span>
-<span class="lineno">  362 </span><span class="spaces">         </span><span class="nottickedoff">typeInferComplete $ Constant (dtExtCns dt)</span></span>
+<span class="lineno">  362 </span><span class="spaces">         </span><span class="nottickedoff">typeInferComplete (Constant (dtName dt) :: TermF Term)</span></span>
 <span class="lineno">  363 </span>
 <span class="lineno">  364 </span>-- | Build an 'OpenTerm' for a global name with a definition
 <span class="lineno">  365 </span>globalOpenTerm :: Ident -&gt; OpenTerm
@@ -395,9 +395,9 @@ span.spaces    { background: white }
 <span class="lineno">  376 </span><span class="spaces">  </span><span class="nottickedoff">do ident_app &lt;- liftTCM scGlobalDef ident</span>
 <span class="lineno">  377 </span><span class="spaces">     </span><span class="nottickedoff">typeInferComplete ident_app</span></span>
 <span class="lineno">  378 </span>
-<span class="lineno">  379 </span>-- | Build an 'OpenTerm' for an external constant
-<span class="lineno">  380 </span>extCnsOpenTerm :: ExtCns Term -&gt; OpenTerm
-<span class="lineno">  381 </span><span class="decl"><span class="nottickedoff">extCnsOpenTerm ec = OpenTerm (liftTCM scExtCns ec &gt;&gt;= typeInferComplete)</span></span>
+<span class="lineno">  379 </span>-- | Build an 'OpenTerm' for a named variable.
+<span class="lineno">  380 </span>variableOpenTerm :: ExtCns Term -&gt; OpenTerm
+<span class="lineno">  381 </span><span class="decl"><span class="nottickedoff">variableOpenTerm ec = OpenTerm (liftTCM scVariable ec &gt;&gt;= typeInferComplete)</span></span>
 <span class="lineno">  382 </span>
 <span class="lineno">  383 </span>-- | Apply an 'OpenTerm' to another
 <span class="lineno">  384 </span>applyOpenTerm :: OpenTerm -&gt; OpenTerm -&gt; OpenTerm
@@ -1215,9 +1215,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1196 </span><span class="spaces">  </span><span class="nottickedoff">slMinTermF' tf@(LocalVar i) =</span>
 <span class="lineno"> 1197 </span><span class="spaces">    </span><span class="nottickedoff">tell (varOccs1 i) &gt;&gt; liftIO (scTermF sc tf)</span>
 <span class="lineno"> 1198 </span><span class="spaces">  </span><span class="nottickedoff">slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)</span>
-<span class="lineno"> 1199 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1200 </span><span class="spaces">  </span><span class="nottickedoff">slMinFTermF :: FlatTermF Term -&gt; SLMinM Term</span>
-<span class="lineno"> 1201 </span><span class="spaces">  </span><span class="nottickedoff">slMinFTermF ftf@(ExtCns _) = liftIO $ scFlatTermF sc ftf</span>
+<span class="lineno"> 1199 </span><span class="spaces">  </span><span class="nottickedoff">slMinTermF' tf@(Variable _) = liftIO (scTermF sc tf)</span>
+<span class="lineno"> 1200 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1201 </span><span class="spaces">  </span><span class="nottickedoff">slMinFTermF :: FlatTermF Term -&gt; SLMinM Term</span>
 <span class="lineno"> 1202 </span><span class="spaces">  </span><span class="nottickedoff">slMinFTermF ftf = traverse slMinTerm ftf &gt;&gt;= liftIO . scFlatTermF sc</span></span>
 
 </pre>

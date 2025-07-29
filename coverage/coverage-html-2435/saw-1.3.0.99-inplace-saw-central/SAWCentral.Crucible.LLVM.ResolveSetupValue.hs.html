@@ -777,7 +777,7 @@ span.spaces    { background: white }
 <span class="lineno">  758 </span><span class="spaces">     </span><span class="istickedoff">(_,tm') &lt;- rewriteSharedTerm sc ss tm</span>
 <span class="lineno">  759 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  760 </span><span class="spaces">     </span><span class="istickedoff">checkBooleanType sc tm'</span>
-<span class="lineno">  761 </span><span class="spaces">     </span><span class="istickedoff"></span>
+<span class="lineno">  761 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  762 </span><span class="spaces">     </span><span class="istickedoff">mx &lt;- case getAllExts tm' of</span>
 <span class="lineno">  763 </span><span class="spaces">             </span><span class="istickedoff">-- concretely evaluate if it is a closed term</span>
 <span class="lineno">  764 </span><span class="spaces">             </span><span class="istickedoff">[] -&gt; do modmap &lt;- scGetModuleMap sc</span>
@@ -791,7 +791,7 @@ span.spaces    { background: white }
 <span class="lineno">  772 </span><span class="spaces">           </span><span class="istickedoff">do cryptol_ss &lt;- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc</span>
 <span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">(_,tm'') &lt;- rewriteSharedTerm sc cryptol_ss tm'</span>
 <span class="lineno">  774 </span><span class="spaces">              </span><span class="istickedoff">(_,tm''') &lt;- rewriteSharedTerm sc ss tm''</span>
-<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">if not (any (\(name, _) -&gt; not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then</span>
+<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">if all isPreludeName (Map.elems $ getConstantSet tm''') then</span>
 <span class="lineno">  776 </span><span class="spaces">                </span><span class="istickedoff">do (_names, (_mlabels, p)) &lt;- w4Eval sym st sc mempty Set.empty tm'''</span>
 <span class="lineno">  777 </span><span class="spaces">                   </span><span class="istickedoff">return p</span>
 <span class="lineno">  778 </span><span class="spaces">              </span><span class="istickedoff">else bindSAWTerm sym st W4.BaseBoolRepr tm'</span>
@@ -823,7 +823,7 @@ span.spaces    { background: white }
 <span class="lineno">  804 </span><span class="spaces">              </span><span class="istickedoff">cryptol_ss &lt;- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc</span>
 <span class="lineno">  805 </span><span class="spaces">              </span><span class="istickedoff">(_,tm'') &lt;- rewriteSharedTerm sc cryptol_ss tm'</span>
 <span class="lineno">  806 </span><span class="spaces">              </span><span class="istickedoff">(_,tm''') &lt;- rewriteSharedTerm sc ss tm''</span>
-<span class="lineno">  807 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlytrue">not (any (\(name, _) -&gt; not (isPreludeName name)) (Map.elems $ getConstantSet tm'''))</span> then</span>
+<span class="lineno">  807 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlytrue">all isPreludeName (Map.elems $ getConstantSet tm''')</span> then</span>
 <span class="lineno">  808 </span><span class="spaces">                </span><span class="istickedoff">do (_names, _, _, x) &lt;- w4EvalAny sym st sc mempty Set.empty tm'''</span>
 <span class="lineno">  809 </span><span class="spaces">                   </span><span class="istickedoff">case valueToSymExpr x of</span>
 <span class="lineno">  810 </span><span class="spaces">                     </span><span class="istickedoff">Just (Some y)</span>

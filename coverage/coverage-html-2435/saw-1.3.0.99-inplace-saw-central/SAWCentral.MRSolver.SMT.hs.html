@@ -169,8 +169,8 @@ span.spaces    { background: white }
 <span class="lineno">  150 </span><span class="decl"><span class="nottickedoff">mkReflProof sc b =</span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">do b_trm &lt;- scBool sc b</span>
 <span class="lineno">  152 </span><span class="spaces">     </span><span class="nottickedoff">bool_tp &lt;- scBoolType sc</span>
-<span class="lineno">  153 </span><span class="spaces">     </span><span class="nottickedoff">refl_trm &lt;- scCtorApp sc &quot;Prelude.Refl&quot; [bool_tp, b_trm]</span>
-<span class="lineno">  154 </span><span class="spaces">     </span><span class="nottickedoff">eq_tp &lt;- scDataTypeApp sc &quot;Prelude.Eq&quot; [bool_tp, b_trm, b_trm]</span>
+<span class="lineno">  153 </span><span class="spaces">     </span><span class="nottickedoff">refl_trm &lt;- scGlobalApply sc &quot;Prelude.Refl&quot; [bool_tp, b_trm]</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="nottickedoff">eq_tp &lt;- scGlobalApply sc &quot;Prelude.Eq&quot; [bool_tp, b_trm, b_trm]</span>
 <span class="lineno">  155 </span><span class="spaces">     </span><span class="nottickedoff">return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm</span></span>
 <span class="lineno">  156 </span>
 <span class="lineno">  157 </span>mkDummyProofValue :: Text -&gt; IO (Thunk TermModel)
@@ -323,7 +323,7 @@ span.spaces    { background: white }
 <span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">where -- | Create a new global variable of the given name and type</span>
 <span class="lineno">  305 </span><span class="spaces">        </span><span class="nottickedoff">instUVar :: LocalName -&gt; Term -&gt; MRM t Term</span>
 <span class="lineno">  306 </span><span class="spaces">        </span><span class="nottickedoff">instUVar nm =</span>
-<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">liftSC1 scWhnf &gt;=&gt; liftSC2 scFreshEC nm &gt;=&gt; liftSC1 scExtCns</span></span>
+<span class="lineno">  307 </span><span class="spaces">          </span><span class="nottickedoff">liftSC1 scWhnf &gt;=&gt; liftSC2 scFreshEC nm &gt;=&gt; liftSC1 scVariable</span></span>
 <span class="lineno">  308 </span>
 <span class="lineno">  309 </span>
 <span class="lineno">  310 </span>----------------------------------------------------------------------
@@ -559,7 +559,7 @@ span.spaces    { background: white }
 <span class="lineno">  540 </span>mrApplyRepr :: InjectiveRepr -&gt; Term -&gt; MRM t Term
 <span class="lineno">  541 </span><span class="decl"><span class="nottickedoff">mrApplyRepr InjReprId t = return t</span>
 <span class="lineno">  542 </span><span class="spaces"></span><span class="nottickedoff">mrApplyRepr (InjReprNum steps) t_top = foldM applyStep t_top steps where</span>
-<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">applyStep t InjNatToNum = liftSC2 scCtorApp &quot;Cryptol.TCNum&quot; [t]</span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">applyStep t InjNatToNum = liftSC2 scGlobalApply &quot;Cryptol.TCNum&quot; [t]</span>
 <span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">applyStep t (InjBVToNat n) = liftSC2 scBvToNat n t</span>
 <span class="lineno">  545 </span><span class="spaces"></span><span class="nottickedoff">mrApplyRepr (InjReprPair repr1 repr2) t =</span>
 <span class="lineno">  546 </span><span class="spaces">  </span><span class="nottickedoff">do t1 &lt;- mrApplyRepr repr1 =&lt;&lt; doTermProj t TermProjLeft</span>
