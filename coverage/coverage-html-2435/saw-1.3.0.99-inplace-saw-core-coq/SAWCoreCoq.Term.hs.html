@@ -404,8 +404,8 @@ span.spaces    { background: white }
 <span class="lineno">  385 </span><span class="spaces">     </span><span class="nottickedoff">pure (Coq.Var renamed)</span></span>
 <span class="lineno">  386 </span>
 <span class="lineno">  387 </span>
-<span class="lineno">  388 </span>-- | Translate an 'Ident' and see if the result maps to a SAW core 'Ident',
-<span class="lineno">  389 </span>-- returning the latter 'Ident' if so
+<span class="lineno">  388 </span>-- | Translate an 'Ident' and see if the result maps to a special 'Coq.Ident',
+<span class="lineno">  389 </span>-- returning the latter 'Coq.Ident' if so
 <span class="lineno">  390 </span>translateIdentToIdent :: TermTranslationMonad m =&gt; Ident -&gt; m (Maybe Coq.Ident)
 <span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">translateIdentToIdent i =</span>
 <span class="lineno">  392 </span><span class="spaces">  </span><span class="nottickedoff">(atUseSite &lt;$&gt; findSpecialTreatment i) &gt;&gt;= \case</span>
@@ -457,7 +457,7 @@ span.spaces    { background: white }
 <span class="lineno">  438 </span><span class="spaces">             </span><span class="nottickedoff">ModuleIdentifier ident -&gt; translateIdentToIdent ident</span>
 <span class="lineno">  439 </span><span class="spaces">             </span><span class="nottickedoff">ImportedName{} -&gt; pure Nothing</span>
 <span class="lineno">  440 </span><span class="spaces">         </span><span class="nottickedoff">rect_var &lt;- case maybe_d_trans of</span>
-<span class="lineno">  441 </span><span class="spaces">           </span><span class="nottickedoff">Just i -&gt; return $ Coq.ExplVar (Coq.Ident (show i ++ &quot;_rect&quot;))</span>
+<span class="lineno">  441 </span><span class="spaces">           </span><span class="nottickedoff">Just (Coq.Ident i) -&gt; return $ Coq.ExplVar (Coq.Ident (i ++ &quot;_rect&quot;))</span>
 <span class="lineno">  442 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt;</span>
 <span class="lineno">  443 </span><span class="spaces">             </span><span class="nottickedoff">errorTermM (&quot;Recursor for &quot; ++ show d ++</span>
 <span class="lineno">  444 </span><span class="spaces">                         </span><span class="nottickedoff">&quot; cannot be translated because the datatype &quot; ++</span>
