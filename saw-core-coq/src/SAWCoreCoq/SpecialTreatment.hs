@@ -50,7 +50,7 @@ data DefSiteTreatment
     DefPreserve
   | -- | Translate the identifier into the given Coq identifer,
     --   and otherwise directly translate the associated SAWCore declaration.
-    DefRename String
+    DefRename Coq.Ident
   | -- | Replace the declaration of the identifier with the given text.
     DefReplace  String
     -- | Skip the declartion of the identifier altogether.
@@ -65,7 +65,7 @@ data UseSiteTreatment
     --   identifier should be an "explicit" identifier with a leading \"\@\"
     --   symbol, which indicates to Coq that all implicit arguments should be
     --   treated as explicit.
-  | UseRename   (Maybe ModuleName) String Bool
+  | UseRename (Maybe ModuleName) Coq.Ident Bool
     -- | Apply a macro function to the translations of the first @n@ SAWCore
     -- arguments of this identifier
   | UseMacro Int ([Coq.Term] -> Coq.Term)
@@ -112,7 +112,7 @@ findSpecialTreatment ident = do
 -- | Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Coq side.  As such, their definition can be skipped, and use
 -- sites can be replaced by the appropriate call.
-mapsTo :: ModuleName -> String -> IdentSpecialTreatment
+mapsTo :: ModuleName -> Coq.Ident -> IdentSpecialTreatment
 mapsTo targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName False
@@ -120,14 +120,14 @@ mapsTo targetModule targetName = IdentSpecialTreatment
 
 -- | Like 'mapsTo' but use an explicit variable reference so
 -- that all implicit arguments must be provided.
-mapsToExpl :: ModuleName -> String -> IdentSpecialTreatment
+mapsToExpl :: ModuleName -> Coq.Ident -> IdentSpecialTreatment
 mapsToExpl targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName True
   }
 
 -- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
-mapsToExplInferArg :: String -> Int -> IdentSpecialTreatment
+mapsToExplInferArg :: Coq.Ident -> Int -> IdentSpecialTreatment
 mapsToExplInferArg targetName argNum = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseMacro argNum (\args ->
@@ -152,7 +152,7 @@ realize code = IdentSpecialTreatment
 -- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
 -- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
 -- Also useful for translation notations, until they are better supported.
-rename :: String -> IdentSpecialTreatment
+rename :: Coq.Ident -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
   { atDefSite = DefRename ident
   , atUseSite = UseRename Nothing ident False
@@ -555,7 +555,7 @@ specMSpecialTreatmentMap _configuration =
   Map.fromList $
 
   -- Type descriptions
-  map (\str -> (str, mapsTo specMModule str))
+  map (\str -> (str, mapsTo specMModule (Coq.Ident str)))
   [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
   , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
   , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
@@ -598,10 +598,10 @@ specMSpecialTreatmentMap _configuration =
 
 
 
-escapeIdent :: String -> String
-escapeIdent str
-  | all okChar str = str
-  | otherwise      = "Op_" ++ zEncodeString str
+escapeIdent :: Coq.Ident -> Coq.Ident
+escapeIdent (Coq.Ident str)
+  | all okChar str = Coq.Ident str
+  | otherwise      = Coq.Ident ("Op_" ++ zEncodeString str)
  where
    okChar x = isAlphaNum x || x `elem` ("_'" :: String)
 

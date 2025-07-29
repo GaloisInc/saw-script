@@ -110,7 +110,7 @@ makeLenses ''TranslationReader
 
 data TranslationState = TranslationState
 
-  { _globalDeclarations :: [String]
+  { _globalDeclarations :: [Coq.Ident]
     -- ^ Some Cryptol terms seem to capture the name and body of some functions
     -- they use (whether from the Cryptol prelude, or previously defined in the
     -- same file). We want to translate those exactly once, so we need to keep
@@ -149,7 +149,7 @@ localTR f =
 -- and add 1 to that number, viewing an identifier with no trailing number as
 -- ending in 0
 nextVariant :: Coq.Ident -> Coq.Ident
-nextVariant = reverse . go . reverse
+nextVariant (Coq.Ident s) = Coq.Ident (reverse (go (reverse s)))
   where
     go :: String -> String
     go (c : cs)
@@ -173,7 +173,7 @@ withUsedCoqIdent ident m =
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
-translateLocalIdent x = freshVariant (escapeIdent (Text.unpack x))
+translateLocalIdent x = freshVariant (escapeIdent (Coq.Ident (Text.unpack x)))
 
 -- | Generate a fresh, unused Coq identifier from a SAW core name and mark it as
 -- unavailable in the supplied translation computation
@@ -234,6 +234,7 @@ withSharedTerms ((idx,t):ts) f =
 reservedIdents :: Set.Set Coq.Ident
 reservedIdents =
   Set.fromList $
+  map Coq.Ident $
   concatMap words $
   [ "_ Axiom CoFixpoint Definition Fixpoint Hypothesis IF Parameter Prop"
   , "SProp Set Theorem Type Variable as at by cofix discriminated else"
@@ -243,10 +244,10 @@ reservedIdents =
 
 -- | Extract the list of names from a list of Coq declarations.  Not all
 -- declarations have names, e.g. comments and code snippets come without names.
-namedDecls :: [Coq.Decl] -> [String]
+namedDecls :: [Coq.Decl] -> [Coq.Ident]
 namedDecls = concatMap filterNamed
   where
-    filterNamed :: Coq.Decl -> [String]
+    filterNamed :: Coq.Decl -> [Coq.Ident]
     filterNamed (Coq.Axiom n _)                               = [n]
     filterNamed (Coq.Parameter n _)                           = [n]
     filterNamed (Coq.Variable n _)                            = [n]
@@ -260,7 +261,7 @@ namedDecls = concatMap filterNamed
 -- translation state.
 getNamesOfAllDeclarations ::
   TermTranslationMonad m =>
-  m [String]
+  m [Coq.Ident]
 getNamesOfAllDeclarations = view allDeclarations <$> get
   where
     allDeclarations =
@@ -271,7 +272,7 @@ runTermTranslationMonad ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   ModuleMap ->
-  [String] ->
+  [Coq.Ident] ->
   [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
@@ -293,6 +294,9 @@ runTermTranslationMonad configuration mname mm globalDecls localEnv =
 errorTermM :: TermTranslationMonad m => String -> m Coq.Term
 errorTermM str = return $ Coq.App (Coq.Var "error") [Coq.StringLit str]
 
+qualify :: ModuleName -> Coq.Ident -> Coq.Ident
+qualify m (Coq.Ident i) = Coq.Ident (Text.unpack (moduleNameText m) ++ "." ++ i)
+
 -- | Translate an 'Ident' with a given list of arguments to a Coq term, using
 -- any special treatment for that identifier and qualifying it if necessary
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Term
@@ -300,10 +304,9 @@ translateIdentWithArgs i args = do
   currentModuleName <- asks (view currentModule . otherConfiguration)
   let identToCoq ident =
         if Just (identModule ident) == currentModuleName
-          then escapeIdent (identName ident)
-          else
-            show (translateModuleName (identModule ident))
-            ++ "." ++ escapeIdent (identName ident)
+          then base else qualify (translateModuleName (identModule ident)) base
+        where
+          base = escapeIdent (Coq.Ident (identName ident))
   specialTreatment <- findSpecialTreatment i
   applySpecialTreatment identToCoq (atUseSite specialTreatment)
 
@@ -311,11 +314,11 @@ translateIdentWithArgs i args = do
 
     applySpecialTreatment identToCoq UsePreserve =
       Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
-    applySpecialTreatment identToCoq (UseRename targetModule targetName expl) =
+    applySpecialTreatment _identToCoq (UseRename targetModule targetName expl) =
       Coq.App
-        ((if expl then Coq.ExplVar else Coq.Var) $ identToCoq $
-          mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
-          (Text.pack targetName))
+        ((if expl then Coq.ExplVar else Coq.Var) $
+          qualify (fromMaybe (translateModuleName $ identModule i) targetModule)
+          targetName)
           <$> mapM translateTerm args
     applySpecialTreatment _identToCoq (UseMacro n macroFun)
       | length args >= n
@@ -350,14 +353,14 @@ translateConstant nm =
      -- TODO short name seems wrong
      let nm_str = Text.unpack $ toShortName $ nameInfo nm
      let renamed =
-           escapeIdent $ fromMaybe nm_str $
+           escapeIdent $ Coq.Ident $ fromMaybe nm_str $
            lookup nm_str $ constantRenaming configuration
 
      -- Next, test if we should add a definition of this constant
      alreadyTranslatedDecls <- getNamesOfAllDeclarations
      let skip_def =
            elem renamed alreadyTranslatedDecls ||
-           elem renamed (constantSkips configuration)
+           elem nm_str (constantSkips configuration)
 
      -- Add the definition if we aren't skipping it
      mm <- asks (view sawModuleMap . otherConfiguration)
@@ -384,12 +387,12 @@ translateConstant nm =
 
 -- | Translate an 'Ident' and see if the result maps to a SAW core 'Ident',
 -- returning the latter 'Ident' if so
-translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Ident)
+translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Coq.Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> return $ Just (mkIdent translatedModuleName (identBaseName i))
+    UsePreserve -> return $ Just (qualify translatedModuleName (Coq.Ident (Text.unpack (identBaseName i))))
     UseRename   targetModule targetName _ ->
-      return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) (Text.pack targetName)
+      return $ Just $ qualify (fromMaybe translatedModuleName targetModule) targetName
     UseMacro _ _ -> return Nothing
   where
     translatedModuleName = translateModuleName (identModule i)
@@ -435,7 +438,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing
          rect_var <- case maybe_d_trans of
-           Just i -> return $ Coq.ExplVar (show i ++ "_rect")
+           Just i -> return $ Coq.ExplVar (Coq.Ident (show i ++ "_rect"))
            Nothing ->
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
@@ -843,8 +846,8 @@ translateTermToDocWith ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   ModuleMap ->
-  [String] -> -- ^ globals that have already been translated
-  [String] -> -- ^ string names of local variables in scope
+  [Coq.Ident] -> -- ^ globals that have already been translated
+  [Coq.Ident] -> -- ^ names of local variables in scope
   (Coq.Term -> Coq.Term -> Doc ann) ->
   Term -> Term ->
   Either (TranslationError Term) (Doc ann)
@@ -866,7 +869,7 @@ translateDefDoc ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   ModuleMap ->
-  [String] ->
+  [Coq.Ident] ->
   Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration r mm globalDecls name =

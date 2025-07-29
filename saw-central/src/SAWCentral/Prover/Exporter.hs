@@ -86,6 +86,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 import qualified SAWCoreCoq.Coq as Coq
+import qualified Language.Coq.AST as Coq
 import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
@@ -490,7 +491,7 @@ writeCoqTerm name notations skips path t = do
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Coq.translateTermAsDeclImports configuration mm (Text.unpack name) t tp of
+  case Coq.translateTermAsDeclImports configuration mm (Coq.Ident (Text.unpack name)) t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       "" -> print doc
@@ -535,14 +536,16 @@ writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   mm <- scGetModuleMap sc
   let ?mm = mm
   cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
-  let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let cryptolPreludeDecls =
+        map Coq.Ident $
+        mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
-  let nm = takeBaseName inputFile
+  let nm = Coq.Ident (takeBaseName inputFile)
   res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm'
   case res of
     Left e -> putStrLn $ show e

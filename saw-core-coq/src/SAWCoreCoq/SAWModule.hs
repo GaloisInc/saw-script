@@ -69,7 +69,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
       ModuleIdentifier ident -> liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ident
       ImportedName{} -> pure Nothing
   let constructorName = case maybe_constructorName of
-        Just n -> identName n
+        Just n -> n
         Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
@@ -91,12 +91,12 @@ translateDataType (DataType {..}) =
   case dtNameInfo of
     ModuleIdentifier dtIdent ->
       atDefSite <$> findSpecialTreatment dtIdent >>= \case
-      DefPreserve            -> translateNamed $ identName dtIdent
+      DefPreserve            -> translateNamed $ Coq.Ident (identName dtIdent)
       DefRename   targetName -> translateNamed $ targetName
       DefReplace  str        -> return $ Coq.Snippet str
       DefSkip                -> return $ skipped dtIdent
     ImportedName{} ->
-      translateNamed $ Text.unpack (toShortName dtNameInfo)
+      translateNamed $ Coq.Ident (Text.unpack (toShortName dtNameInfo))
   where
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = do
@@ -154,7 +154,7 @@ translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ Text.unpack (toShortName defNameInfo)
+    translateAccordingly  DefPreserve           = translateNamed $ Coq.Ident (Text.unpack (toShortName defNameInfo))
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
     translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str
     translateAccordingly  DefSkip               = return $ skipped' defNameInfo

@@ -25,7 +25,7 @@ translateTypedTermMap ::
 translateTypedTermMap defs = forM defs translateAndRegisterEntry
   where
     translateAndRegisterEntry (name, t, tp) = do
-      let nameStr = unpackIdent (nameIdent name)
+      let nameStr = Coq.Ident (unpackIdent (nameIdent name))
       decl <-
         do t_trans <- TermTranslation.translateTerm t
            tp_trans <- TermTranslation.translateTerm tp
@@ -41,7 +41,7 @@ translateCryptolModule ::
   SharedContext -> Env ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
-  [String] ->
+  [Coq.Ident] ->
   CryptolModule ->
   IO (Either (TranslationError Term) [Coq.Decl])
 translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =

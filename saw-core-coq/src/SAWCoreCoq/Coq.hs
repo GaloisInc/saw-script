@@ -97,7 +97,7 @@ translateCryptolModule ::
   Coq.Ident {- ^ Section name -} ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
-  [String] ->
+  [Coq.Ident] ->
   CryptolModule ->
   IO (Either (TranslationError Term) (Doc ann))
 translateCryptolModule sc env nm configuration globalDecls m = do
