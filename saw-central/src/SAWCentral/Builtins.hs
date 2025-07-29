@@ -127,6 +127,7 @@ import SAWCentral.ImportAIG
 
 import SAWCentral.AST (getVal, Located(..))
 import SAWCentral.Options as Opts
+import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common as Common
@@ -1673,11 +1674,25 @@ print_type t = do
   ty <- io $ scTypeOf sc t
   printOutLnTop Info (scPrettyTerm opts ty)
 
-check_term :: Term -> TopLevel ()
-check_term t = do
+check_term :: TypedTerm -> TopLevel ()
+check_term tt = do
   sc <- getSharedContext
   opts <- getTopLevelPPOpts
+  cenv <- rwCryptol <$> getTopLevelRW
+  let t = ttTerm tt
   ty <- io $ scTypeCheckError sc t
+  expectedTy <-
+    case ttType tt of
+      TypedTermSchema schema -> io $ importSchemaCEnv sc cenv schema
+      TypedTermKind k -> io $ Cryptol.importKind sc k
+      TypedTermOther ty' -> pure ty'
+  convertible <- io $ scConvertible sc True ty expectedTy
+  unless convertible $
+    panic "check_term"
+    [ "Term's actual type does not match its attached type:"
+    , "Expected: " <> Text.pack (scPrettyTerm opts expectedTy)
+    , "Actual: " <> Text.pack (scPrettyTerm opts ty)
+    ]
   printOutLnTop Info (scPrettyTerm opts ty)
 
 check_goal :: ProofScript ()
