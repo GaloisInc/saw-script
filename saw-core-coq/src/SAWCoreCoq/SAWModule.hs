@@ -69,7 +69,8 @@ translateCtor inductiveParameters (Ctor {..}) = do
       ModuleIdentifier ident -> liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ident
       ImportedName{} -> pure Nothing
   let constructorName = case maybe_constructorName of
-        Just n -> n
+        -- Drop qualifiers from constructor name
+        Just (Coq.Ident n) -> Coq.Ident (reverse (takeWhile (/= '.') (reverse n)))
         Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
