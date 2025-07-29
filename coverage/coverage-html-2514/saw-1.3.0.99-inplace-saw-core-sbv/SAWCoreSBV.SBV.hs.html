@@ -128,7 +128,7 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">Prims.BasePrims</span>
 <span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">{ Prims.bpIsSymbolicEvaluator = True</span>
 <span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAsBool  = svAsBool</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = svUnpack</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = <span class="nottickedoff">svUnpack</span></span>
 <span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = <span class="nottickedoff">pure1 symFromBits</span></span>
 <span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">pure2 svAt</span></span>
 <span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 literalSWord</span>
@@ -137,7 +137,7 @@ span.spaces    { background: white }
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 svSlice</span></span>
 <span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = pure3 svIte</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = pure3 svIte</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxInt   = <span class="nottickedoff">pure3 svIte</span></span>
 <span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxArray = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpMuxArray&quot;</span></span>
 <span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxExtra = <span class="nottickedoff">muxSbvExtra</span></span>
@@ -197,7 +197,7 @@ span.spaces    { background: white }
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = <span class="nottickedoff">pure1 svUNeg</span></span>
 <span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 svAbs</span></span>
 <span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = <span class="nottickedoff">pure2 svEqual</span></span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = pure2 svLessEq</span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = <span class="nottickedoff">pure2 svLessEq</span></span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 svLessThan</span></span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpIntMin&quot;</span></span>
 <span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpIntMax&quot;</span></span>
@@ -224,8 +224,8 @@ span.spaces    { background: white }
 <span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , <span class="nottickedoff">bvShROp</span>)</span>
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, <span class="nottickedoff">bvSShROp</span>)</span>
 <span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
-<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, intToNatOp)</span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natToInt&quot;, natToIntOp)</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, <span class="nottickedoff">intToNatOp</span>)</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natToInt&quot;, <span class="nottickedoff">natToIntOp</span>)</span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToBv&quot; , <span class="nottickedoff">intToBvOp</span>)</span>
 <span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvToInt&quot; , <span class="nottickedoff">bvToIntOp</span>)</span>
 <span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.sbvToInt&quot;, <span class="nottickedoff">sbvToIntOp</span>)</span>
@@ -255,8 +255,8 @@ span.spaces    { background: white }
 <span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">symFromBits v = V.foldl svJoin (bitVector 0 0) (V.map svToWord1 v)</span></span>
 <span class="lineno">  237 </span>
 <span class="lineno">  238 </span>toMaybeBool :: SValue -&gt; Maybe SBool
-<span class="lineno">  239 </span><span class="decl"><span class="istickedoff">toMaybeBool (VBool b) = <span class="nottickedoff">Just b</span></span>
-<span class="lineno">  240 </span><span class="spaces"></span><span class="istickedoff">toMaybeBool _  = Nothing</span></span>
+<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">toMaybeBool (VBool b) = Just b</span>
+<span class="lineno">  240 </span><span class="spaces"></span><span class="nottickedoff">toMaybeBool _  = Nothing</span></span>
 <span class="lineno">  241 </span>
 <span class="lineno">  242 </span>toBool :: SValue -&gt; SBool
 <span class="lineno">  243 </span><span class="decl"><span class="nottickedoff">toBool (VBool b) = b</span>
@@ -269,8 +269,8 @@ span.spaces    { background: white }
 <span class="lineno">  250 </span>
 <span class="lineno">  251 </span>toMaybeWord :: SValue -&gt; IO (Maybe SWord)
 <span class="lineno">  252 </span><span class="decl"><span class="istickedoff">toMaybeWord (VWord w) = return (Just w)</span>
-<span class="lineno">  253 </span><span class="spaces"></span><span class="istickedoff">toMaybeWord (VVector vv) = ((<span class="nottickedoff">symFromBits</span> &lt;$&gt;) . T.sequence) &lt;$&gt; traverse (fmap toMaybeBool . force) vv</span>
-<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff">toMaybeWord _ = return Nothing</span></span>
+<span class="lineno">  253 </span><span class="spaces"></span><span class="istickedoff">toMaybeWord (VVector vv) = <span class="nottickedoff">((symFromBits &lt;$&gt;) . T.sequence) &lt;$&gt; traverse (fmap toMaybeBool . force) vv</span></span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff">toMaybeWord _ = <span class="nottickedoff">return Nothing</span></span></span>
 <span class="lineno">  255 </span>
 <span class="lineno">  256 </span>-- | Flatten an SValue to a sequence of components, each of which is
 <span class="lineno">  257 </span>-- either a symbolic word or a symbolic boolean. If the SValue
@@ -282,29 +282,29 @@ span.spaces    { background: white }
 <span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">case mw of</span>
 <span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">Just w -&gt; return ([w], &quot;&quot;)</span>
 <span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff">case v of</span>
-<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff">VUnit                     -&gt; <span class="nottickedoff">return ([], &quot;&quot;)</span></span>
-<span class="lineno">  268 </span><span class="spaces">        </span><span class="istickedoff">VPair x y                 -&gt; <span class="nottickedoff">do (xs, sx) &lt;- flattenSValue nm =&lt;&lt; force x</span></span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
+<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VUnit                     -&gt; return ([], &quot;&quot;)</span></span>
+<span class="lineno">  268 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VPair x y                 -&gt; do (xs, sx) &lt;- flattenSValue nm =&lt;&lt; force x</span></span>
 <span class="lineno">  269 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">(ys, sy) &lt;- flattenSValue nm =&lt;&lt; force y</span></span>
 <span class="lineno">  270 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (xs ++ ys, sx ++ sy)</span></span>
-<span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff">VRecordValue elems        -&gt; <span class="nottickedoff">do (xss, sxs) &lt;-</span></span>
+<span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VRecordValue elems        -&gt; do (xss, sxs) &lt;-</span></span>
 <span class="lineno">  272 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">unzip &lt;$&gt;</span></span>
 <span class="lineno">  273 </span><span class="spaces">                                          </span><span class="istickedoff"><span class="nottickedoff">mapM (flattenSValue nm &lt;=&lt; force . snd) elems</span></span>
 <span class="lineno">  274 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (concat xss, concat sxs)</span></span>
-<span class="lineno">  275 </span><span class="spaces">        </span><span class="istickedoff">VVector (V.toList -&gt; ts)  -&gt; do (xss, ss) &lt;- unzip &lt;$&gt; traverse (force &gt;=&gt; flattenSValue <span class="nottickedoff">nm</span>) ts</span>
-<span class="lineno">  276 </span><span class="spaces">                                        </span><span class="istickedoff">return (concat xss, concat ss)</span>
-<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">VBool sb                  -&gt; <span class="nottickedoff">return ([sb], &quot;&quot;)</span></span>
-<span class="lineno">  278 </span><span class="spaces">        </span><span class="istickedoff">VInt si                   -&gt; <span class="nottickedoff">return ([si], &quot;&quot;)</span></span>
-<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff">VIntMod 0 si              -&gt; <span class="nottickedoff">return ([si], &quot;&quot;)</span></span>
-<span class="lineno">  280 </span><span class="spaces">        </span><span class="istickedoff">VIntMod n si              -&gt; <span class="nottickedoff">return ([svRem si (svInteger KUnbounded (toInteger n))], &quot;&quot;)</span></span>
-<span class="lineno">  281 </span><span class="spaces">        </span><span class="istickedoff">VWord sw                  -&gt; <span class="nottickedoff">return (if intSizeOf sw &gt; 0 then [sw] else [], &quot;&quot;)</span></span>
-<span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff">VCtorApp i ps ts          -&gt; do (xss, ss) &lt;- unzip &lt;$&gt; traverse (force &gt;=&gt; flattenSValue <span class="nottickedoff">nm</span>) (ps++ts)</span>
-<span class="lineno">  283 </span><span class="spaces">                                        </span><span class="istickedoff">return (concat xss, &quot;_&quot; ++ (Text.unpack (toShortName (ecName i))) ++ concat ss)</span>
-<span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff">VNat n                    -&gt; return ([], &quot;_&quot; ++ show n)</span>
-<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">TValue (suffixTValue -&gt; Just s)</span>
-<span class="lineno">  286 </span><span class="spaces">                                  </span><span class="istickedoff">-&gt; return ([], s)</span>
-<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff">VFun _ _ -&gt; <span class="nottickedoff">fail $ &quot;Cannot create uninterpreted higher-order function &quot; ++ show nm</span></span>
-<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;Cannot create uninterpreted function &quot; ++ show nm ++ &quot; with argument &quot; ++ show v</span></span></span>
+<span class="lineno">  275 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VVector (V.toList -&gt; ts)  -&gt; do (xss, ss) &lt;- unzip &lt;$&gt; traverse (force &gt;=&gt; flattenSValue nm) ts</span></span>
+<span class="lineno">  276 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (concat xss, concat ss)</span></span>
+<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VBool sb                  -&gt; return ([sb], &quot;&quot;)</span></span>
+<span class="lineno">  278 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VInt si                   -&gt; return ([si], &quot;&quot;)</span></span>
+<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VIntMod 0 si              -&gt; return ([si], &quot;&quot;)</span></span>
+<span class="lineno">  280 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VIntMod n si              -&gt; return ([svRem si (svInteger KUnbounded (toInteger n))], &quot;&quot;)</span></span>
+<span class="lineno">  281 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VWord sw                  -&gt; return (if intSizeOf sw &gt; 0 then [sw] else [], &quot;&quot;)</span></span>
+<span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VCtorApp i ps ts          -&gt; do (xss, ss) &lt;- unzip &lt;$&gt; traverse (force &gt;=&gt; flattenSValue nm) (ps++ts)</span></span>
+<span class="lineno">  283 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (concat xss, &quot;_&quot; ++ (Text.unpack (toShortName (ecName i))) ++ concat ss)</span></span>
+<span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VNat n                    -&gt; return ([], &quot;_&quot; ++ show n)</span></span>
+<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">TValue (suffixTValue -&gt; Just s)</span></span>
+<span class="lineno">  286 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">-&gt; return ([], s)</span></span>
+<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VFun _ _ -&gt; fail $ &quot;Cannot create uninterpreted higher-order function &quot; ++ show nm</span></span>
+<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail $ &quot;Cannot create uninterpreted function &quot; ++ show nm ++ &quot; with argument &quot; ++ show v</span></span></span>
 <span class="lineno">  289 </span>
 <span class="lineno">  290 </span>vWord :: SWord -&gt; SValue
 <span class="lineno">  291 </span><span class="decl"><span class="istickedoff">vWord lv = VWord lv</span></span>
@@ -359,10 +359,10 @@ span.spaces    { background: white }
 <span class="lineno">  340 </span>
 <span class="lineno">  341 </span>-- Big-endian version of svTestBit
 <span class="lineno">  342 </span>svAt :: SWord -&gt; Int -&gt; SBool
-<span class="lineno">  343 </span><span class="decl"><span class="istickedoff">svAt x i = svTestBit x (intSizeOf x - 1 - i)</span></span>
+<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">svAt x i = svTestBit x (intSizeOf x - 1 - i)</span></span>
 <span class="lineno">  344 </span>
 <span class="lineno">  345 </span>svUnpack :: SWord -&gt; IO (Vector SBool)
-<span class="lineno">  346 </span><span class="decl"><span class="istickedoff">svUnpack x = return (V.generate (intSizeOf x) (svAt x))</span></span>
+<span class="lineno">  346 </span><span class="decl"><span class="nottickedoff">svUnpack x = return (V.generate (intSizeOf x) (svAt x))</span></span>
 <span class="lineno">  347 </span>
 <span class="lineno">  348 </span>asWordList :: [SValue] -&gt; Maybe [SWord]
 <span class="lineno">  349 </span><span class="decl"><span class="nottickedoff">asWordList = go id</span>
@@ -412,24 +412,24 @@ span.spaces    { background: white }
 <span class="lineno">  393 </span>-- primitive intToNat : Integer -&gt; Nat;
 <span class="lineno">  394 </span>-- intToNat x == max 0 x
 <span class="lineno">  395 </span>intToNatOp :: SPrim
-<span class="lineno">  396 </span><span class="decl"><span class="istickedoff">intToNatOp =</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">Prims.intFun $ \i -&gt;</span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">case svAsInteger i of</span>
-<span class="lineno">  400 </span><span class="spaces">      </span><span class="istickedoff">Just i'</span>
-<span class="lineno">  401 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">0 &lt;= i'</span>   -&gt; VNat (fromInteger i')</span>
-<span class="lineno">  402 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">VNat 0</span></span>
-<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  404 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let z  = svInteger KUnbounded 0</span></span>
-<span class="lineno">  405 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">i' = svIte (svLessThan i z) z i</span></span>
-<span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">in VIntToNat (VInt i')</span></span></span>
+<span class="lineno">  396 </span><span class="decl"><span class="nottickedoff">intToNatOp =</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \i -&gt;</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="nottickedoff">case svAsInteger i of</span>
+<span class="lineno">  400 </span><span class="spaces">      </span><span class="nottickedoff">Just i'</span>
+<span class="lineno">  401 </span><span class="spaces">        </span><span class="nottickedoff">| 0 &lt;= i'   -&gt; VNat (fromInteger i')</span>
+<span class="lineno">  402 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise -&gt; VNat 0</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">  404 </span><span class="spaces">        </span><span class="nottickedoff">let z  = svInteger KUnbounded 0</span>
+<span class="lineno">  405 </span><span class="spaces">            </span><span class="nottickedoff">i' = svIte (svLessThan i z) z i</span>
+<span class="lineno">  406 </span><span class="spaces">         </span><span class="nottickedoff">in VIntToNat (VInt i')</span></span>
 <span class="lineno">  407 </span>
 <span class="lineno">  408 </span>-- primitive natToInt :: Nat -&gt; Integer;
 <span class="lineno">  409 </span>natToIntOp :: SPrim
-<span class="lineno">  410 </span><span class="decl"><span class="istickedoff">natToIntOp =</span>
-<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">VInt (literalSInteger (toInteger n))</span></span>
+<span class="lineno">  410 </span><span class="decl"><span class="nottickedoff">natToIntOp =</span>
+<span class="lineno">  411 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  412 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  413 </span><span class="spaces">    </span><span class="nottickedoff">VInt (literalSInteger (toInteger n))</span></span>
 <span class="lineno">  414 </span>
 <span class="lineno">  415 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
 <span class="lineno">  416 </span>bvToIntOp :: SPrim
@@ -664,7 +664,7 @@ span.spaces    { background: white }
 <span class="lineno">  645 </span><span class="spaces">         </span><span class="istickedoff">VFun fnm $ \x -&gt;</span>
 <span class="lineno">  646 </span><span class="spaces">           </span><span class="istickedoff">do x' &lt;- force x</span>
 <span class="lineno">  647 </span><span class="spaces">              </span><span class="istickedoff">(cws', suffix) &lt;- flattenSValue <span class="nottickedoff">nm</span> x'</span>
-<span class="lineno">  648 </span><span class="spaces">              </span><span class="istickedoff">t2 &lt;- applyPiBody body (ready x')</span>
+<span class="lineno">  648 </span><span class="spaces">              </span><span class="istickedoff">t2 &lt;- applyPiBody body <span class="nottickedoff">(ready x')</span></span>
 <span class="lineno">  649 </span><span class="spaces">              </span><span class="istickedoff">parseUninterpreted (cws ++ cws') (nm ++ suffix) t2</span>
 <span class="lineno">  650 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  651 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
@@ -705,7 +705,7 @@ span.spaces    { background: white }
 <span class="lineno">  686 </span><span class="decl"><span class="istickedoff">mkUninterpreted k args nm =</span>
 <span class="lineno">  687 </span><span class="spaces">  </span><span class="istickedoff">svUninterpreted k nm'</span>
 <span class="lineno">  688 </span><span class="spaces"></span><span class="istickedoff">#if MIN_VERSION_sbv(10,3,0)</span>
-<span class="lineno">  689 </span><span class="spaces">                  </span><span class="istickedoff">(UINone True)</span>
+<span class="lineno">  689 </span><span class="spaces">                  </span><span class="istickedoff">(UINone <span class="nottickedoff">True</span>)</span>
 <span class="lineno">  690 </span><span class="spaces"></span><span class="istickedoff">#elif MIN_VERSION_sbv(10,0,0)</span>
 <span class="lineno">  691 </span><span class="spaces">                  </span><span class="istickedoff">UINone</span>
 <span class="lineno">  692 </span><span class="spaces"></span><span class="istickedoff">#else</span>
