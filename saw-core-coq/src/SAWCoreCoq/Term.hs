@@ -385,8 +385,8 @@ translateConstant nm =
      pure (Coq.Var renamed)
 
 
--- | Translate an 'Ident' and see if the result maps to a SAW core 'Ident',
--- returning the latter 'Ident' if so
+-- | Translate an 'Ident' and see if the result maps to a special 'Coq.Ident',
+-- returning the latter 'Coq.Ident' if so
 translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Coq.Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
@@ -438,7 +438,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing
          rect_var <- case maybe_d_trans of
-           Just i -> return $ Coq.ExplVar (Coq.Ident (show i ++ "_rect"))
+           Just (Coq.Ident i) -> return $ Coq.ExplVar (Coq.Ident (i ++ "_rect"))
            Nothing ->
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
