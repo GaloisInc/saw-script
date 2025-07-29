@@ -39,4 +39,4 @@ let stream_spec len = do {
 };
 
 print "running verification...";
-time (llvm_llvm_verify mod "crypto_stream_chacha20" [] true (stream_spec 256) abc);
+time (llvm_verify mod "crypto_stream_chacha20" [] true (stream_spec 256) abc);
