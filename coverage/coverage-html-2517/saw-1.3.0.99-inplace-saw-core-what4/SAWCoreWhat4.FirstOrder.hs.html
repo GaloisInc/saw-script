@@ -67,9 +67,9 @@ span.spaces    { background: white }
 <span class="lineno">   48 </span>-- | Convert a type expression from SAW-core to What4
 <span class="lineno">   49 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
 <span class="lineno">   50 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseBoolRepr)</span></span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseBoolRepr)</span>
 <span class="lineno">   52 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
-<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseIntegerRepr)</span>
 <span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>
 <span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
 <span class="lineno">   56 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTVec nat FOTBit)</span>
@@ -81,9 +81,9 @@ span.spaces    { background: white }
 <span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn (replicate (fromIntegral nat) fot)</span></span>
 <span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
 <span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTArray fot1 fot2)</span>
-<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- <span class="nottickedoff">fotToBaseType fot1</span></span>
-<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- <span class="nottickedoff">fotToBaseType fot2</span></span>
-<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span></span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some ty1) &lt;- fotToBaseType fot1</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some ty2) &lt;- fotToBaseType fot2</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some (BaseArrayRepr (Empty :&gt; ty1) ty2))</span>
 <span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTTuple fots)</span>
 <span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some assn) &lt;- <span class="nottickedoff">listToAssn fots</span></span>
 <span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some (BaseStructRepr assn))</span></span>
@@ -102,19 +102,19 @@ span.spaces    { background: white }
 <span class="lineno">   83 </span>-- | Convert a type expression from What4 to SAW-core
 <span class="lineno">   84 </span>
 <span class="lineno">   85 </span>typeReprToFOT :: BaseTypeRepr ty -&gt; Either String FirstOrderType
-<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">typeReprToFOT BaseBoolRepr            = pure FOTBit</span>
-<span class="lineno">   87 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseIntegerRepr         = pure FOTInt</span>
-<span class="lineno">   88 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit</span>
-<span class="lineno">   89 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseRealRepr            = Left &quot;No FO Real&quot;</span>
-<span class="lineno">   90 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT BaseComplexRepr         = Left &quot;No FO Complex&quot;</span>
-<span class="lineno">   91 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseStringRepr _)      = Left &quot;No FO String&quot;</span>
-<span class="lineno">   92 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseArrayRepr (Empty :&gt; ty) b)</span>
-<span class="lineno">   93 </span><span class="spaces">  </span><span class="nottickedoff">| Right fot1 &lt;- typeReprToFOT ty</span>
-<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">, Right fot2 &lt;- typeReprToFOT b</span>
-<span class="lineno">   95 </span><span class="spaces">  </span><span class="nottickedoff">= pure $ FOTArray fot1 fot2</span>
-<span class="lineno">   96 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT ty@(BaseArrayRepr _ctx _b) = Left $ &quot;Unsupported FO Array: &quot; ++ show ty</span>
-<span class="lineno">   97 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseFloatRepr _)       = Left &quot;No FO Floating point&quot;</span>
-<span class="lineno">   98 </span><span class="spaces"></span><span class="nottickedoff">typeReprToFOT (BaseStructRepr ctx)    = FOTTuple &lt;$&gt; assnToList ctx</span></span>
+<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">typeReprToFOT BaseBoolRepr            = <span class="nottickedoff">pure FOTBit</span></span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseIntegerRepr         = <span class="nottickedoff">pure FOTInt</span></span>
+<span class="lineno">   88 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit</span>
+<span class="lineno">   89 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseRealRepr            = <span class="nottickedoff">Left &quot;No FO Real&quot;</span></span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT BaseComplexRepr         = <span class="nottickedoff">Left &quot;No FO Complex&quot;</span></span>
+<span class="lineno">   91 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseStringRepr _)      = <span class="nottickedoff">Left &quot;No FO String&quot;</span></span>
+<span class="lineno">   92 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseArrayRepr (Empty :&gt; ty) b)</span>
+<span class="lineno">   93 </span><span class="spaces">  </span><span class="istickedoff">| Right fot1 &lt;- <span class="nottickedoff">typeReprToFOT ty</span></span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">, Right fot2 &lt;- <span class="nottickedoff">typeReprToFOT b</span></span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">pure $ FOTArray fot1 fot2</span></span>
+<span class="lineno">   96 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT ty@(BaseArrayRepr _ctx _b) = <span class="nottickedoff">Left $ &quot;Unsupported FO Array: &quot; ++ show ty</span></span>
+<span class="lineno">   97 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseFloatRepr _)       = <span class="nottickedoff">Left &quot;No FO Floating point&quot;</span></span>
+<span class="lineno">   98 </span><span class="spaces"></span><span class="istickedoff">typeReprToFOT (BaseStructRepr ctx)    = <span class="nottickedoff">FOTTuple &lt;$&gt; assnToList ctx</span></span></span>
 <span class="lineno">   99 </span>
 <span class="lineno">  100 </span>assnToList :: Assignment BaseTypeRepr ctx -&gt; Either String [FirstOrderType]
 <span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">assnToList = foldrFC g (Right []) where</span>
@@ -126,7 +126,7 @@ span.spaces    { background: white }
 <span class="lineno">  107 </span>-- | Convert between What4 GroundValues and saw-core FirstOrderValues
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>groundToFOV :: BaseTypeRepr ty -&gt; GroundValue ty -&gt; Either String FirstOrderValue
-<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = <span class="nottickedoff">pure $ FOVBit b</span></span>
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">groundToFOV BaseBoolRepr    b         = pure $ FOVBit b</span>
 <span class="lineno">  111 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseIntegerRepr i         = <span class="nottickedoff">pure $ FOVInt i</span></span>
 <span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)</span>
 <span class="lineno">  113 </span><span class="spaces"></span><span class="istickedoff">groundToFOV BaseRealRepr    _         = <span class="nottickedoff">Left &quot;Real is not FOV&quot;</span></span>
@@ -159,24 +159,24 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span></span>
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_val' &lt;- typeReprToFOT ty_val</span></span>
 <span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ FOVOpaqueArray ty_idx' ty_val'</span></span>
-<span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayConcrete dfl values) = <span class="nottickedoff">do</span></span>
-<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span></span>
-<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">dfl' &lt;- groundToFOV ty_val dfl</span></span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let convert idx values' v = do</span></span>
-<span class="lineno">  147 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">let idx' = indexToFOV idx</span></span>
-<span class="lineno">  148 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">v' &lt;- groundToFOV ty_val v</span></span>
-<span class="lineno">  149 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return $ Map.insert idx' v' values'</span></span>
-<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">values' &lt;- ifoldlM convert Map.empty values</span></span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ FOVArray ty_idx' dfl' values'</span></span>
+<span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr (Empty :&gt; ty_idx) ty_val) (ArrayConcrete dfl values) = do</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">ty_idx' &lt;- typeReprToFOT ty_idx</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="istickedoff">dfl' &lt;- groundToFOV ty_val dfl</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">let convert idx values' v = do</span>
+<span class="lineno">  147 </span><span class="spaces">          </span><span class="istickedoff">let idx' = indexToFOV idx</span>
+<span class="lineno">  148 </span><span class="spaces">          </span><span class="istickedoff">v' &lt;- groundToFOV ty_val v</span>
+<span class="lineno">  149 </span><span class="spaces">          </span><span class="istickedoff">return $ Map.insert idx' v' values'</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">values' &lt;- ifoldlM convert Map.empty values</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">pure $ FOVArray ty_idx' dfl' values'</span>
 <span class="lineno">  152 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseArrayRepr _ _) _ =</span>
 <span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Left &quot;Unsupported FOV array (unexpected key type)&quot;</span></span>
 <span class="lineno">  154 </span><span class="spaces"></span><span class="istickedoff">groundToFOV (BaseStructRepr ctx) tup  = <span class="nottickedoff">FOVTuple &lt;$&gt; tupleToList ctx tup</span></span></span>
 <span class="lineno">  155 </span>
 <span class="lineno">  156 </span>indexToFOV :: Assignment IndexLit (EmptyCtx ::&gt; ty) -&gt; FirstOrderValue
-<span class="lineno">  157 </span><span class="decl"><span class="nottickedoff">indexToFOV (Empty :&gt; IntIndexLit k) =</span>
-<span class="lineno">  158 </span><span class="spaces">    </span><span class="nottickedoff">FOVInt k</span>
-<span class="lineno">  159 </span><span class="spaces"></span><span class="nottickedoff">indexToFOV (Empty :&gt; BVIndexLit w k) =</span>
-<span class="lineno">  160 </span><span class="spaces">    </span><span class="nottickedoff">FOVWord (natValue w) (BV.asUnsigned k)</span></span>
+<span class="lineno">  157 </span><span class="decl"><span class="istickedoff">indexToFOV (Empty :&gt; IntIndexLit k) =</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">FOVInt k</span></span>
+<span class="lineno">  159 </span><span class="spaces"></span><span class="istickedoff">indexToFOV (Empty :&gt; BVIndexLit w k) =</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">FOVWord (natValue w) (BV.asUnsigned k)</span></span>
 <span class="lineno">  161 </span>
 <span class="lineno">  162 </span>
 <span class="lineno">  163 </span>tupleToList :: Assignment BaseTypeRepr ctx -&gt;

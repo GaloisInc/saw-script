@@ -58,7 +58,7 @@ span.spaces    { background: white }
 <span class="lineno">   39 </span><span class="decl"><span class="istickedoff">literalSWord w i = svInteger (KBounded False w) i</span></span>
 <span class="lineno">   40 </span>
 <span class="lineno">   41 </span>literalSInteger :: Integer -&gt; SWord
-<span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">literalSInteger i = svInteger KUnbounded i</span></span>
+<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">literalSInteger i = svInteger KUnbounded i</span></span>
 <span class="lineno">   43 </span>
 <span class="lineno">   44 </span>forallSWord :: String -&gt; Int -&gt; Symbolic SWord
 <span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">forallSWord nm w = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) (KBounded False w) (Just nm)</span></span>
@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">forallSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KBool (Just nm)</span></span>
 <span class="lineno">   58 </span>
 <span class="lineno">   59 </span>existsSBool :: String -&gt; Symbolic SBool
-<span class="lineno">   60 </span><span class="decl"><span class="nottickedoff">existsSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just EX)) KBool (Just nm)</span></span>
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">existsSBool nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just <span class="nottickedoff">EX</span>)) KBool (Just nm)</span></span>
 <span class="lineno">   61 </span>
 <span class="lineno">   62 </span>forallSBool_ :: Symbolic SBool
 <span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">forallSBool_ = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KBool Nothing</span></span>
@@ -88,7 +88,7 @@ span.spaces    { background: white }
 <span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">forallSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KUnbounded (Just nm)</span></span>
 <span class="lineno">   70 </span>
 <span class="lineno">   71 </span>existsSInteger :: String -&gt; Symbolic SInteger
-<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">existsSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just EX)) KUnbounded (Just nm)</span></span>
+<span class="lineno">   72 </span><span class="decl"><span class="istickedoff">existsSInteger nm = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just <span class="nottickedoff">EX</span>)) KUnbounded (Just nm)</span></span>
 <span class="lineno">   73 </span>
 <span class="lineno">   74 </span>forallSInteger_ :: Symbolic SInteger
 <span class="lineno">   75 </span><span class="decl"><span class="nottickedoff">forallSInteger_ = symbolicEnv &gt;&gt;= liftIO . svMkSymVar (NonQueryVar (Just ALL)) KUnbounded Nothing</span></span>

@@ -264,7 +264,7 @@ span.spaces    { background: white }
 <span class="lineno">  245 </span><span class="decl"><span class="istickedoff">vTuple [] = <span class="nottickedoff">VUnit</span></span>
 <span class="lineno">  246 </span><span class="spaces"></span><span class="istickedoff">vTuple [_] = <span class="nottickedoff">error &quot;vTuple: unsupported 1-tuple&quot;</span></span>
 <span class="lineno">  247 </span><span class="spaces"></span><span class="istickedoff">vTuple [x, y] = VPair x y</span>
-<span class="lineno">  248 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = <span class="nottickedoff">VPair x (ready (vTuple xs))</span></span></span>
+<span class="lineno">  248 </span><span class="spaces"></span><span class="istickedoff">vTuple (x : xs) = VPair x (ready (vTuple xs))</span></span>
 <span class="lineno">  249 </span>
 <span class="lineno">  250 </span>vTupleType :: VMonad l =&gt; [TValue l] -&gt; TValue l
 <span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">vTupleType [] = VUnitType</span>
@@ -344,10 +344,10 @@ span.spaces    { background: white }
 <span class="lineno">  325 </span><span class="spaces">    </span><span class="istickedoff">VBoolType     -&gt; return FOTBit</span>
 <span class="lineno">  326 </span><span class="spaces">    </span><span class="istickedoff">VVecType n v1 -&gt; FOTVec n &lt;$&gt; asFirstOrderTypeTValue v1</span>
 <span class="lineno">  327 </span><span class="spaces">    </span><span class="istickedoff">VIntType      -&gt; return FOTInt</span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return <span class="nottickedoff">(FOTIntMod m)</span></span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">VIntModType m -&gt; return (FOTIntMod m)</span>
 <span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">VArrayType a b -&gt;</span>
 <span class="lineno">  330 </span><span class="spaces">      </span><span class="istickedoff">FOTArray &lt;$&gt; asFirstOrderTypeTValue a &lt;*&gt; asFirstOrderTypeTValue b</span>
-<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return <span class="nottickedoff">(FOTTuple [])</span></span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; return (FOTTuple [])</span>
 <span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">VPairType v1 v2 -&gt; do</span>
 <span class="lineno">  333 </span><span class="spaces">      </span><span class="istickedoff">t1 &lt;- asFirstOrderTypeTValue v1</span>
 <span class="lineno">  334 </span><span class="spaces">      </span><span class="istickedoff">t2 &lt;- asFirstOrderTypeTValue v2</span>
