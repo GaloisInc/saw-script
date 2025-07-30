@@ -53,7 +53,7 @@ period :: Doc ann
 period = text "."
 
 ppIdent :: Ident -> Doc ann
-ppIdent = text
+ppIdent (Ident s) = text s
 
 ppBinder :: Binder -> Doc ann
 ppBinder (Binder x Nothing)  = ppIdent x
@@ -102,7 +102,7 @@ ppTerm p e =
       text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm PrecLambda t
     Fix ident binders returnType body ->
       parensIf (p > PrecLambda) $
-      text "fix" <+> text ident <+> ppBinders binders <+> text ":"
+      text "fix" <+> ppIdent ident <+> ppBinders binders <+> text ":"
         <+> ppTerm PrecNone returnType <+> text ":=" <+> ppTerm PrecLambda body
     Pi bs t ->
       parensIf (p > PrecLambda) $
@@ -157,22 +157,22 @@ ppDecl :: Decl -> Doc ann
 ppDecl decl = case decl of
   Axiom nm ty ->
     nest 2 (
-      hsep [text "Axiom", text nm, text ":", ppTerm PrecNone ty, period]
+      hsep [text "Axiom", ppIdent nm, text ":", ppTerm PrecNone ty, period]
     ) <> hardline
   Parameter nm ty ->
     nest 2 (
-     hsep [text "Parameter", text nm, text ":", ppTerm PrecNone ty, period]
+     hsep [text "Parameter", ppIdent nm, text ":", ppTerm PrecNone ty, period]
     ) <> hardline
   Variable nm ty ->
     nest 2 (
-      hsep [text "Variable", text nm, text ":", ppTerm PrecNone ty, period]
+      hsep [text "Variable", ppIdent nm, text ":", ppTerm PrecNone ty, period]
     ) <> hardline
   Comment s ->
     text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
     nest 2 (
       vsep
-      [ hsep ([text "Definition", text nm] ++
+      [ hsep ([text "Definition", ppIdent nm] ++
              map ppBinder bs ++
              [ppMaybeTy mty, text ":="])
       , ppTerm PrecNone body <> period
@@ -181,9 +181,9 @@ ppDecl decl = case decl of
   InductiveDecl ind -> ppInductive ind
   Section nm ds ->
     vsep $ concat
-     [ [ hsep [text "Section", text nm, period] ]
+     [ [ hsep [text "Section", ppIdent nm, period] ]
      , map (indent 2 . ppDecl) ds
-     , [ hsep [text "End", text nm, period] ]
+     , [ hsep [text "End", ppIdent nm, period] ]
      ]
   Snippet s -> text s
 
@@ -191,7 +191,7 @@ ppConstructor :: Constructor -> Doc ann
 ppConstructor (Constructor {..}) =
   nest 2 $
   hsep [ text "|"
-       , text constructorName
+       , ppIdent constructorName
        , text ":"
        , ppTerm PrecNone constructorType
        ]
@@ -201,7 +201,7 @@ ppInductive (Inductive {..}) =
   (vsep
    ([ nest 2 $
       hsep ([ text "Inductive"
-            , text inductiveName
+            , ppIdent inductiveName
             ]
             ++ map ppBinder inductiveParameters
             ++ [ text ":" ]

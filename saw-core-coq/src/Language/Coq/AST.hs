@@ -9,7 +9,22 @@ Portability : portable
 
 module Language.Coq.AST where
 
-type Ident = String
+import Data.String (IsString(..))
+
+-- | An 'Ident' is a Coq qualified identifier represented as a string,
+-- with the invariant that it is lexically valid.
+-- A valid Coq identifier is a sequence of letters, digits,
+-- underscores and primes that starts with a letter or underscore.
+-- A /qualified/ identifier is a sequence of one or more identifiers
+-- separated by periods.
+newtype Ident = Ident String
+  deriving (Eq, Ord)
+
+instance Show Ident where
+  show (Ident s) = show s
+
+instance IsString Ident where
+  fromString s = Ident s
 
 data Sort
   = Prop
@@ -61,6 +76,7 @@ data PiBinder
 -- applied return type.
 data Constructor = Constructor
   { constructorName    :: Ident
+  -- ^ NOTE: The constructor name must be an /unqualified/ identifier.
   , constructorType    :: Term
   }
   deriving (Show)
