@@ -936,8 +936,8 @@ span.spaces    { background: white }
 <span class="lineno">  917 </span><span class="spaces">    </span><span class="istickedoff">PVar _ x _ -&gt; withVar x s m</span>
 <span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">PTuple _ ps -&gt;</span>
 <span class="lineno">  919 </span><span class="spaces">      </span><span class="istickedoff">case t of</span>
-<span class="lineno">  920 </span><span class="spaces">        </span><span class="istickedoff">TyCon _pos (TupleCon _) ts -&gt; foldr <span class="nottickedoff">($)</span> m</span>
-<span class="lineno">  921 </span><span class="spaces">          </span><span class="istickedoff">[ <span class="nottickedoff">withPatternSchema p (Forall vs t')</span> | (p, t') &lt;- zip ps <span class="nottickedoff">ts</span> ]</span>
+<span class="lineno">  920 </span><span class="spaces">        </span><span class="istickedoff">TyCon _pos (TupleCon _) ts -&gt; foldr ($) m</span>
+<span class="lineno">  921 </span><span class="spaces">          </span><span class="istickedoff">[ withPatternSchema p (Forall vs t') | (p, t') &lt;- zip ps ts ]</span>
 <span class="lineno">  922 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">m</span></span></span>
 <span class="lineno">  923 </span>
 <span class="lineno">  924 </span>-- wrap the action m with types for the vars in a declaration.
