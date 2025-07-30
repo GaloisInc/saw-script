@@ -1291,6 +1291,29 @@ instance FromValue a => FromValue [a] where
     fromValue how (VArray xs) = map (fromValue how) xs
     fromValue _ _ = error "fromValue []"
 
+
+-- | Common logic for the FromValue instances for plain monadic values.
+--   Runs in any interpreter monad.
+--
+--   Note: this won't actually run until the result action is bound into
+--   the execution sequence somewhere (downstream from fromValue).
+preparePlainMonadicAction ::
+  forall m a. InterpreterMonad m => FromValueHow -> SS.Pos -> RefChain -> m a -> m a
+preparePlainMonadicAction how pos chain action = do
+  liftTopLevel $ do
+    setPosition pos
+    case how of
+        FromInterpreter -> pure ()
+        FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+    pushTraceFrames chain
+  ret <- action
+  liftTopLevel $ do
+    popTraceFrames chain
+    case how of
+        FromInterpreter -> pure ()
+        FromArgument -> popTraceFrame
+  return ret
+
 instance IsValue a => IsValue (IO a) where
     toValue name action = toValue name (io action)
 
@@ -1302,18 +1325,8 @@ instance FromValue a => FromValue (TopLevel a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VTopLevel pos chain action -> do
-          setPosition pos
-          case how of
-              FromInterpreter -> pure ()
-              FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
-          pushTraceFrames chain
-          ret <- action
-          popTraceFrames chain
-          case how of
-              FromInterpreter -> pure ()
-              FromArgument -> popTraceFrame
-          return $ fromValue how ret
+        VTopLevel pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (TopLevel)" [
               "Invalid/ill-typed value: " <> Text.pack (show v')
@@ -1327,20 +1340,8 @@ instance FromValue a => FromValue (ProofScript a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VProofScript pos chain action -> do
-          scriptTopLevel $ do
-            setPosition pos
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushTraceFrames chain
-          ret <- action
-          scriptTopLevel $ do
-            popTraceFrames chain
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> popTraceFrame
-          return $ fromValue how ret
+        VProofScript pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (ProofScript)" [
               "Invalid/ill-typed value: " <> Text.pack (show v')
@@ -1354,20 +1355,8 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VLLVMCrucibleSetup pos chain action -> do
-          llvmTopLevel $ do
-            setPosition pos
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushTraceFrames chain
-          ret <- action
-          llvmTopLevel $ do
-            popTraceFrames chain
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> popTraceFrame
-          return $ fromValue how ret
+        VLLVMCrucibleSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (LLVMSetup)" [
               "Invalid/ill-typed value: " <> Text.pack (show v')
@@ -1381,20 +1370,8 @@ instance FromValue a => FromValue (JVMSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VJVMSetup pos chain action -> do
-          jvmTopLevel $ do
-            setPosition pos
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushTraceFrames chain
-          ret <- action
-          jvmTopLevel $ do
-            popTraceFrames chain
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> popTraceFrame
-          return $ fromValue how ret
+        VJVMSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (JVMSetup)" [
               "Invalid/ill-typed value: " <> Text.pack (show v')
@@ -1408,20 +1385,8 @@ instance FromValue a => FromValue (MIRSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VMIRSetup pos chain action -> do
-          mirTopLevel $ do
-            setPosition pos
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushTraceFrames chain
-          ret <- action
-          mirTopLevel $ do
-            popTraceFrames chain
-            case how of
-                FromInterpreter -> pure ()
-                FromArgument -> popTraceFrame
-          return $ fromValue how ret
+        VMIRSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (MIRSetup)" [
               "Invalid/ill-typed value: " <> Text.pack (show v')
