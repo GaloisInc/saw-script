@@ -25,6 +25,48 @@ Stack trace:
  tuple with bind
 Stack trace:
    (builtin) in print_stack
-   trace009.saw:28:14-28:25 in f3
+   trace009.saw:28:14-28:25 in f4
    trace009.saw:31:1-31:3 (at top level)
+
+ ------------------------------------------------------------
+ one-step tuple with let
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:36:16-36:27 in f5
+   trace009.saw:37:1-37:3 (at top level)
+
+ ------------------------------------------------------------
+ one-step tuple with bind
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:41:20-41:31 in f6
+   trace009.saw:42:1-42:3 (at top level)
+
+ ------------------------------------------------------------
+ tuple with let, in do-block
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:48:17-48:28 in f7
+   trace009.saw:51:4-51:6 (at top level)
+
+ ------------------------------------------------------------
+ tuple with bind, in do-block
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:55:17-55:28 in f8
+   trace009.saw:58:4-58:6 (at top level)
+
+ ------------------------------------------------------------
+ one-step tuple with let, in do-block
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:62:19-62:30 in f9
+   trace009.saw:63:4-63:6 (at top level)
+
+ ------------------------------------------------------------
+ one-step tuple with bind
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:67:24-67:35 in f10
+   trace009.saw:68:4-68:7 (at top level)
 
