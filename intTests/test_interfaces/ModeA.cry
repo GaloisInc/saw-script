@@ -1,0 +1,6 @@
+module ModeA where
+
+import interface CipherInterface as C
+
+encrypt : [C::KeySize] -> [128] -> [128]
+encrypt key blocks = C::XY key blocks

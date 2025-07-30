@@ -1,0 +1,9 @@
+module ModeB where
+
+import interface CipherInterface as C
+
+expand : [C::KeySize] -> [2 * C::KeySize]
+expand = C::Y
+
+encrypt : [2 * C::KeySize] -> [128] -> [128]
+encrypt key block = C::X key block

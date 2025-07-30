@@ -1,0 +1,12 @@
+module MyCipher where
+
+type KeySize = 64
+
+X: [2 * KeySize] -> [128] -> [128]
+X key block = key ^ block
+
+Y : [KeySize] -> [2 * KeySize]
+Y k = k # k
+
+XY : [KeySize] -> [128] -> [128]
+XY key block = X (Y key) block

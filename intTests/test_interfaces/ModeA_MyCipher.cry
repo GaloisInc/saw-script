@@ -1,0 +1,1 @@
+module ModeA_MyCipher = ModeA { MyCipher }

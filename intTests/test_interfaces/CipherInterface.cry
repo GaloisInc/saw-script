@@ -1,0 +1,9 @@
+interface module CipherInterface where
+    type KeySize : #
+    type constraint (fin KeySize)
+
+    X: [2 * KeySize] -> [128] -> [128]
+    Y : [KeySize] -> [2 * KeySize]
+
+    // Compose X and Y
+    XY : [KeySize] -> [128] -> [128]

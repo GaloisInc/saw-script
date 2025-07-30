@@ -1,0 +1,34 @@
+import "./ModeA_MyCipher.cry" as A;
+import "./ModeB_MyCipher.cry" as B;
+
+thm <- return {{ \key blocks -> A::encrypt key blocks == B::encrypt (B::expand key) blocks }};
+
+let ss0 = cryptol_ss ();
+
+// This doesn't work; I don't know how to refer to things about the interface `C`
+// used in my mode instantiations.
+xy_thm <- return {{ \key blk -> A::C::XY key blk == B::C::X (B::C::Y key) blk }};
+xy_proof <- prove_print z3 xy_thm;
+
+proof <- prove_print do {
+    unfolding ["A::encrypt", "B::encrypt", "B::expand"];
+    simplify (addsimps [xy_proof] ss0);
+    print_goal;
+    // In my actual setting, the interface stuff does not prove like this.
+    // I want to be able to simplify it away by proving a theorem about it.
+    z3;
+} thm;
+
+// `print_goal` output:
+// [18:49:45.262] Loading file "equiv.saw"
+// [18:49:45.389] Goal prove_print (goal number 0): prove
+// at equiv.saw:13:1-19:6
+//
+// let { x@1 = Vec 128 Bool
+    // }
+ // in (key : Vec 64 Bool)
+// -> (blocks : x@1)
+// -> EqTrue
+//      (ecEq x@1 (PEqWord 128) (ModeA_MyCipher::C::XY key blocks)
+//         (ModeB_MyCipher::C::X (ModeB_MyCipher::C::Y key) blocks))
+//
