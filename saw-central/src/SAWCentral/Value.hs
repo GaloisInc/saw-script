@@ -85,8 +85,8 @@ module SAWCentral.Value (
     setPosition,
     -- used by SAWScript.Interpreter
     getStackTrace,
-    pushNewTraceFrame, popNewTraceFrame,
-    pushNewTraceFrames, popNewTraceFrames,
+    pushTraceFrame, popTraceFrame,
+    pushTraceFrames, popTraceFrames,
     -- used by SAWScript.Interpreter
     RefChain,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
@@ -434,11 +434,6 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   environment handling, and that needs a through mucking-out of its
 --   own first.
 --
---   (Note: the legacy stack trace mechanism keeps a name in VDo, so
---   that'll still be there until the commits that remove that
---   machinery. This name is readily identifiable because it's a
---   String rather than Text.)
---
 --   The flow for the position of last reference is as follows:
 --      (a) Builtins in the global environment are initialized with
 --          `atRestPos`. This should never be seen by a user because
@@ -525,7 +520,6 @@ data Value
     -- XXX: This should go away. Fortunately, it's only used by the
     -- closures that implement stack traces, which are scheduled for
     -- removal soon.
-  | VClosure (SS.Pos -> Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
@@ -721,7 +715,6 @@ showsPrecValue opts nenv p v =
       let name' = PP.pretty name in
       shows $ PP.sep ["<<", "builtin", name', ">>"]
 
-    VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn _pos _chain v' ->
@@ -1006,9 +999,9 @@ setPosition newpos = do
 
 -- | Add a stack trace frame. Takes the call site position and the
 --   function name.
-pushNewTraceFrame :: SS.Pos -> Text -> TopLevel ()
-pushNewTraceFrame pos func =
-  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.newPush pos func (rwStackTrace rw) })
+pushTraceFrame :: SS.Pos -> Text -> TopLevel ()
+pushTraceFrame pos func =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.push pos func (rwStackTrace rw) })
 
 -- | Add multiple stack trace frames. Takes a list of call site and
 --   function name pairs.
@@ -1024,20 +1017,20 @@ pushNewTraceFrame pos func =
 --   inclined to reverse the list both here and in the caller to match
 --   a rather vague expectation.
 --
-pushNewTraceFrames :: [(SS.Pos, Text)] -> TopLevel ()
-pushNewTraceFrames frames =
-  mapM_ (\(pos, name) -> pushNewTraceFrame pos name) frames
+pushTraceFrames :: [(SS.Pos, Text)] -> TopLevel ()
+pushTraceFrames frames =
+  mapM_ (\(pos, name) -> pushTraceFrame pos name) frames
 
 -- | Drop a stack trace frame.
-popNewTraceFrame :: TopLevel ()
-popNewTraceFrame =
-  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.newPop (rwStackTrace rw) })
+popTraceFrame :: TopLevel ()
+popTraceFrame =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.pop (rwStackTrace rw) })
 
 -- | Drop multiple stack trace frames. Takes a list of the corresponding
 --   length for caller convenience.
-popNewTraceFrames :: [a] -> TopLevel ()
-popNewTraceFrames frames =
-  mapM_ (\_ -> popNewTraceFrame) frames
+popTraceFrames :: [a] -> TopLevel ()
+popTraceFrames frames =
+  mapM_ (\_ -> popTraceFrame) frames
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv =

@@ -434,8 +434,8 @@ processTypeCheck (errs_or_output, warns) =
 --   turns out not to be a function value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
-  let enter name = pushNewTraceFrame pos name
-      leave = popNewTraceFrame
+  let enter name = pushTraceFrame pos name
+      leave = popTraceFrame
   in
   case v1 of
     VLambda env mname pat e -> do
@@ -455,15 +455,6 @@ applyValue pos v1info v1 v2 =
             -- f will still be partially applied after this, so it
             -- won't do anything and there's no need to enter/leave.
             VBuiltin name (args :|> v2) <$> f v2
-    VClosure f -> do
-        -- Do not generate trace frames for these.
-        -- The only remaining uses of VClosure are the hooks used by
-        -- the legacy stack trace facility, and we don't want to see
-        -- those.
-        --enter "<<unknown closure>>"
-        r <- f pos v2
-        --leave
-        return r
     _ ->
         panic "applyValue" [
             "Called object is not a function",
@@ -622,16 +613,16 @@ interpretMonadAction fromHow v = case v of
     liftTopLevel $ do
       case fromHow of
           FromInterpreter -> pure ()
-          FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-      pushNewTraceFrames chain
+          FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+      pushTraceFrames chain
 
     r <- withLocalEnvAny env (interpretDoStmts body)
 
     liftTopLevel $ do
-      popNewTraceFrames chain
+      popTraceFrames chain
       case fromHow of
           FromInterpreter -> pure ()
-          FromArgument -> popNewTraceFrame
+          FromArgument -> popTraceFrame
     return $ propagateRefChain chain r
   VBindOnce pos chain baseVal1 val2 -> do
     -- baseVal1 is a monadic value of the same class as returned by
@@ -646,8 +637,8 @@ interpretMonadAction fromHow v = case v of
     liftTopLevel $ do
       case fromHow of
           FromInterpreter -> pure ()
-          FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-      pushNewTraceFrames chain
+          FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+      pushTraceFrames chain
 
     plainVal1 <- interpretMonadAction FromInterpreter baseVal1
     let plainVal1' = injectPositionIntoMonadicValue pos plainVal1
@@ -658,10 +649,10 @@ interpretMonadAction fromHow v = case v of
     result3 <- interpretMonadAction FromInterpreter result2
 
     liftTopLevel $ do
-      popNewTraceFrames chain
+      popTraceFrames chain
       case fromHow of
           FromInterpreter -> pure ()
-          FromArgument -> popNewTraceFrame
+          FromArgument -> popTraceFrame
     -- Handle the RefChain the same way as a do-block. Note that with
     -- luck we don't have to worry about unwanted additional RefChain
     -- entries in the second and subsequent VBindOnce values in a
@@ -1315,13 +1306,13 @@ instance FromValue a => FromValue (TopLevel a) where
           setPosition pos
           case how of
               FromInterpreter -> pure ()
-              FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-          pushNewTraceFrames chain
+              FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+          pushTraceFrames chain
           ret <- action
-          popNewTraceFrames chain
+          popTraceFrames chain
           case how of
               FromInterpreter -> pure ()
-              FromArgument -> popNewTraceFrame
+              FromArgument -> popTraceFrame
           return $ fromValue how ret
         _ ->
           panic "fromValue (TopLevel)" [
@@ -1341,14 +1332,14 @@ instance FromValue a => FromValue (ProofScript a) where
             setPosition pos
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushNewTraceFrames chain
+                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+            pushTraceFrames chain
           ret <- action
           scriptTopLevel $ do
-            popNewTraceFrames chain
+            popTraceFrames chain
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> popNewTraceFrame
+                FromArgument -> popTraceFrame
           return $ fromValue how ret
         _ ->
           panic "fromValue (ProofScript)" [
@@ -1368,14 +1359,14 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
             setPosition pos
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushNewTraceFrames chain
+                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+            pushTraceFrames chain
           ret <- action
           llvmTopLevel $ do
-            popNewTraceFrames chain
+            popTraceFrames chain
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> popNewTraceFrame
+                FromArgument -> popTraceFrame
           return $ fromValue how ret
         _ ->
           panic "fromValue (LLVMSetup)" [
@@ -1395,14 +1386,14 @@ instance FromValue a => FromValue (JVMSetupM a) where
             setPosition pos
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushNewTraceFrames chain
+                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+            pushTraceFrames chain
           ret <- action
           jvmTopLevel $ do
-            popNewTraceFrames chain
+            popTraceFrames chain
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> popNewTraceFrame
+                FromArgument -> popTraceFrame
           return $ fromValue how ret
         _ ->
           panic "fromValue (JVMSetup)" [
@@ -1422,14 +1413,14 @@ instance FromValue a => FromValue (MIRSetupM a) where
             setPosition pos
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> pushNewTraceFrame SS.PosInsideBuiltin "(callback)"
-            pushNewTraceFrames chain
+                FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+            pushTraceFrames chain
           ret <- action
           mirTopLevel $ do
-            popNewTraceFrames chain
+            popTraceFrames chain
             case how of
                 FromInterpreter -> pure ()
-                FromArgument -> popNewTraceFrame
+                FromArgument -> popTraceFrame
           return $ fromValue how ret
         _ ->
           panic "fromValue (MIRSetup)" [

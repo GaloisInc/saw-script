@@ -14,8 +14,8 @@ Stability   : provisional
 module SAWCentral.Trace (
     Trace(),
     empty,
-    newPush,
-    newPop,
+    push,
+    pop,
     ppTrace
  ) where
 
@@ -92,19 +92,19 @@ empty :: Trace
 empty = Trace []
 
 
--- | Push a fresh frame on the new part of a trace.
-newPush :: Pos -> Text -> Trace -> Trace
-newPush callpos func (Trace newframes) =
+-- | Push a fresh frame on a trace.
+push :: Pos -> Text -> Trace -> Trace
+push callpos func (Trace frames) =
   let func' = TraceFunc func
       frame = TraceFrame callpos func'
   in
-  Trace (frame : newframes)
+  Trace (frame : frames)
 
--- | Pop a frame off the new part of a trace.
-newPop :: Trace -> Trace
-newPop (Trace newframes) = case newframes of
-  [] -> panic "Trace.newPop" ["Popping empty stack"]
-  _ : newframes' -> Trace newframes'
+-- | Pop a frame off a trace.
+pop :: Trace -> Trace
+pop (Trace frames) = case frames of
+  [] -> panic "Trace.pop" ["Popping empty stack"]
+  _ : frames' -> Trace frames'
 
 
 -- | Print a TraceFunc. Simple for now, but we're going to want more
@@ -112,10 +112,10 @@ newPop (Trace newframes) = case newframes of
 ppTraceFunc :: TraceFunc -> Text
 ppTraceFunc (TraceFunc name) = name
 
--- | Prepare a (new-style) trace for printing.
+-- | Prepare a trace for printing.
 --
---   The new trace is a list of call sites, and that's not the way
---   we want to print it.
+--   The trace is a list of call sites, and that's not the way we want
+--   to print it.
 --
 --   Suppose we had this code:
 --
@@ -164,8 +164,8 @@ prepareTrace curpos tfs = case tfs of
 --   in a confusingly messed-up trace.
 --
 ppTrace :: Trace -> Pos -> Text
-ppTrace (Trace newframes) curpos =
-  let newframes' =
+ppTrace (Trace frames) curpos =
+  let frames' =
         let ppEntry (pos, mfunc) =
               let pos' = Text.pack (show pos)
                   mfunc' = case mfunc of
@@ -174,6 +174,6 @@ ppTrace (Trace newframes) curpos =
               in
               "   " <> pos' <> mfunc'
         in
-        map ppEntry $ prepareTrace curpos newframes
+        map ppEntry $ prepareTrace curpos frames
   in
-  Text.unlines newframes'
+  Text.unlines frames'
