@@ -1,0 +1,30 @@
+ Loading file "trace009.saw"
+ ------------------------------------------------------------
+ monadic callback argument
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:8:4-8:15 in m
+   trace009.saw:7:17-7:18 in f1
+   trace009.saw:8:1-8:15 (at top level)
+
+ ------------------------------------------------------------
+ bind/return
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:13:14-13:25 in f2
+   trace009.saw:14:1-14:3 (at top level)
+
+ ------------------------------------------------------------
+ tuple with let
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:21:14-21:25 in f3
+   trace009.saw:24:1-24:3 (at top level)
+
+ ------------------------------------------------------------
+ tuple with bind
+Stack trace:
+   (builtin) in print_stack
+   trace009.saw:28:14-28:25 in f3
+   trace009.saw:31:1-31:3 (at top level)
+

@@ -1,0 +1,31 @@
+enable_experimental;
+
+// Arguments to SAWScript functions that are monadic callbacks should
+// behave the same way as arguments to builtins. Alas, not for now...
+print "------------------------------------------------------------";
+print "monadic callback argument";
+let f1 m = do { m; return (); };
+f1 print_stack;
+
+// A bind/return pair should produce the same trace behavior as a let.
+print "------------------------------------------------------------";
+print "bind/return";
+f2 <- return print_stack;
+f2;
+
+// If you cons a tuple of actions and push it around, ideally that
+// should also result in trace frames. Currently, though, it does
+// not.
+print "------------------------------------------------------------";
+print "tuple with let";
+let pair1 = (print_stack, print_stack);
+let pair2 = pair1;
+let (f3, _) = pair2;
+f3;
+
+print "------------------------------------------------------------";
+print "tuple with bind";
+let pair1 = (print_stack, print_stack);
+let pair2 = pair1;
+(f3, _) <- return pair2;
+f3;
