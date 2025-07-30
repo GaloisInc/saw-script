@@ -208,7 +208,7 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff">SS.PWild _pos ~(Just t) -&gt; t</span>
 <span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">SS.PVar _pos _x ~(Just t) -&gt; t</span>
 <span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">SS.PTuple tuplepos pats -&gt;</span>
-<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)</span></span></span>
+<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff">SS.TyCon <span class="nottickedoff">tuplepos</span> (SS.TupleCon <span class="nottickedoff">(genericLength pats)</span>) (map getType pats)</span></span>
 <span class="lineno">  193 </span>
 <span class="lineno">  194 </span>-- Convert some text (wrapped in a position with Located) to
 <span class="lineno">  195 </span>-- an InputText for cryptol-saw-core.
@@ -330,7 +330,7 @@ span.spaces    { background: white }
 <span class="lineno">  311 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  312 </span><span class="spaces">                      </span><span class="istickedoff">repeat <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  313 </span><span class="spaces">                  </span><span class="istickedoff">Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) -&gt;</span>
-<span class="lineno">  314 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ Just (SS.Forall ks t) | t &lt;- ts ]</span></span>
+<span class="lineno">  314 </span><span class="spaces">                      </span><span class="istickedoff">[ Just (SS.Forall ks t) | t &lt;- ts ]</span>
 <span class="lineno">  315 </span><span class="spaces">                  </span><span class="istickedoff">Just t -&gt;</span>
 <span class="lineno">  316 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;bindPatternLocal&quot; [</span></span>
 <span class="lineno">  317 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">&quot;Expected tuple type, got &quot; &lt;&gt; Text.pack (show t)</span></span>
@@ -357,17 +357,17 @@ span.spaces    { background: white }
 <span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff">let s = fromMaybe <span class="nottickedoff">(SS.tMono ty)</span> ms</span>
 <span class="lineno">  339 </span><span class="spaces">        </span><span class="istickedoff">liftIO $ extendEnv sc x s <span class="nottickedoff">Nothing</span> v env</span>
 <span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">SS.PTuple _pos ps -&gt;</span>
-<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
-<span class="lineno">  342 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VTuple vs -&gt; foldr (=&lt;&lt;) (pure env) (zipWith3 bindPatternEnv ps mss vs)</span></span>
-<span class="lineno">  343 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">where mss = case ms of</span></span>
-<span class="lineno">  344 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; repeat Nothing</span></span>
-<span class="lineno">  345 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) -&gt;</span></span>
-<span class="lineno">  346 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">[ Just (SS.Forall ks t) | t &lt;- ts ]</span></span>
-<span class="lineno">  347 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">Just t -&gt;</span></span>
+<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">case v of</span>
+<span class="lineno">  342 </span><span class="spaces">        </span><span class="istickedoff">VTuple vs -&gt; foldr (=&lt;&lt;) (pure env) (zipWith3 bindPatternEnv ps mss vs)</span>
+<span class="lineno">  343 </span><span class="spaces">          </span><span class="istickedoff">where mss = case ms of</span>
+<span class="lineno">  344 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">repeat Nothing</span></span>
+<span class="lineno">  345 </span><span class="spaces">                  </span><span class="istickedoff">Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) -&gt;</span>
+<span class="lineno">  346 </span><span class="spaces">                      </span><span class="istickedoff">[ Just (SS.Forall ks t) | t &lt;- ts ]</span>
+<span class="lineno">  347 </span><span class="spaces">                  </span><span class="istickedoff">Just t -&gt;</span>
 <span class="lineno">  348 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;bindPatternEnv&quot; [</span></span>
 <span class="lineno">  349 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">&quot;Expected tuple type, got &quot; &lt;&gt; Text.pack (show t)</span></span>
 <span class="lineno">  350 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt;</span></span>
+<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  352 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;bindPatternEnv&quot; [</span></span>
 <span class="lineno">  353 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Expected tuple value; got &quot; &lt;&gt; Text.pack (show v)</span></span>
 <span class="lineno">  354 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>

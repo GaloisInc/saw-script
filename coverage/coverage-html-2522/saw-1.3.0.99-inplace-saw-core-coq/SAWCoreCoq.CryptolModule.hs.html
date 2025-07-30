@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span><span class="decl"><span class="nottickedoff">translateTypedTermMap defs = forM defs translateAndRegisterEntry</span>
 <span class="lineno">   26 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">   27 </span><span class="spaces">    </span><span class="nottickedoff">translateAndRegisterEntry (name, t, tp) = do</span>
-<span class="lineno">   28 </span><span class="spaces">      </span><span class="nottickedoff">let nameStr = unpackIdent (nameIdent name)</span>
+<span class="lineno">   28 </span><span class="spaces">      </span><span class="nottickedoff">let nameStr = Coq.Ident (unpackIdent (nameIdent name))</span>
 <span class="lineno">   29 </span><span class="spaces">      </span><span class="nottickedoff">decl &lt;-</span>
 <span class="lineno">   30 </span><span class="spaces">        </span><span class="nottickedoff">do t_trans &lt;- TermTranslation.translateTerm t</span>
 <span class="lineno">   31 </span><span class="spaces">           </span><span class="nottickedoff">tp_trans &lt;- TermTranslation.translateTerm tp</span>
@@ -60,7 +60,7 @@ span.spaces    { background: white }
 <span class="lineno">   41 </span>  SharedContext -&gt; Env -&gt;
 <span class="lineno">   42 </span>  TranslationConfiguration -&gt;
 <span class="lineno">   43 </span>  -- | List of already translated global declarations
-<span class="lineno">   44 </span>  [String] -&gt;
+<span class="lineno">   44 </span>  [Coq.Ident] -&gt;
 <span class="lineno">   45 </span>  CryptolModule -&gt;
 <span class="lineno">   46 </span>  IO (Either (TranslationError Term) [Coq.Decl])
 <span class="lineno">   47 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =</span>
