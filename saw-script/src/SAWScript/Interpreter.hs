@@ -5444,7 +5444,7 @@ primitives = Map.fromList
   , prim "mir_ghost_value"
     "Ghost -> Term -> MIRSetup ()"
     (pureVal mir_ghost_value)
-    Current
+    Experimental
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
 
