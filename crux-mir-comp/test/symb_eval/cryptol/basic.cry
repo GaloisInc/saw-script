@@ -14,3 +14,6 @@ arrayArg [x, y] = x + y
 
 arrayRet : [8] -> [8] -> [2][8]
 arrayRet x y = [x + y, x - y]
+
+xorBits : {n} (fin n) => [n] -> [n] -> [n]
+xorBits x y = x ^ y
