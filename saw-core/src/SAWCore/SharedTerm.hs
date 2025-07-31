@@ -33,7 +33,7 @@ module SAWCore.SharedTerm
   , Term(..)
   , TermIndex
   , looseVars
-  , smallestFreeVar
+  , smallestLooseVar
   , scSharedTerm
   , unshare
   , scImport
@@ -759,7 +759,8 @@ getTerm cache termF =
         i <- getUniqueInt
         let term = STApp { stAppIndex = i
                          , stAppHash = hash termF
-                         , stAppFreeVars = freesTermF (fmap looseVars termF)
+                         , stAppLooseVars = looseTermF (fmap looseVars termF)
+                         , stAppFreeVars = freesTermF (fmap freeVars termF)
                          , stAppTermF = termF
                          }
             s' = insertTFM termF term s
@@ -1541,7 +1542,7 @@ instantiateLocalVars sc f initialLevel t0 =
     go l t =
       case t of
         Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppFreeVars = _, stAppTermF = tf}
+        STApp{ stAppIndex = tidx, stAppTermF = tf }
           | termIsClosed t -> return t -- closed terms map to themselves
           | otherwise -> useCache ?cache (tidx, l) (go' l tf)
 
@@ -2794,39 +2795,43 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 --   to the terms in the replacement map; so external constants
 --   in those terms will not be replaced.
 scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExt sc vmap = instantiateVars sc fn 0
+scInstantiateExt sc vmap
+  | all termIsClosed vmap = scInstantiateExtClosed sc vmap
+  | otherwise = instantiateVars sc fn 0
   where fn _rec l (Left ec) =
             case IntMap.lookup (ecVarIndex ec) vmap of
                Just t  -> incVars sc 0 l t
                Nothing -> scVariable sc ec
         fn _ _ (Right i) = scLocalVar sc i
 
-{-
--- RWD: I'm pretty sure the following implementation gets incorrect results when
--- the terms being substituted have free deBruijn variables.  The above is a
--- reimplementation based on instantiateVars that does the necessary deBruijn
--- shifting.
-
-scInstantiateExt sc vmap t0 = do
-  tcache <- newCacheMap' Map.empty
-  let go :: Term -> ChangeT IO Term
-      go t@(Unshared tf) =
-        case tf of
-          -- | Lookup variable in term if it is bound.
-          FTermF (Variable ec) ->
-            maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
-          -- | Recurse on other terms.
-          _ -> whenModified t (scTermF sc) (traverse go tf)
-      go t@(STApp idx tf) =
-        case tf of
-          -- Lookup variable in term if it is bound.
-          FTermF (Variable ec) ->
-            maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
-          -- Recurse on other terms.
-          _ -> useChangeCache tcache idx $
-                 whenModified t (scTermF sc) (traverse go tf)
-  commitChangeT (go t0)
--}
+-- | Internal variant of 'scInstantiateExt' that requires the
+-- substituted terms to all be closed, i.e. they must not have any
+-- loose de Bruijn indices.
+scInstantiateExtClosed :: SharedContext -> IntMap Term -> Term -> IO Term
+scInstantiateExtClosed sc vmap t0 =
+  do let vs = IntMap.keysSet vmap
+     tcache <- newCacheIntMap
+     let memo :: Term -> IO Term
+         memo t =
+           case t of
+             Unshared {} -> go t
+             STApp {stAppIndex = i} -> useCache tcache i (go t)
+         go :: Term -> IO Term
+         go t
+           | IntSet.disjoint vs (freeVars t) = pure t
+           | otherwise =
+             case unwrapTermF t of
+               FTermF ftf     -> scFlatTermF sc =<< traverse memo ftf
+               App t1 t2      -> scTermF sc =<< App <$> memo t1 <*> memo t2
+               Lambda x t1 t2 -> scTermF sc =<< Lambda x <$> memo t1 <*> memo t2
+               Pi x t1 t2     -> scTermF sc =<< Pi x <$> memo t1 <*> memo t2
+               LocalVar {} -> pure t
+               Constant {} -> pure t
+               Variable ec ->
+                 case IntMap.lookup (ecVarIndex ec) vmap of
+                   Just t' -> pure t'
+                   Nothing -> pure t
+     go t0
 
 -- | Convert the given list of external constants to local variables,
 -- with the right-most mapping to local variable 0. If the term is
