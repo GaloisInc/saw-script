@@ -412,9 +412,11 @@ data Term
        -- with this 'Term'. This should be as unique as a hash can be, but is
        -- not guaranteed unique as 'stAppIndex' is.
      , stAppLooseVars :: !BitSet
-       -- ^ The loose de Bruijn indices associated with the 'stAppTermF' field.
+       -- ^ A set containing the 'DeBruijnIndex' of each of the loose
+       -- de Bruijn indices from 'LocalVar' constructors in the term.
      , stAppFreeVars :: !IntSet
-       -- ^ The set of 'VarIndex'es of the free named variables in the term.
+       -- ^ A set containing the 'VarIndex' of each of the free named
+       -- variables from 'Variable' constructors in the term.
      , stAppTermF    :: !(TermF Term)
        -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
        -- knot" of the 'Term'/'TermF' recursion scheme.
