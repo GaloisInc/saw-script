@@ -3,10 +3,10 @@
     Term is not a function. (Maybe a function is applied to too many arguments?)
     unify004.saw:8:9-8:10: The type t.0 -> t.1 arises from the context of the term
     unify004.saw:7:9-7:10: The type Int arises from the type of this term
-    
+
     Expected: t.0 -> t.1
     Found:    Int
-    
+
     within "x" (unify004.saw:8:5-8:6)
 
 FAILED

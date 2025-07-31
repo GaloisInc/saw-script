@@ -3,13 +3,13 @@
     Mismatch of type constructors. Expected: String but got Int
     err018.saw:16:14-16:20: The type String arises from this type annotation
     err018.saw:23:25-23:26: The type Int arises from the type of this term
-    
+
     Expected: String
     Found:    Int
-    
+
     Expected: {amethyst : String, moonstone : String, obsidian : String, turquoise : String}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err018.saw:26:5-26:6)
 
 FAILED

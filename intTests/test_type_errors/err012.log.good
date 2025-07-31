@@ -6,10 +6,10 @@
     Mismatch of type constructors. Expected: Int but got <Block>
     err012.saw:12:6-12:9: The type Int arises from this type annotation
     err012.saw:12:2-12:17: The type LLVMSetup Int arises from this type annotation
-    
+
     Expected: Int
     Found:    LLVMSetup Int
-    
+
     within "<toplevel>" (err012.saw:12:2-12:17)
 
 FAILED

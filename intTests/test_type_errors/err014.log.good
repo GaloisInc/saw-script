@@ -3,10 +3,10 @@
     Record field names mismatch.
     err014.saw:8:13-8:24: The type {a : Int} arises from this type annotation
     err014.saw:10:25-10:34: The type {b : Int} arises from the type of this term
-    
+
     Expected: {a : Int}
     Found:    {b : Int}
-    
+
     within "baz" (err014.saw:12:5-12:8)
 
 FAILED

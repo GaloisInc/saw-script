@@ -755,7 +755,11 @@ unify m t1 pos t2 = do
          firstline = "Type mismatch."
          morelines = ppFailMGU msgs ++ ["within " ++ show m]
          -- Indent all but the first line by four spaces.
-         morelines' = map (\msg -> "    " ++ msg) morelines
+         -- Don't indent blank lines; that produces trailing whitespace.
+         adjust msg = case msg of
+             [] -> []
+             _ -> "    " ++ msg
+         morelines' = map adjust morelines
 
 -- Check if two types match but don't actually unify them
 -- (that is, on success throw away the substitution and on error
