@@ -3,13 +3,13 @@
     Mismatch of type constructors. Expected: String but got Int
     unify009.saw:21:33-21:38: The type String arises from the type of this term
     unify009.saw:21:16-21:19: The type Int arises from this type annotation
-    
+
     Expected: String
     Found:    Int
-    
+
     Expected: Int -> String
     Found:    Int -> Int
-    
+
     within "x" (unify009.saw:20:6-20:7)
 
 FAILED

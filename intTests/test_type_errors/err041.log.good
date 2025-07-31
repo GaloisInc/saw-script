@@ -3,13 +3,13 @@
     Mismatch of type constructors. Expected: Int but got String
     err041.saw:7:25-7:28: The type Int arises from this type annotation
     err041.saw:5:31-5:37: The type String arises from this type annotation
-    
+
     Expected: Int
     Found:    String
-    
+
     Expected: Int -> Int -> Int -> Int
     Found:    Int -> Int -> String -> Int
-    
+
     within "x" (err041.saw:9:5-9:6)
 
 FAILED

@@ -3,7 +3,7 @@
     Occurs check failure: the type at <type of concat>:1:2-1:3: Fresh type for this term appears within the type at <type of concat>:1:2-1:3: Fresh type for this term
     Expected: [t.5]
     Found:    [[t.5]]
-    
+
     within "paste" (err013.saw:9:5-9:10)
 
 FAILED

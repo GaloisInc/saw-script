@@ -3,10 +3,10 @@
     Mismatch of type constructors. Expected: <Block> but got Int
     err036.saw:9:9-9:14: The type Int Int arises from this type annotation
     err036.saw:9:17-9:18: The type Int arises from the type of this term
-    
+
     Expected: Int Int
     Found:    Int
-    
+
     within "x" (err036.saw:9:5-9:6)
 
 FAILED

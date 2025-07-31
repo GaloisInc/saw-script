@@ -6,10 +6,10 @@
     Mismatch of type constructors. Expected: () but got <Block>
     unify012.saw:14:6-14:8: The type () arises from this type annotation
     unify012.saw:14:2-14:14: The type LLVMSetup () arises from this type annotation
-    
+
     Expected: ()
     Found:    LLVMSetup ()
-    
+
     within "<toplevel>" (unify012.saw:14:2-14:14)
 
 FAILED

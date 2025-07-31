@@ -5,10 +5,10 @@
     Mismatch of type constructors. Expected: Int but got String
     unify011.saw:12:6-12:9: The type Int arises from this type annotation
     unify011.saw:12:14-12:19: The type String arises from the type of this term
-    
+
     Expected: Int
     Found:    String
-    
+
     within "<toplevel>" (unify011.saw:12:2-12:19)
 
 FAILED

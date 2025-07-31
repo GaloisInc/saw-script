@@ -20,7 +20,7 @@ let assign_spec = do {
 
    // run the function
    llvm_ghost_value casper table;
-   llvm_execute_func [crucible_term k, crucible_term v];
+   llvm_execute_func [llvm_term k, llvm_term v];
    llvm_ghost_value casper table';
 };
 
@@ -48,7 +48,7 @@ let zero_spec = do {
 
    // run the function
    llvm_ghost_value casper table;
-   llvm_execute_func [crucible_term k];
+   llvm_execute_func [llvm_term k];
    llvm_ghost_value casper table';
 };
 

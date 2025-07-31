@@ -4,10 +4,10 @@
     Mismatch of type constructors. Expected: Int but got String
     unify002.saw:7:10-7:11: The type Int arises from the type of this term
     unify002.saw:7:13-7:18: The type String arises from the type of this term
-    
+
     Expected: Int
     Found:    String
-    
+
     within "x" (unify002.saw:7:5-7:6)
 
   unify002.saw:7:23-7:27: Unbound variable: "True" (unify002.saw:7:23-7:27)

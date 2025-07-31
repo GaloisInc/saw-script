@@ -3,10 +3,10 @@
     Mismatch of type constructors. Expected: (,,,) but got (,,)
     err019.saw:4:11-4:31: The type (Int, Int, Int, Int) arises from this type annotation
     err019.saw:3:9-3:18: The type (Int, Int, Int) arises from the type of this term
-    
+
     Expected: (Int, Int, Int, Int)
     Found:    (Int, Int, Int)
-    
+
     within "y" (err019.saw:5:5-5:6)
 
 FAILED

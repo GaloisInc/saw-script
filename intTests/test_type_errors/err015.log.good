@@ -4,50 +4,50 @@
     Record field names mismatch.
     err015.saw:18:15-22:2: The type {amethyst : Int, moonstone : Int, obsidian : Int} arises from this type annotation
     err015.saw:55:14-55:74: The type {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int} arises from the type of this term
-    
+
     Expected: {amethyst : Int, moonstone : Int, obsidian : Int}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err015.saw:65:5-65:6)
 
   err015.saw:65:21-65:22: Type mismatch.
     Record field names mismatch.
     err015.saw:25:15-31:2: The type {amethyst : Int, moonstone : Int, obsidian : Int, sapphire : Int, turquoise : Int} arises from this type annotation
     err015.saw:55:14-55:74: The type {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int} arises from the type of this term
-    
+
     Expected: {amethyst : Int, moonstone : Int, obsidian : Int, sapphire : Int, turquoise : Int}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err015.saw:65:5-65:6)
 
   err015.saw:65:28-65:29: Type mismatch.
     Record field names mismatch.
     err015.saw:34:15-39:2: The type {amethyst : Int, moonstone : Int, obsidian : Int, tourmaline : Int} arises from this type annotation
     err015.saw:55:14-55:74: The type {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int} arises from the type of this term
-    
+
     Expected: {amethyst : Int, moonstone : Int, obsidian : Int, tourmaline : Int}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err015.saw:65:5-65:6)
 
   err015.saw:65:35-65:36: Type mismatch.
     Record field names mismatch.
     err015.saw:42:15-45:2: The type {amethyst : Int, obsidian : Int} arises from this type annotation
     err015.saw:55:14-55:74: The type {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int} arises from the type of this term
-    
+
     Expected: {amethyst : Int, obsidian : Int}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err015.saw:65:5-65:6)
 
   err015.saw:65:41-65:42: Type mismatch.
     Record field names mismatch.
     err015.saw:48:14-53:2: The type {anise : Int, cinnamon : Int, sage : Int, tarragon : Int} arises from this type annotation
     err015.saw:55:14-55:74: The type {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int} arises from the type of this term
-    
+
     Expected: {anise : Int, cinnamon : Int, sage : Int, tarragon : Int}
     Found:    {amethyst : Int, moonstone : Int, obsidian : Int, turquoise : Int}
-    
+
     within "y" (err015.saw:65:5-65:6)
 
 

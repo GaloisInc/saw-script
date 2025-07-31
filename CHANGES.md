@@ -289,7 +289,7 @@ This release supports [version
   (generally minor) adjustment.
   Prior to these changes the typechecker allowed unbound type variables
   in a number of places (such as on the right-hand side of typedefs, and
-  in function signatures), so for example type names contaning typos
+  in function signatures), so for example type names containing typos
   would not necessarily have been caught and will now fail.
   ```typedef t = nonexistent``` was previously accepted and now is not.
   These problems could trigger panics, but there does not appear to have

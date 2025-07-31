@@ -3,13 +3,13 @@
     Mismatch of type constructors. Expected: TopLevel but got LLVMSetup
     err011.saw:11:1-11:14: The type TopLevel arises from this type annotation
     <type of llvm_assert>:1:9-1:18: The type LLVMSetup arises from this type annotation
-    
+
     Expected: TopLevel
     Found:    LLVMSetup
-    
+
     Expected: TopLevel (t.0, t.1)
     Found:    LLVMSetup (Int, Int)
-    
+
     within "<toplevel>" (err011.saw:11:1-11:14)
 
 FAILED
