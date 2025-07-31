@@ -82,7 +82,7 @@ span.spaces    { background: white }
 <span class="lineno">   63 </span>--
 <span class="lineno">   64 </span>--   (FUTURE: it might make sense for each frame to be a prettyprinter
 <span class="lineno">   65 </span>--   document rather than Text.)
-<span class="lineno">   66 </span>data TraceFunc = TraceFunc Text
+<span class="lineno">   66 </span>newtype TraceFunc = TraceFunc Text
 <span class="lineno">   67 </span>
 <span class="lineno">   68 </span>-- | Entry in a stack trace.
 <span class="lineno">   69 </span>--
