@@ -1,0 +1,107 @@
+enable_experimental;
+
+// call chains within SAWScript
+
+// pure functions
+let p1 () = run (print_stack);
+let p2 () = p1 ();
+let p3 () = p2 ();
+let p22 () = let () = p1 () in p1 ();
+
+// monadic actions (in TopLevel)
+//
+// Note that the last position of a do-block is different, so be sure
+// to check that explicitly.
+
+let m1a = print_stack;
+let m1b = do { print_stack; };
+let m1c = do { print_stack; return (); };
+let m1d = do { let x = 5; print_stack; };
+
+let m2a = m1a;
+let m2b = do { m1a; };
+let m2c = do { m1a; return (); };
+let m2d = do { let x = 5; m1a; };
+let m2e = m1b;
+let m2f = do { m1b; };
+let m2g = do { m1b; return (); };
+let m2h = do { let x = 5; m1b; };
+let m2i = m1c;
+let m2j = do { m1c; };
+let m2k = do { m1c; return (); };
+let m2l = do { let x = 5; m1c; };
+
+let m22a = do { m1a; m1a; };
+let m22b = do { m1a; m1a; return (); };
+let m22c = do { m1b; m1b; };
+let m22d = do { m1c; m1c; return (); };
+
+let m1p1a = do { m1a; return (p1 ()); };
+let m1p1b = do { let _ = p1 (); m1a; };
+let m1p1c = do { m1a; let _ = p1 (); return (); };
+let m1p1d = do { let _ = p1 (); m1a; return (); };
+
+// monadic actions that take arguments
+
+let ma1a () = print_stack;
+let ma1b () = do { print_stack; };
+let ma1c () = do { print_stack; return (); };
+let ma1d () = do { let x = 5; print_stack; };
+
+let ma2a () = ma1a ();
+let ma2b () = do { ma1a (); };
+let ma2c () = do { ma1a (); return (); };
+let ma2d () = do { let x = 5; ma1a (); };
+let ma2e () = ma1b ();
+let ma2f () = do { ma1b (); };
+let ma2g () = do { ma1b (); return (); };
+let ma2h () = do { let x = 5; ma1b (); };
+
+// now run them
+
+print "p1"; let _ = p1 ();
+print "p2"; let _ = p2 ();
+print "p3"; let _ = p3 ();
+print "p22"; let _ = p22 ();
+
+print "m1a"; m1a;
+print "m1b"; m1b;
+print "m1c"; m1c;
+print "m1d"; m1d;
+
+print "m2a"; m2a;
+print "m2b"; m2b;
+print "m2c"; m2c;
+print "m2d"; m2d;
+print "m2e"; m2e;
+print "m2f"; m2f;
+print "m2g"; m2g;
+print "m2h"; m2h;
+print "m2i"; m2i;
+print "m2j"; m2j;
+print "m2k"; m2k;
+print "m2l"; m2l;
+
+print "m22a"; m22a;
+print "m22b"; m22b;
+print "m22c"; m22c;
+print "m22d"; m22d;
+
+print "m1p1a"; m1p1a;
+print "m1p1b"; m1p1b;
+print "m1p1c"; m1p1c;
+print "m1p1d"; m1p1d;
+
+print "ma1a"; ma1a ();
+print "ma1b"; ma1b ();
+print "ma1c"; ma1c ();
+print "ma1d"; ma1d ();
+
+print "ma2a"; ma2a ();
+print "ma2b"; ma2b ();
+print "ma2c"; ma2c ();
+print "ma2d"; ma2d ();
+print "ma2e"; ma2e ();
+print "ma2f"; ma2f ();
+print "ma2g"; ma2g ();
+print "ma2h"; ma2h ();

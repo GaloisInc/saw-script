@@ -27,7 +27,10 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
    zero::k: 1
  ----------------------------------
  Stack trace:
-"llvm_verify" (test.saw:60:1-60:12)
+   (builtin) in w4
+   test.saw:60:49-60:51 in (callback)
+   (builtin) in llvm_verify
+   test.saw:60:1-60:51 (at top level)
 Proof failed.
 
 FAILED

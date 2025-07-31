@@ -1,0 +1,43 @@
+ Loading file "trace006.saw"
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:6:12-6:23 in p1
+   (builtin) in for
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:9:1-9:15 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace006.saw:7:17-7:28 in p2
+   (builtin) in for
+   (builtin) in for
+   (builtin) in for
+   trace006.saw:10:1-10:15 (at top level)
+

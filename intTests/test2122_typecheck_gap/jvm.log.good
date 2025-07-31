@@ -3,7 +3,8 @@ registering standard overrides
 registering user-provided overrides
 registering assumptions
  Stack trace:
-"jvm_verify" (jvm.saw:16:1-16:11)
+   (builtin) in jvm_verify
+   jvm.saw:16:1-16:42 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
   internal: error: in _SAW_JVM_verifyPrestate

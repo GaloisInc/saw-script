@@ -19,7 +19,10 @@ Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#1580
    x: NNN
  ----------------------------------
  Stack trace:
-"llvm_verify" (err001.saw:13:1-13:12)
+   (builtin) in z3
+   err001.saw:13:38-13:40 in (callback)
+   (builtin) in llvm_verify
+   err001.saw:13:1-13:40 (at top level)
 Proof failed.
 
 FAILED

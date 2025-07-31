@@ -1,0 +1,10 @@
+enable_experimental;
+
+// see what happens with for, because it has its own private
+// implementation of a number of things
+
+let p1 _ = print_stack;
+let p2 _ = do { print_stack; return (); };
+
+for [1,2,3] p1;
+for [1,2,3] p2;

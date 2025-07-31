@@ -46,6 +46,8 @@ import Mir.Mir (Adt)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
+import qualified SAWCentral.Trace as Trace (empty)
+
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
 import SAWCore.SharedTerm (mkSharedContext, scLoadModule, scGetModuleMap)
@@ -248,7 +250,7 @@ initialState readFileFn =
                 , rwDocs = mempty
                 , rwCryptol = cenv
                 , rwPosition = PosInternal "SAWServer"
-                , rwStackTrace = []
+                , rwStackTrace = Trace.empty
                 , rwLocalEnv = []
                 , rwMonadify = let ?mm = mm in defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv

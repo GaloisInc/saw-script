@@ -33,7 +33,6 @@ module SAWScript.Interpreter
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask, asks)
-import Control.Monad.State (gets, modify)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe)
@@ -45,6 +44,7 @@ import qualified Data.Sequence as Seq (empty)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
+import qualified Data.Text.IO as TextIO
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
@@ -69,6 +69,9 @@ import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts,
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
 import CryptolSAWCore.TypedTerm
+
+--import SAWCentral.Trace (Trace)
+import qualified SAWCentral.Trace as Trace
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
@@ -204,26 +207,62 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
+      SS.PosInsideBuiltin -> ("(builtin)", 1, 1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
 
--- | Default placeholder position for plain monadic values.
+-- | "Position of last reference" for values that haven't been
+--   referenced.
 --
 --   Used in toValue so it'll appear in the builtin table. However,
 --   it should always be replaced when the value is retrieved and
 --   before it's returned out or passed on by the interpreter for
---   execution.
-dummyMonadicPos :: SS.Pos
-dummyMonadicPos = SS.PosInternal "<<placeholder position for monadic action>>"
+--   execution. So users should never see it.
+--
+--   FUTURE: might make sense to set this to a panic.
+atRestPos :: SS.Pos
+atRestPos = SS.PosInternal "<<position of value at rest; shouldn't be seen>>"
 
 -- | Update the position in a plain monadic value.
 injectPositionIntoMonadicValue :: SS.Pos -> Value -> Value
 injectPositionIntoMonadicValue pos v = case v of
-    VTopLevel _oldpos f -> VTopLevel pos f
-    VProofScript _oldpos f -> VProofScript pos f
-    VLLVMCrucibleSetup _oldpos f -> VLLVMCrucibleSetup pos f
-    VJVMSetup _oldpos f -> VJVMSetup pos f
-    VMIRSetup _oldpos f -> VMIRSetup pos f
+    VTopLevel _oldpos chain f -> VTopLevel pos chain f
+    VProofScript _oldpos chain f -> VProofScript pos chain f
+    VLLVMCrucibleSetup _oldpos chain f -> VLLVMCrucibleSetup pos chain f
+    VJVMSetup _oldpos chain f -> VJVMSetup pos chain f
+    VMIRSetup _oldpos chain f -> VMIRSetup pos chain f
+    _ -> v
+
+-- | Insert an entry in a plain monadic value's RefChain.
+insertRefChain :: SS.Pos -> SS.Name -> Value -> Value
+insertRefChain pos name v =
+  let insert chain = (pos, name) : chain in
+  case v of
+    VDo chain env body -> VDo (insert chain) env body
+    VBindOnce bindpos chain v1 v2 -> VBindOnce bindpos (insert chain) v1 v2
+    VTopLevel vpos chain f -> VTopLevel vpos (insert chain) f
+    VProofScript vpos chain f -> VProofScript vpos (insert chain) f
+    VLLVMCrucibleSetup vpos chain f -> VLLVMCrucibleSetup vpos (insert chain) f
+    VJVMSetup vpos chain f -> VJVMSetup vpos (insert chain) f
+    VMIRSetup vpos chain f -> VMIRSetup vpos (insert chain) f
+    _ -> v
+
+-- | Merge an ancestor RefChain (e.g. from a generating do block) into
+--   a downstream one.
+propagateRefChain :: RefChain -> Value -> Value
+propagateRefChain chain1 v =
+  let insert chain2 =
+        -- concatenate the chain (older goes at the end)
+        chain2 ++ chain1
+  in
+  case v of
+    VDo chain2 env body -> VDo (insert chain2) env body
+    VBindOnce pos chain2 v1 v2 -> VBindOnce pos (insert chain2) v1 v2
+    VTopLevel pos chain2 f -> VTopLevel pos (insert chain2) f
+    VProofScript pos chain2 f -> VProofScript pos (insert chain2) f
+    VLLVMCrucibleSetup pos chain2 f -> VLLVMCrucibleSetup pos (insert chain2) f
+    VJVMSetup pos chain2 f -> VJVMSetup pos (insert chain2) f
+    VMIRSetup pos chain2 f -> VMIRSetup pos (insert chain2) f
     _ -> v
 
 
@@ -323,43 +362,43 @@ bindPatternEnv pat ms v env =
 
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
-  actionFromValue :: FromValue a => Value -> m a
-  mkValue :: SS.Pos -> m Value -> Value
+  actionFromValue :: FromValue a => FromValueHow -> Value -> m a
+  mkValue :: SS.Pos -> RefChain -> m Value -> Value
   getMonadContext :: m SS.Context
   withLocalEnvAny :: LocalEnv -> m a -> m a
 
 instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
-  mkValue pos m = VTopLevel pos m
+  mkValue pos chain m = VTopLevel pos chain m
   getMonadContext = return SS.TopLevel
   withLocalEnvAny = withLocalEnv
 
 instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VProofScript pos m
+  mkValue pos chain m = VProofScript pos chain m
   getMonadContext = return SS.ProofScript
   withLocalEnvAny = withLocalEnvProof
 
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VLLVMCrucibleSetup pos m
+  mkValue pos chain m = VLLVMCrucibleSetup pos chain m
   getMonadContext = return SS.LLVMSetup
   withLocalEnvAny = withLocalEnvLLVM
 
 instance InterpreterMonad JVMSetupM where
   liftTopLevel m = jvmTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VJVMSetup pos m
+  mkValue pos chain m = VJVMSetup pos chain m
   getMonadContext = return SS.JavaSetup
   withLocalEnvAny = withLocalEnvJVM
 
 instance InterpreterMonad MIRSetupM where
   liftTopLevel m = mirTopLevel m
   actionFromValue = fromValue
-  mkValue pos m = VMIRSetup pos m
+  mkValue pos chain m = VMIRSetup pos chain m
   getMonadContext = return SS.MIRSetup
   withLocalEnvAny = withLocalEnvMIR
 
@@ -385,100 +424,6 @@ processTypeCheck (errs_or_output, warns) =
 
 
 ------------------------------------------------------------
--- Stack tracing
-
--- | Implement stack tracing by wrapping every function-shaped value
---   in sight in another closure that manipulates the interpreter's
---   current stack trace.
---
--- XXX this is the wrong way to do this.
-withStackTraceFrame :: String -> Value -> Value
-withStackTraceFrame str val =
-  let doTopLevel :: TopLevel a -> TopLevel a
-      doTopLevel action = do
-        trace <- gets rwStackTrace
-        modify (\rw -> rw { rwStackTrace = str : trace })
-        result <- action
-        modify (\rw -> rw { rwStackTrace = trace })
-        return result
-      doProofScript :: ProofScript a -> ProofScript a
-      doProofScript (ProofScript m) =
-        let m' =
-              underExceptT (underStateT doTopLevel) m
-        in
-        ProofScript m'
-      doLLVM :: LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
-      doLLVM (LLVMCrucibleSetupM m) =
-        LLVMCrucibleSetupM (underReaderT (underStateT doTopLevel) m)
-      doJVM :: JVMSetupM a -> JVMSetupM a
-      doJVM (JVMSetupM m) =
-        JVMSetupM (underReaderT (underStateT doTopLevel) m)
-      doMIR :: MIRSetupM a -> MIRSetupM a
-      doMIR (MIRSetupM m) =
-        MIRSetupM (underReaderT (underStateT doTopLevel) m)
-  in
-  case val of
-    VLambda env mname pat e ->
-      -- This is gross. The point of having VLambda is that it's _not_
-      -- a closure, but in order to handle stack traces by wrapping
-      -- everything in closures, we have to wrap it in a closure
-      -- anyway.
-      --
-      -- But, since this is the wrong way to do stack traces anyway,
-      -- with luck we'll be able to remove the lot before much longer.
-      let info = "(stack trace thunk for lambda)"
-          wrap pos v2 =
-            withStackTraceFrame str `fmap` doTopLevel (applyValue pos info (VLambda env mname pat e) v2)
-      in
-      VClosure wrap
-    VBuiltin name args wf -> case wf of
-      OneMoreArg f ->
-        let wrap _pos v =
-              withStackTraceFrame str `fmap` doTopLevel (f v)
-        in
-        VClosure wrap
-      ManyMoreArgs f ->
-        let wrap _pos x = do
-              (withStackTraceFrame str . VBuiltin name args) <$> doTopLevel (f x)
-        in
-        VClosure wrap
-    VTopLevel pos m ->
-      let m' =
-            withStackTraceFrame str `fmap` doTopLevel m
-      in
-      VTopLevel pos m'
-    VProofScript pos m ->
-      let m' =
-            withStackTraceFrame str `fmap` doProofScript m
-      in
-      VProofScript pos m'
-    VDo pos _ env stmts ->
-      VDo pos (Just str) env stmts
-    VBindOnce pos v1 v2 ->
-      let v1' = withStackTraceFrame str v1
-          v2' = withStackTraceFrame str v2
-      in
-      VBindOnce pos v1' v2'
-    VLLVMCrucibleSetup pos m ->
-      let m' =
-            withStackTraceFrame str `fmap` doLLVM m
-      in
-      VLLVMCrucibleSetup pos m'
-    VJVMSetup pos m ->
-      let m' =
-            withStackTraceFrame str `fmap` doJVM m
-      in
-      VJVMSetup pos m'
-    VMIRSetup pos m ->
-      let m' =
-            withStackTraceFrame str `fmap` doMIR m
-      in
-      VMIRSetup pos m'
-    _ ->
-      val
-
-
-------------------------------------------------------------
 -- Interpreter core
 
 -- | Apply an argument value to a function value.
@@ -488,19 +433,32 @@ withStackTraceFrame str val =
 --   The second (Text) argument is printed as part of the panic if v1
 --   turns out not to be a function value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
-applyValue pos v1info v1 v2 = case v1 of
-    VLambda env _mname pat e ->
-        withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+applyValue pos v1info v1 v2 =
+  let enter name = pushTraceFrame pos name
+      leave = popTraceFrame
+  in
+  case v1 of
+    VLambda env mname pat e -> do
+        let name = fromMaybe "(lambda)" mname
+        enter name
+        r <- withLocalEnv (bindPatternLocal pat Nothing v2 env) (interpretExpr e)
+        leave
+        return $ insertRefChain pos name r
     VBuiltin name args wf -> case wf of
-        OneMoreArg f ->
-            f v2
+        OneMoreArg f -> do
+            setPosition pos
+            enter name
+            r <- f v2
+            leave
+            return $ insertRefChain pos name r
         ManyMoreArgs f ->
+            -- f will still be partially applied after this, so it
+            -- won't do anything and there's no need to enter/leave.
             VBuiltin name (args :|> v2) <$> f v2
-    VClosure f ->
-        f pos v2
     _ ->
         panic "applyValue" [
             "Called object is not a function",
+            "Call site: " <> Text.pack (show pos),
             "Value found: " <> Text.pack (show v1),
             v1info
         ]
@@ -537,17 +495,17 @@ interpretExpr expr =
           --showCryptolEnv' cenv
           t <- io $ CEnv.parseTypedTerm sc cenv
                   $ locToInput str
-          return (toValue t)
+          return (VTerm t)
       SS.CType str -> do
           cenv <- fmap rwCryptol getMergedEnv
           s <- io $ CEnv.parseSchema cenv
                   $ locToInput str
-          return (toValue s)
+          return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
-      SS.Block pos stmts -> do
+      SS.Block _pos stmts -> do
           env <- getLocalEnv
-          return $ VDo pos Nothing env stmts
+          return $ VDo [] env stmts
       SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _pos bs ->
@@ -571,9 +529,11 @@ interpretExpr expr =
                     "Read of unknown variable " <> SS.getVal x
                 ]
             Just (lc, _ty, v)
-              | Set.member lc (rwPrimsAvail rw) ->
-                   let v' = injectPositionIntoMonadicValue (SS.getPos x) v in
-                   return (withStackTraceFrame (show x) v')
+              | Set.member lc (rwPrimsAvail rw) -> do
+                   let pos = SS.getPos x
+                       v' = injectPositionIntoMonadicValue pos v
+                       v'' = insertRefChain pos (SS.getVal x) v'
+                   return v''
               | otherwise ->
                    -- This case is also rejected by the typechecker
                    panic "interpretExpr" [
@@ -640,22 +600,100 @@ interpretDeclGroup (SS.Recursive ds) = do
         env' = foldr addDecl env ds
     return env'
 
+-- Bind a monadic value into the monadic execution sequence.
+--
+-- Takes a monadic value that might be a VDo, VBindOnce, VReturn, or
+-- plain monadic value, run it through the interpreter as necessary to
+-- get a plain monadic value, then bind it in Haskell to get a result.
+-- Returns the resulting Value. Runs in any interpreter monad.
+--
+-- Even though this is called from multiple places, in each case it's
+-- the interpreter doing a SAWScript-level bind so we are always
+-- coming from the interpreter.
+--
+-- There are three steps:
+--    - Run it in the interpreter with interpretMonadAction, in case
+--      it's a do-block. (plainVal should then always be a plain
+--      monadic value with a Haskell monadic action in it.)
+--    - Update the value metadata. (Specifically: insert the bind
+--      position into the plain monadic value we get back from the
+--      interpreter, as its position of last reference.)
+--    - Fetch the Haskell-level monadic action with fromValue and bind
+--      that in Haskell to execute it.
+--
+-- Note that calling interpretMonadAction here is necessary for the
+-- moment (even though it's also called from fromValue /
+-- actionFromValue) because we need the result to do the position
+-- update.
+--
+bindMonadAction :: forall m. InterpreterMonad m => SS.Pos -> Value -> m Value
+bindMonadAction pos baseVal = do
+    plainVal <- interpretMonadAction FromInterpreter baseVal
+    let plainVal' = injectPositionIntoMonadicValue pos plainVal
+    result <- actionFromValue FromInterpreter plainVal'
+    return result
+
 -- Execute a monad action. This happens in any of the interpreter
 -- monads.
-interpretMonadAction :: forall m. InterpreterMonad m => Value -> m Value
-interpretMonadAction v = case v of
-  VReturn pos v' -> do
-    -- VReturn pos v' -> VProofScript pos (return v')
+interpretMonadAction :: forall m. InterpreterMonad m => FromValueHow -> Value -> m Value
+interpretMonadAction fromHow v = case v of
+  VReturn pos chain v' -> do
+    -- VReturn ... v' -> VProofScript ... (return v')
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
-    return $ mkValue pos v''
-  VDo _blkpos mname env body ->
-    withLocalEnvAny env (interpretDoStmts' mname body)
-  VBindOnce pos m1 v2 -> do
-    let m1' = injectPositionIntoMonadicValue pos m1
-    v1 <- actionFromValue m1'
-    m2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" v2 v1
-    interpretMonadAction m2
+    return $ mkValue pos chain v''
+  VDo chain env body -> do
+    liftTopLevel $ do
+      case fromHow of
+          FromInterpreter -> pure ()
+          FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+      pushTraceFrames chain
+
+    r <- withLocalEnvAny env (interpretDoStmts body)
+
+    liftTopLevel $ do
+      popTraceFrames chain
+      case fromHow of
+          FromInterpreter -> pure ()
+          FromArgument -> popTraceFrame
+    return $ propagateRefChain chain r
+  VBindOnce pos chain baseVal1 val2 -> do
+    -- baseVal1 is a monadic value of the same class as returned by
+    -- interpretExpr (that is, it might be a VDo or a VBindOnce).
+    -- Bind it.
+    --
+    -- Note that even if the _bind_ is triggered with FromArgument,
+    -- the contents are executed right here from the interpreter.
+    --
+    -- Wrap the execution (of the whole sequence of binds) in the frames
+    -- from the RefChain the same way as a do-block.
+    liftTopLevel $ do
+      case fromHow of
+          FromInterpreter -> pure ()
+          FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+      pushTraceFrames chain
+
+    result1 <- bindMonadAction pos baseVal1
+    -- val2 is a lambda or equivalent that expects the result as an
+    -- argument (the traditional >>= form of monad bind)
+    result2 <- liftTopLevel $ applyValue pos "Value in a VBindOnce" val2 result1
+    result3 <- interpretMonadAction FromInterpreter result2
+
+    liftTopLevel $ do
+      popTraceFrames chain
+      case fromHow of
+          FromInterpreter -> pure ()
+          FromArgument -> popTraceFrame
+    -- Handle the RefChain the same way as a do-block. Note that with
+    -- luck we don't have to worry about unwanted additional RefChain
+    -- entries in the second and subsequent VBindOnce values in a
+    -- sequence of them; they should never have the opportunity to
+    -- grow their own references. If we had an explicit bind operator
+    -- in the language, that might be a problem, but we don't and we
+    -- aren't getting one. So the only bind sequences we have are
+    -- canned. (And in particular there's only one, in the "for"
+    -- builtin.)
+    return $ propagateRefChain chain result3
   _ -> pure v
 
 
@@ -679,17 +717,16 @@ interpretDoStmt stmt =
       SS.StmtBind pos pat e -> do
           env <- liftTopLevel getLocalEnv
           -- Execute the expression purely first. ("purely")
-          v1 :: Value <- liftTopLevel $ interpretExpr e
-          -- If we got a do-block or similar back, execute it now.
-          v2 :: Value <- interpretMonadAction v1
-          -- We should now have a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it that we can execute
-          -- in Haskell to get the resultant Value. Insert the call
-          -- position into it.
-          let v2' = injectPositionIntoMonadicValue pos v2
-          v3 :: Value <- actionFromValue v2'
-          -- Bind the value to the pattern
-          return $ bindPatternLocal pat Nothing v3 env
+          baseVal :: Value <- liftTopLevel $ interpretExpr e
+          -- Now bind the resulting value to execute it.
+          --
+          -- No trace frames here because the logic is inside
+          -- interpretMonadAction and fromValue (for the interpreter
+          -- and Haskell-level execution respectively).
+          result :: Value <- bindMonadAction pos baseVal
+          -- Bind (in the name-binding, not monad-binding sense) the
+          -- result to the pattern.
+          return $ bindPatternLocal pat Nothing result env
       SS.StmtLet _pos dg -> do
           -- Process the declarations
           liftTopLevel $ interpretDeclGroup dg
@@ -725,44 +762,49 @@ interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Va
 interpretDoStmts (stmts, lastexpr) =
     case stmts of
       [] -> do
-          -- Execute the expression purely first.
-          result :: Value <- liftTopLevel $ interpretExpr lastexpr
-          -- If we got a do-block or similar back, execute it now.
-          result' :: Value <- interpretMonadAction result
-
-          -- This gives us a VTopLevel/VProofScript/etc with a
-          -- TopLevel/ProofScript/etc Value in it.
-          -- Return that as the result of the block; let the caller
-          -- execute it. (If we execute it now, the Value we return
-          -- will have SAWScript type a instead of m a, and things
-          -- will go downhill.)
-          --
-          -- Insert the position in the result if it's a plain monadic
-          -- value. This is its call site as far as things like stack
-          -- traces are concerned, and now's the last opportunity to
-          -- record that. If it's another do-block, this will do
-          -- nothing, but we'll come back here when it's executed.
+          -- The position for the bind we're about to do will be the
+          -- source position of the expression.
           let pos = SS.getPos lastexpr
-          return $ injectPositionIntoMonadicValue pos result'
+
+          -- Execute the expression purely first.
+          baseVal :: Value <- liftTopLevel $ interpretExpr lastexpr
+
+          -- Now (monad-)bind the resulting value and execute it.
+
+          -- If we got a do-block or similar back, execute it now.
+          --
+          -- In principle we should return the plain monadic value as
+          -- the result of the block and let the caller execute
+          -- it. Instead, bind it now and construct a return of the
+          -- result. (As in: replace "do { ...; e; }" with "do { ...;
+          -- r <- e; return r; }".) In the common case where the last
+          -- expression is just a return, this has no effect, and
+          -- these are semantically equivalent; but if it actually
+          -- does something, letting the caller execute it is akin to
+          -- tail-call optimization and breaks stack traces.
+          --
+          -- FUTURE: do this transform on the AST upstream before
+          -- executing; that can more readily avoid doing the
+          -- transform if the last expression is already a return.
+          --
+          -- No trace frames here because the logic is inside
+          -- interpretMonadAction and fromValue (for the interpreter
+          -- and Haskell-level execution respectively).
+          --
+          result :: Value <- bindMonadAction pos baseVal
+
+          -- Don't return a VReturn here, because there isn't
+          -- necessarily a following call to interpretMonadAction to
+          -- unfold it. Instead, produce the unfolded form directly.
+          -- Which requires some gyrations to feed the monad type in.
+          let result' :: m Value = return result
+          return $ mkValue pos [] result'
+
       stmt : more -> do
           -- Execute the expression and get the updated environment
           env' <- interpretDoStmt stmt
           -- Run the rest of the block with the updated environment
           withLocalEnvAny env' (interpretDoStmts (more, lastexpr))
-
--- Wrapper around interpretDoStmts for inserting a stack trace frame, in the
--- old style. XXX remove along with the old stack trace code...
-interpretDoStmts' :: InterpreterMonad m => Maybe String -> ([SS.Stmt], SS.Expr) -> m Value
-interpretDoStmts' mname body = do
-  trace <- liftTopLevel $ gets rwStackTrace
-  case mname of
-    Nothing -> pure ()
-    Just name -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = name : trace })
-  v <- interpretDoStmts body
-  case mname of
-    Nothing -> pure ()
-    Just _ -> liftTopLevel $ modify (\rw -> rw { rwStackTrace = trace })
-  return v
 
 -- Execute a top-level bind.
 processStmtBind ::
@@ -775,7 +817,8 @@ processStmtBind ::
 processStmtBind printBinds pos pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
-  val <- liftTopLevel $ interpretExpr expr
+  -- Eval the expression
+  baseVal <- liftTopLevel $ interpretExpr expr
 
   -- Fetch the type from updated pattern, since the typechecker will
   -- have filled it in there.
@@ -789,15 +832,13 @@ processStmtBind printBinds pos pat expr = do -- mx mt
   -- be inside the typechecker or restricted to the repl.
   when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ PPS.pShow ty
 
-  -- Run the resulting TopLevel (or ProofScript) action.
+  -- Now bind the resulting value using bindMonadAction.
   --
-  -- Insert the bind position into the monadic value before executing
-  -- it. The fromValue call (inside actionFromValue) is the point that
-  -- sets the exposed position for real. (It has to be, because it can
-  -- get triggered from places that don't come directly from the
-  -- interpreter.)
-  let val' = injectPositionIntoMonadicValue pos val
-  result <- actionFromValue val'
+  -- No trace frames here because the logic is inside
+  -- interpretMonadAction and fromValue (for the interpreter and
+  -- Haskell-level execution respectively).
+  --
+  result <- bindMonadAction pos baseVal
 
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
@@ -923,10 +964,16 @@ interpretFile file runMain =
 interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
-  let mainName = Located "main" "main" (SS.PosInternal "entry")
+  let pos = SS.PosInternal "entry"
+      mainName = Located "main" "main" pos
   case Map.lookup mainName (rwValueInfo rw) of
-    Nothing -> return () -- fail "No 'main' defined"
-    Just (Current, _ty, v) -> fromValue v
+    Nothing ->
+      -- fail "No 'main' defined"
+      return ()
+    Just (Current, _ty, v) -> do
+      let v' = injectPositionIntoMonadicValue pos v
+          v'' = insertRefChain pos "main" v'
+      fromValue FromInterpreter v''
     Just (lc, _ty, _v) ->
       -- There is no way for things other than primitives to get marked
       -- experimental or deprecated, so this isn't possible. If we allow
@@ -996,7 +1043,7 @@ buildTopLevelEnv proxy opts =
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwPosition = SS.Unknown
-                   , rwStackTrace = []
+                   , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
                    , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
@@ -1060,7 +1107,7 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 --
 --   First, some history. Until July 2025 there was a relatively
 --   straightforward IsValue instance for (a -> b) that matched any
---   argument type a supporting FromValue, and any result type
+--   argument type a that supported FromValue, and any result type
 --   supporting IsValue, including functions. Thus, because Haskell
 --   functions are curried, functions of more than one argument would
 --   generate a Value that took one argument and produced a result
@@ -1172,427 +1219,452 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 --   there's no difference in the types to work from.
 --
 class IsValue a where
-    toValue :: a -> Value
+    toValue :: Text -> a -> Value
     -- these will be overridden on the function instance
     isFunction :: a -> Bool
     isFunction _ = False
-    toWrapper :: a -> BuiltinWrapper
-    toWrapper _ = panic "toWrapper" ["Invalid call on base value"]
+    toWrapper :: Text -> a -> BuiltinWrapper
+    toWrapper _ _ = panic "toWrapper" ["Invalid call on base value"]
+
+-- | Flag to indicate where/how fromValue was triggered.
+--   (Could be just a Bool, but having it be its own thing increases
+--   legibility and this whole set of arrangements is delicate.)
+data FromValueHow = FromInterpreter | FromArgument
 
 class FromValue a where
-    fromValue :: Value -> a
+    fromValue :: FromValueHow -> Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    -- XXX for now stuff ??? in the name field here and the caller (in
-    -- the builtin table infrastructure) will reinsert the real name.
-    -- In the future this should be tidied.    
-    toValue f = VBuiltin "???" Seq.empty $ toWrapper f
+    toValue name f = VBuiltin name Seq.empty $ toWrapper name f
     isFunction _ = True
-    toWrapper f =
+    toWrapper name f =
         -- | isFunction needs a value of type b, which we don't have,
         --   but doesn't look at it, so we can use a placeholder, and
         --   it's ok for it to be a bomb.
         let hook :: b = panic "toWrapper" ["isFunction must have used its argument"] in
         if isFunction hook then
-          let f' v = return $ toWrapper (f (fromValue v)) in
+          let f' v = return $ toWrapper name (f (fromValue FromArgument v)) in
           ManyMoreArgs f'
         else
-          let f' v = return $ toValue (f (fromValue v)) in
+          let f' v = return $ toValue name (f (fromValue FromArgument v)) in
           OneMoreArg f'
 
 instance FromValue Value where
-    fromValue x = x
+    fromValue _ x = x
 
 instance IsValue Value where
-    toValue x = x
+    toValue _name x = x
 
 instance IsValue () where
-    toValue _ = VTuple []
+    toValue _name _ = VTuple []
 
 instance FromValue () where
-    fromValue _ = ()
+    fromValue _ _ = ()
 
 instance (IsValue a, IsValue b) => IsValue (a, b) where
-    toValue (x, y) = VTuple [toValue x, toValue y]
+    toValue name (x, y) = VTuple [toValue name x, toValue name y]
 
 instance (FromValue a, FromValue b) => FromValue (a, b) where
-    fromValue (VTuple [x, y]) = (fromValue x, fromValue y)
-    fromValue _ = error "fromValue (,)"
+    fromValue how (VTuple [x, y]) = (fromValue how x, fromValue how y)
+    fromValue _ _ = error "fromValue (,)"
 
 instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
-    toValue (x, y, z) = VTuple [toValue x, toValue y, toValue z]
+    toValue name (x, y, z) = VTuple [toValue name x, toValue name y, toValue name z]
 
 instance (FromValue a, FromValue b, FromValue c) => FromValue (a, b, c) where
-    fromValue (VTuple [x, y, z]) = (fromValue x, fromValue y, fromValue z)
-    fromValue _ = error "fromValue (,,)"
+    fromValue how (VTuple [x, y, z]) = (fromValue how x, fromValue how y, fromValue how z)
+    fromValue _ _ = error "fromValue (,,)"
 
 instance IsValue a => IsValue [a] where
-    toValue xs = VArray (map toValue xs)
+    toValue name xs = VArray (map (toValue name) xs)
 
 
 instance FromValue a => FromValue [a] where
-    fromValue (VArray xs) = map fromValue xs
-    fromValue _ = error "fromValue []"
+    fromValue how (VArray xs) = map (fromValue how) xs
+    fromValue _ _ = error "fromValue []"
+
+
+-- | Common logic for the FromValue instances for plain monadic values.
+--   Runs in any interpreter monad.
+--
+--   Note: this won't actually run until the result action is bound into
+--   the execution sequence somewhere (downstream from fromValue).
+preparePlainMonadicAction ::
+  forall m a. InterpreterMonad m => FromValueHow -> SS.Pos -> RefChain -> m a -> m a
+preparePlainMonadicAction how pos chain action = do
+  liftTopLevel $ do
+    setPosition pos
+    case how of
+        FromInterpreter -> pure ()
+        FromArgument -> pushTraceFrame SS.PosInsideBuiltin "(callback)"
+    pushTraceFrames chain
+  ret <- action
+  liftTopLevel $ do
+    popTraceFrames chain
+    case how of
+        FromInterpreter -> pure ()
+        FromArgument -> popTraceFrame
+  return ret
 
 instance IsValue a => IsValue (IO a) where
-    toValue action = toValue (io action)
+    toValue name action = toValue name (io action)
 
 instance IsValue a => IsValue (TopLevel a) where
-    toValue action = VTopLevel dummyMonadicPos (fmap toValue action)
+    toValue name action =
+      VTopLevel atRestPos [] (fmap (toValue name) action)
 
 instance FromValue a => FromValue (TopLevel a) where
-    fromValue v = do
-      v' <- interpretMonadAction v
+    fromValue how v = do
+      v' <- interpretMonadAction how v
       case v' of
-        VTopLevel pos action -> do
-          setPosition pos
-          ret <- action
-          return $ fromValue ret
-        _ -> panic "fromValue (TopLevel)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        VTopLevel pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
+        _ ->
+          panic "fromValue (TopLevel)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (ProofScript a) where
-    toValue m = VProofScript dummyMonadicPos (fmap toValue m)
+    toValue name m =
+      VProofScript atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (ProofScript a) where
-    fromValue v = do
-      v' <- interpretMonadAction v
+    fromValue how v = do
+      v' <- interpretMonadAction how v
       case v' of
-        VProofScript pos action -> do
-          scriptTopLevel $ setPosition pos
-          ret <- action
-          return $ fromValue ret
-        _ -> panic "fromValue (ProofScript)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        VProofScript pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
+        _ ->
+          panic "fromValue (ProofScript)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
-    toValue m = VLLVMCrucibleSetup dummyMonadicPos (fmap toValue m)
+    toValue name m =
+      VLLVMCrucibleSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
-    fromValue v = do
-      v' <- interpretMonadAction v
+    fromValue how v = do
+      v' <- interpretMonadAction how v
       case v' of
-        VLLVMCrucibleSetup pos action -> do
-          llvmTopLevel $ setPosition pos
-          ret <- action
-          return $ fromValue ret
-        _ -> panic "fromValue (LLVMSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        VLLVMCrucibleSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
+        _ ->
+          panic "fromValue (LLVMSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
-    toValue m = VJVMSetup dummyMonadicPos (fmap toValue m)
+    toValue name m =
+      VJVMSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (JVMSetupM a) where
-    fromValue v = do
-      v' <- interpretMonadAction v
+    fromValue how v = do
+      v' <- interpretMonadAction how v
       case v' of
-        VJVMSetup pos action -> do
-          jvmTopLevel $ setPosition pos
-          ret <- action
-          return $ fromValue ret
-        _ -> panic "fromValue (JVMSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        VJVMSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
+        _ ->
+          panic "fromValue (JVMSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
-    toValue m = VMIRSetup dummyMonadicPos (fmap toValue m)
+    toValue name m =
+      VMIRSetup atRestPos [] (fmap (toValue name) m)
 
 instance FromValue a => FromValue (MIRSetupM a) where
-    fromValue v = do
-      v' <- interpretMonadAction v
+    fromValue how v = do
+      v' <- interpretMonadAction how v
       case v' of
-        VMIRSetup pos action -> do
-          mirTopLevel $ setPosition pos
-          ret <- action
-          return $ fromValue ret
-        _ -> panic "fromValue (MIRSetup)" [
-                 "Invalid/ill-typed value: " <> Text.pack (show v')
-             ]
+        VMIRSetup pos chain action ->
+          fromValue how <$> preparePlainMonadicAction how pos chain action
+        _ ->
+          panic "fromValue (MIRSetup)" [
+              "Invalid/ill-typed value: " <> Text.pack (show v')
+          ]
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
-  toValue = VLLVMCrucibleSetupValue
+  toValue _name v = VLLVMCrucibleSetupValue v
 
 instance FromValue (CIR.AllLLVM CMS.SetupValue) where
-  fromValue (VLLVMCrucibleSetupValue v) = v
-  fromValue _ = error "fromValue Crucible.SetupValue"
+  fromValue _ (VLLVMCrucibleSetupValue v) = v
+  fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue (CMS.SetupValue CJ.JVM) where
-  toValue v = VJVMSetupValue v
+  toValue _name v = VJVMSetupValue v
 
 instance FromValue (CMS.SetupValue CJ.JVM) where
-  fromValue (VJVMSetupValue v) = v
-  fromValue _ = error "fromValue Crucible.SetupValue"
+  fromValue _ (VJVMSetupValue v) = v
+  fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue (CMS.SetupValue MIR) where
-  toValue v = VMIRSetupValue v
+  toValue _name v = VMIRSetupValue v
 
 instance FromValue (CMS.SetupValue MIR) where
-  fromValue (VMIRSetupValue v) = v
-  fromValue _ = error "fromValue Crucible.SetupValue"
+  fromValue _ (VMIRSetupValue v) = v
+  fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue SAW_CFG where
-    toValue t = VCFG t
+    toValue _name t = VCFG t
 
 instance FromValue SAW_CFG where
-    fromValue (VCFG t) = t
-    fromValue _ = error "fromValue CFG"
+    fromValue _ (VCFG t) = t
+    fromValue _ _ = error "fromValue CFG"
 
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
-    toValue mir = VLLVMCrucibleMethodSpec mir
+    toValue _name mir = VLLVMCrucibleMethodSpec mir
 
 instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
-    fromValue (VLLVMCrucibleMethodSpec mir) = mir
-    fromValue _ = error "fromValue ProvedSpec LLVM"
+    fromValue _ (VLLVMCrucibleMethodSpec mir) = mir
+    fromValue _ _ = error "fromValue ProvedSpec LLVM"
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
-    toValue t = VJVMMethodSpec t
+    toValue _name t = VJVMMethodSpec t
 
 instance FromValue (CMS.ProvedSpec CJ.JVM) where
-    fromValue (VJVMMethodSpec t) = t
-    fromValue _ = error "fromValue ProvedSpec JVM"
+    fromValue _ (VJVMMethodSpec t) = t
+    fromValue _ _ = error "fromValue ProvedSpec JVM"
 
 instance IsValue (CMS.ProvedSpec MIR) where
-    toValue t = VMIRMethodSpec t
+    toValue _name t = VMIRMethodSpec t
 
 instance FromValue (CMS.ProvedSpec MIR) where
-    fromValue (VMIRMethodSpec t) = t
-    fromValue _ = error "fromValue ProvedSpec MIR"
+    fromValue _ (VMIRMethodSpec t) = t
+    fromValue _ _ = error "fromValue ProvedSpec MIR"
 
 instance IsValue ModuleSkeleton where
-    toValue s = VLLVMModuleSkeleton s
+    toValue _name s = VLLVMModuleSkeleton s
 
 instance FromValue ModuleSkeleton where
-    fromValue (VLLVMModuleSkeleton s) = s
-    fromValue _ = error "fromValue ModuleSkeleton"
+    fromValue _ (VLLVMModuleSkeleton s) = s
+    fromValue _ _ = error "fromValue ModuleSkeleton"
 
 instance IsValue FunctionSkeleton where
-    toValue s = VLLVMFunctionSkeleton s
+    toValue _name s = VLLVMFunctionSkeleton s
 
 instance FromValue FunctionSkeleton where
-    fromValue (VLLVMFunctionSkeleton s) = s
-    fromValue _ = error "fromValue FunctionSkeleton"
+    fromValue _ (VLLVMFunctionSkeleton s) = s
+    fromValue _ _ = error "fromValue FunctionSkeleton"
 
 instance IsValue SkeletonState where
-    toValue s = VLLVMSkeletonState s
+    toValue _name s = VLLVMSkeletonState s
 
 instance FromValue SkeletonState where
-    fromValue (VLLVMSkeletonState s) = s
-    fromValue _ = error "fromValue SkeletonState"
+    fromValue _ (VLLVMSkeletonState s) = s
+    fromValue _ _ = error "fromValue SkeletonState"
 
 instance IsValue FunctionProfile where
-    toValue s = VLLVMFunctionProfile s
+    toValue _name s = VLLVMFunctionProfile s
 
 instance FromValue FunctionProfile where
-    fromValue (VLLVMFunctionProfile s) = s
-    fromValue _ = error "fromValue FunctionProfile"
+    fromValue _ (VLLVMFunctionProfile s) = s
+    fromValue _ _ = error "fromValue FunctionProfile"
 
 instance IsValue (AIGNetwork) where
-    toValue t = VAIG t
+    toValue _name t = VAIG t
 
 instance FromValue (AIGNetwork) where
-    fromValue (VAIG t) = t
-    fromValue _ = error "fromValue AIGNetwork"
+    fromValue _ (VAIG t) = t
+    fromValue _ _ = error "fromValue AIGNetwork"
 
 instance IsValue TypedTerm where
-    toValue t = VTerm t
+    toValue _name t = VTerm t
 
 instance FromValue TypedTerm where
-    fromValue (VTerm t) = t
-    fromValue _ = error "fromValue TypedTerm"
+    fromValue _ (VTerm t) = t
+    fromValue _ _ = error "fromValue TypedTerm"
 
 instance FromValue Term where
-    fromValue (VTerm t) = ttTerm t
-    fromValue _ = error "fromValue SharedTerm"
+    fromValue _ (VTerm t) = ttTerm t
+    fromValue _ _ = error "fromValue SharedTerm"
 
 instance IsValue Cryptol.Schema where
-    toValue s = VType s
+    toValue _name s = VType s
 
 instance FromValue Cryptol.Schema where
-    fromValue (VType s) = s
-    fromValue _ = error "fromValue Schema"
+    fromValue _ (VType s) = s
+    fromValue _ _ = error "fromValue Schema"
 
 instance IsValue Text where
-    toValue n = VString n
+    toValue _name n = VString n
 
 instance FromValue Text where
-    fromValue (VString n) = n
-    fromValue _ = error "fromValue Text"
+    fromValue _ (VString n) = n
+    fromValue _ _ = error "fromValue Text"
 
 instance IsValue Integer where
-    toValue n = VInteger n
+    toValue _name n = VInteger n
 
 instance FromValue Integer where
-    fromValue (VInteger n) = n
-    fromValue _ = error "fromValue Integer"
+    fromValue _ (VInteger n) = n
+    fromValue _ _ = error "fromValue Integer"
 
 instance IsValue Int where
-    toValue n = VInteger (toInteger n)
+    toValue _name n = VInteger (toInteger n)
 
 instance FromValue Int where
-    fromValue (VInteger n)
+    fromValue _ (VInteger n)
       | toInteger (minBound :: Int) <= n &&
         toInteger (maxBound :: Int) >= n = fromIntegral n
-    fromValue _ = error "fromValue Int"
+    fromValue _ _ = error "fromValue Int"
 
 instance IsValue Bool where
-    toValue b = VBool b
+    toValue _name b = VBool b
 
 instance FromValue Bool where
-    fromValue (VBool b) = b
-    fromValue _ = error "fromValue Bool"
+    fromValue _ (VBool b) = b
+    fromValue _ _ = error "fromValue Bool"
 
 instance IsValue SAWSimpset where
-    toValue ss = VSimpset ss
+    toValue _name ss = VSimpset ss
 
 instance FromValue SAWSimpset where
-    fromValue (VSimpset ss) = ss
-    fromValue _ = error "fromValue Simpset"
+    fromValue _ (VSimpset ss) = ss
+    fromValue _ _ = error "fromValue Simpset"
 
 instance IsValue SAWRefnset where
-    toValue rs = VRefnset rs
+    toValue _name rs = VRefnset rs
 
 instance FromValue SAWRefnset where
-    fromValue (VRefnset rs) = rs
-    fromValue _ = error "fromValue Refnset"
+    fromValue _ (VRefnset rs) = rs
+    fromValue _ _ = error "fromValue Refnset"
 
 instance IsValue Theorem where
-    toValue t = VTheorem t
+    toValue _name t = VTheorem t
 
 instance FromValue Theorem where
-    fromValue (VTheorem t) = t
-    fromValue _ = error "fromValue Theorem"
+    fromValue _ (VTheorem t) = t
+    fromValue _ _ = error "fromValue Theorem"
 
 instance IsValue BisimTheorem where
-    toValue = VBisimTheorem
+    toValue _name = VBisimTheorem
 
 instance FromValue BisimTheorem where
-    fromValue (VBisimTheorem t) = t
-    fromValue _ = error "fromValue BisimTheorem"
+    fromValue _ (VBisimTheorem t) = t
+    fromValue _ _ = error "fromValue BisimTheorem"
 
 instance IsValue JavaType where
-    toValue t = VJavaType t
+    toValue _name t = VJavaType t
 
 instance FromValue JavaType where
-    fromValue (VJavaType t) = t
-    fromValue _ = error "fromValue JavaType"
+    fromValue _ (VJavaType t) = t
+    fromValue _ _ = error "fromValue JavaType"
 
 instance IsValue LLVM.Type where
-    toValue t = VLLVMType t
+    toValue _name t = VLLVMType t
 
 instance FromValue LLVM.Type where
-    fromValue (VLLVMType t) = t
-    fromValue _ = error "fromValue LLVMType"
+    fromValue _ (VLLVMType t) = t
+    fromValue _ _ = error "fromValue LLVMType"
 
 instance IsValue MIR.Ty where
-    toValue t = VMIRType t
+    toValue _name t = VMIRType t
 
 instance FromValue MIR.Ty where
-    fromValue (VMIRType t) = t
-    fromValue _ = error "fromValue MIRType"
+    fromValue _ (VMIRType t) = t
+    fromValue _ _ = error "fromValue MIRType"
 
 instance IsValue Uninterp where
-    toValue me = VUninterp me
+    toValue _name me = VUninterp me
 
 instance FromValue Uninterp where
-    fromValue (VUninterp me) = me
-    fromValue _ = error "fromValue Uninterp"
+    fromValue _ (VUninterp me) = me
+    fromValue _ _ = error "fromValue Uninterp"
 
 instance IsValue CryptolModule where
-    toValue m = VCryptolModule m
+    toValue _name m = VCryptolModule m
 
 instance FromValue CryptolModule where
-    fromValue (VCryptolModule m) = m
-    fromValue _ = error "fromValue ModuleEnv"
+    fromValue _ (VCryptolModule m) = m
+    fromValue _ _ = error "fromValue ModuleEnv"
 
 instance IsValue JSS.Class where
-    toValue c = VJavaClass c
+    toValue _name c = VJavaClass c
 
 instance FromValue JSS.Class where
-    fromValue (VJavaClass c) = c
-    fromValue _ = error "fromValue JavaClass"
+    fromValue _ (VJavaClass c) = c
+    fromValue _ _ = error "fromValue JavaClass"
 
 instance IsValue (Some CIR.LLVMModule) where
-    toValue m = VLLVMModule m
+    toValue _name m = VLLVMModule m
 
 instance IsValue (CIR.LLVMModule arch) where
-    toValue m = VLLVMModule (Some m)
+    toValue _name m = VLLVMModule (Some m)
 
 instance FromValue (Some CIR.LLVMModule) where
-    fromValue (VLLVMModule m) = m
-    fromValue _ = error "fromValue LLVMModule"
+    fromValue _ (VLLVMModule m) = m
+    fromValue _ _ = error "fromValue LLVMModule"
 
 instance IsValue MIR.RustModule where
-    toValue m = VMIRModule m
+    toValue _name m = VMIRModule m
 
 instance FromValue MIR.RustModule where
-    fromValue (VMIRModule m) = m
-    fromValue _ = error "fromValue RustModule"
+    fromValue _ (VMIRModule m) = m
+    fromValue _ _ = error "fromValue RustModule"
 
 instance IsValue MIR.Adt where
-    toValue adt = VMIRAdt adt
+    toValue _name adt = VMIRAdt adt
 
 instance FromValue MIR.Adt where
-    fromValue (VMIRAdt adt) = adt
-    fromValue _ = error "fromValue Adt"
+    fromValue _ (VMIRAdt adt) = adt
+    fromValue _ _ = error "fromValue Adt"
 
 instance IsValue HeapsterEnv where
-    toValue m = VHeapsterEnv m
+    toValue _name m = VHeapsterEnv m
 
 instance FromValue HeapsterEnv where
-    fromValue (VHeapsterEnv m) = m
-    fromValue _ = error "fromValue HeapsterEnv"
+    fromValue _ (VHeapsterEnv m) = m
+    fromValue _ _ = error "fromValue HeapsterEnv"
 
 instance IsValue ProofResult where
-   toValue r = VProofResult r
+   toValue _name r = VProofResult r
 
 instance FromValue ProofResult where
-   fromValue (VProofResult r) = r
-   fromValue v = error $ "fromValue ProofResult: " ++ show v
+   fromValue _ (VProofResult r) = r
+   fromValue _ v = error $ "fromValue ProofResult: " ++ show v
 
 instance IsValue SatResult where
-   toValue r = VSatResult r
+   toValue _name r = VSatResult r
 
 instance FromValue SatResult where
-   fromValue (VSatResult r) = r
-   fromValue v = error $ "fromValue SatResult: " ++ show v
+   fromValue _ (VSatResult r) = r
+   fromValue _ v = error $ "fromValue SatResult: " ++ show v
 
 instance IsValue CMS.GhostGlobal where
-  toValue = VGhostVar
+  toValue _name x = VGhostVar x
 
 instance FromValue CMS.GhostGlobal where
-  fromValue (VGhostVar r) = r
-  fromValue v = error ("fromValue GlobalVar: " ++ show v)
+  fromValue _ (VGhostVar r) = r
+  fromValue _ v = error ("fromValue GlobalVar: " ++ show v)
 
 instance IsValue Yo.YosysIR where
-  toValue = VYosysModule
+  toValue _name ym = VYosysModule ym
 
 instance FromValue Yo.YosysIR where
-  fromValue (VYosysModule ir) = ir
-  fromValue v = error ("fromValue YosysIR: " ++ show v)
+  fromValue _ (VYosysModule ir) = ir
+  fromValue _ v = error ("fromValue YosysIR: " ++ show v)
 
 instance IsValue Yo.YosysImport where
-  toValue = VYosysImport
+  toValue _name yi = VYosysImport yi
 
 instance FromValue Yo.YosysImport where
-  fromValue (VYosysImport i) = i
-  fromValue v = error ("fromValue YosysImport: " ++ show v)
+  fromValue _ (VYosysImport i) = i
+  fromValue _ v = error ("fromValue YosysImport: " ++ show v)
 
 instance IsValue Yo.YosysSequential where
-  toValue = VYosysSequential
+  toValue _name ysq = VYosysSequential ysq
 
 instance FromValue Yo.YosysSequential where
-  fromValue (VYosysSequential s) = s
-  fromValue v = error ("fromValue YosysSequential: " ++ show v)
+  fromValue _ (VYosysSequential s) = s
+  fromValue _ v = error ("fromValue YosysSequential: " ++ show v)
 
 instance IsValue Yo.YosysTheorem where
-  toValue = VYosysTheorem
+  toValue _name yt = VYosysTheorem yt
 
 instance FromValue Yo.YosysTheorem where
-  fromValue (VYosysTheorem thm) = thm
-  fromValue v = error ("fromValue YosysTheorem: " ++ show v)
+  fromValue _ (VYosysTheorem thm) = thm
+  fromValue _ v = error ("fromValue YosysTheorem: " ++ show v)
 
 
 ------------------------------------------------------------
@@ -1609,13 +1681,13 @@ toplevelSubshell :: () -> TopLevel Value
 toplevelSubshell () = do
      m <- roSubshell <$> ask
      env <- getLocalEnv
-     toValue <$> withLocalEnv env m
+     toValue "subshell" <$> withLocalEnv env m
 
 proofScriptSubshell :: () -> ProofScript Value
 proofScriptSubshell () = do
      m <- scriptTopLevel $ asks roProofSubshell
      env <- scriptTopLevel $ getLocalEnv
-     toValue <$> withLocalEnvProof env m
+     toValue "proof_subshell" <$> withLocalEnvProof env m
 
 -- The "for" builtin.
 --
@@ -1646,14 +1718,14 @@ proofScriptSubshell () = do
 -- likely to be quite messy.
 --
 forValue :: [Value] -> Value -> TopLevel Value
-forValue [] _ = return $ VReturn dummyMonadicPos (VArray [])
+forValue [] _ = return $ VReturn atRestPos [] (VArray [])
 forValue (x : xs) f = do
-   let pos = SS.PosInternal "<for>"
+   let pos = SS.PosInsideBuiltin
    m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce pos m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce pos m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
-       return $ VReturn dummyMonadicPos (VArray (v1 : fromValue v2))
+   return $ VBindOnce pos [] m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
+     return $ VBindOnce pos [] m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+       return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
 
 caseProofResultPrim ::
   ProofResult ->
@@ -1668,14 +1740,14 @@ caseProofResultPrim pr vValid vInvalid = do
   pos <- getPosition
   case pr of
     ValidProof _ thm ->
-      applyValue pos infoValid vValid (toValue thm)
+      applyValue pos infoValid vValid (VTheorem thm)
     InvalidProof _ pairs _pst -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue pos infoInvalid vInvalid (toValue tt)
+      applyValue pos infoInvalid vInvalid (VTerm tt)
     UnfinishedProof _ -> do
       tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
-      applyValue pos infoInvalid vInvalid (toValue tt)
+      applyValue pos infoInvalid vInvalid (VTerm tt)
 
 caseSatResultPrim ::
   SatResult ->
@@ -1692,11 +1764,32 @@ caseSatResultPrim sr vUnsat vSat = do
     Sat _ pairs -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue pos info vSat (toValue tt)
+      applyValue pos info vSat (VTerm tt)
     SatUnknown -> do
       let fov = FOVTuple []
       tt <- io $ typedTermOfFirstOrderValue sc fov
-      applyValue pos info vSat (toValue tt)
+      applyValue pos info vSat (VTerm tt)
+
+print_stack :: TopLevel ()
+print_stack = do
+  -- We are inside a builtin here, namely print_stack.
+  let pos = SS.PosInsideBuiltin
+  trace <- getStackTrace
+  let trace' = Trace.ppTrace trace pos
+  io $ TextIO.putStrLn "Stack trace:"
+  io $ TextIO.putStrLn trace'
+
+proof_stack :: ProofScript ()
+proof_stack = scriptTopLevel print_stack
+
+llvm_stack :: LLVMCrucibleSetupM ()
+llvm_stack = llvmTopLevel print_stack
+
+jvm_stack :: JVMSetupM ()
+jvm_stack = jvmTopLevel print_stack
+
+mir_stack :: MIRSetupM ()
+mir_stack = mirTopLevel print_stack
 
 enable_safety_proofs :: TopLevel ()
 enable_safety_proofs = do
@@ -2348,7 +2441,7 @@ primTypes = Map.fromList
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
   [ prim "return"              "{m, a} a -> m a"
-    (pureVal (VReturn dummyMonadicPos))
+    (pureVal (\v -> VReturn atRestPos [] v))
     Current
     [ "Yield a value in a command context. The command"
     , "    x <- return e"
@@ -2373,6 +2466,34 @@ primitives = Map.fromList
     , "the list containing the result returned by the command at each"
     , "iteration."
     ]
+
+    -- In principle we could have one monad-polymorphic builtin, but
+    -- monad-polymorphic builtins don't currently work.
+    --
+    -- FUTURE: because these are only intended for use by the test
+    -- suite, it might make sense to add a different category for that
+    -- instead of Experimental, to make it extra clear that third
+    -- parties shouldn't use these.
+  , prim "print_stack"         "TopLevel ()"
+    (pureVal print_stack)
+    Experimental
+    [ "Print the SAWScript interpreter's current stack trace, for testing." ]
+  , prim "proof_stack"         "ProofScript ()"
+    (pureVal proof_stack)
+    Experimental
+    [ "ProofScript version of print_stack." ]
+  , prim "llvm_stack"          "LLVMSetup ()"
+    (pureVal llvm_stack)
+    Experimental
+    [ "LLVMSetup version of print_stack." ]
+  , prim "jvm_stack"           "JVMSetup ()"
+    (pureVal jvm_stack)
+    Experimental
+    [ "JVMSetup version of print_stack." ]
+  , prim "mir_stack"           "MIRSetup ()"
+    (pureVal mir_stack)
+    Experimental
+    [ "MIRSetup version of print_stack." ]
 
   , prim "run"                 "{a} TopLevel a -> a"
     (funVal1 (id :: TopLevel Value -> TopLevel Value))
@@ -3992,7 +4113,7 @@ primitives = Map.fromList
     ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean identities"
     , "and conversions relating to bitvectors, natural numbers, and vectors."
@@ -6635,7 +6756,7 @@ primitives = Map.fromList
             fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
-    pureVal x name _ _ = stuffName name $ toValue x
+    pureVal x name _ _ = toValue name x
 
     -- pureVal can be used for anything with an IsValue instance,
     -- including functions. However, functions in TopLevel need to use
@@ -6654,7 +6775,7 @@ primitives = Map.fromList
     funVal1 f name _ _ =
       VBuiltin name Seq.empty $
         OneMoreArg $ \a ->
-          toValue <$> f (fromValue a)
+          toValue name <$> f (fromValue FromArgument a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
@@ -6662,7 +6783,7 @@ primitives = Map.fromList
       VBuiltin name Seq.empty $
         ManyMoreArgs $ \a -> return $
         OneMoreArg $ \b ->
-          toValue <$> f (fromValue a) (fromValue b)
+          toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b)
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
@@ -6671,29 +6792,20 @@ primitives = Map.fromList
         ManyMoreArgs $ \a -> return $
         ManyMoreArgs $ \b -> return $
         OneMoreArg $ \c ->
-          toValue <$> f (fromValue a) (fromValue b) (fromValue c)
+          toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b) (fromValue FromArgument c)
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Text -> Options -> BuiltinContext -> Value
-    scVal f name _ bic = stuffName name $ toValue (f (biSharedContext bic))
+    scVal f name _ bic = toValue name (f (biSharedContext bic))
 
     scVal' :: forall t. IsValue t =>
              (SharedContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
-    scVal' f name opts bic = stuffName name $ toValue (f (biSharedContext bic) opts)
+    scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)
 
     bicVal :: forall t. IsValue t =>
               (BuiltinContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
-    bicVal f name opts bic = stuffName name $ toValue (f bic opts)
+    bicVal f name opts bic = toValue name (f bic opts)
 
-
-    -- | Insert the name, passed through from the table entry, into
-    --   the VBuiltin for the builtin.
-    --
-    --   Does nothing for values that aren't VBuiltin, like constants.
-    stuffName :: SS.Name -> Value -> Value
-    stuffName name v = case v of
-        VBuiltin _ args wrap -> VBuiltin name args wrap
-        _ -> v
 
 
 -- FUTURE: extract here is now functionally a nop, so if things don't

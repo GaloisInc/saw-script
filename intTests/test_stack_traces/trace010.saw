@@ -1,0 +1,18 @@
+enable_experimental;
+
+// See what happens if we return a monadic value out of the tail of a
+// do-block and then execute it.
+//
+// Currently this does not trace the flow of the monadic value;
+// arguably it shouldn't. What's flowing is not print_stack but
+// a separate monadic value that contains print_stack.
+let get_print_stack = do { return print_stack; };
+let foo = do { let x = 3; get_print_stack; };
+bar <- foo;
+bar;
+
+// Similarly if you pass around a pure function that returns a monadic
+// value, that doesn't get tracked.
+let get_print_stack' () = print_stack;
+let baz = get_print_stack';
+baz ();

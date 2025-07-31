@@ -72,6 +72,12 @@ data Inference
 -- for the cases that currently generate PosInternal, so we can keep
 -- track of what they are.)
 --
+-- PosInsideBuiltin is the position associated with code within a
+-- builtin. This is separate so it prints differently from other
+-- things, and it prints in the way we want for printing stack
+-- traces. XXX: source positions and runtime positions shouldn't
+-- necessarily even be in the same data type...
+--
 -- PosREPL is for things typed at the repl, or in some cases (that
 -- should get cleaned out) for things we assume came from the repl.
 --
@@ -95,6 +101,7 @@ data Pos = Range !FilePath -- file
          | FileAndFunctionPos !FilePath !String
          | Unknown
          | PosInternal String
+         | PosInsideBuiltin
          | PosREPL
          | PosInferred Inference Pos
   deriving (Data, Generic, Eq)
@@ -144,6 +151,8 @@ spanPos :: Pos -> Pos -> Pos
 spanPos (PosInternal str) _ = PosInternal str
 spanPos PosREPL _ = PosREPL
 spanPos _ (PosInternal str) = PosInternal str
+spanPos _ PosInsideBuiltin = PosInsideBuiltin
+spanPos PosInsideBuiltin _ = PosInsideBuiltin
 spanPos _ PosREPL = PosREPL
 -- prefer anything else to unknown
 spanPos Unknown p = p
@@ -216,6 +225,9 @@ comparePosQuality p1 p2 = case (p1, p2) of
    (PosInternal _, PosInternal _) -> EQ
    (PosInternal _, _) -> LT
    (_, PosInternal _) -> GT
+   (PosInsideBuiltin, PosInsideBuiltin) -> EQ
+   (PosInsideBuiltin, _) -> LT
+   (_, PosInsideBuiltin) -> GT
    (FileOnlyPos _, FileOnlyPos _) -> EQ
    (FileOnlyPos _, FileAndFunctionPos _ _) -> LT
    (FileAndFunctionPos _ _, FileOnlyPos _) -> GT
@@ -256,6 +268,7 @@ posRelativeToCurrentDirectory (FileOnlyPos f)       = makeRelativeToCurrentDirec
 posRelativeToCurrentDirectory (FileAndFunctionPos f fn) = makeRelativeToCurrentDirectory f >>= \f' -> return (FileAndFunctionPos f' fn)
 posRelativeToCurrentDirectory Unknown               = return Unknown
 posRelativeToCurrentDirectory (PosInternal s)       = return $ PosInternal s
+posRelativeToCurrentDirectory PosInsideBuiltin      = return PosInsideBuiltin
 posRelativeToCurrentDirectory PosREPL               = return PosREPL
 posRelativeToCurrentDirectory (PosInferred inf p) =
   PosInferred inf <$> posRelativeToCurrentDirectory p
@@ -266,6 +279,7 @@ posRelativeTo d (FileOnlyPos f)       = FileOnlyPos (makeRelative d f)
 posRelativeTo d (FileAndFunctionPos f fn) = FileAndFunctionPos (makeRelative d f) fn
 posRelativeTo _ Unknown               = Unknown
 posRelativeTo _ (PosInternal s)       = PosInternal s
+posRelativeTo _ PosInsideBuiltin      = PosInsideBuiltin
 posRelativeTo _ PosREPL               = PosREPL
 posRelativeTo d (PosInferred inf p)   = PosInferred inf $ posRelativeTo d p
 
@@ -305,6 +319,7 @@ instance Show Pos where
   show (PosInferred InfContext p) = show p ++ ": Inferred from this context"
   show Unknown               = "unknown"
   show (PosInternal s)       = "[internal:" ++ s ++ "]"
+  show PosInsideBuiltin      = "(builtin)"
   show PosREPL               = "REPL"
 
 toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
@@ -315,6 +330,7 @@ toW4Loc fnm =
     Unknown -> mkLoc fnm W4.InternalPos
     PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos
     PosInternal nm -> mkLoc (fnm <> " " <> Text.pack nm) W4.InternalPos
+    PosInsideBuiltin -> mkLoc (fnm <> " (in builtin)") W4.InternalPos
     PosInferred _ p -> toW4Loc fnm p
     Range file sl sc _el _ec ->
       mkLoc fnm (W4.SourcePos (Text.pack file) sl sc)

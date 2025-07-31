@@ -1,0 +1,5 @@
+enable_experimental;
+
+// main has its own private code path, check if it works
+
+let main = do { print_stack; return (); };

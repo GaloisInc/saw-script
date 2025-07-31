@@ -2,7 +2,8 @@
  Verifying test/c6dc65fc::f[0] ...
  Simulating test/c6dc65fc::f[0] ...
  Stack trace:
-"mir_verify" (mir.saw:16:1-16:11)
+   (builtin) in mir_verify
+   mir.saw:16:1-16:49 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
   internal: error: in _SAW_MIR_verifyPrestate

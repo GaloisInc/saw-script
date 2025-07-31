@@ -1,6 +1,7 @@
  Loading file "fail3.saw"
  Stack trace:
-"fail" (fail3.saw:5:3-5:7)
+   (builtin) in fail
+   fail3.saw:5:3-5:27 (at top level)
 requested failure
 
 FAILED

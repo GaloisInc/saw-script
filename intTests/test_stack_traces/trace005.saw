@@ -1,0 +1,12 @@
+enable_experimental;
+
+// These should not differ in whether they generate a trace frame
+// for the intermediate assignment.
+
+let foo1 = print_stack;
+let foo2 = foo1;
+foo2;
+
+let bar1 = do { print_stack; };
+let bar2 = bar1;
+bar2;

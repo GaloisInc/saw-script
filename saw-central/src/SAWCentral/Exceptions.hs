@@ -10,11 +10,13 @@ module SAWCentral.Exceptions
   ) where
 
 import Control.Exception
+import qualified Data.Text as Text (unpack)
 import Data.Typeable (cast)
 
 import What4.ProgramLoc (ProgramLoc)
 
 import SAWCentral.Position (Pos(..))
+import SAWCentral.Trace (Trace, ppTrace)
 
 newtype TypeErrors = TypeErrors [(Pos, String)]
 
@@ -64,10 +66,27 @@ topLevelExceptionFromException x =
 
 instance Exception TopLevelException
 
-data TraceException = TraceException [String] SomeException
+-- | Wrapper exception that adds a stack trace.
+--   The position should be what's currently executing that threw the
+--   exception. For exceptions coming from builtins, this should be
+--   PosInsideBuiltin. (And _not_ the result of calling getPosition to
+--   fetch the interpreter's last execution position.) For exceptions
+--   coming from inside the SAWScript interpreter, it should be the
+--   current execution position.
+--
+--   XXX: the current infrastructure that throws TraceException
+--   assumes it's coming from a builtin and hardwires
+--   PosInsideBuiltin. There mostly aren't exceptions from inside the
+--   interpreter, and they're all wired up wrong right now anyhow.
+--   This should get cleaned out as part of the error printing
+--   cleanup.
+data TraceException = TraceException Trace Pos SomeException
 
 instance Show TraceException where
-  show (TraceException msg ex) =
-    unlines (["Stack trace:"] ++ msg ++ [displayException ex])
+  show (TraceException trace curpos ex) =
+    let trace' = lines $ Text.unpack $ ppTrace trace curpos
+        ex' = displayException ex
+    in
+    unlines (["Stack trace:"] ++ trace' ++ [ex'])
 
 instance Exception TraceException

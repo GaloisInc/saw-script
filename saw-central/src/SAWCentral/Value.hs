@@ -83,6 +83,12 @@ module SAWCentral.Value (
     throwTopLevel,
     -- used by SAWScript.Interpreter
     setPosition,
+    -- used by SAWScript.Interpreter
+    getStackTrace,
+    pushTraceFrame, popTraceFrame,
+    pushTraceFrames, popTraceFrames,
+    -- used by SAWScript.Interpreter
+    RefChain,
     -- used by SAWScript.Interpreter plus appears in getMergedEnv
     getLocalEnv,
     -- used in various places in SAWCentral, and in selected builtins in
@@ -219,6 +225,9 @@ import qualified Data.AIG as AIG
 
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, showBrackets, showBraces, showCommaSep)
 
+import SAWCentral.Trace (Trace)
+import qualified SAWCentral.Trace as Trace
+
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
 import SAWCentral.BisimulationTheorem (BisimTheorem)
@@ -291,6 +300,210 @@ data BuiltinWrapper
   = OneMoreArg (Value -> TopLevel Value)
   | ManyMoreArgs (Value -> TopLevel BuiltinWrapper)
 
+-- | A type to hold the chain of references to a value that arise
+--   during execution. This appears in the monadic value types
+--   (VTopLevel, VProofScript, etc.) in order to trace let-bindings of
+--   monadic objects and treat them as part of the call chain.
+--
+--   It starts empty for builtins in the builtins table, and gets an
+--   entry consed onto it each time a value is either read out of the
+--   environment (for plain values) or created by function
+--   application.
+--
+--   Each reference is a position and a name (the position of the
+--   reference and the name that was used to refer to the value) and
+--   is used as a call site when handling stack traces.
+--
+--   For example,
+--      1: let x = print_stack;
+--      2: let y = x;
+--      3: y;
+--
+--   will flow as follows:
+--      (a) We load print_stack from the global environment and add an
+--          entry containing the reference position (line 1, columns
+--          9-20) and the name "print_stack". The resulting value is
+--          saved as "x".
+--      (b) We load "x" from the environment, and add an entry with
+--          the reference position (line 2, columns 9-10) and the name
+--          "x". The value already contains the entry from (a), so now
+--          there are two, and the one from "x" is on the front of the
+--          list.
+--      (c) We load "y" from the environment, and add a similar entry
+--          with "y".
+--      (d) Then we bind y to execute it, and that loads the sequence
+--          y -> x -> print_stack onto the call stack.
+--      (e) The resulting trace printed by print_stack will look like:
+--             (builtin) in print_stack
+--             foo.saw:1:9-20 in x
+--             foo.saw:2:9-10 in y
+--             foo.saw:3:1-2 at top level
+--
+type RefChain = [(SS.Pos, SS.Name)]
+
+-- | The SAWScript interpreter's base value type.
+--
+--   The interpreter executes from AST elements (expressions,
+--   statements) to values. Unfortunately, for the time being, values
+--   are a (considerable) superset of what the AST can represent, so
+--   values can't be injected back into unexecuted AST elements.
+--   FUTURE: this should be fixed, but not until it can be done
+--   without tying a gigantic knot in the module dependencies.
+--
+--   Because monadic values are irreducible until executed (they're
+--   effectively lambdas) but we also want to be able to know what
+--   they are when we execute them (for stack traces and error
+--   reporting) we carry around a bunch of metadata with each one.
+--
+--   Values that can have monadic type are:
+--      - the compound monadic values, that reduce to plain ones
+--        by executing in the interpreter:
+--           VReturn
+--           VDo
+--           VBindOnce
+--      - the plain monadic values, which contain Haskell-level
+--        monadic actions:
+--           VTopLevel
+--           VProofScript
+--           VLLVMCrucibleSetup
+--           VJVMSetup
+--           VMIRSetup
+--
+--   Furthermore, VLambda and VBuiltin can produce monadic values
+--   after application of an argument, and need to carry certain
+--   metadata of their own to populate their results.
+--
+--   In general, monadic values carry the following metadata until
+--   executed:
+--      - Position of last reference
+--      - a RefChain (q.v.)
+--
+--   Function-class values that might produce monadic values when an
+--   argument is applied (VLambda and VBuiltin) carry the following
+--   metadata:
+--      - a name
+--      - an argument list
+--
+--   The position of last reference is kept for VReturn and the plain
+--   monadic values. For plain monadic values, the position is loaded
+--   into the interpreter's last position state before the
+--   Haskell-level monadic action is executed.
+--
+--   For VReturn, it propagates to the result. (Whether this is
+--   necessary, useful, or even desirable isn't entirely clear -- it
+--   has no effect if you return a scalar, obviously, and if you
+--   return out a monadic value, that should already have its own
+--   reference position and it's not clear that updating it with the
+--   return's position is helpful. FUTURE: investigate.)
+--
+--   VBindOnce contains a position; however, it's the position of the
+--   bind operation (comparable to the position in a StmtBind) and not
+--   relevant to this discussion.
+--
+--   The RefChain is kept for plain monadic values, and for VReturn
+--   for propagation purposes. (Again, that may or may not be the best
+--   way. FUTURE.) VDo (and VBindOnce) also have a RefChain, which
+--   propagates to the resultant plain monadic value when the do-block
+--   is executed in the interpreter. The do-block RefChain tracks the
+--   names the do-block gets passed around under before it gets
+--   evaluated. (And then the chain in the resulting value could
+--   theoretically accumulate more entries as it gets passed around,
+--   except that there's no way to do that: we always execute the
+--   resultant Haskell-level action immediately after interpreting any
+--   do-block.)
+--
+--   We could in principle also carry a RefChain in VLambda so if
+--   you pass a lambda around it gets traced the same way a monadic
+--   value does. There's not as much call for it, but it might be
+--   useful. FUTURE.
+--
+--   VLambda and VBuiltin carry their names. When the last argument is
+--   applied, and the resulting value is monadic, the name is used to
+--   seed its RefChain. The RefChain then tracks the whole sequence of
+--   names used to refer to that value, in order; this is why plain
+--   monadic values don't specifically carry their "own" names. Note
+--   that for VLambda the name is optional, because lambdas don't
+--   necessarily have names. There's no such thing as an anonymous
+--   builtin though.
+--
+--   VBuiltin also carries a list of values (it is actually a
+--   snoc-list manifested as a `Seq`) that are the arguments already
+--   applied to the builtin. This is purely for printing in stack
+--   traces. FUTURE: VLambda should have this as well, but it doesn't
+--   make sense to make such a list separate from the variable
+--   environment handling, and that needs a through mucking-out of its
+--   own first.
+--
+--   The flow for the position of last reference is as follows:
+--      (a) Builtins in the global environment are initialized with
+--          `atRestPos`. This should never be seen by a user because
+--          stuff in the environment should not be seen without being
+--          referenced somehow.
+--      (b) When a variable is looked up in the environment, the
+--          value returned has its last reference position updated
+--          with the position of the variable name.
+--      (c) Before an argument is applied to a function (or lambda)
+--          the _argument's_ last reference position is updated with
+--          the position of the argument expression. For arguments
+--          to builtins that are monadic value callbacks, this
+--          causes the last reference position to be the point where
+--          the value was passed to the builtin. Alas, I no longer
+--          remember what special case this was needed to handle,
+--          and it's possible it's no longer necessary.
+--      (d) Somewhat similarly, the first argument of VBindOnce is
+--          updated before it is executed, using the position in
+--          the VBindOnce.
+--      (e) The same goes for statements in do-blocks, using the
+--          position of the BindStmt, or for the last expression in a
+--          do-block, the position of the expression.
+--      (f) When the Haskell-level monadic action in a plan monadic
+--          value is extracted with fromValue, we use the position to
+--          call setPosition to update the interpreter's last
+--          execution position.
+--      (g) The idea is that anytime we leave the interpreter to
+--          execute a builtin, there's a setPosition call that sets
+--          the last execution position to something that makes sense
+--          to report to the user if the builtin errors out.
+--      (h) FUTURE: consider clearing a value's position (setting it
+--          to `atRestPos`) when added to the environment, so the
+--          position of last reference for everything in the
+--          environment is the same.
+--
+--   The flow for names is as follows:
+--      (a) toValue is given a name to insert. This allows the
+--          typeclass-based construction process for builtins to
+--          propagate the name to every VBuiltin. (The name itself is
+--          provided from the builtins table.)
+--      (b) The names of lambdas are applied by the parser in
+--          `buildFunction`. Every let-binding that's written with a
+--          function head is converted to a chain of lambdas there,
+--          and that conversion inserts the name from the let-binding.
+--          Other lambdas are by definition anonymous and get Nothing.
+--      (c) As mentioned above, when the last argument is applied to a
+--          function, the name is used to seed the RefChain of the
+--          resulting value, if there is one. At this time we'll also
+--          be generating a stack trace frame while the function
+--          executes, using that name.
+--
+--   See above for notes on the flow for RefChains.
+--
+--   In principle the position of last reference should be the same as
+--   the position at the top of the RefChain, and we should not get
+--   empty RefChains (same as we should never see the default position
+--   that appears in the builtins table) so it may be sufficient to
+--   use the RefChain to call setPosition. However, not all the places
+--   that update the position of last reference add to the RefChain
+--   (they were tried and found to produce unwanted or incorrect stack
+--   traces) so this may not be true and/or those position updates may
+--   not be needed, all of which should probably be investigated
+--   further in the FUTURE.
+--
+--   Also note that because the bits of metadata aren't quite the same
+--   in each case and don't update in exactly the same places, it
+--   currently doesn't work very well to try to wrap them together in
+--   their own type. If things become more regular, it might be worth
+--   revisiting that proposition.
+--
 data Value
   = VBool Bool
   | VString Text
@@ -307,37 +520,47 @@ data Value
     -- XXX: This should go away. Fortunately, it's only used by the
     -- closures that implement stack traces, which are scheduled for
     -- removal soon.
-  | VClosure (SS.Pos -> Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
-    -- | Returned value in unspecified monad
-  | VReturn SS.Pos Value
-    -- | Not-yet-executed do-block in unspecified monad
-    --
-    --   The string is a hack hook for the current implementation of
-    --   stack traces. See the commit message that added it for further
-    --   information. XXX: to be removed along with the stack trace code
-  | VDo SS.Pos (Maybe String) LocalEnv ([SS.Stmt], SS.Expr)
+    -- | Returned value in unspecified monad.
+  | VReturn SS.Pos RefChain Value
+    -- | Not-yet-executed do-block in unspecified monad.
+  | VDo RefChain LocalEnv ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
+    --
     --   This exists only to support the "for" builtin; see notes there
-    --   for why this is so. XXX: remove it once that's no longer needed
-  | VBindOnce SS.Pos Value Value
-  | VTopLevel SS.Pos (TopLevel Value)
-  | VProofScript SS.Pos (ProofScript Value)
+    --   for why this is so. XXX: remove it once that's no longer needed.
+    --   A sequence of these is effectively equivalent to a do-block.
+    --
+    --   The position is the position of the bind operation,
+    --   comparable to the position in a StmtBind.
+  | VBindOnce SS.Pos RefChain Value Value
+    -- | A plain value containing a Haskell-level action in TopLevel
+    --   (that itself yields a Value).
+  | VTopLevel SS.Pos RefChain (TopLevel Value)
+    -- | A plain value containing a Haskell-level action in ProofScript.
+    --   Like a VTopLevel, except in the other monad.
+  | VProofScript SS.Pos RefChain (ProofScript Value)
   | VSimpset SAWSimpset
   | VRefnset SAWRefnset
   | VTheorem Theorem
   | VBisimTheorem BisimTheorem
   -----
-  | VLLVMCrucibleSetup SS.Pos !(LLVMCrucibleSetupM Value)
+    -- | A plain value containing a Haskell-level action in LLVMSetup.
+    --   Like a VTopLevel, except in the other monad.
+  | VLLVMCrucibleSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
-  | VJVMSetup SS.Pos !(JVMSetupM Value)
+    -- | A plain value containing a Haskell-level action in JVMSetup.
+    --   Like a VTopLevel, except in the other monad.
+  | VJVMSetup SS.Pos RefChain !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
-  | VMIRSetup SS.Pos !(MIRSetupM Value)
+    -- | A plain value containing a Haskell-level action in MIRSetup.
+    --   Like a VTopLevel, except in the other monad.
+  | VMIRSetup SS.Pos RefChain !(MIRSetupM Value)
   | VMIRMethodSpec !(CMS.ProvedSpec MIR)
   | VMIRSetupValue !(CMS.SetupValue MIR)
   -----
@@ -492,14 +715,18 @@ showsPrecValue opts nenv p v =
       let name' = PP.pretty name in
       shows $ PP.sep ["<<", "builtin", name', ">>"]
 
-    VClosure {} -> showString "<<closure>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts nenv (ttTerm t))
     VType sig -> showString (pretty sig)
-    VReturn _pos v' -> showString "return " . showsPrecValue opts nenv (p + 1) v'
-    VDo pos _name _env body ->
-      let e = SS.Block pos body in
+    VReturn _pos _chain v' ->
+      showString "return " . showsPrecValue opts nenv (p + 1) v'
+    VDo _chain _env body ->
+      -- The printer for expressions doesn't print positions, so we can
+      -- feed in a dummy.
+      let pos = SS.PosInternal "<<do-block>>"
+          e = SS.Block pos body
+      in
       shows (PP.pretty e)
-    VBindOnce _pos v1 v2 ->
+    VBindOnce _pos _chain v1 v2 ->
       let v1' = showsPrecValue opts nenv 0 v1
           v2' = showsPrecValue opts nenv 0 v2
       in
@@ -655,7 +882,7 @@ data TopLevelRW =
   , rwPosition :: SS.Pos
   
     -- | The current stack trace. The most recent frame is at the front.
-  , rwStackTrace :: [String]
+  , rwStackTrace :: Trace
 
   , rwLocalEnv   :: LocalEnv
 
@@ -732,7 +959,11 @@ io f = (TopLevel_ (liftIO f))
     rethrow :: X.Exception ex => ex -> TopLevel a
     rethrow ex =
       do stk <- getStackTrace
-         throwM (SS.TraceException stk (X.SomeException ex))
+         -- XXX: assumes the exception came from inside a builtin somewhere,
+         -- and hardwires PosInsideBuiltin. This is not going to always be
+         -- true and this logic should be reworked when we're doing the error
+         -- printing cleanup.
+         throwM (SS.TraceException stk SS.PosInsideBuiltin (X.SomeException ex))
 
     handleTopLevel :: SS.TopLevelException -> TopLevel a
     handleTopLevel e = rethrow e
@@ -756,14 +987,50 @@ io f = (TopLevel_ (liftIO f))
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
-  pos <- getPosition
   stk <- getStackTrace
-  throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
+  -- All current uses of throwTopLevel are inside builtins.
+  let pos = SS.PosInsideBuiltin
+  throwM (SS.TraceException stk pos (X.SomeException (SS.TopLevelException pos msg)))
 
 -- | Set the current execution position.
 setPosition :: SS.Pos -> TopLevel ()
 setPosition newpos = do
   modifyTopLevelRW (\rw -> rw { rwPosition = newpos })
+
+-- | Add a stack trace frame. Takes the call site position and the
+--   function name.
+pushTraceFrame :: SS.Pos -> Text -> TopLevel ()
+pushTraceFrame pos func =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.push pos func (rwStackTrace rw) })
+
+-- | Add multiple stack trace frames. Takes a list of call site and
+--   function name pairs.
+--
+--   The topmost entry in the argument list goes onto the stack first
+--   and becomes the deepest entry and thus the caller of the rest.
+--
+--   This is backwards from what one might expect if the list were
+--   itself a call stack. However, the use case we have produces
+--   entries in that order naturally (it is a chain of references to /
+--   assignments of monadic values, with the most recent and therefore
+--   first/deepest when run at the top of the list), so I'm not
+--   inclined to reverse the list both here and in the caller to match
+--   a rather vague expectation.
+--
+pushTraceFrames :: [(SS.Pos, Text)] -> TopLevel ()
+pushTraceFrames frames =
+  mapM_ (\(pos, name) -> pushTraceFrame pos name) frames
+
+-- | Drop a stack trace frame.
+popTraceFrame :: TopLevel ()
+popTraceFrame =
+  modifyTopLevelRW (\rw -> rw { rwStackTrace = Trace.pop (rwStackTrace rw) })
+
+-- | Drop multiple stack trace frames. Takes a list of the corresponding
+--   length for caller convenience.
+popTraceFrames :: [a] -> TopLevel ()
+popTraceFrames frames =
+  mapM_ (\_ -> popTraceFrame) frames
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv =
@@ -775,9 +1042,8 @@ getPosition =
   gets rwPosition
 
 -- | Get the current stack trace.
-getStackTrace :: TopLevel [String]
-getStackTrace =
-  reverse <$> gets rwStackTrace
+getStackTrace :: TopLevel Trace
+getStackTrace = gets rwStackTrace
 
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel_ (rwSharedContext <$> get)

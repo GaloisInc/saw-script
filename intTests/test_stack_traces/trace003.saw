@@ -1,0 +1,52 @@
+enable_experimental;
+print "";
+
+// calls in ProofScript
+//
+// This could just replicate all the cases in trace002, but does not;
+// the expectation is that most of the logic (especially for SAWScript
+// execution) is shared and doesn't need to be tested twice. Instead
+// we just make sure that (a) it works at all from inside the
+// ProofScript monad and (b) the transition calling back into the
+// interpreter for the proof script comes out in a reasonable way.
+
+
+// Test just proof_stack by itself.
+// This does not actually solve the goal so wrap in "fails".
+print "------------------------------------------------------------";
+print "just proof_stack";
+fails (prove_print proof_stack {{ True }});
+print "";
+
+// Test proof_stack via a let-binding.
+// This does not actually solve the goal so wrap in "fails".
+print "------------------------------------------------------------";
+print "proof_stack via let";
+let pf = proof_stack;
+fails (prove_print pf {{ True }});
+print "";
+
+// Test with an inline do-block.
+print "------------------------------------------------------------";
+print "do-block";
+prove_print (do { proof_stack; z3; }) {{ True }};
+prove_print (do { z3; proof_stack; }) {{ True }};
+print "";
+
+// Test with an action that doesn't take arguments.
+print "------------------------------------------------------------";
+print "action";
+let prove1 = do { proof_stack; z3; };
+let prove2 = do { z3; proof_stack; };
+prove_print prove1 {{ True }};
+prove_print prove2 {{ True }};
+print "";
+
+// Test with an action that does take arguments.
+print "------------------------------------------------------------";
+print "function";
+let prove3 () = do { proof_stack; z3; };
+let prove4 () = do { z3; proof_stack; };
+prove_print (prove3 ()) {{ True }};
+prove_print (prove4 ()) {{ True }};
+print "";

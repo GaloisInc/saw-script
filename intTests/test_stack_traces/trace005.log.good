@@ -1,0 +1,13 @@
+ Loading file "trace005.saw"
+Stack trace:
+   (builtin) in print_stack
+   trace005.saw:6:12-6:23 in foo1
+   trace005.saw:7:12-7:16 in foo2
+   trace005.saw:8:1-8:5 (at top level)
+
+Stack trace:
+   (builtin) in print_stack
+   trace005.saw:10:17-10:28 in bar1
+   trace005.saw:11:12-11:16 in bar2
+   trace005.saw:12:1-12:5 (at top level)
+

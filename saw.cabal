@@ -600,6 +600,7 @@ library saw-central
     SAWCentral.Utils
     SAWCentral.AST
     SAWCentral.ASTUtil
+    SAWCentral.Trace
     SAWCentral.Exceptions
     SAWCentral.CongruenceClosure
     SAWCentral.JavaExpr
