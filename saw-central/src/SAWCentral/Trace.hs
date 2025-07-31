@@ -63,7 +63,7 @@ import SAWCentral.Position (Pos)
 --
 --   (FUTURE: it might make sense for each frame to be a prettyprinter
 --   document rather than Text.)
-data TraceFunc = TraceFunc Text
+newtype TraceFunc = TraceFunc Text
 
 -- | Entry in a stack trace.
 --

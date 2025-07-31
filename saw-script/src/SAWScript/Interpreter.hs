@@ -612,14 +612,13 @@ interpretDeclGroup (SS.Recursive ds) = do
 -- coming from the interpreter.
 --
 -- There are three steps:
---    - run it in the interpreter with interpretMonadAction, in case
---      it's a do-block
---    - (plainVal should then always be a plain monadic value with a
---      Haskell monadic action in it.)
---    - update the value metadata (specifically: insert the bind
+--    - Run it in the interpreter with interpretMonadAction, in case
+--      it's a do-block. (plainVal should then always be a plain
+--      monadic value with a Haskell monadic action in it.)
+--    - Update the value metadata. (Specifically: insert the bind
 --      position into the plain monadic value we get back from the
---      interpreter as its position of last reference)
---    - fetch the Haskell-level monadic action with fromValue and bind
+--      interpreter, as its position of last reference.)
+--    - Fetch the Haskell-level monadic action with fromValue and bind
 --      that in Haskell to execute it.
 --
 -- Note that calling interpretMonadAction here is necessary for the
