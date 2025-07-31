@@ -82,7 +82,7 @@ satQueryAsTerm sc satq =
          (BoolAssert x:xs) -> loop x xs
          (UniversalAssert{} : _) -> univFail
  where
-   univFail = fail "satQueryAsTerm : Solver backend cannot handle universally-quantifed assertions"
+   univFail = fail "satQueryAsTerm : Solver backend cannot handle universally-quantified assertions"
 
    loop x [] = return x
    loop x (BoolAssert y:xs) =

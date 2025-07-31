@@ -321,7 +321,7 @@ bindPatternLocal pat ms v env =
                 "Expected tuple value; got " <> Text.pack (show v)
             ]
 
--- See notes in bindPatternLocal above regading the schema argument.
+-- See notes in bindPatternLocal above regarding the schema argument.
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
@@ -2871,7 +2871,7 @@ primitives = Map.fromList
     (pureVal set_timeout)
     Experimental
     [ "Set the timeout, in milliseconds, for any automated prover at the"
-    , "end of this proof script. Not that this is simply ignored for provers"
+    , "end of this proof script. Note that this is simply ignored for provers"
     , "that don't support timeouts, for now."
     ]
 
@@ -3334,7 +3334,7 @@ primitives = Map.fromList
     , "This command will attempt to prove the theorem expressed in the second"
     , "element of the tuple by induction. The goal presented to the user-provided"
     , "tactic will ask to prove the stated goal and will be provided with an induction"
-    , "hypothesis which states that the goal holds for all values of the varibles"
+    , "hypothesis which states that the goal holds for all values of the variables"
     , "where the expression given in the first element of the tuple has decreased."
     ]
 
@@ -3567,7 +3567,7 @@ primitives = Map.fromList
     Experimental
     [ "When focused on a conclusion, weaken the focused conclusion"
     , "by introducing an implication using the numbered sequent hypothesis."
-    , "This is essentially the reverse of 'gooal_intro_hyps'."
+    , "This is essentially the reverse of 'goal_intro_hyps'."
     ]
 
   , prim "goal_insert"         "Theorem -> ProofScript ()"
@@ -5062,7 +5062,7 @@ primitives = Map.fromList
     Experimental
     [ "Verify that a given specification for a function is a refinement of one or more"
     , "specifications already proved for a function. This can be useful for situations where"
-    , "it is advantageous to logically restate the specification in some why, or where a more"
+    , "it is advantageous to logically restate the specification in some way, or where a more"
     , "general specification can be constructed from a collection of individual, more specific,"
     , "specifications."
     ]

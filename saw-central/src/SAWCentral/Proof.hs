@@ -1796,7 +1796,7 @@ startProof g pos ploc rsn =
 --   of solver resources used in the proof.
 --
 --   If first boolean argument is @False@, the resulting theorem will not be
---   recored in the theorem database. This should only be done when you are
+--   recorded in the theorem database. This should only be done when you are
 --   sure that the theorem will not be used as part of the proof of other theorems,
 --   or later steps will fail. This is intended for proofs of verification conditions,
 --   which are not exposed for reuse, and where it requires a significant memory

@@ -68,7 +68,7 @@ getTestList testdir disabled = do
 -- ----------------------------------------------------------------------=
 -- * Environment variable handling.
 --
--- Start with an initial set of variables and an asociated value (or
+-- Start with an initial set of variables and an associated value (or
 -- set of values with a separator), then override/update with any
 -- environment variables set.
 

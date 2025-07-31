@@ -1888,7 +1888,7 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz md fresh
      {-
      memTy <- case Crucible.asMemType symTy of
                 Just memTy -> return memTy
-                Nothing    -> fail "executAllocation: failed to resolve type"
+                Nothing    -> fail "executeAllocation: failed to resolve type"
                 -}
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
