@@ -431,233 +431,235 @@ span.spaces    { background: white }
 <span class="lineno">  412 </span>       -- with this 'Term'. This should be as unique as a hash can be, but is
 <span class="lineno">  413 </span>       -- not guaranteed unique as 'stAppIndex' is.
 <span class="lineno">  414 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppLooseVars</span></span></span> :: !BitSet
-<span class="lineno">  415 </span>       -- ^ The loose de Bruijn indices associated with the 'stAppTermF' field.
-<span class="lineno">  416 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppFreeVars</span></span></span> :: !IntSet
-<span class="lineno">  417 </span>       -- ^ The set of 'VarIndex'es of the free named variables in the term.
-<span class="lineno">  418 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppTermF</span></span></span>    :: !(TermF Term)
-<span class="lineno">  419 </span>       -- ^ The underlying 'TermF' that this 'Term' wraps. This field &quot;ties the
-<span class="lineno">  420 </span>       -- knot&quot; of the 'Term'/'TermF' recursion scheme.
-<span class="lineno">  421 </span>     }
-<span class="lineno">  422 </span>  | Unshared !(TermF Term)
-<span class="lineno">  423 </span>    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
-<span class="lineno">  424 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, Typeable)
-<span class="lineno">  425 </span>
-<span class="lineno">  426 </span>instance Hashable Term where
-<span class="lineno">  427 </span>  -- The hash of an 'STApp' depends on its not-necessarily-unique
-<span class="lineno">  428 </span>  -- 'stAppHash' instead of its necessarily-unique 'stAppIndex'.
-<span class="lineno">  429 </span>  -- The reason is that per #1830 (PR) and #1831 (issue), we want to
-<span class="lineno">  430 </span>  -- to derive references to terms based solely on their shape.
-<span class="lineno">  431 </span>  -- Indices have nothing to do with a term's shape - they're assigned
-<span class="lineno">  432 </span>  -- sequentially when building terms, according to the (arbitrary)
-<span class="lineno">  433 </span>  -- order in which a term is built.
-<span class="lineno">  434 </span>  -- As for uniqueness, though hashing a term based on its subterms'
-<span class="lineno">  435 </span>  -- hashes introduces less randomness/freshness, it maintains plenty,
-<span class="lineno">  436 </span>  -- and provides benefits as described above.
-<span class="lineno">  437 </span>  -- No code should ever rely on total uniqueness of hashes, and terms
-<span class="lineno">  438 </span>  -- are no exception.
-<span class="lineno">  439 </span>  --
-<span class="lineno">  440 </span>  -- Note: Nevertheless, we do take some minor liberties with the
-<span class="lineno">  441 </span>  -- contract of 'hashWithSalt'. The contract states that if two
-<span class="lineno">  442 </span>  -- values are equal according to '(==)', then they must have the
-<span class="lineno">  443 </span>  -- same hash.
-<span class="lineno">  444 </span>  -- For terms constructed by/within SAW, this will hold, because
-<span class="lineno">  445 </span>  -- SAW's handling of index generation and assignment ensures that
-<span class="lineno">  446 </span>  -- equality of indices implies equality of terms and term hashes
-<span class="lineno">  447 </span>  -- (see 'SAWCore.SharedTerm.getTerm').
-<span class="lineno">  448 </span>  -- However, if terms are constructed outside this standard procedure
-<span class="lineno">  449 </span>  -- or in a way that does not respect index uniqueness rules,
-<span class="lineno">  450 </span>  -- 'hashWithSalt''s contract could be violated.
-<span class="lineno">  451 </span>  <span class="decl"><span class="istickedoff">hash STApp{ stAppHash = h } = h</span>
-<span class="lineno">  452 </span><span class="spaces">  </span><span class="istickedoff">hash (Unshared t) = hash t</span></span>
-<span class="lineno">  453 </span>  <span class="decl"><span class="istickedoff">hashWithSalt salt = hashWithSalt salt . hash</span></span>
-<span class="lineno">  454 </span>
-<span class="lineno">  455 </span>instance <span class="decl"><span class="istickedoff">Eq Term</span></span> where
-<span class="lineno">  456 </span>  <span class="decl"><span class="istickedoff">(==) = equalTerm</span></span>
-<span class="lineno">  457 </span>
-<span class="lineno">  458 </span>equalTerm :: Term -&gt; Term -&gt; Bool
-<span class="lineno">  459 </span><span class="decl"><span class="istickedoff">equalTerm (Unshared tf1) (Unshared tf2) = tf1 == tf2</span>
-<span class="lineno">  460 </span><span class="spaces"></span><span class="istickedoff">equalTerm Unshared{} STApp{} = False</span>
-<span class="lineno">  461 </span><span class="spaces"></span><span class="istickedoff">equalTerm STApp{} Unshared{} = False</span>
-<span class="lineno">  462 </span><span class="spaces"></span><span class="istickedoff">equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})</span>
-<span class="lineno">  463 </span><span class="spaces">          </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =</span>
-<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">i1 == i2 || (h1 == h2 &amp;&amp; <span class="nottickedoff">tf1 == tf2</span>)</span></span>
-<span class="lineno">  465 </span>  -- The hash check (^) is merely an optimization that enables us to
-<span class="lineno">  466 </span>  -- quickly return 'False' in most cases. Since we're assuming the
-<span class="lineno">  467 </span>  -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
-<span class="lineno">  468 </span>  -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
-<span class="lineno">  469 </span>  -- changing the behavior of this function, but keeping it in enables
-<span class="lineno">  470 </span>  -- us to utilize the fact that we save 'STApp' hashes to get away
-<span class="lineno">  471 </span>  -- with not traversing the 'stAppTermF' fields in most cases of
-<span class="lineno">  472 </span>  -- inequality.
-<span class="lineno">  473 </span>
-<span class="lineno">  474 </span>-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
-<span class="lineno">  475 </span>-- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
-<span class="lineno">  476 </span>-- 'Unshared' expressions).
-<span class="lineno">  477 </span>alphaEquiv :: Term -&gt; Term -&gt; Bool
-<span class="lineno">  478 </span><span class="decl"><span class="istickedoff">alphaEquiv = term</span>
-<span class="lineno">  479 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  480 </span><span class="spaces">    </span><span class="istickedoff">term :: Term -&gt; Term -&gt; Bool</span>
-<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
-<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (STApp{stAppTermF = tf2}) = <span class="nottickedoff">termf tf1 tf2</span></span>
-<span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppTermF = tf1}) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
-<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppIndex = i1, stAppTermF = tf1})</span>
-<span class="lineno">  485 </span><span class="spaces">         </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppTermF = tf2}) =</span>
-<span class="lineno">  486 </span><span class="spaces">         </span><span class="istickedoff">i1 == i2 || termf tf1 tf2</span>
-<span class="lineno">  487 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">termf :: TermF Term -&gt; TermF Term -&gt; Bool</span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2</span>
-<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">termf (App t1 u1) (App t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
-<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">termf (Lambda _ t1 u1) (Lambda _ t2 u2) = <span class="nottickedoff">term t1 t2 &amp;&amp; term u1 u2</span></span>
-<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
-<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">termf (LocalVar i1) (LocalVar i2) = i1 == i2</span>
-<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">termf (Constant x1) (Constant x2) = x1 == x2</span>
-<span class="lineno">  495 </span><span class="spaces">    </span><span class="istickedoff">termf (Variable x1) (Variable x2) = x1 == x2</span>
-<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">termf FTermF{}   _ = False</span>
-<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">termf App{}      _ = False</span>
-<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">termf Lambda{}   _ = <span class="nottickedoff">False</span></span>
-<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">termf Pi{}       _ = <span class="nottickedoff">False</span></span>
-<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">termf LocalVar{} _ = False</span>
-<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">termf Constant{} _ = False</span>
-<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">termf Variable{} _ = False</span>
-<span class="lineno">  503 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
-<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">ftermf ftf1 ftf2 = case zipWithFlatTermF <span class="nottickedoff">term</span> ftf1 ftf2 of</span>
-<span class="lineno">  506 </span><span class="spaces">                         </span><span class="istickedoff">Nothing -&gt; False</span>
-<span class="lineno">  507 </span><span class="spaces">                         </span><span class="istickedoff">Just ftf3 -&gt; <span class="nottickedoff">Foldable.and ftf3</span></span></span>
-<span class="lineno">  508 </span>
-<span class="lineno">  509 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Term</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  510 </span>  <span class="decl"><span class="istickedoff">compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | <span class="tickonlytrue">i == j</span> = EQ</span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">compare STApp{} Unshared{} = <span class="nottickedoff">LT</span> -- matches what we'd get from derived Ord instance</span>
-<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">compare Unshared{} STApp{} = <span class="nottickedoff">GT</span></span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">compare x y = <span class="nottickedoff">compare (unwrapTermF x) (unwrapTermF y)</span></span></span>
-<span class="lineno">  514 </span>
-<span class="lineno">  515 </span>instance Net.Pattern Term where
-<span class="lineno">  516 </span>  <span class="decl"><span class="istickedoff">toPat = termToPat</span></span>
-<span class="lineno">  517 </span>
-<span class="lineno">  518 </span>termToPat :: Term -&gt; Net.Pat
-<span class="lineno">  519 </span><span class="decl"><span class="istickedoff">termToPat t =</span>
-<span class="lineno">  520 </span><span class="spaces">    </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">Constant nm               -&gt; Net.Atom (toShortName (nameInfo nm))</span>
-<span class="lineno">  522 </span><span class="spaces">      </span><span class="istickedoff">App t1 t2                 -&gt; Net.App (termToPat t1) (termToPat t2)</span>
-<span class="lineno">  523 </span><span class="spaces">      </span><span class="istickedoff">FTermF (Sort s _)         -&gt; Net.Atom (Text.pack ('*' : show s))</span>
-<span class="lineno">  524 </span><span class="spaces">      </span><span class="istickedoff">FTermF (NatLit _)         -&gt; Net.Var</span>
-<span class="lineno">  525 </span><span class="spaces">      </span><span class="istickedoff">_                         -&gt; Net.Var</span></span>
-<span class="lineno">  526 </span>
-<span class="lineno">  527 </span>unwrapTermF :: Term -&gt; TermF Term
-<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{stAppTermF = tf} = tf</span>
-<span class="lineno">  529 </span><span class="spaces"></span><span class="istickedoff">unwrapTermF (Unshared tf) = tf</span></span>
-<span class="lineno">  530 </span>
-<span class="lineno">  531 </span>
-<span class="lineno">  532 </span>-- Free de Bruijn Variables ----------------------------------------------------
+<span class="lineno">  415 </span>       -- ^ A set containing the 'DeBruijnIndex' of each of the loose
+<span class="lineno">  416 </span>       -- de Bruijn indices from 'LocalVar' constructors in the term.
+<span class="lineno">  417 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppFreeVars</span></span></span> :: !IntSet
+<span class="lineno">  418 </span>       -- ^ The set containing the 'VarIndex' of each of the free
+<span class="lineno">  419 </span>       -- named variables from 'Variable' constructors in the term.
+<span class="lineno">  420 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppTermF</span></span></span>    :: !(TermF Term)
+<span class="lineno">  421 </span>       -- ^ The underlying 'TermF' that this 'Term' wraps. This field &quot;ties the
+<span class="lineno">  422 </span>       -- knot&quot; of the 'Term'/'TermF' recursion scheme.
+<span class="lineno">  423 </span>     }
+<span class="lineno">  424 </span>  | Unshared !(TermF Term)
+<span class="lineno">  425 </span>    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
+<span class="lineno">  426 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, Typeable)
+<span class="lineno">  427 </span>
+<span class="lineno">  428 </span>instance Hashable Term where
+<span class="lineno">  429 </span>  -- The hash of an 'STApp' depends on its not-necessarily-unique
+<span class="lineno">  430 </span>  -- 'stAppHash' instead of its necessarily-unique 'stAppIndex'.
+<span class="lineno">  431 </span>  -- The reason is that per #1830 (PR) and #1831 (issue), we want to
+<span class="lineno">  432 </span>  -- to derive references to terms based solely on their shape.
+<span class="lineno">  433 </span>  -- Indices have nothing to do with a term's shape - they're assigned
+<span class="lineno">  434 </span>  -- sequentially when building terms, according to the (arbitrary)
+<span class="lineno">  435 </span>  -- order in which a term is built.
+<span class="lineno">  436 </span>  -- As for uniqueness, though hashing a term based on its subterms'
+<span class="lineno">  437 </span>  -- hashes introduces less randomness/freshness, it maintains plenty,
+<span class="lineno">  438 </span>  -- and provides benefits as described above.
+<span class="lineno">  439 </span>  -- No code should ever rely on total uniqueness of hashes, and terms
+<span class="lineno">  440 </span>  -- are no exception.
+<span class="lineno">  441 </span>  --
+<span class="lineno">  442 </span>  -- Note: Nevertheless, we do take some minor liberties with the
+<span class="lineno">  443 </span>  -- contract of 'hashWithSalt'. The contract states that if two
+<span class="lineno">  444 </span>  -- values are equal according to '(==)', then they must have the
+<span class="lineno">  445 </span>  -- same hash.
+<span class="lineno">  446 </span>  -- For terms constructed by/within SAW, this will hold, because
+<span class="lineno">  447 </span>  -- SAW's handling of index generation and assignment ensures that
+<span class="lineno">  448 </span>  -- equality of indices implies equality of terms and term hashes
+<span class="lineno">  449 </span>  -- (see 'SAWCore.SharedTerm.getTerm').
+<span class="lineno">  450 </span>  -- However, if terms are constructed outside this standard procedure
+<span class="lineno">  451 </span>  -- or in a way that does not respect index uniqueness rules,
+<span class="lineno">  452 </span>  -- 'hashWithSalt''s contract could be violated.
+<span class="lineno">  453 </span>  <span class="decl"><span class="istickedoff">hash STApp{ stAppHash = h } = h</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="istickedoff">hash (Unshared t) = hash t</span></span>
+<span class="lineno">  455 </span>  <span class="decl"><span class="istickedoff">hashWithSalt salt = hashWithSalt salt . hash</span></span>
+<span class="lineno">  456 </span>
+<span class="lineno">  457 </span>instance <span class="decl"><span class="istickedoff">Eq Term</span></span> where
+<span class="lineno">  458 </span>  <span class="decl"><span class="istickedoff">(==) = equalTerm</span></span>
+<span class="lineno">  459 </span>
+<span class="lineno">  460 </span>equalTerm :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  461 </span><span class="decl"><span class="istickedoff">equalTerm (Unshared tf1) (Unshared tf2) = tf1 == tf2</span>
+<span class="lineno">  462 </span><span class="spaces"></span><span class="istickedoff">equalTerm Unshared{} STApp{} = False</span>
+<span class="lineno">  463 </span><span class="spaces"></span><span class="istickedoff">equalTerm STApp{} Unshared{} = False</span>
+<span class="lineno">  464 </span><span class="spaces"></span><span class="istickedoff">equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})</span>
+<span class="lineno">  465 </span><span class="spaces">          </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =</span>
+<span class="lineno">  466 </span><span class="spaces">  </span><span class="istickedoff">i1 == i2 || (h1 == h2 &amp;&amp; <span class="nottickedoff">tf1 == tf2</span>)</span></span>
+<span class="lineno">  467 </span>  -- The hash check (^) is merely an optimization that enables us to
+<span class="lineno">  468 </span>  -- quickly return 'False' in most cases. Since we're assuming the
+<span class="lineno">  469 </span>  -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
+<span class="lineno">  470 </span>  -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
+<span class="lineno">  471 </span>  -- changing the behavior of this function, but keeping it in enables
+<span class="lineno">  472 </span>  -- us to utilize the fact that we save 'STApp' hashes to get away
+<span class="lineno">  473 </span>  -- with not traversing the 'stAppTermF' fields in most cases of
+<span class="lineno">  474 </span>  -- inequality.
+<span class="lineno">  475 </span>
+<span class="lineno">  476 </span>-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
+<span class="lineno">  477 </span>-- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
+<span class="lineno">  478 </span>-- 'Unshared' expressions).
+<span class="lineno">  479 </span>alphaEquiv :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  480 </span><span class="decl"><span class="istickedoff">alphaEquiv = term</span>
+<span class="lineno">  481 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">term :: Term -&gt; Term -&gt; Bool</span>
+<span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (STApp{stAppTermF = tf2}) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppTermF = tf1}) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppIndex = i1, stAppTermF = tf1})</span>
+<span class="lineno">  487 </span><span class="spaces">         </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppTermF = tf2}) =</span>
+<span class="lineno">  488 </span><span class="spaces">         </span><span class="istickedoff">i1 == i2 || termf tf1 tf2</span>
+<span class="lineno">  489 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">termf :: TermF Term -&gt; TermF Term -&gt; Bool</span>
+<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2</span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">termf (App t1 u1) (App t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">termf (Lambda _ t1 u1) (Lambda _ t2 u2) = <span class="nottickedoff">term t1 t2 &amp;&amp; term u1 u2</span></span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
+<span class="lineno">  495 </span><span class="spaces">    </span><span class="istickedoff">termf (LocalVar i1) (LocalVar i2) = i1 == i2</span>
+<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">termf (Constant x1) (Constant x2) = x1 == x2</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">termf (Variable x1) (Variable x2) = x1 == x2</span>
+<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">termf FTermF{}   _ = False</span>
+<span class="lineno">  499 </span><span class="spaces">    </span><span class="istickedoff">termf App{}      _ = False</span>
+<span class="lineno">  500 </span><span class="spaces">    </span><span class="istickedoff">termf Lambda{}   _ = <span class="nottickedoff">False</span></span>
+<span class="lineno">  501 </span><span class="spaces">    </span><span class="istickedoff">termf Pi{}       _ = <span class="nottickedoff">False</span></span>
+<span class="lineno">  502 </span><span class="spaces">    </span><span class="istickedoff">termf LocalVar{} _ = False</span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">termf Constant{} _ = False</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">termf Variable{} _ = False</span>
+<span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
+<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">ftermf ftf1 ftf2 = case zipWithFlatTermF <span class="nottickedoff">term</span> ftf1 ftf2 of</span>
+<span class="lineno">  508 </span><span class="spaces">                         </span><span class="istickedoff">Nothing -&gt; False</span>
+<span class="lineno">  509 </span><span class="spaces">                         </span><span class="istickedoff">Just ftf3 -&gt; <span class="nottickedoff">Foldable.and ftf3</span></span></span>
+<span class="lineno">  510 </span>
+<span class="lineno">  511 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Term</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  512 </span>  <span class="decl"><span class="istickedoff">compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | <span class="tickonlytrue">i == j</span> = EQ</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">compare STApp{} Unshared{} = <span class="nottickedoff">LT</span> -- matches what we'd get from derived Ord instance</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">compare Unshared{} STApp{} = <span class="nottickedoff">GT</span></span>
+<span class="lineno">  515 </span><span class="spaces">  </span><span class="istickedoff">compare x y = <span class="nottickedoff">compare (unwrapTermF x) (unwrapTermF y)</span></span></span>
+<span class="lineno">  516 </span>
+<span class="lineno">  517 </span>instance Net.Pattern Term where
+<span class="lineno">  518 </span>  <span class="decl"><span class="istickedoff">toPat = termToPat</span></span>
+<span class="lineno">  519 </span>
+<span class="lineno">  520 </span>termToPat :: Term -&gt; Net.Pat
+<span class="lineno">  521 </span><span class="decl"><span class="istickedoff">termToPat t =</span>
+<span class="lineno">  522 </span><span class="spaces">    </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno">  523 </span><span class="spaces">      </span><span class="istickedoff">Constant nm               -&gt; Net.Atom (toShortName (nameInfo nm))</span>
+<span class="lineno">  524 </span><span class="spaces">      </span><span class="istickedoff">App t1 t2                 -&gt; Net.App (termToPat t1) (termToPat t2)</span>
+<span class="lineno">  525 </span><span class="spaces">      </span><span class="istickedoff">FTermF (Sort s _)         -&gt; Net.Atom (Text.pack ('*' : show s))</span>
+<span class="lineno">  526 </span><span class="spaces">      </span><span class="istickedoff">FTermF (NatLit _)         -&gt; Net.Var</span>
+<span class="lineno">  527 </span><span class="spaces">      </span><span class="istickedoff">_                         -&gt; Net.Var</span></span>
+<span class="lineno">  528 </span>
+<span class="lineno">  529 </span>unwrapTermF :: Term -&gt; TermF Term
+<span class="lineno">  530 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{stAppTermF = tf} = tf</span>
+<span class="lineno">  531 </span><span class="spaces"></span><span class="istickedoff">unwrapTermF (Unshared tf) = tf</span></span>
+<span class="lineno">  532 </span>
 <span class="lineno">  533 </span>
-<span class="lineno">  534 </span>-- | A @BitSet@ represents a set of natural numbers.
-<span class="lineno">  535 </span>-- Bit n is a 1 iff n is in the set.
-<span class="lineno">  536 </span>newtype BitSet = BitSet Integer deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
-<span class="lineno">  537 </span>
-<span class="lineno">  538 </span>-- | The empty 'BitSet'
-<span class="lineno">  539 </span>emptyBitSet :: BitSet
-<span class="lineno">  540 </span><span class="decl"><span class="istickedoff">emptyBitSet = BitSet 0</span></span>
-<span class="lineno">  541 </span>
-<span class="lineno">  542 </span>-- | The singleton 'BitSet'
-<span class="lineno">  543 </span>singletonBitSet :: Int -&gt; BitSet
-<span class="lineno">  544 </span><span class="decl"><span class="istickedoff">singletonBitSet = BitSet . bit</span></span>
-<span class="lineno">  545 </span>
-<span class="lineno">  546 </span>-- | Test if a number is in a 'BitSet'
-<span class="lineno">  547 </span>inBitSet :: Int -&gt; BitSet -&gt; Bool
-<span class="lineno">  548 </span><span class="decl"><span class="istickedoff">inBitSet i (BitSet j) = testBit j i</span></span>
-<span class="lineno">  549 </span>
-<span class="lineno">  550 </span>-- | Union two 'BitSet's
-<span class="lineno">  551 </span>unionBitSets :: BitSet -&gt; BitSet -&gt; BitSet
-<span class="lineno">  552 </span><span class="decl"><span class="istickedoff">unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)</span></span>
-<span class="lineno">  553 </span>
-<span class="lineno">  554 </span>-- | Intersect two 'BitSet's
-<span class="lineno">  555 </span>intersectBitSets :: BitSet -&gt; BitSet -&gt; BitSet
-<span class="lineno">  556 </span><span class="decl"><span class="istickedoff">intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&amp;. i2)</span></span>
-<span class="lineno">  557 </span>
-<span class="lineno">  558 </span>-- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
-<span class="lineno">  559 </span>-- set. This is useful for moving a 'BitSet' out of the scope of a variable.
-<span class="lineno">  560 </span>decrBitSet :: BitSet -&gt; BitSet
-<span class="lineno">  561 </span><span class="decl"><span class="istickedoff">decrBitSet (BitSet i) = BitSet (shiftR i 1)</span></span>
-<span class="lineno">  562 </span>
-<span class="lineno">  563 </span>-- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
-<span class="lineno">  564 </span>-- removing any value less than @N@. This is the same as calling 'decrBitSet'
-<span class="lineno">  565 </span>-- @N@ times.
-<span class="lineno">  566 </span>multiDecrBitSet :: Int -&gt; BitSet -&gt; BitSet
-<span class="lineno">  567 </span><span class="decl"><span class="nottickedoff">multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)</span></span>
-<span class="lineno">  568 </span>
-<span class="lineno">  569 </span>-- | The 'BitSet' containing all elements less than a given index @i@
-<span class="lineno">  570 </span>completeBitSet :: Int -&gt; BitSet
-<span class="lineno">  571 </span><span class="decl"><span class="istickedoff">completeBitSet i = BitSet (bit i - 1)</span></span>
-<span class="lineno">  572 </span>
-<span class="lineno">  573 </span>-- | Compute the smallest element of a 'BitSet', if any
-<span class="lineno">  574 </span>smallestBitSetElem :: BitSet -&gt; Maybe Int
-<span class="lineno">  575 </span><span class="decl"><span class="nottickedoff">smallestBitSetElem (BitSet 0) = Nothing</span>
-<span class="lineno">  576 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) | i &lt; 0 = error &quot;smallestBitSetElem&quot;</span>
-<span class="lineno">  577 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) = Just $ go 0 i where</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; Integer -&gt; Int</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">go !shft !x</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">| xw == 0   = go (shft+64) (shiftR x 64)</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise = shft + countTrailingZeros xw</span>
-<span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">where xw :: Word64</span>
-<span class="lineno">  583 </span><span class="spaces">          </span><span class="nottickedoff">xw = fromInteger x</span></span>
-<span class="lineno">  584 </span>
-<span class="lineno">  585 </span>-- | Compute the list of all elements of a 'BitSet'
-<span class="lineno">  586 </span>bitSetElems :: BitSet -&gt; [Int]
-<span class="lineno">  587 </span><span class="decl"><span class="nottickedoff">bitSetElems = go 0 where</span>
-<span class="lineno">  588 </span><span class="spaces">  </span><span class="nottickedoff">-- Return the addition of shft to all elements of a BitSet</span>
-<span class="lineno">  589 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; BitSet -&gt; [Int]</span>
-<span class="lineno">  590 </span><span class="spaces">  </span><span class="nottickedoff">go shft bs = case smallestBitSetElem bs of</span>
-<span class="lineno">  591 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; []</span>
-<span class="lineno">  592 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt;</span>
-<span class="lineno">  593 </span><span class="spaces">      </span><span class="nottickedoff">shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)</span></span>
-<span class="lineno">  594 </span>
-<span class="lineno">  595 </span>-- | Compute the loose de Bruijn indices of a term given the loose
-<span class="lineno">  596 </span>-- indices for its immediate subterms.
-<span class="lineno">  597 </span>looseTermF :: TermF BitSet -&gt; BitSet
-<span class="lineno">  598 </span><span class="decl"><span class="istickedoff">looseTermF tf =</span>
-<span class="lineno">  599 </span><span class="spaces">    </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  600 </span><span class="spaces">      </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' unionBitSets emptyBitSet ftf</span>
-<span class="lineno">  601 </span><span class="spaces">      </span><span class="istickedoff">App l r -&gt; unionBitSets l r</span>
-<span class="lineno">  602 </span><span class="spaces">      </span><span class="istickedoff">Lambda _name tp rhs -&gt; unionBitSets tp (decrBitSet rhs)</span>
-<span class="lineno">  603 </span><span class="spaces">      </span><span class="istickedoff">Pi _name lhs rhs -&gt; unionBitSets lhs (decrBitSet rhs)</span>
-<span class="lineno">  604 </span><span class="spaces">      </span><span class="istickedoff">LocalVar i -&gt; singletonBitSet i</span>
-<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">Constant {} -&gt; emptyBitSet -- assume type is a closed term</span>
-<span class="lineno">  606 </span><span class="spaces">      </span><span class="istickedoff">Variable ec -&gt; ecType ec</span></span>
-<span class="lineno">  607 </span>
-<span class="lineno">  608 </span>-- | Return a bitset containing indices of all loose de Bruijn indices.
-<span class="lineno">  609 </span>looseVars :: Term -&gt; BitSet
-<span class="lineno">  610 </span><span class="decl"><span class="istickedoff">looseVars STApp{ stAppLooseVars = x } = x</span>
-<span class="lineno">  611 </span><span class="spaces"></span><span class="istickedoff">looseVars (Unshared f) = looseTermF (fmap <span class="nottickedoff">looseVars</span> f)</span></span>
-<span class="lineno">  612 </span>
-<span class="lineno">  613 </span>-- | Compute the value of the smallest variable in the term, if any.
-<span class="lineno">  614 </span>smallestLooseVar :: Term -&gt; Maybe Int
-<span class="lineno">  615 </span><span class="decl"><span class="nottickedoff">smallestLooseVar = smallestBitSetElem . looseVars</span></span>
-<span class="lineno">  616 </span>
-<span class="lineno">  617 </span>-- | Test whether a 'Term' is closed, i.e., has no loose de Bruijn indices.
-<span class="lineno">  618 </span>termIsClosed :: Term -&gt; Bool
-<span class="lineno">  619 </span><span class="decl"><span class="istickedoff">termIsClosed t = looseVars t == emptyBitSet</span></span>
-<span class="lineno">  620 </span>
-<span class="lineno">  621 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  534 </span>-- Free de Bruijn Variables ----------------------------------------------------
+<span class="lineno">  535 </span>
+<span class="lineno">  536 </span>-- | A @BitSet@ represents a set of natural numbers.
+<span class="lineno">  537 </span>-- Bit n is a 1 iff n is in the set.
+<span class="lineno">  538 </span>newtype BitSet = BitSet Integer deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  539 </span>
+<span class="lineno">  540 </span>-- | The empty 'BitSet'
+<span class="lineno">  541 </span>emptyBitSet :: BitSet
+<span class="lineno">  542 </span><span class="decl"><span class="istickedoff">emptyBitSet = BitSet 0</span></span>
+<span class="lineno">  543 </span>
+<span class="lineno">  544 </span>-- | The singleton 'BitSet'
+<span class="lineno">  545 </span>singletonBitSet :: Int -&gt; BitSet
+<span class="lineno">  546 </span><span class="decl"><span class="istickedoff">singletonBitSet = BitSet . bit</span></span>
+<span class="lineno">  547 </span>
+<span class="lineno">  548 </span>-- | Test if a number is in a 'BitSet'
+<span class="lineno">  549 </span>inBitSet :: Int -&gt; BitSet -&gt; Bool
+<span class="lineno">  550 </span><span class="decl"><span class="istickedoff">inBitSet i (BitSet j) = testBit j i</span></span>
+<span class="lineno">  551 </span>
+<span class="lineno">  552 </span>-- | Union two 'BitSet's
+<span class="lineno">  553 </span>unionBitSets :: BitSet -&gt; BitSet -&gt; BitSet
+<span class="lineno">  554 </span><span class="decl"><span class="istickedoff">unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)</span></span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>-- | Intersect two 'BitSet's
+<span class="lineno">  557 </span>intersectBitSets :: BitSet -&gt; BitSet -&gt; BitSet
+<span class="lineno">  558 </span><span class="decl"><span class="istickedoff">intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&amp;. i2)</span></span>
+<span class="lineno">  559 </span>
+<span class="lineno">  560 </span>-- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
+<span class="lineno">  561 </span>-- set. This is useful for moving a 'BitSet' out of the scope of a variable.
+<span class="lineno">  562 </span>decrBitSet :: BitSet -&gt; BitSet
+<span class="lineno">  563 </span><span class="decl"><span class="istickedoff">decrBitSet (BitSet i) = BitSet (shiftR i 1)</span></span>
+<span class="lineno">  564 </span>
+<span class="lineno">  565 </span>-- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
+<span class="lineno">  566 </span>-- removing any value less than @N@. This is the same as calling 'decrBitSet'
+<span class="lineno">  567 </span>-- @N@ times.
+<span class="lineno">  568 </span>multiDecrBitSet :: Int -&gt; BitSet -&gt; BitSet
+<span class="lineno">  569 </span><span class="decl"><span class="nottickedoff">multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)</span></span>
+<span class="lineno">  570 </span>
+<span class="lineno">  571 </span>-- | The 'BitSet' containing all elements less than a given index @i@
+<span class="lineno">  572 </span>completeBitSet :: Int -&gt; BitSet
+<span class="lineno">  573 </span><span class="decl"><span class="istickedoff">completeBitSet i = BitSet (bit i - 1)</span></span>
+<span class="lineno">  574 </span>
+<span class="lineno">  575 </span>-- | Compute the smallest element of a 'BitSet', if any
+<span class="lineno">  576 </span>smallestBitSetElem :: BitSet -&gt; Maybe Int
+<span class="lineno">  577 </span><span class="decl"><span class="nottickedoff">smallestBitSetElem (BitSet 0) = Nothing</span>
+<span class="lineno">  578 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) | i &lt; 0 = error &quot;smallestBitSetElem&quot;</span>
+<span class="lineno">  579 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) = Just $ go 0 i where</span>
+<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; Integer -&gt; Int</span>
+<span class="lineno">  581 </span><span class="spaces">  </span><span class="nottickedoff">go !shft !x</span>
+<span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">| xw == 0   = go (shft+64) (shiftR x 64)</span>
+<span class="lineno">  583 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise = shft + countTrailingZeros xw</span>
+<span class="lineno">  584 </span><span class="spaces">    </span><span class="nottickedoff">where xw :: Word64</span>
+<span class="lineno">  585 </span><span class="spaces">          </span><span class="nottickedoff">xw = fromInteger x</span></span>
+<span class="lineno">  586 </span>
+<span class="lineno">  587 </span>-- | Compute the list of all elements of a 'BitSet'
+<span class="lineno">  588 </span>bitSetElems :: BitSet -&gt; [Int]
+<span class="lineno">  589 </span><span class="decl"><span class="nottickedoff">bitSetElems = go 0 where</span>
+<span class="lineno">  590 </span><span class="spaces">  </span><span class="nottickedoff">-- Return the addition of shft to all elements of a BitSet</span>
+<span class="lineno">  591 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; BitSet -&gt; [Int]</span>
+<span class="lineno">  592 </span><span class="spaces">  </span><span class="nottickedoff">go shft bs = case smallestBitSetElem bs of</span>
+<span class="lineno">  593 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; []</span>
+<span class="lineno">  594 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt;</span>
+<span class="lineno">  595 </span><span class="spaces">      </span><span class="nottickedoff">shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)</span></span>
+<span class="lineno">  596 </span>
+<span class="lineno">  597 </span>-- | Compute the loose de Bruijn indices of a term given the loose
+<span class="lineno">  598 </span>-- indices for its immediate subterms.
+<span class="lineno">  599 </span>looseTermF :: TermF BitSet -&gt; BitSet
+<span class="lineno">  600 </span><span class="decl"><span class="istickedoff">looseTermF tf =</span>
+<span class="lineno">  601 </span><span class="spaces">    </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  602 </span><span class="spaces">      </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' unionBitSets emptyBitSet ftf</span>
+<span class="lineno">  603 </span><span class="spaces">      </span><span class="istickedoff">App l r -&gt; unionBitSets l r</span>
+<span class="lineno">  604 </span><span class="spaces">      </span><span class="istickedoff">Lambda _name tp rhs -&gt; unionBitSets tp (decrBitSet rhs)</span>
+<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">Pi _name lhs rhs -&gt; unionBitSets lhs (decrBitSet rhs)</span>
+<span class="lineno">  606 </span><span class="spaces">      </span><span class="istickedoff">LocalVar i -&gt; singletonBitSet i</span>
+<span class="lineno">  607 </span><span class="spaces">      </span><span class="istickedoff">Constant {} -&gt; emptyBitSet -- assume type is a closed term</span>
+<span class="lineno">  608 </span><span class="spaces">      </span><span class="istickedoff">Variable ec -&gt; ecType ec</span></span>
+<span class="lineno">  609 </span>
+<span class="lineno">  610 </span>-- | Return a bitset containing indices of all loose de Bruijn indices.
+<span class="lineno">  611 </span>looseVars :: Term -&gt; BitSet
+<span class="lineno">  612 </span><span class="decl"><span class="istickedoff">looseVars STApp{ stAppLooseVars = x } = x</span>
+<span class="lineno">  613 </span><span class="spaces"></span><span class="istickedoff">looseVars (Unshared f) = looseTermF (fmap <span class="nottickedoff">looseVars</span> f)</span></span>
+<span class="lineno">  614 </span>
+<span class="lineno">  615 </span>-- | Compute the value of the smallest variable in the term, if any.
+<span class="lineno">  616 </span>smallestLooseVar :: Term -&gt; Maybe Int
+<span class="lineno">  617 </span><span class="decl"><span class="nottickedoff">smallestLooseVar = smallestBitSetElem . looseVars</span></span>
+<span class="lineno">  618 </span>
+<span class="lineno">  619 </span>-- | Test whether a 'Term' is closed, i.e., has no loose de Bruijn indices.
+<span class="lineno">  620 </span>termIsClosed :: Term -&gt; Bool
+<span class="lineno">  621 </span><span class="decl"><span class="istickedoff">termIsClosed t = looseVars t == emptyBitSet</span></span>
 <span class="lineno">  622 </span>
-<span class="lineno">  623 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
-<span class="lineno">  624 </span>-- variables of a term, given the free variables for its immediate
-<span class="lineno">  625 </span>-- subterms.
-<span class="lineno">  626 </span>freesTermF :: TermF IntSet -&gt; IntSet
-<span class="lineno">  627 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
-<span class="lineno">  628 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  629 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
-<span class="lineno">  630 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
-<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">Lambda _name tp rhs -&gt; IntSet.union tp rhs</span>
-<span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">Pi _name lhs rhs -&gt; IntSet.union lhs rhs</span>
-<span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">LocalVar _ -&gt; IntSet.empty</span>
-<span class="lineno">  634 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
-<span class="lineno">  635 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; IntSet.singleton (ecVarIndex ec)</span></span>
-<span class="lineno">  636 </span>
-<span class="lineno">  637 </span>-- | Return an 'IntSet' containing the 'VarIndex' of all free
-<span class="lineno">  638 </span>-- variables in the 'Term'.
-<span class="lineno">  639 </span>freeVars :: Term -&gt; IntSet
-<span class="lineno">  640 </span><span class="decl"><span class="istickedoff">freeVars STApp{ stAppFreeVars = s } = s</span>
-<span class="lineno">  641 </span><span class="spaces"></span><span class="istickedoff">freeVars (Unshared tf) = freesTermF (fmap <span class="nottickedoff">freeVars</span> tf)</span></span>
+<span class="lineno">  623 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  624 </span>
+<span class="lineno">  625 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+<span class="lineno">  626 </span>-- variables of a term, given the free variables for its immediate
+<span class="lineno">  627 </span>-- subterms.
+<span class="lineno">  628 </span>freesTermF :: TermF IntSet -&gt; IntSet
+<span class="lineno">  629 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
+<span class="lineno">  630 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  631 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
+<span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
+<span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">Lambda _name tp rhs -&gt; IntSet.union tp rhs</span>
+<span class="lineno">  634 </span><span class="spaces">    </span><span class="istickedoff">Pi _name lhs rhs -&gt; IntSet.union lhs rhs</span>
+<span class="lineno">  635 </span><span class="spaces">    </span><span class="istickedoff">LocalVar _ -&gt; IntSet.empty</span>
+<span class="lineno">  636 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
+<span class="lineno">  637 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; IntSet.singleton (ecVarIndex ec)</span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>-- | Return an 'IntSet' containing the 'VarIndex' of all free
+<span class="lineno">  640 </span>-- variables in the 'Term'.
+<span class="lineno">  641 </span>freeVars :: Term -&gt; IntSet
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">freeVars STApp{ stAppFreeVars = s } = s</span>
+<span class="lineno">  643 </span><span class="spaces"></span><span class="istickedoff">freeVars (Unshared tf) = freesTermF (fmap <span class="nottickedoff">freeVars</span> tf)</span></span>
 
 </pre>
 </body>

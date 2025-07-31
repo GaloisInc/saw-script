@@ -223,7 +223,7 @@ span.spaces    { background: white }
 <span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">Lookup pos rec fld     -&gt; <span class="nottickedoff">Lookup pos (appSubst s rec) fld</span></span>
 <span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">TLookup pos tpl idx    -&gt; <span class="nottickedoff">TLookup pos (appSubst s tpl) idx</span></span>
 <span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">Var _                  -&gt; expr</span>
-<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname pat body -&gt; Lambda <span class="nottickedoff">pos</span> <span class="nottickedoff">mname</span> (appSubst s pat) (appSubst <span class="nottickedoff">s</span> body)</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname pat body -&gt; Lambda <span class="nottickedoff">pos</span> mname (appSubst s pat) (appSubst <span class="nottickedoff">s</span> body)</span>
 <span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">Application pos f v    -&gt; Application pos (appSubst <span class="nottickedoff">s</span> f) (appSubst s v)</span>
 <span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">Let pos dg e           -&gt; Let <span class="nottickedoff">pos</span> (appSubst <span class="nottickedoff">s</span> dg) (appSubst <span class="nottickedoff">s</span> e)</span>
 <span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse pos e e2 e3 -&gt; IfThenElse <span class="nottickedoff">pos</span> (appSubst <span class="nottickedoff">s</span> e) (appSubst <span class="nottickedoff">s</span> e2) (appSubst <span class="nottickedoff">s</span> e3)</span></span>
@@ -232,7 +232,7 @@ span.spaces    { background: white }
 <span class="lineno">  213 </span>  <span class="decl"><span class="istickedoff">appSubst s pat = case pat of</span>
 <span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">PWild pos mt  -&gt; PWild <span class="nottickedoff">pos</span> (appSubst s mt)</span>
 <span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">PVar pos x mt -&gt; PVar <span class="nottickedoff">pos</span> x (appSubst s mt)</span>
-<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">PTuple pos ps -&gt; PTuple <span class="nottickedoff">pos</span> (appSubst <span class="nottickedoff">s</span> ps)</span></span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">PTuple pos ps -&gt; PTuple <span class="nottickedoff">pos</span> (appSubst s ps)</span></span>
 <span class="lineno">  217 </span>
 <span class="lineno">  218 </span>instance AppSubst Stmt where
 <span class="lineno">  219 </span>  <span class="decl"><span class="istickedoff">appSubst s bst = case bst of</span>
@@ -854,7 +854,7 @@ span.spaces    { background: white }
 <span class="lineno">  835 </span><span class="spaces">    </span><span class="istickedoff">PWild _pos mty -&gt; <span class="nottickedoff">inspectMaybeTypeFTVs mty</span></span>
 <span class="lineno">  836 </span><span class="spaces">    </span><span class="istickedoff">PVar _pos _x mty -&gt; inspectMaybeTypeFTVs mty</span>
 <span class="lineno">  837 </span><span class="spaces">    </span><span class="istickedoff">PTuple _pos subpats -&gt;</span>
-<span class="lineno">  838 </span><span class="spaces">        </span><span class="istickedoff">M.unions &lt;$&gt; mapM <span class="nottickedoff">inspectPatternFTVs</span> subpats</span></span>
+<span class="lineno">  838 </span><span class="spaces">        </span><span class="istickedoff">M.unions &lt;$&gt; mapM inspectPatternFTVs subpats</span></span>
 <span class="lineno">  839 </span>
 <span class="lineno">  840 </span>-- Get the free type variables found in a chain of Lambda Exprs.
 <span class="lineno">  841 </span>-- Also return the body expression found on the inside of the chain
@@ -935,10 +935,10 @@ span.spaces    { background: white }
 <span class="lineno">  916 </span><span class="spaces">    </span><span class="istickedoff">PWild _ _ -&gt; <span class="nottickedoff">m</span></span>
 <span class="lineno">  917 </span><span class="spaces">    </span><span class="istickedoff">PVar _ x _ -&gt; withVar x s m</span>
 <span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">PTuple _ ps -&gt;</span>
-<span class="lineno">  919 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case t of</span></span>
-<span class="lineno">  920 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">TyCon _pos (TupleCon _) ts -&gt; foldr ($) m</span></span>
-<span class="lineno">  921 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[ withPatternSchema p (Forall vs t') | (p, t') &lt;- zip ps ts ]</span></span>
-<span class="lineno">  922 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; m</span></span></span>
+<span class="lineno">  919 </span><span class="spaces">      </span><span class="istickedoff">case t of</span>
+<span class="lineno">  920 </span><span class="spaces">        </span><span class="istickedoff">TyCon _pos (TupleCon _) ts -&gt; foldr ($) m</span>
+<span class="lineno">  921 </span><span class="spaces">          </span><span class="istickedoff">[ withPatternSchema p (Forall vs t') | (p, t') &lt;- zip ps ts ]</span>
+<span class="lineno">  922 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">m</span></span></span>
 <span class="lineno">  923 </span>
 <span class="lineno">  924 </span>-- wrap the action m with types for the vars in a declaration.
 <span class="lineno">  925 </span>--
@@ -1088,7 +1088,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1069 </span><span class="spaces">  </span><span class="istickedoff">Lambda pos mname pat body -&gt;</span>
 <span class="lineno"> 1070 </span><span class="spaces">    </span><span class="istickedoff">do (pt, pat') &lt;- inferPattern pat</span>
 <span class="lineno"> 1071 </span><span class="spaces">       </span><span class="istickedoff">(body', t) &lt;- withPattern pat' $ inferExpr (ln, body)</span>
-<span class="lineno"> 1072 </span><span class="spaces">       </span><span class="istickedoff">return (Lambda <span class="nottickedoff">pos</span> <span class="nottickedoff">mname</span> pat' body', tFun (PosInferred InfContext (getPos body)) pt t)</span>
+<span class="lineno"> 1072 </span><span class="spaces">       </span><span class="istickedoff">return (Lambda <span class="nottickedoff">pos</span> mname pat' body', tFun (PosInferred InfContext (getPos body)) pt t)</span>
 <span class="lineno"> 1073 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1074 </span><span class="spaces">  </span><span class="istickedoff">Application pos f arg -&gt;</span>
 <span class="lineno"> 1075 </span><span class="spaces">    </span><span class="istickedoff">do argtype &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
