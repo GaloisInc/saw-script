@@ -1895,13 +1895,10 @@ scConstant :: SharedContext
 scConstant sc name rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
-     let ecs = getAllExts rhs
-     rhs' <- scAbstractExts sc ecs rhs
-     ty' <- scFunAll sc (map ecType ecs) ty
+     unless (null (getAllExts rhs)) $
+       fail "scConstant: term contains free variables"
      nm <- scFreshName sc name
-     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scVariable sc) ecs
-     scApplyAll sc t args
+     scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 -- FIXME: Regarding comments,
 --  - PROBLEM: the previous and the next function have the same
@@ -1921,13 +1918,10 @@ scConstant' :: SharedContext
 scConstant' sc nmi rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
-     let ecs = getAllExts rhs
-     rhs' <- scAbstractExts sc ecs rhs
-     ty' <- scFunAll sc (map ecType ecs) ty
+     unless (null (getAllExts rhs)) $
+       fail "scConstant: term contains free variables"
      nm <- scRegisterName sc nmi
-     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scVariable sc) ecs
-     scApplyAll sc t args
+     scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 
 -- | Create an abstract and opaque constant with the specified name and type.
