@@ -283,7 +283,7 @@ span.spaces    { background: white }
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">stateType &lt;- fieldsToType <span class="nottickedoff">sc</span> $ s ^. yosysSequentialStateFields</span>
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">initialStateEC &lt;- liftIO $ SC.scFreshEC sc &quot;initial_state&quot; stateType</span>
 <span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">initialState &lt;- liftIO $ SC.scVariable sc initialStateEC</span>
-<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">(_, outputs) &lt;- foldM (\acc i -&gt; compose1 i acc) (initialState, Map.empty) [0..n]</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">(_, outputs) &lt;- foldM (\acc i -&gt; compose1 i acc) (initialState, Map.empty) [0..n-1]</span>
 <span class="lineno">  268 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">outputRecord &lt;- cryptolRecord <span class="nottickedoff">sc</span> outputs</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- liftIO $ SC.scAbstractExts sc [initialStateEC, extendedInputRecordEC] outputRecord</span>

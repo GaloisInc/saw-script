@@ -116,7 +116,7 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span>  Coq.Ident {- ^ Section name -} -&gt;
 <span class="lineno">   98 </span>  TranslationConfiguration -&gt;
 <span class="lineno">   99 </span>  -- | List of already translated global declarations
-<span class="lineno">  100 </span>  [String] -&gt;
+<span class="lineno">  100 </span>  [Coq.Ident] -&gt;
 <span class="lineno">  101 </span>  CryptolModule -&gt;
 <span class="lineno">  102 </span>  IO (Either (TranslationError Term) (Doc ann))
 <span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env nm configuration globalDecls m = do</span>

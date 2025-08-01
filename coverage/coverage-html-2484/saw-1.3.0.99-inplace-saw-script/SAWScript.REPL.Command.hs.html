@@ -88,7 +88,7 @@ span.spaces    { background: white }
 <span class="lineno">   69 </span>import SAWScript.Panic
 <span class="lineno">   70 </span>import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 <span class="lineno">   71 </span>import SAWScript.Search (compileSearchPattern, matchSearchPattern)
-<span class="lineno">   72 </span>import SAWScript.Interpreter (interpretStmt)
+<span class="lineno">   72 </span>import SAWScript.Interpreter (interpretTopStmt)
 <span class="lineno">   73 </span>import qualified SAWScript.Lexer (lexSAW)
 <span class="lineno">   74 </span>import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 <span class="lineno">   75 </span>import SAWCentral.TopLevel (TopLevelRW(..))
@@ -312,7 +312,7 @@ span.spaces    { background: white }
 <span class="lineno">  293 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  294 </span><span class="spaces">         </span><span class="istickedoff">moreMatches matches =</span>
 <span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let n = Map.size matches in</span>
-<span class="lineno">  296 </span><span class="spaces">             </span><span class="istickedoff">if n == 1 then &quot;1 more match&quot;</span>
+<span class="lineno">  296 </span><span class="spaces">             </span><span class="istickedoff">if <span class="tickonlyfalse">n == 1</span> then <span class="nottickedoff">&quot;1 more match&quot;</span></span>
 <span class="lineno">  297 </span><span class="spaces">             </span><span class="istickedoff">else show n ++ &quot; more matches&quot;</span>
 <span class="lineno">  298 </span><span class="spaces">         </span><span class="istickedoff">alsoExperimental =</span>
 <span class="lineno">  299 </span><span class="spaces">             </span><span class="istickedoff">if not (Map.null expMatches) then</span>
@@ -425,8 +425,8 @@ span.spaces    { background: white }
 <span class="lineno">  406 </span><span class="spaces">    </span><span class="istickedoff">Right stmt -&gt;</span>
 <span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">do mr &lt;- getProofStateRef</span>
 <span class="lineno">  408 </span><span class="spaces">         </span><span class="istickedoff">case mr of</span>
-<span class="lineno">  409 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretStmt True stmt)</span>
-<span class="lineno">  410 </span><span class="spaces">           </span><span class="istickedoff">Just r  -&gt; <span class="nottickedoff">void $ liftProofScript (interpretStmt True stmt) r</span></span></span>
+<span class="lineno">  409 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretTopStmt True stmt)</span>
+<span class="lineno">  410 </span><span class="spaces">           </span><span class="istickedoff">Just r  -&gt; void $ liftProofScript (interpretTopStmt True stmt) r</span></span>
 <span class="lineno">  411 </span>
 <span class="lineno">  412 </span>replFileName :: String
 <span class="lineno">  413 </span><span class="decl"><span class="istickedoff">replFileName = &quot;&lt;stdin&gt;&quot;</span></span>

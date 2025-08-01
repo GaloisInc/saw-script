@@ -312,7 +312,7 @@ span.spaces    { background: white }
 <span class="lineno">  293 </span>               , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">afterMatchExecute</span></span></span> :: Bool }
 <span class="lineno">  294 </span>
 <span class="lineno">  295 </span>-- | The type of the line-by-line interpreter, which needs to be passed in another module to avoid circularity
-<span class="lineno">  296 </span>type StmtInterpreter = TopLevelRO -&gt; TopLevelRW -&gt; [SAWScript.Stmt] -&gt; IO Value
+<span class="lineno">  296 </span>type StmtInterpreter = TopLevelRO -&gt; TopLevelRW -&gt; [SAWScript.Stmt] -&gt; IO ()
 <span class="lineno">  297 </span>
 <span class="lineno">  298 </span>-- | How to interpret a MatchResult to the TopLevel monad
 <span class="lineno">  299 </span>actAfterMatch :: StmtInterpreter -&gt; MatchResult -&gt; TopLevel ()

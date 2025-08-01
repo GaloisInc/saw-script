@@ -292,7 +292,7 @@ span.spaces    { background: white }
 <span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">-- saves the names associated with those bound variables.</span>
 <span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">match :: Int -&gt; [(LocalName, Term)] -&gt; Term -&gt; Term -&gt; MatchState -&gt;</span>
 <span class="lineno">  275 </span><span class="spaces">             </span><span class="istickedoff">MaybeT IO MatchState</span>
-<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">match _ _ t@(STApp{stAppIndex = i}) (STApp{stAppIndex = j}) s</span>
 <span class="lineno">  277 </span><span class="spaces">      </span><span class="istickedoff">| termIsClosed t &amp;&amp; i == j = return s</span>
 <span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">match depth env x y s@(MatchState m cs) =</span>
 <span class="lineno">  279 </span><span class="spaces">      </span><span class="istickedoff">-- (lift $ putStrLn $ &quot;matching (lhs): &quot; ++ scPrettyTerm PPS.defaultOpts x) &gt;&gt;</span>
@@ -311,16 +311,16 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff">let fvj = foldl <span class="nottickedoff">unionBitSets</span> emptyBitSet (map <span class="nottickedoff">singletonBitSet</span> js)</span>
 <span class="lineno">  293 </span><span class="spaces">             </span><span class="istickedoff">let fvy = looseVars y `intersectBitSets` (completeBitSet depth)</span>
 <span class="lineno">  294 </span><span class="spaces">             </span><span class="istickedoff">guard (fvy `unionBitSets` fvj == fvj)</span>
-<span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let fixVar t (nm, ty) =</span>
-<span class="lineno">  296 </span><span class="spaces">                   </span><span class="istickedoff">do ec &lt;- scFreshEC sc nm ty</span>
-<span class="lineno">  297 </span><span class="spaces">                      </span><span class="istickedoff">v &lt;- scVariable sc ec</span>
-<span class="lineno">  298 </span><span class="spaces">                      </span><span class="istickedoff">t' &lt;- instantiateVar sc 0 <span class="nottickedoff">v</span> t</span>
-<span class="lineno">  299 </span><span class="spaces">                      </span><span class="istickedoff">return (t', <span class="nottickedoff">ec</span>)</span>
+<span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let <span class="nottickedoff">fixVar t (nm, ty) =</span></span>
+<span class="lineno">  296 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do ec &lt;- scFreshEC sc nm ty</span></span>
+<span class="lineno">  297 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">v &lt;- scVariable sc ec</span></span>
+<span class="lineno">  298 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- instantiateVar sc 0 v t</span></span>
+<span class="lineno">  299 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">return (t', ec)</span></span>
 <span class="lineno">  300 </span><span class="spaces">             </span><span class="istickedoff">let fixVars t [] = return (t, <span class="nottickedoff">[]</span>)</span>
 <span class="lineno">  301 </span><span class="spaces">                 </span><span class="istickedoff">fixVars t (ty : tys) =</span>
-<span class="lineno">  302 </span><span class="spaces">                   </span><span class="istickedoff">do (t', ec) &lt;- fixVar t ty</span>
-<span class="lineno">  303 </span><span class="spaces">                      </span><span class="istickedoff">(t'', ecs) &lt;- fixVars t' tys</span>
-<span class="lineno">  304 </span><span class="spaces">                      </span><span class="istickedoff">return (t'', <span class="nottickedoff">ec : ecs</span>)</span>
+<span class="lineno">  302 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do (t', ec) &lt;- fixVar t ty</span></span>
+<span class="lineno">  303 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">(t'', ecs) &lt;- fixVars t' tys</span></span>
+<span class="lineno">  304 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">return (t'', ec : ecs)</span></span>
 <span class="lineno">  305 </span><span class="spaces">             </span><span class="istickedoff">-- replace local bound variables with global ones</span>
 <span class="lineno">  306 </span><span class="spaces">             </span><span class="istickedoff">-- this also decrements loose variables in y by `depth`</span>
 <span class="lineno">  307 </span><span class="spaces">             </span><span class="istickedoff">(y1, ecs) &lt;- lift $ fixVars y env</span>
@@ -346,15 +346,15 @@ span.spaces    { background: white }
 <span class="lineno">  327 </span><span class="spaces">            </span><span class="istickedoff">(App x1 x2, App y1 y2) -&gt;</span>
 <span class="lineno">  328 </span><span class="spaces">              </span><span class="istickedoff">match depth env x1 y1 s &gt;&gt;= match depth env x2 y2</span>
 <span class="lineno">  329 </span><span class="spaces">            </span><span class="istickedoff">(Lambda _ t1 x1, Lambda nm t2 x2) -&gt;</span>
-<span class="lineno">  330 </span><span class="spaces">              </span><span class="istickedoff">match <span class="nottickedoff">depth</span> <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= match (depth + 1) ((nm, t2) : env) x1 x2</span>
+<span class="lineno">  330 </span><span class="spaces">              </span><span class="istickedoff">match <span class="nottickedoff">depth</span> <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= match (depth + 1) <span class="nottickedoff">((nm, t2) : env)</span> x1 x2</span>
 <span class="lineno">  331 </span><span class="spaces">            </span><span class="istickedoff">(Pi _ t1 x1, Pi nm t2 x2) -&gt;</span>
-<span class="lineno">  332 </span><span class="spaces">              </span><span class="istickedoff">match depth <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= <span class="nottickedoff">match (depth + 1) ((nm, t2) : env) x1 x2</span></span>
+<span class="lineno">  332 </span><span class="spaces">              </span><span class="istickedoff">match depth <span class="nottickedoff">env</span> t1 t2 s &gt;&gt;= match <span class="nottickedoff">(depth + 1)</span> <span class="nottickedoff">((nm, t2) : env)</span> x1 x2</span>
 <span class="lineno">  333 </span><span class="spaces">            </span><span class="istickedoff">(App _ _, FTermF (NatLit n)) -&gt;</span>
 <span class="lineno">  334 </span><span class="spaces">              </span><span class="istickedoff">-- add deferred constraint</span>
 <span class="lineno">  335 </span><span class="spaces">              </span><span class="istickedoff">return (MatchState m ((x, <span class="nottickedoff">n</span>) : <span class="nottickedoff">cs</span>))</span>
 <span class="lineno">  336 </span><span class="spaces">            </span><span class="istickedoff">(_, _) -&gt;</span>
 <span class="lineno">  337 </span><span class="spaces">              </span><span class="istickedoff">-- other possible matches are local vars and constants</span>
-<span class="lineno">  338 </span><span class="spaces">              </span><span class="istickedoff">if x == y then return s else mzero</span></span>
+<span class="lineno">  338 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlyfalse">x == y</span> then <span class="nottickedoff">return s</span> else mzero</span></span>
 <span class="lineno">  339 </span>
 <span class="lineno">  340 </span>----------------------------------------------------------------------
 <span class="lineno">  341 </span>-- Building rewrite rules
@@ -512,7 +512,7 @@ span.spaces    { background: white }
 <span class="lineno">  493 </span><span class="spaces">                  </span><span class="istickedoff">argECs &lt;- fst &lt;$&gt; scAsPiList sc ctorT</span>
 <span class="lineno">  494 </span><span class="spaces">                  </span><span class="istickedoff">-- Build a fully-applied constructor @c@.</span>
 <span class="lineno">  495 </span><span class="spaces">                  </span><span class="istickedoff">args &lt;- traverse (scVariable sc) argECs</span>
-<span class="lineno">  496 </span><span class="spaces">                  </span><span class="istickedoff">c &lt;- scCtorAppParams sc (ctorName ctor) params1 args</span>
+<span class="lineno">  496 </span><span class="spaces">                  </span><span class="istickedoff">c &lt;- scConstApply sc (ctorName ctor) (params1 ++ args)</span>
 <span class="lineno">  497 </span><span class="spaces">                  </span><span class="istickedoff">-- Define function to substitute the constructor @c@</span>
 <span class="lineno">  498 </span><span class="spaces">                  </span><span class="istickedoff">-- in for the old local variable @ec@.</span>
 <span class="lineno">  499 </span><span class="spaces">                  </span><span class="istickedoff">let subst = IntMap.singleton (ecVarIndex ec) c</span>

@@ -69,7 +69,7 @@ span.spaces    { background: white }
 <span class="lineno">   50 </span>    DefPreserve
 <span class="lineno">   51 </span>  | -- | Translate the identifier into the given Coq identifer,
 <span class="lineno">   52 </span>    --   and otherwise directly translate the associated SAWCore declaration.
-<span class="lineno">   53 </span>    DefRename String
+<span class="lineno">   53 </span>    DefRename Coq.Ident
 <span class="lineno">   54 </span>  | -- | Replace the declaration of the identifier with the given text.
 <span class="lineno">   55 </span>    DefReplace  String
 <span class="lineno">   56 </span>    -- | Skip the declartion of the identifier altogether.
@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>    --   identifier should be an &quot;explicit&quot; identifier with a leading \&quot;\@\&quot;
 <span class="lineno">   66 </span>    --   symbol, which indicates to Coq that all implicit arguments should be
 <span class="lineno">   67 </span>    --   treated as explicit.
-<span class="lineno">   68 </span>  | UseRename   (Maybe ModuleName) String Bool
+<span class="lineno">   68 </span>  | UseRename (Maybe ModuleName) Coq.Ident Bool
 <span class="lineno">   69 </span>    -- | Apply a macro function to the translations of the first @n@ SAWCore
 <span class="lineno">   70 </span>    -- arguments of this identifier
 <span class="lineno">   71 </span>  | UseMacro Int ([Coq.Term] -&gt; Coq.Term)
@@ -131,7 +131,7 @@ span.spaces    { background: white }
 <span class="lineno">  112 </span>-- | Use `mapsTo` for identifiers whose definition has a matching definition
 <span class="lineno">  113 </span>-- already on the Coq side.  As such, their definition can be skipped, and use
 <span class="lineno">  114 </span>-- sites can be replaced by the appropriate call.
-<span class="lineno">  115 </span>mapsTo :: ModuleName -&gt; String -&gt; IdentSpecialTreatment
+<span class="lineno">  115 </span>mapsTo :: ModuleName -&gt; Coq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  116 </span><span class="decl"><span class="nottickedoff">mapsTo targetModule targetName = IdentSpecialTreatment</span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseRename (Just targetModule) targetName False</span>
@@ -139,14 +139,14 @@ span.spaces    { background: white }
 <span class="lineno">  120 </span>
 <span class="lineno">  121 </span>-- | Like 'mapsTo' but use an explicit variable reference so
 <span class="lineno">  122 </span>-- that all implicit arguments must be provided.
-<span class="lineno">  123 </span>mapsToExpl :: ModuleName -&gt; String -&gt; IdentSpecialTreatment
+<span class="lineno">  123 </span>mapsToExpl :: ModuleName -&gt; Coq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">mapsToExpl targetModule targetName = IdentSpecialTreatment</span>
 <span class="lineno">  125 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseRename (Just targetModule) targetName True</span>
 <span class="lineno">  127 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
 <span class="lineno">  128 </span>
 <span class="lineno">  129 </span>-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
-<span class="lineno">  130 </span>mapsToExplInferArg :: String -&gt; Int -&gt; IdentSpecialTreatment
+<span class="lineno">  130 </span>mapsToExplInferArg :: Coq.Ident -&gt; Int -&gt; IdentSpecialTreatment
 <span class="lineno">  131 </span><span class="decl"><span class="nottickedoff">mapsToExplInferArg targetName argNum = IdentSpecialTreatment</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefSkip</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseMacro argNum (\args -&gt;</span>
@@ -171,7 +171,7 @@ span.spaces    { background: white }
 <span class="lineno">  152 </span>-- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
 <span class="lineno">  153 </span>-- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
 <span class="lineno">  154 </span>-- Also useful for translation notations, until they are better supported.
-<span class="lineno">  155 </span>rename :: String -&gt; IdentSpecialTreatment
+<span class="lineno">  155 </span>rename :: Coq.Ident -&gt; IdentSpecialTreatment
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">rename ident = IdentSpecialTreatment</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">{ atDefSite = DefRename ident</span>
 <span class="lineno">  158 </span><span class="spaces">  </span><span class="nottickedoff">, atUseSite = UseRename Nothing ident False</span>
@@ -574,7 +574,7 @@ span.spaces    { background: white }
 <span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">Map.fromList $</span>
 <span class="lineno">  556 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">-- Type descriptions</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">map (\str -&gt; (str, mapsTo specMModule str))</span>
+<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">map (\str -&gt; (str, mapsTo specMModule (Coq.Ident str)))</span>
 <span class="lineno">  559 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;ExprKind&quot;, &quot;Kind_unit&quot;, &quot;Kind_bool&quot;, &quot;Kind_nat&quot;, &quot;Kind_bv&quot;</span>
 <span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;TpExprUnOp&quot;, &quot;UnOp_BVToNat&quot;, &quot;UnOp_NatToBV&quot;</span>
 <span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;TpExprBinOp&quot;, &quot;BinOp_AddNat&quot;, &quot;BinOp_MulNat&quot;, &quot;BinOp_AddBV&quot;, &quot;BinOp_MulBV&quot;</span>
@@ -617,10 +617,10 @@ span.spaces    { background: white }
 <span class="lineno">  598 </span>
 <span class="lineno">  599 </span>
 <span class="lineno">  600 </span>
-<span class="lineno">  601 </span>escapeIdent :: String -&gt; String
-<span class="lineno">  602 </span><span class="decl"><span class="nottickedoff">escapeIdent str</span>
-<span class="lineno">  603 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = str</span>
-<span class="lineno">  604 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = &quot;Op_&quot; ++ zEncodeString str</span>
+<span class="lineno">  601 </span>escapeIdent :: Coq.Ident -&gt; Coq.Ident
+<span class="lineno">  602 </span><span class="decl"><span class="nottickedoff">escapeIdent (Coq.Ident str)</span>
+<span class="lineno">  603 </span><span class="spaces">  </span><span class="nottickedoff">| all okChar str = Coq.Ident str</span>
+<span class="lineno">  604 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise      = Coq.Ident (&quot;Op_&quot; ++ zEncodeString str)</span>
 <span class="lineno">  605 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
 <span class="lineno">  606 </span><span class="spaces">   </span><span class="nottickedoff">okChar x = isAlphaNum x || x `elem` (&quot;_'&quot; :: String)</span></span>
 <span class="lineno">  607 </span>

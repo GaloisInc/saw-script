@@ -273,9 +273,9 @@ span.spaces    { background: white }
 <span class="lineno">  254 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
 <span class="lineno">  255 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ Name vi' nmi</span></span>
 <span class="lineno">  256 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
-<span class="lineno">  257 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do vi' &lt;- lift $ scRegisterName sc nmi</span></span>
-<span class="lineno">  258 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi vi' vs)</span></span>
-<span class="lineno">  259 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure $ Name vi' nmi</span></span>
+<span class="lineno">  257 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do nm &lt;- lift $ scRegisterName sc nmi</span></span>
+<span class="lineno">  258 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi (nameIndex nm) vs)</span></span>
+<span class="lineno">  259 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure nm</span></span>
 <span class="lineno">  260 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">readName :: String -&gt; ReadM Name</span>
 <span class="lineno">  262 </span><span class="spaces">    </span><span class="istickedoff">readName i =</span>
@@ -299,9 +299,9 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
 <span class="lineno">  281 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ EC vi' nmi t'</span></span>
 <span class="lineno">  282 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
-<span class="lineno">  283 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do vi' &lt;- lift $ scRegisterName sc nmi</span></span>
-<span class="lineno">  284 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi vi' vs)</span></span>
-<span class="lineno">  285 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure $ EC vi' nmi t'</span></span>
+<span class="lineno">  283 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do nm &lt;- lift $ scRegisterName sc nmi</span></span>
+<span class="lineno">  284 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi (nameIndex nm) vs)</span></span>
+<span class="lineno">  285 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure $ EC (nameIndex nm) nmi t'</span></span>
 <span class="lineno">  286 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">readEC :: String -&gt; String -&gt; ReadM (ExtCns Term)</span>
 <span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">readEC i t =</span>

@@ -1550,14 +1550,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1531 </span>  X86Sim (LLVMOverrideMatcher md ())
 <span class="lineno"> 1532 </span><span class="decl"><span class="istickedoff">assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do</span>
 <span class="lineno"> 1533 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
-<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
+<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use <span class="nottickedoff">x86SharedContext</span></span>
 <span class="lineno"> 1535 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
 <span class="lineno"> 1536 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
 <span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
 <span class="lineno"> 1538 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1539 </span><span class="spaces">  </span><span class="istickedoff">ptr &lt;- resolvePtrSetupValue <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> tptr</span>
 <span class="lineno"> 1540 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
-<span class="lineno"> 1541 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
+<span class="lineno"> 1541 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
 <span class="lineno"> 1542 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
 <span class="lineno"> 1543 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1544 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
