@@ -38,7 +38,7 @@ module CryptolSAWCore.CryptolEnv
   , mkCryEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
-  , setFocusModule    -- FIXME:MT: keep?
+  , setFocusModule    -- FIXME:MT: remove or make a "full feature"
   )
   where
 
@@ -312,6 +312,8 @@ ioParseResult res = case res of
 
 -- setFocusModule --------------------------------------------------------------
 
+-- FIXME: really the name you want?
+--   MT: source of this code?
 setFocusModule :: String -> ME.ModuleEnv -> IO ME.ModuleEnv
 setFocusModule modNm me0 =
   case P.parseImpName modNm of
@@ -790,16 +792,22 @@ importModule ::
   IO CryptolEnv
 importModule sc env src as vis imps = do
   let modEnv = eModuleEnv env
-  (mtop, modEnv') <-
+  (m, modEnv') <-
     liftModuleM modEnv $
-    case src of
-      Left path -> MB.loadModuleByPath True path
-      Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
-  m <- case mtop of
-         T.TCTopModule m -> pure m
-         T.TCTopSignature {} ->
-            fail "Expected a module but found an interface."
-  checkNotParameterized m
+      do
+      mtop <-
+        case src of
+          Left path -> MB.loadModuleByPath True path
+          Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
+      m <- case mtop of
+             T.TCTopModule m -> pure m
+             T.TCTopSignature {} ->
+                fail "Expected a module but found an interface."
+      MM.io $ checkNotParameterized m
+      MM.setFocusedModule (P.ImpTop (T.mName m))
+        -- FIXME: works at all?
+        -- FIXME: only handles the 'last' imported module, AFAIK.
+      return m
 
   when debug $ do
     putStrLn $ unwords [ "LOG: importModule ("
@@ -812,6 +820,7 @@ importModule sc env src as vis imps = do
                  writeFile (fp ++ ".ast-im") (ppShow m)
                  ME.logModuleEnv (fp ++ ".im.modenv") modEnv'
       Right _ -> return ()
+
 
   -- Regenerate SharedTerm environment.
   let oldModNames   = map ME.lmName
@@ -938,6 +947,25 @@ resolveIdentifier env nm =
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
 
+{-
+
+# in deps/cryptol/src/Cryptol/ModuleSystem/Monad.hs:
+
+getFocusedModule :: ModuleM (Maybe (P.ImpName T.Name))
+getFocusedModule  = ModuleT (meFocusedModule `fmap` get)
+
+getFocusedEnv :: ModuleM ModContext
+getFocusedEnv  = ModuleT (focusedEnv `fmap` get)
+
+getFocusedEnv''
+
+-- new code
+
+focusedEnv''
+focusedEnv'' :: [ImpName Name] -> ModuleEnv -> ModContext
+
+-}
+
 
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
@@ -953,12 +981,27 @@ parseTypedTerm sc env input = do
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
 
-    -- Eliminate patterns
+    -- FIXME: refactor: improve var names here:
+
+    -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
+
+    -- FIXME: WIP: copied from cryptol's `checkExpr`:
+    fe <- MM.getFocusedEnv  {- MT:  ::  M.ModContext -}
+    let {- MT: just nabbing fields: -}
+        -- params = mctxParams fe
+        -- decls  = mctxDecls fe
+        nameEnv  = ME.mctxNames fe
+        -- FIXME:WIP:MT:
+        --  - this is empty when nothing focused.
+        --  - this WORKS after we've `sawscript> focus MODULENAME`
+        --    - for both load and import
+        -- FIXME:WIP:MT:
+        --  - are there other means by which other top-levels are in env?
 
     -- Resolve names
     -- let nameEnv = getNamingEnv env       -- FIXME:MT:restore
-    nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
+    -- nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
     when debug $ MM.io $ do
       putStrLn "- LOG: nameEnv:"
       print $ pp nameEnv
