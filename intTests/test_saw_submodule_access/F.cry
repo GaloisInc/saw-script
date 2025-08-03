@@ -3,17 +3,20 @@ import B
 import C
 
 top0  = 2000 + b + c
-topd2 = 5  + D2::d2
-topd3 = 10 + D2::D3::d3
+topd2 = 5  + D3::d2
+topd3 = 10 + D3::D4::d3
 
-submodule D2 where
+d00 : [32]
+d00 = 1 // let's conflict with D.cry
+
+submodule D3 where
   d2   = 10000 + top0
-  d3D2 =     1 + D3::d3
+  d3D2 =     1 + D4::d3
   d2'  =     1 + d3P
   
   private
     d3P = 1 + d2
   
-  submodule D3 where
+  submodule D4 where
     d3 = 20000 + top0 + d2
     

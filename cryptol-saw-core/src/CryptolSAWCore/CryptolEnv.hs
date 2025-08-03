@@ -312,6 +312,7 @@ ioParseResult res = case res of
 
 -- setFocusModule --------------------------------------------------------------
 
+-- FIXME: just drop this, what you would really want is add/substract from import set.
 -- FIXME: really the name you want?
 --   MT: source of this code?
 setFocusModule :: String -> ME.ModuleEnv -> IO ME.ModuleEnv
@@ -327,6 +328,22 @@ setFocusModule modNm me0 =
             Nothing  -> panic "setFocusModule:"
                           ["cannot find" <> Text.pack (show modNm)]
 
+-- FIXME
+--  - can this replace next?
+--  - add error when you access conflicting name.
+--  - more testing.
+
+getNamingEnv2 :: CryptolEnv -> MR.NamingEnv
+getNamingEnv2 env =
+
+  eExtraNames env `MR.shadowing` nameEnv
+
+  where
+  mods = map importToModImp (eImports env)
+  modEnv = eModuleEnv env
+  nameEnv = ME.mctxNames $ ME.focusedEnvL mods modEnv
+
+  importToModImp (_,imprt) = P.ImpTop (T.iModule imprt)
 
 -- Rename ----------------------------------------------------------------------
 --  FIXME: why ^ "Rename"?  I see we pass the result of this to 'MB.rename'
@@ -430,6 +447,7 @@ getNamingEnvLog env =
         --   BH: not sure anything like this exists in Cryptol REPL
         --   saw - a union of scopes/modules, not just one module.
         --   idea: special name for top-level [interactive] module: then use that.
+
 
 -- | Generate all the names in a module that are inside submodules.
 --    TODO: ... that are public.
@@ -804,7 +822,7 @@ importModule sc env src as vis imps = do
              T.TCTopSignature {} ->
                 fail "Expected a module but found an interface."
       MM.io $ checkNotParameterized m
-      MM.setFocusedModule (P.ImpTop (T.mName m))
+      -- MM.setFocusedModule (P.ImpTop (T.mName m))
         -- FIXME: works at all?
         -- FIXME: only handles the 'last' imported module, AFAIK.
       return m
@@ -947,25 +965,6 @@ resolveIdentifier env nm =
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
 
-{-
-
-# in deps/cryptol/src/Cryptol/ModuleSystem/Monad.hs:
-
-getFocusedModule :: ModuleM (Maybe (P.ImpName T.Name))
-getFocusedModule  = ModuleT (meFocusedModule `fmap` get)
-
-getFocusedEnv :: ModuleM ModContext
-getFocusedEnv  = ModuleT (focusedEnv `fmap` get)
-
-getFocusedEnv''
-
--- new code
-
-focusedEnv''
-focusedEnv'' :: [ImpName Name] -> ModuleEnv -> ModContext
-
--}
-
 
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
@@ -987,11 +986,12 @@ parseTypedTerm sc env input = do
     npe <- MM.interactive (MB.noPat pexpr)
 
     -- FIXME: WIP: copied from cryptol's `checkExpr`:
-    fe <- MM.getFocusedEnv  {- MT:  ::  M.ModContext -}
-    let {- MT: just nabbing fields: -}
-        -- params = mctxParams fe
-        -- decls  = mctxDecls fe
-        nameEnv  = ME.mctxNames fe
+    let nameEnv = getNamingEnv2 env
+               -- ME.mctxNames <$> MM.getFocusedEnv OLD
+               -- FIXME
+               {- MT:  ::  M.ModContext -}
+                {- MT:  ::  M.NamingEnv -}
+
         -- FIXME:WIP:MT:
         --  - this is empty when nothing focused.
         --  - this WORKS after we've `sawscript> focus MODULENAME`
