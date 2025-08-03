@@ -19,6 +19,7 @@ Thanks for helping to make SAW better for everyone!
 overview
 installing-saw
 invoking-saw
+getting-started
 structure-of-sawscript
 cryptol-and-its-role-in-saw
 loading-code
