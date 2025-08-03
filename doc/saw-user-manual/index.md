@@ -22,7 +22,8 @@ invoking-saw
 getting-started
 languages-in-saw
 structure-of-sawscript
-cryptol-and-its-role-in-saw
+using-cryptol-in-sawscript
+using-cryptol-in-python
 loading-code
 analyzing-hardware-circuits-using-yosys
 creating-symbolic-variables
