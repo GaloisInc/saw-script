@@ -20,6 +20,7 @@ overview
 installing-saw
 invoking-saw
 getting-started
+languages-in-saw
 structure-of-sawscript
 cryptol-and-its-role-in-saw
 loading-code
