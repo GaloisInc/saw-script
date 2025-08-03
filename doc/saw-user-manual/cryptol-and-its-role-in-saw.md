@@ -1,20 +1,42 @@
 # Cryptol and its Role in SAW
 
-Cryptol is a domain-specific language originally designed for the
-high-level specification of cryptographic algorithms. It is general
-enough, however, to describe a wide variety of programs, and is
+Cryptol is a domain-specific modeling and specification language.
+It is integrated into SAW and used for a broad range of tasks.
+Use of SAW for essentially any purpose requires use of Cryptol.
+<!-- XXX Update the Cryptol repository to publish a canonical link for this. -->
+Thus, the 
+[Cryptol manual](https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf)
+is an important additional resource for SAW users.
+
+Cryptol is a pure functional language that was originally developed
+for specification of cryptographic algorithms and protocols.
+It is 
 particularly applicable to describing computations that operate on
 streams of data of some fixed size.
+It is general enough, however, to describe a wide variety of programs.
 
-<!-- N.b. Update the Cryptol repository to publish a canonical version of this. -->
-In addition to being integrated into SAW, Cryptol is a standalone
-language with [its own
-manual](https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf).
+Typically, complex or nontrivial models will be written as one or more
+external Cryptol modules and imported into SAW.
+However, Cryptol fragments can also be included directly into SAWScript
+via quasiquotation.
+<!-- describe how you do this in the python interface -->
 
-SAW includes deep support for Cryptol, and in fact requires the use of
-Cryptol for most non-trivial tasks. To fully understand the rest of
-this manual and to effectively use SAW, you will need to develop at least
-a rudimentary understanding of Cryptol.
+However provided, Cryptol code loaded into SAW is translated into
+SAWCore.
+This makes it possible to combine Cryptol models with other SAW
+facilities, and to reason jointly about Cryptol models and other
+things at the same time.
+For this reason, the most common proof methodology in SAW is to
+relate imported code to a Cryptol model.
+(The second most common proof methodology is probably to use SAW
+to construct proofs _about_ Cryptol models that Cryptol's own proof
+facilities cannot handle.)
+
+
+
+
+
+
 
 The primary use of Cryptol within SAWScript is to construct values of type
 `Term`. Although `Term` values can be constructed from various sources,
