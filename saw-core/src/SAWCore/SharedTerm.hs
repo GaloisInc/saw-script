@@ -1895,13 +1895,16 @@ scConstant :: SharedContext
 scConstant sc name rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
-     let ecs = getAllExts rhs
-     rhs' <- scAbstractExts sc ecs rhs
-     ty' <- scFunAll sc (map ecType ecs) ty
+     unless (null (getAllExts rhs)) $
+       fail $ unlines
+       [ "scConstant: term contains free variables"
+       , "name: " ++ Text.unpack name
+       , "ty: " ++ showTerm ty
+       , "rhs: " ++ showTerm rhs
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       ]
      nm <- scFreshName sc name
-     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scVariable sc) ecs
-     scApplyAll sc t args
+     scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 -- FIXME: Regarding comments,
 --  - PROBLEM: the previous and the next function have the same
@@ -1920,14 +1923,17 @@ scConstant' :: SharedContext
             -> IO Term
 scConstant' sc nmi rhs ty =
   do unless (termIsClosed rhs) $
-       fail "scConstant: term contains loose variables"
-     let ecs = getAllExts rhs
-     rhs' <- scAbstractExts sc ecs rhs
-     ty' <- scFunAll sc (map ecType ecs) ty
+       fail "scConstant': term contains loose variables"
+     unless (null (getAllExts rhs)) $
+       fail $ unlines
+       [ "scConstant': term contains free variables"
+       , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
+       , "ty: " ++ showTerm ty
+       , "rhs: " ++ showTerm rhs
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       ]
      nm <- scRegisterName sc nmi
-     t <- scDeclareDef sc nm NoQualifier ty' (Just rhs')
-     args <- mapM (scVariable sc) ecs
-     scApplyAll sc t args
+     scDeclareDef sc nm NoQualifier ty (Just rhs)
 
 
 -- | Create an abstract and opaque constant with the specified name and type.
