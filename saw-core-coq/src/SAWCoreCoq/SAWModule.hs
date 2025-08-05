@@ -90,7 +90,7 @@ translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
 -- translateDataType (DataType {..})
 --   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
-  case dtNameInfo of
+  case nameInfo dtName of
     ModuleIdentifier dtIdent ->
       atDefSite <$> findSpecialTreatment dtIdent >>= \case
       DefPreserve            -> translateNamed $ Coq.Ident (identName dtIdent)
@@ -98,7 +98,7 @@ translateDataType (DataType {..}) =
       DefReplace  str        -> return $ Coq.Snippet str
       DefSkip                -> return $ skipped dtIdent
     ImportedName{} ->
-      translateNamed $ Coq.Ident (Text.unpack (toShortName dtNameInfo))
+      translateNamed $ Coq.Ident (Text.unpack (toShortName (nameInfo dtName)))
   where
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = do

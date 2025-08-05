@@ -312,7 +312,6 @@ import SAWCore.Module
   ( beginDataType
   , completeDataType
   , dtName
-  , dtNameInfo
   , ctorNumParams
   , ctorName
   , emptyModuleMap
@@ -673,18 +672,16 @@ scBeginDataType ::
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  do nm <- scRegisterName sc (ModuleIdentifier dtIdent)
+  do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scGeneralizeExts sc (dtParams ++ dtIndices) =<< scSort sc dtSort
-     let dtNameInfo = ModuleIdentifier dtIdent
-     let dtVarIndex = nameIndex nm
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
-     scRegisterGlobal sc dtIdent =<< scConst sc (dtName dt)
-     pure nm
+     scRegisterGlobal sc dtIdent =<< scConst sc dtName
+     pure dtName
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()

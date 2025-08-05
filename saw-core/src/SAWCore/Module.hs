@@ -30,7 +30,6 @@ module SAWCore.Module
   , ctorNumArgs
   , DataType(..)
   , dtExtCns
-  , dtName
   , dtNumParams
   , dtNumIndices
     -- * Modules
@@ -227,10 +226,8 @@ instance Show Ctor where
 -- | An inductively-defined datatype
 data DataType =
   DataType
-  { dtNameInfo :: NameInfo
+  { dtName :: Name
     -- ^ The name of this datatype
-  , dtVarIndex :: !VarIndex
-    -- ^ Unique var index for this data type
   , dtParams :: [ExtCns Term]
     -- ^ The context of parameters of this datatype
   , dtIndices :: [ExtCns Term]
@@ -258,11 +255,7 @@ dtNumIndices dt = length $ dtIndices dt
 
 -- | Compute the ExtCns that uniquely references a datatype
 dtExtCns :: DataType -> ExtCns Term
-dtExtCns dt = EC (dtVarIndex dt) (dtNameInfo dt) (dtType dt)
-
--- | Compute the 'Name' that uniquely references a datatype
-dtName :: DataType -> Name
-dtName dt = Name (dtVarIndex dt) (dtNameInfo dt)
+dtExtCns dt = EC (nameIndex (dtName dt)) (nameInfo (dtName dt)) (dtType dt)
 
 instance Eq DataType where
   (==) = lift2 dtName (==)
@@ -271,7 +264,7 @@ instance Ord DataType where
   compare = lift2 dtName compare
 
 instance Show DataType where
-  show = show . dtNameInfo
+  show = show . nameInfo . dtName
 
 
 -- Modules ---------------------------------------------------------------------
@@ -291,11 +284,17 @@ data ResolvedName
   | ResolvedDataType DataType
   | ResolvedDef Def
 
+-- | Get the 'Name' of a 'ResolvedName'.
+resolvedNameName :: ResolvedName -> Name
+resolvedNameName r =
+  case r of
+    ResolvedCtor ctor -> ctorName ctor
+    ResolvedDataType dt -> dtName dt
+    ResolvedDef def -> defName def
+
 -- | Get the 'NameInfo' for a 'ResolvedName'
 resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo (ResolvedCtor ctor) = nameInfo (ctorName ctor)
-resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt
-resolvedNameInfo (ResolvedDef d) = nameInfo (defName d)
+resolvedNameInfo r = nameInfo (resolvedNameName r)
 
 -- | Get the type of a 'ResolvedName' as a 'Term'.
 resolvedNameType :: ResolvedName -> Term
@@ -307,11 +306,7 @@ resolvedNameType r =
 
 -- | Get the 'VarIndex' for a 'ResolvedName'.
 resolvedNameVarIndex :: ResolvedName -> VarIndex
-resolvedNameVarIndex r =
-  case r of
-    ResolvedCtor ctor -> nameIndex (ctorName ctor)
-    ResolvedDataType dt -> dtVarIndex dt
-    ResolvedDef def -> nameIndex (defName def)
+resolvedNameVarIndex r = nameIndex (resolvedNameName r)
 
 -- | Modules define namespaces of datatypes, constructors, and definitions,
 -- i.e., mappings from 'Text' names to these objects. A module is allowed to
@@ -403,7 +398,7 @@ completeDataType ident ctors mm0 =
         do let dt' = dt {dtCtors = ctors}
            let r = ResolvedDataType dt'
            let mm1 = insDeclInMap (identModule ident) (TypeDecl dt') mm0
-           let mm2 = mm1 { mmIndexMap = IntMap.insert (dtVarIndex dt) r (mmIndexMap mm1) }
+           let mm2 = mm1 { mmIndexMap = IntMap.insert (nameIndex (dtName dt)) r (mmIndexMap mm1) }
            foldM (flip insResolvedNameInMap) mm2 (map ResolvedCtor ctors)
     Just (ResolvedDataType _) ->
       panic "completeDataType" ["datatype already completed: " <> str]
