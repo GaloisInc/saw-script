@@ -51,17 +51,18 @@ clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
+        MirVector_Array _ -> error $
+          "clobberSymbolic: MirVector_Array is unsupported, for " ++ nameStr
     go (TupleShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
     go (StructShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
     go (TransparentShape _ shp) rv = go shp rv
     go (EnumShape _ _ _ _ _) _rv =
-      error "Enums not currently supported in overrides"
+        error $ "Enums not currently supported in overrides, for " ++ nameStr
     go (FnPtrShape _ _ _) _rv =
-        error "Function pointers not currently supported in overrides"
-    go (RefShape _ _ _ _) _rv = error "clobberSymbolic: RefShape NYI"
+        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
+    go (RefShape _ _ _ _) _rv = error $ "clobberSymbolic: RefShape NYI, for " ++ nameStr
     go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
         let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
         ref' <- go refShp ref
@@ -96,7 +97,8 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
+        MirVector_Array _ -> error $
+          "clobberSymbolic: MirVector_Array is unsupported, for " ++ nameStr
     go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
         clobberSymbolic sym loc nameStr shp rv
     go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
@@ -115,9 +117,9 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         len' <- go lenShp len
         pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
     go (EnumShape _ _ _ _ _) _rv =
-      error "Enums not currently supported in overrides"
+        error $ "Enums not currently supported in overrides, for " ++ nameStr
     go (FnPtrShape _ _ _) _rv =
-        error "Function pointers not currently supported in overrides"
+        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -147,8 +149,8 @@ freshSymbolic sym loc nameStr shp0 = go shp0
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
     go (FnPtrShape _ _ _) =
-        error "Function pointers not currently supported in overrides"
-    go shp = error $ "freshSymbolic: " ++ show (shapeType shp) ++ " NYI"
+        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
+    go shp = error $ "freshSymbolic: " ++ show (shapeType shp) ++ " NYI, for " ++ nameStr
 
 
 -- Note on clobbering refs inside `static`s: The current behavior is to leave
@@ -180,9 +182,10 @@ clobberGlobals sym loc nameStr cs = do
                 Nothing -> error $ "couldn't find static def for " ++ show defId
         let tpr = globalType gv
         let shp = tyToShapeEq (cs ^. collection) (static ^. M.sTy) tpr
+        let nameStr' = nameStr ++ "_" ++ show defId
         let clobber = case static ^. M.sMutable of
-                False -> clobberImmutSymbolic sym loc nameStr
-                True -> clobberSymbolic sym loc nameStr
+                False -> clobberImmutSymbolic sym loc nameStr'
+                True -> clobberSymbolic sym loc nameStr'
         rv <- readGlobal gv
         rv' <- clobber shp rv
         writeGlobal gv rv'
