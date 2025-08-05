@@ -1,0 +1,118 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE PolyKinds #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ExistentialQuantification #-}
+<span class="lineno">    5 </span>{-# LANGUAGE QuasiQuotes #-}
+<span class="lineno">    6 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    7 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">    8 </span>module Heapster.NamedMb where
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>import Data.Binding.Hobbits
+<span class="lineno">   11 </span>import Data.Binding.Hobbits.MonadBind
+<span class="lineno">   12 </span>import Data.Type.RList
+<span class="lineno">   13 </span>import Control.Lens
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>-- | A constant type functor for 'String's
+<span class="lineno">   16 </span>newtype StringF a = StringF { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unStringF</span></span></span> :: String }
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">mkNuMatching [t| forall a. StringF a |]</span></span></span>
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>-- | An 'Mb' multi-binding where each bound 'Name' has an associated 'String'
+<span class="lineno">   21 </span>-- for parsing and printing it
+<span class="lineno">   22 </span>data NamedMb ctx a = NamedMb
+<span class="lineno">   23 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mbNames</span></span></span> :: RAssign StringF ctx
+<span class="lineno">   24 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_mbBinding</span></span></span> :: Mb ctx a
+<span class="lineno">   25 </span>  }
+<span class="lineno">   26 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>-- | A 'Binding' of a single 'Name' with a 'String'
+<span class="lineno">   29 </span>type NamedBinding c = NamedMb (RNil :&gt; c)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>instance Liftable (StringF a) where
+<span class="lineno">   32 </span>    <span class="decl"><span class="nottickedoff">mbLift (mbMatch -&gt; [nuMP| StringF x |]) = StringF (mbLift x)</span></span>
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>instance LiftableAny1 StringF where
+<span class="lineno">   35 </span>    <span class="decl"><span class="nottickedoff">mbLiftAny1 = mbLift</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">mkNuMatching [t| forall ctx a. NuMatching a =&gt; NamedMb ctx a |]</span></span></span>
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>-- | Apply a binary function to the body of a 'NamedMb'; similar to 'mbMap2'
+<span class="lineno">   40 </span>mbMap2Named :: (a -&gt; b -&gt; c) -&gt; NamedMb ctx a -&gt; NamedMb ctx b -&gt; NamedMb ctx c
+<span class="lineno">   41 </span><span class="decl"><span class="nottickedoff">mbMap2Named f mb1 mb2 =</span>
+<span class="lineno">   42 </span><span class="spaces">  </span><span class="nottickedoff">NamedMb (_mbNames mb1) (mbMap2 f (_mbBinding mb1) (_mbBinding mb2))</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- | A 'Lens' to get the binding ouf of a 'NamedMb'
+<span class="lineno">   45 </span>mbBinding :: Lens (NamedMb ctx a) (NamedMb ctx b) (Mb ctx a) (Mb ctx b)
+<span class="lineno">   46 </span><span class="decl"><span class="nottickedoff">mbBinding f x = NamedMb (_mbNames x) &lt;$&gt; f (_mbBinding x)</span></span>
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>-- | Build a 'NamedMb' that binds multiple 'Name's with the given 'String's
+<span class="lineno">   49 </span>nuMultiNamed :: RAssign StringF ctx -&gt; (RAssign Name ctx -&gt; b) -&gt; NamedMb ctx b
+<span class="lineno">   50 </span><span class="decl"><span class="nottickedoff">nuMultiNamed tps f = NamedMb</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="nottickedoff">{ _mbNames = tps</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">, _mbBinding = nuMulti (mapRAssign (const Proxy) tps) f</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- | A version of 'nuMultiWithElim1' for 'NamedMb'
+<span class="lineno">   56 </span>nuMultiWithElim1Named :: (RAssign Name ctx -&gt; arg -&gt; b) -&gt;
+<span class="lineno">   57 </span>                         NamedMb ctx arg -&gt; NamedMb ctx b
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">nuMultiWithElim1Named k = over mbBinding (nuMultiWithElim1 k)</span></span>
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>-- | Commute a 'NamedMb' inside a strong binding monad
+<span class="lineno">   61 </span>strongMbMNamed :: MonadStrongBind m =&gt; NamedMb ctx (m a) -&gt; m (NamedMb ctx a)
+<span class="lineno">   62 </span><span class="decl"><span class="nottickedoff">strongMbMNamed = traverseOf mbBinding strongMbM</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- | Commute a 'NamedMb' inside a binding monad
+<span class="lineno">   65 </span>mbMNamed :: (MonadBind m, NuMatching a) =&gt; NamedMb ctx (m a) -&gt; m (NamedMb ctx a)
+<span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">mbMNamed = traverseOf mbBinding mbM</span></span>
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>-- | Swap the order of two nested named bindings
+<span class="lineno">   69 </span>mbSwapNamed :: RAssign Proxy ctx -&gt; NamedMb ctx' (NamedMb ctx a) -&gt;
+<span class="lineno">   70 </span>               NamedMb ctx (NamedMb ctx' a)
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">mbSwapNamed p (NamedMb names' body') =</span>
+<span class="lineno">   72 </span><span class="spaces">    </span><span class="nottickedoff">NamedMb</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="nottickedoff">{ _mbNames = mbLift (_mbNames &lt;$&gt; body')</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="nottickedoff">, _mbBinding = NamedMb names' &lt;$&gt; mbSwap p (_mbBinding &lt;$&gt; body')</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>-- | Swap the order of a binding with 'String' names with one without
+<span class="lineno">   78 </span>mbSink :: RAssign Proxy ctx -&gt; Mb ctx' (NamedMb ctx a) -&gt; NamedMb ctx (Mb ctx' a)
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">mbSink p m =</span>
+<span class="lineno">   80 </span><span class="spaces">    </span><span class="nottickedoff">NamedMb</span>
+<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">{ _mbNames = mbLift (_mbNames &lt;$&gt; m)</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">, _mbBinding = mbSwap p (_mbBinding &lt;$&gt; m)</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- | Lift a 'Liftable' value out of a 'NamedMb'
+<span class="lineno">   86 </span>mbLiftNamed :: Liftable a =&gt; NamedMb ctx a -&gt; a
+<span class="lineno">   87 </span><span class="decl"><span class="nottickedoff">mbLiftNamed = views mbBinding mbLift</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | Eliminate a 'NamedMb' that binds zero names
+<span class="lineno">   90 </span>elimEmptyNamedMb :: NamedMb RNil a -&gt; a
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">elimEmptyNamedMb = views mbBinding elimEmptyMb</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>-- | Create a 'NamedMb' that binds zero names
+<span class="lineno">   94 </span>emptyNamedMb :: a -&gt; NamedMb RNil a
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">emptyNamedMb = NamedMb MNil . emptyMb</span></span>
+
+</pre>
+</body>
+</html>
