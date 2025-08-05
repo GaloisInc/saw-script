@@ -82,6 +82,7 @@ tgt_build() {
                 exe:cryptol exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
                 test-suite:integration-tests test-suite:saw-core-tests \
+                test-suite:crux-mir-comp-tests \
                 test-suite:cryptol-saw-core-tests \
                 test-suite:saw-core-coq-tests \
                 test-suite:heapster-prover-tests

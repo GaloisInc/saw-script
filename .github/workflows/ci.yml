@@ -18,17 +18,22 @@ on:
   workflow_dispatch:
 
 env:
-  # The CABAL_CACHE_VERSION and SOLVER_CACHE_VERSION environment variables
-  # can be updated to force the use of a new cabal or solver cache if the
-  # respective current cache contents become corrupted/invalid.  This can
-  # sometimes happen when (for example) the OS version is changed but
-  # older .so files are cached, which can have various effects
-  # (e.g. cabal complains it can't find a valid version of the "happy"
+  # The CABAL_CACHE_VERSION, CARGO_CACHE_VERSION, and SOLVER_CACHE_VERSION
+  # environment variables can be updated to force the use of a new cabal,
+  # cargo, or solver cache if the respective current cache contents become
+  # corrupted/invalid.  This can sometimes happen when (for example) the OS
+  # version is changed but older .so files are cached, which can have various
+  # effects (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
   CABAL_CACHE_VERSION: 10
+  CARGO_CACHE_VERSION: 1
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
+
+  # If you update this, make sure to also update RUST_TOOLCHAIN in
+  # crux-mir-comp/Dockerfile.
+  RUST_TOOLCHAIN: "nightly-2025-02-16"
 
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
@@ -187,6 +192,7 @@ jobs:
             integration-tests
             saw-core-tests
             cryptol-saw-core-tests
+            crux-mir-comp-tests
             saw-core-coq-tests
             heapster-prover-tests
           dest: dist-tests
@@ -519,6 +525,66 @@ jobs:
         shell: bash
         run: opam exec -- make -j
 
+  crux-mir-comp-tests:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repo and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          override: true
+          components: rustc-dev, rust-src
+
+      - name: cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          prefix-key: "${{ env.CARGO_CACHE_VERSION }}-${{ matrix.os }}"
+          shared-key: "cargo-cache"
+          workspaces: "deps/mir-json"
+
+      - name: Install system dependencies
+        shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
+
+      - name: Install mir-json
+        working-directory: deps/mir-json
+        run: |
+          cargo install --locked --force
+          mir-json-translate-libs
+          echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
+
+      - name: Download test binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - name: Update PATH to include crux-mir-comp
+        shell: bash
+        run: |
+          chmod +x dist-tests/*
+          echo $GITHUB_WORKSPACE/dist-tests >> $GITHUB_PATH
+
+      - name: Run crux-mir-comp test suite
+        continue-on-error: ${{ matrix.continue-on-error }}
+        working-directory: crux-mir-comp
+        shell: bash
+        run: crux-mir-comp-tests
+
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
     needs: [build]
@@ -603,6 +669,10 @@ jobs:
           - suite: integration-tests
             os: windows-2022
             continue-on-error: false
+          # We exclude crux-mir-comp-tests as it requires some Rust-specific
+          # setup that is unique to that particular test suite. See the
+          # crux-mir-comp-tests job, which is defined separately.
+          - suite: crux-mir-comp-tests
     steps:
       - uses: actions/checkout@v4
         with:
@@ -990,6 +1060,7 @@ jobs:
     needs:
       - build
       - heapster-tests
+      - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
       - coverage

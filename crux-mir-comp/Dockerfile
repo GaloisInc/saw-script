@@ -2,6 +2,8 @@
 # gitrev" so that the current git commit information propagates
 # into the container.
 
+# If you update this, make sure to also update RUST_TOOLCHAIN in
+# .github/workflows/ci.yml.
 ARG RUST_TOOLCHAIN="nightly-2025-02-16"
 
 # Note that we intentionally do not use ubuntu:24.04 or later pending a
