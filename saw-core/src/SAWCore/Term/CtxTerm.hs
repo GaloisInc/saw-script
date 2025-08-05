@@ -152,4 +152,4 @@ mkCtorArgStruct sc d params dt_ixs ctor_tp =
   mkCtorArgsIxs sc d params dt_ixs ctor_tp >>= \case
     Nothing -> pure Nothing
     Just (args, ctor_ixs) ->
-      pure $ Just (CtorArgStruct params args ctor_ixs dt_ixs)
+      pure $ Just (CtorArgStruct params args ctor_ixs)

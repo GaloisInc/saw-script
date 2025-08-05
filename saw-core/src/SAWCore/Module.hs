@@ -148,10 +148,8 @@ data CtorArgStruct =
     -- ^ earlier ctorParams are in scope
     ctorArgs :: [(Name, CtorArg)],
     -- ^ ctorParams and earlier ctorArgs are in scope
-    ctorIndices :: [Term],
+    ctorIndices :: [Term]
     -- ^ ctorParams and ctorArgs are in scope
-    dataTypeIndices :: [ExtCns Term]
-    -- ^ ctorParams and earlier dataTypeIndices are in scope
   }
 
 -- | A specification of a constructor
