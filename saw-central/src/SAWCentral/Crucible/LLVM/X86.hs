@@ -1083,9 +1083,9 @@ initialState bak opts sc cc path elf relf ms globs maxAddr = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
   symTab <- case Elf.decodeHeaderSymtab elf of
-    Nothing -> throwX86 path "Elf file has no symbol table"
-    Just (Left _err) -> throwX86 path "Failed to decode symbol table"
-    Just (Right st) -> pure st
+    Left Elf.NoSymtabs -> throwX86 path "Elf file has no symbol table"
+    Left _err -> throwX86 path "Failed to decode symbol table"
+    Right st -> pure st
   let
     align = C.LLVM.exponentToAlignment 4
     allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
