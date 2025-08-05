@@ -695,7 +695,7 @@ scCompleteDataType sc dtIdent ctors =
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
      forM_ ctors $ \ctor ->
-       case ctorNameInfo ctor of
+       case nameInfo (ctorName ctor) of
          ModuleIdentifier ident ->
            -- register constructor in scGlobalEnv if it has an Ident name
            scRegisterGlobal sc ident =<< scConst sc (ctorName ctor)
@@ -868,8 +868,7 @@ scBuildCtor sc d c arg_struct =
 
     -- Finally, return the required Ctor record
     return $ Ctor
-      { ctorNameInfo = ModuleIdentifier c
-      , ctorVarIndex = nameIndex cname
+      { ctorName = cname
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp

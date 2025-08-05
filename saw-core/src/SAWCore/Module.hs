@@ -26,7 +26,6 @@ module SAWCore.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
-  , ctorName
   , ctorNumParams
   , ctorNumArgs
   , DataType(..)
@@ -154,10 +153,8 @@ data CtorArgStruct =
 -- | A specification of a constructor
 data Ctor =
   Ctor
-  { ctorNameInfo :: !NameInfo
+  { ctorName :: !Name
     -- ^ The name of this constructor
-  , ctorVarIndex :: !VarIndex
-    -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct
     -- ^ Arguments to the constructor
   , ctorDataType :: !Name
@@ -212,10 +209,6 @@ ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   length ctorArgs
 
--- | Compute the 'Name' that uniquely references a constructor
-ctorName :: Ctor -> Name
-ctorName ctor = Name (ctorVarIndex ctor) (ctorNameInfo ctor)
-
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
@@ -226,7 +219,7 @@ instance Ord Ctor where
   compare = lift2 ctorName compare
 
 instance Show Ctor where
-  show = show . toAbsoluteName . ctorNameInfo
+  show = show . toAbsoluteName . nameInfo . ctorName
 
 
 -- Datatypes -------------------------------------------------------------------
@@ -300,7 +293,7 @@ data ResolvedName
 
 -- | Get the 'NameInfo' for a 'ResolvedName'
 resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor
+resolvedNameInfo (ResolvedCtor ctor) = nameInfo (ctorName ctor)
 resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt
 resolvedNameInfo (ResolvedDef d) = nameInfo (defName d)
 
@@ -316,7 +309,7 @@ resolvedNameType r =
 resolvedNameVarIndex :: ResolvedName -> VarIndex
 resolvedNameVarIndex r =
   case r of
-    ResolvedCtor ctor -> ctorVarIndex ctor
+    ResolvedCtor ctor -> nameIndex (ctorName ctor)
     ResolvedDataType dt -> dtVarIndex dt
     ResolvedDef def -> nameIndex (defName def)
 

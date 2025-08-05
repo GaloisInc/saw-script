@@ -239,7 +239,7 @@ evalTermF cfg lam recEval tf env =
                  do argv <- recEval arg
                     case evalConstructor argv of
                       Just (ctor, args)
-                        | Just (elim,elimTy) <- Map.lookup (ctorVarIndex ctor) ps_fs
+                        | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
                         -> do let rTy = VRecursorType d ps motive motiveTy
                               ctorTy <- toTValue <$> lam (ctorType ctor) []
                               allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready r,rTy)]
