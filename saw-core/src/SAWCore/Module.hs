@@ -106,12 +106,11 @@ data DefQualifier
 
 instance Hashable DefQualifier -- automatically derived
 
--- | A Definition contains an identifier, the type of the definition, and an
--- optional body (axioms and primitives do not have a body)
+-- | A Definition contains a name, the type of the definition, and an
+-- optional body (axioms and primitives do not have a body).
 data Def =
   Def
-  { defNameInfo :: NameInfo
-  , defVarIndex :: VarIndex
+  { defName :: Name
   , defQualifier :: DefQualifier
   , defType :: Term
   , defBody :: Maybe Term
@@ -303,7 +302,7 @@ data ResolvedName
 resolvedNameInfo :: ResolvedName -> NameInfo
 resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor
 resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt
-resolvedNameInfo (ResolvedDef d) = defNameInfo d
+resolvedNameInfo (ResolvedDef d) = nameInfo (defName d)
 
 -- | Get the type of a 'ResolvedName' as a 'Term'.
 resolvedNameType :: ResolvedName -> Term
@@ -319,7 +318,7 @@ resolvedNameVarIndex r =
   case r of
     ResolvedCtor ctor -> ctorVarIndex ctor
     ResolvedDataType dt -> dtVarIndex dt
-    ResolvedDef def -> defVarIndex def
+    ResolvedDef def -> nameIndex (defName def)
 
 -- | Modules define namespaces of datatypes, constructors, and definitions,
 -- i.e., mappings from 'Text' names to these objects. A module is allowed to
@@ -594,7 +593,7 @@ insDeclInMap mname decl mm =
 insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
 insDefInMap d mm =
   insResolvedNameInMap (ResolvedDef d) $
-  case defNameInfo d of
+  case nameInfo (defName d) of
     ModuleIdentifier i ->
       insDeclInMap (identModule i) (DefDecl d) mm
     ImportedName{} -> mm

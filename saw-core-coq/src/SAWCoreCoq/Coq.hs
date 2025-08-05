@@ -29,9 +29,9 @@ import           Prettyprinter
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           SAWCore.Module
+import           SAWCore.Name
 import           SAWCore.SharedTerm
-import           SAWCore.Term.Functor
--- import SAWCore.Term.CtxTerm
+
 import qualified SAWCoreCoq.CryptolModule    as CMT
 import qualified SAWCoreCoq.SAWModule        as SAWModuleTranslation
 import           SAWCoreCoq.Monad
@@ -107,5 +107,5 @@ translateCryptolModule sc env nm configuration globalDecls m = do
 -- | Extract out the 'String' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe String
 moduleDeclName (TypeDecl (DataType { dtNameInfo })) = Just (Text.unpack (toShortName dtNameInfo))
-moduleDeclName (DefDecl  (Def      { defNameInfo })) = Just (Text.unpack (toShortName defNameInfo))
+moduleDeclName (DefDecl  (Def      { defName })) = Just (Text.unpack (toShortName (nameInfo defName)))
 moduleDeclName InjectCodeDecl{} = Nothing

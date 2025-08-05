@@ -33,8 +33,9 @@ import           Prettyprinter                                 (Doc, pretty)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           SAWCore.Module
+import           SAWCore.Name
 import           SAWCore.SharedTerm
-import           SAWCore.Term.Functor
+
 import qualified SAWCoreCoq.Monad            as M
 import           SAWCoreCoq.SpecialTreatment
 import qualified SAWCoreCoq.Term             as TermTranslation
@@ -149,16 +150,16 @@ skipped sawIdent =
 
 translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
-  specialTreatment <- findSpecialTreatment' defNameInfo
+  specialTreatment <- findSpecialTreatment' (nameInfo defName)
   translateAccordingly (atDefSite specialTreatment)
 
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ Coq.Ident (Text.unpack (toShortName defNameInfo))
+    translateAccordingly  DefPreserve           = translateNamed $ Coq.Ident (Text.unpack (toShortName (nameInfo defName)))
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
     translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str
-    translateAccordingly  DefSkip               = return $ skipped' defNameInfo
+    translateAccordingly  DefSkip               = return $ skipped' (nameInfo defName)
 
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = liftTermTranslationMonad (go defQualifier defBody)

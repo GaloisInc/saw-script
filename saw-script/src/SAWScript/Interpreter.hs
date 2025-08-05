@@ -105,7 +105,7 @@ import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
 
 import SAWCore.Conversion
 import SAWCore.Module (Def(..), emptyModule, moduleDefs)
-import SAWCore.Name (mkModuleName)
+import SAWCore.Name (mkModuleName, Name(..))
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
@@ -1004,7 +1004,7 @@ buildTopLevelEnv proxy opts =
                       ]
            cryptolDefs = filter defPred $ moduleDefs cryptol_mod
            defPred d =
-             case defNameInfo d of
+             case nameInfo (defName d) of
                ModuleIdentifier ident -> ident `Set.member` includedDefs
                ImportedName{} -> False
            includedDefs = Set.fromList

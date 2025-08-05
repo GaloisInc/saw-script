@@ -11,6 +11,7 @@ module Tests.Parser where
 import Test.Tasty
 import Test.Tasty.HUnit
 import SAWCore.Module
+import SAWCore.Name
 import SAWCore.Prelude
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -21,7 +22,7 @@ namedMsg sym msg = "In " ++ show (toAbsoluteName sym) ++ ": " ++ msg
 
 checkDef :: Def -> Assertion
 checkDef d = do
-  let sym = defNameInfo d
+  let sym = nameInfo (defName d)
   let tp = defType d
   assertBool (namedMsg sym "Type is not ground.") (termIsClosed tp)
   case defBody d of

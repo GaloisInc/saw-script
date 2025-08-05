@@ -57,7 +57,7 @@ import SAWCore.Module
   , allModulePrimitives
   , ctorNumParams
   , ctorNumArgs
-  , defNameInfo
+  , defName
   , dtNumIndices
   , dtNumParams
   , findCtorInMap
@@ -500,7 +500,7 @@ checkPrimitives modmap prims = do
 
 defIdent :: Def -> Maybe Ident
 defIdent d =
-  case defNameInfo d of
+  case nameInfo (defName d) of
     ModuleIdentifier ident -> Just ident
     ImportedName{} -> Nothing
 

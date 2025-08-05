@@ -607,8 +607,7 @@ scDeclareDef ::
 scDeclareDef sc nm q ty body =
   do scInsDefInMap sc $
        Def
-       { defNameInfo = nameInfo nm
-       , defVarIndex = nameIndex nm
+       { defName = nm
        , defQualifier = q
        , defType = ty
        , defBody = body
@@ -1702,7 +1701,7 @@ scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAllBeta sc = foldlM (scApplyBeta sc)
 
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc Def{..} = scConst sc (Name defVarIndex defNameInfo)
+scDefTerm sc d = scConst sc (defName d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
