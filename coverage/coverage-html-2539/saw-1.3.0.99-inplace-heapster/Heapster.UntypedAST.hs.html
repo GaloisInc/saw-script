@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Heapster.UntypedAST where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import GHC.Natural
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import Heapster.Located
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>-- | Unchecked function permission
+<span class="lineno">    8 </span>-- @(context). inputs -o outputs@
+<span class="lineno">    9 </span>data AstFunPerm = AstFunPerm
+<span class="lineno">   10 </span>  Pos
+<span class="lineno">   11 </span>  [(Located String, AstType)] -- ^ The context of ghost variables
+<span class="lineno">   12 </span>  [(Located String, AstExpr)] -- ^ The input permissions
+<span class="lineno">   13 </span>  [(Located String, AstType)] -- ^ The context of ghost output variables
+<span class="lineno">   14 </span>  [(Located String, AstExpr)] -- ^ The output permissions
+<span class="lineno">   15 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>-- | Unchecked array permission
+<span class="lineno">   18 </span>-- @[lifetime]array(rw, offset, size, width) |-&gt; permission
+<span class="lineno">   19 </span>data ArrayPerm =
+<span class="lineno">   20 </span>  ArrayPerm Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr
+<span class="lineno">   21 </span>  -- ^ @array@ position, lifetime, rw, offset, size, width, permission
+<span class="lineno">   22 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>-- | Unchecked types
+<span class="lineno">   25 </span>data AstType
+<span class="lineno">   26 </span>  = TyUnit Pos                  -- ^ unit type
+<span class="lineno">   27 </span>  | TyBool Pos                  -- ^ bool type
+<span class="lineno">   28 </span>  | TyNat Pos                   -- ^ nat type
+<span class="lineno">   29 </span>  | TyBV Pos Natural            -- ^ bitvector type
+<span class="lineno">   30 </span>  | TyLlvmPtr Pos Natural       -- ^ llvm pointer with width
+<span class="lineno">   31 </span>  | TyLlvmFrame Pos Natural     -- ^ llvm frame with width
+<span class="lineno">   32 </span>  | TyLlvmBlock Pos Natural     -- ^ llvm block with width
+<span class="lineno">   33 </span>  | TyLlvmShape Pos Natural     -- ^ llvm shape with width
+<span class="lineno">   34 </span>  | TyLifetime Pos              -- ^ lifetime
+<span class="lineno">   35 </span>  | TyRwModality Pos            -- ^ rwmodality
+<span class="lineno">   36 </span>  | TyPermList Pos              -- ^ permlist
+<span class="lineno">   37 </span>  | TyStruct Pos [AstType]      -- ^ struct(types)
+<span class="lineno">   38 </span>  | TyPerm Pos AstType          -- ^ perm(type)
+<span class="lineno">   39 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>-- | Unchecked expressions
+<span class="lineno">   42 </span>data AstExpr
+<span class="lineno">   43 </span>  = ExUnit Pos                  -- ^ unit
+<span class="lineno">   44 </span>  | ExAlways Pos                -- ^ always
+<span class="lineno">   45 </span>  | ExNat Pos Natural           -- ^ number literal
+<span class="lineno">   46 </span>  | ExVar Pos String (Maybe [AstExpr]) (Maybe AstExpr) -- ^ identifier, shape arguments, offset
+<span class="lineno">   47 </span>  | ExAdd Pos AstExpr AstExpr   -- ^ addition
+<span class="lineno">   48 </span>  | ExNeg Pos AstExpr           -- ^ negation
+<span class="lineno">   49 </span>  | ExMul Pos AstExpr AstExpr   -- ^ multiplication or permission conjunction
+<span class="lineno">   50 </span>  | ExRead Pos                  -- ^ read modality
+<span class="lineno">   51 </span>  | ExWrite Pos                 -- ^ read/write modality
+<span class="lineno">   52 </span>  | ExStruct Pos [AstExpr]      -- ^ struct literal with field expressions
+<span class="lineno">   53 </span>  | ExLlvmWord Pos AstExpr      -- ^ llvmword with value
+<span class="lineno">   54 </span>  | ExLlvmFrame Pos [(AstExpr, Natural)] -- ^ llvmframe literal
+<span class="lineno">   55 </span>  | ExOr Pos AstExpr AstExpr    -- ^ or permission
+<span class="lineno">   56 </span>  | ExFalse Pos                 -- ^ false permission
+<span class="lineno">   57 </span>  | ExAny Pos                   -- ^ any permission
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>  | ExEmptySh Pos               -- ^ empty shape
+<span class="lineno">   60 </span>  | ExEqSh Pos AstExpr AstExpr  -- ^ equal shape
+<span class="lineno">   61 </span>  | ExTrue Pos                  -- ^ trivial permission
+<span class="lineno">   62 </span>  | ExExists Pos String AstType AstExpr -- ^ existentially quantified value
+<span class="lineno">   63 </span>  | ExSeqSh Pos AstExpr AstExpr -- ^ sequenced shapes
+<span class="lineno">   64 </span>  | ExOrSh Pos AstExpr AstExpr  -- ^ alternative shapes
+<span class="lineno">   65 </span>  | ExExSh Pos String AstType AstExpr -- ^ existentially quantified shape
+<span class="lineno">   66 </span>  | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
+<span class="lineno">   67 </span>  | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
+<span class="lineno">   68 </span>  | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
+<span class="lineno">   69 </span>  | ExTupleSh Pos AstExpr -- ^ field shape
+<span class="lineno">   70 </span>  | ExFalseSh Pos               -- ^ false shape
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>  | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
+<span class="lineno">   73 </span>  | ExNotEqual Pos AstExpr AstExpr -- ^ not-equal bitvector proposition
+<span class="lineno">   74 </span>  | ExLessThan Pos AstExpr AstExpr -- ^ less-than bitvector proposition
+<span class="lineno">   75 </span>  | ExLessEqual Pos AstExpr AstExpr -- ^ less-than or equal-to bitvector proposition
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>  | ExEq Pos AstExpr            -- ^ equal permission
+<span class="lineno">   78 </span>  | ExLOwned Pos [AstExpr] [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
+<span class="lineno">   79 </span>  | ExLCurrent Pos (Maybe AstExpr) -- ^ current permission
+<span class="lineno">   80 </span>  | ExLFinished Pos -- ^ finished permission
+<span class="lineno">   81 </span>  | ExShape Pos AstExpr -- ^ shape literal
+<span class="lineno">   82 </span>  | ExFree Pos AstExpr -- ^ free literal
+<span class="lineno">   83 </span>  | ExPtr Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr -- ^ pointer permission
+<span class="lineno">   84 </span>  | ExMemblock Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr -- ^ memblock permission
+<span class="lineno">   85 </span>  | ExLlvmFunPtr Pos AstExpr AstExpr AstFunPerm -- ^ function pointer permission
+<span class="lineno">   86 </span>  | ExArray Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr AstExpr -- ^ array permission
+<span class="lineno">   87 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | Returns outermost position
+<span class="lineno">   90 </span>instance HasPos AstExpr where
+<span class="lineno">   91 </span>  <span class="decl"><span class="nottickedoff">pos (ExUnit       p          ) = p</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExAlways     p          ) = p</span>
+<span class="lineno">   93 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExNat        p _        ) = p</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExVar        p _ _ _    ) = p</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExAdd        p _ _      ) = p</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExNeg        p _        ) = p</span>
+<span class="lineno">   97 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExMul        p _ _      ) = p</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExRead       p          ) = p</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExWrite      p          ) = p</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExStruct     p _        ) = p</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLlvmWord   p _        ) = p</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExEmptySh    p          ) = p</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExEqSh       p _ _      ) = p</span>
+<span class="lineno">  104 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExEq         p _        ) = p</span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExOr         p _ _      ) = p</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExFalse      p          ) = p</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExTrue       p          ) = p</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExAny        p          ) = p</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExExists     p _ _ _    ) = p</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExSeqSh      p _ _      ) = p</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExOrSh       p _ _      ) = p</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExExSh       p _ _ _    ) = p</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExFieldSh    p _ _      ) = p</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExTupleSh    p _        ) = p</span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExPtrSh      p _ _ _    ) = p</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExEqual      p _ _      ) = p</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExNotEqual   p _ _      ) = p</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLessThan   p _ _      ) = p</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLessEqual  p _ _      ) = p</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLOwned     p _ _ _    ) = p</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLCurrent   p _        ) = p</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLFinished  p          ) = p</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExShape      p _        ) = p</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExFree       p _        ) = p</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExPtr        p _ _ _ _ _) = p</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExMemblock   p _ _ _ _ _) = p</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLlvmFunPtr p _ _ _    ) = p</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExLlvmFrame  p _        ) = p</span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExArray      p _ _ _ _ _ _) = p</span>
+<span class="lineno">  130 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExArraySh    p _ _ _    ) = p</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">pos (ExFalseSh    p          ) = p</span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>-- | Returns outermost position
+<span class="lineno">  134 </span>instance HasPos AstType where
+<span class="lineno">  135 </span>  <span class="decl"><span class="nottickedoff">pos (TyUnit       p   ) = p</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyBool       p   ) = p</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyNat        p   ) = p</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyBV         p  _) = p</span>
+<span class="lineno">  139 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyLlvmPtr    p  _) = p</span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyLlvmFrame  p  _) = p</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyLlvmBlock  p  _) = p</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyLlvmShape  p  _) = p</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyLifetime   p   ) = p</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyRwModality p   ) = p</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyPermList   p   ) = p</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyStruct     p  _) = p</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">pos (TyPerm       p  _) = p</span></span>
+
+</pre>
+</body>
+</html>

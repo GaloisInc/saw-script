@@ -1,0 +1,734 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# Language DataKinds, OverloadedStrings #-}
+<span class="lineno">    2 </span>{-# Language RankNTypes, TypeOperators #-}
+<span class="lineno">    3 </span>{-# Language PatternSynonyms #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    5 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    6 </span>module SAWCentral.X86
+<span class="lineno">    7 </span>  ( Options(..)
+<span class="lineno">    8 </span>  , proof
+<span class="lineno">    9 </span>  , proofWithOptions
+<span class="lineno">   10 </span>  , linuxInfo
+<span class="lineno">   11 </span>  , bsdInfo
+<span class="lineno">   12 </span>  , Fun(..)
+<span class="lineno">   13 </span>  , Goal(..)
+<span class="lineno">   14 </span>  , gGoal
+<span class="lineno">   15 </span>  , gLoc
+<span class="lineno">   16 </span>  , getGoals
+<span class="lineno">   17 </span>  , X86Error(..)
+<span class="lineno">   18 </span>  , X86Unsupported(..)
+<span class="lineno">   19 </span>  , SharedContext
+<span class="lineno">   20 </span>  , CallHandler
+<span class="lineno">   21 </span>  , Sym
+<span class="lineno">   22 </span>  , RelevantElf(..)
+<span class="lineno">   23 </span>  , getElf
+<span class="lineno">   24 </span>  , getRelevant
+<span class="lineno">   25 </span>  , findSymbols
+<span class="lineno">   26 </span>  , posFn
+<span class="lineno">   27 </span>  , loadGlobal
+<span class="lineno">   28 </span>  ) where
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import Control.Lens ((^.))
+<span class="lineno">   32 </span>import Control.Exception(Exception(..),throwIO)
+<span class="lineno">   33 </span>import Control.Monad.IO.Class(liftIO)
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">   36 </span>import           Data.ByteString (ByteString)
+<span class="lineno">   37 </span>import qualified Data.ByteString as BS
+<span class="lineno">   38 </span>import qualified Data.ByteString.Char8 as BSC
+<span class="lineno">   39 </span>import           Data.IORef
+<span class="lineno">   40 </span>import qualified Data.Map as Map
+<span class="lineno">   41 </span>import           Data.Text (Text)
+<span class="lineno">   42 </span>import qualified Data.Text as Text
+<span class="lineno">   43 </span>import           Data.Text.Encoding(decodeUtf8)
+<span class="lineno">   44 </span>import           System.IO(hFlush,stdout)
+<span class="lineno">   45 </span>import           Data.Maybe(mapMaybe, fromMaybe)
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>-- import Text.PrettyPrint.ANSI.Leijen(pretty)
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>import qualified Data.ElfEdit as Elf
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>import Data.Parameterized.Some(Some(..))
+<span class="lineno">   52 </span>import Data.Parameterized.Context(EmptyCtx,(::&gt;),singleton)
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>-- What4
+<span class="lineno">   55 </span>import What4.Interface(asNat,asBV)
+<span class="lineno">   56 </span>import qualified What4.Interface as W4
+<span class="lineno">   57 </span>import qualified What4.Config as W4
+<span class="lineno">   58 </span>import What4.FunctionName(functionNameFromText)
+<span class="lineno">   59 </span>import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- Crucible
+<span class="lineno">   62 </span>import Lang.Crucible.Analysis.Postdom (postdomInfo)
+<span class="lineno">   63 </span>import Lang.Crucible.CFG.Core(SomeCFG(..), TypeRepr(..), cfgHandle)
+<span class="lineno">   64 </span>import Lang.Crucible.CFG.Common(GlobalVar)
+<span class="lineno">   65 </span>import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
+<span class="lineno">   66 </span>import Lang.Crucible.Simulator.RegValue(RegValue'(..))
+<span class="lineno">   67 </span>import Lang.Crucible.Simulator.GlobalState(insertGlobal,emptyGlobals)
+<span class="lineno">   68 </span>import Lang.Crucible.Simulator.Operations(defaultAbortHandler)
+<span class="lineno">   69 </span>import Lang.Crucible.Simulator.OverrideSim(runOverrideSim, callCFG, readGlobal)
+<span class="lineno">   70 </span>import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
+<span class="lineno">   71 </span>import Lang.Crucible.Simulator.ExecutionTree
+<span class="lineno">   72 </span>          (ExecResult(..), SimContext(..), FnState(..)
+<span class="lineno">   73 </span>          , ExecState(InitialState)
+<span class="lineno">   74 </span>          , FunctionBindings(..)
+<span class="lineno">   75 </span>          )
+<span class="lineno">   76 </span>import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
+<span class="lineno">   77 </span>import Lang.Crucible.Backend
+<span class="lineno">   78 </span>          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
+<span class="lineno">   79 </span>          ,assumptionsPred,IsSymBackend(..),SomeBackend(..),HasSymInterface(..))
+<span class="lineno">   80 </span>import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>-- Crucible LLVM
+<span class="lineno">   84 </span>import SAWCentral.Crucible.LLVM.CrucibleLLVM
+<span class="lineno">   85 </span>  (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
+<span class="lineno">   86 </span>import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
+<span class="lineno">   87 </span>import Lang.Crucible.LLVM.MemModel (mkMemVar)
+<span class="lineno">   88 </span>import qualified Lang.Crucible.LLVM.MemModel as Crucible
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>-- Macaw
+<span class="lineno">   91 </span>import Data.Macaw.Architecture.Info(ArchitectureInfo)
+<span class="lineno">   92 </span>import Data.Macaw.Discovery(analyzeFunction)
+<span class="lineno">   93 </span>import Data.Macaw.Discovery.State(FunctionExploreReason(UserRequest)
+<span class="lineno">   94 </span>                                 , emptyDiscoveryState, AddrSymMap)
+<span class="lineno">   95 </span>import Data.Macaw.Memory( Memory, MemSegment(..), MemSegmentOff(..)
+<span class="lineno">   96 </span>                        , segmentBase, segmentOffset
+<span class="lineno">   97 </span>                        , addrOffset, memWordToUnsigned
+<span class="lineno">   98 </span>                        , segoffAddr, incAddr
+<span class="lineno">   99 </span>                        , readWord8, readWord16le, readWord32le, readWord64le)
+<span class="lineno">  100 </span>import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
+<span class="lineno">  101 </span>                                  , memoryForElfAllSymbols
+<span class="lineno">  102 </span>                                  , memoryForElf
+<span class="lineno">  103 </span>                                  , MemSymbol(..)
+<span class="lineno">  104 </span>                                  )
+<span class="lineno">  105 </span>import Data.Macaw.Symbolic( ArchRegStruct
+<span class="lineno">  106 </span>                          , mkFunCFG
+<span class="lineno">  107 </span>                          , GlobalMap
+<span class="lineno">  108 </span>                          , MacawSimulatorState(..)
+<span class="lineno">  109 </span>                          , macawExtensions
+<span class="lineno">  110 </span>                          , MemModelConfig(..)
+<span class="lineno">  111 </span>                          , unsupportedSyscalls
+<span class="lineno">  112 </span>                          , defaultMacawArchStmtExtensionOverride
+<span class="lineno">  113 </span>                          )
+<span class="lineno">  114 </span>import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
+<span class="lineno">  115 </span>import Data.Macaw.Symbolic( MacawExt
+<span class="lineno">  116 </span>                                  , MacawFunctionArgs
+<span class="lineno">  117 </span>                                  )
+<span class="lineno">  118 </span>import Data.Macaw.Symbolic.Backend(MacawSymbolicArchFunctions(..), crucArchRegTypes)
+<span class="lineno">  119 </span>import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
+<span class="lineno">  120 </span>import Data.Macaw.X86.ArchTypes(X86_64)
+<span class="lineno">  121 </span>import Data.Macaw.X86.Symbolic
+<span class="lineno">  122 </span>  ( x86_64MacawSymbolicFns, x86_64MacawEvalFn, newSymFuns
+<span class="lineno">  123 </span>  , lookupX86Reg
+<span class="lineno">  124 </span>  )
+<span class="lineno">  125 </span>import Data.Macaw.X86.Crucible(SymFuns(..))
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>-- Saw Core
+<span class="lineno">  129 </span>import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
+<span class="lineno">  130 </span>import SAWCore.Term.Pretty(showTerm)
+<span class="lineno">  131 </span>import SAWCore.Recognizer(asBool)
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>-- Cryptol Verifier
+<span class="lineno">  136 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
+<span class="lineno">  137 </span>import CryptolSAWCore.Prelude(scLoadPreludeModule,scLoadCryptolModule)
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>-- SAWCentral
+<span class="lineno">  140 </span>import SAWCentral.X86Spec hiding (Prop)
+<span class="lineno">  141 </span>import SAWCentral.Proof(boolToProp, Prop)
+<span class="lineno">  142 </span>import SAWCentral.Crucible.Common.MethodSpec (ConditionMetadata(..))
+<span class="lineno">  143 </span>import SAWCentral.Crucible.Common.Override (MetadataMap)
+<span class="lineno">  144 </span>import SAWCentral.Crucible.Common
+<span class="lineno">  145 </span>  ( newSAWCoreBackend, newSAWCoreExprBuilder
+<span class="lineno">  146 </span>  , sawCoreState, SomeOnlineBackend(..)
+<span class="lineno">  147 </span>  , PathSatSolver
+<span class="lineno">  148 </span>  )
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>--------------------------------------------------------------------------------
+<span class="lineno">  152 </span>-- Input Options
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>-- | What we'd like done, plus additional information from the &quot;outside world&quot;.
+<span class="lineno">  155 </span>data Options = Options
+<span class="lineno">  156 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fileName</span></span></span>  :: FilePath
+<span class="lineno">  157 </span>    -- ^ Name of the elf file to process.
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">function</span></span></span> :: Fun
+<span class="lineno">  160 </span>    -- ^ Function that we'd like to extract.
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">archInfo</span></span></span> :: ArchitectureInfo X86_64
+<span class="lineno">  163 </span>    -- ^ Architectural flavor.  See &quot;linuxInfo&quot; and &quot;bsdInfo&quot;.
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">backend</span></span></span> :: SomeBackend Sym
+<span class="lineno">  166 </span>    -- ^ The Crucible backend to use.
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">allocator</span></span></span> :: HandleAllocator
+<span class="lineno">  169 </span>    -- ^ The handle allocator used to allocate @memvar@
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">memvar</span></span></span> :: GlobalVar Mem
+<span class="lineno">  172 </span>    -- ^ The global variable storing the heap
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">cryEnv</span></span></span> :: CryptolEnv
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">extraGlobals</span></span></span> :: [(ByteString,Integer,Unit)]
+<span class="lineno">  177 </span>    -- ^ Additional globals to auto-load from the ELF file
+<span class="lineno">  178 </span>  }
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>linuxInfo :: ArchitectureInfo X86_64
+<span class="lineno">  181 </span><span class="decl"><span class="nottickedoff">linuxInfo = x86_64_linux_info</span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>bsdInfo :: ArchitectureInfo X86_64
+<span class="lineno">  184 </span><span class="decl"><span class="nottickedoff">bsdInfo = x86_64_freeBSD_info</span></span>
+<span class="lineno">  185 </span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>--------------------------------------------------------------------------------
+<span class="lineno">  188 </span>-- Spec
+<span class="lineno">  189 </span>
+<span class="lineno">  190 </span>data Fun = Fun { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">funName</span></span></span> :: ByteString, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">funSpec</span></span></span> :: FunSpec }
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>--------------------------------------------------------------------------------
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>type CallHandler = Sym -&gt; Macaw.LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>-- | Run a top-level proof.
+<span class="lineno">  198 </span>-- Should be used when making a standalone proof script.
+<span class="lineno">  199 </span>proof ::
+<span class="lineno">  200 </span>  (FilePath -&gt; IO ByteString) -&gt;
+<span class="lineno">  201 </span>  PathSatSolver -&gt;
+<span class="lineno">  202 </span>  ArchitectureInfo X86_64 -&gt;
+<span class="lineno">  203 </span>  FilePath {- ^ ELF binary -} -&gt;
+<span class="lineno">  204 </span>  Maybe FilePath {- ^ Cryptol spec, if any -} -&gt;
+<span class="lineno">  205 </span>  [(ByteString,Integer,Unit)] -&gt;
+<span class="lineno">  206 </span>  Fun -&gt;
+<span class="lineno">  207 </span>  IO (SharedContext,Integer,[Goal])
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">proof fileReader pss archi file mbCry globs fun =</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="nottickedoff">do sc  &lt;- mkSharedContext</span>
+<span class="lineno">  210 </span><span class="spaces">     </span><span class="nottickedoff">halloc  &lt;- newHandleAllocator</span>
+<span class="lineno">  211 </span><span class="spaces">     </span><span class="nottickedoff">scLoadPreludeModule sc</span>
+<span class="lineno">  212 </span><span class="spaces">     </span><span class="nottickedoff">scLoadCryptolModule sc</span>
+<span class="lineno">  213 </span><span class="spaces">     </span><span class="nottickedoff">sym &lt;- newSAWCoreExprBuilder sc False</span>
+<span class="lineno">  214 </span><span class="spaces">     </span><span class="nottickedoff">SomeOnlineBackend bak &lt;- newSAWCoreBackend pss sym</span>
+<span class="lineno">  215 </span><span class="spaces">     </span><span class="nottickedoff">let ?fileReader = fileReader</span>
+<span class="lineno">  216 </span><span class="spaces">     </span><span class="nottickedoff">cenv &lt;- loadCry sym mbCry</span>
+<span class="lineno">  217 </span><span class="spaces">     </span><span class="nottickedoff">mvar &lt;- mkMemVar &quot;saw_x86:llvm_memory&quot; halloc</span>
+<span class="lineno">  218 </span><span class="spaces">     </span><span class="nottickedoff">proofWithOptions Options</span>
+<span class="lineno">  219 </span><span class="spaces">       </span><span class="nottickedoff">{ fileName = file</span>
+<span class="lineno">  220 </span><span class="spaces">       </span><span class="nottickedoff">, function = fun</span>
+<span class="lineno">  221 </span><span class="spaces">       </span><span class="nottickedoff">, archInfo = archi</span>
+<span class="lineno">  222 </span><span class="spaces">       </span><span class="nottickedoff">, backend = SomeBackend bak</span>
+<span class="lineno">  223 </span><span class="spaces">       </span><span class="nottickedoff">, allocator = halloc</span>
+<span class="lineno">  224 </span><span class="spaces">       </span><span class="nottickedoff">, memvar = mvar</span>
+<span class="lineno">  225 </span><span class="spaces">       </span><span class="nottickedoff">, cryEnv = cenv</span>
+<span class="lineno">  226 </span><span class="spaces">       </span><span class="nottickedoff">, extraGlobals = globs</span>
+<span class="lineno">  227 </span><span class="spaces">       </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  228 </span>
+<span class="lineno">  229 </span>-- | Run a proof using the given backend.
+<span class="lineno">  230 </span>-- Useful for integrating with other tool.
+<span class="lineno">  231 </span>proofWithOptions :: Options -&gt; IO (SharedContext,Integer,[Goal])
+<span class="lineno">  232 </span><span class="decl"><span class="nottickedoff">proofWithOptions opts =</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">do let path = fileName opts</span>
+<span class="lineno">  234 </span><span class="spaces">     </span><span class="nottickedoff">elf &lt;- getRelevant path =&lt;&lt; getElf path</span>
+<span class="lineno">  235 </span><span class="spaces">     </span><span class="nottickedoff">translate opts elf (function opts)</span></span>
+<span class="lineno">  236 </span>
+<span class="lineno">  237 </span>-- | Add interpretations for the symbolic functions, by looking
+<span class="lineno">  238 </span>-- them up in the Cryptol environment.  There should be definitions
+<span class="lineno">  239 </span>-- for &quot;aesenc&quot;, &quot;aesenclast&quot;, and &quot;clmul&quot;.
+<span class="lineno">  240 </span>registerSymFuns :: Opts -&gt; IO (SymFuns Sym)
+<span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">registerSymFuns opts =</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">do let sym = optsSym opts</span>
+<span class="lineno">  243 </span><span class="spaces">     </span><span class="nottickedoff">st  &lt;- sawCoreState sym</span>
+<span class="lineno">  244 </span><span class="spaces">     </span><span class="nottickedoff">sfs &lt;- newSymFuns sym</span>
+<span class="lineno">  245 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  246 </span><span class="spaces">     </span><span class="nottickedoff">sawRegisterSymFunInterp st (fnAesEnc     sfs) (mk2 &quot;aesenc&quot;)</span>
+<span class="lineno">  247 </span><span class="spaces">     </span><span class="nottickedoff">sawRegisterSymFunInterp st (fnAesEncLast sfs) (mk2 &quot;aesenclast&quot;)</span>
+<span class="lineno">  248 </span><span class="spaces">     </span><span class="nottickedoff">sawRegisterSymFunInterp st (fnClMul      sfs) (mk2 &quot;clmul&quot;)</span>
+<span class="lineno">  249 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  250 </span><span class="spaces">     </span><span class="nottickedoff">return sfs</span>
+<span class="lineno">  251 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  253 </span><span class="spaces">  </span><span class="nottickedoff">err nm xs =</span>
+<span class="lineno">  254 </span><span class="spaces">      </span><span class="nottickedoff">&quot;Type error in call to &quot; &lt;&gt; nm &lt;&gt;</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="nottickedoff">&quot;: expected 2 arguments, found &quot; &lt;&gt; Text.pack (show $ length xs)</span>
+<span class="lineno">  256 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="nottickedoff">mk2 nm _sc xs = case xs of</span>
+<span class="lineno">  258 </span><span class="spaces">                    </span><span class="nottickedoff">[_,_] -&gt; cryTerm opts nm xs</span>
+<span class="lineno">  259 </span><span class="spaces">                    </span><span class="nottickedoff">_     -&gt; fail $ Text.unpack $ err nm xs</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>--------------------------------------------------------------------------------
+<span class="lineno">  262 </span>-- ELF
+<span class="lineno">  263 </span>
+<span class="lineno">  264 </span>-- | These are the parts of the ELF file that we care about.
+<span class="lineno">  265 </span>data RelevantElf = RelevantElf
+<span class="lineno">  266 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">memory</span></span></span>    :: Memory 64
+<span class="lineno">  267 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">funSymMap</span></span></span> :: AddrSymMap 64
+<span class="lineno">  268 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">symMap</span></span></span>    :: AddrSymMap 64
+<span class="lineno">  269 </span>  }
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>-- | Parse an elf file.
+<span class="lineno">  272 </span>getElf :: FilePath -&gt; IO (Elf.ElfHeaderInfo 64)
+<span class="lineno">  273 </span><span class="decl"><span class="istickedoff">getElf path =</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">do bs &lt;- BS.readFile path</span>
+<span class="lineno">  275 </span><span class="spaces">     </span><span class="istickedoff">case Elf.decodeElfHeaderInfo bs of</span>
+<span class="lineno">  276 </span><span class="spaces">       </span><span class="istickedoff">Left (off, msg) -&gt;</span>
+<span class="lineno">  277 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">malformed path $ &quot;Invalid ELF header at offset &quot; &lt;&gt; Text.pack (show off) &lt;&gt;</span></span>
+<span class="lineno">  278 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">&quot;: &quot; &lt;&gt; Text.pack msg</span></span>
+<span class="lineno">  279 </span><span class="spaces">       </span><span class="istickedoff">Right (Elf.SomeElf hdr) -&gt;</span>
+<span class="lineno">  280 </span><span class="spaces">           </span><span class="istickedoff">let elfmachine = Elf.headerMachine (Elf.header hdr)</span>
+<span class="lineno">  281 </span><span class="spaces">               </span><span class="istickedoff">elfclass = Elf.headerClass (Elf.header hdr)</span>
+<span class="lineno">  282 </span><span class="spaces">           </span><span class="istickedoff">in case (elfmachine, elfclass) of</span>
+<span class="lineno">  283 </span><span class="spaces">               </span><span class="istickedoff">(Elf.EM_X86_64, Elf.ELFCLASS64) -&gt;</span>
+<span class="lineno">  284 </span><span class="spaces">                   </span><span class="istickedoff">pure hdr</span>
+<span class="lineno">  285 </span><span class="spaces">               </span><span class="istickedoff">(Elf.EM_X86_64, _) -&gt;</span>
+<span class="lineno">  286 </span><span class="spaces">                   </span><span class="istickedoff">-- Note that 32-bit x86 is a different machine; if</span>
+<span class="lineno">  287 </span><span class="spaces">                   </span><span class="istickedoff">-- we do see a 32-bit x86_64 bin though it might be</span>
+<span class="lineno">  288 </span><span class="spaces">                   </span><span class="istickedoff">-- one of the several 32-on-64 ABIs (akin to mips</span>
+<span class="lineno">  289 </span><span class="spaces">                   </span><span class="istickedoff">-- N32) that haven't caught on, so call it</span>
+<span class="lineno">  290 </span><span class="spaces">                   </span><span class="istickedoff">-- unsupported rather than malformed.</span>
+<span class="lineno">  291 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">unsupported path $ &quot;Unexpected ELF class &quot; ++ show elfclass</span></span>
+<span class="lineno">  292 </span><span class="spaces">               </span><span class="istickedoff">(_, _) -&gt;</span>
+<span class="lineno">  293 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">unsupported path $ &quot;Unexpected ELF machine &quot; ++ show elfmachine</span></span></span>
+<span class="lineno">  294 </span>
+<span class="lineno">  295 </span>
+<span class="lineno">  296 </span>-- | Extract a Macaw &quot;memory&quot; from an ELF file and resolve symbols.
+<span class="lineno">  297 </span>getRelevant :: FilePath -&gt; Elf.ElfHeaderInfo 64 -&gt; IO RelevantElf
+<span class="lineno">  298 </span><span class="decl"><span class="istickedoff">getRelevant path elf =</span>
+<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">(Left err, _) -&gt; <span class="nottickedoff">malformed path $ Text.pack err</span></span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">(_, Left err) -&gt; <span class="nottickedoff">malformed path $ Text.pack err</span></span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">(Right (mem, faddrs, _warnings, _errs), Right (_, addrs, _, _)) -&gt;</span>
+<span class="lineno">  303 </span><span class="spaces">      </span><span class="istickedoff">do let toEntry msym = (memSymbolStart msym, memSymbolName msym)</span>
+<span class="lineno">  304 </span><span class="spaces">         </span><span class="istickedoff">return RelevantElf { memory = mem</span>
+<span class="lineno">  305 </span><span class="spaces">                            </span><span class="istickedoff">, funSymMap = Map.fromList (map toEntry faddrs)</span>
+<span class="lineno">  306 </span><span class="spaces">                            </span><span class="istickedoff">, symMap = Map.fromList (map toEntry addrs)</span>
+<span class="lineno">  307 </span><span class="spaces">                            </span><span class="istickedoff">}</span>
+<span class="lineno">  308 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: What options do we want?</span>
+<span class="lineno">  311 </span><span class="spaces">  </span><span class="istickedoff">opts = LoadOptions { loadOffset = Just 0</span>
+<span class="lineno">  312 </span><span class="spaces">                     </span><span class="istickedoff">}</span></span>
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>
+<span class="lineno">  316 </span>
+<span class="lineno">  317 </span>-- | Find the address(es) of a symbol by name.
+<span class="lineno">  318 </span>findSymbols :: AddrSymMap 64 -&gt; ByteString -&gt; [ MemSegmentOff 64 ]
+<span class="lineno">  319 </span><span class="decl"><span class="istickedoff">findSymbols addrs nm = Map.findWithDefault <span class="nottickedoff">[]</span> nm invertedMap</span>
+<span class="lineno">  320 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  321 </span><span class="spaces">  </span><span class="istickedoff">invertedMap = Map.fromListWith <span class="nottickedoff">(++)</span> [ (y,[x]) | (x,y) &lt;- Map.toList addrs ]</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>-- | Find the single address of a symbol, or fail.
+<span class="lineno">  324 </span>findSymbol :: FilePath -&gt; AddrSymMap 64 -&gt; ByteString -&gt; IO (MemSegmentOff 64)
+<span class="lineno">  325 </span><span class="decl"><span class="nottickedoff">findSymbol path addrs nm =</span>
+<span class="lineno">  326 </span><span class="spaces">  </span><span class="nottickedoff">case findSymbols addrs nm of</span>
+<span class="lineno">  327 </span><span class="spaces">    </span><span class="nottickedoff">[addr] -&gt; return $! addr</span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="nottickedoff">[]     -&gt; malformed path (&quot;Could not find function &quot; &lt;&gt; Text.pack (show nm))</span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="nottickedoff">_      -&gt; malformed path (&quot;Multiple definitions for &quot; &lt;&gt; Text.pack (show nm))</span></span>
+<span class="lineno">  330 </span>
+<span class="lineno">  331 </span>
+<span class="lineno">  332 </span>loadGlobal ::
+<span class="lineno">  333 </span>  RelevantElf -&gt;
+<span class="lineno">  334 </span>  (ByteString, Integer, Unit) -&gt;
+<span class="lineno">  335 </span>  IO [(String, Integer, Unit, [Integer])]
+<span class="lineno">  336 </span><span class="decl"><span class="nottickedoff">loadGlobal elf (nm,n,u) =</span>
+<span class="lineno">  337 </span><span class="spaces">  </span><span class="nottickedoff">case findSymbols (symMap elf) nm of</span>
+<span class="lineno">  338 </span><span class="spaces">    </span><span class="nottickedoff">[] -&gt; do print $ symMap elf</span>
+<span class="lineno">  339 </span><span class="spaces">             </span><span class="nottickedoff">err &quot;Global not found&quot;</span>
+<span class="lineno">  340 </span><span class="spaces">    </span><span class="nottickedoff">_  -&gt; mapM loadLoc (findSymbols (symMap elf) nm)</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="nottickedoff">mem   = memory elf</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="nottickedoff">sname = BSC.unpack nm</span>
+<span class="lineno">  344 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  345 </span><span class="spaces">  </span><span class="nottickedoff">readOne a = case u of</span>
+<span class="lineno">  346 </span><span class="spaces">                </span><span class="nottickedoff">Bytes  -&gt; check (readWord8    mem a)</span>
+<span class="lineno">  347 </span><span class="spaces">                </span><span class="nottickedoff">Words  -&gt; check (readWord16le mem a)</span>
+<span class="lineno">  348 </span><span class="spaces">                </span><span class="nottickedoff">DWords -&gt; check (readWord32le mem a)</span>
+<span class="lineno">  349 </span><span class="spaces">                </span><span class="nottickedoff">QWords -&gt; check (readWord64le mem a)</span>
+<span class="lineno">  350 </span><span class="spaces">                </span><span class="nottickedoff">_      -&gt; err (&quot;unsuported global size: &quot; ++ show u)</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="nottickedoff">nextAddr = incAddr (bytesToInteger (1 *. u))</span>
+<span class="lineno">  353 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="nottickedoff">addrsFor o = take (fromIntegral n) (iterate nextAddr o)</span>
+<span class="lineno">  355 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">check :: (Show b, Integral a) =&gt; Either b a -&gt; IO Integer</span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="nottickedoff">check res = case res of</span>
+<span class="lineno">  358 </span><span class="spaces">                </span><span class="nottickedoff">Left e  -&gt; err (show e)</span>
+<span class="lineno">  359 </span><span class="spaces">                </span><span class="nottickedoff">Right a -&gt; return (fromIntegral a)</span>
+<span class="lineno">  360 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  361 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">loadLoc off = do let start = segoffAddr off</span>
+<span class="lineno">  363 </span><span class="spaces">                       </span><span class="nottickedoff">a  = memWordToUnsigned (addrOffset start)</span>
+<span class="lineno">  364 </span><span class="spaces">                   </span><span class="nottickedoff">is &lt;- mapM readOne (addrsFor start)</span>
+<span class="lineno">  365 </span><span class="spaces">                   </span><span class="nottickedoff">return (sname, a, u, is)</span>
+<span class="lineno">  366 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="nottickedoff">err :: [Char] -&gt; IO a</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">err xs = fail $ unlines</span>
+<span class="lineno">  369 </span><span class="spaces">                    </span><span class="nottickedoff">[ &quot;Failed to load global.&quot;</span>
+<span class="lineno">  370 </span><span class="spaces">                    </span><span class="nottickedoff">, &quot;*** Global: &quot; ++ show nm</span>
+<span class="lineno">  371 </span><span class="spaces">                    </span><span class="nottickedoff">, &quot;*** Error: &quot; ++ xs</span>
+<span class="lineno">  372 </span><span class="spaces">                    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  373 </span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>-- | The position associated with a specific location.
+<span class="lineno">  376 </span>posFn :: MemSegmentOff 64 -&gt; Position
+<span class="lineno">  377 </span><span class="decl"><span class="istickedoff">posFn = OtherPos . Text.pack . show</span></span>
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>-- | Load a file with Cryptol decls.
+<span class="lineno">  381 </span>loadCry ::
+<span class="lineno">  382 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno">  383 </span>  Sym -&gt; Maybe FilePath -&gt;
+<span class="lineno">  384 </span>  IO CryptolEnv
+<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">loadCry sym mb =</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno">  387 </span><span class="spaces">     </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
+<span class="lineno">  388 </span><span class="spaces">     </span><span class="nottickedoff">case mb of</span>
+<span class="lineno">  389 </span><span class="spaces">       </span><span class="nottickedoff">Nothing   -&gt; return env</span>
+<span class="lineno">  390 </span><span class="spaces">       </span><span class="nottickedoff">Just file -&gt; snd &lt;$&gt; loadCryptolModule sc defaultPrimitiveOptions env file</span></span>
+<span class="lineno">  391 </span>
+<span class="lineno">  392 </span>
+<span class="lineno">  393 </span>--------------------------------------------------------------------------------
+<span class="lineno">  394 </span>-- Translation
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>callHandler :: Overrides -&gt; CallHandler
+<span class="lineno">  397 </span><span class="decl"><span class="nottickedoff">callHandler callMap sym = Macaw.LookupFunctionHandle $ \st mem regs -&gt; do</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">case lookupX86Reg X86_IP regs of</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="nottickedoff">Just (RV ptr) | LLVMPointer base off &lt;- ptr -&gt;</span>
+<span class="lineno">  400 </span><span class="spaces">      </span><span class="nottickedoff">case (asNat base, BV.asUnsigned &lt;$&gt; asBV off) of</span>
+<span class="lineno">  401 </span><span class="spaces">        </span><span class="nottickedoff">(Just b, Just o) -&gt;</span>
+<span class="lineno">  402 </span><span class="spaces">           </span><span class="nottickedoff">case Map.lookup (b,o) callMap of</span>
+<span class="lineno">  403 </span><span class="spaces">             </span><span class="nottickedoff">Just h  -&gt; case h sym of</span>
+<span class="lineno">  404 </span><span class="spaces">                          </span><span class="nottickedoff">Macaw.LookupFunctionHandle f -&gt; f st mem regs</span>
+<span class="lineno">  405 </span><span class="spaces">             </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">  406 </span><span class="spaces">               </span><span class="nottickedoff">fail (&quot;No over-ride for function: &quot; ++ show (ppPtr ptr))</span>
+<span class="lineno">  407 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  408 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail (&quot;Non-static call: &quot; ++ show (ppPtr ptr))</span>
+<span class="lineno">  409 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  410 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail &quot;[Bug?] Failed to obtain the value of the IP register.&quot;</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>
+<span class="lineno">  413 </span>-- | Verify the given function.  The function matches it sepcification,
+<span class="lineno">  414 </span>-- as long as the returned goals can be discharged.
+<span class="lineno">  415 </span>-- Returns the shared context and the goals (from the Sym)
+<span class="lineno">  416 </span>-- and the integer is the (aboslute) address of the function.
+<span class="lineno">  417 </span>translate ::
+<span class="lineno">  418 </span>  Options -&gt; RelevantElf -&gt; Fun -&gt; IO (SharedContext, Integer, [Goal])
+<span class="lineno">  419 </span><span class="decl"><span class="nottickedoff">translate opts elf fun =</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">do let name = funName fun</span>
+<span class="lineno">  421 </span><span class="spaces">     </span><span class="nottickedoff">sayLn (&quot;Translating function: &quot; ++ BSC.unpack name)</span>
+<span class="lineno">  422 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  423 </span><span class="spaces">     </span><span class="nottickedoff">-- TODO? do we need to pass in the mdMap into more places in this mode?</span>
+<span class="lineno">  424 </span><span class="spaces">     </span><span class="nottickedoff">mdMap &lt;- newIORef mempty</span>
+<span class="lineno">  425 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  426 </span><span class="spaces">     </span><span class="nottickedoff">let ?memOpts = Crucible.defaultMemOptions</span>
+<span class="lineno">  427 </span><span class="spaces">     </span><span class="nottickedoff">let ?recordLLVMAnnotation = \_ _ _ -&gt; return ()</span>
+<span class="lineno">  428 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  429 </span><span class="spaces">     </span><span class="nottickedoff">let bak   = backend opts</span>
+<span class="lineno">  430 </span><span class="spaces">         </span><span class="nottickedoff">sym   = case bak of SomeBackend b -&gt; backendGetSym b</span>
+<span class="lineno">  431 </span><span class="spaces">         </span><span class="nottickedoff">sopts = Opts { optsBackend = bak, optsCry = cryEnv opts, optsMvar = memvar opts }</span>
+<span class="lineno">  432 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  433 </span><span class="spaces">     </span><span class="nottickedoff">sfs &lt;- registerSymFuns sopts</span>
+<span class="lineno">  434 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  435 </span><span class="spaces">     </span><span class="nottickedoff">(globs,st,checkPost) &lt;-</span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="nottickedoff">case funSpec fun of</span>
+<span class="lineno">  437 </span><span class="spaces">          </span><span class="nottickedoff">NewStyle mkSpec debug -&gt;</span>
+<span class="lineno">  438 </span><span class="spaces">            </span><span class="nottickedoff">do gss &lt;- mapM (loadGlobal elf) (extraGlobals opts)</span>
+<span class="lineno">  439 </span><span class="spaces">               </span><span class="nottickedoff">spec0 &lt;- mkSpec (cryEnv opts)</span>
+<span class="lineno">  440 </span><span class="spaces">               </span><span class="nottickedoff">let spec = spec0 {specGlobsRO = concat (specGlobsRO spec0:gss)}</span>
+<span class="lineno">  441 </span><span class="spaces">               </span><span class="nottickedoff">(gs,st,po) &lt;- verifyMode spec sopts</span>
+<span class="lineno">  442 </span><span class="spaces">               </span><span class="nottickedoff">debug st</span>
+<span class="lineno">  443 </span><span class="spaces">               </span><span class="nottickedoff">return (gs,st,\st1 -&gt; debug st1 &gt;&gt; po st1)</span>
+<span class="lineno">  444 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  445 </span><span class="spaces">     </span><span class="nottickedoff">addr &lt;- doSim opts elf sfs name globs st checkPost</span>
+<span class="lineno">  446 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  447 </span><span class="spaces">     </span><span class="nottickedoff">gs &lt;- getGoals bak mdMap</span>
+<span class="lineno">  448 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno">  449 </span><span class="spaces">     </span><span class="nottickedoff">return (sc, addr, gs)</span></span>
+<span class="lineno">  450 </span>
+<span class="lineno">  451 </span>
+<span class="lineno">  452 </span>setSimulatorVerbosity :: (W4.IsSymExprBuilder sym) =&gt; Int -&gt; sym -&gt; IO ()
+<span class="lineno">  453 </span><span class="decl"><span class="nottickedoff">setSimulatorVerbosity verbosity sym = do</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="nottickedoff">verbSetting &lt;- W4.getOptionSetting W4.verbosity (W4.getConfiguration sym)</span>
+<span class="lineno">  455 </span><span class="spaces">  </span><span class="nottickedoff">_ &lt;- W4.setOpt verbSetting (toInteger verbosity)</span>
+<span class="lineno">  456 </span><span class="spaces">  </span><span class="nottickedoff">return ()</span></span>
+<span class="lineno">  457 </span>
+<span class="lineno">  458 </span>
+<span class="lineno">  459 </span>
+<span class="lineno">  460 </span>doSim ::
+<span class="lineno">  461 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  462 </span>  Options -&gt;
+<span class="lineno">  463 </span>  RelevantElf -&gt;
+<span class="lineno">  464 </span>  SymFuns Sym -&gt;
+<span class="lineno">  465 </span>  ByteString -&gt;
+<span class="lineno">  466 </span>  (GlobalMap Sym Crucible.Mem 64, Overrides) -&gt;
+<span class="lineno">  467 </span>  State -&gt;
+<span class="lineno">  468 </span>  (State -&gt; IO ()) -&gt;
+<span class="lineno">  469 </span>  IO Integer
+<span class="lineno">  470 </span><span class="decl"><span class="nottickedoff">doSim opts elf sfs name (globs,overs) st checkPost =</span>
+<span class="lineno">  471 </span><span class="spaces">  </span><span class="nottickedoff">do say &quot;  Looking for address... &quot;</span>
+<span class="lineno">  472 </span><span class="spaces">     </span><span class="nottickedoff">let path = fileName opts</span>
+<span class="lineno">  473 </span><span class="spaces">     </span><span class="nottickedoff">addr &lt;- findSymbol path (symMap elf) name</span>
+<span class="lineno">  474 </span><span class="spaces">     </span><span class="nottickedoff">-- addr :: MemSegmentOff 64</span>
+<span class="lineno">  475 </span><span class="spaces">     </span><span class="nottickedoff">let addrInt =</span>
+<span class="lineno">  476 </span><span class="spaces">           </span><span class="nottickedoff">let seg :: MemSegment 64</span>
+<span class="lineno">  477 </span><span class="spaces">               </span><span class="nottickedoff">seg = segoffSegment addr</span>
+<span class="lineno">  478 </span><span class="spaces">           </span><span class="nottickedoff">in if segmentBase seg == 0</span>
+<span class="lineno">  479 </span><span class="spaces">                 </span><span class="nottickedoff">then toInteger (segmentOffset seg + segoffOffset addr)</span>
+<span class="lineno">  480 </span><span class="spaces">                 </span><span class="nottickedoff">else error &quot;  Not an absolute address&quot;</span>
+<span class="lineno">  481 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  482 </span><span class="spaces">     </span><span class="nottickedoff">sayLn (show addr)</span>
+<span class="lineno">  483 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  484 </span><span class="spaces">     </span><span class="nottickedoff">SomeCFG cfg &lt;- statusBlock &quot;  Constructing CFG... &quot;</span>
+<span class="lineno">  485 </span><span class="spaces">                    </span><span class="nottickedoff">$ makeCFG opts elf name addr</span>
+<span class="lineno">  486 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  487 </span><span class="spaces">     </span><span class="nottickedoff">-- writeFile &quot;XXX.hs&quot; (show cfg)</span>
+<span class="lineno">  488 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  489 </span><span class="spaces">     </span><span class="nottickedoff">let sym  = case backend opts of SomeBackend bak -&gt; backendGetSym bak</span>
+<span class="lineno">  490 </span><span class="spaces">         </span><span class="nottickedoff">mvar = memvar opts</span>
+<span class="lineno">  491 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  492 </span><span class="spaces">     </span><span class="nottickedoff">setSimulatorVerbosity 0 sym</span>
+<span class="lineno">  493 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  494 </span><span class="spaces">     </span><span class="nottickedoff">execResult &lt;- statusBlock &quot;  Simulating... &quot; $ do</span>
+<span class="lineno">  495 </span><span class="spaces">       </span><span class="nottickedoff">let crucRegTypes = crucArchRegTypes x86</span>
+<span class="lineno">  496 </span><span class="spaces">       </span><span class="nottickedoff">let macawStructRepr = StructRepr crucRegTypes</span>
+<span class="lineno">  497 </span><span class="spaces">       </span><span class="nottickedoff">-- The global pointer validity predicate is required if your memory</span>
+<span class="lineno">  498 </span><span class="spaces">       </span><span class="nottickedoff">-- representation has gaps that are not supposed to be mapped and you</span>
+<span class="lineno">  499 </span><span class="spaces">       </span><span class="nottickedoff">-- want to verify that no memory accesses touch unmapped regions.</span>
+<span class="lineno">  500 </span><span class="spaces">       </span><span class="nottickedoff">--</span>
+<span class="lineno">  501 </span><span class="spaces">       </span><span class="nottickedoff">-- The memory setup for this verifier does not have that problem, and</span>
+<span class="lineno">  502 </span><span class="spaces">       </span><span class="nottickedoff">-- thus does not need any additional validity predicates.</span>
+<span class="lineno">  503 </span><span class="spaces">       </span><span class="nottickedoff">let noExtraValidityPred _ _ _ _ = return Nothing</span>
+<span class="lineno">  504 </span><span class="spaces">       </span><span class="nottickedoff">let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride</span>
+<span class="lineno">  505 </span><span class="spaces">       </span><span class="nottickedoff">let lookupSyscall = unsupportedSyscalls &quot;saw-script&quot;</span>
+<span class="lineno">  506 </span><span class="spaces">       </span><span class="nottickedoff">let mmConf = MemModelConfig</span>
+<span class="lineno">  507 </span><span class="spaces">                      </span><span class="nottickedoff">{ globalMemMap = globs</span>
+<span class="lineno">  508 </span><span class="spaces">                      </span><span class="nottickedoff">, lookupFunctionHandle = callHandler overs sym</span>
+<span class="lineno">  509 </span><span class="spaces">                      </span><span class="nottickedoff">, lookupSyscallHandle = lookupSyscall</span>
+<span class="lineno">  510 </span><span class="spaces">                      </span><span class="nottickedoff">, mkGlobalPointerValidityAssertion = noExtraValidityPred</span>
+<span class="lineno">  511 </span><span class="spaces">                      </span><span class="nottickedoff">, resolvePointer = pure</span>
+<span class="lineno">  512 </span><span class="spaces">                      </span><span class="nottickedoff">, concreteImmutableGlobalRead = \_ _ -&gt; pure Nothing</span>
+<span class="lineno">  513 </span><span class="spaces">                      </span><span class="nottickedoff">, lazilyPopulateGlobalMem = \_ _ -&gt; pure</span>
+<span class="lineno">  514 </span><span class="spaces">                      </span><span class="nottickedoff">}</span>
+<span class="lineno">  515 </span><span class="spaces">       </span><span class="nottickedoff">let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)</span>
+<span class="lineno">  516 </span><span class="spaces">           </span><span class="nottickedoff">ctx = SimContext { _ctxBackend = backend opts</span>
+<span class="lineno">  517 </span><span class="spaces">                              </span><span class="nottickedoff">, ctxSolverProof = \a -&gt; a</span>
+<span class="lineno">  518 </span><span class="spaces">                              </span><span class="nottickedoff">, ctxIntrinsicTypes = llvmIntrinsicTypes</span>
+<span class="lineno">  519 </span><span class="spaces">                              </span><span class="nottickedoff">, simHandleAllocator = allocator opts</span>
+<span class="lineno">  520 </span><span class="spaces">                              </span><span class="nottickedoff">, printHandle = stdout</span>
+<span class="lineno">  521 </span><span class="spaces">                              </span><span class="nottickedoff">, extensionImpl = macawExtensions archEvalFns mvar mmConf</span>
+<span class="lineno">  522 </span><span class="spaces">                              </span><span class="nottickedoff">, _functionBindings = FnBindings $</span>
+<span class="lineno">  523 </span><span class="spaces">                                </span><span class="nottickedoff">insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap</span>
+<span class="lineno">  524 </span><span class="spaces">                              </span><span class="nottickedoff">, _cruciblePersonality = MacawSimulatorState</span>
+<span class="lineno">  525 </span><span class="spaces">                              </span><span class="nottickedoff">, _profilingMetrics = Map.empty</span>
+<span class="lineno">  526 </span><span class="spaces">                              </span><span class="nottickedoff">}</span>
+<span class="lineno">  527 </span><span class="spaces">       </span><span class="nottickedoff">let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals</span>
+<span class="lineno">  528 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  529 </span><span class="spaces">       </span><span class="nottickedoff">executeCrucible []</span>
+<span class="lineno">  530 </span><span class="spaces">         </span><span class="nottickedoff">$ InitialState ctx initGlobals defaultAbortHandler macawStructRepr</span>
+<span class="lineno">  531 </span><span class="spaces">         </span><span class="nottickedoff">$ runOverrideSim macawStructRepr</span>
+<span class="lineno">  532 </span><span class="spaces">         </span><span class="nottickedoff">$ do let args :: RegMap Sym (MacawFunctionArgs X86_64)</span>
+<span class="lineno">  533 </span><span class="spaces">                  </span><span class="nottickedoff">args = RegMap (singleton (RegEntry macawStructRepr</span>
+<span class="lineno">  534 </span><span class="spaces">                                                      </span><span class="nottickedoff">(stateRegs st)))</span>
+<span class="lineno">  535 </span><span class="spaces">              </span><span class="nottickedoff">crucGenArchConstraints x86 $</span>
+<span class="lineno">  536 </span><span class="spaces">                  </span><span class="nottickedoff">do r &lt;- callCFG cfg args</span>
+<span class="lineno">  537 </span><span class="spaces">                     </span><span class="nottickedoff">mem &lt;- readGlobal mvar</span>
+<span class="lineno">  538 </span><span class="spaces">                     </span><span class="nottickedoff">let regs = regValue r</span>
+<span class="lineno">  539 </span><span class="spaces">                     </span><span class="nottickedoff">let sta = State { stateMem = mem, stateRegs = regs }</span>
+<span class="lineno">  540 </span><span class="spaces">                     </span><span class="nottickedoff">liftIO (checkPost sta)</span>
+<span class="lineno">  541 </span><span class="spaces">                     </span><span class="nottickedoff">pure regs</span>
+<span class="lineno">  542 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  543 </span><span class="spaces">     </span><span class="nottickedoff">case execResult of</span>
+<span class="lineno">  544 </span><span class="spaces">       </span><span class="nottickedoff">FinishedResult {} -&gt; pure ()</span>
+<span class="lineno">  545 </span><span class="spaces">       </span><span class="nottickedoff">AbortedResult {}  -&gt; sayLn &quot;[Warning] Function never returns&quot;</span>
+<span class="lineno">  546 </span><span class="spaces">       </span><span class="nottickedoff">TimeoutResult {}  -&gt; timeout path</span>
+<span class="lineno">  547 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  548 </span><span class="spaces">     </span><span class="nottickedoff">return addrInt</span></span>
+<span class="lineno">  549 </span>
+<span class="lineno">  550 </span>
+<span class="lineno">  551 </span>type TheCFG = SomeCFG (MacawExt X86_64)
+<span class="lineno">  552 </span>                      (EmptyCtx ::&gt; ArchRegStruct X86_64)
+<span class="lineno">  553 </span>                      (ArchRegStruct X86_64)
+<span class="lineno">  554 </span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>-- | Generate a CFG for the function at the given address.
+<span class="lineno">  557 </span>makeCFG ::
+<span class="lineno">  558 </span>  Options -&gt;
+<span class="lineno">  559 </span>  RelevantElf -&gt;
+<span class="lineno">  560 </span>  ByteString -&gt;
+<span class="lineno">  561 </span>  MemSegmentOff 64 -&gt;
+<span class="lineno">  562 </span>  IO TheCFG
+<span class="lineno">  563 </span><span class="decl"><span class="nottickedoff">makeCFG opts elf name addr =</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">do (_,Some funInfo) &lt;- return $ analyzeFunction addr UserRequest empty</span>
+<span class="lineno">  565 </span><span class="spaces">     </span><span class="nottickedoff">-- writeFile &quot;MACAW.cfg&quot; (show (pretty funInfo))</span>
+<span class="lineno">  566 </span><span class="spaces">     </span><span class="nottickedoff">mkFunCFG x86 (allocator opts) cruxName posFn funInfo</span>
+<span class="lineno">  567 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">txtName   = decodeUtf8 name</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">cruxName  = functionNameFromText txtName</span>
+<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">empty = emptyDiscoveryState (memory elf) (funSymMap elf) (archInfo opts)</span></span>
+<span class="lineno">  571 </span>
+<span class="lineno">  572 </span>
+<span class="lineno">  573 </span>
+<span class="lineno">  574 </span>--------------------------------------------------------------------------------
+<span class="lineno">  575 </span>-- Goals
+<span class="lineno">  576 </span>
+<span class="lineno">  577 </span>data Goal = Goal
+<span class="lineno">  578 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">gAssumes</span></span></span> :: [ Term ]              -- ^ Assuming these
+<span class="lineno">  579 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">gShows</span></span></span>   :: Term                  -- ^ We need to show this
+<span class="lineno">  580 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">gMd</span></span></span>      :: ConditionMetadata     -- ^ Metadata about the goal
+<span class="lineno">  581 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">gMessage</span></span></span> :: SimErrorReason        -- ^ We should say this if the proof fails
+<span class="lineno">  582 </span>  }
+<span class="lineno">  583 </span>
+<span class="lineno">  584 </span>gLoc :: Goal -&gt; ProgramLoc
+<span class="lineno">  585 </span><span class="decl"><span class="nottickedoff">gLoc = conditionLoc . gMd</span></span>
+<span class="lineno">  586 </span>
+<span class="lineno">  587 </span>-- | The proposition that needs proving (i.e., assumptions imply conclusion)
+<span class="lineno">  588 </span>gGoal :: SharedContext -&gt; Goal -&gt; IO Prop
+<span class="lineno">  589 </span><span class="decl"><span class="nottickedoff">gGoal sc g0 = boolToProp sc [] =&lt;&lt; go (gAssumes g)</span>
+<span class="lineno">  590 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  591 </span><span class="spaces">  </span><span class="nottickedoff">g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }</span>
+<span class="lineno">  592 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  593 </span><span class="spaces">  </span><span class="nottickedoff">_shG = do putStrLn &quot;Assuming:&quot;</span>
+<span class="lineno">  594 </span><span class="spaces">            </span><span class="nottickedoff">mapM_ _shT (gAssumes g)</span>
+<span class="lineno">  595 </span><span class="spaces">            </span><span class="nottickedoff">putStrLn &quot;Shows:&quot;</span>
+<span class="lineno">  596 </span><span class="spaces">            </span><span class="nottickedoff">_shT (gShows g)</span>
+<span class="lineno">  597 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  598 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  599 </span><span class="spaces">  </span><span class="nottickedoff">_shT t = putStrLn (&quot;  &quot; ++ showTerm t)</span>
+<span class="lineno">  600 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  601 </span><span class="spaces">  </span><span class="nottickedoff">skip a = case asBool a of</span>
+<span class="lineno">  602 </span><span class="spaces">             </span><span class="nottickedoff">Just True -&gt; Nothing</span>
+<span class="lineno">  603 </span><span class="spaces">             </span><span class="nottickedoff">_         -&gt; Just a</span>
+<span class="lineno">  604 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  605 </span><span class="spaces">  </span><span class="nottickedoff">go xs = case xs of</span>
+<span class="lineno">  606 </span><span class="spaces">            </span><span class="nottickedoff">[]     -&gt; return (gShows g)</span>
+<span class="lineno">  607 </span><span class="spaces">            </span><span class="nottickedoff">a : as -&gt; scImplies sc a =&lt;&lt; go as</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>getGoals :: SomeBackend Sym -&gt; IORef MetadataMap -&gt; IO [Goal]
+<span class="lineno">  610 </span><span class="decl"><span class="nottickedoff">getGoals (SomeBackend bak) mdMap =</span>
+<span class="lineno">  611 </span><span class="spaces">  </span><span class="nottickedoff">do finalMdMap &lt;- readIORef mdMap</span>
+<span class="lineno">  612 </span><span class="spaces">     </span><span class="nottickedoff">obls &lt;- maybe [] goalsToList &lt;$&gt; getProofObligations bak</span>
+<span class="lineno">  613 </span><span class="spaces">     </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
+<span class="lineno">  614 </span><span class="spaces">     </span><span class="nottickedoff">mapM (toGoal st finalMdMap) obls</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="nottickedoff">sym = backendGetSym bak</span>
+<span class="lineno">  617 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  618 </span><span class="spaces">  </span><span class="nottickedoff">toGoal st finalMdMap (ProofGoal asmps g) =</span>
+<span class="lineno">  619 </span><span class="spaces">    </span><span class="nottickedoff">do a1 &lt;- toSC sym st =&lt;&lt; assumptionsPred sym asmps</span>
+<span class="lineno">  620 </span><span class="spaces">       </span><span class="nottickedoff">p  &lt;- toSC sym st (g ^. labeledPred)</span>
+<span class="lineno">  621 </span><span class="spaces">       </span><span class="nottickedoff">let SimError loc msg = g^.labeledPredMsg</span>
+<span class="lineno">  622 </span><span class="spaces">       </span><span class="nottickedoff">let defaultMd = ConditionMetadata</span>
+<span class="lineno">  623 </span><span class="spaces">                       </span><span class="nottickedoff">{ conditionLoc = loc</span>
+<span class="lineno">  624 </span><span class="spaces">                       </span><span class="nottickedoff">, conditionTags = mempty</span>
+<span class="lineno">  625 </span><span class="spaces">                       </span><span class="nottickedoff">, conditionType = &quot;safety assertion&quot;</span>
+<span class="lineno">  626 </span><span class="spaces">                       </span><span class="nottickedoff">, conditionContext = &quot;&quot;</span>
+<span class="lineno">  627 </span><span class="spaces">                       </span><span class="nottickedoff">}</span>
+<span class="lineno">  628 </span><span class="spaces">       </span><span class="nottickedoff">let md = fromMaybe defaultMd $</span>
+<span class="lineno">  629 </span><span class="spaces">                  </span><span class="nottickedoff">do ann &lt;- W4.getAnnotation sym (g^.labeledPred)</span>
+<span class="lineno">  630 </span><span class="spaces">                     </span><span class="nottickedoff">Map.lookup ann finalMdMap</span>
+<span class="lineno">  631 </span><span class="spaces">       </span><span class="nottickedoff">return Goal { gAssumes = [a1]</span>
+<span class="lineno">  632 </span><span class="spaces">                   </span><span class="nottickedoff">, gShows   = p</span>
+<span class="lineno">  633 </span><span class="spaces">                   </span><span class="nottickedoff">, gMd      = md</span>
+<span class="lineno">  634 </span><span class="spaces">                   </span><span class="nottickedoff">, gMessage = msg</span>
+<span class="lineno">  635 </span><span class="spaces">                   </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  636 </span>
+<span class="lineno">  637 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Goal</span></span></span></span> where
+<span class="lineno">  638 </span>  <span class="decl"><span class="nottickedoff">showsPrec _ g = showString &quot;Goal { gAssumes = &quot;</span>
+<span class="lineno">  639 </span><span class="spaces">                </span><span class="nottickedoff">. showList (map (show . showTerm) (gAssumes g))</span>
+<span class="lineno">  640 </span><span class="spaces">                </span><span class="nottickedoff">. showString &quot;, gShows = &quot; . shows (showTerm (gShows g))</span>
+<span class="lineno">  641 </span><span class="spaces">                </span><span class="nottickedoff">. showString &quot;, gLoc = &quot; . shows (gLoc g)</span>
+<span class="lineno">  642 </span><span class="spaces">                </span><span class="nottickedoff">. showString &quot;, gMessage = &quot; . shows (show (gMessage g))</span>
+<span class="lineno">  643 </span><span class="spaces">                </span><span class="nottickedoff">. showString &quot; }&quot;</span></span>
+<span class="lineno">  644 </span>
+<span class="lineno">  645 </span>
+<span class="lineno">  646 </span>--------------------------------------------------------------------------------
+<span class="lineno">  647 </span>-- Specialize the generic functions to the X86.
+<span class="lineno">  648 </span>
+<span class="lineno">  649 </span>-- | All functions related to X86.
+<span class="lineno">  650 </span>x86 :: MacawSymbolicArchFunctions X86_64
+<span class="lineno">  651 </span><span class="decl"><span class="nottickedoff">x86 = x86_64MacawSymbolicFns</span></span>
+<span class="lineno">  652 </span>
+<span class="lineno">  653 </span>
+<span class="lineno">  654 </span>
+<span class="lineno">  655 </span>--------------------------------------------------------------------------------
+<span class="lineno">  656 </span>-- Calling Convention
+<span class="lineno">  657 </span>-- see: http://refspecs.linuxfoundation.org/elf/x86_64-abi-0.99.pdf
+<span class="lineno">  658 </span>-- Need to preserve: %rbp, %rbx, %r12--%r15
+<span class="lineno">  659 </span>-- Preserve control bits in MXCSR
+<span class="lineno">  660 </span>-- Preserve x87 control word.
+<span class="lineno">  661 </span>-- On entry:
+<span class="lineno">  662 </span>--   CPU is in x87 mode
+<span class="lineno">  663 </span>--   DF in $rFLAGS is clear one entry and return.
+<span class="lineno">  664 </span>-- &quot;Red zone&quot; 128 bytes past the end of the stack %rsp.
+<span class="lineno">  665 </span>--    * not modified by interrupts
+<span class="lineno">  666 </span>
+<span class="lineno">  667 </span>
+<span class="lineno">  668 </span>--------------------------------------------------------------------------------
+<span class="lineno">  669 </span>-- Errors
+<span class="lineno">  670 </span>
+<span class="lineno">  671 </span>-- | Exception for hitting an unsupported object or feature. The arguments
+<span class="lineno">  672 </span>--   are the filename we were looking at, and a message.
+<span class="lineno">  673 </span>data X86Unsupported = X86Unsupported FilePath String deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  674 </span>
+<span class="lineno">  675 </span>-- | Exception for miscellaneous errors during verification. The arguments
+<span class="lineno">  676 </span>--   are the filename we were looking at, also optionally a function/symbol
+<span class="lineno">  677 </span>--   name, and a message.
+<span class="lineno">  678 </span>data X86Error       = X86Error FilePath (Maybe Text) Text deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  679 </span>
+<span class="lineno">  680 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Exception X86Unsupported</span></span></span></span></span></span>
+<span class="lineno">  681 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Exception X86Error</span></span></span></span></span></span>
+<span class="lineno">  682 </span>
+<span class="lineno">  683 </span>unsupported :: FilePath -&gt; String -&gt; IO a
+<span class="lineno">  684 </span><span class="decl"><span class="nottickedoff">unsupported path x = throwIO (X86Unsupported path x)</span></span>
+<span class="lineno">  685 </span>
+<span class="lineno">  686 </span>malformed :: FilePath -&gt; Text -&gt; IO a
+<span class="lineno">  687 </span><span class="decl"><span class="nottickedoff">malformed path x = throwIO (X86Error path Nothing x)</span></span>
+<span class="lineno">  688 </span>
+<span class="lineno">  689 </span>timeout :: FilePath -&gt; IO a
+<span class="lineno">  690 </span><span class="decl"><span class="nottickedoff">timeout path = throwIO (X86Error path Nothing &quot;Execution timed out&quot;)</span></span>
+<span class="lineno">  691 </span>
+<span class="lineno">  692 </span>
+<span class="lineno">  693 </span>--------------------------------------------------------------------------------
+<span class="lineno">  694 </span>-- Status output
+<span class="lineno">  695 </span>
+<span class="lineno">  696 </span>
+<span class="lineno">  697 </span>say :: String -&gt; IO ()
+<span class="lineno">  698 </span><span class="decl"><span class="nottickedoff">say x = putStr x &gt;&gt; hFlush stdout</span></span>
+<span class="lineno">  699 </span>
+<span class="lineno">  700 </span>sayLn :: String -&gt; IO ()
+<span class="lineno">  701 </span><span class="decl"><span class="nottickedoff">sayLn = putStrLn</span></span>
+<span class="lineno">  702 </span>
+<span class="lineno">  703 </span>sayOK :: IO ()
+<span class="lineno">  704 </span><span class="decl"><span class="nottickedoff">sayOK = sayLn &quot;[OK]&quot;</span></span>
+<span class="lineno">  705 </span>
+<span class="lineno">  706 </span>statusBlock :: String -&gt; IO a -&gt; IO a
+<span class="lineno">  707 </span><span class="decl"><span class="nottickedoff">statusBlock msg m =</span>
+<span class="lineno">  708 </span><span class="spaces">  </span><span class="nottickedoff">do say msg</span>
+<span class="lineno">  709 </span><span class="spaces">     </span><span class="nottickedoff">a &lt;- m</span>
+<span class="lineno">  710 </span><span class="spaces">     </span><span class="nottickedoff">sayOK</span>
+<span class="lineno">  711 </span><span class="spaces">     </span><span class="nottickedoff">return a</span></span>
+
+</pre>
+</body>
+</html>
