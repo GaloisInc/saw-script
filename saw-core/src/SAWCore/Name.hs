@@ -269,6 +269,8 @@ instance Hashable Name where
 -- External Constants ----------------------------------------------------------
 
 -- | A global name paired with a type.
+-- We assume a global invariant: the type should be uniquely
+-- determined by the name.
 data ExtCns e =
   EC
   { ecName :: !Name
@@ -277,16 +279,13 @@ data ExtCns e =
   deriving (Show, Functor, Foldable, Traversable)
 
 -- | Because of the global uniqueness invariant, comparing the
--- 'VarIndex' is sufficient to ensure equality of names.
+-- 'Name' is sufficient to ensure equality.
 instance Eq (ExtCns e) where
   x == y = ecName x == ecName y
 
 instance Ord (ExtCns e) where
   compare x y = compare (ecName x) (ecName y)
 
--- | For hashing, we consider only the 'NameInfo' and not the
--- 'VarIndex'; this gives a stable hash value for a particular name,
--- even if the unique IDs are assigned differently from run to run.
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecName ec)
 
