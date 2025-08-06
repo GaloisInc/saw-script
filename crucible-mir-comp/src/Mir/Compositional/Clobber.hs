@@ -184,7 +184,7 @@ clobberGlobals sym loc nameStr cs = do
                 Nothing -> error $ "couldn't find static def for " ++ show defId
         let tpr = globalType gv
         let shp = tyToShapeEq (cs ^. collection) (static ^. M.sTy) tpr
-        let nameStr' = nameStr ++ "_" ++ show defId
+        let nameStr' = nameStr ++ " (" ++ show defId ++ ")"
         let clobber = case static ^. M.sMutable of
                 False -> clobberImmutSymbolic sym loc nameStr'
                 True -> clobberSymbolic sym loc nameStr'
