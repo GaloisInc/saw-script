@@ -287,129 +287,125 @@ span.spaces    { background: white }
 <span class="lineno">  268 </span>
 <span class="lineno">  269 </span>-- External Constants ----------------------------------------------------------
 <span class="lineno">  270 </span>
-<span class="lineno">  271 </span>-- | A global name with a unique ID and a type. We maintain a global
-<span class="lineno">  272 </span>-- invariant that the 'VarIndex' and the 'NameInfo' must be in a
-<span class="lineno">  273 </span>-- strict one-to-one correspondence: Each 'VarIndex' is paired with a
-<span class="lineno">  274 </span>-- unique 'NameInfo', and each 'NameInfo' is paired with a unique
-<span class="lineno">  275 </span>-- 'VarIndex'.
-<span class="lineno">  276 </span>data ExtCns e =
-<span class="lineno">  277 </span>  EC
-<span class="lineno">  278 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">ecName</span></span></span> :: !Name
-<span class="lineno">  279 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ecType</span></span></span> :: !e
-<span class="lineno">  280 </span>  }
-<span class="lineno">  281 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
-<span class="lineno">  282 </span>
-<span class="lineno">  283 </span>-- | Because of the global uniqueness invariant, comparing the
-<span class="lineno">  284 </span>-- 'VarIndex' is sufficient to ensure equality of names.
-<span class="lineno">  285 </span>instance <span class="decl"><span class="nottickedoff">Eq (ExtCns e)</span></span> where
-<span class="lineno">  286 </span>  <span class="decl"><span class="istickedoff">x == y = ecName x == ecName y</span></span>
-<span class="lineno">  287 </span>
-<span class="lineno">  288 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord (ExtCns e)</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  289 </span>  <span class="decl"><span class="istickedoff">compare x y = compare (ecName x) (ecName y)</span></span>
-<span class="lineno">  290 </span>
-<span class="lineno">  291 </span>-- | For hashing, we consider only the 'NameInfo' and not the
-<span class="lineno">  292 </span>-- 'VarIndex'; this gives a stable hash value for a particular name,
-<span class="lineno">  293 </span>-- even if the unique IDs are assigned differently from run to run.
-<span class="lineno">  294 </span>instance <span class="decl"><span class="nottickedoff">Hashable (ExtCns e)</span></span> where
-<span class="lineno">  295 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x ec = hashWithSalt x (ecName ec)</span></span>
-<span class="lineno">  296 </span>
-<span class="lineno">  297 </span>ecNameInfo :: ExtCns e -&gt; NameInfo
-<span class="lineno">  298 </span><span class="decl"><span class="istickedoff">ecNameInfo ec = nameInfo (ecName ec)</span></span>
-<span class="lineno">  299 </span>
-<span class="lineno">  300 </span>ecVarIndex :: ExtCns e -&gt; VarIndex
-<span class="lineno">  301 </span><span class="decl"><span class="istickedoff">ecVarIndex ec = nameIndex (ecName ec)</span></span>
-<span class="lineno">  302 </span>
-<span class="lineno">  303 </span>ecShortName :: ExtCns e -&gt; Text
-<span class="lineno">  304 </span><span class="decl"><span class="istickedoff">ecShortName ec = toShortName (ecNameInfo ec)</span></span>
-<span class="lineno">  305 </span>
-<span class="lineno">  306 </span>scFreshNameURI :: Text -&gt; VarIndex -&gt; URI
-<span class="lineno">  307 </span><span class="decl"><span class="istickedoff">scFreshNameURI nm i = fromMaybe <span class="nottickedoff">(panic &quot;scFreshNameURI&quot; [&quot;Failed to construct name URI: &lt;&gt; &quot; &lt;&gt; nm &lt;&gt; &quot;  &quot; &lt;&gt; Text.pack (show i)])</span> $</span>
-<span class="lineno">  308 </span><span class="spaces">  </span><span class="istickedoff">do sch &lt;- mkScheme &quot;fresh&quot;</span>
-<span class="lineno">  309 </span><span class="spaces">     </span><span class="istickedoff">nm' &lt;- mkPathPiece (if Text.null nm then &quot;_&quot; else nm)</span>
-<span class="lineno">  310 </span><span class="spaces">     </span><span class="istickedoff">i'  &lt;- mkFragment (Text.pack (show i))</span>
-<span class="lineno">  311 </span><span class="spaces">     </span><span class="istickedoff">pure URI</span>
-<span class="lineno">  312 </span><span class="spaces">       </span><span class="istickedoff">{ uriScheme = Just sch</span>
-<span class="lineno">  313 </span><span class="spaces">       </span><span class="istickedoff">, uriAuthority = Left False -- relative path</span>
-<span class="lineno">  314 </span><span class="spaces">       </span><span class="istickedoff">, uriPath   = Just (False, (nm' :| []))</span>
-<span class="lineno">  315 </span><span class="spaces">       </span><span class="istickedoff">, uriQuery  = []</span>
-<span class="lineno">  316 </span><span class="spaces">       </span><span class="istickedoff">, uriFragment = Just i'</span>
-<span class="lineno">  317 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
-<span class="lineno">  318 </span>
-<span class="lineno">  319 </span>
-<span class="lineno">  320 </span>-- Display Name Environments --------------------------------------------------------
-<span class="lineno">  321 </span>
-<span class="lineno">  322 </span>-- | A 'DisplayNameEnv' encodes the mappings between display names (type
-<span class="lineno">  323 </span>-- 'Text') and internal names (type 'VarIndex'). Multiple display
-<span class="lineno">  324 </span>-- names may be associated with each internal name; these are stored
-<span class="lineno">  325 </span>-- in priority order, with preferred display names first.
-<span class="lineno">  326 </span>data DisplayNameEnv =
-<span class="lineno">  327 </span>  DisplayNameEnv
-<span class="lineno">  328 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">displayNames</span></span></span> :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
-<span class="lineno">  329 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">displayIndexes</span></span></span> :: !(Map Text IntSet)
-<span class="lineno">  330 </span>  }
-<span class="lineno">  331 </span>-- Invariants: The 'displayNames' and 'displayIndexes' maps should be
-<span class="lineno">  332 </span>-- inverses of each other. That is, 'displayNames' maps @i@ to a list
-<span class="lineno">  333 </span>-- containing @x@ if and only if 'displayIndexes' maps @x@ to a set
-<span class="lineno">  334 </span>-- containing @i@.
-<span class="lineno">  335 </span>
-<span class="lineno">  336 </span>emptyDisplayNameEnv :: DisplayNameEnv
-<span class="lineno">  337 </span><span class="decl"><span class="istickedoff">emptyDisplayNameEnv = DisplayNameEnv mempty mempty</span></span>
-<span class="lineno">  338 </span>
-<span class="lineno">  339 </span>-- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
-<span class="lineno">  340 </span>-- for a given 'VarIndex'. Display names should be provided in
-<span class="lineno">  341 </span>-- priority order, with preferred names first. If the 'VarIndex'
-<span class="lineno">  342 </span>-- already exists in the map, then add the new display names with
-<span class="lineno">  343 </span>-- higher priority while keeping the old ones.
-<span class="lineno">  344 </span>extendDisplayNameEnv :: VarIndex -&gt; [Text] -&gt; DisplayNameEnv -&gt; DisplayNameEnv
-<span class="lineno">  345 </span><span class="decl"><span class="istickedoff">extendDisplayNameEnv i aliases env =</span>
-<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
-<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.insertWith <span class="nottickedoff">List.union</span> i aliases (displayNames env)</span>
-<span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = foldr insertAlias (displayIndexes env) aliases</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">}</span>
-<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">insertAlias :: Text -&gt; Map Text IntSet -&gt; Map Text IntSet</span>
-<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m</span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>-- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
-<span class="lineno">  355 </span>filterDisplayNameEnv :: (Text -&gt; Bool) -&gt; DisplayNameEnv -&gt; DisplayNameEnv
-<span class="lineno">  356 </span><span class="decl"><span class="istickedoff">filterDisplayNameEnv p env =</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
-<span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env</span>
-<span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.filterWithKey (\k _ -&gt; p <span class="nottickedoff">k</span>) $ displayIndexes env</span>
-<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
-<span class="lineno">  361 </span>
-<span class="lineno">  362 </span>-- | Merge two 'DisplayNameEnv's, giving higher priority to display
-<span class="lineno">  363 </span>-- names from the first argument.
-<span class="lineno">  364 </span>mergeDisplayNameEnv :: DisplayNameEnv -&gt; DisplayNameEnv -&gt; DisplayNameEnv
-<span class="lineno">  365 </span><span class="decl"><span class="istickedoff">mergeDisplayNameEnv env1 env2 =</span>
-<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
-<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.unionWith <span class="nottickedoff">List.union</span> (displayNames env1) (displayNames env2)</span>
-<span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.unionWith <span class="nottickedoff">IntSet.union</span> (displayIndexes env1) (displayIndexes env2)</span>
-<span class="lineno">  369 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
-<span class="lineno">  370 </span>
-<span class="lineno">  371 </span>-- | Look up a 'Text' display name in an environment, returning the
-<span class="lineno">  372 </span>-- list of indexes it could resolve to.
-<span class="lineno">  373 </span>resolveDisplayName :: DisplayNameEnv -&gt; Text -&gt; [VarIndex]
-<span class="lineno">  374 </span><span class="decl"><span class="istickedoff">resolveDisplayName env x =</span>
-<span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
-<span class="lineno">  376 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; []</span>
-<span class="lineno">  377 </span><span class="spaces">    </span><span class="istickedoff">Just s -&gt; IntSet.elems s</span></span>
-<span class="lineno">  378 </span>
-<span class="lineno">  379 </span>-- | Return the first display name for the given 'VarIndex' that is
-<span class="lineno">  380 </span>-- unambiguous in the naming environment. If there is no unambiguous
-<span class="lineno">  381 </span>-- alias, then return 'Nothing'.
-<span class="lineno">  382 </span>bestDisplayName :: DisplayNameEnv -&gt; VarIndex -&gt; Maybe Text
-<span class="lineno">  383 </span><span class="decl"><span class="istickedoff">bestDisplayName env i =</span>
-<span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">do aliases &lt;- IntMap.lookup i (displayNames env)</span>
-<span class="lineno">  385 </span><span class="spaces">     </span><span class="istickedoff">go aliases</span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff">go [] = Nothing</span>
-<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">go (x : xs) =</span>
-<span class="lineno">  389 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
-<span class="lineno">  390 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;bestDisplayName&quot; [&quot;Invariant violated: Missing key &quot; &lt;&gt; x]</span></span>
-<span class="lineno">  391 </span><span class="spaces">        </span><span class="istickedoff">Just vs</span>
-<span class="lineno">  392 </span><span class="spaces">          </span><span class="istickedoff">| IntSet.size vs == 1 -&gt; Just x</span>
-<span class="lineno">  393 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; go xs</span></span>
+<span class="lineno">  271 </span>-- | A global name paired with a type.
+<span class="lineno">  272 </span>data ExtCns e =
+<span class="lineno">  273 </span>  EC
+<span class="lineno">  274 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">ecName</span></span></span> :: !Name
+<span class="lineno">  275 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ecType</span></span></span> :: !e
+<span class="lineno">  276 </span>  }
+<span class="lineno">  277 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>)
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>-- | Because of the global uniqueness invariant, comparing the
+<span class="lineno">  280 </span>-- 'VarIndex' is sufficient to ensure equality of names.
+<span class="lineno">  281 </span>instance <span class="decl"><span class="nottickedoff">Eq (ExtCns e)</span></span> where
+<span class="lineno">  282 </span>  <span class="decl"><span class="istickedoff">x == y = ecName x == ecName y</span></span>
+<span class="lineno">  283 </span>
+<span class="lineno">  284 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord (ExtCns e)</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  285 </span>  <span class="decl"><span class="istickedoff">compare x y = compare (ecName x) (ecName y)</span></span>
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>-- | For hashing, we consider only the 'NameInfo' and not the
+<span class="lineno">  288 </span>-- 'VarIndex'; this gives a stable hash value for a particular name,
+<span class="lineno">  289 </span>-- even if the unique IDs are assigned differently from run to run.
+<span class="lineno">  290 </span>instance <span class="decl"><span class="nottickedoff">Hashable (ExtCns e)</span></span> where
+<span class="lineno">  291 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x ec = hashWithSalt x (ecName ec)</span></span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>ecNameInfo :: ExtCns e -&gt; NameInfo
+<span class="lineno">  294 </span><span class="decl"><span class="istickedoff">ecNameInfo ec = nameInfo (ecName ec)</span></span>
+<span class="lineno">  295 </span>
+<span class="lineno">  296 </span>ecVarIndex :: ExtCns e -&gt; VarIndex
+<span class="lineno">  297 </span><span class="decl"><span class="istickedoff">ecVarIndex ec = nameIndex (ecName ec)</span></span>
+<span class="lineno">  298 </span>
+<span class="lineno">  299 </span>ecShortName :: ExtCns e -&gt; Text
+<span class="lineno">  300 </span><span class="decl"><span class="istickedoff">ecShortName ec = toShortName (ecNameInfo ec)</span></span>
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>scFreshNameURI :: Text -&gt; VarIndex -&gt; URI
+<span class="lineno">  303 </span><span class="decl"><span class="istickedoff">scFreshNameURI nm i = fromMaybe <span class="nottickedoff">(panic &quot;scFreshNameURI&quot; [&quot;Failed to construct name URI: &lt;&gt; &quot; &lt;&gt; nm &lt;&gt; &quot;  &quot; &lt;&gt; Text.pack (show i)])</span> $</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">do sch &lt;- mkScheme &quot;fresh&quot;</span>
+<span class="lineno">  305 </span><span class="spaces">     </span><span class="istickedoff">nm' &lt;- mkPathPiece (if Text.null nm then &quot;_&quot; else nm)</span>
+<span class="lineno">  306 </span><span class="spaces">     </span><span class="istickedoff">i'  &lt;- mkFragment (Text.pack (show i))</span>
+<span class="lineno">  307 </span><span class="spaces">     </span><span class="istickedoff">pure URI</span>
+<span class="lineno">  308 </span><span class="spaces">       </span><span class="istickedoff">{ uriScheme = Just sch</span>
+<span class="lineno">  309 </span><span class="spaces">       </span><span class="istickedoff">, uriAuthority = Left False -- relative path</span>
+<span class="lineno">  310 </span><span class="spaces">       </span><span class="istickedoff">, uriPath   = Just (False, (nm' :| []))</span>
+<span class="lineno">  311 </span><span class="spaces">       </span><span class="istickedoff">, uriQuery  = []</span>
+<span class="lineno">  312 </span><span class="spaces">       </span><span class="istickedoff">, uriFragment = Just i'</span>
+<span class="lineno">  313 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
+<span class="lineno">  314 </span>
+<span class="lineno">  315 </span>
+<span class="lineno">  316 </span>-- Display Name Environments --------------------------------------------------------
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>-- | A 'DisplayNameEnv' encodes the mappings between display names (type
+<span class="lineno">  319 </span>-- 'Text') and internal names (type 'VarIndex'). Multiple display
+<span class="lineno">  320 </span>-- names may be associated with each internal name; these are stored
+<span class="lineno">  321 </span>-- in priority order, with preferred display names first.
+<span class="lineno">  322 </span>data DisplayNameEnv =
+<span class="lineno">  323 </span>  DisplayNameEnv
+<span class="lineno">  324 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">displayNames</span></span></span> :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
+<span class="lineno">  325 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">displayIndexes</span></span></span> :: !(Map Text IntSet)
+<span class="lineno">  326 </span>  }
+<span class="lineno">  327 </span>-- Invariants: The 'displayNames' and 'displayIndexes' maps should be
+<span class="lineno">  328 </span>-- inverses of each other. That is, 'displayNames' maps @i@ to a list
+<span class="lineno">  329 </span>-- containing @x@ if and only if 'displayIndexes' maps @x@ to a set
+<span class="lineno">  330 </span>-- containing @i@.
+<span class="lineno">  331 </span>
+<span class="lineno">  332 </span>emptyDisplayNameEnv :: DisplayNameEnv
+<span class="lineno">  333 </span><span class="decl"><span class="istickedoff">emptyDisplayNameEnv = DisplayNameEnv mempty mempty</span></span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>-- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
+<span class="lineno">  336 </span>-- for a given 'VarIndex'. Display names should be provided in
+<span class="lineno">  337 </span>-- priority order, with preferred names first. If the 'VarIndex'
+<span class="lineno">  338 </span>-- already exists in the map, then add the new display names with
+<span class="lineno">  339 </span>-- higher priority while keeping the old ones.
+<span class="lineno">  340 </span>extendDisplayNameEnv :: VarIndex -&gt; [Text] -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  341 </span><span class="decl"><span class="istickedoff">extendDisplayNameEnv i aliases env =</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.insertWith <span class="nottickedoff">List.union</span> i aliases (displayNames env)</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = foldr insertAlias (displayIndexes env) aliases</span>
+<span class="lineno">  345 </span><span class="spaces">  </span><span class="istickedoff">}</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">insertAlias :: Text -&gt; Map Text IntSet -&gt; Map Text IntSet</span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m</span></span>
+<span class="lineno">  349 </span>
+<span class="lineno">  350 </span>-- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
+<span class="lineno">  351 </span>filterDisplayNameEnv :: (Text -&gt; Bool) -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  352 </span><span class="decl"><span class="istickedoff">filterDisplayNameEnv p env =</span>
+<span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.filterWithKey (\k _ -&gt; p <span class="nottickedoff">k</span>) $ displayIndexes env</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  357 </span>
+<span class="lineno">  358 </span>-- | Merge two 'DisplayNameEnv's, giving higher priority to display
+<span class="lineno">  359 </span>-- names from the first argument.
+<span class="lineno">  360 </span>mergeDisplayNameEnv :: DisplayNameEnv -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  361 </span><span class="decl"><span class="istickedoff">mergeDisplayNameEnv env1 env2 =</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.unionWith <span class="nottickedoff">List.union</span> (displayNames env1) (displayNames env2)</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.unionWith <span class="nottickedoff">IntSet.union</span> (displayIndexes env1) (displayIndexes env2)</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  366 </span>
+<span class="lineno">  367 </span>-- | Look up a 'Text' display name in an environment, returning the
+<span class="lineno">  368 </span>-- list of indexes it could resolve to.
+<span class="lineno">  369 </span>resolveDisplayName :: DisplayNameEnv -&gt; Text -&gt; [VarIndex]
+<span class="lineno">  370 </span><span class="decl"><span class="istickedoff">resolveDisplayName env x =</span>
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
+<span class="lineno">  372 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; []</span>
+<span class="lineno">  373 </span><span class="spaces">    </span><span class="istickedoff">Just s -&gt; IntSet.elems s</span></span>
+<span class="lineno">  374 </span>
+<span class="lineno">  375 </span>-- | Return the first display name for the given 'VarIndex' that is
+<span class="lineno">  376 </span>-- unambiguous in the naming environment. If there is no unambiguous
+<span class="lineno">  377 </span>-- alias, then return 'Nothing'.
+<span class="lineno">  378 </span>bestDisplayName :: DisplayNameEnv -&gt; VarIndex -&gt; Maybe Text
+<span class="lineno">  379 </span><span class="decl"><span class="istickedoff">bestDisplayName env i =</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">do aliases &lt;- IntMap.lookup i (displayNames env)</span>
+<span class="lineno">  381 </span><span class="spaces">     </span><span class="istickedoff">go aliases</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  383 </span><span class="spaces">    </span><span class="istickedoff">go [] = Nothing</span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff">go (x : xs) =</span>
+<span class="lineno">  385 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
+<span class="lineno">  386 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;bestDisplayName&quot; [&quot;Invariant violated: Missing key &quot; &lt;&gt; x]</span></span>
+<span class="lineno">  387 </span><span class="spaces">        </span><span class="istickedoff">Just vs</span>
+<span class="lineno">  388 </span><span class="spaces">          </span><span class="istickedoff">| IntSet.size vs == 1 -&gt; Just x</span>
+<span class="lineno">  389 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; go xs</span></span>
 
 </pre>
 </body>
