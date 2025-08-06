@@ -465,7 +465,7 @@ genSubmoduleExports m = nestedInSet (T.mNested m)
                                iface = T.smIface y
                   Nothing -> Set.empty -- must be signature or a functor
 
-
+--
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me =
   mconcat
@@ -610,7 +610,12 @@ loadCryptolModule sc primOpts env path = do
   let ifaceDecls = getAllIfaceDecls modEnv' -- MT: d2!
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
+      -- monad reader, "generate the primitive map"
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
+      -- NOTE: inpVars are the variables that are in scope.
+      -- See source for these two, doing a bit of unnecessary work here?!
+    -- NOTE: looking at the source code of the functions in this action, it
+    -- appears (not 100% clear) that modEnv'' will be equal to modEnv'
 
   -- FIXME[MT]:debugging:
   when debug $ do
@@ -632,7 +637,7 @@ loadCryptolModule sc primOpts env path = do
 
     -- writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
     -- writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
-     -- NOTE: these three are all identical and look good ^.
+     -- NOTE: -ld2/these three are all identical and look good ^.
      -- NOTE: "d2" is different as it is Qual, all else is UnQual.
 
   -- NOTE: at this point (all above) completely in cryptol-land!
@@ -822,9 +827,6 @@ importModule sc env src as vis imps = do
              T.TCTopSignature {} ->
                 fail "Expected a module but found an interface."
       MM.io $ checkNotParameterized m
-      -- MM.setFocusedModule (P.ImpTop (T.mName m))
-        -- FIXME: works at all?
-        -- FIXME: only handles the 'last' imported module, AFAIK.
       return m
 
   when debug $ do
