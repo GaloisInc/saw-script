@@ -50,6 +50,7 @@ import Data.Text (Text, unpack)
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name (Name(..))
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
@@ -566,7 +567,7 @@ instance PrettyInCtx FunName where
   prettyInCtx (EVarFunName var) = prettyInCtx var
   prettyInCtx (GlobalName g projs) =
     foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (ppName $
-                                                      globalDefName g) projs
+                                                      nameInfo $ globalDefName g) projs
 
 instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t
