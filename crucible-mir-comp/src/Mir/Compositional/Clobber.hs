@@ -99,6 +99,30 @@ traverseFieldShape sym f shp0 rv0 = goField shp0 rv0
         rv'' <- f shp rv'
         return $ RV $ W4.justPartExpr sym rv''
 
+-- | Apply `f` to all of the `RegValue`s within a `VariantBranch`.
+--
+-- Note that this leaves the `Pred` of the `VariantBranch` unchanged, so using
+-- this to handle `EnumShape` can't change which variant of the enum is active.
+traverseVariantShape :: forall sym p t st fs tp0 rtp args ret.
+  (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+  sym ->
+  (forall tp.
+    TypeShape tp ->
+    RegValue sym tp ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)) ->
+  VariantShape tp0 -> VariantBranch sym tp0 ->
+  OverrideSim (p sym) sym MIR rtp args ret (VariantBranch sym tp0)
+traverseVariantShape sym f (VariantShape flds) (VB pe) =
+  case pe of
+    W4.Unassigned -> return $ VB $ W4.Unassigned
+    -- `rv` is known to be `RegValue _ (StructRepr ctx)`, which is represented
+    -- as `Ctx.Assignment RegValue' ctx`.  So we can directly zip `rv` with
+    -- another assignment (`flds`).
+    W4.PE p rv -> do
+      rv' <- Ctx.zipWithM (traverseFieldShape sym f) flds rv
+      return $ VB $ W4.PE p rv'
+
+
 -- | Replace each primitive value within `rv` with a fresh symbolic variable.
 clobberSymbolic :: forall sym p t st fs tp0 rtp args ret.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
@@ -133,6 +157,13 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _ _tpr) rv = return rv
+    -- The enum is in immutable memory, so we don't need to clobber its
+    -- discriminant or change which variant is active.  We can just traverse
+    -- over the fields of any (potentially) active variants as normal.
+    go (EnumShape _ _ variantShps _ _) rv = do
+      let Ctx.Empty Ctx.:> RV discrRv Ctx.:> RV variantRv = rv
+      variantRv' <- Ctx.zipWithM (traverseVariantShape sym go) variantShps variantRv
+      return $ Ctx.Empty Ctx.:> RV discrRv Ctx.:> RV variantRv'
     go shp rv = traverseTypeShape sym nameStr go shp rv
 
 -- | Construct a fresh symbolic `RegValue` of type `tp0`.
