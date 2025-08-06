@@ -85,7 +85,7 @@ span.spaces    { background: white }
 <span class="lineno">   66 </span><span class="spaces">    </span><span class="nottickedoff">neutral _env nt = return $ Prim.userError $ &quot;Could not evaluate neutral term\n:&quot; ++ show nt</span>
 <span class="lineno">   67 </span><span class="spaces">    </span><span class="nottickedoff">primHandler ec msg env _tv =</span>
 <span class="lineno">   68 </span><span class="spaces">      </span><span class="nottickedoff">return $ Prim.userError $ unlines</span>
-<span class="lineno">   69 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecName ec))</span>
+<span class="lineno">   69 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecNameInfo ec))</span>
 <span class="lineno">   70 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
 <span class="lineno">   71 </span><span class="spaces">        </span><span class="nottickedoff">, Text.unpack msg</span>
 <span class="lineno">   72 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
@@ -311,7 +311,7 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; if x == y then x else error $ &quot;muxRValue: VInt &quot; ++ show (x, y)</span></span>
 <span class="lineno">  293 </span>
 <span class="lineno">  294 </span>muxExtra :: TValue ReedMuller -&gt; RME -&gt; RExtra -&gt; RExtra -&gt; RExtra
-<span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">muxExtra (VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) b (AStream xs) (AStream ys) =</span>
+<span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">muxExtra (VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) b (AStream xs) (AStream ys) =</span>
 <span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">AStream (muxRValue tp b &lt;$&gt; xs &lt;*&gt; ys)</span>
 <span class="lineno">  297 </span><span class="spaces"></span><span class="nottickedoff">muxExtra tp _ _ _ = panic &quot;muxExtra&quot; [&quot;Type mismatch: &quot; &lt;&gt; Text.pack (show tp)]</span></span>
 <span class="lineno">  298 </span>
@@ -423,7 +423,7 @@ span.spaces    { background: white }
 <span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">neutral _env nt = return $ Prim.userError $ &quot;Could not evaluate neutral term\n:&quot; ++ show nt</span></span>
 <span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">primHandler ec msg env _tv =</span></span>
 <span class="lineno">  406 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return $ Prim.userError $ unlines</span></span>
-<span class="lineno">  407 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecName ec))</span></span>
+<span class="lineno">  407 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecNameInfo ec))</span></span>
 <span class="lineno">  408 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span></span>
 <span class="lineno">  409 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">, Text.unpack msg</span></span>
 <span class="lineno">  410 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -431,7 +431,7 @@ span.spaces    { background: white }
 <span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">cfg &lt;- Sim.evalGlobal m (Map.union constMap addlPrims)</span>
 <span class="lineno">  413 </span><span class="spaces">         </span><span class="istickedoff">(\ec -&gt; case Map.lookup (ecVarIndex ec) ecMap of</span>
 <span class="lineno">  414 </span><span class="spaces">                   </span><span class="istickedoff">Just v -&gt; pure v</span>
-<span class="lineno">  415 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error (&quot;RME: unknown ExtCns: &quot; ++ show (ecName ec))</span>)</span>
+<span class="lineno">  415 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error (&quot;RME: unknown ExtCns: &quot; ++ show (ecNameInfo ec))</span>)</span>
 <span class="lineno">  416 </span><span class="spaces">         </span><span class="istickedoff">(const Nothing)</span>
 <span class="lineno">  417 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">neutral</span></span>
 <span class="lineno">  418 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">primHandler</span></span>

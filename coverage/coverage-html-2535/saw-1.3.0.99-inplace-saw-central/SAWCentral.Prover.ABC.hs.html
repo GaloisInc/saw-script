@@ -213,7 +213,7 @@ span.spaces    { background: white }
 <span class="lineno">  194 </span><span class="spaces">         </span><span class="nottickedoff">([&quot;s SATISFIABLE&quot;], _) -&gt; do</span>
 <span class="lineno">  195 </span><span class="spaces">           </span><span class="nottickedoff">let bs = parseDimacsSolution variables vls</span>
 <span class="lineno">  196 </span><span class="spaces">           </span><span class="nottickedoff">let r = liftCexBB (map snd shapes) bs</span>
-<span class="lineno">  197 </span><span class="spaces">               </span><span class="nottickedoff">argNames = map (Text.unpack . toShortName . ecName . fst) shapes</span>
+<span class="lineno">  197 </span><span class="spaces">               </span><span class="nottickedoff">argNames = map (Text.unpack . ecShortName . fst) shapes</span>
 <span class="lineno">  198 </span><span class="spaces">               </span><span class="nottickedoff">ecs = map fst shapes</span>
 <span class="lineno">  199 </span><span class="spaces">           </span><span class="nottickedoff">case r of</span>
 <span class="lineno">  200 </span><span class="spaces">             </span><span class="nottickedoff">Left msg -&gt; fail $ &quot;Can't parse counterexample: &quot; ++ msg</span>

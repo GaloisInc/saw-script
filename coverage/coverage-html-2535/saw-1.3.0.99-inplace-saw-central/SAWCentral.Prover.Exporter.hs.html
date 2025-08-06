@@ -99,7 +99,7 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span>import SAWCore.ExternalFormat(scWriteExternal)
 <span class="lineno">   81 </span>import SAWCore.FiniteValue
 <span class="lineno">   82 </span>import SAWCore.Module (emptyModule, moduleDecls)
-<span class="lineno">   83 </span>import SAWCore.Name (mkModuleName, toShortName)
+<span class="lineno">   83 </span>import SAWCore.Name (mkModuleName, ecShortName)
 <span class="lineno">   84 </span>import SAWCore.Prelude (preludeModule)
 <span class="lineno">   85 </span>import SAWCore.Recognizer (asPi)
 <span class="lineno">   86 </span>import SAWCore.SATQuery
@@ -368,7 +368,7 @@ span.spaces    { background: white }
 <span class="lineno">  349 </span><span class="spaces">                   </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;writeVerilogSAT: Unsupported argument type &quot; ++ show fot</span>
 <span class="lineno">  350 </span><span class="spaces">                   </span><span class="nottickedoff">Just ft -&gt; return ft</span>
 <span class="lineno">  351 </span><span class="spaces">     </span><span class="nottickedoff">let argSValues = map (snd . snd) vars</span>
-<span class="lineno">  352 </span><span class="spaces">     </span><span class="nottickedoff">let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)</span>
+<span class="lineno">  352 </span><span class="spaces">     </span><span class="nottickedoff">let argSValueNames = zip argSValues (map ecShortName argNames)</span>
 <span class="lineno">  353 </span><span class="spaces">     </span><span class="nottickedoff">argTys' &lt;- traverse f argTys</span>
 <span class="lineno">  354 </span><span class="spaces">     </span><span class="nottickedoff">let mkInput (v, nm) = map (,nm) &lt;$&gt; flattenSValue sym v</span>
 <span class="lineno">  355 </span><span class="spaces">     </span><span class="nottickedoff">ins &lt;- concat &lt;$&gt; mapM mkInput argSValueNames</span>

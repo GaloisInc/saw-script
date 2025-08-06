@@ -95,7 +95,7 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span>import qualified Data.Vector as V
 <span class="lineno">   77 </span>import Numeric.Natural (Natural)
 <span class="lineno">   78 </span>
-<span class="lineno">   79 </span>import SAWCore.Name (ExtCns(..), Ident, NameInfo(..))
+<span class="lineno">   79 </span>import SAWCore.Name (ExtCns(..), Ident, NameInfo(..), ecVarIndex, ecNameInfo)
 <span class="lineno">   80 </span>import SAWCore.Panic (panic)
 <span class="lineno">   81 </span>import SAWCore.Simulator.Value
 <span class="lineno">   82 </span>import SAWCore.Prim
@@ -137,8 +137,8 @@ span.spaces    { background: white }
 <span class="lineno">  118 </span>natFun :: VMonad l =&gt; (Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  119 </span><span class="decl"><span class="istickedoff">natFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat&quot;</span> r</span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure n</span>
-<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] [])  = <span class="nottickedoff">pure 0</span></span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
+<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] [])  = <span class="nottickedoff">pure 0</span></span>
+<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
 <span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>-- | A primitive that requires an integer argument
@@ -568,8 +568,8 @@ span.spaces    { background: white }
 <span class="lineno">  549 </span>              (Either (Natural, Value l) Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  550 </span><span class="decl"><span class="istickedoff">natSizeFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat with a known size&quot;</span> r</span>
 <span class="lineno">  551 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure (Right n)</span>
-<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
-<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (ecName -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) =</span>
+<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) =</span>
 <span class="lineno">  554 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">lift (force x) &gt;&gt;= r &gt;&gt;= bimapM (const (szPr v)) (pure . succ)</span></span>
 <span class="lineno">  555 </span><span class="spaces">        </span><span class="istickedoff">r v = <span class="nottickedoff">Left &lt;$&gt; szPr v</span></span>
 <span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)</span></span></span>

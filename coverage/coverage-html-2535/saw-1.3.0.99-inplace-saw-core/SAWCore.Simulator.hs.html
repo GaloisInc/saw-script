@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span>  , allModulePrimitives
 <span class="lineno">   58 </span>  , ctorNumParams
 <span class="lineno">   59 </span>  , ctorNumArgs
-<span class="lineno">   60 </span>  , defNameInfo
+<span class="lineno">   60 </span>  , defName
 <span class="lineno">   61 </span>  , dtNumIndices
 <span class="lineno">   62 </span>  , dtNumParams
 <span class="lineno">   63 </span>  , findCtorInMap
@@ -188,7 +188,7 @@ span.spaces    { background: white }
 <span class="lineno">  169 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">Constant nm             -&gt; do let r = requireNameInMap nm (simModMap cfg)</span>
 <span class="lineno">  171 </span><span class="spaces">                                  </span><span class="istickedoff">ty' &lt;- evalType (resolvedNameType r)</span>
-<span class="lineno">  172 </span><span class="spaces">                                  </span><span class="istickedoff">let ec' = EC (nameIndex nm) (nameInfo nm) ty'</span>
+<span class="lineno">  172 </span><span class="spaces">                                  </span><span class="istickedoff">let ec' = EC nm ty'</span>
 <span class="lineno">  173 </span><span class="spaces">                                  </span><span class="istickedoff">case simConstant cfg tf ec' of</span>
 <span class="lineno">  174 </span><span class="spaces">                                    </span><span class="istickedoff">Just override -&gt; override</span>
 <span class="lineno">  175 </span><span class="spaces">                                    </span><span class="istickedoff">Nothing -&gt;</span>
@@ -233,7 +233,7 @@ span.spaces    { background: white }
 <span class="lineno">  214 </span><span class="spaces">        </span><span class="istickedoff">RecursorType d ps m mtp -&gt;</span>
 <span class="lineno">  215 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do dty &lt;- evalType (resolvedNameType (requireNameInMap d (simModMap cfg)))</span></span>
 <span class="lineno">  216 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">TValue &lt;$&gt; (VRecursorType &lt;$&gt;</span></span>
-<span class="lineno">  217 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (EC (nameIndex d) (nameInfo d) dty) &lt;*&gt;</span></span>
+<span class="lineno">  217 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (EC d dty) &lt;*&gt;</span></span>
 <span class="lineno">  218 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">mapM recEval ps &lt;*&gt;</span></span>
 <span class="lineno">  219 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">recEval m &lt;*&gt;</span></span>
 <span class="lineno">  220 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">(evalType mtp))</span></span>
@@ -244,7 +244,7 @@ span.spaces    { background: white }
 <span class="lineno">  225 </span><span class="spaces">                                </span><span class="istickedoff">pure (v,<span class="nottickedoff">ty</span>)</span>
 <span class="lineno">  226 </span><span class="spaces">             </span><span class="istickedoff">let dname = recursorDataType r</span>
 <span class="lineno">  227 </span><span class="spaces">             </span><span class="istickedoff">dty &lt;- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))</span>
-<span class="lineno">  228 </span><span class="spaces">             </span><span class="istickedoff">let d = EC (nameIndex dname) (nameInfo dname) dty</span>
+<span class="lineno">  228 </span><span class="spaces">             </span><span class="istickedoff">let d = EC dname dty</span>
 <span class="lineno">  229 </span><span class="spaces">             </span><span class="istickedoff">ps  &lt;- traverse recEval (recursorParams r)</span>
 <span class="lineno">  230 </span><span class="spaces">             </span><span class="istickedoff">m   &lt;- recEval (recursorMotive r)</span>
 <span class="lineno">  231 </span><span class="spaces">             </span><span class="istickedoff">mty &lt;- evalType (recursorMotiveTy r)</span>
@@ -258,7 +258,7 @@ span.spaces    { background: white }
 <span class="lineno">  239 </span><span class="spaces">                 </span><span class="istickedoff">do argv &lt;- recEval arg</span>
 <span class="lineno">  240 </span><span class="spaces">                    </span><span class="istickedoff">case evalConstructor argv of</span>
 <span class="lineno">  241 </span><span class="spaces">                      </span><span class="istickedoff">Just (ctor, args)</span>
-<span class="lineno">  242 </span><span class="spaces">                        </span><span class="istickedoff">| Just (elim,elimTy) &lt;- Map.lookup (ctorVarIndex ctor) ps_fs</span>
+<span class="lineno">  242 </span><span class="spaces">                        </span><span class="istickedoff">| Just (elim,elimTy) &lt;- Map.lookup (nameIndex (ctorName ctor)) ps_fs</span>
 <span class="lineno">  243 </span><span class="spaces">                        </span><span class="istickedoff">-&gt; do let <span class="nottickedoff">rTy = VRecursorType d ps motive motiveTy</span></span>
 <span class="lineno">  244 </span><span class="spaces">                              </span><span class="istickedoff">ctorTy &lt;- toTValue &lt;$&gt; lam (ctorType ctor) <span class="nottickedoff">[]</span></span>
 <span class="lineno">  245 </span><span class="spaces">                              </span><span class="istickedoff">allArgs &lt;- processRecArgs ps args ctorTy [(elim,<span class="nottickedoff">elimTy</span>),(ready r,<span class="nottickedoff">rTy</span>)]</span>
@@ -315,7 +315,7 @@ span.spaces    { background: white }
 <span class="lineno">  296 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">do allArgs &lt;- processRecArgs ps args (ecType c) [(elim, elimTy), (ready r, rTy)]</span></span>
 <span class="lineno">  297 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">pure (p, lam (ctorIotaTemplate ctor) allArgs)</span></span>
 <span class="lineno">  298 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;evalTermF / evalCtorMuxBranch&quot;</span></span>
-<span class="lineno">  299 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">[&quot;could not find info for constructor: &quot; &lt;&gt; toAbsoluteName (ecName c)]</span></span>
+<span class="lineno">  299 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">[&quot;could not find info for constructor: &quot; &lt;&gt; toAbsoluteName (ecNameInfo c)]</span></span>
 <span class="lineno">  300 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;evalTermF / evalCtorMuxBranch&quot; [&quot;expected VRecursor&quot;]</span></span>
 <span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">combineAlts :: TValue l -&gt; [(VBool l, EvalM l (Value l))] -&gt; EvalM l (Value l)</span>
@@ -468,23 +468,23 @@ span.spaces    { background: white }
 <span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">case constant tf ec of</span>
 <span class="lineno">  450 </span><span class="spaces">        </span><span class="istickedoff">Just v -&gt; Just v</span>
 <span class="lineno">  451 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  452 </span><span class="spaces">          </span><span class="istickedoff">case ecName ec of</span>
+<span class="lineno">  452 </span><span class="spaces">          </span><span class="istickedoff">case ecNameInfo ec of</span>
 <span class="lineno">  453 </span><span class="spaces">            </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
 <span class="lineno">  454 </span><span class="spaces">              </span><span class="istickedoff">evalPrim (primHandler ec) ec &lt;$&gt; Map.lookup ident prims</span>
 <span class="lineno">  455 </span><span class="spaces">            </span><span class="istickedoff">ImportedName{} -&gt; Nothing</span>
 <span class="lineno">  456 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">ctors :: ExtCns (TValue l) -&gt; Maybe (MValue l)</span>
 <span class="lineno">  458 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctors ec =</span></span>
-<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ecName ec of</span></span>
+<span class="lineno">  459 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ecNameInfo ec of</span></span>
 <span class="lineno">  460 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ModuleIdentifier ident -&gt;</span></span>
 <span class="lineno">  461 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">evalPrim (primHandler ec) ec &lt;$&gt; Map.lookup ident prims</span></span>
 <span class="lineno">  462 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ImportedName{} -&gt; Nothing</span></span>
 <span class="lineno">  463 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">primitive :: ExtCns (TValue l) -&gt; MValue l</span>
 <span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">primitive ec =</span></span>
-<span class="lineno">  466 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ecName ec of</span></span>
+<span class="lineno">  466 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ecNameInfo ec of</span></span>
 <span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ImportedName {} -&gt;</span></span>
-<span class="lineno">  468 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalGlobal'&quot; [&quot;Unimplemented global: &quot; &lt;&gt; toAbsoluteName (ecName ec)]</span></span>
+<span class="lineno">  468 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalGlobal'&quot; [&quot;Unimplemented global: &quot; &lt;&gt; toAbsoluteName (ecNameInfo ec)]</span></span>
 <span class="lineno">  469 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ModuleIdentifier ident -&gt;</span></span>
 <span class="lineno">  470 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case Map.lookup ident prims of</span></span>
 <span class="lineno">  471 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Just v  -&gt; evalPrim (primHandler ec) ec v</span></span>
@@ -519,7 +519,7 @@ span.spaces    { background: white }
 <span class="lineno">  500 </span>
 <span class="lineno">  501 </span>defIdent :: Def -&gt; Maybe Ident
 <span class="lineno">  502 </span><span class="decl"><span class="nottickedoff">defIdent d =</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">case defNameInfo d of</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">case nameInfo (defName d) of</span>
 <span class="lineno">  504 </span><span class="spaces">    </span><span class="nottickedoff">ModuleIdentifier ident -&gt; Just ident</span>
 <span class="lineno">  505 </span><span class="spaces">    </span><span class="nottickedoff">ImportedName{} -&gt; Nothing</span></span>
 <span class="lineno">  506 </span>
@@ -771,7 +771,7 @@ span.spaces    { background: white }
 <span class="lineno">  752 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  753 </span><span class="spaces">    </span><span class="istickedoff">loop _env _tp _p =</span>
 <span class="lineno">  754 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalPrim&quot; [</span></span>
-<span class="lineno">  755 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Type mismatch in primitive: &quot; &lt;&gt; toAbsoluteName (ecName ec)]</span></span></span>
+<span class="lineno">  755 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Type mismatch in primitive: &quot; &lt;&gt; toAbsoluteName (ecNameInfo ec)]</span></span></span>
 <span class="lineno">  756 </span>
 <span class="lineno">  757 </span>-- | A basic handler for stuck primitives.
 <span class="lineno">  758 </span>defaultPrimHandler ::
@@ -779,7 +779,7 @@ span.spaces    { background: white }
 <span class="lineno">  760 </span>  ExtCns (TValue l) -&gt; Text -&gt; Env l -&gt; TValue l -&gt; MValue l
 <span class="lineno">  761 </span><span class="decl"><span class="nottickedoff">defaultPrimHandler ec msg env _tv =</span>
 <span class="lineno">  762 </span><span class="spaces">  </span><span class="nottickedoff">fail $ unlines</span>
-<span class="lineno">  763 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecName ec))</span>
+<span class="lineno">  763 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecNameInfo ec))</span>
 <span class="lineno">  764 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span>
 <span class="lineno">  765 </span><span class="spaces">  </span><span class="nottickedoff">, Text.unpack msg</span>
 <span class="lineno">  766 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>

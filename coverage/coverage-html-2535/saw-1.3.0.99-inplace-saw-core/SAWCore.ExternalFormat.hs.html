@@ -122,7 +122,7 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">stashEC :: ExtCns Int -&gt; WriteM ()</span>
 <span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">stashEC ec =</span>
 <span class="lineno">  105 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
-<span class="lineno">  106 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (ecVarIndex ec) (ecName ec) nms, lns, x)</span>
+<span class="lineno">  106 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (ecVarIndex ec) (ecNameInfo ec) nms, lns, x)</span>
 <span class="lineno">  107 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; WriteM Int</span>
 <span class="lineno">  109 </span><span class="spaces">    </span><span class="istickedoff">go (Unshared tf) = <span class="nottickedoff">do</span></span>
@@ -291,17 +291,17 @@ span.spaces    { background: white }
 <span class="lineno">  272 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
 <span class="lineno">  273 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
 <span class="lineno">  274 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">lift (scResolveNameByURI sc (moduleIdentToURI ident)) &gt;&gt;= \case</span></span>
-<span class="lineno">  275 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure (EC vi' nmi t')</span></span>
+<span class="lineno">  275 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure (EC (Name vi' nmi) t')</span></span>
 <span class="lineno">  276 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Nothing  -&gt; lift $ fail $ &quot;scReadExternal: missing module identifier: &quot; ++ show ident</span></span>
 <span class="lineno">  277 </span><span class="spaces">           </span><span class="istickedoff">ImportedName uri _aliases -&gt;</span>
 <span class="lineno">  278 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc uri) &gt;&gt;= \case</span>
-<span class="lineno">  279 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (EC vi' nmi t')</span>
+<span class="lineno">  279 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (EC (Name vi' nmi) t')</span>
 <span class="lineno">  280 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
-<span class="lineno">  281 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ EC vi' nmi t'</span></span>
+<span class="lineno">  281 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ EC (Name vi' nmi) t'</span></span>
 <span class="lineno">  282 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
 <span class="lineno">  283 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do nm &lt;- lift $ scRegisterName sc nmi</span></span>
 <span class="lineno">  284 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi (nameIndex nm) vs)</span></span>
-<span class="lineno">  285 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure $ EC (nameIndex nm) nmi t'</span></span>
+<span class="lineno">  285 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure $ EC nm t'</span></span>
 <span class="lineno">  286 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">readEC :: String -&gt; String -&gt; ReadM (ExtCns Term)</span>
 <span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">readEC i t =</span>

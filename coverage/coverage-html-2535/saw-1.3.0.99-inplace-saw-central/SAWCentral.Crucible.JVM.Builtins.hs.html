@@ -129,7 +129,7 @@ span.spaces    { background: white }
 <span class="lineno">  110 </span>import qualified Data.Parameterized.Context as Ctx
 <span class="lineno">  111 </span>
 <span class="lineno">  112 </span>import SAWCore.FiniteValue (ppFirstOrderValue)
-<span class="lineno">  113 </span>import SAWCore.Name (toShortName)
+<span class="lineno">  113 </span>import SAWCore.Name (ecShortName)
 <span class="lineno">  114 </span>import SAWCore.SharedTerm
 <span class="lineno">  115 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">  116 </span>
@@ -365,7 +365,7 @@ span.spaces    { background: white }
 <span class="lineno">  346 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
 <span class="lineno">  347 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno">  348 </span><span class="spaces">           </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
-<span class="lineno">  349 </span><span class="spaces">           </span><span class="istickedoff">let showEC ec = Text.unpack (toShortName (ecName ec))</span>
+<span class="lineno">  349 </span><span class="spaces">           </span><span class="istickedoff">let showEC ec = Text.unpack (ecShortName ec)</span>
 <span class="lineno">  350 </span><span class="spaces">           </span><span class="istickedoff">let showAssignment (name, val) = &quot;  &quot; ++ showEC name ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val)</span>
 <span class="lineno">  351 </span><span class="spaces">           </span><span class="istickedoff">mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno">  352 </span><span class="spaces">           </span><span class="istickedoff">io $ fail &quot;Proof failed.&quot; -- Mirroring behavior of llvm_verify</span>

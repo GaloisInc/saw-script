@@ -276,7 +276,7 @@ span.spaces    { background: white }
 <span class="lineno">  257 </span>import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 <span class="lineno">  258 </span>import SAWCentral.Yosys.State (YosysSequential)
 <span class="lineno">  259 </span>
-<span class="lineno">  260 </span>import SAWCore.Name (toShortName, DisplayNameEnv, emptyDisplayNameEnv)
+<span class="lineno">  260 </span>import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
 <span class="lineno">  261 </span>import CryptolSAWCore.CryptolEnv as CEnv
 <span class="lineno">  262 </span>import CryptolSAWCore.Monadify as Monadify
 <span class="lineno">  263 </span>import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -663,7 +663,7 @@ span.spaces    { background: white }
 <span class="lineno">  644 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  645 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
 <span class="lineno">  646 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showEC x . showString &quot; = &quot; . showVal t</span>
-<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (toShortName (ecName ec)))</span>
+<span class="lineno">  647 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (ecShortName ec))</span>
 <span class="lineno">  648 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  649 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
 <span class="lineno">  650 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>
@@ -676,7 +676,7 @@ span.spaces    { background: white }
 <span class="lineno">  657 </span><span class="spaces">    </span><span class="istickedoff">SatUnknown  -&gt; <span class="nottickedoff">showString &quot;Unknown&quot;</span></span>
 <span class="lineno">  658 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">showVal t = shows (ppFirstOrderValue opts t)</span>
-<span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (toShortName (ecName ec)))</span>
+<span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff">showEC ec = showString (Text.unpack (ecShortName ec))</span>
 <span class="lineno">  661 </span><span class="spaces">    </span><span class="istickedoff">showEqn (x, t) = showEC x . showString &quot; = &quot; . showVal t</span>
 <span class="lineno">  662 </span><span class="spaces">    </span><span class="istickedoff">showMulti _ [] = showString &quot;]&quot;</span>
 <span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff">showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti &quot;, &quot; eqns</span></span>

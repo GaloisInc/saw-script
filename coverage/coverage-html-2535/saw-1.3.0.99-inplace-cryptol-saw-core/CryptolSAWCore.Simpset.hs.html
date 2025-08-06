@@ -33,9 +33,9 @@ span.spaces    { background: white }
 <span class="lineno">   14 </span>  ) where
 <span class="lineno">   15 </span>
 <span class="lineno">   16 </span>import SAWCore.Module (moduleDefs, Def(..))
-<span class="lineno">   17 </span>import SAWCore.Rewriter
-<span class="lineno">   18 </span>import SAWCore.SharedTerm
-<span class="lineno">   19 </span>import SAWCore.Term.Functor
+<span class="lineno">   17 </span>import SAWCore.Name
+<span class="lineno">   18 </span>import SAWCore.Rewriter
+<span class="lineno">   19 </span>import SAWCore.SharedTerm
 <span class="lineno">   20 </span>
 <span class="lineno">   21 </span>mkCryptolSimpset :: SharedContext -&gt; IO (Simpset a)
 <span class="lineno">   22 </span><span class="decl"><span class="istickedoff">mkCryptolSimpset sc =</span>
@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">   26 </span><span class="spaces">    </span><span class="istickedoff">cryptolDefs m = filter (not . excluded) $ moduleDefs m</span>
 <span class="lineno">   27 </span><span class="spaces">    </span><span class="istickedoff">excluded d =</span>
-<span class="lineno">   28 </span><span class="spaces">      </span><span class="istickedoff">case defNameInfo d of</span>
+<span class="lineno">   28 </span><span class="spaces">      </span><span class="istickedoff">case nameInfo (defName d) of</span>
 <span class="lineno">   29 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier ident -&gt; ident `elem` excludedNames</span>
 <span class="lineno">   30 </span><span class="spaces">        </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">True</span></span></span>
 <span class="lineno">   31 </span>

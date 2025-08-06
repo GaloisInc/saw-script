@@ -124,7 +124,7 @@ span.spaces    { background: white }
 <span class="lineno">  105 </span>
 <span class="lineno">  106 </span>import SAWCore.Conversion
 <span class="lineno">  107 </span>import SAWCore.Module (Def(..), emptyModule, moduleDefs)
-<span class="lineno">  108 </span>import SAWCore.Name (mkModuleName)
+<span class="lineno">  108 </span>import SAWCore.Name (mkModuleName, Name(..))
 <span class="lineno">  109 </span>import SAWCore.Prim (rethrowEvalError)
 <span class="lineno">  110 </span>import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 <span class="lineno">  111 </span>import SAWCore.SharedTerm
@@ -1023,7 +1023,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1004 </span><span class="spaces">                      </span><span class="istickedoff">]</span>
 <span class="lineno"> 1005 </span><span class="spaces">           </span><span class="istickedoff">cryptolDefs = filter defPred $ moduleDefs cryptol_mod</span>
 <span class="lineno"> 1006 </span><span class="spaces">           </span><span class="istickedoff">defPred d =</span>
-<span class="lineno"> 1007 </span><span class="spaces">             </span><span class="istickedoff">case defNameInfo d of</span>
+<span class="lineno"> 1007 </span><span class="spaces">             </span><span class="istickedoff">case nameInfo (defName d) of</span>
 <span class="lineno"> 1008 </span><span class="spaces">               </span><span class="istickedoff">ModuleIdentifier ident -&gt; ident `Set.member` includedDefs</span>
 <span class="lineno"> 1009 </span><span class="spaces">               </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno"> 1010 </span><span class="spaces">           </span><span class="istickedoff">includedDefs = Set.fromList</span>

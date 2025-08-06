@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; return $ Prim.userError $ &quot;Unimplemented: external constant &quot; ++ show (ecName ec)</span></span>
 <span class="lineno">   58 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">primHandler ec msg env _tv =</span></span>
 <span class="lineno">   59 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return $ Prim.userError $ unlines</span></span>
-<span class="lineno">   60 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecName ec))</span></span>
+<span class="lineno">   60 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not evaluate primitive &quot; ++ Text.unpack (toAbsoluteName (ecNameInfo ec))</span></span>
 <span class="lineno">   61 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, &quot;On argument &quot; ++ show (length env)</span></span>
 <span class="lineno">   62 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, Text.unpack msg</span></span>
 <span class="lineno">   63 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>

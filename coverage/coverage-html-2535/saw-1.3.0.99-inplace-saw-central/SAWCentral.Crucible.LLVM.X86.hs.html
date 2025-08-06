@@ -92,7 +92,7 @@ span.spaces    { background: white }
 <span class="lineno">   73 </span>import CryptolSAWCore.CryptolEnv
 <span class="lineno">   74 </span>import SAWCore.FiniteValue
 <span class="lineno">   75 </span>import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-<span class="lineno">   76 </span>import SAWCore.Name (Name(..), toShortName)
+<span class="lineno">   76 </span>import SAWCore.Name (Name(..), ecShortName)
 <span class="lineno">   77 </span>import SAWCore.Prelude
 <span class="lineno">   78 </span>import SAWCore.Recognizer
 <span class="lineno">   79 </span>import SAWCore.SharedTerm
@@ -1648,7 +1648,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
 <span class="lineno"> 1631 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
-<span class="lineno"> 1632 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showEC ec = Text.unpack (toShortName (ecName ec)) in</span>
+<span class="lineno"> 1632 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showEC ec = Text.unpack (ecShortName ec) in</span>
 <span class="lineno"> 1633 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (ec, val) =</span>
 <span class="lineno"> 1634 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showEC ec, &quot;: &quot;, show $ ppFirstOrderValue ppOpts val ]</span>
 <span class="lineno"> 1635 </span><span class="spaces">               </span><span class="istickedoff">in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>

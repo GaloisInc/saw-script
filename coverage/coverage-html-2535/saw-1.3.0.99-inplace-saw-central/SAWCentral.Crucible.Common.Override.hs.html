@@ -127,7 +127,7 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span>
 <span class="lineno">  109 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 <span class="lineno">  110 </span>
-<span class="lineno">  111 </span>import           SAWCore.Name (toShortName)
+<span class="lineno">  111 </span>import           SAWCore.Name (ecShortName)
 <span class="lineno">  112 </span>import           SAWCore.Prelude as SAWVerifier (scEq)
 <span class="lineno">  113 </span>import           SAWCore.SharedTerm as SAWVerifier
 <span class="lineno">  114 </span>import           SAWCore.Term.Functor (unwrapTermF)
@@ -570,7 +570,7 @@ span.spaces    { background: white }
 <span class="lineno">  551 </span><span class="spaces">     </span><span class="istickedoff">OM (termSub %= IntMap.union extension)</span>
 <span class="lineno">  552 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  553 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedExtCns _cty ec) =</span>
-<span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do ec' &lt;- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)</span>
+<span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">do ec' &lt;- liftIO $ scFreshEC sc (ecShortName ec) (ecType ec)</span>
 <span class="lineno">  555 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc ec'</span>
 <span class="lineno">  556 </span><span class="spaces">         </span><span class="istickedoff">return (ecVarIndex ec, new)</span></span>
 <span class="lineno">  557 </span>

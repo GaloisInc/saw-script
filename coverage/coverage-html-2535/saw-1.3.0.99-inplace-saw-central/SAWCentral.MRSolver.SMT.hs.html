@@ -303,7 +303,7 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span><span class="spaces">       </span><span class="nottickedoff">Right (stats, SolveCounterexample cex) -&gt;</span>
 <span class="lineno">  285 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 2 &quot;SMT solver response: not provable&quot; &gt;&gt;</span>
 <span class="lineno">  286 </span><span class="spaces">         </span><span class="nottickedoff">mrDebugPrint 3 (&quot;Counterexample:&quot; ++ concatMap (\(x,v) -&gt;</span>
-<span class="lineno">  287 </span><span class="spaces">           </span><span class="nottickedoff">&quot;\n - &quot; ++ show (ppName $ ecName x) ++</span>
+<span class="lineno">  287 </span><span class="spaces">           </span><span class="nottickedoff">&quot;\n - &quot; ++ show (ppName $ ecNameInfo x) ++</span>
 <span class="lineno">  288 </span><span class="spaces">           </span><span class="nottickedoff">&quot; = &quot; ++ PPS.render opts (ppFirstOrderValue opts v)) cex) &gt;&gt;</span>
 <span class="lineno">  289 </span><span class="spaces">         </span><span class="nottickedoff">recordUsedSolver stats prop_term &gt;&gt; return False</span>
 <span class="lineno">  290 </span><span class="spaces">       </span><span class="nottickedoff">Right (stats, SolveSuccess _) -&gt;</span>

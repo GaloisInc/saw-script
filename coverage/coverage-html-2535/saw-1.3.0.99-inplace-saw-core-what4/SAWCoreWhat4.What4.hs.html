@@ -109,7 +109,7 @@ span.spaces    { background: white }
 <span class="lineno">   90 </span>import SAWCore.Simulator.Value
 <span class="lineno">   91 </span>import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 <span class="lineno">   92 </span>import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-<span class="lineno">   93 </span>import SAWCore.Name (toAbsoluteName, toShortName)
+<span class="lineno">   93 </span>import SAWCore.Name (Name(..), ecShortName, toAbsoluteName, toShortName)
 <span class="lineno">   94 </span>import SAWCore.Term.Functor (FieldName)
 <span class="lineno">   95 </span>
 <span class="lineno">   96 </span>-- what4
@@ -631,7 +631,7 @@ span.spaces    { background: white }
 <span class="lineno">  612 </span>
 <span class="lineno">  613 </span>muxWhat4Extra :: forall sym. Sym sym =&gt;
 <span class="lineno">  614 </span>  sym -&gt; TValue (What4 sym) -&gt; SBool sym -&gt; What4Extra sym -&gt; What4Extra sym -&gt; IO (What4Extra sym)
-<span class="lineno">  615 </span><span class="decl"><span class="nottickedoff">muxWhat4Extra sym (VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] [] ) c x y =</span>
+<span class="lineno">  615 </span><span class="decl"><span class="nottickedoff">muxWhat4Extra sym (VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] [] ) c x y =</span>
 <span class="lineno">  616 </span><span class="spaces">  </span><span class="nottickedoff">do let f i = do xi &lt;- lookupSStream (VExtra x) i</span>
 <span class="lineno">  617 </span><span class="spaces">                  </span><span class="nottickedoff">yi &lt;- lookupSStream (VExtra y) i</span>
 <span class="lineno">  618 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal sym tp c xi yi</span>
@@ -898,7 +898,7 @@ span.spaces    { background: white }
 <span class="lineno">  879 </span>  IO (SValue sym)
 <span class="lineno">  880 </span><span class="decl"><span class="istickedoff">w4SolveBasic sym sc addlPrims ecMap ref unintSet t =</span>
 <span class="lineno">  881 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- scGetModuleMap sc</span>
-<span class="lineno">  882 </span><span class="spaces">     </span><span class="istickedoff">let extcns (EC ix nm ty)</span>
+<span class="lineno">  882 </span><span class="spaces">     </span><span class="istickedoff">let extcns (EC (Name ix nm) ty)</span>
 <span class="lineno">  883 </span><span class="spaces">            </span><span class="istickedoff">| Just v &lt;- Map.lookup ix ecMap = return v</span>
 <span class="lineno">  884 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ &quot;_&quot; ++ show ix)) ty</span></span>
 <span class="lineno">  885 </span><span class="spaces">     </span><span class="istickedoff">let uninterpreted ec</span>
@@ -1082,7 +1082,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1063 </span><span class="spaces">    </span><span class="nottickedoff">VArray (SArray sa)        -&gt; return (extendUnintApp app0 sa (W.exprType sa))</span>
 <span class="lineno"> 1064 </span><span class="spaces">    </span><span class="nottickedoff">VWord ZBV                 -&gt; return app0</span>
 <span class="lineno"> 1065 </span><span class="spaces">    </span><span class="nottickedoff">VCtorApp i ps xv          -&gt; foldM (applyUnintApp sym) app' =&lt;&lt; traverse force (ps++xv)</span>
-<span class="lineno"> 1066 </span><span class="spaces">                                   </span><span class="nottickedoff">where app' = suffixUnintApp (&quot;_&quot; ++ (Text.unpack (toShortName (ecName i)))) app0</span>
+<span class="lineno"> 1066 </span><span class="spaces">                                   </span><span class="nottickedoff">where app' = suffixUnintApp (&quot;_&quot; ++ (Text.unpack (ecShortName i))) app0</span>
 <span class="lineno"> 1067 </span><span class="spaces">    </span><span class="nottickedoff">VNat n                    -&gt; return (suffixUnintApp (&quot;_&quot; ++ show n) app0)</span>
 <span class="lineno"> 1068 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat w v'             -&gt; applyUnintApp sym app' v'</span>
 <span class="lineno"> 1069 </span><span class="spaces">                                   </span><span class="nottickedoff">where app' = suffixUnintApp (&quot;_&quot; ++ show w) app0</span>
@@ -1175,7 +1175,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1156 </span><span class="spaces">   </span><span class="nottickedoff">freshBnd :: ExtCns Term -&gt; W.BaseTypeRepr tp -&gt; StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)</span>
 <span class="lineno"> 1157 </span><span class="spaces">   </span><span class="nottickedoff">freshBnd ec tpr =</span>
 <span class="lineno"> 1158 </span><span class="spaces">     </span><span class="nottickedoff">do (vs,n) &lt;- get</span>
-<span class="lineno"> 1159 </span><span class="spaces">        </span><span class="nottickedoff">let nm = Text.unpack (toShortName (ecName ec)) ++ &quot;.&quot; ++ show n</span>
+<span class="lineno"> 1159 </span><span class="spaces">        </span><span class="nottickedoff">let nm = Text.unpack (ecShortName ec) ++ &quot;.&quot; ++ show n</span>
 <span class="lineno"> 1160 </span><span class="spaces">        </span><span class="nottickedoff">bvar &lt;- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)</span>
 <span class="lineno"> 1161 </span><span class="spaces">        </span><span class="nottickedoff">put (Some bvar : vs, n+1)</span>
 <span class="lineno"> 1162 </span><span class="spaces">        </span><span class="nottickedoff">return (W.varExpr sym bvar)</span>
@@ -1569,7 +1569,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1550 </span>  Term {- ^ term to simulate -} -&gt;
 <span class="lineno"> 1551 </span>  IO (SValue (B.ExprBuilder n st fs))
 <span class="lineno"> 1552 </span><span class="decl"><span class="istickedoff">w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =</span>
-<span class="lineno"> 1553 </span><span class="spaces">  </span><span class="istickedoff">do let extcns tf (EC ix nm ty)</span>
+<span class="lineno"> 1553 </span><span class="spaces">  </span><span class="istickedoff">do let extcns tf (EC (Name ix nm) ty)</span>
 <span class="lineno"> 1554 </span><span class="spaces">           </span><span class="istickedoff">| Just v &lt;- Map.lookup ix ecCons = <span class="nottickedoff">pure v</span></span>
 <span class="lineno"> 1555 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno"> 1556 </span><span class="spaces">           </span><span class="istickedoff">do trm &lt;- ArgTermConst &lt;$&gt; scTermF sc tf</span>
@@ -1602,11 +1602,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1583 </span>  Term {- ^ term to simulate -} -&gt;
 <span class="lineno"> 1584 </span>  IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
 <span class="lineno"> 1585 </span><span class="decl"><span class="nottickedoff">w4SimulatorEval sym st sc m addlPrims ref constantFilter t =</span>
-<span class="lineno"> 1586 </span><span class="spaces">  </span><span class="nottickedoff">do let extcns tf (EC ix nm ty) =</span>
+<span class="lineno"> 1586 </span><span class="spaces">  </span><span class="nottickedoff">do let extcns tf (EC (Name ix nm) ty) =</span>
 <span class="lineno"> 1587 </span><span class="spaces">           </span><span class="nottickedoff">do trm &lt;- ArgTermConst &lt;$&gt; scTermF sc tf</span>
 <span class="lineno"> 1588 </span><span class="spaces">              </span><span class="nottickedoff">parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ &quot;_&quot; ++ show ix)) ty</span>
 <span class="lineno"> 1589 </span><span class="spaces">     </span><span class="nottickedoff">let uninterpreted _tf ec =</span>
-<span class="lineno"> 1590 </span><span class="spaces">          </span><span class="nottickedoff">if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))</span>
+<span class="lineno"> 1590 </span><span class="spaces">          </span><span class="nottickedoff">if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecNameInfo ec)))</span>
 <span class="lineno"> 1591 </span><span class="spaces">     </span><span class="nottickedoff">let neutral _env nt = fail (&quot;w4SimulatorEval: could not evaluate neutral term: &quot; ++ show nt)</span>
 <span class="lineno"> 1592 </span><span class="spaces">     </span><span class="nottickedoff">let primHandler = Sim.defaultPrimHandler</span>
 <span class="lineno"> 1593 </span><span class="spaces">     </span><span class="nottickedoff">let mux = Prims.lazyMuxValue (prims sym)</span>
@@ -1844,7 +1844,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1825 </span><span class="spaces">         </span><span class="nottickedoff">ctor &lt;-</span>
 <span class="lineno"> 1826 </span><span class="spaces">           </span><span class="nottickedoff">case lookupVarIndexInMap (ecVarIndex i) mm of</span>
 <span class="lineno"> 1827 </span><span class="spaces">             </span><span class="nottickedoff">Just (ResolvedCtor ctor) -&gt; pure ctor</span>
-<span class="lineno"> 1828 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Constructor not found: &quot; &lt;&gt; toAbsoluteName (ecName i)]</span>
+<span class="lineno"> 1828 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Constructor not found: &quot; &lt;&gt; toAbsoluteName (ecNameInfo i)]</span>
 <span class="lineno"> 1829 </span><span class="spaces">         </span><span class="nottickedoff">ps' &lt;- traverse (termOfSValue sc &lt;=&lt; force) ps</span>
 <span class="lineno"> 1830 </span><span class="spaces">         </span><span class="nottickedoff">vv' &lt;- traverse (termOfSValue sc &lt;=&lt; force) vv</span>
 <span class="lineno"> 1831 </span><span class="spaces">         </span><span class="nottickedoff">x   &lt;- scConstApply sc (ctorName ctor) (ps' ++ vv')</span>

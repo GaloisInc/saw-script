@@ -205,7 +205,7 @@ span.spaces    { background: white }
 <span class="lineno">  186 </span><span class="spaces">      </span><span class="nottickedoff">VFun {}        -&gt; showString &quot;&lt;&lt;fun&gt;&gt;&quot;</span>
 <span class="lineno">  187 </span><span class="spaces">      </span><span class="nottickedoff">VUnit          -&gt; showString &quot;()&quot;</span>
 <span class="lineno">  188 </span><span class="spaces">      </span><span class="nottickedoff">VPair{}        -&gt; showString &quot;&lt;&lt;tuple&gt;&gt;&quot;</span>
-<span class="lineno">  189 </span><span class="spaces">      </span><span class="nottickedoff">VCtorApp s _ps _xv -&gt; shows (toAbsoluteName (ecName s))</span>
+<span class="lineno">  189 </span><span class="spaces">      </span><span class="nottickedoff">VCtorApp s _ps _xv -&gt; shows (toAbsoluteName (ecNameInfo s))</span>
 <span class="lineno">  190 </span><span class="spaces">      </span><span class="nottickedoff">VCtorMux {}    -&gt; showString &quot;&lt;&lt;constructor&gt;&gt;&quot;</span>
 <span class="lineno">  191 </span><span class="spaces">      </span><span class="nottickedoff">VVector xv     -&gt; showList (toList xv)</span>
 <span class="lineno">  192 </span><span class="spaces">      </span><span class="nottickedoff">VBool _        -&gt; showString &quot;&lt;&lt;boolean&gt;&gt;&quot;</span>

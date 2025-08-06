@@ -99,14 +99,14 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span><span class="spaces">     </span><span class="nottickedoff">return (t', replMap)</span>
 <span class="lineno">   81 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">   82 </span><span class="spaces"> </span><span class="nottickedoff">where</span>
-<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">uninterpreted cfg mapref tf ec@(EC ix _nm ty)</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="nottickedoff">uninterpreted cfg mapref tf ec@(EC (nameIndex -&gt; ix) ty)</span>
 <span class="lineno">   84 </span><span class="spaces">      </span><span class="nottickedoff">| Set.member ix opaqueSet = Just $</span>
 <span class="lineno">   85 </span><span class="spaces">          </span><span class="nottickedoff">do tm &lt;- scTermF sc tf</span>
 <span class="lineno">   86 </span><span class="spaces">             </span><span class="nottickedoff">reflectTerm sc cfg ty tm</span>
 <span class="lineno">   87 </span><span class="spaces">      </span><span class="nottickedoff">| Set.member ix unintSet = Just (replace sc cfg mapref ec)</span>
 <span class="lineno">   88 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise = Nothing</span>
 <span class="lineno">   89 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   90 </span><span class="spaces">    </span><span class="nottickedoff">extcns cfg mapref tf ec@(EC ix _nm ty)</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="nottickedoff">extcns cfg mapref tf ec@(EC (nameIndex -&gt; ix) ty)</span>
 <span class="lineno">   91 </span><span class="spaces">      </span><span class="nottickedoff">| Set.member ix unintSet = replace sc cfg mapref ec</span>
 <span class="lineno">   92 </span><span class="spaces">      </span><span class="nottickedoff">| otherwise =</span>
 <span class="lineno">   93 </span><span class="spaces">          </span><span class="nottickedoff">case Map.lookup ix ecVals of</span>
@@ -122,7 +122,7 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span><span class="spaces">         </span><span class="nottickedoff">reflectTerm sc cfg tyv tm</span>
 <span class="lineno">  104 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  105 </span><span class="spaces">    </span><span class="nottickedoff">primHandler cfg ec _msg env tp =</span>
-<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">do let nm = Name (ecVarIndex ec) (ecName ec)</span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">do let nm = ecName ec</span>
 <span class="lineno">  107 </span><span class="spaces">         </span><span class="nottickedoff">args &lt;- reverse &lt;$&gt; traverse (\(x,ty) -&gt; readBackValue sc cfg ty =&lt;&lt; force x) env</span>
 <span class="lineno">  108 </span><span class="spaces">         </span><span class="nottickedoff">prim &lt;- scConst sc nm</span>
 <span class="lineno">  109 </span><span class="spaces">         </span><span class="nottickedoff">f    &lt;- foldM (scApply sc) prim args</span>
@@ -149,7 +149,7 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">loop env ty =</span>
 <span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">do let args = reverse env</span>
 <span class="lineno">  132 </span><span class="spaces">         </span><span class="nottickedoff">ty' &lt;- readBackTValue sc cfg ty</span>
-<span class="lineno">  133 </span><span class="spaces">         </span><span class="nottickedoff">newec &lt;- scFreshEC sc (toShortName (ecName ec)) ty'</span>
+<span class="lineno">  133 </span><span class="spaces">         </span><span class="nottickedoff">newec &lt;- scFreshEC sc (ecShortName ec) ty'</span>
 <span class="lineno">  134 </span><span class="spaces">         </span><span class="nottickedoff">modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))</span>
 <span class="lineno">  135 </span><span class="spaces">         </span><span class="nottickedoff">reflectTerm sc cfg ty =&lt;&lt; scVariable sc newec</span></span>
 <span class="lineno">  136 </span>
@@ -208,7 +208,7 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">primHandler cfg ec _msg env tp =</span>
 <span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">do let ?recordEC = <span class="nottickedoff">\_ec -&gt; return ()</span></span>
-<span class="lineno">  192 </span><span class="spaces">         </span><span class="istickedoff">let nm = Name (ecVarIndex ec) (ecName ec)</span>
+<span class="lineno">  192 </span><span class="spaces">         </span><span class="istickedoff">let nm = ecName ec</span>
 <span class="lineno">  193 </span><span class="spaces">         </span><span class="istickedoff">args &lt;- reverse &lt;$&gt; traverse (\(x,ty) -&gt; readBackValue sc <span class="nottickedoff">cfg</span> <span class="nottickedoff">ty</span> =&lt;&lt; force x) env</span>
 <span class="lineno">  194 </span><span class="spaces">         </span><span class="istickedoff">prim &lt;- scConst sc nm</span>
 <span class="lineno">  195 </span><span class="spaces">         </span><span class="istickedoff">f    &lt;- foldM (scApply sc) prim args</span>
@@ -285,15 +285,15 @@ span.spaces    { background: white }
 <span class="lineno">  266 </span><span class="spaces">      </span><span class="istickedoff">VRecordType fs -&gt;</span>
 <span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do fs' &lt;- traverse (traverse loop) fs</span></span>
 <span class="lineno">  268 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">scRecordType sc fs'</span></span>
-<span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff">VDataType nm ps vs -&gt;</span>
-<span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">do let nm' = Name (ecVarIndex nm) (ecName nm)</span>
-<span class="lineno">  271 </span><span class="spaces">           </span><span class="istickedoff">args &lt;- readBackDataTypeParams (ecType nm) (ps++vs)</span>
-<span class="lineno">  272 </span><span class="spaces">           </span><span class="istickedoff">scConstApply sc nm' args</span>
+<span class="lineno">  269 </span><span class="spaces">      </span><span class="istickedoff">VDataType ec ps vs -&gt;</span>
+<span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">do let nm = ecName ec</span>
+<span class="lineno">  271 </span><span class="spaces">           </span><span class="istickedoff">args &lt;- readBackDataTypeParams (ecType ec) (ps++vs)</span>
+<span class="lineno">  272 </span><span class="spaces">           </span><span class="istickedoff">scConstApply sc nm args</span>
 <span class="lineno">  273 </span><span class="spaces">      </span><span class="istickedoff">VPiType{} -&gt;</span>
 <span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff">do (ecs, tm) &lt;- readBackPis tv</span>
 <span class="lineno">  275 </span><span class="spaces">           </span><span class="istickedoff">scGeneralizeExts sc ecs tm</span>
 <span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">VRecursorType d ps m mty -&gt;</span>
-<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let d' = Name (ecVarIndex d) (ecName d)</span></span>
+<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do let d' = ecName d</span></span>
 <span class="lineno">  278 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ps'  &lt;- readBackDataTypeParams (ecType d) ps</span></span>
 <span class="lineno">  279 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">m'   &lt;- readBackValue sc cfg mty m</span></span>
 <span class="lineno">  280 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">mty' &lt;- loop mty</span></span>
@@ -447,7 +447,7 @@ span.spaces    { background: white }
 <span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">scVectorReduced sc tp' vs'</span></span>
 <span class="lineno">  429 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =</span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">do let nm = Name (ecVarIndex cnm) (ecName cnm)</span>
+<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">do let nm = ecName cnm</span>
 <span class="lineno">  432 </span><span class="spaces">         </span><span class="istickedoff">args &lt;- readBackCtorArgs <span class="nottickedoff">cnm</span> (ecType cnm) (ps++vs)</span>
 <span class="lineno">  433 </span><span class="spaces">         </span><span class="istickedoff">scConstApply sc nm args</span>
 <span class="lineno">  434 </span><span class="spaces"></span><span class="istickedoff"></span>

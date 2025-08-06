@@ -635,8 +635,8 @@ span.spaces    { background: white }
 <span class="lineno">  616 </span><span class="spaces">       </span><span class="nottickedoff">where</span>
 <span class="lineno">  617 </span><span class="spaces">         </span><span class="nottickedoff">ty = ecType ec</span>
 <span class="lineno">  618 </span><span class="spaces">         </span><span class="nottickedoff">(args, pi_body) = asPiList ty</span>
-<span class="lineno">  619 </span><span class="spaces">         </span><span class="nottickedoff">nm = Name (ecVarIndex ec) (ecName ec)</span>
-<span class="lineno">  620 </span><span class="spaces">         </span><span class="nottickedoff">n = toShortName (ecName ec)</span>
+<span class="lineno">  619 </span><span class="spaces">         </span><span class="nottickedoff">nm = ecName ec</span>
+<span class="lineno">  620 </span><span class="spaces">         </span><span class="nottickedoff">n = toShortName (nameInfo nm)</span>
 <span class="lineno">  621 </span><span class="spaces">         </span><span class="nottickedoff">helper ::</span>
 <span class="lineno">  622 </span><span class="spaces">           </span><span class="nottickedoff">Coq.Ident -&gt;</span>
 <span class="lineno">  623 </span><span class="spaces">           </span><span class="nottickedoff">[(Bool, (LocalName, Coq.Ident))] -&gt;</span>
@@ -817,7 +817,7 @@ span.spaces    { background: white }
 <span class="lineno">  798 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  799 </span><span class="spaces">    </span><span class="nottickedoff">Variable ec -&gt;</span>
 <span class="lineno">  800 </span><span class="spaces">      </span><span class="nottickedoff">do nenv &lt;- view namedEnvironment &lt;$&gt; askTR</span>
-<span class="lineno">  801 </span><span class="spaces">         </span><span class="nottickedoff">let nm = Name (ecVarIndex ec) (ecName ec)</span>
+<span class="lineno">  801 </span><span class="spaces">         </span><span class="nottickedoff">let nm = ecName ec</span>
 <span class="lineno">  802 </span><span class="spaces">         </span><span class="nottickedoff">case Map.lookup nm nenv of</span>
 <span class="lineno">  803 </span><span class="spaces">           </span><span class="nottickedoff">Just ident -&gt; pure (Coq.Var ident)</span>
 <span class="lineno">  804 </span><span class="spaces">           </span><span class="nottickedoff">Nothing -&gt; translateConstant nm</span>

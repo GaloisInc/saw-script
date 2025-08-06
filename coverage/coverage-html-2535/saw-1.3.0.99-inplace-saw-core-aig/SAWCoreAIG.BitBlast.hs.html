@@ -52,7 +52,7 @@ span.spaces    { background: white }
 <span class="lineno">   33 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts)
 <span class="lineno">   34 </span>
 <span class="lineno">   35 </span>import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-<span class="lineno">   36 </span>import SAWCore.Name (toShortName)
+<span class="lineno">   36 </span>import SAWCore.Name (Name(..), ecShortName)
 <span class="lineno">   37 </span>import SAWCore.Module (ModuleMap)
 <span class="lineno">   38 </span>import qualified SAWCore.Simulator as Sim
 <span class="lineno">   39 </span>import SAWCore.Simulator.Value
@@ -327,7 +327,7 @@ span.spaces    { background: white }
 <span class="lineno">  308 </span>
 <span class="lineno">  309 </span>muxBExtra :: AIG.IsAIG l g =&gt; g s -&gt;
 <span class="lineno">  310 </span>  TValue (BitBlast (l s)) -&gt; l s -&gt; BExtra (l s) -&gt; BExtra (l s) -&gt; IO (BExtra (l s))
-<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">muxBExtra be (VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) c x y =</span>
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">muxBExtra be (VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) c x y =</span>
 <span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">do let f i = do xi &lt;- lookupBStream (VExtra x) i</span>
 <span class="lineno">  313 </span><span class="spaces">                  </span><span class="nottickedoff">yi &lt;- lookupBStream (VExtra y) i</span>
 <span class="lineno">  314 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal be tp c xi yi</span>
@@ -492,7 +492,7 @@ span.spaces    { background: white }
 <span class="lineno">  473 </span>bitBlastExtCns ::
 <span class="lineno">  474 </span>  Map VarIndex (BValue (l s)) -&gt; ExtCns (TValue (BitBlast (l s))) -&gt;
 <span class="lineno">  475 </span>  IO (BValue (l s))
-<span class="lineno">  476 </span><span class="decl"><span class="istickedoff">bitBlastExtCns ecMap (EC idx name _v) =</span>
+<span class="lineno">  476 </span><span class="decl"><span class="istickedoff">bitBlastExtCns ecMap (EC (Name idx name) _v) =</span>
 <span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup idx ecMap of</span>
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">Just var -&gt; return var</span>
 <span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $</span></span>
@@ -530,7 +530,7 @@ span.spaces    { background: white }
 <span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
 <span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">bval &lt;- bitBlastBasic be modmap addlPrims <span class="nottickedoff">ecMap</span> t</span>
 <span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">bval' &lt;- applyAll bval argVars</span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">names =  map fst args ++ map (Text.unpack . toShortName . ecName) ecs</span></span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">names =  map fst args ++ map (Text.unpack . ecShortName) ecs</span></span>
 <span class="lineno">  515 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">shapes = argShapes ++ ecShapes</span></span>
 <span class="lineno">  516 </span><span class="spaces">  </span><span class="istickedoff">return (bval', <span class="nottickedoff">zip names shapes</span>)</span></span>
 <span class="lineno">  517 </span>

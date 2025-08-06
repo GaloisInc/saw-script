@@ -483,7 +483,7 @@ span.spaces    { background: white }
 <span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">do ne &lt;- asks ppNamingEnv</span>
 <span class="lineno">  465 </span><span class="spaces">     </span><span class="istickedoff">case bestDisplayName ne (ecVarIndex ec) of</span>
 <span class="lineno">  466 </span><span class="spaces">       </span><span class="istickedoff">Just alias -&gt; pure $ pretty alias</span>
-<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecName ec)</span></span>
+<span class="lineno">  467 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure $ ppName (ecNameInfo ec)</span></span>
 <span class="lineno">  468 </span>
 <span class="lineno">  469 </span>-- | Pretty-print a 'Name', using the best unambiguous alias from the
 <span class="lineno">  470 </span>-- naming environment.

@@ -176,7 +176,7 @@ span.spaces    { background: white }
 <span class="lineno">  157 </span>import SAWCore.Rewriter
 <span class="lineno">  158 </span>import SAWCore.SATQuery
 <span class="lineno">  159 </span>import SAWCore.Module (ModuleMap)
-<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv)
+<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv, ecShortName)
 <span class="lineno">  161 </span>import SAWCore.SharedTerm
 <span class="lineno">  162 </span>import SAWCore.Term.Functor
 <span class="lineno">  163 </span>import CryptolSAWCore.TypedTerm
@@ -2065,7 +2065,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2046 </span><span class="spaces">                          </span><span class="istickedoff">-- this argument not solved by unification, so make it a goal</span>
 <span class="lineno"> 2047 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst (ecType ec)</span>
 <span class="lineno"> 2048 </span><span class="spaces">                             </span><span class="istickedoff">mp &lt;- termToMaybeProp sc c0</span>
-<span class="lineno"> 2049 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2049 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = ecShortName ec</span></span>
 <span class="lineno"> 2050 </span><span class="spaces">                             </span><span class="istickedoff">case mp of</span>
 <span class="lineno"> 2051 </span><span class="spaces">                               </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2052 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;goal_apply: could not find instantiation for &quot; ++ show nm)</span></span>
@@ -2094,7 +2094,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2075 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
 <span class="lineno"> 2076 </span><span class="spaces">      </span><span class="istickedoff">liftIO (scAsPi sc (unProp p)) &gt;&gt;= \case</span>
 <span class="lineno"> 2077 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
-<span class="lineno"> 2078 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2078 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = ecShortName ec</span></span>
 <span class="lineno"> 2079 </span><span class="spaces">             </span><span class="istickedoff">let tp = ecType ec</span>
 <span class="lineno"> 2080 </span><span class="spaces">             </span><span class="istickedoff">let name = if <span class="tickonlyfalse">Text.null usernm</span> then <span class="nottickedoff">nm</span> else usernm</span>
 <span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">xv &lt;- liftIO $ scFreshEC sc name tp</span>

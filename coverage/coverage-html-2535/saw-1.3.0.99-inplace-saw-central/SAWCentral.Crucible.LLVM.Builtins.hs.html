@@ -200,9 +200,9 @@ span.spaces    { background: white }
 <span class="lineno">  181 </span>
 <span class="lineno">  182 </span>-- saw-core
 <span class="lineno">  183 </span>import SAWCore.FiniteValue (ppFirstOrderValue)
-<span class="lineno">  184 </span>import SAWCore.SharedTerm
-<span class="lineno">  185 </span>import SAWCore.Recognizer
-<span class="lineno">  186 </span>import SAWCore.Term.Functor
+<span class="lineno">  184 </span>import SAWCore.Name (ecShortName)
+<span class="lineno">  185 </span>import SAWCore.SharedTerm
+<span class="lineno">  186 </span>import SAWCore.Recognizer
 <span class="lineno">  187 </span>import SAWCore.Term.Pretty (showTerm)
 <span class="lineno">  188 </span>
 <span class="lineno">  189 </span>import SAWCoreWhat4.ReturnTrip
@@ -866,7 +866,7 @@ span.spaces    { background: white }
 <span class="lineno">  847 </span><span class="spaces">                 </span><span class="istickedoff">if null vals then</span>
 <span class="lineno">  848 </span><span class="spaces">                   </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
 <span class="lineno">  849 </span><span class="spaces">                 </span><span class="istickedoff">else</span>
-<span class="lineno">  850 </span><span class="spaces">                   </span><span class="istickedoff">let showEC ec = Text.unpack (toShortName (ecName ec)) in</span>
+<span class="lineno">  850 </span><span class="spaces">                   </span><span class="istickedoff">let showEC ec = Text.unpack (ecShortName ec) in</span>
 <span class="lineno">  851 </span><span class="spaces">                   </span><span class="istickedoff">let showAssignment (ec, val) = &quot;  &quot; ++ showEC ec ++ &quot;: &quot; ++ show (ppFirstOrderValue opts val) in</span>
 <span class="lineno">  852 </span><span class="spaces">                   </span><span class="istickedoff">mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
 <span class="lineno">  853 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------------------------------&quot;</span>

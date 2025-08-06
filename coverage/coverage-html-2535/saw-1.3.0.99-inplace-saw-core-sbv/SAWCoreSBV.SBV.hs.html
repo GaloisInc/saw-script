@@ -80,7 +80,7 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span>import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 <span class="lineno">   62 </span>import Numeric.Natural (Natural)
 <span class="lineno">   63 </span>
-<span class="lineno">   64 </span>import SAWCore.Name (toShortName)
+<span class="lineno">   64 </span>import SAWCore.Name (Name(..), ecShortName, toShortName)
 <span class="lineno">   65 </span>import qualified SAWCore.Prim as Prim
 <span class="lineno">   66 </span>import qualified SAWCore.Recognizer as R
 <span class="lineno">   67 </span>import qualified SAWCore.Simulator as Sim
@@ -299,7 +299,7 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VIntMod n si              -&gt; return ([svRem si (svInteger KUnbounded (toInteger n))], &quot;&quot;)</span></span>
 <span class="lineno">  281 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VWord sw                  -&gt; return (if intSizeOf sw &gt; 0 then [sw] else [], &quot;&quot;)</span></span>
 <span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VCtorApp i ps ts          -&gt; do (xss, ss) &lt;- unzip &lt;$&gt; traverse (force &gt;=&gt; flattenSValue nm) (ps++ts)</span></span>
-<span class="lineno">  283 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (concat xss, &quot;_&quot; ++ (Text.unpack (toShortName (ecName i))) ++ concat ss)</span></span>
+<span class="lineno">  283 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">return (concat xss, &quot;_&quot; ++ (Text.unpack (ecShortName i)) ++ concat ss)</span></span>
 <span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VNat n                    -&gt; return ([], &quot;_&quot; ++ show n)</span></span>
 <span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">TValue (suffixTValue -&gt; Just s)</span></span>
 <span class="lineno">  286 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">-&gt; return ([], s)</span></span>
@@ -629,7 +629,7 @@ span.spaces    { background: white }
 <span class="lineno">  610 </span><span class="decl"><span class="nottickedoff">muxBVal = Prims.muxValue prims</span></span>
 <span class="lineno">  611 </span>
 <span class="lineno">  612 </span>muxSbvExtra :: TValue SBV -&gt; SBool -&gt; SbvExtra -&gt; SbvExtra -&gt; IO SbvExtra
-<span class="lineno">  613 </span><span class="decl"><span class="nottickedoff">muxSbvExtra (VDataType (ecName -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) c x y =</span>
+<span class="lineno">  613 </span><span class="decl"><span class="nottickedoff">muxSbvExtra (VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [TValue tp] []) c x y =</span>
 <span class="lineno">  614 </span><span class="spaces">  </span><span class="nottickedoff">do let f i = do xi &lt;- lookupSbvExtra x i</span>
 <span class="lineno">  615 </span><span class="spaces">                  </span><span class="nottickedoff">yi &lt;- lookupSbvExtra y i</span>
 <span class="lineno">  616 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal tp c xi yi</span>
@@ -646,7 +646,7 @@ span.spaces    { background: white }
 <span class="lineno">  627 </span><span class="decl"><span class="nottickedoff">sbvSolveBasic sc addlPrims unintSet t = do</span>
 <span class="lineno">  628 </span><span class="spaces">  </span><span class="nottickedoff">m &lt;- scGetModuleMap sc</span>
 <span class="lineno">  629 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  630 </span><span class="spaces">  </span><span class="nottickedoff">let extcns (EC ix nm ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ &quot;#&quot; ++ show ix) ty</span>
+<span class="lineno">  630 </span><span class="spaces">  </span><span class="nottickedoff">let extcns (EC (Name ix nm) ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ &quot;#&quot; ++ show ix) ty</span>
 <span class="lineno">  631 </span><span class="spaces">  </span><span class="nottickedoff">let uninterpreted ec</span>
 <span class="lineno">  632 </span><span class="spaces">        </span><span class="nottickedoff">| Set.member (ecVarIndex ec) unintSet = Just (extcns ec)</span>
 <span class="lineno">  633 </span><span class="spaces">        </span><span class="nottickedoff">| otherwise                           = Nothing</span>
@@ -719,7 +719,7 @@ span.spaces    { background: white }
 <span class="lineno">  700 </span><span class="spaces">  </span><span class="istickedoff">do t &lt;- liftIO (satQueryAsTerm <span class="nottickedoff">sc</span> query)</span>
 <span class="lineno">  701 </span><span class="spaces">     </span><span class="istickedoff">let qvars = Map.toList (satVariables query)</span>
 <span class="lineno">  702 </span><span class="spaces">     </span><span class="istickedoff">let unintSet = satUninterp query</span>
-<span class="lineno">  703 </span><span class="spaces">     </span><span class="istickedoff">let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot</span>
+<span class="lineno">  703 </span><span class="spaces">     </span><span class="istickedoff">let ecVars (ec, fot) = newVars (Text.unpack (ecShortName ec)) fot</span>
 <span class="lineno">  704 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  705 </span><span class="spaces">     </span><span class="istickedoff">(labels, vars) &lt;-</span>
 <span class="lineno">  706 </span><span class="spaces">       </span><span class="istickedoff">flip evalStateT 0 $ unzip &lt;$&gt;</span>
@@ -731,7 +731,7 @@ span.spaces    { background: white }
 <span class="lineno">  712 </span><span class="spaces">       </span><span class="istickedoff">do vars' &lt;- sequence vars</span>
 <span class="lineno">  713 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')</span>
 <span class="lineno">  714 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  715 </span><span class="spaces">          </span><span class="istickedoff">let mkUninterp (EC ix nm ty) =</span>
+<span class="lineno">  715 </span><span class="spaces">          </span><span class="istickedoff">let mkUninterp (EC (Name ix nm) ty) =</span>
 <span class="lineno">  716 </span><span class="spaces">                </span><span class="istickedoff">parseUninterpreted [] (Text.unpack (toShortName nm) ++ &quot;#&quot; ++ show ix) ty</span>
 <span class="lineno">  717 </span><span class="spaces">          </span><span class="istickedoff">let extcns ec</span>
 <span class="lineno">  718 </span><span class="spaces">                </span><span class="istickedoff">| Just v &lt;- Map.lookup (ecVarIndex ec) varMap = pure v</span>
@@ -813,7 +813,7 @@ span.spaces    { background: white }
 <span class="lineno">  794 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">length args == length xs</span> = Just (zip args xs)</span>
 <span class="lineno">  795 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">error $ unwords</span></span>
 <span class="lineno">  796 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;SBV SAT results do not match expected arguments &quot;</span></span>
-<span class="lineno">  797 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (map (toShortName . ecName) args), show xs]</span></span>
+<span class="lineno">  797 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (map ecShortName args), show xs]</span></span>
 <span class="lineno">  798 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  800 </span><span class="spaces">  </span><span class="istickedoff">xs = fmap getLabel ls</span>
