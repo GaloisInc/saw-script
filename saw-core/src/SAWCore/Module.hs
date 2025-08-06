@@ -255,7 +255,7 @@ dtNumIndices dt = length $ dtIndices dt
 
 -- | Compute the ExtCns that uniquely references a datatype
 dtExtCns :: DataType -> ExtCns Term
-dtExtCns dt = EC (nameIndex (dtName dt)) (nameInfo (dtName dt)) (dtType dt)
+dtExtCns dt = EC (dtName dt) (dtType dt)
 
 instance Eq DataType where
   (==) = lift2 dtName (==)

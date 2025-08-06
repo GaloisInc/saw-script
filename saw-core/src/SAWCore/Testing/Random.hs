@@ -19,6 +19,7 @@ import SAWCore.FiniteValue
   ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
 
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name (ecVarIndex)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
   ( scGetModuleMap, SharedContext, Term

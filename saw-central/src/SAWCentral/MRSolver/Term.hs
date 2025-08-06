@@ -78,7 +78,7 @@ mrVarType = ecType . unMRVar
 
 -- | Print the string name of an 'MRVar'
 showMRVar :: MRVar -> String
-showMRVar = show . ppName . ecName . unMRVar
+showMRVar = show . ppName . ecNameInfo . unMRVar
 
 -- | A tuple or record projection of a 'Term'
 data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
@@ -527,7 +527,7 @@ instance PrettyInCtx Type where
   prettyInCtx (Type t) = prettyInCtx t
 
 instance PrettyInCtx MRVar where
-  prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
+  prettyInCtx (MRVar ec) = return $ ppName $ ecNameInfo ec
 
 instance PrettyInCtx a => PrettyInCtx [a] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs

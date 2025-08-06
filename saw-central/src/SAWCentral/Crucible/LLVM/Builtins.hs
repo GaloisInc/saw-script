@@ -847,7 +847,7 @@ verifyObligations cc mspec tactic assumes asserts =
                  if null vals then
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else
-                   let showEC ec = Text.unpack (toShortName (ecName ec)) in
+                   let showEC ec = Text.unpack (toShortName (ecNameInfo ec)) in
                    let showAssignment (ec, val) = "  " ++ showEC ec ++ ": " ++ show (ppFirstOrderValue opts val) in
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"

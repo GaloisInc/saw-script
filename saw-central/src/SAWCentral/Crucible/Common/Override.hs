@@ -551,7 +551,7 @@ refreshTerms sc ss =
      OM (termSub %= IntMap.union extension)
   where
     freshenTerm (TypedExtCns _cty ec) =
-      do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)
+      do ec' <- liftIO $ scFreshEC sc (toShortName (ecNameInfo ec)) (ecType ec)
          new <- liftIO $ scVariable sc ec'
          return (ecVarIndex ec, new)
 

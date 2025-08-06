@@ -41,6 +41,8 @@ module SAWCore.Name
   , Name(..)
     -- * ExtCns
   , ExtCns(..)
+  , ecNameInfo
+  , ecVarIndex
   , scFreshNameURI
     -- * Display Name Environments
   , DisplayNameEnv(..)
@@ -272,8 +274,7 @@ instance Hashable Name where
 -- 'VarIndex'.
 data ExtCns e =
   EC
-  { ecVarIndex :: !VarIndex
-  , ecName :: !NameInfo
+  { ecName :: !Name
   , ecType :: !e
   }
   deriving (Show, Functor, Foldable, Traversable)
@@ -281,10 +282,10 @@ data ExtCns e =
 -- | Because of the global uniqueness invariant, comparing the
 -- 'VarIndex' is sufficient to ensure equality of names.
 instance Eq (ExtCns e) where
-  x == y = ecVarIndex x == ecVarIndex y
+  x == y = ecName x == ecName y
 
 instance Ord (ExtCns e) where
-  compare x y = compare (ecVarIndex x) (ecVarIndex y)
+  compare x y = compare (ecName x) (ecName y)
 
 -- | For hashing, we consider only the 'NameInfo' and not the
 -- 'VarIndex'; this gives a stable hash value for a particular name,
@@ -292,6 +293,11 @@ instance Ord (ExtCns e) where
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecName ec)
 
+ecNameInfo :: ExtCns e -> NameInfo
+ecNameInfo ec = nameInfo (ecName ec)
+
+ecVarIndex :: ExtCns e -> VarIndex
+ecVarIndex ec = nameIndex (ecName ec)
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $

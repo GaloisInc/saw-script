@@ -644,7 +644,7 @@ showsProofResult opts r =
   where
     showVal t = shows (ppFirstOrderValue opts t)
     showEqn (x, t) = showEC x . showString " = " . showVal t
-    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (toShortName (ecNameInfo ec)))
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -657,7 +657,7 @@ showsSatResult opts r =
     SatUnknown  -> showString "Unknown"
   where
     showVal t = shows (ppFirstOrderValue opts t)
-    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (toShortName (ecNameInfo ec)))
     showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns

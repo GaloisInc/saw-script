@@ -2000,11 +2000,11 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (ecName -> ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType (ecNameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
         return (Left C.KNum)
 
       SC.VDataType _ _ _ -> Nothing

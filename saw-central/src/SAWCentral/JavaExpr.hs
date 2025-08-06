@@ -162,7 +162,7 @@ jeVarName = map dotToUnderscore . ppJavaExpr
         dotToUnderscore c = c
 
 asJavaExpr :: Term -> Maybe String
-asJavaExpr (asVariable -> Just ec) = Just (Text.unpack (toShortName (ecName ec))) -- TODO?
+asJavaExpr (asVariable -> Just ec) = Just (Text.unpack (toShortName (ecNameInfo ec))) -- TODO?
 asJavaExpr _ = Nothing
 
 isRefJavaExpr :: JavaExpr -> Bool

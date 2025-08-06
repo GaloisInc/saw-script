@@ -116,7 +116,7 @@ asPiCtorArg sc d params dt_ixs t =
     Just (ec, rest) ->
       asCtorArg sc d params dt_ixs (ecType ec) >>= \case
         Nothing -> pure Nothing
-        Just arg -> pure $ Just (Name (ecVarIndex ec) (ecName ec), arg, rest)
+        Just arg -> pure $ Just (ecName ec, arg, rest)
 
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs ::

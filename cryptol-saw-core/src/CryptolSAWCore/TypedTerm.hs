@@ -74,7 +74,7 @@ ppTypedTermType (TypedTermOther tp) =
 
 ppTypedExtCns :: TypedExtCns -> PP.Doc ann
 ppTypedExtCns (TypedExtCns tp ec) =
-  PP.unAnnotate (ppName (ecName ec))
+  PP.unAnnotate (ppName (ecNameInfo ec))
   PP.<+> PP.pretty ":" PP.<+>
   PP.viaShow (C.ppPrec 0 tp)
 

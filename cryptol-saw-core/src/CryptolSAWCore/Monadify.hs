@@ -174,7 +174,7 @@ asTypedGlobalDef t =
       let ty = resolvedNameType (requireNameInMap nm ?mm)
       in Just $ GlobalDef (nameInfo nm) (nameIndex nm) ty t
     Variable ec ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
+      Just $ GlobalDef (ecNameInfo ec) (ecVarIndex ec) (ecType ec) t
     _ -> Nothing
 
 -- FIXME HERE NOW: remove these if no longer needed
@@ -827,15 +827,15 @@ mkCtorArgMonTerm ec
   | not (isFirstOrderType (ecType ec)) =
     failArgMonTerm (monadifyType [] $ ecType ec)
     ("monadification failed: cannot handle constructor "
-     ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with higher-order type")
+     ++ Text.unpack (toAbsoluteName (ecNameInfo ec)) ++ " with higher-order type")
 mkCtorArgMonTerm ec =
-  case ecName ec of
+  case ecNameInfo ec of
     ModuleIdentifier ident ->
       fromSemiPureTermFun (monadifyType [] $ ecType ec) (ctorOpenTerm ident)
     ImportedName{} ->
       failArgMonTerm (monadifyType [] $ ecType ec)
       ("monadification failed: cannot handle constructor "
-       ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with non-ident name")
+       ++ Text.unpack (toAbsoluteName (ecNameInfo ec)) ++ " with non-ident name")
 
 
 ----------------------------------------------------------------------

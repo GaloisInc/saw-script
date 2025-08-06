@@ -464,7 +464,7 @@ ppExtCns ec =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (ecVarIndex ec) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppName (ecName ec)
+       Nothing -> pure $ ppName (ecNameInfo ec)
 
 -- | Pretty-print a 'Name', using the best unambiguous alias from the
 -- naming environment.

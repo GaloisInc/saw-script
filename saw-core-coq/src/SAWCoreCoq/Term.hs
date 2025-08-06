@@ -616,8 +616,8 @@ translateBinderEC ec f =
        where
          ty = ecType ec
          (args, pi_body) = asPiList ty
-         nm = Name (ecVarIndex ec) (ecName ec)
-         n = toShortName (ecName ec)
+         nm = ecName ec
+         n = toShortName (nameInfo nm)
          helper ::
            Coq.Ident ->
            [(Bool, (LocalName, Coq.Ident))] ->
@@ -798,7 +798,7 @@ translateTermUnshared t = do
 
     Variable ec ->
       do nenv <- view namedEnvironment <$> askTR
-         let nm = Name (ecVarIndex ec) (ecName ec)
+         let nm = ecName ec
          case Map.lookup nm nenv of
            Just ident -> pure (Coq.Var ident)
            Nothing -> translateConstant nm

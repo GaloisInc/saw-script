@@ -186,7 +186,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s _ps _xv -> shows (toAbsoluteName (ecName s))
+      VCtorApp s _ps _xv -> shows (toAbsoluteName (ecNameInfo s))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"

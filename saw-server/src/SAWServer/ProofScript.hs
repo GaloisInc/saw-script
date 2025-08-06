@@ -48,7 +48,7 @@ import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
 import SAWCore.FiniteValue (FirstOrderValue(..))
-import SAWCore.Name (ecName, toShortName)
+import SAWCore.Name (ecNameInfo, toShortName)
 import SAWCore.Rewriter (emptySimpset)
 import SAWCore.TermNet (merge)
 
@@ -277,7 +277,7 @@ prove params = do
                          do e <- case exportFirstOrderExpression v of
                                    Left err -> throw $ ProveException err
                                    Right e -> return e
-                            return $ CexValue (toShortName (ecName ec)) e
+                            return $ CexValue (toShortName (ecNameInfo ec)) e
          return $ ProofInvalid $ cexVals
     PF.UnfinishedProof{} ->
       return ProofUnknown

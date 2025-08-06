@@ -80,14 +80,14 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
      return (t', replMap)
 
  where
-    uninterpreted cfg mapref tf ec@(EC ix _nm ty)
+    uninterpreted cfg mapref tf ec@(EC (nameIndex -> ix) ty)
       | Set.member ix opaqueSet = Just $
           do tm <- scTermF sc tf
              reflectTerm sc cfg ty tm
       | Set.member ix unintSet = Just (replace sc cfg mapref ec)
       | otherwise = Nothing
 
-    extcns cfg mapref tf ec@(EC ix _nm ty)
+    extcns cfg mapref tf ec@(EC (nameIndex -> ix) ty)
       | Set.member ix unintSet = replace sc cfg mapref ec
       | otherwise =
           case Map.lookup ix ecVals of
@@ -103,7 +103,7 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
          reflectTerm sc cfg tyv tm
 
     primHandler cfg ec _msg env tp =
-      do let nm = Name (ecVarIndex ec) (ecName ec)
+      do let nm = ecName ec
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
@@ -130,7 +130,7 @@ replace sc cfg mapref ec = loop [] (ecType ec)
     loop env ty =
       do let args = reverse env
          ty' <- readBackTValue sc cfg ty
-         newec <- scFreshEC sc (toShortName (ecName ec)) ty'
+         newec <- scFreshEC sc (toShortName (ecNameInfo ec)) ty'
          modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))
          reflectTerm sc cfg ty =<< scVariable sc newec
 
@@ -189,7 +189,7 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
 
     primHandler cfg ec _msg env tp =
       do let ?recordEC = \_ec -> return ()
-         let nm = Name (ecVarIndex ec) (ecName ec)
+         let nm = ecName ec
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
@@ -266,15 +266,15 @@ readBackTValue sc cfg = loop
       VRecordType fs ->
         do fs' <- traverse (traverse loop) fs
            scRecordType sc fs'
-      VDataType nm ps vs ->
-        do let nm' = Name (ecVarIndex nm) (ecName nm)
-           args <- readBackDataTypeParams (ecType nm) (ps++vs)
-           scConstApply sc nm' args
+      VDataType ec ps vs ->
+        do let nm = ecName ec
+           args <- readBackDataTypeParams (ecType ec) (ps++vs)
+           scConstApply sc nm args
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
       VRecursorType d ps m mty ->
-        do let d' = Name (ecVarIndex d) (ecName d)
+        do let d' = ecName d
            ps'  <- readBackDataTypeParams (ecType d) ps
            m'   <- readBackValue sc cfg mty m
            mty' <- loop mty
@@ -428,7 +428,7 @@ readBackValue sc cfg = loop
          scVectorReduced sc tp' vs'
 
     loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
-      do let nm = Name (ecVarIndex cnm) (ecName cnm)
+      do let nm = ecName cnm
          args <- readBackCtorArgs cnm (ecType cnm) (ps++vs)
          scConstApply sc nm args
 

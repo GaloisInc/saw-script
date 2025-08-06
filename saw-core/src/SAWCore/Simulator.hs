@@ -169,7 +169,7 @@ evalTermF cfg lam recEval tf env =
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
-                                  let ec' = EC (nameIndex nm) (nameInfo nm) ty'
+                                  let ec' = EC nm ty'
                                   case simConstant cfg tf ec' of
                                     Just override -> override
                                     Nothing ->
@@ -214,7 +214,7 @@ evalTermF cfg lam recEval tf env =
         RecursorType d ps m mtp ->
           do dty <- evalType (resolvedNameType (requireNameInMap d (simModMap cfg)))
              TValue <$> (VRecursorType <$>
-               pure (EC (nameIndex d) (nameInfo d) dty) <*>
+               pure (EC d dty) <*>
                mapM recEval ps <*>
                recEval m <*>
                (evalType mtp))
@@ -225,7 +225,7 @@ evalTermF cfg lam recEval tf env =
                                 pure (v,ty)
              let dname = recursorDataType r
              dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
-             let d = EC (nameIndex dname) (nameInfo dname) dty
+             let d = EC dname dty
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
              mty <- evalType (recursorMotiveTy r)
@@ -296,7 +296,7 @@ evalTermF cfg lam recEval tf env =
                  do allArgs <- processRecArgs ps args (ecType c) [(elim, elimTy), (ready r, rTy)]
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
-                    ["could not find info for constructor: " <> toAbsoluteName (ecName c)]
+                    ["could not find info for constructor: " <> toAbsoluteName (ecNameInfo c)]
         _ -> panic "evalTermF / evalCtorMuxBranch" ["expected VRecursor"]
 
     combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
@@ -449,23 +449,23 @@ evalGlobal' modmap prims extcns constant neutral primHandler lazymux =
       case constant tf ec of
         Just v -> Just v
         Nothing ->
-          case ecName ec of
+          case ecNameInfo ec of
             ModuleIdentifier ident ->
               evalPrim (primHandler ec) ec <$> Map.lookup ident prims
             ImportedName{} -> Nothing
 
     ctors :: ExtCns (TValue l) -> Maybe (MValue l)
     ctors ec =
-      case ecName ec of
+      case ecNameInfo ec of
         ModuleIdentifier ident ->
           evalPrim (primHandler ec) ec <$> Map.lookup ident prims
         ImportedName{} -> Nothing
 
     primitive :: ExtCns (TValue l) -> MValue l
     primitive ec =
-      case ecName ec of
+      case ecNameInfo ec of
         ImportedName {} ->
-          panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (ecName ec)]
+          panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (ecNameInfo ec)]
         ModuleIdentifier ident ->
           case Map.lookup ident prims of
             Just v  -> evalPrim (primHandler ec) ec v
@@ -752,7 +752,7 @@ evalPrim fallback ec = loop [] (ecType ec)
 
     loop _env _tp _p =
       panic "evalPrim" [
-          "Type mismatch in primitive: " <> toAbsoluteName (ecName ec)]
+          "Type mismatch in primitive: " <> toAbsoluteName (ecNameInfo ec)]
 
 -- | A basic handler for stuck primitives.
 defaultPrimHandler ::
@@ -760,7 +760,7 @@ defaultPrimHandler ::
   ExtCns (TValue l) -> Text -> Env l -> TValue l -> MValue l
 defaultPrimHandler ec msg env _tv =
   fail $ unlines
-  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
+  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecNameInfo ec))
   , "On argument " ++ show (length env)
   , Text.unpack msg
   ]

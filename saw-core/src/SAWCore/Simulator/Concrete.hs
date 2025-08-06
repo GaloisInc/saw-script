@@ -57,7 +57,7 @@ evalSharedTerm m addlPrims ecVals t =
         Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
     primHandler ec msg env _tv =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecName ec))
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecNameInfo ec))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]

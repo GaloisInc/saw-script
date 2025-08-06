@@ -1629,7 +1629,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         ppOpts <- rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showEC ec = Text.unpack (toShortName (ecName ec)) in
+          _ -> let showEC ec = Text.unpack (toShortName (ecNameInfo ec)) in
                let showAssignment (ec, val) =
                      mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals

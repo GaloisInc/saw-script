@@ -90,7 +90,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-import SAWCore.Name (toAbsoluteName, toShortName)
+import SAWCore.Name (Name(..), toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -612,7 +612,7 @@ muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
   sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] [] ) c x y =
+muxWhat4Extra sym (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] [] ) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
                   muxBVal sym tp c xi yi
@@ -879,7 +879,7 @@ w4SolveBasic ::
   IO (SValue sym)
 w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
   do m <- scGetModuleMap sc
-     let extcns (EC ix nm ty)
+     let extcns (EC (Name ix nm) ty)
             | Just v <- Map.lookup ix ecMap = return v
             | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted ec
@@ -1063,7 +1063,7 @@ applyUnintApp sym app0 v =
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (ecName i)))) app0
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (ecNameInfo i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1156,7 +1156,7 @@ boundFOTs sym vars =
    freshBnd :: ExtCns Term -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
    freshBnd ec tpr =
      do (vs,n) <- get
-        let nm = Text.unpack (toShortName (ecName ec)) ++ "." ++ show n
+        let nm = Text.unpack (toShortName (ecNameInfo ec)) ++ "." ++ show n
         bvar <- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)
         put (Some bvar : vs, n+1)
         return (W.varExpr sym bvar)
@@ -1550,7 +1550,7 @@ w4EvalBasic ::
   Term {- ^ term to simulate -} ->
   IO (SValue (B.ExprBuilder n st fs))
 w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
-  do let extcns tf (EC ix nm ty)
+  do let extcns tf (EC (Name ix nm) ty)
            | Just v <- Map.lookup ix ecCons = pure v
            | otherwise =
            do trm <- ArgTermConst <$> scTermF sc tf
@@ -1583,11 +1583,11 @@ w4SimulatorEval ::
   Term {- ^ term to simulate -} ->
   IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
 w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
-  do let extcns tf (EC ix nm ty) =
+  do let extcns tf (EC (Name ix nm) ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted _tf ec =
-          if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))
+          if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecNameInfo ec)))
      let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
@@ -1825,7 +1825,7 @@ mkArgTerm sc ty val =
          ctor <-
            case lookupVarIndexInMap (ecVarIndex i) mm of
              Just (ResolvedCtor ctor) -> pure ctor
-             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (ecName i)]
+             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (ecNameInfo i)]
          ps' <- traverse (termOfSValue sc <=< force) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
          x   <- scConstApply sc (ctorName ctor) (ps' ++ vv')

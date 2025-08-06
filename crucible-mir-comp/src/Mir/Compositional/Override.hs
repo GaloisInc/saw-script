@@ -167,7 +167,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     let postFresh = ms ^. MS.csPostState . MS.csFreshVars
     postFreshTermSub <- liftM IntMap.fromList $ forM postFresh $ \tec -> do
         let ec = SAW.tecExt tec
-        let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecName ec
+        let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecNameInfo ec
         let nameSymbol = W4.safeSymbol nameStr
         Some btpr <- liftIO $ termToType sym (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr

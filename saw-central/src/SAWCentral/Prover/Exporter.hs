@@ -349,7 +349,7 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
      let argSValues = map (snd . snd) vars
-     let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
+     let argSValueNames = zip argSValues (map (toShortName . ecNameInfo) argNames)
      argTys' <- traverse f argTys
      let mkInput (v, nm) = map (,nm) <$> flattenSValue sym v
      ins <- concat <$> mapM mkInput argSValueNames
