@@ -284,7 +284,7 @@ mrProvableRaw prop_term =
        Right (stats, SolveCounterexample cex) ->
          mrDebugPrint 2 "SMT solver response: not provable" >>
          mrDebugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
-           "\n - " ++ show (ppName $ ecName x) ++
+           "\n - " ++ show (ppName $ ecNameInfo x) ++
            " = " ++ PPS.render opts (ppFirstOrderValue opts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->

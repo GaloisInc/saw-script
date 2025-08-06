@@ -72,6 +72,7 @@ import SAWCore.FiniteValue
   , scFirstOrderValue
   )
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name (ecShortName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -1358,7 +1359,7 @@ proveByBVInduction script t =
             vars  <- io $ mapM (scVariable sc) pis
             innerVars <-
               io $ sequence $
-              [ scFreshGlobal sc ("i_" <> toShortName (ecName ec)) (ecType ec) | ec <- pis ]
+              [ scFreshGlobal sc ("i_" <> ecShortName ec) (ecType ec) | ec <- pis ]
             t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
             tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
             tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
@@ -1566,7 +1567,7 @@ quickCheckPrintPrim sc opts numTests tt =
      runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
         Just cex ->
-          do let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
+          do let cex' = [ (Text.unpack (ecShortName ec), v) | (ec,v) <- cex ]
              printOutLn opts OnlyCounterExamples $
                "----------Counterexample----------\n" ++
                showList cex' ""

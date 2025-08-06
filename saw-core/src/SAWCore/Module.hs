@@ -26,12 +26,10 @@ module SAWCore.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
-  , ctorName
   , ctorNumParams
   , ctorNumArgs
   , DataType(..)
   , dtExtCns
-  , dtName
   , dtNumParams
   , dtNumIndices
     -- * Modules
@@ -106,12 +104,11 @@ data DefQualifier
 
 instance Hashable DefQualifier -- automatically derived
 
--- | A Definition contains an identifier, the type of the definition, and an
--- optional body (axioms and primitives do not have a body)
+-- | A Definition contains a name, the type of the definition, and an
+-- optional body (axioms and primitives do not have a body).
 data Def =
   Def
-  { defNameInfo :: NameInfo
-  , defVarIndex :: VarIndex
+  { defName :: Name
   , defQualifier :: DefQualifier
   , defType :: Term
   , defBody :: Maybe Term
@@ -155,10 +152,8 @@ data CtorArgStruct =
 -- | A specification of a constructor
 data Ctor =
   Ctor
-  { ctorNameInfo :: !NameInfo
+  { ctorName :: !Name
     -- ^ The name of this constructor
-  , ctorVarIndex :: !VarIndex
-    -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct
     -- ^ Arguments to the constructor
   , ctorDataType :: !Name
@@ -213,10 +208,6 @@ ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   length ctorArgs
 
--- | Compute the 'Name' that uniquely references a constructor
-ctorName :: Ctor -> Name
-ctorName ctor = Name (ctorVarIndex ctor) (ctorNameInfo ctor)
-
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
@@ -227,7 +218,7 @@ instance Ord Ctor where
   compare = lift2 ctorName compare
 
 instance Show Ctor where
-  show = show . toAbsoluteName . ctorNameInfo
+  show = show . toAbsoluteName . nameInfo . ctorName
 
 
 -- Datatypes -------------------------------------------------------------------
@@ -235,10 +226,8 @@ instance Show Ctor where
 -- | An inductively-defined datatype
 data DataType =
   DataType
-  { dtNameInfo :: NameInfo
+  { dtName :: Name
     -- ^ The name of this datatype
-  , dtVarIndex :: !VarIndex
-    -- ^ Unique var index for this data type
   , dtParams :: [ExtCns Term]
     -- ^ The context of parameters of this datatype
   , dtIndices :: [ExtCns Term]
@@ -266,11 +255,7 @@ dtNumIndices dt = length $ dtIndices dt
 
 -- | Compute the ExtCns that uniquely references a datatype
 dtExtCns :: DataType -> ExtCns Term
-dtExtCns dt = EC (dtVarIndex dt) (dtNameInfo dt) (dtType dt)
-
--- | Compute the 'Name' that uniquely references a datatype
-dtName :: DataType -> Name
-dtName dt = Name (dtVarIndex dt) (dtNameInfo dt)
+dtExtCns dt = EC (dtName dt) (dtType dt)
 
 instance Eq DataType where
   (==) = lift2 dtName (==)
@@ -279,7 +264,7 @@ instance Ord DataType where
   compare = lift2 dtName compare
 
 instance Show DataType where
-  show = show . dtNameInfo
+  show = show . nameInfo . dtName
 
 
 -- Modules ---------------------------------------------------------------------
@@ -299,11 +284,17 @@ data ResolvedName
   | ResolvedDataType DataType
   | ResolvedDef Def
 
+-- | Get the 'Name' of a 'ResolvedName'.
+resolvedNameName :: ResolvedName -> Name
+resolvedNameName r =
+  case r of
+    ResolvedCtor ctor -> ctorName ctor
+    ResolvedDataType dt -> dtName dt
+    ResolvedDef def -> defName def
+
 -- | Get the 'NameInfo' for a 'ResolvedName'
 resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo (ResolvedCtor ctor) = ctorNameInfo ctor
-resolvedNameInfo (ResolvedDataType dt) = dtNameInfo dt
-resolvedNameInfo (ResolvedDef d) = defNameInfo d
+resolvedNameInfo r = nameInfo (resolvedNameName r)
 
 -- | Get the type of a 'ResolvedName' as a 'Term'.
 resolvedNameType :: ResolvedName -> Term
@@ -315,11 +306,7 @@ resolvedNameType r =
 
 -- | Get the 'VarIndex' for a 'ResolvedName'.
 resolvedNameVarIndex :: ResolvedName -> VarIndex
-resolvedNameVarIndex r =
-  case r of
-    ResolvedCtor ctor -> ctorVarIndex ctor
-    ResolvedDataType dt -> dtVarIndex dt
-    ResolvedDef def -> defVarIndex def
+resolvedNameVarIndex r = nameIndex (resolvedNameName r)
 
 -- | Modules define namespaces of datatypes, constructors, and definitions,
 -- i.e., mappings from 'Text' names to these objects. A module is allowed to
@@ -411,7 +398,7 @@ completeDataType ident ctors mm0 =
         do let dt' = dt {dtCtors = ctors}
            let r = ResolvedDataType dt'
            let mm1 = insDeclInMap (identModule ident) (TypeDecl dt') mm0
-           let mm2 = mm1 { mmIndexMap = IntMap.insert (dtVarIndex dt) r (mmIndexMap mm1) }
+           let mm2 = mm1 { mmIndexMap = IntMap.insert (nameIndex (dtName dt)) r (mmIndexMap mm1) }
            foldM (flip insResolvedNameInMap) mm2 (map ResolvedCtor ctors)
     Just (ResolvedDataType _) ->
       panic "completeDataType" ["datatype already completed: " <> str]
@@ -594,7 +581,7 @@ insDeclInMap mname decl mm =
 insDefInMap :: Def -> ModuleMap -> Either Ident ModuleMap
 insDefInMap d mm =
   insResolvedNameInMap (ResolvedDef d) $
-  case defNameInfo d of
+  case nameInfo (defName d) of
     ModuleIdentifier i ->
       insDeclInMap (identModule i) (DefDecl d) mm
     ImportedName{} -> mm

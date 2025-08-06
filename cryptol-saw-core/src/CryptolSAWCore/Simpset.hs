@@ -14,9 +14,9 @@ module CryptolSAWCore.Simpset
   ) where
 
 import SAWCore.Module (moduleDefs, Def(..))
+import SAWCore.Name
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
-import SAWCore.Term.Functor
 
 mkCryptolSimpset :: SharedContext -> IO (Simpset a)
 mkCryptolSimpset sc =
@@ -25,7 +25,7 @@ mkCryptolSimpset sc =
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
     excluded d =
-      case defNameInfo d of
+      case nameInfo (defName d) of
         ModuleIdentifier ident -> ident `elem` excludedNames
         ImportedName{} -> True
 

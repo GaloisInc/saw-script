@@ -76,7 +76,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (ExtCns(..), Ident, NameInfo(..))
+import SAWCore.Name (ExtCns(..), Ident, NameInfo(..), ecVarIndex, ecNameInfo)
 import SAWCore.Panic (panic)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
@@ -118,8 +118,8 @@ boolFun = PrimFilterFun "expected Bool" r
 natFun :: VMonad l => (Natural -> Prim l) -> Prim l
 natFun = PrimFilterFun "expected Nat" r
   where r (VNat n) = pure n
-        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Zero") [] [])  = pure 0
-        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
+        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Zero") [] [])  = pure 0
+        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
 
 -- | A primitive that requires an integer argument
@@ -549,8 +549,8 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (ecName -> ModuleIdentifier "Prelude.Zero") [] []) = pure (Right 0)
-        r v@(VCtorApp (ecName -> ModuleIdentifier "Prelude.Succ") [] [x]) =
+        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Zero") [] []) = pure (Right 0)
+        r v@(VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Succ") [] [x]) =
           lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)

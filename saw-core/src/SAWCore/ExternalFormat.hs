@@ -103,7 +103,7 @@ scWriteExternal t0 =
     stashEC :: ExtCns Int -> WriteM ()
     stashEC ec =
        do (m, nms, lns, x) <- State.get
-          State.put (m, Map.insert (ecVarIndex ec) (ecName ec) nms, lns, x)
+          State.put (m, Map.insert (ecVarIndex ec) (ecNameInfo ec) nms, lns, x)
 
     go :: Term -> WriteM Int
     go (Unshared tf) = do
@@ -272,17 +272,17 @@ scReadExternal sc input =
          case nmi of
            ModuleIdentifier ident ->
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
-               Just vi' -> pure (EC vi' nmi t')
+               Just vi' -> pure (EC (Name vi' nmi) t')
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
            ImportedName uri _aliases ->
              lift (scResolveNameByURI sc uri) >>= \case
-               Just vi' -> pure (EC vi' nmi t')
+               Just vi' -> pure (EC (Name vi' nmi) t')
                Nothing -> case Map.lookup vi vs of
-                 Just vi' -> pure $ EC vi' nmi t'
+                 Just vi' -> pure $ EC (Name vi' nmi) t'
                  Nothing ->
                    do nm <- lift $ scRegisterName sc nmi
                       State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
-                      pure $ EC (nameIndex nm) nmi t'
+                      pure $ EC nm t'
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =

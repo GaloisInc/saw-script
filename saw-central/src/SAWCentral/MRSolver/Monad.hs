@@ -53,6 +53,7 @@ import Prettyprinter
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
+import SAWCore.Name (Name(..))
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SCTypeCheck
@@ -1033,7 +1034,7 @@ mrFunNameBody (CallSName var) =
   _ -> error "mrFunBody: unknown letrec var"
 mrFunNameBody (GlobalName glob projs) =
   do mm <- liftSC0 scGetModuleMap
-     case lookupVarIndexInMap (globalDefIndex glob) mm of
+     case lookupVarIndexInMap (nameIndex (globalDefName glob)) mm of
        Just (ResolvedDef (defBody -> Just body)) ->
          Just <$> foldM doTermProj body projs
        _ -> pure Nothing

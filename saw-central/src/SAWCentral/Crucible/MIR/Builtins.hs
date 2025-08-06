@@ -136,7 +136,7 @@ import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
 import SAWCore.FiniteValue (ppFirstOrderValue)
-import SAWCore.Name (toShortName)
+import SAWCore.Name (ecShortName)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
@@ -1208,7 +1208,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop Info (show stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- rwPPOpts <$> getTopLevelRW
-           let showEC ec = Text.unpack (toShortName (ecName ec))
+           let showEC ec = Text.unpack (ecShortName ec)
            let showAssignment (name, val) = "  " ++ showEC name ++ ": " ++ show (ppFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify

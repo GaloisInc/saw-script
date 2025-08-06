@@ -194,7 +194,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls
            let r = liftCexBB (map snd shapes) bs
-               argNames = map (Text.unpack . toShortName . ecName . fst) shapes
+               argNames = map (Text.unpack . ecShortName . fst) shapes
                ecs = map fst shapes
            case r of
              Left msg -> fail $ "Can't parse counterexample: " ++ msg

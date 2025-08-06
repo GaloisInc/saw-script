@@ -141,26 +141,23 @@ import GHC.Stack
 
 -- FIXME: move to OpenTerm.hs
 
--- | A global definition, which is either a primitive or a constant. As
--- described in the documentation for 'ExtCns', the names need not be unique,
--- but the 'VarIndex' is, and this is what is used to index 'GlobalDef's.
-data GlobalDef = GlobalDef { globalDefName :: NameInfo,
-                             globalDefIndex :: VarIndex,
+-- | A global definition, which is either a primitive or a constant.
+data GlobalDef = GlobalDef { globalDefName :: Name,
                              globalDefType :: Term,
                              globalDefTerm :: Term }
 
 instance Eq GlobalDef where
-  gd1 == gd2 = globalDefIndex gd1 == globalDefIndex gd2
+  gd1 == gd2 = globalDefName gd1 == globalDefName gd2
 
 instance Ord GlobalDef where
-  compare gd1 gd2 = compare (globalDefIndex gd1) (globalDefIndex gd2)
+  compare gd1 gd2 = compare (globalDefName gd1) (globalDefName gd2)
 
 instance Show GlobalDef where
   show = show . globalDefName
 
 -- | Get the 'String' name of a 'GlobalDef'
 globalDefString :: GlobalDef -> String
-globalDefString = T.unpack . toAbsoluteName . globalDefName
+globalDefString = T.unpack . toAbsoluteName . nameInfo . globalDefName
 
 -- | Build an 'OpenTerm' from a 'GlobalDef'
 globalDefOpenTerm :: GlobalDef -> OpenTerm
@@ -172,9 +169,9 @@ asTypedGlobalDef t =
   case unwrapTermF t of
     Constant nm ->
       let ty = resolvedNameType (requireNameInMap nm ?mm)
-      in Just $ GlobalDef (nameInfo nm) (nameIndex nm) ty t
+      in Just $ GlobalDef nm ty t
     Variable ec ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
+      Just $ GlobalDef (ecName ec) (ecType ec) t
     _ -> Nothing
 
 -- FIXME HERE NOW: remove these if no longer needed
@@ -827,15 +824,15 @@ mkCtorArgMonTerm ec
   | not (isFirstOrderType (ecType ec)) =
     failArgMonTerm (monadifyType [] $ ecType ec)
     ("monadification failed: cannot handle constructor "
-     ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with higher-order type")
+     ++ Text.unpack (toAbsoluteName (ecNameInfo ec)) ++ " with higher-order type")
 mkCtorArgMonTerm ec =
-  case ecName ec of
+  case ecNameInfo ec of
     ModuleIdentifier ident ->
       fromSemiPureTermFun (monadifyType [] $ ecType ec) (ctorOpenTerm ident)
     ImportedName{} ->
       failArgMonTerm (monadifyType [] $ ecType ec)
       ("monadification failed: cannot handle constructor "
-       ++ Text.unpack (toAbsoluteName (ecName ec)) ++ " with non-ident name")
+       ++ Text.unpack (toAbsoluteName (ecNameInfo ec)) ++ " with non-ident name")
 
 
 ----------------------------------------------------------------------
@@ -860,7 +857,7 @@ monMacro0 mtrm = MonMacro 0 $ \_ _ -> usingEvType $ return mtrm
 semiPureGlobalMacro :: Ident -> Ident -> Bool -> MonMacro
 semiPureGlobalMacro from to params_p =
   MonMacro 0 $ \glob args -> usingEvType $
-  if globalDefName glob == ModuleIdentifier from && args == [] then
+  if nameInfo (globalDefName glob) == ModuleIdentifier from && args == [] then
     return $ ArgMonTerm $
     fromSemiPureTerm (monadifyType [] $ globalDefType glob)
     (if params_p then applyGlobalOpenTerm to [evTypeTerm ?specMEvType]
@@ -876,7 +873,7 @@ semiPureGlobalMacro from to params_p =
 argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
 argGlobalMacro from to params_p =
   MonMacro 0 $ \glob args -> usingEvType $
-  if globalDefName glob == from && args == [] then
+  if nameInfo (globalDefName glob) == from && args == [] then
     return $ ArgMonTerm $
     mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to params_p
   else
@@ -1194,7 +1191,7 @@ monadifyTerm' _ (asCtor -> Just (ec, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm ec) args
 -}
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
-  (Map.lookup (globalDefName glob) <$> monStMonTable <$> ask) >>= \case
+  (Map.lookup (nameInfo (globalDefName glob)) <$> monStMonTable <$> ask) >>= \case
   Just macro ->
     do let (macro_args, reg_args) = splitAt (macroNumArgs macro) args
        mtrm_f <- macroApply macro glob macro_args
@@ -1402,7 +1399,7 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
 finMacro :: Bool -> Int -> Int -> Ident -> Ident -> Bool -> MonMacro
 finMacro isSemiPure i j from to params_p =
   MonMacro (i+j) $ \glob args -> usingEvType $
-  do if globalDefName glob == ModuleIdentifier from && length args == i+j then
+  do if nameInfo (globalDefName glob) == ModuleIdentifier from && length args == i+j then
        return ()
        else error ("Monadification macro for " ++ show from ++
                    " applied incorrectly")

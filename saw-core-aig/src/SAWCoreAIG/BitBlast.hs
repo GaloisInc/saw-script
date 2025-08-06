@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (toShortName)
+import SAWCore.Name (Name(..), ecShortName)
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -308,7 +308,7 @@ muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, 
 
 muxBExtra :: AIG.IsAIG l g => g s ->
   TValue (BitBlast (l s)) -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra be (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
+muxBExtra be (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupBStream (VExtra x) i
                   yi <- lookupBStream (VExtra y) i
                   muxBVal be tp c xi yi
@@ -473,7 +473,7 @@ bitBlastBasic be m addlPrims ecMap t = do
 bitBlastExtCns ::
   Map VarIndex (BValue (l s)) -> ExtCns (TValue (BitBlast (l s))) ->
   IO (BValue (l s))
-bitBlastExtCns ecMap (EC idx name _v) =
+bitBlastExtCns ecMap (EC (Name idx name) _v) =
   case Map.lookup idx ecMap of
     Just var -> return var
     Nothing -> fail $
@@ -511,7 +511,7 @@ bitBlastTerm be sc addlPrims t = do
   modmap <- scGetModuleMap sc
   bval <- bitBlastBasic be modmap addlPrims ecMap t
   bval' <- applyAll bval argVars
-  let names =  map fst args ++ map (Text.unpack . toShortName . ecName) ecs
+  let names =  map fst args ++ map (Text.unpack . ecShortName) ecs
       shapes = argShapes ++ ecShapes
   return (bval', zip names shapes)
 

@@ -257,7 +257,7 @@ import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
-import SAWCore.Name (toShortName, DisplayNameEnv, emptyDisplayNameEnv)
+import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -644,7 +644,7 @@ showsProofResult opts r =
   where
     showVal t = shows (ppFirstOrderValue opts t)
     showEqn (x, t) = showEC x . showString " = " . showVal t
-    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (ecShortName ec))
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -657,7 +657,7 @@ showsSatResult opts r =
     SatUnknown  -> showString "Unknown"
   where
     showVal t = shows (ppFirstOrderValue opts t)
-    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
+    showEC ec = showString (Text.unpack (ecShortName ec))
     showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns

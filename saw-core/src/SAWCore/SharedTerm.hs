@@ -27,6 +27,8 @@ module SAWCore.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
+  , ecNameInfo
+  , ecVarIndex
   , NameInfo(..)
   , ppName
     -- * Shared terms
@@ -312,7 +314,6 @@ import SAWCore.Module
   ( beginDataType
   , completeDataType
   , dtName
-  , dtNameInfo
   , ctorNumParams
   , ctorName
   , emptyModuleMap
@@ -509,8 +510,8 @@ scFreshName sc x =
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
-  do Name i nmi <- scFreshName sc x
-     pure (EC i nmi tp)
+  do nm <- scFreshName sc x
+     pure (EC nm tp)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshGlobal :: SharedContext -> Text -> Term -> IO Term
@@ -607,8 +608,7 @@ scDeclareDef ::
 scDeclareDef sc nm q ty body =
   do scInsDefInMap sc $
        Def
-       { defNameInfo = nameInfo nm
-       , defVarIndex = nameIndex nm
+       { defName = nm
        , defQualifier = q
        , defType = ty
        , defBody = body
@@ -674,18 +674,16 @@ scBeginDataType ::
   Sort {- ^ The universe of this datatype -} ->
   IO Name
 scBeginDataType sc dtIdent dtParams dtIndices dtSort =
-  do nm <- scRegisterName sc (ModuleIdentifier dtIdent)
+  do dtName <- scRegisterName sc (ModuleIdentifier dtIdent)
      dtType <- scGeneralizeExts sc (dtParams ++ dtIndices) =<< scSort sc dtSort
-     let dtNameInfo = ModuleIdentifier dtIdent
-     let dtVarIndex = nameIndex nm
      let dt = DataType { dtCtors = [], .. }
      e <- atomicModifyIORef' (scModuleMap sc) $ \mm ->
        case beginDataType dt mm of
          Left i -> (mm, Just (DuplicateNameException (moduleIdentToURI i)))
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
-     scRegisterGlobal sc dtIdent =<< scConst sc (dtName dt)
-     pure nm
+     scRegisterGlobal sc dtIdent =<< scConst sc dtName
+     pure dtName
 
 -- | Complete a datatype, by adding its constructors. See also 'scBeginDataType'.
 scCompleteDataType :: SharedContext -> Ident -> [Ctor] -> IO ()
@@ -696,7 +694,7 @@ scCompleteDataType sc dtIdent ctors =
          Right mm' -> (mm', Nothing)
      maybe (pure ()) throwIO e
      forM_ ctors $ \ctor ->
-       case ctorNameInfo ctor of
+       case nameInfo (ctorName ctor) of
          ModuleIdentifier ident ->
            -- register constructor in scGlobalEnv if it has an Ident name
            scRegisterGlobal sc ident =<< scConst sc (ctorName ctor)
@@ -808,7 +806,7 @@ ctxCtorArgBindings _ _ [] = return []
 ctxCtorArgBindings sc d_params ((x, arg) : args) =
   do tp <- ctxCtorArgType sc d_params arg
      rest <- ctxCtorArgBindings sc d_params args
-     let ec = EC (nameIndex x) (nameInfo x) tp
+     let ec = EC x tp
      return (ec : rest)
 
 -- | Internal: Compute the type of a constructor from the name of its
@@ -869,8 +867,7 @@ scBuildCtor sc d c arg_struct =
 
     -- Finally, return the required Ctor record
     return $ Ctor
-      { ctorNameInfo = ModuleIdentifier c
-      , ctorVarIndex = nameIndex cname
+      { ctorName = cname
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
@@ -915,7 +912,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
      let helper :: [Term] -> [(Name, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
-           do arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) tp)
+           do arg <- scVariable sc (EC nm tp)
               rest <- helper (prevs ++ [arg]) args
               scGeneralizeTerms sc [arg] rest
          helper prevs ((nm, RecursiveArg zs ts) : args) =
@@ -933,7 +930,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
            do d_params_ts <- scApplyAll sc d_params ts
               -- Build the type of the argument arg
               arg_tp <- scGeneralizeExts sc zs d_params_ts
-              arg <- scVariable sc (EC (nameIndex nm) (nameInfo nm) arg_tp)
+              arg <- scVariable sc (EC nm arg_tp)
               -- Build the type of ih
               pret_ts <- scApplyAll sc p_ret ts
               z_vars <- traverse (scVariable sc) zs
@@ -1702,7 +1699,7 @@ scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAllBeta sc = foldlM (scApplyBeta sc)
 
 scDefTerm :: SharedContext -> Def -> IO Term
-scDefTerm sc Def{..} = scConst sc (Name defVarIndex defNameInfo)
+scDefTerm sc d = scConst sc (defName d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
@@ -1901,7 +1898,7 @@ scConstant sc name rhs ty =
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecNameInfo) (getAllExts rhs))
        ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -1930,7 +1927,7 @@ scConstant' sc nmi rhs ty =
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecName) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecNameInfo) (getAllExts rhs))
        ]
      nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -2872,7 +2869,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
-         scLambda sc (toShortName (ecName ec)) (ecType ec) tm'
+         scLambda sc (ecShortName ec) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
     -- before apply scLambda.  This ensures any dependencies between the
@@ -2880,7 +2877,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
          tp' <- scExtsToLocals sc begin (ecType ec)
-         scLambda sc (toShortName (ecName ec)) tp' tm'
+         scLambda sc (ecShortName ec) tp' tm'
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
@@ -2936,7 +2933,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
-         scPi sc (toShortName (ecName ec)) (ecType ec) tm'
+         scPi sc (ecShortName ec) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
     -- before apply scLambda.  This ensures any dependenices between the
@@ -2944,7 +2941,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
          tp' <- scExtsToLocals sc begin (ecType ec)
-         scPi sc (toShortName (ecName ec)) tp' tm'
+         scPi sc (ecShortName ec) tp' tm'
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
@@ -3126,7 +3123,7 @@ scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
 scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
-    close sc (toShortName (ecName ec)) (ecType ec) body'
+    close sc (ecShortName ec) (ecType ec) body'
 
 -- | Compute the body of 0 or more nested lambda-abstractions by applying the
 -- lambdas to fresh 'ExtCns's. Note that we do this lambda-by-lambda, rather

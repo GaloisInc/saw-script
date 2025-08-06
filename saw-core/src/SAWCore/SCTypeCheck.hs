@@ -709,8 +709,8 @@ compileRecursor dt params motive cs_fs =
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
      let d = dtName dt
-     let ctorVarIxs = map ctorVarIndex (dtCtors dt)
      let ctorOrder = map ctorName (dtCtors dt)
+     let ctorVarIxs = map nameIndex ctorOrder
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
      let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
      let mk_err str =

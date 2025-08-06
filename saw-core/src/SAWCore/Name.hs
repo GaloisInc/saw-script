@@ -41,6 +41,9 @@ module SAWCore.Name
   , Name(..)
     -- * ExtCns
   , ExtCns(..)
+  , ecNameInfo
+  , ecVarIndex
+  , ecShortName
   , scFreshNameURI
     -- * Display Name Environments
   , DisplayNameEnv(..)
@@ -265,33 +268,35 @@ instance Hashable Name where
 
 -- External Constants ----------------------------------------------------------
 
--- | A global name with a unique ID and a type. We maintain a global
--- invariant that the 'VarIndex' and the 'NameInfo' must be in a
--- strict one-to-one correspondence: Each 'VarIndex' is paired with a
--- unique 'NameInfo', and each 'NameInfo' is paired with a unique
--- 'VarIndex'.
+-- | A global name paired with a type.
+-- We assume a global invariant: the type should be uniquely
+-- determined by the name.
 data ExtCns e =
   EC
-  { ecVarIndex :: !VarIndex
-  , ecName :: !NameInfo
+  { ecName :: !Name
   , ecType :: !e
   }
   deriving (Show, Functor, Foldable, Traversable)
 
 -- | Because of the global uniqueness invariant, comparing the
--- 'VarIndex' is sufficient to ensure equality of names.
+-- 'Name' is sufficient to ensure equality.
 instance Eq (ExtCns e) where
-  x == y = ecVarIndex x == ecVarIndex y
+  x == y = ecName x == ecName y
 
 instance Ord (ExtCns e) where
-  compare x y = compare (ecVarIndex x) (ecVarIndex y)
+  compare x y = compare (ecName x) (ecName y)
 
--- | For hashing, we consider only the 'NameInfo' and not the
--- 'VarIndex'; this gives a stable hash value for a particular name,
--- even if the unique IDs are assigned differently from run to run.
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecName ec)
 
+ecNameInfo :: ExtCns e -> NameInfo
+ecNameInfo ec = nameInfo (ecName ec)
+
+ecVarIndex :: ExtCns e -> VarIndex
+ecVarIndex ec = nameIndex (ecName ec)
+
+ecShortName :: ExtCns e -> Text
+ecShortName ec = toShortName (ecNameInfo ec)
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $

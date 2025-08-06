@@ -50,6 +50,7 @@ import Data.Text (Text, unpack)
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
 import SAWCore.Module (ModuleMap)
+import SAWCore.Name (Name(..))
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
@@ -78,7 +79,7 @@ mrVarType = ecType . unMRVar
 
 -- | Print the string name of an 'MRVar'
 showMRVar :: MRVar -> String
-showMRVar = show . ppName . ecName . unMRVar
+showMRVar = show . ppName . ecNameInfo . unMRVar
 
 -- | A tuple or record projection of a 'Term'
 data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
@@ -527,7 +528,7 @@ instance PrettyInCtx Type where
   prettyInCtx (Type t) = prettyInCtx t
 
 instance PrettyInCtx MRVar where
-  prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
+  prettyInCtx (MRVar ec) = return $ ppName $ ecNameInfo ec
 
 instance PrettyInCtx a => PrettyInCtx [a] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
@@ -566,7 +567,7 @@ instance PrettyInCtx FunName where
   prettyInCtx (EVarFunName var) = prettyInCtx var
   prettyInCtx (GlobalName g projs) =
     foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (ppName $
-                                                      globalDefName g) projs
+                                                      nameInfo $ globalDefName g) projs
 
 instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t

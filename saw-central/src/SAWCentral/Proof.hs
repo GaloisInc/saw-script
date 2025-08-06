@@ -157,7 +157,7 @@ import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
 import SAWCore.Module (ModuleMap)
-import SAWCore.Name (DisplayNameEnv)
+import SAWCore.Name (DisplayNameEnv, ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
@@ -2046,7 +2046,7 @@ propApply sc rule goal = applyFirst =<< asPiLists (unProp rule)
                           -- this argument not solved by unification, so make it a goal
                           do c0 <- scInstantiateExt sc inst (ecType ec)
                              mp <- termToMaybeProp sc c0
-                             let nm = toShortName (ecName ec)
+                             let nm = ecShortName ec
                              case mp of
                                Nothing ->
                                  fail ("goal_apply: could not find instantiation for " ++ show nm)
@@ -2075,7 +2075,7 @@ tacticIntro sc usernm = Tactic \goal ->
     ConclFocus p mkSqt ->
       liftIO (scAsPi sc (unProp p)) >>= \case
         Just (ec, body) ->
-          do let nm = toShortName (ecName ec)
+          do let nm = ecShortName ec
              let tp = ecType ec
              let name = if Text.null usernm then nm else usernm
              xv <- liftIO $ scFreshEC sc name tp

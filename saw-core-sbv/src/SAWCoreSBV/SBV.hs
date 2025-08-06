@@ -61,7 +61,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (toShortName)
+import SAWCore.Name (Name(..), ecShortName, toShortName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -280,7 +280,7 @@ flattenSValue nm v = do
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
-                                        return (concat xss, "_" ++ (Text.unpack (toShortName (ecName i))) ++ concat ss)
+                                        return (concat xss, "_" ++ (Text.unpack (ecShortName i)) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -610,7 +610,7 @@ muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
 muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (ecName -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
+muxSbvExtra (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
                   muxBVal tp c xi yi
@@ -627,7 +627,7 @@ sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO 
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
-  let extcns (EC ix nm ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
+  let extcns (EC (Name ix nm) ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
   let uninterpreted ec
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
@@ -700,7 +700,7 @@ sbvSATQuery sc addlPrims query =
   do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
-     let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot
+     let ecVars (ec, fot) = newVars (Text.unpack (ecShortName ec)) fot
 
      (labels, vars) <-
        flip evalStateT 0 $ unzip <$>
@@ -712,7 +712,7 @@ sbvSATQuery sc addlPrims query =
        do vars' <- sequence vars
           let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
 
-          let mkUninterp (EC ix nm ty) =
+          let mkUninterp (EC (Name ix nm) ty) =
                 parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
           let extcns ec
                 | Just v <- Map.lookup (ecVarIndex ec) varMap = pure v
@@ -794,7 +794,7 @@ getLabels ls d args
   | length args == length xs = Just (zip args xs)
   | otherwise = error $ unwords
                 [ "SBV SAT results do not match expected arguments "
-                , show (map (toShortName . ecName) args), show xs]
+                , show (map ecShortName args), show xs]
 
   where
   xs = fmap getLabel ls
