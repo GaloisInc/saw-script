@@ -51,18 +51,15 @@ clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> error $
-          "clobberSymbolic: MirVector_Array is unsupported, for " ++ nameStr
+        MirVector_Array _ -> die "MirVector_Array is unsupported"
     go (TupleShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
     go (StructShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
     go (TransparentShape _ shp) rv = go shp rv
-    go (EnumShape _ _ _ _ _) _rv =
-        error $ "Enums not currently supported in overrides, for " ++ nameStr
-    go (FnPtrShape _ _ _) _rv =
-        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
-    go (RefShape _ _ _ _) _rv = error $ "clobberSymbolic: RefShape NYI, for " ++ nameStr
+    go (EnumShape _ _ _ _ _) _rv = die "Enums not currently supported in overrides"
+    go (FnPtrShape _ _ _) _rv = die "Function pointers not currently supported in overrides"
+    go (RefShape _ _ _ _) _rv = die "RefShape NYI"
     go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
         let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
         ref' <- go refShp ref
@@ -76,6 +73,9 @@ clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
         rv'' <- go shp rv'
         return $ RV $ W4.justPartExpr sym rv''
+
+    die :: String -> a
+    die msg = error $ "clobberSymbolic: " ++ msg ++ ", for " ++ nameStr
 
 -- | Like `clobberSymbolic`, but for values in "immutable" memory.  Values
 -- inside an `UnsafeCell<T>` wrapper can still be modified even with only
@@ -97,8 +97,7 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> error $
-          "clobberSymbolic: MirVector_Array is unsupported, for " ++ nameStr
+        MirVector_Array _ -> die "MirVector_Array is unsupported"
     go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
         clobberSymbolic sym loc nameStr shp rv
     go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
@@ -116,10 +115,8 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         ref' <- go refShp ref
         len' <- go lenShp len
         pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
-    go (EnumShape _ _ _ _ _) _rv =
-        error $ "Enums not currently supported in overrides, for " ++ nameStr
-    go (FnPtrShape _ _ _) _rv =
-        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
+    go (EnumShape _ _ _ _ _) _rv = die "Enums not currently supported in overrides"
+    go (FnPtrShape _ _ _) _rv = die "Function pointers not currently supported in overrides"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -128,6 +125,9 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
         rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
         rv'' <- go shp rv'
         return $ RV $ W4.justPartExpr sym rv''
+
+    die :: String -> a
+    die msg = error $ "clobberImmutSymbolic: " ++ msg ++ ", for " ++ nameStr
 
 -- | Construct a fresh symbolic `RegValue` of type `tp0`.
 freshSymbolic :: forall sym p t st fs tp0 rtp args ret.
@@ -148,9 +148,11 @@ freshSymbolic sym loc nameStr shp0 = go shp0
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
-    go (FnPtrShape _ _ _) =
-        error $ "Function pointers not currently supported in overrides, for " ++ nameStr
-    go shp = error $ "freshSymbolic: " ++ show (shapeType shp) ++ " NYI, for " ++ nameStr
+    go (FnPtrShape _ _ _) = die "Function pointers not currently supported in overrides"
+    go shp = die $ show (shapeType shp) ++ " NYI"
+
+    die :: String -> a
+    die msg = error $ "freshSymbolic: " ++ msg ++ ", for " ++ nameStr
 
 
 -- Note on clobbering refs inside `static`s: The current behavior is to leave
