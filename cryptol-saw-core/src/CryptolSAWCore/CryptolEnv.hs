@@ -691,9 +691,14 @@ loadCryptolModule sc primOpts env path = do
     print $ ppListX "[exported] names1=" (Set.toList names1)
     ppIfaceNames (TIface.genIfaceNames m)
 
-  -- FIXME: refactor to show the [lack of] dependencies better:
-
-  let tm'   = Map.filterWithKey (\k _ -> Set.member k names) $
+  let cryptolModule =
+        CryptolModule
+          -- create type synonym Map, keep only the exports:
+          (Map.filterWithKey
+             (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
+             (T.mTySyns m)
+          )
+          (Map.filterWithKey (\k _ -> Set.member k names) $
               --  - FIXME:
               --    - fixing/removing above
               --      - partially fixes (better fix is ...) loading submodules.
@@ -704,27 +709,30 @@ loadCryptolModule sc primOpts env path = do
               --  - FIXME:MT:undo
               --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
               --      - BUT, isn't this still not correct?
-              Map.intersectionWith
-                (\t x -> TypedTerm (TypedTermSchema t) x)
-                types
-                newTermEnv
+           Map.intersectionWith
+             (\t x -> TypedTerm (TypedTermSchema t) x)
+             types          -- NOTE: only use of this variable.
+            newTermEnv
+          )
 
-  let env' = updateFFITypes m
-               env { eModuleEnv = modEnv''
-                     -- NOTE the difference between this function and
-                     -- `importModule`:
-                     --  - we don't update eImports, as
-                     --   this module (as a whole) is not being
-                     --   brought into scope inside {{ }} constructs.
-                   , eTermEnv = newTermEnv
-                   }
+  -- MT: So, it appears that the bringing of the module-handle into
+  --     "cryptol scope", via {{-}}, is not handled here; it is done
+  --     elsewhere with the use of `cryptolModule` being bound as a
+  --     sawscript variable.
 
-  -- create type synonym Map, keep only the exports:
-  let sm' = Map.filterWithKey
-              (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
-              (T.mTySyns m)
-
-  return (CryptolModule sm' tm', env')
+  return ( cryptolModule
+         , updateFFITypes m
+             env { eModuleEnv = modEnv''
+                 , eTermEnv = newTermEnv
+                 }
+             -- NOTE here the difference between this function and
+             -- `importModule`:
+             --  1. the `eImports` field is not updated, as
+             --     this module (as a whole) is not being
+             --     brought into scope inside {{ }} constructs.
+             --  2. modEnv'' vs modEnv' (which may not be different, see
+             --     notes above).
+         )
 
 ppIfaceNames :: Show n => MI.IfaceNames n -> IO ()
 ppIfaceNames x =
