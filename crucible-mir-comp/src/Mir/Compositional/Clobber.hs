@@ -36,6 +36,69 @@ import Mir.Compositional.Convert
 
 -- Helper functions for generating clobbering PointsTos
 
+-- | Apply `f` to all of the `RegValue`s within a `RegValue`.  This calls `f`
+-- only on the immediate descendants of `rv`; it does not perform a recursive
+-- traversal.
+traverseTypeShape :: forall sym p t st fs tp0 rtp args ret.
+  (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+  sym -> String ->
+  (forall tp.
+    TypeShape tp ->
+    RegValue sym tp ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)) ->
+  TypeShape tp0 -> RegValue sym tp0 ->
+  OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp0)
+traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
+  where
+    go :: forall tp. TypeShape tp -> RegValue sym tp ->
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
+    go (UnitShape _) () = return ()
+    go (PrimShape _ _) _ = die "PrimShape unimplemented"
+    go (ArrayShape _ _ shp) mirVec = case mirVec of
+        MirVector_Vector v -> MirVector_Vector <$> mapM (f shp) v
+        MirVector_PartialVector pv ->
+            MirVector_PartialVector <$> mapM (mapM (f shp)) pv
+        MirVector_Array _ -> die "MirVector_Array is unsupported"
+    go (TupleShape _ _ flds) rvs =
+        Ctx.zipWithM (traverseFieldShape sym f) flds rvs
+    go (StructShape _ _ flds) rvs =
+        Ctx.zipWithM (traverseFieldShape sym f) flds rvs
+    go (TransparentShape _ shp) rv = f shp rv
+    go (EnumShape _ _ _ _ _) _rv = die "EnumShape unimplemented"
+    go (FnPtrShape _ _ _) _rv = die "FnPtrShape unimplemented"
+    go (RefShape _ _ _ _) _rv = die "RefShape unimplemented"
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        ref' <- f refShp ref
+        len' <- f lenShp len
+        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
+
+    die :: String -> a
+    die msg = error $ "traverseTypeShape: " ++ msg ++ ", for " ++ nameStr
+
+-- | Apply `f` to all of the `RegValue`s within a `RegValue'`.
+--
+-- When the `FieldShape` is `OptField`, this requires the `MaybeRepr` to be
+-- initialized; it will raise an `error` otherwise.
+traverseFieldShape :: forall sym p t st fs tp0 rtp args ret.
+  (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+  sym ->
+  (forall tp.
+    TypeShape tp ->
+    RegValue sym tp ->
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)) ->
+  FieldShape tp0 -> RegValue' sym tp0 ->
+  OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp0)
+traverseFieldShape sym f shp0 rv0 = goField shp0 rv0
+  where
+    goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
+    goField (ReqField shp) (RV rv) = RV <$> f shp rv
+    goField (OptField shp) (RV rv) = do
+        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        rv'' <- f shp rv'
+        return $ RV $ W4.justPartExpr sym rv''
+
 -- | Replace each primitive value within `rv` with a fresh symbolic variable.
 clobberSymbolic :: forall sym p t st fs tp0 rtp args ret.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
@@ -45,37 +108,8 @@ clobberSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-    go (UnitShape _) () = return ()
     go shp@(PrimShape _ _btpr) _rv = freshSymbolic sym loc nameStr shp
-    go (ArrayShape _ _ shp) mirVec = case mirVec of
-        MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
-        MirVector_PartialVector pv ->
-            MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> die "MirVector_Array is unsupported"
-    go (TupleShape _ _ flds) rvs =
-        Ctx.zipWithM goField flds rvs
-    go (StructShape _ _ flds) rvs =
-        Ctx.zipWithM goField flds rvs
-    go (TransparentShape _ shp) rv = go shp rv
-    go (EnumShape _ _ _ _ _) _rv = die "Enums not currently supported in overrides"
-    go (FnPtrShape _ _ _) _rv = die "Function pointers not currently supported in overrides"
-    go (RefShape _ _ _ _) _rv = die "RefShape NYI"
-    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
-        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
-        ref' <- go refShp ref
-        len' <- go lenShp len
-        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
-
-    goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
-        OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
-    goField (ReqField shp) (RV rv) = RV <$> go shp rv
-    goField (OptField shp) (RV rv) = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
-        rv'' <- go shp rv'
-        return $ RV $ W4.justPartExpr sym rv''
-
-    die :: String -> a
-    die msg = error $ "clobberSymbolic: " ++ msg ++ ", for " ++ nameStr
+    go shp rv = traverseTypeShape sym nameStr go shp rv
 
 -- | Like `clobberSymbolic`, but for values in "immutable" memory.  Values
 -- inside an `UnsafeCell<T>` wrapper can still be modified even with only
@@ -89,45 +123,17 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
-    go (UnitShape _) () = return ()
-    -- If we reached a leaf value without entering an `UnsafeCell`, then
-    -- there's nothing to change.
-    go (PrimShape _ _) rv = return rv
-    go (ArrayShape _ _ shp) mirVec = case mirVec of
-        MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
-        MirVector_PartialVector pv ->
-            MirVector_PartialVector <$> mapM (mapM (go shp)) pv
-        MirVector_Array _ -> die "MirVector_Array is unsupported"
     go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
         clobberSymbolic sym loc nameStr shp rv
     go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
         clobberSymbolic sym loc nameStr shp rv
-    go (TupleShape _ _ flds) rvs =
-        Ctx.zipWithM goField flds rvs
-    go (StructShape _ _ flds) rvs =
-        Ctx.zipWithM goField flds rvs
-    go (TransparentShape _ shp) rv = go shp rv
+    -- If we reached a leaf value without entering an `UnsafeCell`, then
+    -- there's nothing to change.
+    go (PrimShape _ _) rv = return rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _ _tpr) rv = return rv
-    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
-        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
-        ref' <- go refShp ref
-        len' <- go lenShp len
-        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
-    go (EnumShape _ _ _ _ _) _rv = die "Enums not currently supported in overrides"
-    go (FnPtrShape _ _ _) _rv = die "Function pointers not currently supported in overrides"
-
-    goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
-        OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
-    goField (ReqField shp) (RV rv) = RV <$> go shp rv
-    goField (OptField shp) (RV rv) = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
-        rv'' <- go shp rv'
-        return $ RV $ W4.justPartExpr sym rv''
-
-    die :: String -> a
-    die msg = error $ "clobberImmutSymbolic: " ++ msg ++ ", for " ++ nameStr
+    go shp rv = traverseTypeShape sym nameStr go shp rv
 
 -- | Construct a fresh symbolic `RegValue` of type `tp0`.
 freshSymbolic :: forall sym p t st fs tp0 rtp args ret.
