@@ -61,7 +61,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Name(..), toShortName)
+import SAWCore.Name (Name(..), ecShortName, toShortName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -280,7 +280,7 @@ flattenSValue nm v = do
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
-                                        return (concat xss, "_" ++ (Text.unpack (toShortName (ecNameInfo i))) ++ concat ss)
+                                        return (concat xss, "_" ++ (Text.unpack (ecShortName i)) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -700,7 +700,7 @@ sbvSATQuery sc addlPrims query =
   do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
-     let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecNameInfo ec))) fot
+     let ecVars (ec, fot) = newVars (Text.unpack (ecShortName ec)) fot
 
      (labels, vars) <-
        flip evalStateT 0 $ unzip <$>
@@ -794,7 +794,7 @@ getLabels ls d args
   | length args == length xs = Just (zip args xs)
   | otherwise = error $ unwords
                 [ "SBV SAT results do not match expected arguments "
-                , show (map (toShortName . ecNameInfo) args), show xs]
+                , show (map ecShortName args), show xs]
 
   where
   xs = fmap getLabel ls

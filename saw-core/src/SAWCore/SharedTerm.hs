@@ -2869,7 +2869,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
-         scLambda sc (toShortName (ecNameInfo ec)) (ecType ec) tm'
+         scLambda sc (ecShortName ec) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
     -- before apply scLambda.  This ensures any dependencies between the
@@ -2877,7 +2877,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
          tp' <- scExtsToLocals sc begin (ecType ec)
-         scLambda sc (toShortName (ecNameInfo ec)) tp' tm'
+         scLambda sc (ecShortName ec) tp' tm'
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
@@ -2933,7 +2933,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
-         scPi sc (toShortName (ecNameInfo ec)) (ecType ec) tm'
+         scPi sc (ecShortName ec) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
     -- before apply scLambda.  This ensures any dependenices between the
@@ -2941,7 +2941,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
          tp' <- scExtsToLocals sc begin (ecType ec)
-         scPi sc (toShortName (ecNameInfo ec)) tp' tm'
+         scPi sc (ecShortName ec) tp' tm'
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
@@ -3123,7 +3123,7 @@ scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
 scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
-    close sc (toShortName (ecNameInfo ec)) (ecType ec) body'
+    close sc (ecShortName ec) (ecType ec) body'
 
 -- | Compute the body of 0 or more nested lambda-abstractions by applying the
 -- lambdas to fresh 'ExtCns's. Note that we do this lambda-by-lambda, rather

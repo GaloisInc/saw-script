@@ -90,7 +90,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-import SAWCore.Name (Name(..), toAbsoluteName, toShortName)
+import SAWCore.Name (Name(..), ecShortName, toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -1063,7 +1063,7 @@ applyUnintApp sym app0 v =
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (ecNameInfo i)))) app0
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (ecShortName i))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1156,7 +1156,7 @@ boundFOTs sym vars =
    freshBnd :: ExtCns Term -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
    freshBnd ec tpr =
      do (vs,n) <- get
-        let nm = Text.unpack (toShortName (ecNameInfo ec)) ++ "." ++ show n
+        let nm = Text.unpack (ecShortName ec) ++ "." ++ show n
         bvar <- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)
         put (Some bvar : vs, n+1)
         return (W.varExpr sym bvar)

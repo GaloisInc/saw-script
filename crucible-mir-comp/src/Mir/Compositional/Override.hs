@@ -47,10 +47,10 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
+import qualified SAWCore.Name as SAW
 import qualified SAWCore.Prelude as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
-import qualified SAWCore.Term.Functor as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -167,7 +167,7 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     let postFresh = ms ^. MS.csPostState . MS.csFreshVars
     postFreshTermSub <- liftM IntMap.fromList $ forM postFresh $ \tec -> do
         let ec = SAW.tecExt tec
-        let nameStr = Text.unpack $ SAW.toShortName $ SAW.ecNameInfo ec
+        let nameStr = Text.unpack $ SAW.ecShortName ec
         let nameSymbol = W4.safeSymbol nameStr
         Some btpr <- liftIO $ termToType sym (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr

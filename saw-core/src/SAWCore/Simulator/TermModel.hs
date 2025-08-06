@@ -130,7 +130,7 @@ replace sc cfg mapref ec = loop [] (ecType ec)
     loop env ty =
       do let args = reverse env
          ty' <- readBackTValue sc cfg ty
-         newec <- scFreshEC sc (toShortName (ecNameInfo ec)) ty'
+         newec <- scFreshEC sc (ecShortName ec) ty'
          modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))
          reflectTerm sc cfg ty =<< scVariable sc newec
 

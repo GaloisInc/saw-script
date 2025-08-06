@@ -181,9 +181,9 @@ import qualified Data.Parameterized.TraversableFC as Ctx
 
 -- saw-core
 import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.Name (ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
 
 import SAWCoreWhat4.ReturnTrip
@@ -847,7 +847,7 @@ verifyObligations cc mspec tactic assumes asserts =
                  if null vals then
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else
-                   let showEC ec = Text.unpack (toShortName (ecNameInfo ec)) in
+                   let showEC ec = Text.unpack (ecShortName ec) in
                    let showAssignment (ec, val) = "  " ++ showEC ec ++ ": " ++ show (ppFirstOrderValue opts val) in
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"

@@ -73,7 +73,7 @@ import Data.Parameterized.Context hiding (view, zipWithM)
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-import SAWCore.Name (Name(..), toShortName)
+import SAWCore.Name (Name(..), ecShortName)
 import SAWCore.Prelude
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
@@ -1629,7 +1629,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         ppOpts <- rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showEC ec = Text.unpack (toShortName (ecNameInfo ec)) in
+          _ -> let showEC ec = Text.unpack (ecShortName ec) in
                let showAssignment (ec, val) =
                      mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals

@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (Name(..), toShortName)
+import SAWCore.Name (Name(..), ecShortName)
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -511,7 +511,7 @@ bitBlastTerm be sc addlPrims t = do
   modmap <- scGetModuleMap sc
   bval <- bitBlastBasic be modmap addlPrims ecMap t
   bval' <- applyAll bval argVars
-  let names =  map fst args ++ map (Text.unpack . toShortName . ecNameInfo) ecs
+  let names =  map fst args ++ map (Text.unpack . ecShortName) ecs
       shapes = argShapes ++ ecShapes
   return (bval', zip names shapes)
 

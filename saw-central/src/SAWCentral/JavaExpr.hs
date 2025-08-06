@@ -72,7 +72,7 @@ import Text.Read hiding (lift)
 import Lang.JVM.Codebase as JSS
 
 import CryptolSAWCore.Cryptol
-import SAWCore.Name (toShortName)
+import SAWCore.Name (ecShortName)
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 
@@ -162,7 +162,7 @@ jeVarName = map dotToUnderscore . ppJavaExpr
         dotToUnderscore c = c
 
 asJavaExpr :: Term -> Maybe String
-asJavaExpr (asVariable -> Just ec) = Just (Text.unpack (toShortName (ecNameInfo ec))) -- TODO?
+asJavaExpr (asVariable -> Just ec) = Just (Text.unpack (ecShortName ec)) -- TODO?
 asJavaExpr _ = Nothing
 
 isRefJavaExpr :: JavaExpr -> Bool

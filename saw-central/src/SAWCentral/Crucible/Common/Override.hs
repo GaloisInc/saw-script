@@ -108,7 +108,7 @@ import           Data.Parameterized.TraversableFC (toListFC)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 
-import           SAWCore.Name (toShortName)
+import           SAWCore.Name (ecShortName)
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.Term.Functor (unwrapTermF)
@@ -551,7 +551,7 @@ refreshTerms sc ss =
      OM (termSub %= IntMap.union extension)
   where
     freshenTerm (TypedExtCns _cty ec) =
-      do ec' <- liftIO $ scFreshEC sc (toShortName (ecNameInfo ec)) (ecType ec)
+      do ec' <- liftIO $ scFreshEC sc (ecShortName ec) (ecType ec)
          new <- liftIO $ scVariable sc ec'
          return (ecVarIndex ec, new)
 

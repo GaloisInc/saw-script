@@ -43,6 +43,7 @@ module SAWCore.Name
   , ExtCns(..)
   , ecNameInfo
   , ecVarIndex
+  , ecShortName
   , scFreshNameURI
     -- * Display Name Environments
   , DisplayNameEnv(..)
@@ -298,6 +299,9 @@ ecNameInfo ec = nameInfo (ecName ec)
 
 ecVarIndex :: ExtCns e -> VarIndex
 ecVarIndex ec = nameIndex (ecName ec)
+
+ecShortName :: ExtCns e -> Text
+ecShortName ec = toShortName (ecNameInfo ec)
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
