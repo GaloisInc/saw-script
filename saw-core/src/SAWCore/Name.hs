@@ -268,11 +268,7 @@ instance Hashable Name where
 
 -- External Constants ----------------------------------------------------------
 
--- | A global name with a unique ID and a type. We maintain a global
--- invariant that the 'VarIndex' and the 'NameInfo' must be in a
--- strict one-to-one correspondence: Each 'VarIndex' is paired with a
--- unique 'NameInfo', and each 'NameInfo' is paired with a unique
--- 'VarIndex'.
+-- | A global name paired with a type.
 data ExtCns e =
   EC
   { ecName :: !Name

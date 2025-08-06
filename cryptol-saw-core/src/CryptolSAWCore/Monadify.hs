@@ -141,9 +141,7 @@ import GHC.Stack
 
 -- FIXME: move to OpenTerm.hs
 
--- | A global definition, which is either a primitive or a constant. As
--- described in the documentation for 'ExtCns', the names need not be unique,
--- but the 'VarIndex' is, and this is what is used to index 'GlobalDef's.
+-- | A global definition, which is either a primitive or a constant.
 data GlobalDef = GlobalDef { globalDefName :: Name,
                              globalDefType :: Term,
                              globalDefTerm :: Term }
