@@ -1,0 +1,24 @@
+m <- llvm_load_module "test.bc";
+
+let t = llvm_array 16 (llvm_int 32);
+
+let spec_increment = do {
+    a <- llvm_fresh_var "a" t;
+    p <- llvm_alloc t;
+    llvm_points_to p (llvm_term a);
+    let ptr_end = llvm_elem p 16;
+    llvm_execute_func [ptr_end];
+};
+
+let spec_increment_span = do {
+    a <- llvm_fresh_var "a" t;
+    p <- llvm_alloc t;
+    llvm_points_to p (llvm_term a);
+    let ptr_start = llvm_elem p 0;
+    let ptr_end = llvm_elem p 16;
+    llvm_execute_func [ptr_start, ptr_end];
+    llvm_points_to p (llvm_term {{ map (\x -> x+1) a }} );
+};
+
+llvm_verify m "increment_span" [] false spec_increment_span rme;
+fails (llvm_verify m "increment" [] false spec_increment rme);
