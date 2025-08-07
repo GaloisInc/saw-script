@@ -39,6 +39,12 @@ import Mir.Compositional.Convert
 -- | Apply `f` to all of the `RegValue`s within a `RegValue`.  This calls `f`
 -- only on the immediate descendants of `rv`; it does not perform a recursive
 -- traversal.
+--
+-- For types that don't contain any nested `RegValue`s, such as `UnitShape` and
+-- `PrimShape`, this function returns the input unchanged.  For types where
+-- there isn't a clear way to traverse the type, such as `EnumShape` and
+-- `RefShape`, this function will throw an error; the caller should handle
+-- these cases itself rather than dispatching to `traverseTypeShape`.
 traverseTypeShape :: forall sym p t st fs tp0 rtp args ret.
   (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
   sym -> String ->
@@ -53,7 +59,7 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) () = return ()
-    go (PrimShape _ _) _ = die "PrimShape unimplemented"
+    go (PrimShape _ _) rv = return rv
     go (ArrayShape _ _ shp) mirVec = case mirVec of
         MirVector_Vector v -> MirVector_Vector <$> mapM (f shp) v
         MirVector_PartialVector pv ->
@@ -147,13 +153,13 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
+    -- Values in immutable memory can be left unchanged, but anything inside
+    -- `UnsafeCell` is actually mutable, and should be updated using (mutable)
+    -- `clobberSymbolic` instead.
     go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
         clobberSymbolic sym loc nameStr shp rv
     go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
         clobberSymbolic sym loc nameStr shp rv
-    -- If we reached a leaf value without entering an `UnsafeCell`, then
-    -- there's nothing to change.
-    go (PrimShape _ _) rv = return rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _ _tpr) rv = return rv
