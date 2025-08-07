@@ -120,7 +120,7 @@ traverseVariantShape :: forall sym p t st fs tp0 rtp args ret.
   OverrideSim (p sym) sym MIR rtp args ret (VariantBranch sym tp0)
 traverseVariantShape sym f (VariantShape flds) (VB pe) =
   case pe of
-    W4.Unassigned -> return $ VB $ W4.Unassigned
+    W4.Unassigned -> return $ VB W4.Unassigned
     -- `rv` is known to be `RegValue _ (StructRepr ctx)`, which is represented
     -- as `Ctx.Assignment RegValue' ctx`.  So we can directly zip `rv` with
     -- another assignment (`flds`).
