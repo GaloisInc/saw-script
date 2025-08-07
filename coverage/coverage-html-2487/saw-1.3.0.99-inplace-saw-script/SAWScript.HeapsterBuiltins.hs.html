@@ -116,8 +116,8 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span>import SAWCore.Typechecker
 <span class="lineno">   98 </span>import SAWCore.SCTypeCheck
 <span class="lineno">   99 </span>import qualified SAWCore.Term.Pretty as Pretty (scPrettyTerm, scPrettyTermInCtx)
-<span class="lineno">  100 </span>import qualified SAWCore.UntypedAST as Un
-<span class="lineno">  101 </span>import qualified SAWCore.Grammar as Un
+<span class="lineno">  100 </span>import qualified SAWCore.Parser.AST as Un
+<span class="lineno">  101 </span>import qualified SAWCore.Parser.Grammar as Un
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>import Lang.Crucible.Types
 <span class="lineno">  104 </span>import Lang.Crucible.FunctionHandle
@@ -351,7 +351,7 @@ span.spaces    { background: white }
 <span class="lineno">  332 </span><span class="spaces">     </span><span class="nottickedoff">typed_term &lt;- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term</span>
 <span class="lineno">  333 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp</span>
 <span class="lineno">  334 </span><span class="spaces">     </span><span class="nottickedoff">case typedVal typed_term of</span>
-<span class="lineno">  335 </span><span class="spaces">       </span><span class="nottickedoff">STApp _ _ _ (Constant (Name _ (ModuleIdentifier term_ident))) -&gt;</span>
+<span class="lineno">  335 </span><span class="spaces">       </span><span class="nottickedoff">STApp {stAppTermF = Constant (Name _ (ModuleIdentifier term_ident))} -&gt;</span>
 <span class="lineno">  336 </span><span class="spaces">         </span><span class="nottickedoff">return term_ident</span>
 <span class="lineno">  337 </span><span class="spaces">       </span><span class="nottickedoff">term -&gt; do</span>
 <span class="lineno">  338 </span><span class="spaces">         </span><span class="nottickedoff">m &lt;- liftIO $ scFindModule sc mnm</span>

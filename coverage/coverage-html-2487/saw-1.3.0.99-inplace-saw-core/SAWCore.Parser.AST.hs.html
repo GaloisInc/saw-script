@@ -23,7 +23,7 @@ span.spaces    { background: white }
 <span class="lineno">    4 </span>{-# LANGUAGE TupleSections #-}
 <span class="lineno">    5 </span>
 <span class="lineno">    6 </span>{- |
-<span class="lineno">    7 </span>Module      : SAWCore.UntypedAST
+<span class="lineno">    7 </span>Module      : SAWCore.Parser.AST
 <span class="lineno">    8 </span>Copyright   : Galois, Inc. 2012-2025
 <span class="lineno">    9 </span>License     : BSD3
 <span class="lineno">   10 </span>Maintainer  : jhendrix@galois.com
@@ -31,7 +31,7 @@ span.spaces    { background: white }
 <span class="lineno">   12 </span>Portability : non-portable (language extensions)
 <span class="lineno">   13 </span>-}
 <span class="lineno">   14 </span>
-<span class="lineno">   15 </span>module SAWCore.UntypedAST
+<span class="lineno">   15 </span>module SAWCore.Parser.AST
 <span class="lineno">   16 </span>  ( Module(..)
 <span class="lineno">   17 </span>  , ModuleName, mkModuleName
 <span class="lineno">   18 </span>  , Decl(..)
@@ -53,7 +53,7 @@ span.spaces    { background: white }
 <span class="lineno">   34 </span>  , Sort, mkSort, propSort, sortOf
 <span class="lineno">   35 </span>  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
 <span class="lineno">   36 </span>  , badTerm
-<span class="lineno">   37 </span>  , module SAWCore.Position
+<span class="lineno">   37 </span>  , module SAWCore.Parser.Position
 <span class="lineno">   38 </span>  , moduleName
 <span class="lineno">   39 </span>  , moduleTypedDecls
 <span class="lineno">   40 </span>  , moduleDataDecls
@@ -70,7 +70,7 @@ span.spaces    { background: white }
 <span class="lineno">   51 </span>
 <span class="lineno">   52 </span>import SAWCore.Module (DefQualifier)
 <span class="lineno">   53 </span>import SAWCore.Name (ModuleName, mkModuleName)
-<span class="lineno">   54 </span>import SAWCore.Position
+<span class="lineno">   54 </span>import SAWCore.Parser.Position
 <span class="lineno">   55 </span>import SAWCore.Term.Functor
 <span class="lineno">   56 </span>  ( Sort, mkSort, propSort, sortOf
 <span class="lineno">   57 </span>  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList

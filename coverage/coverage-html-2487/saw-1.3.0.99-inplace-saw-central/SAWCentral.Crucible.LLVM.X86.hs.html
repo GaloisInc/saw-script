@@ -92,7 +92,7 @@ span.spaces    { background: white }
 <span class="lineno">   73 </span>import CryptolSAWCore.CryptolEnv
 <span class="lineno">   74 </span>import SAWCore.FiniteValue
 <span class="lineno">   75 </span>import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
-<span class="lineno">   76 </span>import SAWCore.Name (Name(..), toShortName)
+<span class="lineno">   76 </span>import SAWCore.Name (Name(..), ecShortName)
 <span class="lineno">   77 </span>import SAWCore.Prelude
 <span class="lineno">   78 </span>import SAWCore.Recognizer
 <span class="lineno">   79 </span>import SAWCore.SharedTerm
@@ -1102,9 +1102,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1083 </span><span class="spaces">  </span><span class="istickedoff">emptyMem &lt;- C.LLVM.emptyMem C.LLVM.LittleEndian</span>
 <span class="lineno"> 1084 </span><span class="spaces">  </span><span class="istickedoff">emptyRegs &lt;- traverseWithIndex (freshRegister sym) C.knownRepr</span>
 <span class="lineno"> 1085 </span><span class="spaces">  </span><span class="istickedoff">symTab &lt;- case Elf.decodeHeaderSymtab elf of</span>
-<span class="lineno"> 1086 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwX86 path &quot;Elf file has no symbol table&quot;</span></span>
-<span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">Just (Left _err) -&gt; <span class="nottickedoff">throwX86 path &quot;Failed to decode symbol table&quot;</span></span>
-<span class="lineno"> 1088 </span><span class="spaces">    </span><span class="istickedoff">Just (Right st) -&gt; pure st</span>
+<span class="lineno"> 1086 </span><span class="spaces">    </span><span class="istickedoff">Left Elf.NoSymtabs -&gt; <span class="nottickedoff">throwX86 path &quot;Elf file has no symbol table&quot;</span></span>
+<span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">Left _err -&gt; <span class="nottickedoff">throwX86 path &quot;Failed to decode symbol table&quot;</span></span>
+<span class="lineno"> 1088 </span><span class="spaces">    </span><span class="istickedoff">Right st -&gt; pure st</span>
 <span class="lineno"> 1089 </span><span class="spaces">  </span><span class="istickedoff">let</span>
 <span class="lineno"> 1090 </span><span class="spaces">    </span><span class="istickedoff">align = C.LLVM.exponentToAlignment 4</span>
 <span class="lineno"> 1091 </span><span class="spaces">    </span><span class="istickedoff">allocGlobalEnd :: MS.AllocGlobal LLVM -&gt; Integer</span>
@@ -1550,14 +1550,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1531 </span>  X86Sim (LLVMOverrideMatcher md ())
 <span class="lineno"> 1532 </span><span class="decl"><span class="istickedoff">assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do</span>
 <span class="lineno"> 1533 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
-<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
+<span class="lineno"> 1534 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use <span class="nottickedoff">x86SharedContext</span></span>
 <span class="lineno"> 1535 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
 <span class="lineno"> 1536 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
 <span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
 <span class="lineno"> 1538 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1539 </span><span class="spaces">  </span><span class="istickedoff">ptr &lt;- resolvePtrSetupValue <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> tptr</span>
 <span class="lineno"> 1540 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
-<span class="lineno"> 1541 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
+<span class="lineno"> 1541 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
 <span class="lineno"> 1542 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
 <span class="lineno"> 1543 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1544 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
@@ -1648,7 +1648,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
 <span class="lineno"> 1631 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
-<span class="lineno"> 1632 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showEC ec = Text.unpack (toShortName (ecName ec)) in</span>
+<span class="lineno"> 1632 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showEC ec = Text.unpack (ecShortName ec) in</span>
 <span class="lineno"> 1633 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (ec, val) =</span>
 <span class="lineno"> 1634 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showEC ec, &quot;: &quot;, show $ ppFirstOrderValue ppOpts val ]</span>
 <span class="lineno"> 1635 </span><span class="spaces">               </span><span class="istickedoff">in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>

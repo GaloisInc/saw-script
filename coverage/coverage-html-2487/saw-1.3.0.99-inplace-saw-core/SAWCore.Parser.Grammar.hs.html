@@ -28,7 +28,7 @@ span.spaces    { background: white }
 <span class="lineno">    9 </span>{-# OPTIONS_GHC -fno-warn-tabs #-}
 <span class="lineno">   10 </span>
 <span class="lineno">   11 </span>{- |
-<span class="lineno">   12 </span>Module      : SAWCore.Grammar
+<span class="lineno">   12 </span>Module      : SAWCore.Parser.Grammar
 <span class="lineno">   13 </span>Copyright   : Galois, Inc. 2012-2014
 <span class="lineno">   14 </span>License     : BSD3
 <span class="lineno">   15 </span>Maintainer  : jhendrix@galois.com
@@ -36,7 +36,7 @@ span.spaces    { background: white }
 <span class="lineno">   17 </span>Portability : non-portable (language extensions)
 <span class="lineno">   18 </span>-}
 <span class="lineno">   19 </span>
-<span class="lineno">   20 </span>module SAWCore.Grammar
+<span class="lineno">   20 </span>module SAWCore.Parser.Grammar
 <span class="lineno">   21 </span>  ( parseSAW
 <span class="lineno">   22 </span>  , parseSAWTerm
 <span class="lineno">   23 </span>  ) where
@@ -57,10 +57,10 @@ span.spaces    { background: white }
 <span class="lineno">   38 </span>
 <span class="lineno">   39 </span>import Prelude hiding (mapM, sequence)
 <span class="lineno">   40 </span>
-<span class="lineno">   41 </span>import SAWCore.Panic
-<span class="lineno">   42 </span>import SAWCore.UntypedAST
-<span class="lineno">   43 </span>import SAWCore.Module (DefQualifier(..))
-<span class="lineno">   44 </span>import SAWCore.Lexer
+<span class="lineno">   41 </span>import SAWCore.Module (DefQualifier(..))
+<span class="lineno">   42 </span>import SAWCore.Panic
+<span class="lineno">   43 </span>import SAWCore.Parser.AST
+<span class="lineno">   44 </span>import SAWCore.Parser.Lexer
 <span class="lineno">   45 </span>import qualified Data.Array as Happy_Data_Array
 <span class="lineno">   46 </span>import qualified Data.Bits as Bits
 <span class="lineno">   47 </span>import qualified GHC.Exts as Happy_GHC_Exts

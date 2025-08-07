@@ -91,7 +91,7 @@ span.spaces    { background: white }
 <span class="lineno">   72 </span>import Lang.JVM.Codebase as JSS
 <span class="lineno">   73 </span>
 <span class="lineno">   74 </span>import CryptolSAWCore.Cryptol
-<span class="lineno">   75 </span>import SAWCore.Name (toShortName)
+<span class="lineno">   75 </span>import SAWCore.Name (ecShortName)
 <span class="lineno">   76 </span>import SAWCore.Recognizer
 <span class="lineno">   77 </span>import SAWCore.SharedTerm
 <span class="lineno">   78 </span>
@@ -181,7 +181,7 @@ span.spaces    { background: white }
 <span class="lineno">  162 </span><span class="spaces">        </span><span class="nottickedoff">dotToUnderscore c = c</span></span>
 <span class="lineno">  163 </span>
 <span class="lineno">  164 </span>asJavaExpr :: Term -&gt; Maybe String
-<span class="lineno">  165 </span><span class="decl"><span class="nottickedoff">asJavaExpr (asVariable -&gt; Just ec) = Just (Text.unpack (toShortName (ecName ec))) -- TODO?</span>
+<span class="lineno">  165 </span><span class="decl"><span class="nottickedoff">asJavaExpr (asVariable -&gt; Just ec) = Just (Text.unpack (ecShortName ec)) -- TODO?</span>
 <span class="lineno">  166 </span><span class="spaces"></span><span class="nottickedoff">asJavaExpr _ = Nothing</span></span>
 <span class="lineno">  167 </span>
 <span class="lineno">  168 </span>isRefJavaExpr :: JavaExpr -&gt; Bool

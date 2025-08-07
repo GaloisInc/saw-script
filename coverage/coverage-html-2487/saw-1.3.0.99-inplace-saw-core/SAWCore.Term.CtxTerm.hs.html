@@ -135,7 +135,7 @@ span.spaces    { background: white }
 <span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">Just (ec, rest) -&gt;</span>
 <span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">asCtorArg <span class="nottickedoff">sc</span> d params dt_ixs (ecType ec) &gt;&gt;= \case</span>
 <span class="lineno">  118 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  119 </span><span class="spaces">        </span><span class="istickedoff">Just arg -&gt; pure $ Just (Name (ecVarIndex ec) (ecName ec), arg, rest)</span></span>
+<span class="lineno">  119 </span><span class="spaces">        </span><span class="istickedoff">Just arg -&gt; pure $ Just (ecName ec, arg, rest)</span></span>
 <span class="lineno">  120 </span>
 <span class="lineno">  121 </span>-- | Helper function for 'mkCtorArgStruct'
 <span class="lineno">  122 </span>mkCtorArgsIxs ::
@@ -171,7 +171,7 @@ span.spaces    { background: white }
 <span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">mkCtorArgsIxs sc d params dt_ixs ctor_tp &gt;&gt;= \case</span>
 <span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno">  154 </span><span class="spaces">    </span><span class="istickedoff">Just (args, ctor_ixs) -&gt;</span>
-<span class="lineno">  155 </span><span class="spaces">      </span><span class="istickedoff">pure $ Just (CtorArgStruct params args ctor_ixs <span class="nottickedoff">dt_ixs</span>)</span></span>
+<span class="lineno">  155 </span><span class="spaces">      </span><span class="istickedoff">pure $ Just (CtorArgStruct params args ctor_ixs)</span></span>
 
 </pre>
 </body>

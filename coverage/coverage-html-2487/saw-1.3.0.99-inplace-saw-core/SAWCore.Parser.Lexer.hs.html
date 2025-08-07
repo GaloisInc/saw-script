@@ -23,7 +23,7 @@ span.spaces    { background: white }
 <span class="lineno">    4 </span>{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 <span class="lineno">    5 </span>{-# LANGUAGE CPP #-}
 <span class="lineno">    6 </span>{-# LANGUAGE MagicHash #-}
-<span class="lineno">    7 </span>{-# LINE 1 &quot;saw-core/src/SAWCore/Lexer.x&quot; #-}
+<span class="lineno">    7 </span>{-# LINE 1 &quot;saw-core/src/SAWCore/Parser/Lexer.x&quot; #-}
 <span class="lineno">    8 </span>{-# LANGUAGE BangPatterns #-}
 <span class="lineno">    9 </span>{-# LANGUAGE DeriveFunctor #-}
 <span class="lineno">   10 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -39,7 +39,7 @@ span.spaces    { background: white }
 <span class="lineno">   20 </span>{-# OPTIONS_GHC -fno-warn-tabs #-}
 <span class="lineno">   21 </span>
 <span class="lineno">   22 </span>{- |
-<span class="lineno">   23 </span>Module      : SAWCore.Lexer
+<span class="lineno">   23 </span>Module      : SAWCore.Parser.Lexer
 <span class="lineno">   24 </span>Copyright   : Galois, Inc. 2012-2014
 <span class="lineno">   25 </span>License     : BSD3
 <span class="lineno">   26 </span>Maintainer  : jhendrix@galois.com
@@ -47,7 +47,7 @@ span.spaces    { background: white }
 <span class="lineno">   28 </span>Portability : non-portable (language extensions)
 <span class="lineno">   29 </span>-}
 <span class="lineno">   30 </span>
-<span class="lineno">   31 </span>module SAWCore.Lexer
+<span class="lineno">   31 </span>module SAWCore.Parser.Lexer
 <span class="lineno">   32 </span>  ( Token(..)
 <span class="lineno">   33 </span>  , LexerMessage(..)
 <span class="lineno">   34 </span>  , LexerState
@@ -64,7 +64,7 @@ span.spaces    { background: white }
 <span class="lineno">   45 </span>import qualified Data.Char as Char
 <span class="lineno">   46 </span>import Numeric.Natural
 <span class="lineno">   47 </span>
-<span class="lineno">   48 </span>import SAWCore.Position
+<span class="lineno">   48 </span>import SAWCore.Parser.Position
 <span class="lineno">   49 </span>#include &quot;ghcconfig.h&quot;
 <span class="lineno">   50 </span>import qualified Data.Array
 <span class="lineno">   51 </span>import Data.Array.Base (unsafeAt)
@@ -505,7 +505,7 @@ span.spaces    { background: white }
 <span class="lineno">  486 </span>        -- match when checking the right context, just
 <span class="lineno">  487 </span>        -- the first match will do.
 <span class="lineno">  488 </span>#endif
-<span class="lineno">  489 </span>{-# LINE 109 &quot;saw-core/src/SAWCore/Lexer.x&quot; #-}
+<span class="lineno">  489 </span>{-# LINE 109 &quot;saw-core/src/SAWCore/Parser/Lexer.x&quot; #-}
 <span class="lineno">  490 </span>data Token
 <span class="lineno">  491 </span>  = TIdent { tokIdent :: String }   -- ^ Identifier
 <span class="lineno">  492 </span>  | TRecursor { tokRecursor :: String }   -- ^ Recursor
