@@ -1025,14 +1025,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1006 </span><span class="decl"><span class="istickedoff">resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]</span>
 <span class="lineno"> 1007 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1008 </span><span class="spaces">    </span><span class="istickedoff">nArgs = toInteger (length (mspec ^. MS.csArgs))</span>
-<span class="lineno"> 1009 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tyenv = MS.csAllocations mspec</span></span>
+<span class="lineno"> 1009 </span><span class="spaces">    </span><span class="istickedoff">tyenv = MS.csAllocations mspec</span>
 <span class="lineno"> 1010 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames</span></span>
 <span class="lineno"> 1011 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nm = mspec^.csName</span></span>
 <span class="lineno"> 1012 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1013 </span><span class="spaces">    </span><span class="istickedoff">resolveArg i =</span>
 <span class="lineno"> 1014 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i (mspec ^. MS.csArgBindings) of</span>
 <span class="lineno"> 1015 </span><span class="spaces">        </span><span class="istickedoff">Just (mt, sv) -&gt; do</span>
-<span class="lineno"> 1016 </span><span class="spaces">          </span><span class="istickedoff">v &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sv</span>
+<span class="lineno"> 1016 </span><span class="spaces">          </span><span class="istickedoff">v &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> env tyenv <span class="nottickedoff">nameEnv</span> sv</span>
 <span class="lineno"> 1017 </span><span class="spaces">          </span><span class="istickedoff">return (<span class="nottickedoff">mt</span>, v)</span>
 <span class="lineno"> 1018 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwMethodSpec mspec $ unwords</span></span>
 <span class="lineno"> 1019 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;Argument&quot;, show i, &quot;unspecified when verifying&quot;, show nm]</span></span></span>
