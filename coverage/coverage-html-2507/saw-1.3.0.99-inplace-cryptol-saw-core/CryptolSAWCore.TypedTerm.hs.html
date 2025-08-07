@@ -93,7 +93,7 @@ span.spaces    { background: white }
 <span class="lineno">   74 </span>
 <span class="lineno">   75 </span>ppTypedExtCns :: TypedExtCns -&gt; PP.Doc ann
 <span class="lineno">   76 </span><span class="decl"><span class="istickedoff">ppTypedExtCns (TypedExtCns tp ec) =</span>
-<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">PP.unAnnotate (ppName (ecName ec))</span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">PP.unAnnotate (ppName (ecNameInfo ec))</span>
 <span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">PP.&lt;+&gt; PP.pretty &quot;:&quot; PP.&lt;+&gt;</span>
 <span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">PP.viaShow (C.ppPrec <span class="nottickedoff">0</span> tp)</span></span>
 <span class="lineno">   80 </span>

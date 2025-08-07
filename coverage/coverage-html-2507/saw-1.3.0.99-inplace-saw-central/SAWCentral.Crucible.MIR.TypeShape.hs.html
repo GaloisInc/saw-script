@@ -205,7 +205,7 @@ span.spaces    { background: white }
 <span class="lineno">  186 </span><span class="spaces">        </span><span class="istickedoff">M.TyFnDef _ -&gt; <span class="nottickedoff">goUnit ty</span></span>
 <span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff">M.TyArray ty' _ | Some shp &lt;- go ty' -&gt; Some $ ArrayShape ty ty' shp</span>
 <span class="lineno">  188 </span><span class="spaces">        </span><span class="istickedoff">M.TyAdt nm _ _ -&gt; case Map.lookup nm (col ^. M.adts) of</span>
-<span class="lineno">  189 </span><span class="spaces">            </span><span class="istickedoff">Just adt | Just ty' &lt;- reprTransparentFieldTy <span class="nottickedoff">col</span> adt -&gt;</span>
+<span class="lineno">  189 </span><span class="spaces">            </span><span class="istickedoff">Just adt | Just ty' &lt;- reprTransparentFieldTy col adt -&gt;</span>
 <span class="lineno">  190 </span><span class="spaces">                </span><span class="istickedoff">mapSome (TransparentShape ty) $ go ty'</span>
 <span class="lineno">  191 </span><span class="spaces">            </span><span class="istickedoff">Just (M.Adt _ kind vs _ _ _ _) -&gt;</span>
 <span class="lineno">  192 </span><span class="spaces">              </span><span class="istickedoff">case kind of</span>
@@ -354,7 +354,7 @@ span.spaces    { background: white }
 <span class="lineno">  335 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (ArrayShape ty _ _) = ty</span>
 <span class="lineno">  336 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (StructShape ty _ _) = ty</span>
 <span class="lineno">  337 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (EnumShape ty _ _ _ _) = ty</span>
-<span class="lineno">  338 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (TransparentShape ty _) = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  338 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (TransparentShape ty _) = ty</span>
 <span class="lineno">  339 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (RefShape ty _ _ _) = ty</span>
 <span class="lineno">  340 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (SliceShape ty _ _ _) = <span class="nottickedoff">ty</span></span>
 <span class="lineno">  341 </span><span class="spaces"></span><span class="istickedoff">shapeMirTy (FnPtrShape ty _ _) = <span class="nottickedoff">ty</span></span></span>

@@ -728,8 +728,8 @@ span.spaces    { background: white }
 <span class="lineno">  709 </span><span class="spaces">     </span><span class="istickedoff">cs_fs' &lt;- forM cs_fs (\e -&gt; do ety &lt;- typeInferComplete (typedType e)</span>
 <span class="lineno">  710 </span><span class="spaces">                                    </span><span class="istickedoff">pure (e,ety))</span>
 <span class="lineno">  711 </span><span class="spaces">     </span><span class="istickedoff">let d = dtName dt</span>
-<span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">let ctorVarIxs = map ctorVarIndex (dtCtors dt)</span>
-<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">let ctorOrder = map ctorName (dtCtors dt)</span>
+<span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">let ctorOrder = map ctorName (dtCtors dt)</span>
+<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">let ctorVarIxs = map nameIndex ctorOrder</span>
 <span class="lineno">  714 </span><span class="spaces">     </span><span class="istickedoff">let elims = Map.fromList (zip ctorVarIxs cs_fs')</span>
 <span class="lineno">  715 </span><span class="spaces">     </span><span class="istickedoff">let rec = CompiledRecursor d params motive motiveTy elims ctorOrder</span>
 <span class="lineno">  716 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">mk_err str =</span></span>

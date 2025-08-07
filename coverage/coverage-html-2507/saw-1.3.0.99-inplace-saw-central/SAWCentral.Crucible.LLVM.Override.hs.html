@@ -715,7 +715,7 @@ span.spaces    { background: white }
 <span class="lineno">  696 </span><span class="spaces">     </span><span class="istickedoff">traverse_ (learnSetupCondition <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">cs</span> prepost) (ss ^. MS.csConditions)</span>
 <span class="lineno">  697 </span><span class="spaces">     </span><span class="istickedoff">assertTermEqualities sc cc</span>
 <span class="lineno">  698 </span><span class="spaces">     </span><span class="istickedoff">enforcePointerValidity sc cc ss</span>
-<span class="lineno">  699 </span><span class="spaces">     </span><span class="istickedoff">enforceDisjointness sc cc loc globals extras ss</span>
+<span class="lineno">  699 </span><span class="spaces">     </span><span class="istickedoff">enforceDisjointness <span class="nottickedoff">sc</span> cc loc globals extras ss</span>
 <span class="lineno">  700 </span><span class="spaces">     </span><span class="istickedoff">enforceCompleteSubstitution loc ss</span></span>
 <span class="lineno">  701 </span>
 <span class="lineno">  702 </span>
@@ -861,7 +861,7 @@ span.spaces    { background: white }
 <span class="lineno">  842 </span><span class="spaces">     </span><span class="istickedoff">-- Ensure that all RW regions are disjoint from each other, and</span>
 <span class="lineno">  843 </span><span class="spaces">     </span><span class="istickedoff">-- that all RW regions are disjoint from all RO regions.</span>
 <span class="lineno">  844 </span><span class="spaces">     </span><span class="istickedoff">sequence_</span>
-<span class="lineno">  845 </span><span class="spaces">        </span><span class="istickedoff">[ enforceDisjointAllocSpec sc cc sym loc p q</span>
+<span class="lineno">  845 </span><span class="spaces">        </span><span class="istickedoff">[ enforceDisjointAllocSpec <span class="nottickedoff">sc</span> cc sym loc p q</span>
 <span class="lineno">  846 </span><span class="spaces">        </span><span class="istickedoff">| p : ps &lt;- tails mems</span>
 <span class="lineno">  847 </span><span class="spaces">        </span><span class="istickedoff">, q &lt;- ps ++ mems2</span>
 <span class="lineno">  848 </span><span class="spaces">        </span><span class="istickedoff">]</span>
@@ -900,9 +900,9 @@ span.spaces    { background: white }
 <span class="lineno">  881 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure ()</span> -- Fresh pointers need not be disjoint</span>
 <span class="lineno">  882 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno">  883 </span><span class="spaces">  </span><span class="istickedoff">do liftIO $ W4.setCurrentProgramLoc sym (MS.conditionLoc pMd)</span>
-<span class="lineno">  884 </span><span class="spaces">     </span><span class="istickedoff">psz' &lt;- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz</span>
+<span class="lineno">  884 </span><span class="spaces">     </span><span class="istickedoff">psz' &lt;- instantiateExtResolveSAWSymBV <span class="nottickedoff">sc</span> cc Crucible.PtrWidth psz</span>
 <span class="lineno">  885 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ W4.setCurrentProgramLoc sym (MS.conditionLoc qMd)</span>
-<span class="lineno">  886 </span><span class="spaces">     </span><span class="istickedoff">qsz' &lt;- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth qsz</span>
+<span class="lineno">  886 </span><span class="spaces">     </span><span class="istickedoff">qsz' &lt;- instantiateExtResolveSAWSymBV <span class="nottickedoff">sc</span> cc Crucible.PtrWidth qsz</span>
 <span class="lineno">  887 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ W4.setCurrentProgramLoc sym loc</span>
 <span class="lineno">  888 </span><span class="spaces">     </span><span class="istickedoff">c &lt;- liftIO $ Crucible.buildDisjointRegionsAssertion</span>
 <span class="lineno">  889 </span><span class="spaces">       </span><span class="istickedoff">sym Crucible.PtrWidth</span>
@@ -1177,7 +1177,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1158 </span><span class="spaces">    </span><span class="istickedoff">(Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs)</span>
 <span class="lineno"> 1159 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">V.length xs &gt;= length zs</span> -&gt;</span>
 <span class="lineno"> 1160 </span><span class="spaces">        </span><span class="istickedoff">sequence_</span>
-<span class="lineno"> 1161 </span><span class="spaces">          </span><span class="istickedoff">[ matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">cs</span> <span class="nottickedoff">prepost</span> <span class="nottickedoff">md</span> x <span class="nottickedoff">y</span> z</span>
+<span class="lineno"> 1161 </span><span class="spaces">          </span><span class="istickedoff">[ matchArg <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">cs</span> <span class="nottickedoff">prepost</span> <span class="nottickedoff">md</span> x <span class="nottickedoff">y</span> z</span>
 <span class="lineno"> 1162 </span><span class="spaces">          </span><span class="istickedoff">| (x, z) &lt;- zip (V.toList xs) zs ]</span>
 <span class="lineno"> 1163 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1164 </span><span class="spaces">    </span><span class="istickedoff">-- LLVM string literals are syntactic shorthand for [&lt;N&gt; x i8] arrays,</span>
@@ -1185,7 +1185,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1166 </span><span class="spaces">    </span><span class="istickedoff">(Crucible.LLVMValString xs, Crucible.ArrayType _len (Crucible.IntType 8), SetupArray () zs)</span>
 <span class="lineno"> 1167 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">BS.length xs &gt;= length zs</span> -&gt;</span>
 <span class="lineno"> 1168 </span><span class="spaces">        </span><span class="istickedoff">do explodedActual &lt;- liftIO $ Crucible.explodeStringValue sym xs</span>
-<span class="lineno"> 1169 </span><span class="spaces">           </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">cs</span> <span class="nottickedoff">prepost</span> <span class="nottickedoff">md</span> explodedActual expectedTy expected</span>
+<span class="lineno"> 1169 </span><span class="spaces">           </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">cs</span> <span class="nottickedoff">prepost</span> <span class="nottickedoff">md</span> explodedActual expectedTy expected</span>
 <span class="lineno"> 1170 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1171 </span><span class="spaces">    </span><span class="istickedoff">-- match the fields of struct point-wise</span>
 <span class="lineno"> 1172 </span><span class="spaces">    </span><span class="istickedoff">(Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct _ zs) -&gt;</span>
@@ -1373,7 +1373,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1354 </span>  OverrideMatcher (LLVM arch) md ()
 <span class="lineno"> 1355 </span><span class="decl"><span class="istickedoff">learnSetupCondition opts sc cc spec prepost cond =</span>
 <span class="lineno"> 1356 </span><span class="spaces">  </span><span class="istickedoff">case cond of</span>
-<span class="lineno"> 1357 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Equal md val1 val2 -&gt; learnEqual <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> md <span class="nottickedoff">prepost</span> val1 val2</span>
+<span class="lineno"> 1357 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Equal md val1 val2 -&gt; learnEqual <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">spec</span> md <span class="nottickedoff">prepost</span> val1 val2</span>
 <span class="lineno"> 1358 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Pred md tm         -&gt; learnPred sc cc md prepost (ttTerm tm)</span>
 <span class="lineno"> 1359 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCond_Ghost md var val   -&gt; learnGhost sc md prepost var val</span></span>
 <span class="lineno"> 1360 </span>
@@ -1519,9 +1519,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1500 </span><span class="spaces">                   </span><span class="istickedoff">return Nothing</span>
 <span class="lineno"> 1501 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1502 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1503 </span><span class="spaces">                </span><span class="istickedoff">do sub &lt;- OM (use <span class="nottickedoff">termSub</span>)</span>
+<span class="lineno"> 1503 </span><span class="spaces">                </span><span class="istickedoff">do sub &lt;- OM (use termSub)</span>
 <span class="lineno"> 1504 </span><span class="spaces">                   </span><span class="istickedoff">modmap &lt;- liftIO $ scGetModuleMap sc</span>
-<span class="lineno"> 1505 </span><span class="spaces">                   </span><span class="istickedoff">instantiated_expected_sz_tm &lt;- liftIO $ scInstantiateExt sc <span class="nottickedoff">sub</span> $ ttTerm expected_sz_tm</span>
+<span class="lineno"> 1505 </span><span class="spaces">                   </span><span class="istickedoff">instantiated_expected_sz_tm &lt;- liftIO $ scInstantiateExt <span class="nottickedoff">sc</span> sub $ ttTerm expected_sz_tm</span>
 <span class="lineno"> 1506 </span><span class="spaces">                   </span><span class="istickedoff">normalized_expected_sz_tm &lt;- liftIO $</span>
 <span class="lineno"> 1507 </span><span class="spaces">                     </span><span class="istickedoff">normalizeSharedTerm sc modmap mempty <span class="nottickedoff">mempty</span> mempty instantiated_expected_sz_tm</span>
 <span class="lineno"> 1508 </span><span class="spaces">                   </span><span class="istickedoff">case asUnsignedConcreteBv normalized_expected_sz_tm of</span>
@@ -1539,7 +1539,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1520 </span><span class="spaces">                              </span><span class="istickedoff">do addAssert ok <span class="nottickedoff">md</span> $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg</span>
 <span class="lineno"> 1521 </span><span class="spaces">                                 </span><span class="istickedoff">st &lt;- liftIO (sawCoreState sym)</span>
 <span class="lineno"> 1522 </span><span class="spaces">                                 </span><span class="istickedoff">arr_tm &lt;- liftIO $ toSC sym st arr</span>
-<span class="lineno"> 1523 </span><span class="spaces">                                 </span><span class="istickedoff">instantiateExtMatchTerm sc <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> arr_tm $ ttTerm expected_arr_tm</span>
+<span class="lineno"> 1523 </span><span class="spaces">                                 </span><span class="istickedoff">instantiateExtMatchTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> arr_tm $ ttTerm expected_arr_tm</span>
 <span class="lineno"> 1524 </span><span class="spaces">                                 </span><span class="istickedoff">return Nothing</span>
 <span class="lineno"> 1525 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1526 </span><span class="spaces">                            </span><span class="istickedoff">Left{} -&gt; <span class="nottickedoff">return $ Just errMsg</span></span>
@@ -1733,7 +1733,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1714 </span>  OverrideMatcher (LLVM arch) md ()
 <span class="lineno"> 1715 </span><span class="decl"><span class="istickedoff">learnEqual opts sc cc spec md prepost v1 v2 = do</span>
 <span class="lineno"> 1716 </span><span class="spaces">  </span><span class="istickedoff">(_, val1) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> v1</span>
-<span class="lineno"> 1717 </span><span class="spaces">  </span><span class="istickedoff">(_, val2) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">spec</span> v2</span>
+<span class="lineno"> 1717 </span><span class="spaces">  </span><span class="istickedoff">(_, val2) &lt;- resolveSetupValueLLVM <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> v2</span>
 <span class="lineno"> 1718 </span><span class="spaces">  </span><span class="istickedoff">p         &lt;- liftIO (equalValsPred cc val1 val2)</span>
 <span class="lineno"> 1719 </span><span class="spaces">  </span><span class="istickedoff">let name = &quot;equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
 <span class="lineno"> 1720 </span><span class="spaces">  </span><span class="istickedoff">let loc = MS.conditionLoc md</span>
@@ -1907,7 +1907,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1888 </span><span class="spaces">     </span><span class="nottickedoff">{-</span>
 <span class="lineno"> 1889 </span><span class="spaces">     </span><span class="nottickedoff">memTy &lt;- case Crucible.asMemType symTy of</span>
 <span class="lineno"> 1890 </span><span class="spaces">                </span><span class="nottickedoff">Just memTy -&gt; return memTy</span>
-<span class="lineno"> 1891 </span><span class="spaces">                </span><span class="nottickedoff">Nothing    -&gt; fail &quot;executAllocation: failed to resolve type&quot;</span>
+<span class="lineno"> 1891 </span><span class="spaces">                </span><span class="nottickedoff">Nothing    -&gt; fail &quot;executeAllocation: failed to resolve type&quot;</span>
 <span class="lineno"> 1892 </span><span class="spaces">                </span><span class="nottickedoff">-}</span>
 <span class="lineno"> 1893 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ printOutLn opts Debug $ unwords [&quot;executeAllocation:&quot;, show var, show memTy]</span>
 <span class="lineno"> 1894 </span><span class="spaces">     </span><span class="nottickedoff">let memVar = Crucible.llvmMemVar (ccLLVMContext cc)</span>

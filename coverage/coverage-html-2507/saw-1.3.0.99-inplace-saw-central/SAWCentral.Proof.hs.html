@@ -176,7 +176,7 @@ span.spaces    { background: white }
 <span class="lineno">  157 </span>import SAWCore.Rewriter
 <span class="lineno">  158 </span>import SAWCore.SATQuery
 <span class="lineno">  159 </span>import SAWCore.Module (ModuleMap)
-<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv)
+<span class="lineno">  160 </span>import SAWCore.Name (DisplayNameEnv, ecShortName)
 <span class="lineno">  161 </span>import SAWCore.SharedTerm
 <span class="lineno">  162 </span>import SAWCore.Term.Functor
 <span class="lineno">  163 </span>import CryptolSAWCore.TypedTerm
@@ -510,10 +510,10 @@ span.spaces    { background: white }
 <span class="lineno">  491 </span><span class="decl"><span class="istickedoff">trivialProofTerm sc (Prop p) = runExceptT (loop =&lt;&lt; lift (scWhnf sc p))</span>
 <span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">loop t =</span>
-<span class="lineno">  494 </span><span class="spaces">      </span><span class="istickedoff">lift (scAsPi sc t) &gt;&gt;= \case</span>
+<span class="lineno">  494 </span><span class="spaces">      </span><span class="istickedoff">lift (scAsPi <span class="nottickedoff">sc</span> t) &gt;&gt;= \case</span>
 <span class="lineno">  495 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
-<span class="lineno">  496 </span><span class="spaces">          </span><span class="istickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span>
-<span class="lineno">  497 </span><span class="spaces">             </span><span class="istickedoff">lift $ scAbstractExts sc [ec] pf</span>
+<span class="lineno">  496 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do pf &lt;- loop =&lt;&lt; lift (scWhnf sc body)</span></span>
+<span class="lineno">  497 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">lift $ scAbstractExts sc [ec] pf</span></span>
 <span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  499 </span><span class="spaces">          </span><span class="istickedoff">case asEq t of</span>
 <span class="lineno">  500 </span><span class="spaces">            </span><span class="istickedoff">Just (tp, x, _y) -&gt;</span>
@@ -1588,17 +1588,17 @@ span.spaces    { background: white }
 <span class="lineno"> 1569 </span><span class="spaces">      </span><span class="istickedoff">IO (Set TheoremNonce, TheoremSummary)</span>
 <span class="lineno"> 1570 </span><span class="spaces">    </span><span class="istickedoff">check nenv e sqt = case e of</span>
 <span class="lineno"> 1571 </span><span class="spaces">      </span><span class="istickedoff">ProofTerm tm -&gt;</span>
-<span class="lineno"> 1572 </span><span class="spaces">        </span><span class="istickedoff">case sequentState sqt of</span>
-<span class="lineno"> 1573 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus (Prop ptm) _ -&gt;</span>
-<span class="lineno"> 1574 </span><span class="spaces">            </span><span class="istickedoff">do ty &lt;- TC.scTypeCheckError sc tm</span>
-<span class="lineno"> 1575 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc <span class="nottickedoff">True</span> ptm ty</span>
-<span class="lineno"> 1576 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno"> 1572 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case sequentState sqt of</span></span>
+<span class="lineno"> 1573 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ConclFocus (Prop ptm) _ -&gt;</span></span>
+<span class="lineno"> 1574 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do ty &lt;- TC.scTypeCheckError sc tm</span></span>
+<span class="lineno"> 1575 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ok &lt;- scConvertible sc True ptm ty</span></span>
+<span class="lineno"> 1576 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">unless ok $ fail $ unlines</span></span>
 <span class="lineno"> 1577 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Proof term does not prove the required proposition&quot;</span></span>
 <span class="lineno"> 1578 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, showTerm ptm</span></span>
 <span class="lineno"> 1579 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">, showTerm tm</span></span>
 <span class="lineno"> 1580 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1581 </span><span class="spaces">               </span><span class="istickedoff">return (<span class="nottickedoff">mempty</span>, <span class="nottickedoff">ProvedTheorem mempty</span>)</span>
-<span class="lineno"> 1582 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Sequent must be conclusion-focused for proof term evidence&quot;</span></span>
+<span class="lineno"> 1581 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">return (mempty, ProvedTheorem mempty)</span></span>
+<span class="lineno"> 1582 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; fail &quot;Sequent must be conclusion-focused for proof term evidence&quot;</span></span>
 <span class="lineno"> 1583 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1584 </span><span class="spaces">      </span><span class="istickedoff">SolverEvidence stats sqt' -&gt;</span>
 <span class="lineno"> 1585 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- sequentSubsumes sc sqt' sqt</span>
@@ -1815,7 +1815,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1796 </span>--   of solver resources used in the proof.
 <span class="lineno"> 1797 </span>--
 <span class="lineno"> 1798 </span>--   If first boolean argument is @False@, the resulting theorem will not be
-<span class="lineno"> 1799 </span>--   recored in the theorem database. This should only be done when you are
+<span class="lineno"> 1799 </span>--   recorded in the theorem database. This should only be done when you are
 <span class="lineno"> 1800 </span>--   sure that the theorem will not be used as part of the proof of other theorems,
 <span class="lineno"> 1801 </span>--   or later steps will fail. This is intended for proofs of verification conditions,
 <span class="lineno"> 1802 </span>--   which are not exposed for reuse, and where it requires a significant memory
@@ -1904,7 +1904,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1885 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1886 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1887 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1888 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1888 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1889 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1890 </span>
 <span class="lineno"> 1891 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -1995,7 +1995,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1976 </span><span class="spaces">                </span><span class="istickedoff">let tp' = tp</span>
 <span class="lineno"> 1977 </span><span class="spaces">                </span><span class="istickedoff">case evalFOT mmap tp' of</span>
 <span class="lineno"> 1978 </span><span class="spaces">                  </span><span class="istickedoff">Just fot -&gt;</span>
-<span class="lineno"> 1979 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((ec, fot) : vars) xs body</span>
+<span class="lineno"> 1979 </span><span class="spaces">                    </span><span class="istickedoff">processUnivAssert mmap ((ec, <span class="nottickedoff">fot</span>) : vars) xs body</span>
 <span class="lineno"> 1980 </span><span class="spaces">                  </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1981 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">termIsClosed body</span> -&gt;</span>
 <span class="lineno"> 1982 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
@@ -2065,7 +2065,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2046 </span><span class="spaces">                          </span><span class="istickedoff">-- this argument not solved by unification, so make it a goal</span>
 <span class="lineno"> 2047 </span><span class="spaces">                          </span><span class="istickedoff">do c0 &lt;- scInstantiateExt sc inst (ecType ec)</span>
 <span class="lineno"> 2048 </span><span class="spaces">                             </span><span class="istickedoff">mp &lt;- termToMaybeProp sc c0</span>
-<span class="lineno"> 2049 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2049 </span><span class="spaces">                             </span><span class="istickedoff">let <span class="nottickedoff">nm = ecShortName ec</span></span>
 <span class="lineno"> 2050 </span><span class="spaces">                             </span><span class="istickedoff">case mp of</span>
 <span class="lineno"> 2051 </span><span class="spaces">                               </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2052 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;goal_apply: could not find instantiation for &quot; ++ show nm)</span></span>
@@ -2094,7 +2094,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2075 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus p mkSqt -&gt;</span>
 <span class="lineno"> 2076 </span><span class="spaces">      </span><span class="istickedoff">liftIO (scAsPi sc (unProp p)) &gt;&gt;= \case</span>
 <span class="lineno"> 2077 </span><span class="spaces">        </span><span class="istickedoff">Just (ec, body) -&gt;</span>
-<span class="lineno"> 2078 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = toShortName (ecName ec)</span></span>
+<span class="lineno"> 2078 </span><span class="spaces">          </span><span class="istickedoff">do let <span class="nottickedoff">nm = ecShortName ec</span></span>
 <span class="lineno"> 2079 </span><span class="spaces">             </span><span class="istickedoff">let tp = ecType ec</span>
 <span class="lineno"> 2080 </span><span class="spaces">             </span><span class="istickedoff">let name = if <span class="tickonlyfalse">Text.null usernm</span> then <span class="nottickedoff">nm</span> else usernm</span>
 <span class="lineno"> 2081 </span><span class="spaces">             </span><span class="istickedoff">xv &lt;- liftIO $ scFreshEC sc name tp</span>
@@ -2283,7 +2283,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2264 </span><span class="spaces">                </span><span class="istickedoff">[ &quot;The trivial tactic cannot prove this equality&quot;</span>
 <span class="lineno"> 2265 </span><span class="spaces">                </span><span class="istickedoff">, showTerm gp</span>
 <span class="lineno"> 2266 </span><span class="spaces">                </span><span class="istickedoff">]</span>
-<span class="lineno"> 2267 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], leafEvidence (ProofTerm pf))</span></span>
+<span class="lineno"> 2267 </span><span class="spaces">              </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [], <span class="nottickedoff">leafEvidence (ProofTerm pf)</span>)</span></span>
 <span class="lineno"> 2268 </span>
 <span class="lineno"> 2269 </span>-- | Attempt to prove a goal by giving a direct proof term.
 <span class="lineno"> 2270 </span>tacticExact :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Term -&gt; Tactic m ()

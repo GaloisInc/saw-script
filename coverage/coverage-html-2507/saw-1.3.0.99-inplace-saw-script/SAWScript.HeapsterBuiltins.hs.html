@@ -351,7 +351,7 @@ span.spaces    { background: white }
 <span class="lineno">  332 </span><span class="spaces">     </span><span class="nottickedoff">typed_term &lt;- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term</span>
 <span class="lineno">  333 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp</span>
 <span class="lineno">  334 </span><span class="spaces">     </span><span class="nottickedoff">case typedVal typed_term of</span>
-<span class="lineno">  335 </span><span class="spaces">       </span><span class="nottickedoff">STApp _ _ _ (Constant (Name _ (ModuleIdentifier term_ident))) -&gt;</span>
+<span class="lineno">  335 </span><span class="spaces">       </span><span class="nottickedoff">STApp {stAppTermF = Constant (Name _ (ModuleIdentifier term_ident))} -&gt;</span>
 <span class="lineno">  336 </span><span class="spaces">         </span><span class="nottickedoff">return term_ident</span>
 <span class="lineno">  337 </span><span class="spaces">       </span><span class="nottickedoff">term -&gt; do</span>
 <span class="lineno">  338 </span><span class="spaces">         </span><span class="nottickedoff">m &lt;- liftIO $ scFindModule sc mnm</span>
