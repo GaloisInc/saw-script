@@ -735,7 +735,7 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 -- TopLevel Monad --------------------------------------------------------------
 
 data LocalBinding
-  = LocalLet SS.Name SS.Schema (Maybe String) Value
+  = LocalLet SS.Name SS.Schema (Maybe [Text]) Value
   | LocalTypedef SS.Name SS.Type
  deriving (Show)
 
@@ -811,9 +811,8 @@ data JavaCodebase =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value)
+  { rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
-  , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
 
     -- | The current execution position. This is only valid when the
@@ -1131,14 +1130,10 @@ addJVMTrans trans = do
   let jvmt = rwJVMTrans rw
   putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
 
-maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
-maybeInsert _ Nothing m = m
-maybeInsert k (Just x) m = M.insert k x m
-
 extendEnv ::
   SharedContext ->
-  SS.Name -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
-extendEnv sc name ty md v rw =
+  SS.Name -> SS.Schema -> Maybe [Text] -> Value -> TopLevelRW -> IO TopLevelRW
+extendEnv sc name ty doc v rw =
   do ce' <-
        case v of
          VTerm t ->
@@ -1158,8 +1153,7 @@ extendEnv sc name ty md v rw =
          _ ->
            pure ce
      pure $
-      rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)
-         , rwDocs    = maybeInsert name md (rwDocs rw)
+      rw { rwValueInfo  = M.insert name (SS.Current, ty, v, doc) (rwValueInfo rw)
          , rwCryptol = ce'
          }
   where

@@ -201,7 +201,7 @@ typeOfCmd str
      decl' <- do
        let primsAvail = rwPrimsAvail rw
            valueInfo = rwValueInfo rw
-           valueInfo' = Map.map (\(lc, ty, _val) -> (lc, ty)) valueInfo
+           valueInfo' = Map.map (\(lc, ty, _val, _doc) -> (lc, ty)) valueInfo
            typeInfo = rwTypeInfo rw
        let (errs_or_results, warns) = checkDecl primsAvail valueInfo' typeInfo decl
        let issueWarning (msgpos, msg) =
@@ -238,7 +238,7 @@ searchCmd str
 
      let primsAvail = rwPrimsAvail rw
          valueInfo = rwValueInfo rw
-         valueInfo' = Map.map (\(lc, ty, _val) -> (lc, ty)) valueInfo
+         valueInfo' = Map.map (\(lc, ty, _val, _doc) -> (lc, ty)) valueInfo
          typeInfo = rwTypeInfo rw
          (errs_or_results, warns) = checkSchemaPattern everythingAvailable valueInfo' typeInfo pat
      let issueWarning (msgpos, msg) =
@@ -337,8 +337,8 @@ envCmd = do
   rw <- getValueEnvironment
   let avail = rwPrimsAvail rw
       valueInfo = rwValueInfo rw
-      valueInfo' = Map.filter (\(lc, _ty, _v) -> Set.member lc avail) valueInfo
-  io $ sequence_ [ TextIO.putStrLn (x <> " : " <> PPS.pShowText ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
+      valueInfo' = Map.filter (\(lc, _ty, _v, _doc) -> Set.member lc avail) valueInfo
+  io $ sequence_ [ TextIO.putStrLn (x <> " : " <> PPS.pShowText ty) | (x, (_lc, ty, _val, _doc)) <- Map.assocs valueInfo' ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
@@ -353,14 +353,17 @@ helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
     do env <- getEnvironment
-       case Map.lookup (Text.pack cmd) (rwDocs env) of
-         Just d -> io $ putStr d
+       case Map.lookup (Text.pack cmd) (rwValueInfo env) of
+         Just (_lc, _ty, _v, Just doc) ->
+           io $ mapM_ TextIO.putStrLn doc
+         Just (_lc, _ty, _v, Nothing) -> do
+           io $ putStrLn $ "// No documentation is available."
+           typeOfCmd cmd
+         Nothing ->
+           io $ putStrLn "// No such command."
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
 --                io $ print $ helpDoc ec
-
-         Nothing -> do io $ putStrLn $ "// No documentation is available."
-                       typeOfCmd cmd
 
 
 cdCmd :: FilePath -> REPL ()

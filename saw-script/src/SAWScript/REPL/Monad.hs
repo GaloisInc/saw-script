@@ -495,7 +495,7 @@ getSAWScriptValueNames :: REPL [String]
 getSAWScriptValueNames = do
   env <- getEnvironment
   let avail = rwPrimsAvail env
-      visible (lc, _, _) = Set.member lc avail
+      visible (lc, _, _, _) = Set.member lc avail
   let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
   return (map Text.unpack rnames)
 

@@ -26,7 +26,6 @@ module SAWScript.Interpreter
   , interpretFile
   , processFile
   , buildTopLevelEnv
-  , primDocEnv
   )
   where
 
@@ -527,7 +526,7 @@ interpretExpr expr =
                 panic "interpretExpr" [
                     "Read of unknown variable " <> x
                 ]
-            Just (lc, _ty, v)
+            Just (lc, _ty, v, _doc)
               | Set.member lc (rwPrimsAvail rw) -> do
                    let v' = injectPositionIntoMonadicValue pos v
                        v'' = insertRefChain pos x v'
@@ -883,7 +882,7 @@ interpretTopStmt printBinds stmt = do
   ctx <- getMonadContext
   rw <- liftTopLevel getMergedEnv
   let valueInfo = rwValueInfo rw
-      valueInfo' = Map.map (\(lc, ty, _v) -> (lc, ty)) valueInfo
+      valueInfo' = Map.map (\(lc, ty, _v, _doc) -> (lc, ty)) valueInfo
   stmt' <- processTypeCheck $ checkStmt (rwPrimsAvail rw) valueInfo' (rwTypeInfo rw) ctx stmt
 
   case stmt' of
@@ -978,7 +977,7 @@ interpretMain = do
     Nothing ->
       -- Don't fail or complain if there's no main.
       return ()
-    Just (Current, tyFound, v) -> case tyFound of
+    Just (Current, tyFound, v, _doc) -> case tyFound of
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
             -- It looks like a monadic value, so check more carefully.
             case typesMatch avail tyenv tyFound tyExpected of
@@ -992,7 +991,7 @@ interpretMain = do
             -- If the type is something entirely random, like a Term or a
             -- String or something, just ignore it.
             return ()
-    Just (lc, _ty, _v) ->
+    Just (lc, _ty, _v, _doc) ->
       -- There is no way for things other than primitives to get marked
       -- experimental or deprecated, so this isn't possible. If we allow
       -- users to deprecate their own functions in the future, change
@@ -1060,7 +1059,6 @@ buildTopLevelEnv proxy opts scriptArgv =
        let rw0 = TopLevelRW
                    { rwValueInfo  = primValueEnv opts bic
                    , rwTypeInfo   = primNamedTypeEnv
-                   , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -2336,7 +2334,7 @@ data Primitive
   = Primitive
     { primitiveType :: SS.Schema
     , primitiveLife :: PrimitiveLifecycle
-    , primitiveDoc  :: [String]
+    , primitiveDoc  :: [Text]
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
 
@@ -6316,7 +6314,7 @@ primitives = Map.fromList
   ]
 
   where
-    prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
+    prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
                                      { primitiveType = readSchema fakeFileName ty
@@ -6387,26 +6385,37 @@ primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
 primNamedTypeEnv = fmap extract primTypes
    where extract pt = (primTypeLife pt, primTypeType pt)
 
-primValueEnv :: Options -> BuiltinContext -> Map SS.Name (PrimitiveLifecycle, SS.Schema, Value)
-primValueEnv opts bic = fmap extract primitives
-  where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) opts bic)
-
--- | Map containing the formatted documentation string for each
--- saw-script primitive.
-primDocEnv :: Map SS.Name String
-primDocEnv =
-  Map.fromList [ (n, doc n p) | (n, p) <- Map.toList primitives ]
-    where
+-- | Initial value environment for the interpreter.
+--
+--   Contains the lifecycle state, the type, the value, and the
+--   documentation for each builtin.
+--
+--   Note: all builtins have documentation; the environment type
+--   includes a Maybe for the documentation so it can also be used for
+--   user definitions.
+--
+--   FUTURE: extract here is now functionally a nop, so we should
+--   consider simplifying so `primitives` uses the same type as the
+--   interpreter environment this function seeds, instead of its own.
+--
+primValueEnv :: Options -> BuiltinContext -> Map SS.Name (PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+primValueEnv opts bic = Map.mapWithKey extract primitives
+  where
+      header = [
+          "Description",
+          "-----------",
+          ""
+       ]
       tag p = case primitiveLife p of
-                Current -> []
-                WarnDeprecated -> ["DEPRECATED AND WILL WARN", ""]
-                HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
-                Experimental -> ["EXPERIMENTAL", ""]
-      doc n p = unlines $
-                [ "Description"
-                , "-----------"
-                , ""
-                ] ++ tag p ++
-                [ "    " ++ Text.unpack n ++ " : " ++ PPS.pShow (primitiveType p)
-                , ""
-                ] ++ primitiveDoc p
+          Current -> []
+          WarnDeprecated -> ["DEPRECATED AND WILL WARN", ""]
+          HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
+          Experimental -> ["EXPERIMENTAL", ""]
+      name n p = [
+          "    " <> n <> " : " <> PPS.pShowText (primitiveType p),
+          ""
+       ]
+      doc n p =
+          header <> tag p <> name n p <> primitiveDoc p
+      extract n p =
+          (primitiveLife p, primitiveType p, (primitiveFn p) opts bic, Just $ doc n p)

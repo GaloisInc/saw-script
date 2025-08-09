@@ -121,7 +121,7 @@ tupleLookupValue pos v1 v2 =
 emptyLocal :: LocalEnv
 emptyLocal = []
 
-extendLocal :: SS.Name -> SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
+extendLocal :: SS.Name -> SS.Schema -> Maybe [Text] -> Value -> LocalEnv -> LocalEnv
 extendLocal x ty md v env = LocalLet x ty md v : env
 
 -- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
