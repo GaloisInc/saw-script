@@ -157,9 +157,9 @@ Stmt :: { Stmt }
  | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
  | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
- | 'let' Code                           { StmtCode (maxSpan [tokPos $1, getPos $2]) $2 }
+ | 'let' code                           { StmtCode (maxSpan [tokPos $1, tokPos $2]) (tokPos $2) (tokStr $2) }
  | 'import' Import                      { StmtImport (maxSpan [tokPos $1, getPos $2]) $2 }
- | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (toLName $2) $4 }
+ | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (tokPos $2) (tokStr $2) $4 }
 
 Declaration :: { Decl }
  : Arg list(Arg) '=' Expression         { Decl (maxSpan' $1 $4) $1 Nothing (buildFunction (Just $1) $2 $4) }
@@ -168,10 +168,10 @@ Declaration :: { Decl }
 
 Pattern :: { Pattern }
  : Arg                                  { $1 }
- | name ':' Type                        { PVar (maxSpan [tokPos $1, getPos $3]) (toLName $1) (Just $3) }
+ | name ':' Type                        { PVar (maxSpan [tokPos $1, getPos $3]) (tokPos $1) (tokStr $1) (Just $3) }
 
 Arg :: { Pattern }
- : name                                 { PVar (tokPos $1) (toLName $1) Nothing }
+ : name                                 { PVar (tokPos $1) (tokPos $1) (tokStr $1) Nothing }
  | '(' ')'                              { PTuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '(' commas(Pattern) ')'              { case $2 of [p] -> p; _ -> PTuple (maxSpan [tokPos $1, tokPos $3]) $2 }
 
@@ -195,10 +195,10 @@ AExpr :: { Expr }
 : '(' ')'                               { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '[' ']'                              { Array (maxSpan [tokPos $1, tokPos $2]) [] }
  | string                               { String (tokPos $1) (tokStr $1) }
- | Code                                 { Code $1 }
- | CType                                { CType $1 }
+ | code                                 { Code (tokPos $1) (tokStr $1) }
+ | ctype                                { CType (tokPos $1) (tokStr $1) }
  | num                                  { Int (tokPos $1) (tokNum $1) }
- | name                                 { Var (Located (tokStr $1) (tokStr $1) (tokPos $1)) }
+ | name                                 { Var (tokPos $1) (tokStr $1) }
  | '(' Expression ')'                   { $2 } -- { Parens (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '[' commas(Expression) ']'           { Array (maxSpan [tokPos $1, tokPos $3]) $2 }
@@ -206,12 +206,6 @@ AExpr :: { Expr }
  | 'do' '{' termBy(Stmt, ';') '}'       {% buildBlock (maxSpan [tokPos $1, tokPos $4]) $3 }
  | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
-
-Code :: { Located Text }
- : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
-
-CType :: { Located Text }
- : ctype                                { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
@@ -402,7 +396,7 @@ fixFunctionName mname = do
   name <- mname
   case name of
       PWild {} -> Nothing
-      PVar _pos name _ty -> Just $ getVal name
+      PVar _allpos _namepos name _ty -> Just name
       PTuple {} -> Nothing
 
 buildFunction :: Maybe Pattern -> [Pattern] -> Expr -> Expr
@@ -432,11 +426,8 @@ toPattern :: Expr -> Either ParseError Pattern
 toPattern expr =
   case expr of
     Tuple pos es       -> PTuple pos `fmap` mapM toPattern es
-    TSig pos (Var x) t -> return (PVar pos x (Just t))
-    Var x              -> return (PVar (getPos x) x Nothing)
+    TSig pos (Var xpos x) t -> return (PVar pos xpos x (Just t))
+    Var pos x           -> return (PVar pos pos x Nothing)
     _              -> Left (InvalidPattern expr)
-
-toLName :: Token Pos -> LName
-toLName p = Located (tokStr p) (tokStr p) (tokPos p)
 
 }

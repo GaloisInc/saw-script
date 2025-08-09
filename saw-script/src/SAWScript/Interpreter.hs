@@ -76,7 +76,7 @@ import qualified SAWCentral.Trace as Trace
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
-import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..), defaultAvailable)
+import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
@@ -185,20 +185,21 @@ isPolymorphic ty0 = case ty0 of
 getType :: SS.Pattern -> SS.Type
 getType pat = case pat of
     SS.PWild _pos ~(Just t) -> t
-    SS.PVar _pos _x ~(Just t) -> t
+    SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
         SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
 
--- Convert some text (wrapped in a position with Located) to
--- an InputText for cryptol-saw-core.
-locToInput :: Located Text -> CEnv.InputText
-locToInput l = CEnv.InputText { CEnv.inpText = getVal l
-                              , CEnv.inpFile = file
-                              , CEnv.inpLine = ln
-                              , CEnv.inpCol  = col + 2 -- for dropped }}
-                              }
+-- Convert some text to an InputText for cryptol-saw-core.
+toInputText :: SS.Pos -> Text -> CEnv.InputText
+toInputText pos0 txt =
+  CEnv.InputText {
+    CEnv.inpText = txt,
+    CEnv.inpFile = file,
+    CEnv.inpLine = ln,
+    CEnv.inpCol  = col + 2 -- for dropped }}
+  }
   where
-  (file, ln, col) = extract $ locatedPos l
+  (file, ln, col) = extract pos0
   extract pos = case pos of
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
@@ -293,15 +294,15 @@ bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _pos _ ->
       env
-    SS.PVar pos _x Nothing ->
+    SS.PVar allpos _xpos _x Nothing ->
       panic "bindPatternLocal" [
           "Found pattern with no type in it",
-          "Source position: " <> Text.pack (show pos),
+          "Source position: " <> Text.pack (show allpos),
           "Pattern: " <> Text.pack (show pat)
       ]
-    SS.PVar _pos x (Just ty) ->
+    SS.PVar _allpos _xpos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
-      extendLocal (SS.getVal x) s Nothing v env
+      extendLocal x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
@@ -325,16 +326,16 @@ bindPatternEnv pat ms v env =
   case pat of
     SS.PWild _pos _   ->
         pure env
-    SS.PVar pos _x Nothing ->
+    SS.PVar allpos _xpos _x Nothing ->
         panic "bindPatternEnv" [
             "Found pattern with no type in it",
-            "Source position: " <> Text.pack (show pos),
+            "Source position: " <> Text.pack (show allpos),
             "Pattern: " <> Text.pack (show pat)
         ]
-    SS.PVar _pos x (Just ty) -> do
+    SS.PVar _allpos _xpos x (Just ty) -> do
         sc <- getSharedContext
         let s = fromMaybe (SS.tMono ty) ms
-        liftIO $ extendEnv sc (getVal x) s Nothing v env
+        liftIO $ extendEnv sc x s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
@@ -486,18 +487,18 @@ interpretExpr expr =
           return $ VString s
       SS.Int _ z ->
           return $ VInteger z
-      SS.Code str -> do
+      SS.Code pos str -> do
           sc <- getSharedContext
           cenv <- fmap rwCryptol getMergedEnv
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
-          t <- io $ CEnv.parseTypedTerm sc cenv
-                  $ locToInput str
+          let str' = toInputText pos str
+          t <- io $ CEnv.parseTypedTerm sc cenv str'
           return (VTerm t)
-      SS.CType str -> do
+      SS.CType pos str -> do
           cenv <- fmap rwCryptol getMergedEnv
-          s <- io $ CEnv.parseSchema cenv
-                  $ locToInput str
+          let str' = toInputText pos str
+          s <- io $ CEnv.parseSchema cenv str'
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
@@ -518,24 +519,23 @@ interpretExpr expr =
       SS.TLookup pos e i -> do
           a <- interpretExpr e
           return (tupleLookupValue pos a i)
-      SS.Var x -> do
+      SS.Var pos x -> do
           rw <- getMergedEnv
-          case Map.lookup (getVal x) (rwValueInfo rw) of
+          case Map.lookup x (rwValueInfo rw) of
             Nothing ->
                 -- This should be rejected by the typechecker, so panic
                 panic "interpretExpr" [
-                    "Read of unknown variable " <> SS.getVal x
+                    "Read of unknown variable " <> x
                 ]
             Just (lc, _ty, v)
               | Set.member lc (rwPrimsAvail rw) -> do
-                   let pos = SS.getPos x
-                       v' = injectPositionIntoMonadicValue pos v
-                       v'' = insertRefChain pos (SS.getVal x) v'
+                   let v' = injectPositionIntoMonadicValue pos v
+                       v'' = insertRefChain pos x v'
                    return v''
               | otherwise ->
                    -- This case is also rejected by the typechecker
                    panic "interpretExpr" [
-                       "Read of inaccessible variable " <> SS.getVal x
+                       "Read of inaccessible variable " <> x
                    ]
       SS.Lambda _pos mname pat e -> do
           env <- getLocalEnv
@@ -728,12 +728,13 @@ interpretDoStmt stmt =
       SS.StmtLet _pos dg -> do
           -- Process the declarations
           liftTopLevel $ interpretDeclGroup dg
-      SS.StmtCode _ s -> do
+      SS.StmtCode _ spos str -> do
           liftTopLevel $ do
             sc <- getSharedContext
             rw <- getMergedEnv
 
-            ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
+            let str' = toInputText spos str
+            ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) str'
             -- FIXME: Local bindings get saved into the global cryptol environment here.
             -- We should change parseDecls to return only the new bindings instead.
             putTopLevelRW $ rw{rwCryptol = ce'}
@@ -741,9 +742,9 @@ interpretDoStmt stmt =
           liftTopLevel getLocalEnv
       SS.StmtImport _ _ ->
           fail "block-level import unimplemented"
-      SS.StmtTypedef _ name ty -> do
+      SS.StmtTypedef _ _ name ty -> do
           env <- liftTopLevel $ getLocalEnv
-          return $ LocalTypedef (getVal name) ty : env
+          return $ LocalTypedef name ty : env
 
 -- Eval some statements from a do-block.
 --
@@ -849,7 +850,7 @@ processStmtBind printBinds pos pat expr = do -- mx mt
     -- any single variable use "it".
     let name = case pat of
           SS.PWild _patpos _t -> "it"
-          SS.PVar _patpos x _t -> getVal x
+          SS.PVar _patpos _xpos x _t -> x
           SS.PTuple _patpos _pats -> "it"
 
     -- Print non-unit result if it was not bound to a variable
@@ -899,12 +900,12 @@ interpretTopStmt printBinds stmt = do
          rw' <- getMergedEnv' env
          putTopLevelRW rw'
 
-    SS.StmtCode _ lstr ->
+    SS.StmtCode _ spos str ->
       liftTopLevel $ do
          sc <- getSharedContext
-         --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
+         --io $ putStrLn $ "Processing toplevel code: " ++ show str
          --showCryptolEnv
-         cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput lstr
+         cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ toInputText spos str
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
@@ -919,9 +920,9 @@ interpretTopStmt printBinds stmt = do
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
-    SS.StmtTypedef _ name ty ->
+    SS.StmtTypedef _ _ name ty ->
       liftTopLevel $ do
-         putTopLevelRW $ addTypedef (getVal name) ty rw
+         putTopLevelRW $ addTypedef name ty rw
 
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter

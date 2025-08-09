@@ -195,8 +195,8 @@ instance AppSubst Expr where
     Bool _ _               -> expr
     String _ _             -> expr
     Int _ _                -> expr
-    Code _                 -> expr
-    CType _                -> expr
+    Code _ _               -> expr
+    CType _ _              -> expr
     Array pos es           -> Array pos (appSubst s es)
     Block pos (bs, e)      -> Block pos (appSubst s bs, appSubst s e)
     Tuple pos es           -> Tuple pos (appSubst s es)
@@ -204,7 +204,7 @@ instance AppSubst Expr where
     Index pos ar ix        -> Index pos (appSubst s ar) (appSubst s ix)
     Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
     TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
-    Var _                  -> expr
+    Var _pos _x            -> expr
     Lambda pos mname pat body -> Lambda pos mname (appSubst s pat) (appSubst s body)
     Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
     Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
@@ -213,16 +213,16 @@ instance AppSubst Expr where
 instance AppSubst Pattern where
   appSubst s pat = case pat of
     PWild pos mt  -> PWild pos (appSubst s mt)
-    PVar pos x mt -> PVar pos x (appSubst s mt)
+    PVar allpos xpos x mt -> PVar allpos xpos x (appSubst s mt)
     PTuple pos ps -> PTuple pos (appSubst s ps)
 
 instance AppSubst Stmt where
   appSubst s bst = case bst of
     StmtBind pos pat e       -> StmtBind pos (appSubst s pat) (appSubst s e)
     StmtLet pos dg           -> StmtLet pos (appSubst s dg)
-    StmtCode pos str         -> StmtCode pos str
+    StmtCode allpos spos str -> StmtCode allpos spos str
     StmtImport pos imp       -> StmtImport pos imp
-    StmtTypedef pos name ty  -> StmtTypedef pos name (appSubst s ty)
+    StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
@@ -294,10 +294,10 @@ instance PPS.PrettyPrec Kind where
 -- now that we report accurate positions with type errors. However,
 -- until then, wrap it up to avoid confusion and crosstalk.
 
-newtype ContextName = ContextName LName
+data ContextName = ContextName Pos Name
 
 instance Show ContextName where
-  show (ContextName ln) = show ln
+  show (ContextName pos name) = show name ++ " (" ++ show pos ++ ")"
 
 
 -- }}}
@@ -459,17 +459,17 @@ namedVarDefinitions = do
 getPatternContext :: Pattern -> ContextName
 getPatternContext pat0 =
   case visit pat0 of
-    Left pos -> ContextName $ Located "_" "_" pos
-    Right n -> ContextName $ n
+    Left pos -> ContextName pos "_"
+    Right (pos, name) -> ContextName pos name
   where
     visit pat =
       case pat of
         PWild pos _ -> Left pos
-        PVar _ n _ -> Right n
+        PVar _ npos name _ -> Right (npos, name)
         PTuple pos [] -> Left pos
         PTuple allpos ps ->
           case partitionEithers $ map visit ps of
-             (_, n : _) -> Right n
+             (_, (pos, name) : _) -> Right (pos, name)
              (pos : _, _) -> Left pos
              _ -> Left allpos
 
@@ -478,7 +478,7 @@ patternBindings :: Pattern -> [(Name, Maybe Type)]
 patternBindings pat =
   case pat of
     PWild _ _mt -> []
-    PVar _ x mt -> [(getVal x, mt)]
+    PVar _ _ x mt -> [(x, mt)]
     PTuple _ ps -> concatMap patternBindings ps
 
 -- }}}
@@ -855,7 +855,7 @@ inspectMaybeTypeFTVs mty = case mty of
 inspectPatternFTVs :: Pattern -> TI (Map Name Pos)
 inspectPatternFTVs pat = case pat of
     PWild _pos mty -> inspectMaybeTypeFTVs mty
-    PVar _pos _x mty -> inspectMaybeTypeFTVs mty
+    PVar _allpos _xpos _x mty -> inspectMaybeTypeFTVs mty
     PTuple _pos subpats ->
         M.unions <$> mapM inspectPatternFTVs subpats
 
@@ -936,7 +936,7 @@ withPatternSchema :: Pattern -> Schema -> TI a -> TI a
 withPatternSchema pat s@(Forall vs t) m =
   case pat of
     PWild _ _ -> m
-    PVar _ x _ -> withVar (getVal x) s m
+    PVar _ _ x _ -> withVar x s m
     PTuple _ ps ->
       case t of
         TyCon _pos (TupleCon _) ts -> foldr ($) m
@@ -973,8 +973,8 @@ inferExpr (ln, expr) = case expr of
   Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
   String pos s  -> return (String pos s, tString (PosInferred InfTerm pos))
   Int pos i     -> return (Int pos i, tInt (PosInferred InfTerm pos))
-  Code s        -> return (Code s, tTerm (PosInferred InfTerm $ getPos s))
-  CType s       -> return (CType s, tType (PosInferred InfTerm $ getPos s))
+  Code pos s    -> return (Code pos s, tTerm (PosInferred InfTerm pos))
+  CType pos s   -> return (CType pos s, tType (PosInferred InfTerm pos))
 
   Array pos [] ->
     do a <- getFreshTyVar pos
@@ -1055,22 +1055,22 @@ inferExpr (ln, expr) = case expr of
                getErrorTyVar pos
        return (TLookup pos e1 i, elTy)
 
-  Var x ->
+  Var pos x ->
     do avail <- TI $ asks primsAvail
        env <- TI $ asks varEnv
-       case M.lookup (getVal x) env of
+       case M.lookup x env of
          Nothing -> do
-           recordError (getPos x) $ "Unbound variable: " ++ show x
-           t <- getFreshTyVar (getPos x)
-           return (Var x, t)
+           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
+           t <- getFreshTyVar pos
+           return (Var pos x, t)
          Just (lc, Forall as t)
           | S.member lc avail -> do
            when (isDeprecated lc) $
                case t of
                    TyCon _typos FunCon _args ->
-                       recordWarning (getPos x) $ "Function is deprecated: " <> show x
+                       recordWarning pos $ "Function is deprecated: " <> show x
                    _ ->
-                       recordWarning (getPos x) $ "Value is deprecated: " <> show x
+                       recordWarning pos $ "Value is deprecated: " <> show x
 
            -- get a fresh tyvar for each quantifier binding, convert
            -- to a name -> ty map, and substitute the fresh tyvars
@@ -1079,14 +1079,14 @@ inferExpr (ln, expr) = case expr of
                  return (a, (Current, ConcreteType at))
            substs <- mapM once as
            let t' = substituteTyVars avail (M.fromList substs) t
-           return (Var x, t')
+           return (Var pos x, t')
           | otherwise -> do
-           recordError (getPos x) $ "Inaccessible variable: " ++ show x
+           recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
            let how = if lc == HideDeprecated then "deprecated" else "experimental"
-           recordError (getPos x) $ "This command is available only after running " ++
-                                    "`enable_" ++ how ++ "`."
-           t' <- getFreshTyVar (getPos x)
-           return (Var x, t')
+           recordError pos $ "This command is available only after running " ++
+                             "`enable_" ++ how ++ "`."
+           t' <- getFreshTyVar pos
+           return (Var pos x, t')
 
   Lambda pos mname pat body ->
     do (pt, pat') <- inferPattern pat
@@ -1149,9 +1149,9 @@ inferPattern pat =
     PWild pos mt ->
       do t <- resolveType pos mt
          return (t, PWild pos (Just t))
-    PVar pos x mt ->
-      do t <- resolveType pos mt
-         return (t, PVar pos x (Just t))
+    PVar allpos xpos x mt ->
+      do t <- resolveType allpos mt
+         return (t, PVar allpos xpos x (Just t))
     PTuple pos ps ->
       do (ts, ps') <- unzip <$> mapM inferPattern ps
          return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
@@ -1172,13 +1172,13 @@ checkPattern cname t pat =
 --
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
-withTypedef :: LName -> Type -> TI a -> TI a
+withTypedef :: Name -> Type -> TI a -> TI a
 withTypedef n t m =
   TI $
   local
     (\ro ->
       let t' = substituteTyVars (primsAvail ro) (tyEnv ro) t
-      in  ro { tyEnv = M.insert (getVal n) (Current, ConcreteType t') $ tyEnv ro })
+      in  ro { tyEnv = M.insert n (Current, ConcreteType t') $ tyEnv ro })
     $ unTI m
 
 -- break a monadic type down into its monad and value types, if it is one
@@ -1201,7 +1201,7 @@ wrapReturn :: Expr -> Expr
 wrapReturn e =
    let ePos = getPos e
        retPos = PosInternal "<implicitly inserted return>"
-       ret = Var $ Located "return" "return" retPos 
+       ret = Var retPos "return"
    in
    Application ePos ret e
 
@@ -1340,14 +1340,14 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             let s' = StmtLet spos dg'
             let wrapper = withDeclGroup dg'
             return (wrapper, s')
-        StmtCode _spos _ ->
+        StmtCode _allpos _spos _txt ->
             return (id, s)
         StmtImport _spos _ ->
             return (id, s)
-        StmtTypedef spos name ty -> do
+        StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
-            let s' = StmtTypedef spos name ty'
-            let wrapper = withTypedef name ty'
+            let s' = StmtTypedef allpos apos a ty'
+            let wrapper = withTypedef a ty'
             return (wrapper, s')
 
 -- Inference for a do-block.
@@ -1819,8 +1819,8 @@ checkStmt avail env tenv ctx stmt =
   -- actually in the repl.
   let pos = getPos stmt
       cname = case ctx of
-          TopLevel -> ContextName $ Located "<toplevel>" "<toplevel>" pos
-          ProofScript -> ContextName $ Located "<proofscript>" "<proofscript>" pos
+          TopLevel -> ContextName pos "<toplevel>"
+          ProofScript -> ContextName pos "<proofscript>"
           _ -> panic "checkStmt" ["Invalid monad context " <> Text.pack (pShow ctx)]
       ctxtype = TyCon pos (ContextCon ctx) []
   in
