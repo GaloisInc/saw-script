@@ -47,7 +47,7 @@ import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 
 -- short names for the environment types we use
-type VarEnv = Map LName (PrimitiveLifecycle, Schema)
+type VarEnv = Map Name (PrimitiveLifecycle, Schema)
 type TyEnv = Map Name (PrimitiveLifecycle, NamedType)
 
 
@@ -457,11 +457,11 @@ patternLName pat0 =
              _ -> Left allpos
 
 -- Get all the bindings in a pattern.
-patternBindings :: Pattern -> [(Located Name, Maybe Type)]
+patternBindings :: Pattern -> [(Name, Maybe Type)]
 patternBindings pat =
   case pat of
     PWild _ _mt -> []
-    PVar _ x mt -> [(x, mt)]
+    PVar _ x mt -> [(getVal x, mt)]
     PTuple _ ps -> concatMap patternBindings ps
 
 -- }}}
@@ -887,12 +887,12 @@ inferField m (n,e) = do
   return ((n,e'),(n,t))
 
 -- wrap the action m with a type for x
-withVar :: Located Name -> Schema -> TI a -> TI a
+withVar :: Name -> Schema -> TI a -> TI a
 withVar x s m =
   TI $ local (\ro -> ro { varEnv = M.insert x (Current, s) $ varEnv ro }) $ unTI m
 
 -- wrap the action m with types for a list of vars
-withVars :: [(Located Name, Schema)] -> TI a -> TI a
+withVars :: [(Name, Schema)] -> TI a -> TI a
 withVars bindings m = foldr (uncurry withVar) m bindings
 
 -- wrap the action m with types for all the vars in a pattern
@@ -919,7 +919,7 @@ withPatternSchema :: Pattern -> Schema -> TI a -> TI a
 withPatternSchema pat s@(Forall vs t) m =
   case pat of
     PWild _ _ -> m
-    PVar _ x _ -> withVar x s m
+    PVar _ x _ -> withVar (getVal x) s m
     PTuple _ ps ->
       case t of
         TyCon _pos (TupleCon _) ts -> foldr ($) m
@@ -1041,7 +1041,7 @@ inferExpr (ln, expr) = case expr of
   Var x ->
     do avail <- TI $ asks primsAvail
        env <- TI $ asks varEnv
-       case M.lookup x env of
+       case M.lookup (getVal x) env of
          Nothing -> do
            recordError (getPos x) $ "Unbound variable: " ++ show x
            t <- getFreshTyVar (getPos x)

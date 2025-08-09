@@ -94,7 +94,6 @@ import qualified Data.AIG.CompactGraph as AIG
 
 import SAWCore.SAWCore (SharedContext)
 
-import SAWCentral.AST (Located(getVal))
 import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel)
@@ -498,7 +497,7 @@ getSAWScriptValueNames = do
   let avail = rwPrimsAvail env
       visible (lc, _, _) = Set.member lc avail
   let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
-  return (map (Text.unpack . getVal) rnames)
+  return (map Text.unpack rnames)
 
 -- | Get visible type names for Haskeline completion.
 getSAWScriptTypeNames :: REPL [String]

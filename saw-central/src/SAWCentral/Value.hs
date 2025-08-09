@@ -735,7 +735,7 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
 -- TopLevel Monad --------------------------------------------------------------
 
 data LocalBinding
-  = LocalLet SS.LName SS.Schema (Maybe String) Value
+  = LocalLet SS.Name SS.Schema (Maybe String) Value
   | LocalTypedef SS.Name SS.Type
  deriving (Show)
 
@@ -811,7 +811,7 @@ data JavaCodebase =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValueInfo  :: Map SS.LName (SS.PrimitiveLifecycle, SS.Schema, Value)
+  { rwValueInfo  :: Map SS.Name (SS.PrimitiveLifecycle, SS.Schema, Value)
   , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
@@ -1137,7 +1137,7 @@ maybeInsert k (Just x) m = M.insert k x m
 
 extendEnv ::
   SharedContext ->
-  SS.LName -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
+  SS.Name -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
 extendEnv sc name ty md v rw =
   do ce' <-
        case v of
@@ -1159,13 +1159,12 @@ extendEnv sc name ty md v rw =
            pure ce
      pure $
       rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)
-         , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
+         , rwDocs    = maybeInsert name md (rwDocs rw)
          , rwCryptol = ce'
          }
   where
-    -- XXX why is this using getOrig?
-    ident = T.mkIdent (SS.getOrig name)
-    modname = T.packModName [SS.getOrig name]
+    ident = T.mkIdent name
+    modname = T.packModName [name]
     ce = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm

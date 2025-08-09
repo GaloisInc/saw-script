@@ -182,6 +182,11 @@ instance Positioned Expr where
   getPos (TSig pos _ _) = pos
   getPos (IfThenElse pos _ _ _) = pos
 
+-- | Patterns.
+--
+--   In `PVar` the first `Pos` is the position of the whole pattern
+--   (including any type) and the additional position in the LName is
+--   just the position of the name itself.
 data Pattern
   = PWild Pos (Maybe Type)
   | PVar Pos LName (Maybe Type)

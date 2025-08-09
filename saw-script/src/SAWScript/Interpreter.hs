@@ -301,7 +301,7 @@ bindPatternLocal pat ms v env =
       ]
     SS.PVar _pos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
-      extendLocal x s Nothing v env
+      extendLocal (SS.getVal x) s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
@@ -334,7 +334,7 @@ bindPatternEnv pat ms v env =
     SS.PVar _pos x (Just ty) -> do
         sc <- getSharedContext
         let s = fromMaybe (SS.tMono ty) ms
-        liftIO $ extendEnv sc x s Nothing v env
+        liftIO $ extendEnv sc (getVal x) s Nothing v env
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
@@ -520,7 +520,7 @@ interpretExpr expr =
           return (tupleLookupValue pos a i)
       SS.Var x -> do
           rw <- getMergedEnv
-          case Map.lookup x (rwValueInfo rw) of
+          case Map.lookup (getVal x) (rwValueInfo rw) of
             Nothing ->
                 -- This should be rejected by the typechecker, so panic
                 panic "interpretExpr" [
@@ -965,8 +965,6 @@ interpretMain = do
   avail <- gets rwPrimsAvail
   tyenv <- gets rwTypeInfo
   let pos = SS.PosInternal "entry"
-      mainName = Located "main" "main" pos
-
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
@@ -975,7 +973,7 @@ interpretMain = do
       tyRet = SS.TyVar pos "a"
       tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
       tyExpected = SS.Forall [(pos, "a")] tyMonadic
-  case Map.lookup mainName (rwValueInfo rw) of
+  case Map.lookup "main" (rwValueInfo rw) of
     Nothing ->
       -- Don't fail or complain if there's no main.
       return ()
@@ -2401,7 +2399,7 @@ primTypes = Map.fromList
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
 
-primitives :: Map SS.LName Primitive
+primitives :: Map SS.Name Primitive
 primitives = Map.fromList
   [ prim "return"              "{m, a} a -> m a"
     (pureVal (\v -> VReturn atRestPos [] v))
@@ -6318,15 +6316,14 @@ primitives = Map.fromList
 
   where
     prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
-         -> (SS.LName, Primitive)
-    prim name ty fn lc doc = (qname, Primitive
+         -> (SS.Name, Primitive)
+    prim name ty fn lc doc = (name, Primitive
                                      { primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn name
                                      , primitiveLife = lc
                                      })
-      where qname = qualify name
-            fakeFileName = Text.unpack $ "<type of " <> name <> ">"
+      where fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
     pureVal x name _ _ = toValue name x
@@ -6389,7 +6386,7 @@ primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
 primNamedTypeEnv = fmap extract primTypes
    where extract pt = (primTypeLife pt, primTypeType pt)
 
-primValueEnv :: Options -> BuiltinContext -> Map SS.LName (PrimitiveLifecycle, SS.Schema, Value)
+primValueEnv :: Options -> BuiltinContext -> Map SS.Name (PrimitiveLifecycle, SS.Schema, Value)
 primValueEnv opts bic = fmap extract primitives
   where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) opts bic)
 
@@ -6397,7 +6394,7 @@ primValueEnv opts bic = fmap extract primitives
 -- saw-script primitive.
 primDocEnv :: Map SS.Name String
 primDocEnv =
-  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
+  Map.fromList [ (n, doc n p) | (n, p) <- Map.toList primitives ]
     where
       tag p = case primitiveLife p of
                 Current -> []
@@ -6409,9 +6406,6 @@ primDocEnv =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ Text.unpack (getVal n) ++ " : " ++ PPS.pShow (primitiveType p)
+                [ "    " ++ Text.unpack n ++ " : " ++ PPS.pShow (primitiveType p)
                 , ""
                 ] ++ primitiveDoc p
-
-qualify :: Text -> Located SS.Name
-qualify s = Located s s (SS.PosInternal "coreEnv")

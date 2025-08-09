@@ -53,13 +53,12 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text.IO as TextIO
 
-import qualified SAWSupport.Pretty as PPS (pShow)
+import qualified SAWSupport.Pretty as PPS (pShowText)
 
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
 import qualified SAWCentral.AST as SS (
-     Located(..),
-     LName,
+     Name,
      Decl(..),
      Pattern(..),
      Schema
@@ -211,7 +210,7 @@ typeOfCmd str
        io $ mapM_ issueWarning warns
        either failTypecheck return errs_or_results
      let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
-     io $ putStrLn $ PPS.pShow schema
+     io $ TextIO.putStrLn $ PPS.pShowText schema
 
 searchCmd :: String -> REPL ()
 searchCmd str
@@ -253,14 +252,14 @@ searchCmd str
          -- Divide the results into visible, experimental-not-visible,
          -- and deprecated-not-visible.
          inspect ::
-             SS.LName ->
+             SS.Name ->
              (PrimitiveLifecycle, SS.Schema) ->
-             (Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema)) ->
-             (Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema),
-              Map.Map SS.LName (PrimitiveLifecycle, SS.Schema))
+             (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema)) ->
+             (Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema),
+              Map.Map SS.Name (PrimitiveLifecycle, SS.Schema))
          inspect name (lc, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)
@@ -280,15 +279,14 @@ searchCmd str
          (visMatches, expMatches, depMatches) =
              Map.foldrWithKey inspect (Map.empty, Map.empty, Map.empty) allMatches
 
-         printMatch (lname, (lc, ty)) = do
-           let name = Text.unpack $ SS.getVal lname
-               ty' = PPS.pShow ty
+         printMatch (name, (lc, ty)) = do
+           let ty' = PPS.pShowText ty
                lc' = case lc of
                    Current -> ""
                    WarnDeprecated -> "  (DEPRECATED AND WILL WARN)"
                    HideDeprecated -> "  (DEPRECATED AND UNAVAILABLE BY DEFAULT)"
                    Experimental -> "  (EXPERIMENTAL)"
-           putStrLn (name ++ " : " ++ ty' ++ lc')
+           TextIO.putStrLn (name <> " : " <> ty' <> lc')
          printMatches matches =
            io $ mapM_ printMatch (Map.assocs matches)
 
@@ -337,11 +335,10 @@ quitCmd  = stop
 envCmd :: REPL ()
 envCmd = do
   rw <- getValueEnvironment
-  let showLName = Text.unpack . SS.getVal
   let avail = rwPrimsAvail rw
       valueInfo = rwValueInfo rw
       valueInfo' = Map.filter (\(lc, _ty, _v) -> Set.member lc avail) valueInfo
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ PPS.pShow ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
+  io $ sequence_ [ TextIO.putStrLn (x <> " : " <> PPS.pShowText ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
@@ -349,7 +346,7 @@ tenvCmd = do
   let avail = rwPrimsAvail rw
       typeInfo = rwTypeInfo rw
       typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
-  io $ sequence_ [ TextIO.putStrLn (a <> " : " <> Text.pack (PPS.pShow ty)) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
+  io $ sequence_ [ TextIO.putStrLn (a <> " : " <> PPS.pShowText ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
