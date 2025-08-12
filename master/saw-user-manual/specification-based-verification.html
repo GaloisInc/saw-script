@@ -2149,6 +2149,11 @@ Cryptol floating point types, but the underlying functions such as
 <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> do not, so until that is implemented <code class="docutils literal notranslate"><span class="pre">llvm_ffi_setup</span></code>
 can generate a spec involving floating point types but it cannot
 actually be run.</p>
+<p>Note also that for the time being only the <code class="docutils literal notranslate"><span class="pre">c</span></code> calling convention is
+supported.
+Support for the recently-added <code class="docutils literal notranslate"><span class="pre">abstract</span></code> calling convention has not
+been written yet.
+See <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2546">issue #2546</a>.</p>
 </section>
 <section id="performing-the-verification">
 <h3>Performing the verification<a class="headerlink" href="#performing-the-verification" title="Link to this heading"></a></h3>
