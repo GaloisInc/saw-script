@@ -69,7 +69,6 @@ import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
-import qualified Cryptol.TypeCheck.FFI.FFIType as T
 import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
@@ -139,7 +138,7 @@ data CryptolEnv = CryptolEnv
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
   , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
   , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
-  , eFFITypes   :: Map NameInfo T.FFIFunType
+  , eFFITypes   :: Map NameInfo T.FFI
     -- ^ FFI info for SAWCore names of Cryptol foreign functions
   }
 
@@ -234,10 +233,15 @@ initCryptolEnv sc = do
   -- Generate SAWCore translations for all values in scope
   termEnv <- genTermEnv sc modEnv cryEnv0
 
+  -- The module names in P.Import are now Located, so give them an empty position.
+  let preludeName' = P.Located P.emptyRange preludeName
+      preludeReferenceName' = P.Located P.emptyRange preludeReferenceName
+      arrayName' = P.Located P.emptyRange arrayName
+
   return CryptolEnv
-    { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import arrayName Nothing Nothing Nothing Nothing)
+    { eImports    = [ (OnlyPublic, P.Import preludeName' Nothing Nothing Nothing Nothing)
+                    , (OnlyPublic, P.Import preludeReferenceName' (Just preludeReferenceName) Nothing Nothing Nothing)
+                    , (OnlyPublic, P.Import arrayName' Nothing Nothing Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
@@ -283,7 +287,7 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
   where
     nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
     loadImport (vis, i) = do
-      lm <- ME.lookupModule (T.iModule i) (eModuleEnv env)
+      lm <- ME.lookupModule (P.thing $ T.iModule i) (eModuleEnv env)
       let ifc = MI.ifNames (ME.lmInterface lm)
           syms = MN.namingEnvFromNames $
                  case vis of
@@ -547,11 +551,15 @@ importModule sc env src as vis imps = do
 
   return $
     updateFFITypes m
-      env { eImports   = (vis, P.Import (T.mName m) as imps Nothing Nothing)
+      env { eImports   = (vis, P.Import (locate $ T.mName m) as imps Nothing Nothing)
                        : eImports env
           , eModuleEnv = modEnv'
           , eTermEnv   = newTermEnv
           }
+    where
+      -- XXX: it would be better to have the real position, but it
+      -- seems to have been thrown away on the Cryptol side.
+      locate x = P.Located P.emptyRange x
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -618,7 +626,7 @@ resolveIdentifier env nm =
 
   doResolve pnm =
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
-    do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
+    do let minp = MM.ModuleInput True False (pure defaultEvalOpts) ?fileReader modEnv
        (res, _ws) <- MM.runModuleM (minp s) $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
        case res of
@@ -782,7 +790,7 @@ liftModuleM ::
   (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
-  do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
+  do let minp = MM.ModuleInput True False (pure defaultEvalOpts) ?fileReader env
      SMT.withSolver (return ()) (meSolverConfig env) $ \s ->
        MM.runModuleM (minp s) m >>= moduleCmdResult
 

@@ -35,7 +35,7 @@ getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
-   let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
+   let minp = M.ModuleInput True False (pure evalOpts) BS.readFile modEnv
    (result, warnings) <-
      SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
      M.loadModuleByPath path (minp s)

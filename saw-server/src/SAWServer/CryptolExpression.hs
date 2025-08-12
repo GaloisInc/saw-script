@@ -62,7 +62,7 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
+     let minp = ModuleInput True False (pure defaultEvalOpts) B.readFile env
      mres <-
        withSolver (return ()) (meSolverConfig env) $ \s ->
        runModuleM (minp s) $
