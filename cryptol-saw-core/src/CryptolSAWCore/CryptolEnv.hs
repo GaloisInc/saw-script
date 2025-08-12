@@ -424,7 +424,6 @@ getNamingEnvLog env =
         ifc :: MI.IfaceNames C.ModName
         ifc = MI.ifNames (ME.lmInterface lm)
 
-
         -- | names - include all nested Submodule names
         -- HIA/FIXME
         names :: Set.Set MN.Name
@@ -515,7 +514,7 @@ mkCryEnv env =
      let types' = Map.union (eExtraTypes env) types
      let terms = eTermEnv env
      let cryEnv = C.emptyEnv
-           { C.envE = fmap (\t -> (t, 0)) terms
+           { C.envE = fmap (\t -> (t, 0)) terms -- FIXME: huh?! DeBruijn??
            , C.envC = types'
            , C.envPrims = ePrims env
            , C.envPrimTypes = ePrimTypes env
@@ -536,7 +535,7 @@ translateDeclGroups sc env dgs =
   do cryEnv <- mkCryEnv env
      cryEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv dgs
      termEnv' <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv')
-
+                  -- FIXME: debruijn??
      let decls = concatMap T.groupDecls dgs
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
@@ -587,7 +586,14 @@ checkNotParameterized m =
 --   - obvious differences
 --      - return of CryptolModule
 --   - common up the common code
+
+-- | loadCryptolModule - load a cryptol module and return a handle to
+-- the `CryptolModule`.  The contents of the module are not imported.
 --
+-- This is used to implement the "cryptol_load" primitive in which a
+-- handle to the module is returned and can be bound to a sawscript
+-- variable.
+
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
@@ -604,18 +610,22 @@ loadCryptolModule sc primOpts env path = do
             fail $ "Expected a module, but " ++ show path ++ " is an interface."
   checkNotParameterized m
 
-  -- FIXME: doc: what's happening here?
+  let ifaceDecls = getAllIfaceDecls modEnv' -- MT: d2!
+
+  -- NOTE: unclear what's happening here!
+  --   - FIXME: understand and doc.
   --   - `m` not used (directly) but translating the modEnv'
   --   - this behavior is not in `importModule`
-  let ifaceDecls = getAllIfaceDecls modEnv' -- MT: d2!
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
-      -- monad reader, "generate the primitive map"
+      -- a monad reader; doc: "generate the primitive map"
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
       -- NOTE: inpVars are the variables that are in scope.
-      -- See source for these two, doing a bit of unnecessary work here?!
-    -- NOTE: looking at the source code of the functions in this action, it
-    -- appears (not 100% clear) that modEnv'' will be equal to modEnv'
+      -- See source for the above two functions
+      --   - doing a bit of unnecessary work here?!
+
+      -- NOTE: looking at the source code of the functions in this action, it
+      -- appears (not 100% clear) that modEnv'' will be equal to modEnv'
 
   -- FIXME[MT]:debugging:
   when debug $ do
@@ -656,8 +666,6 @@ loadCryptolModule sc primOpts env path = do
   let newDeclGroups = concatMap T.mDecls newModules
   let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
                                      (ME.loadedNominalTypes modEnv)
-  -- TODO: looks like we're still in Cryptol-land?
-  -- TODO: Would we want to explicity deal with submodules above??
 
   newTermEnv <- do
        oldCryEnv <- mkCryEnv env
@@ -670,7 +678,9 @@ loadCryptolModule sc primOpts env path = do
         --   This excludes both submodules and what they contain.
         -- mExports :: MEx.ExportSpec MN.Name
       namesP = MI.ifsPublic (TIface.genIfaceNames m)
-        -- This includes submodules, but does not contain names of defns inside them.
+        -- This includes submodules, but does not contain
+        -- names of defns inside them.
+
   {-
       namesN = MI.ifsNested (TIface.genIfaceNames m)
         -- lists the submodules, but not the defs inside them
@@ -687,8 +697,7 @@ loadCryptolModule sc primOpts env path = do
   --         -- special D2
   --
   when debug $ do
-    print $ ppListX "newTermEnv="        (Map.keys newTermEnv)
-    print $ ppListX "[exported] names1=" (Set.toList names1)
+    putStrLn "<begin TIface.genIfaceNames m>:"
     ppIfaceNames (TIface.genIfaceNames m)
 
   let cryptolModule =
@@ -715,6 +724,10 @@ loadCryptolModule sc primOpts env path = do
             newTermEnv
           )
 
+    putStrLn "\n<end>\n"
+    print $ ppListX "newTermEnv="        (Map.keys newTermEnv)
+    print $ ppListX "types="             (Map.keys types)
+    print $ ppListX "[old/info: exported] names1=" (Set.toList names1)
   -- MT: So, it appears that the bringing of the module-handle into
   --     "cryptol scope", via {{-}}, is not handled here; it is done
   --     elsewhere with the use of `cryptolModule` being bound as a
@@ -777,13 +790,17 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
       , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
       }
   where
-    -- select out those typed terms that have Cryptol schemas
+    -- select out those typed terms from `tm' that have Cryptol schemas
     tm' = Map.mapMaybe f tm
-    f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
-    f _                                 = Nothing
+          where
+          f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
+          f _                                 = Nothing
 
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-      -- FIXME: MT:suspicious. (we need to do any C.NSModule?)
+    -- FIXME: MT:suspicious. (we need to do any C.NSModule?)
+
+    addSubModule name = MN.shadowing (MN.singletonNS C.NSModule (P.mkQual modName (MN.nameIdent name)) name)
+
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
     -- FIXME: something wrong here, we lose ability to access sub-module names!!
