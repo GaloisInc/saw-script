@@ -981,7 +981,7 @@ resolveIdentifier env nm =
 
   where
   modEnv = eModuleEnv env
-  nameEnv = getNamingEnv env
+  nameEnv = getNamingEnv2 env
 
   doResolve pnm =
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
@@ -1083,7 +1083,7 @@ parseDecls sc env input = do
     let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- npdecls ]
 
     -- Resolve names
-    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
+    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv2 env) (MR.renameTopDecls interactiveName topdecls))
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
@@ -1133,7 +1133,7 @@ parseSchema env input = do
   fmap fst $ liftModuleM modEnv $ do
 
     -- Resolve names
-    let nameEnv = getNamingEnv env
+    let nameEnv = getNamingEnv2 env
     rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
 
     let ifDecls = getAllIfaceDecls modEnv
