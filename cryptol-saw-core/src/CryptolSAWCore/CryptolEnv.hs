@@ -799,7 +799,11 @@ updateFFITypes m env = env { eFFITypes = eFFITypes' }
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
-                      flip (foldr addTSyn) (Map.keys sm) $ eExtraNames env
+                      flip (foldr addTSyn) (Map.keys sm) $
+                      flip (foldr addSubModule) (Map.keys tm') $
+                        -- FIXME:MT: incomplete?
+                        --   This doesn't really solve our bug/problem.
+                      eExtraNames env
       , eExtraTSyns = Map.union sm (eExtraTSyns env)
       , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
       , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
