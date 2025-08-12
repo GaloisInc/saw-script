@@ -315,10 +315,7 @@ jobs:
     # Run this piece only on tag builds, which in practice means release
     # tags only. Skip running it on forks as well, because we won't have
     # the signing key there.
-    #
-    # (Except, for initial testing, don't restrict it at all, so it'll
-    # run in the initial pull request.)
-    #if: github.event_name == 'push' && needs.config.outputs.tag == 'true' && github.repository_owner == 'GaloisInc'
+    if: github.event_name == 'push' && needs.config.outputs.tag == 'true' && github.repository_owner == 'GaloisInc'
     strategy:
       fail-fast: false
     steps:
