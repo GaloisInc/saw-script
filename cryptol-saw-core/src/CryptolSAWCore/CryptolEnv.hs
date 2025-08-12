@@ -675,6 +675,31 @@ loadCryptolModule sc primOpts env path = do
        newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
+  cryptolModule <- mkCryptolModule m types newTermEnv
+
+  -- NOTE: it appears that the bringing of the module-handle into
+  --     "cryptol scope", via {{-}}, is not handled here; it is done
+  --     elsewhere with the use of `cryptolModule` being bound as a
+  --     sawscript variable.
+
+  return ( cryptolModule
+         , updateFFITypes m
+             env { eModuleEnv = modEnv''
+                 , eTermEnv = newTermEnv
+                 }
+             -- NOTE here the difference between this function and
+             -- `importModule`:
+             --  1. the `eImports` field is not updated, as
+             --     this module (as a whole) is not being
+             --     brought into scope inside {{ }} constructs.
+             --  2. modEnv'' vs modEnv' (which may not be different, see
+             --     notes above).
+         )
+
+-- FIXME: add sig.
+--   mkCryptolModule :: _ -> IO CryptolModule
+mkCryptolModule m types newTermEnv =
+  do
   let names1 = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
         -- FIXME:
         --   This excludes both submodules and what they contain.
@@ -701,53 +726,41 @@ loadCryptolModule sc primOpts env path = do
   when debug $ do
     putStrLn "<begin TIface.genIfaceNames m>:"
     ppIfaceNames (TIface.genIfaceNames m)
-
-  let cryptolModule =
-        CryptolModule
-          -- create type synonym Map, keep only the exports:
-          (Map.filterWithKey
-             (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
-             (T.mTySyns m)
-          )
-          (Map.filterWithKey (\k _ -> Set.member k names) $
-              --  - FIXME:
-              --    - fixing/removing above
-              --      - partially fixes (better fix is ...) loading submodules.
-              --      - but doesn't fix submodules when importing!
-              --  - NOTE removing this filter when loading D, causes
-              --      the def "D::D2:d2" to now be available as "d2"!?  Seems odd!
-
-              --  - FIXME:MT:undo
-              --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
-              --      - BUT, isn't this still not correct?
-           Map.intersectionWith
-             (\t x -> TypedTerm (TypedTermSchema t) x)
-             types          -- NOTE: only use of this variable.
-            newTermEnv
-          )
-
     putStrLn "\n<end>\n"
     print $ ppListX "newTermEnv="        (Map.keys newTermEnv)
     print $ ppListX "types="             (Map.keys types)
     print $ ppListX "[old/info: exported] names1=" (Set.toList names1)
-  -- MT: So, it appears that the bringing of the module-handle into
-  --     "cryptol scope", via {{-}}, is not handled here; it is done
-  --     elsewhere with the use of `cryptolModule` being bound as a
-  --     sawscript variable.
 
-  return ( cryptolModule
-         , updateFFITypes m
-             env { eModuleEnv = modEnv''
-                 , eTermEnv = newTermEnv
-                 }
-             -- NOTE here the difference between this function and
-             -- `importModule`:
-             --  1. the `eImports` field is not updated, as
-             --     this module (as a whole) is not being
-             --     brought into scope inside {{ }} constructs.
-             --  2. modEnv'' vs modEnv' (which may not be different, see
-             --     notes above).
-         )
+  -- CryptolModule points to _ that's already in env.
+
+    -- MT: remove the "adhoc adding of these names prefixid with the
+    -- bound name."
+
+  return $
+    CryptolModule
+      -- create type synonym Map, keep only the exports:
+      (Map.filterWithKey
+         (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
+         (T.mTySyns m)
+      )
+        -- FIXME: ensure type synonym in submodule is included.
+
+      -- create the map of symbols:
+      (  id -- Map.filterWithKey (\k _ -> Set.member k names)
+          --  - FIXME:
+          --    - fixing/removing above
+          --      - partially fixes (better fix is ...) loading submodules.
+          --  - NOTE removing this filter when loading D, causes
+          --      the def "D::D2:d2" to now be available as "d2"!?  Seems odd!
+
+          --  - FIXME:MT:undo
+          --    - A TEMP FIX, RESTORE THIS, (doesn't fix!)
+          --      - BUT, isn't this still not correct?
+      $ Map.intersectionWith
+           (\t x -> TypedTerm (TypedTermSchema t) x)
+           types          -- NOTE: only use of this variable.
+           newTermEnv
+      )
 
 ppIfaceNames :: Show n => MI.IfaceNames n -> IO ()
 ppIfaceNames x =
