@@ -625,9 +625,16 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
-    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
-    do let minp = MM.ModuleInput True False (pure defaultEvalOpts) ?fileReader modEnv
-       (res, _ws) <- MM.runModuleM (minp s) $
+    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
+    do let minp = MM.ModuleInput {
+               MM.minpCallStacks = True,
+               MM.minpSaveRenamed = False,
+               MM.minpEvalOpts = pure defaultEvalOpts,
+               MM.minpByteReader = ?fileReader,
+               MM.minpModuleEnv = modEnv,
+               MM.minpTCSolver = solver
+           }
+       (res, _ws) <- MM.runModuleM minp $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
        case res of
          Left _ -> pure Nothing
@@ -790,9 +797,16 @@ liftModuleM ::
   (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
-  do let minp = MM.ModuleInput True False (pure defaultEvalOpts) ?fileReader env
-     SMT.withSolver (return ()) (meSolverConfig env) $ \s ->
-       MM.runModuleM (minp s) m >>= moduleCmdResult
+  do let minp solver = MM.ModuleInput {
+             MM.minpCallStacks = True,
+             MM.minpSaveRenamed = False,
+             MM.minpEvalOpts = pure defaultEvalOpts,
+             MM.minpByteReader = ?fileReader,
+             MM.minpModuleEnv = env,
+             MM.minpTCSolver = solver
+         }
+     SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+       MM.runModuleM (minp solver) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts

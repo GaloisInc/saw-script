@@ -35,10 +35,17 @@ getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
-   let minp = M.ModuleInput True False (pure evalOpts) BS.readFile modEnv
+   let minp solver = M.ModuleInput {
+           minpCallStacks = True,
+           minpSaveRenamed = False,
+           minpEvalOpts = pure evalOpts,
+           minpByteReader = BS.readFile,
+           minpModuleEnv = modEnv,
+           minpTCSolver = solver
+       }
    (result, warnings) <-
-     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
-     M.loadModuleByPath path (minp s)
+     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
+         M.loadModuleByPath path (minp solver)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of

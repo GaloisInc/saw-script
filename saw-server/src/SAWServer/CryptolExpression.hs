@@ -62,10 +62,17 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     let minp = ModuleInput True False (pure defaultEvalOpts) B.readFile env
+     let minp solver = ModuleInput {
+             minpCallStacks = True,
+             minpSaveRenamed = False,
+             minpEvalOpts = pure defaultEvalOpts,
+             minpByteReader = B.readFile,
+             minpModuleEnv = env,
+             minpTCSolver = solver
+         }
      mres <-
-       withSolver (return ()) (meSolverConfig env) $ \s ->
-       runModuleM (minp s) $
+       withSolver (return ()) (meSolverConfig env) $ \solver ->
+       runModuleM (minp solver) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
