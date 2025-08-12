@@ -667,8 +667,10 @@ loadCryptolModule sc primOpts env path = do
   let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
                                      (ME.loadedNominalTypes modEnv)
 
-  newTermEnv <- do
-       oldCryEnv <- mkCryEnv env
+  -- TODO:MT: [#C] anything wrt submodules above?
+
+  newTermEnv <-
+    do oldCryEnv <- mkCryEnv env
        cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
