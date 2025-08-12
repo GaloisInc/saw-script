@@ -103,7 +103,7 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
                  else (output css)
 
     modEnv <- CM.initialModuleEnv
-    let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
+    let minp = CM.ModuleInput True False (pure defaultEvalOpts) BS.readFile modEnv
     (e,warn) <-
       SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
       CM.loadModuleByPath inputModule (minp s)
@@ -144,7 +144,7 @@ extractCryptol sc modEnv input = do
     case P.parseExpr (pack input) of
       Left err -> fail (show (P.ppError err))
       Right x -> return x
-  let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
+  let minp = CM.ModuleInput True False (pure defaultEvalOpts) BS.readFile modEnv
   (exprResult, exprWarnings) <-
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
     CM.checkExpr pexpr (minp s)
