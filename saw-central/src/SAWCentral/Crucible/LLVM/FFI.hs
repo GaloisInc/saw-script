@@ -170,7 +170,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         -- CallAbstract uses ordinary Cryptol types instead of FFIType,
         -- and while the logic above might be generalized to support that
         -- it'll take work. FUTURE
-        throwFFISetup "CallAbstract foreign functions not supported yet"
+        throwFFISetup $ "Foreign functions using the 'abstract' calling" <>
+                        " convention are not supported yet"
     _ ->
       throwFFISetup
         "Not a (monomorphic instantiation of a) Cryptol foreign function"
