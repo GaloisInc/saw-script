@@ -2175,6 +2175,12 @@ Cryptol floating point types, but the underlying functions such as
 can generate a spec involving floating point types but it cannot
 actually be run.
 
+Note also that for the time being only the `c` calling convention is
+supported.
+Support for the recently-added `abstract` calling convention has not
+been written yet.
+See [issue #2546](https://github.com/GaloisInc/saw-script/issues/2546).
+
 ### Performing the verification
 
 The resulting `LLVMSetup ()` spec can be used with the existing

@@ -55,6 +55,7 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import qualified Cryptol.Utils.PP as CryptolPP
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
@@ -1932,7 +1933,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
     Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
-      let nms = C.addTNames vars IntMap.empty
+      let nms = C.addTNames CryptolPP.defaultPPCfg vars IntMap.empty
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do

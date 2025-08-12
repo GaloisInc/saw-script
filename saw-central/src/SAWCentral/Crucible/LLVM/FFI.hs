@@ -58,6 +58,7 @@ import           Numeric.Natural
 import qualified Text.LLVM.AST                        as LLVM
 
 import           Cryptol.Eval.Type
+import           Cryptol.TypeCheck.AST                (FFI(..))
 import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
 import qualified Cryptol.TypeCheck.Type               as Cry
@@ -144,8 +145,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let ?ctx = FFISetupCtx {..}
   cryEnv <- lll getCryptolEnv
   case asConstant funTerm of
-    Just nm
-      | Just FFIFunType {..} <- Map.lookup (nameInfo nm) (eFFITypes cryEnv) -> do
+    Just nm -> case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of
+      Nothing ->
+        throwFFISetup $ "No Cryptol foreign function " ++ show nm ++ " found"
+      Just (CallC (FFIFunType {..})) -> do
         mm <- lio $ scGetModuleMap sc
         let funDef =
               case lookupVarIndexInMap (nameIndex nm) mm of
@@ -163,6 +166,12 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         (llvmOutArgs, post) <- setupRet tenv ffiRetType
         llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
         post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
+      Just (CallAbstract (FFIFunType{})) ->
+        -- CallAbstract uses ordinary Cryptol types instead of FFIType,
+        -- and while the logic above might be generalized to support that
+        -- it'll take work. FUTURE
+        throwFFISetup $ "Foreign functions using the 'abstract' calling" <>
+                        " convention are not supported yet"
     _ ->
       throwFFISetup
         "Not a (monomorphic instantiation of a) Cryptol foreign function"

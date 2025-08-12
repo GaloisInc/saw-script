@@ -103,7 +103,14 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
                  else (output css)
 
     modEnv <- CM.initialModuleEnv
-    let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
+    let minp solver = CM.ModuleInput {
+            CM.minpCallStacks = True,
+            CM.minpSaveRenamed = False,
+            CM.minpEvalOpts = pure defaultEvalOpts,
+            CM.minpByteReader = BS.readFile,
+            CM.minpModuleEnv = modEnv,
+            CM.minpTCSolver = solver
+        }
     (e,warn) <-
       SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
       CM.loadModuleByPath inputModule (minp s)
@@ -144,10 +151,17 @@ extractCryptol sc modEnv input = do
     case P.parseExpr (pack input) of
       Left err -> fail (show (P.ppError err))
       Right x -> return x
-  let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
+  let minp solver = CM.ModuleInput {
+          CM.minpCallStacks = True,
+          CM.minpSaveRenamed = False,
+          CM.minpEvalOpts = pure defaultEvalOpts,
+          CM.minpByteReader = BS.readFile,
+          CM.minpModuleEnv = modEnv,
+          CM.minpTCSolver = solver
+      }
   (exprResult, exprWarnings) <-
-    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
-    CM.checkExpr pexpr (minp s)
+    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
+    CM.checkExpr pexpr (minp solver)
   mapM_ (print . pp) exprWarnings
   ((_, expr, schema), _modEnv') <-
     case exprResult of
