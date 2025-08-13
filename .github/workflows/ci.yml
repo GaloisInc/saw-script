@@ -304,6 +304,39 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
+  # The source archives that github autogenerates for releases do not
+  # include submodules, and also do not include submodule references, so
+  # they are unbuildable and broken. See issue 2532.
+  #
+  # We only need one of these. Run it on Ubuntu so as to be sure to get GNU tar.
+  source-archive:
+    runs-on: ubuntu-24.04
+    needs: [config]
+    # Run this piece only on tag builds, which in practice means release
+    # tags only. Skip running it on forks as well, because we won't have
+    # the signing key there.
+    if: github.event_name == 'push' && needs.config.outputs.tag == 'true' && github.repository_owner == 'GaloisInc'
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - run: git submodule update --init
+      - name: make-source-distribution
+        shell: bash
+        run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
+      - name: sign-source-distribution
+        shell: bash
+        run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.config.outputs.name }}-sources (full source distribution)
+          path: ${{ needs.config.outputs.name }}-sources.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
   build-docs:
     name: "Build SAW documentation"
     needs: [config]

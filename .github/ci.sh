@@ -204,6 +204,35 @@ zip_dist_with_solvers() {
   tar -cvzf "$sname".tar.gz "$sname"
 }
 
+make_source_distribution() {
+    # Ideally one makes source distributions with "git archive", but
+    # "git archive" and submodules do not work together. 
+    #
+    # We get a freshly checked out tree that's had all its submodules
+    # cloned and checked out. Make a tarball that looks like it was
+    # made with "git archive" but contains the submodules.
+    #
+    # Don't use -v with tar as there's some 12000 lines of output and
+    # not much to be gained by collecting it, especially if something
+    # goes wrong.
+    #
+    # Create the file in distrib/ so it doesn't try to include itself.
+    #
+    # Note: several of these options are almost certainly specific to
+    # GNU tar. We'll accordingly be running this on Linux.
+    #
+    # FUTURE: instead of using "now" here, we should have a date stamp
+    # for the release.
+    mkdir distrib
+    tar -czf distrib/"$1"-sources.tar.gz \
+        --mtime=now --mode=go+rX --owner=0 --group=0 --sort=name \
+        --exclude=".git" --exclude="distrib" \
+        --transform="s,^./,$1/," \
+        .
+    mv distrib/"$1"-sources.tar.gz .
+    rmdir distrib
+}
+
 output() { echo "::set-output name=$1::$2"; }
 ver() { grep '^Version' saw.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }

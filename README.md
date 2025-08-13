@@ -57,6 +57,22 @@ The commonly used `--recursive` option is not required, and also not
 recommended as it results in cloning a considerable number of
 additional unused subtrees.
 
+## Downloading Release Sources
+
+Starting with SAW 1.4, to download the sources for a release from the
+[releases page](https://github.com/GaloisInc/saw-script/releases),
+be sure to get the file `saw-<release>-sources.tar.gz` and not the
+default GitHub-generated file `v<release>.tar.gz`.
+The latter does not include SAW's submodules and is, alas, therefore
+unbuildable.
+(This is
+[a GitHub problem](https://github.com/orgs/community/discussions/6003)
+and there's no sign of it being likely to get fixed.)
+
+For releases prior to 1.4, the best way to get a buildable version of
+the release source is to clone the repository and check out the
+release tag (e.g. `v1.3`).
+
 ## Manual Installation
 
 To build SAWScript and related utilities from source:
