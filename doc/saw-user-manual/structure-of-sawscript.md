@@ -4,9 +4,6 @@ SAWScript is an application-level scripting language used for scripting
 proof developments, running proofs, writing specifications that relate
 code to Cryptol models, and also applying proof tactics and scripting
 individual proofs.
-
-SAWScript is a more-or-less pure functional language with strong types
-and monads for sequencing execution.
 It is not itself either a proof language or a specification language:
 proofs themselves are expressed in SAWCore, and for the most part the
 models that underlie specifications are written in Cryptol.
@@ -14,6 +11,8 @@ models that underlie specifications are written in Cryptol.
 elements to Cryptol fragments, not to write the specifications
 directly.)
 
+SAWScript is a strongly typed language, and a pure functional language,
+with monads for sequencing execution.
 There are five monads in SAWScript; these are all built in to the
 language and more cannot be created.
 These monads and their purposes are:
@@ -28,7 +27,7 @@ stated purpose.
 The language is the same for each, but the primitive functions in each monad
 that one can use are different in each.
 (The `LLVMSetup`, `JVMSetup`, and `MIRSetup` environments are very similar to
-one another, but details do vary with the backend.)
+one another, but some details vary.)
 
 The pure (non-monadic) fragment of SAWScript is very small and has
 little practical use; most things one does are written in one or
@@ -43,139 +42,173 @@ arguments rather than by using parentheses and commas.
 Rather than writing `f(x, y)`, write `f x y`.
 
 Comments are written as in C, Java, and Rust (among many other languages).
-All text from `//` until the end of a line is ignored.
+All text from `//` until the end of a line is ignored:
+:::{code-block} sawscript
+   let x = 3; // this is a comment
+:::
 Additionally, all text between `/*` and `*/` is ignored, regardless of
 whether the line ends.
 Unlike in C, `/* */` comments nest.
+:::{code-block} sawscript
+   /*
+    * This is a comment
+    *   /* and so is this */
+    */
+   let x = 3;
+:::
 
 Identifiers begin with a letter and, like Haskell and ML, can contain
 letters, digits, underscore, and single-quote.
+:::{code-block} sawscript
+   let x = 3;
+   let x' = 4;
+   let x2 = 6;
+:::
 
 Integer constants can be prefixed with `0x` and `0X` for hex, `0o`
 and `0O` for octal, or `0b` and `0B` for binary.
 Otherwise they are read as decimal.
 Floating-point constants are not currently supported.
+:::{code-block} sawscript
+   let x = 0x30; /* 48 */
+   let x = 0o30; /* 24 */
+   let x = 0b11; /* 3 */
+   let x = 0100; /* 100 */
+:::
 
 String constants are written in double quotes, and can contain
 conventional escape sequences like `\t` and `\n`.
+:::{code-block} sawscript
+   print "Hello!\nI am a proof agent!";
+:::
 The forms `\72`, `\o72`, and `\x72` produce the character numbered 72
 in decimal, octal, and hex respectively.
-See [XXX](XXX) for the complete list.
+Character numbers are Unicode code points.
+See [XXX](XXX) for the complete list of escape sequences.
 
 <!-- XXX move this to the reference and update the above reference -->
 <!-- XXX check the rendering of the table -->
 <!-- XXX there's also a \& that does IDK -->
-The full table of escape sequences recognized in string literals is as
+The full set of escape sequences recognized in string literals is as
 follows:
 
-- `\a` produces a beep character (control-G or `BEL`, character 7)
-- `\b` produces a backspace character (control-H or `BS`, character 8)
-- `\t` produces a tab character (control-I or `HT`, character 9)
-- `\n` produces a newline or line feed character (control-J or `LF`, character 10)
-- `\v` produces a vertical tab character (control-K or `VT`, character 11)
-- `\f` produces a form feed character (control-L or `FF`, character 12)
-- `\r` produces a carriage return character (control-M or `CR`, character 13)
-- `\\` produces a literal backslash
-- `\"` produces a double-quote character without ending the string
-- `\'` produces a single-quote character (as does an unescaped single quote)
-- `\123` produces character number 123 (in decimal);
-  all digits found are collected and then out of range numbers are rejected
-- `\o123` produces character number 123 in octal (83 in decimal); all octal digits
-  found are collected and then out of range numbers are rejected
-- `\x123` produces character number 123 in hex (291 in decimal); all hex digits
-  found are collected and then out of range numbers are rejected
-- `\^@` produces control-@ (character 0)
-- `\^A` through `\^Z` produce control-A through control-Z (characters 1-26)
-- `\^[` produces control-[ (`ESC`), character 27
-- `\^\` produces control-\\, character 28
-- `\^]` produces control-], character 29
-- `\^^` produces control-^, character 30
-- `\^_` produces control-_, character 31
-- `\NUL` produces `NUL`, character 0
-- `\SOH` produces `SOH`, character 1
-- `\STX` produces `STX`, character 2
-- `\ETX` produces `ETX`, character 3
-- `\EOT` produces `EOT`, character 4
-- `\ENQ` produces `ENQ`, character 5
-- `\ACK` produces `ACK`, character 6
-- `\BEL` produces `BEL`, character 7
-- `\BS` produces `BS`, character 8
-- `\HT` produces `HT`, character 9
-- `\LF` produces `LF`, character 10
-- `\VT` produces `VT`, character 11
-- `\FF` produces `FF`, character 12
-- `\CR` produces `CR`, character 13
-- `\SO` produces `SO`, character 14
-- `\SI` produces `SI`, character 15
-- `\DLE` produces `DLE`, character 16
-- `\DC1` produces `DC1`, character 17
-- `\DC2` produces `DC2`, character 18
-- `\DC3` produces `DC3`, character 19
-- `\DC4` produces `DC4`, character 20
-- `\NAK` produces `NAK`, character 21
-- `\SYN` produces `SYN`, character 22
-- `\ETB` produces `ETB`, character 23
-- `\CAN` produces `CAN`, character 24
-- `\EM` produces `EM`, character 25
-- `\SUB` produces `SUB`, character 26
-- `\ESC` produces `ESC`, character 27
-- `\FS` produces `FS`, character 28
-- `\GS` produces `GS`, character 29
-- `\RS` produces `RS`, character 31
-- `\US` produces `US`, character 32
-- `\SP` produces `SP`, character 33
-- `\DEL` produces `DEL`, character 127
+:::{table} Escape sequences for control characters
+| Number | By letter | By control-letter | By ASCII name | Notes           |
+| ------ | --------- | ----------------- | ------------- | --------------- |
+| 0      |           | `\^@`             | `\NUL`        | null            |
+| 1      |           | `\^A`             | `\SOH`        |                 |
+| 2      |           | `\^B`             | `\STX`        |                 |
+| 3      |           | `\^C`             | `\ETX`        |                 |
+| 4      |           | `\^D`             | `\EOT`        |                 |
+| 5      |           | `\^E`             | `\ENQ`        |                 |
+| 6      |           | `\^F`             | `\ACK`        |                 |
+| 7      | `\a`      | `\^G`             | `\BEL`        | beep            |
+| 8      | `\b`      | `\^H`             | `\BS`         | backspace       |
+| 9      | `\t`      | `\^I`             | `\HT`         | tab             |
+| 10     | `\n`      | `\^J`             | `\LF`         | newline         |
+| 11     | `\v`      | `\^K`             | `\VT`         | vertical tab    |
+| 12     | `\f`      | `\^L`             | `\FF`         | form feed       |
+| 13     | `\r`      | `\^M`             | `\CR`         | carriage return |
+| 14     |           | `\^N`             | `\SO`         |                 |
+| 15     |           | `\^O`             | `\SI`         |                 |
+| 16     |           | `\^P`             | `\DLE`        |                 |
+| 17     |           | `\^Q`             | `\DC1`        |                 |
+| 18     |           | `\^R`             | `\DC2`        |                 |
+| 19     |           | `\^S`             | `\DC3`        |                 |
+| 20     |           | `\^T`             | `\DC4`        |                 |
+| 21     |           | `\^U`             | `\NAK`        |                 |
+| 22     |           | `\^V`             | `\SYN`        |                 |
+| 23     |           | `\^W`             | `\ETB`        |                 |
+| 24     |           | `\^X`             | `\CAN`        |                 |
+| 25     |           | `\^Y`             | `\EM`         |                 |
+| 26     |           | `\^Z`             | `\SUB`        |                 |
+| 27     |           | `\^[`             | `\ESC`        | escape          |
+| 28     |           | `\^\`             | `\FS`         |                 |
+| 29     |           | `\^]`             | `\GS`         |                 |
+| 30     |           | `\^^`             | `\RS`         |                 |
+| 31     |           | `\^_`             | `\US`         |                 |
+| 127    |           |                   | `\DEL`        | delete / rubout |
+:::
 
-<!-- XXX: however, \^? is missing, which appears to reflect being missing in Haskell -->
+By the traditional usage of `^` with control characters, one might
+expect `\^?` to also produce DEL, but it does not, apparently because
+that escape sequence is not supported in Haskell.
 
-Character numbers are Unicode code points.
+:::{table} Other escape sequences
+| Sequence | Produces                               |
+| -------- | -------------------------------------- |
+| `\\`     | literal backslash                      |
+| `\"`     | double-quote character                 |
+| `\'`     | single-quote character                 |
+| `\SP`    | space (character 32)                   |
+| `\123`   | character 123 (in decimal)             |
+| `\o123`  | character 123 in octal (83 in decimal) |
+| `\x123`  | character 123 in hex (291 in decimal)  |
+:::
+
+The numeric escape sequences (the last three forms) are processed by first
+collecting all legal digits, then converting that to a number and rejecting
+numbers that are too large or illegal Unicode.
+Thus for example `\o339` produces an escape (character 27) followed by '9',
+because 9 isn't a legal octal digit.
+Conversely, `\xaaaaaaaaa` will fail, even though there's a possible
+interpretation of it as a valid code point followed by more `a`s.
 
 Text enclosed in double curly braces (`{{ }}`) is treated as Cryptol
 code (in particular, a Cryptol expression) and parsed by the Cryptol
 parser.
 Text enclosed in curly braces and bars (`{| |}`) is parsed as a Cryptol
 type.
-This is an expression in SAWScript as discussed below.
+Cryptol types are expressions at the SAWScript level, as discussed below.
+:::{code-block} sawscript
+   let xs = {{ [1, 2, 3] }};
+   let t = {| Integer |};
+:::
 
-<!-- XXX make this a table so it comes out more concisely -->
 The following identifiers are reserved words:
 
-- `and`
-- `as`
-- `do`
-- `else`
-- `hiding`
-- `if`
-- `import`
-- `in`
-- `let`
-- `rec`
-- `then`
-- `typedef`
+:::{list-table}
+* - `and`
+  - `do`
+  - `hiding`
+  - `import`
+  - `let`
+  - `then`
+* - `as`
+  - `else`
+  - `if`
+  - `in`
+  - `rec`
+  - `typedef`
+:::
 
 The following identifiers for built-in types are also currently
 treated as reserved words.
 This may change in the future, as handling them as reserved words is
 neither necessary nor particularly desirable.
 
-- `AIG`
-- `Bool`
-- `CFG`
-- `CrucibleMethodSpec`
-- `CrucibleSetup`
-- `Int`
-- `JVMMethodSpec`
-- `JVMSpec`
-- `JavaSetup`
-- `LLVMSetup`
-- `LLVMSpec`
-- `MIRSetup`
-- `MIRSpec`
-- `ProofScript`
-- `String`
-- `Term`
-- `TopLevel`
-- `Type`
+:::{list-table}
+* - `AIG`
+  - `CrucibleSetup`
+  - `JavaSetup`
+  - `MIRSpec`
+  - `TopLevel`
+* - `Bool`
+  - `Int`
+  - `LLVMSetup`
+  - `ProofScript`
+  - `Type`
+* - `CFG`
+  - `JVMMethodSpec`
+  - `LLVMSpec`
+  - `String`
+  -
+* - `CrucibleMethodSpec`
+  - `JVMSpec`
+  - `MIRSetup`
+  - `Term`
+  -
+:::
 
 ## Types
 
@@ -220,7 +253,7 @@ example the type `ProofScript Int` is a computation in the ProofScript
 monad that produces an integer when run.
 
 <!-- XXX there's an issue number for this -->
-Currently owing to limitations in the parser,
+Currently, owing to limitations in the parser,
 writing the name of a monad type without an argument will cause a
 parse error rather than a type or kinding error.
 
@@ -252,6 +285,7 @@ Types related to LLVM verification:
 - `LLVMType` (the type of LLVM-level types)
 - `SetupValue` (the type of LLVM-level values)
 - `LLVMSpec` (a proved LLVM specification)
+- `CrucibleMethodSpec` (an obsolete alternate name for `LLVMSpec`)
 
 See [XXX](XXX).
 
@@ -324,7 +358,10 @@ A statement can be either a typedef, a let-binding, a monad-bind, or an import.
 Typedefs consist of the keyword `typedef`, an identifier, an equals sign `=`,
 and a type name.
 These create aliases for existing types.
-For example, `typedef Foo = Int` makes `Foo` another name for the `Int` type.
+For example, to make `Foo` another name for the `Int` type:
+:::{code-block} sawscript
+typedef Foo = Int;
+:::
 
 The statement form of let-binding consists of the keyword `let`, an
 identifier, optionally a colon and a type name, and then an equal sign
@@ -342,7 +379,10 @@ treated as the names of parameters and the result is a function declaration.
 The expression is not evaluated until an argument is applied for each parameter.
 Parameter names can be given their own type signatures by enclosing the name,
 a colon, and the type name in parentheses.
-For example, `let intPair (x: Int) (y: Int) = (x, y);`.
+For example:
+:::{code-block} sawscript
+let intPair (x: Int) (y: Int) = (x, y);
+:::
 
 Recursive functions can be written using the keyword `rec` in place of `let`.
 Groups of mutually recursive functions can be written using `rec` for the
@@ -464,9 +504,18 @@ brackets `[]`.
 Record literals are comma-separated lists in single braces `{ }`, where
 each field is assigned with a field name, an equal sign `=`, and a
 subexpression.
+:::{code-block} sawscript
+let data = {
+   name = "John Smith",
+   address = "55 Elm St.",
+   city = "Portland",
+   state = "Oregon",
+   phone = "555-1234"
+};
+:::
 
 An expression followed by a dot and an identifier looks up the
-so-named field in a record value.
+so-named field in a record value: `data.phone`.
 An expression followed by a dot and an integer constant looks up the
 nth field of a tuple value.
 
@@ -479,8 +528,8 @@ ifs, and do-blocks.
 The expression forms of let-binding are the same as the statement
 forms (they can be single values, functions, recursive systems, have
 tuple patterns, etc.) except that instead of having the form
-`let x = ...;` they have the form `let x = ... in ...`.
-The second `...` is another expression, which is evaluated after the
+`let x = e;` they have the form `let x = e1 in e2`.
+The `e2` is another expression, which is evaluated after the
 value for `x` is computed, and the scope of `x` is limited to that
 expression.
 
@@ -491,6 +540,17 @@ arguments.
 When an argument value for each parameter has been applied, the
 expression on the right hand side (called the _body_) is evaluated.
 Lambdas are basically in-place function definitions.
+For example:
+:::{code-block} sawscript
+   for [1, 2, 3] (\x -> print x);
+:::
+
+Functions let-bound with function syntax and with lambda syntax are
+equivalent:
+:::{code-block} sawscript
+let f x = (0, x);
+let g = \x -> (0, x);
+:::
 
 If-expressions have the syntax `if e1 then e2 else e3`; the first
 (or _control_) expression `e1`, which must be of boolean type, is
