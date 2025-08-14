@@ -1,0 +1,235 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    2 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    3 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>{- |
+<span class="lineno">    7 </span>Module      : SAWCentral.MRSolver.Evidence
+<span class="lineno">    8 </span>Copyright   : Galois, Inc. 2023
+<span class="lineno">    9 </span>License     : BSD3
+<span class="lineno">   10 </span>Maintainer  : westbrook@galois.com
+<span class="lineno">   11 </span>Stability   : experimental
+<span class="lineno">   12 </span>Portability : non-portable (language extensions)
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>This module defines multiple outward facing components of MRSolver, most
+<span class="lineno">   15 </span>notably the 'MREvidence' type which provides evidence for the truth of a
+<span class="lineno">   16 </span>refinement proposition proved by MRSolver, and used in @Proof.hs@. This module
+<span class="lineno">   17 </span>also defines the 'MREnv' type, the global MRSolver state.
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>Note: In order to avoid circular dependencies, the 'FunAssump' type and its
+<span class="lineno">   20 </span>dependents in this file ('Refnset' and 'MREvidence') are given a type
+<span class="lineno">   21 </span>parameter @t@ which in practice always be 'TheoremNonce' from @Value.hs@.
+<span class="lineno">   22 </span>The reason we cannot just import @Value.hs@ here directly is because the
+<span class="lineno">   23 </span>'Refnset' type is used in @Value.hs@ - specifically, in the 'VRefnset'
+<span class="lineno">   24 </span>constructor of the 'Value' datatype.
+<span class="lineno">   25 </span>-}
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>module SAWCentral.MRSolver.Evidence where
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import Data.Foldable (foldMap')
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import Data.Map (Map)
+<span class="lineno">   32 </span>import qualified Data.Map as Map
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import Data.HashMap.Lazy (HashMap)
+<span class="lineno">   35 </span>import qualified Data.HashMap.Lazy as HashMap
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>import Data.Set (Set)
+<span class="lineno">   38 </span>import qualified Data.Set as Set
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import SAWCore.Module (ModuleMap)
+<span class="lineno">   43 </span>import SAWCore.Name (Name(..))
+<span class="lineno">   44 </span>import SAWCore.SharedTerm
+<span class="lineno">   45 </span>import SAWCore.Recognizer
+<span class="lineno">   46 </span>import CryptolSAWCore.Monadify
+<span class="lineno">   47 </span>import SAWCentral.Prover.SolverStats
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>import SAWCentral.MRSolver.Term
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>----------------------------------------------------------------------
+<span class="lineno">   53 </span>-- * Function Refinement Assumptions
+<span class="lineno">   54 </span>----------------------------------------------------------------------
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>-- | A representation of a refinement proof goal, i.e., a term of the form:
+<span class="lineno">   57 </span>-- &gt; (a1:A1) -&gt; ... -&gt; (an:An) -&gt; refinesS ev rtp1 rtp2 t1 t2
+<span class="lineno">   58 </span>data RefinesS = RefinesS {
+<span class="lineno">   59 </span>  -- | The context of the refinement, i.e. @[(a1,A1), ..., (an,An)]@
+<span class="lineno">   60 </span>  -- from the term above
+<span class="lineno">   61 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnCtx</span></span></span> :: [(Name, Term)],
+<span class="lineno">   62 </span>  -- | The event type of the refinement, i.e. @ev@ above
+<span class="lineno">   63 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnEv</span></span></span> :: Term,
+<span class="lineno">   64 </span>  -- | The LHS return type of the refinement, i.e. @rtp1@ above
+<span class="lineno">   65 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnRType1</span></span></span> :: Term,
+<span class="lineno">   66 </span>  -- | The RHS return type of the refinement, i.e. @rtp2@ above
+<span class="lineno">   67 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnRType2</span></span></span> :: Term,
+<span class="lineno">   68 </span>  -- | The LHS term of the refinement, i.e. @t1@ above
+<span class="lineno">   69 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnLHS</span></span></span> :: Term,
+<span class="lineno">   70 </span>  -- | The RHS term of the refinement, i.e. @t2@ above
+<span class="lineno">   71 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">refnRHS</span></span></span> :: Term
+<span class="lineno">   72 </span>}
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>-- | Recognizes a term of the form:
+<span class="lineno">   75 </span>-- @(a1:A1) -&gt; ... -&gt; (an:An) -&gt; refinesS ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+<span class="lineno">   76 </span>-- and returns:
+<span class="lineno">   77 </span>-- @RefinesS [(a1,A1), ..., (an,An)] ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+<span class="lineno">   78 </span>asRefinesS :: SharedContext -&gt; Term -&gt; IO (Maybe RefinesS)
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">asRefinesS sc t =</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">do (ecs, body) &lt;- scAsPiList sc t</span>
+<span class="lineno">   81 </span><span class="spaces">     </span><span class="nottickedoff">let args = map (\ec -&gt; (ecName ec, ecType ec)) ecs</span>
+<span class="lineno">   82 </span><span class="spaces">     </span><span class="nottickedoff">case asGlobalApply &quot;SpecM.refinesS&quot; body of</span>
+<span class="lineno">   83 </span><span class="spaces">       </span><span class="nottickedoff">Just [ev, rtp1, rtp2, asGlobalApply &quot;SpecM.eqRR&quot; -&gt; Just [t1, t2]] -&gt;</span>
+<span class="lineno">   84 </span><span class="spaces">         </span><span class="nottickedoff">pure $ Just $ RefinesS args ev rtp1 rtp2 t1 t2</span>
+<span class="lineno">   85 </span><span class="spaces">       </span><span class="nottickedoff">Just _ -&gt;</span>
+<span class="lineno">   86 </span><span class="spaces">         </span><span class="nottickedoff">error &quot;FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation&quot;</span>
+<span class="lineno">   87 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; pure Nothing</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
+<span class="lineno">   90 </span>-- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
+<span class="lineno">   91 </span>data FunAssumpRHS = OpaqueFunAssump FunName [Term]
+<span class="lineno">   92 </span>                  | RewriteFunAssump Term
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>-- | An assumption that a named function refines some specification. This has
+<span class="lineno">   95 </span>-- the form
+<span class="lineno">   96 </span>--
+<span class="lineno">   97 </span>-- &gt; forall x1, ..., xn. F e1 ... ek |= m
+<span class="lineno">   98 </span>--
+<span class="lineno">   99 </span>-- for some universal context @x1:T1, .., xn:Tn@, some list of argument
+<span class="lineno">  100 </span>-- expressions @ei@ over the universal @xj@ variables, and some right-hand side
+<span class="lineno">  101 </span>-- computation expression @m@.
+<span class="lineno">  102 </span>data FunAssump t = FunAssump {
+<span class="lineno">  103 </span>  -- | The uvars that were in scope when this assumption was created
+<span class="lineno">  104 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fassumpCtx</span></span></span> :: MRVarCtx,
+<span class="lineno">  105 </span>  -- | The function on the left-hand-side
+<span class="lineno">  106 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fassumpFun</span></span></span> :: FunName,
+<span class="lineno">  107 </span>  -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
+<span class="lineno">  108 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fassumpArgs</span></span></span> :: [Term],
+<span class="lineno">  109 </span>  -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
+<span class="lineno">  110 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fassumpRHS</span></span></span> :: FunAssumpRHS,
+<span class="lineno">  111 </span>  -- | An optional annotation, which in the case of SAWScript, is always a
+<span class="lineno">  112 </span>  -- 'TheoremNonce' indicating from which 'Theorem' this assumption comes
+<span class="lineno">  113 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">fassumpAnnotation</span></span></span> :: Maybe t
+<span class="lineno">  114 </span>}
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>-- | Recognizes a term of the form:
+<span class="lineno">  117 </span>-- @(a1:A1) -&gt; ... -&gt; (an:An) -&gt; refinesS ev rtp rtp eqRR (f b1 ... bm) t2@,
+<span class="lineno">  118 </span>-- and returns: @FunAssump f [a1,...,an] [b1,...,bm] rhs ann@,
+<span class="lineno">  119 </span>-- where @ann@ is the given argument and @rhs@ is either
+<span class="lineno">  120 </span>-- @OpaqueFunAssump g [c1,...,cl]@ if @t2@ is @g c1 ... cl@,
+<span class="lineno">  121 </span>-- or @RewriteFunAssump t2@ otherwise
+<span class="lineno">  122 </span>asFunAssump :: (?mm :: ModuleMap) =&gt; SharedContext -&gt; Maybe t -&gt; Term -&gt; IO (Maybe (FunAssump t))
+<span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">asFunAssump sc ann t =</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="nottickedoff">asRefinesS sc t &gt;&gt;= \case</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">Just (RefinesS args (asGlobalDef -&gt; Just &quot;SpecM.VoidEV&quot;) _ _ (asApplyAll -&gt; (asGlobalFunName -&gt; Just f1, args1)) t2@(asApplyAll -&gt; (asGlobalFunName -&gt; mb_f2, args2))) -&gt;</span>
+<span class="lineno">  126 </span><span class="spaces">      </span><span class="nottickedoff">let rhs = maybe (RewriteFunAssump t2) (\f2 -&gt; OpaqueFunAssump f2 args2) mb_f2 in</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="nottickedoff">pure $</span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">Just $ FunAssump { fassumpCtx = mrVarCtxFromOuterToInner args,</span>
+<span class="lineno">  129 </span><span class="spaces">                         </span><span class="nottickedoff">fassumpFun = f1, fassumpArgs = args1,</span>
+<span class="lineno">  130 </span><span class="spaces">                         </span><span class="nottickedoff">fassumpRHS = rhs,</span>
+<span class="lineno">  131 </span><span class="spaces">                         </span><span class="nottickedoff">fassumpAnnotation = ann }</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; pure Nothing</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>----------------------------------------------------------------------
+<span class="lineno">  136 </span>-- * Refinement Sets
+<span class="lineno">  137 </span>----------------------------------------------------------------------
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>-- | A set of refinements whose left-hand-sides are function applications,
+<span class="lineno">  140 </span>-- represented as 'FunAssump's. Internally, a map from the 'VarIndex'es of the
+<span class="lineno">  141 </span>-- LHS functions to 'FunAssump's describing the complete refinement.
+<span class="lineno">  142 </span>type Refnset t = HashMap VarIndex (Map [TermProj] (FunAssump t))
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>-- | The 'Refnset' with no refinements
+<span class="lineno">  145 </span>emptyRefnset :: Refnset t
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">emptyRefnset = HashMap.empty</span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>-- | Given a 'FunName' and a 'Refnset', return the 'FunAssump' which has
+<span class="lineno">  149 </span>-- the given 'FunName' as its LHS function, if possible
+<span class="lineno">  150 </span>lookupFunAssump :: FunName -&gt; Refnset t -&gt; Maybe (FunAssump t)
+<span class="lineno">  151 </span><span class="decl"><span class="nottickedoff">lookupFunAssump (GlobalName (GlobalDef (nameIndex -&gt; ix) _ _) projs) refSet =</span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="nottickedoff">HashMap.lookup ix refSet &gt;&gt;= Map.lookup projs</span>
+<span class="lineno">  153 </span><span class="spaces"></span><span class="nottickedoff">lookupFunAssump _ _ = Nothing</span></span>
+<span class="lineno">  154 </span>
+<span class="lineno">  155 </span>-- | Add a 'FunAssump' to a 'Refnset'
+<span class="lineno">  156 </span>addFunAssump :: FunAssump t -&gt; Refnset t -&gt; Refnset t
+<span class="lineno">  157 </span><span class="decl"><span class="nottickedoff">addFunAssump fa@(fassumpFun -&gt; GlobalName (GlobalDef (nameIndex -&gt; ix) _ _) projs) =</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="nottickedoff">HashMap.insertWith (\_ -&gt; Map.insert projs fa) ix</span>
+<span class="lineno">  159 </span><span class="spaces">                       </span><span class="nottickedoff">(Map.singleton projs fa)</span>
+<span class="lineno">  160 </span><span class="spaces"></span><span class="nottickedoff">addFunAssump _ = error &quot;Cannot insert a non-global name into a Refnset&quot;</span></span>
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>-- | Return the list of 'FunAssump's in a given 'Refnset'
+<span class="lineno">  163 </span>listFunAssumps :: Refnset t -&gt; [FunAssump t]
+<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">listFunAssumps = concatMap Map.elems . HashMap.elems</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>----------------------------------------------------------------------
+<span class="lineno">  168 </span>-- * Mr Solver Environments
+<span class="lineno">  169 </span>----------------------------------------------------------------------
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- | A global MR Solver environment
+<span class="lineno">  172 </span>data MREnv = MREnv {
+<span class="lineno">  173 </span>  -- | The debug level, which controls debug printing
+<span class="lineno">  174 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">mreDebugLevel</span></span></span> :: Int,
+<span class="lineno">  175 </span>  -- | The options for pretty-printing to be used by MRSolver in error messages
+<span class="lineno">  176 </span>  -- and debug printing
+<span class="lineno">  177 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">mrePPOpts</span></span></span> :: PPS.Opts
+<span class="lineno">  178 </span>}
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>-- | The empty 'MREnv'
+<span class="lineno">  181 </span>emptyMREnv :: MREnv
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">emptyMREnv = MREnv { mreDebugLevel = 0, mrePPOpts = PPS.defaultOpts }</span></span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>-- | Set the debug level of a Mr Solver environment
+<span class="lineno">  185 </span>mrEnvSetDebugLevel :: Int -&gt; MREnv -&gt; MREnv
+<span class="lineno">  186 </span><span class="decl"><span class="nottickedoff">mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }</span></span>
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>
+<span class="lineno">  189 </span>----------------------------------------------------------------------
+<span class="lineno">  190 </span>-- * Mr Solver Evidence
+<span class="lineno">  191 </span>----------------------------------------------------------------------
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>-- | An entry in 'MREvidence' indicating a usage of an SMT solver or a
+<span class="lineno">  194 </span>-- 'FunAssump'
+<span class="lineno">  195 </span>data MREvidenceEntry t = MREUsedSolver !SolverStats !Term
+<span class="lineno">  196 </span>                       | MREUsedFunAssump !t
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>-- | Records evidence for the truth of a refinement proposition proved by
+<span class="lineno">  199 </span>-- MRSolver. Currently, this is just a list of 'MREvidenceEntry's indicating
+<span class="lineno">  200 </span>-- each instance where MRSolver needed to use an SMT solver or a 'FunAssump'.
+<span class="lineno">  201 </span>-- FIXME: Have this data type actually provide evidence! i.e. have it keep
+<span class="lineno">  202 </span>-- track of each refinement theorem used by MRSolver along the way.
+<span class="lineno">  203 </span>type MREvidence t = [MREvidenceEntry t]
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>-- | Verify that the given evidence in fact supports the given refinement
+<span class="lineno">  206 </span>-- proposition. Returns the identifiers of all the theorems depended on while
+<span class="lineno">  207 </span>-- checking evidence.
+<span class="lineno">  208 </span>-- FIXME: Actually take in a refinement to check against!
+<span class="lineno">  209 </span>checkMREvidence :: Ord t =&gt; MREvidence t -&gt; IO (Set t, SolverStats)
+<span class="lineno">  210 </span><span class="decl"><span class="nottickedoff">checkMREvidence = return . foldMap' checkEntry</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">where checkEntry (MREUsedSolver stats _) = (mempty, stats)</span>
+<span class="lineno">  212 </span><span class="spaces">        </span><span class="nottickedoff">checkEntry (MREUsedFunAssump t) = (Set.singleton t, mempty)</span></span>
+
+</pre>
+</body>
+</html>

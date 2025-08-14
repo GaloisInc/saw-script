@@ -1,0 +1,179 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.Common
+<span class="lineno">    3 </span>Description : Crucible-related material that is not specific to a given language
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : langston
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# LANGUAGE ExistentialQuantification #-}
+<span class="lineno">   10 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module SAWCentral.Crucible.Common
+<span class="lineno">   13 </span>  ( ppAbortedResult
+<span class="lineno">   14 </span>  , Sym
+<span class="lineno">   15 </span>  , Backend
+<span class="lineno">   16 </span>  , SomeOnlineBackend(..)
+<span class="lineno">   17 </span>  , SomeBackend(..)
+<span class="lineno">   18 </span>  , IsSymBackend(..)
+<span class="lineno">   19 </span>  , HasSymInterface(..)
+<span class="lineno">   20 </span>  , OnlineSolver(..)
+<span class="lineno">   21 </span>  , PathSatSolver(..)
+<span class="lineno">   22 </span>  , setupProfiling
+<span class="lineno">   23 </span>  , SAWCruciblePersonality(..)
+<span class="lineno">   24 </span>  , newSAWCoreExprBuilder
+<span class="lineno">   25 </span>  , newSAWCoreBackend
+<span class="lineno">   26 </span>  , newSAWCoreBackendWithTimeout
+<span class="lineno">   27 </span>  , defaultSAWCoreBackendTimeout
+<span class="lineno">   28 </span>  , sawCoreState
+<span class="lineno">   29 </span>  ) where
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import           Lang.Crucible.Simulator (GenericExecutionFeature)
+<span class="lineno">   32 </span>import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
+<span class="lineno">   33 </span>import           Lang.Crucible.Simulator.CallFrame (SimFrame)
+<span class="lineno">   34 </span>import           Lang.Crucible.Simulator.Profiling
+<span class="lineno">   35 </span>import           Lang.Crucible.Backend
+<span class="lineno">   36 </span>                   (AbortExecReason(..), ppAbortExecReason, IsSymInterface, IsSymBackend(..),
+<span class="lineno">   37 </span>                    HasSymInterface(..), SomeBackend(..))
+<span class="lineno">   38 </span>import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
+<span class="lineno">   39 </span>import qualified Data.Parameterized.Nonce as Nonce
+<span class="lineno">   40 </span>import           What4.Protocol.Online (OnlineSolver(..))
+<span class="lineno">   41 </span>import qualified What4.Solver.CVC5 as CVC5
+<span class="lineno">   42 </span>import qualified What4.Solver.Z3 as Z3
+<span class="lineno">   43 </span>import qualified What4.Solver.Yices as Yices
+<span class="lineno">   44 </span>import qualified What4.Protocol.SMTLib2 as SMT2
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import qualified What4.Config as W4
+<span class="lineno">   47 </span>import qualified What4.Expr as W4
+<span class="lineno">   48 </span>import qualified What4.Expr.Builder as W4
+<span class="lineno">   49 </span>import qualified What4.Interface as W4
+<span class="lineno">   50 </span>import qualified What4.ProgramLoc as W4 (plSourceLoc)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>import Control.Lens ( (^.) )
+<span class="lineno">   53 </span>import System.Directory (createDirectoryIfMissing)
+<span class="lineno">   54 </span>import System.FilePath ((&lt;/&gt;))
+<span class="lineno">   55 </span>import qualified Prettyprinter as PP
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>import SAWCore.SharedTerm as SC
+<span class="lineno">   59 </span>import SAWCoreWhat4.ReturnTrip (SAWCoreState, newSAWCoreState)
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>data PathSatSolver
+<span class="lineno">   62 </span>  = PathSat_Z3
+<span class="lineno">   63 </span>  | PathSat_Yices
+<span class="lineno">   64 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- | The symbolic backend we use for SAW verification
+<span class="lineno">   68 </span>type Sym = W4.ExprBuilder Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+<span class="lineno">   69 </span>type Backend solver = OnlineBackend solver Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>data SomeOnlineBackend =
+<span class="lineno">   72 </span>  forall solver. OnlineSolver solver =&gt;
+<span class="lineno">   73 </span>    SomeOnlineBackend (Backend solver)
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>data SAWCruciblePersonality sym = SAWCruciblePersonality
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>sawCoreState :: Sym -&gt; IO (SAWCoreState Nonce.GlobalNonceGenerator)
+<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">sawCoreState sym = pure (sym ^. W4.userState)</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>newSAWCoreExprBuilder :: SC.SharedContext -&gt; Bool -&gt; IO Sym
+<span class="lineno">   81 </span><span class="decl"><span class="istickedoff">newSAWCoreExprBuilder sc what4PushMuxOps =</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">do st &lt;- newSAWCoreState sc</span>
+<span class="lineno">   83 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- W4.newExprBuilder W4.FloatRealRepr st Nonce.globalNonceGenerator</span>
+<span class="lineno">   84 </span><span class="spaces">     </span><span class="istickedoff">pushMuxOpsSetting &lt;- W4.getOptionSetting W4.pushMuxOpsOption $ W4.getConfiguration sym</span>
+<span class="lineno">   85 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- W4.setOpt pushMuxOpsSetting what4PushMuxOps</span>
+<span class="lineno">   86 </span><span class="spaces">     </span><span class="istickedoff">pure sym</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>defaultSAWCoreBackendTimeout :: Integer
+<span class="lineno">   89 </span><span class="decl"><span class="istickedoff">defaultSAWCoreBackendTimeout = 10000</span></span>
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>newSAWCoreBackend :: PathSatSolver -&gt; Sym -&gt; IO SomeOnlineBackend
+<span class="lineno">   92 </span><span class="decl"><span class="istickedoff">newSAWCoreBackend pss sym = newSAWCoreBackendWithTimeout pss sym 0</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>newSAWCoreBackendWithTimeout :: PathSatSolver -&gt; Sym -&gt; Integer -&gt; IO SomeOnlineBackend
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">newSAWCoreBackendWithTimeout PathSat_Yices sym timeout =</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do bak &lt;- newOnlineBackend sym Yices.yicesDefaultFeatures</span></span>
+<span class="lineno">   97 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">W4.extendConfig Z3.z3Options (W4.getConfiguration sym)</span></span>
+<span class="lineno">   98 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)</span></span>
+<span class="lineno">   99 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">W4.extendConfig CVC5.cvc5Options (W4.getConfiguration sym)</span></span>
+<span class="lineno">  100 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">yicesTimeoutSetting &lt;- W4.getOptionSetting Yices.yicesGoalTimeout (W4.getConfiguration sym)</span></span>
+<span class="lineno">  101 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">_ &lt;- W4.setOpt yicesTimeoutSetting timeout</span></span>
+<span class="lineno">  102 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">return (SomeOnlineBackend (bak :: Backend Yices.Connection))</span></span>
+<span class="lineno">  103 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff">newSAWCoreBackendWithTimeout PathSat_Z3 sym timeout =</span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="istickedoff">do bak &lt;- newOnlineBackend sym (SMT2.defaultFeatures <span class="nottickedoff">Z3.Z3</span>)</span>
+<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">W4.extendConfig Z3.z3Options (W4.getConfiguration sym)</span>
+<span class="lineno">  107 </span><span class="spaces">     </span><span class="istickedoff">W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)</span>
+<span class="lineno">  108 </span><span class="spaces">     </span><span class="istickedoff">W4.extendConfig CVC5.cvc5Options (W4.getConfiguration sym)</span>
+<span class="lineno">  109 </span><span class="spaces">     </span><span class="istickedoff">z3TimeoutSetting &lt;- W4.getOptionSetting Z3.z3Timeout (W4.getConfiguration sym)</span>
+<span class="lineno">  110 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- W4.setOpt z3TimeoutSetting timeout</span>
+<span class="lineno">  111 </span><span class="spaces">     </span><span class="istickedoff">return (SomeOnlineBackend (bak :: Backend (SMT2.Writer Z3.Z3)))</span></span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -&gt; PP.Doc ann)
+<span class="lineno">  114 </span>                -&gt; AbortedResult Sym ext
+<span class="lineno">  115 </span>                -&gt; PP.Doc ann
+<span class="lineno">  116 </span><span class="decl"><span class="istickedoff">ppAbortedResult _ (AbortedExec InfeasibleBranch{} _) =</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;Infeasible branch&quot;</span></span>
+<span class="lineno">  118 </span><span class="spaces"></span><span class="istickedoff">ppAbortedResult ppGP (AbortedExec abt gp) = do</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">[ ppAbortExecReason abt</span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">, ppGP gp</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">]</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="istickedoff">ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">PP.vcat</span></span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ PP.pretty &quot;Both branches aborted after a symbolic branch.&quot;</span></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.pretty &quot;Location of control-flow branching:&quot;</span></span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (PP.pretty (W4.plSourceLoc loc))</span></span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.pretty &quot;Message from the true branch:&quot;</span></span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (ppAbortedResult ppGP trueBranch)</span></span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.pretty &quot;Message from the false branch:&quot;</span></span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, PP.indent 2 (ppAbortedResult ppGP falseBranch)</span></span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  133 </span><span class="spaces"></span><span class="istickedoff">ppAbortedResult _ (AbortedExit ec _gp) =</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">PP.pretty &quot;Branch exited:&quot; PP.&lt;+&gt; PP.viaShow ec</span></span></span>
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>setupProfiling ::
+<span class="lineno">  137 </span>  IsSymInterface sym =&gt;
+<span class="lineno">  138 </span>  sym -&gt; String -&gt; Maybe FilePath -&gt;
+<span class="lineno">  139 </span>  IO (IO (), [GenericExecutionFeature sym])
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">setupProfiling _ _ Nothing = return (return <span class="nottickedoff">()</span>, [])</span>
+<span class="lineno">  141 </span><span class="spaces"></span><span class="istickedoff">setupProfiling sym profSource (Just dir) =</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">do tbl &lt;- newProfilingTable</span>
+<span class="lineno">  143 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  144 </span><span class="spaces">     </span><span class="istickedoff">createDirectoryIfMissing True dir</span>
+<span class="lineno">  145 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  146 </span><span class="spaces">     </span><span class="istickedoff">startRecordingSolverEvents sym <span class="nottickedoff">tbl</span></span>
+<span class="lineno">  147 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  148 </span><span class="spaces">     </span><span class="istickedoff">let profOutFile = dir &lt;/&gt; &quot;report_data.js&quot;</span>
+<span class="lineno">  149 </span><span class="spaces">         </span><span class="istickedoff">saveProf = writeProfileReport profOutFile &quot;Crucible profile&quot; profSource</span>
+<span class="lineno">  150 </span><span class="spaces">         </span><span class="istickedoff">profOpts = ProfilingOptions</span>
+<span class="lineno">  151 </span><span class="spaces">                      </span><span class="istickedoff">{ periodicProfileInterval = 5</span>
+<span class="lineno">  152 </span><span class="spaces">                      </span><span class="istickedoff">, periodicProfileAction = <span class="nottickedoff">saveProf</span></span>
+<span class="lineno">  153 </span><span class="spaces">                      </span><span class="istickedoff">}</span>
+<span class="lineno">  154 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">pfs &lt;- profilingFeature tbl profilingEventFilter (Just profOpts)</span>
+<span class="lineno">  156 </span><span class="spaces">     </span><span class="istickedoff">return (saveProf tbl, [pfs])</span></span>
+
+</pre>
+</body>
+</html>
