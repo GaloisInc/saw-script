@@ -985,8 +985,9 @@ interpretMain = do
 
 buildTopLevelEnv :: AIGProxy
                  -> Options
+                 -> [Text]
                  -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
-buildTopLevelEnv proxy opts =
+buildTopLevelEnv proxy opts scriptArgv =
     do let mn = mkModuleName ["SAWScript"]
        sc0 <- mkSharedContext
        let ?fileReader = BS.readFile
@@ -1021,6 +1022,7 @@ buildTopLevelEnv proxy opts =
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roOptions = opts
+                   , roArgv = scriptArgv
                    , roHandleAlloc = halloc
                    , roProxy = proxy
                    , roInitWorkDir = currDir
@@ -1082,11 +1084,12 @@ processFile ::
   AIGProxy ->
   Options ->
   FilePath ->
+  [Text] ->
   Maybe (TopLevel ()) ->
   Maybe (ProofScript ()) ->
   IO ()
-processFile proxy opts file mbSubshell mbProofSubshell = do
-  (_, ro, rw) <- buildTopLevelEnv proxy opts
+processFile proxy opts file scriptArgv mbSubshell mbProofSubshell = do
+  (_, ro, rw) <- buildTopLevelEnv proxy opts scriptArgv
   let ro' = case mbSubshell of
               Nothing -> ro
               Just m  -> ro{ roSubshell = m }
@@ -1507,6 +1510,7 @@ instance FromValue Int where
     fromValue _ (VInteger n)
       | toInteger (minBound :: Int) <= n &&
         toInteger (maxBound :: Int) >= n = fromIntegral n
+      | otherwise = error $ "fromValue Int: out of range: " ++ show n
     fromValue _ _ = error "fromValue Int"
 
 instance IsValue Bool where
@@ -4633,8 +4637,25 @@ primitives = Map.fromList
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
     Current
-    [ "Get the nth command-line argument as a String. Index 0 returns"
-    , "the program name; other parameters are numbered starting at 1."
+    [ "Get the nth argument to the current script as a String. Script"
+    , "arguments are collected from the SAW command line after the name of"
+    , "the script being run. The 0th argument is the script name. The"
+    , "argument list is empty when no script was loaded, e.g. when running"
+    , "interactively."
+    ]
+
+  , prim "get_nopts"          "() -> Int"
+    (funVal1 get_nopts)
+    Current
+    [ "Get the number of arguments to the current script. Since the 0th"
+    , "argument is the script name, the count will normally be at least 1."
+    , "If no script was loaded, the count will be 0."
+    ]
+
+  , prim "get_env"            "String -> String"
+    (funVal1 get_env)
+    Current
+    [ "Get an environment variable (from the process environment) as a String."
     ]
 
   , prim "show_cfg"          "CFG -> String"

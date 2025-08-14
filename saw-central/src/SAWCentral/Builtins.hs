@@ -25,6 +25,7 @@ import Control.Lens (view)
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (asks)
 import Control.Monad.State (MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Control.Exception as Ex
@@ -45,7 +46,7 @@ import Data.Time.Clock
 import Data.Typeable
 
 import System.Directory
-import qualified System.Environment
+import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import qualified Data.Text.IO as TextIO
 import System.IO
@@ -2121,9 +2122,20 @@ specialize_theorem thm ts =
 
 get_opt :: Int -> TopLevel Text
 get_opt n = do
-  prog <- io $ System.Environment.getProgName
-  args <- io $ System.Environment.getArgs
-  nthPrim (map Text.pack $ prog : args) n
+  argv <- asks roArgv
+  nthPrim argv n
+
+get_nopts :: () -> TopLevel Int
+get_nopts () = do
+  argv <- asks roArgv
+  return $ length argv
+
+get_env :: Text -> TopLevel Text
+get_env name = do
+  mbValue <- io $ Env.lookupEnv (Text.unpack name)
+  case mbValue of
+    Nothing -> fail $ "Environment variable not found: " ++ Text.unpack name
+    Just v -> return $ Text.pack v
 
 cryptol_prims :: TopLevel CryptolModule
 cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
@@ -2495,8 +2507,8 @@ writeVerificationSummary = do
         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | SV.VTheorem t <- values ]
         summary = computeVerificationSummary db jspecs lspecs thms
-    opts <- roOptions <$> getTopLevelRO
-    dir <- roInitWorkDir <$> getTopLevelRO
+    opts <- asks roOptions
+    dir <- asks roInitWorkDir
     nenv <- io . scGetNamingEnv =<< getSharedContext
     ppOpts <- getTopLevelPPOpts
 

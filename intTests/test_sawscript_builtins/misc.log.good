@@ -1,5 +1,7 @@
  Loading file "misc.saw"
- saw
+ 1
+ misc.saw
+ fnord
  (false,"false")
  ("0","0")
  ("()","()")

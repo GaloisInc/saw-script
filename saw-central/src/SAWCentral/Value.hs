@@ -843,6 +843,7 @@ getCryptolEnv = do
 data TopLevelRO =
   TopLevelRO
   { roOptions       :: Options
+  , roArgv          :: [Text]
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath

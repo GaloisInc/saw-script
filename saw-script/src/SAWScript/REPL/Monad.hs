@@ -122,7 +122,7 @@ data Refs = Refs
 -- | Initial, empty environment.
 defaultRefs :: Bool -> Options -> IO Refs
 defaultRefs isBatch opts =
-  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts
+  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts []
      contRef <- newIORef True
      rwRef <- newIORef rw
      return Refs

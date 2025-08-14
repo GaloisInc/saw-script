@@ -10,6 +10,7 @@ addsimp_shallow : Theorem -> Simpset -> Simpset
 addsimps : [Theorem] -> Simpset -> Simpset
 beta_reduce_term : Term -> Term
 concat : {a} [a] -> [a] -> [a]
+get_env : String -> String
 java_array : Int -> JavaType -> JavaType
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
