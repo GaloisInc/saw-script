@@ -578,14 +578,14 @@ compFunToTerm (CompFunComp f g) =
          -- we explicitly unfold @SpecM.composeS@ here so @mrApplyAll@ will
          -- beta-reduce
          let nm = maybe "ret_val" id (compFunVarName f) in
-         mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
-           do app <- mrApplyAll f'' [arg]
+         mrLambda1 (nm, a) $ \arg ->
+           do app <- mrApplyAll f' [arg]
               liftSC2 scGlobalApply "SpecM.bindS" [unEvTerm ev,
-                                                   b', c', app, g'']
+                                                   b, c, app, g']
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
 compFunToTerm (CompFunReturn ev (Type a)) =
-  mrLambdaLift1 ("ret_val", a) a $ \ret_val a' ->
-    liftSC2 scGlobalApply "SpecM.retS" [unEvTerm ev, a', ret_val]
+  mrLambda1 ("ret_val", a) $ \ret_val ->
+    liftSC2 scGlobalApply "SpecM.retS" [unEvTerm ev, a, ret_val]
 
 {-
 -- | Convert a 'Comp' into a 'Term'
@@ -807,7 +807,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- variable z of type tp_r to hyp and setting each arg in eq_args to the
   -- result of applying its corresponding repr to z
   (hyp', var) <- coIndHypWithVar hyp "z" (Type tp_r)
-  arg_reprs' <- liftTermLike 0 1 (repr:arg_reprs)
+  let arg_reprs' = repr : arg_reprs
   hyp'' <- foldlM (\hyp_i (arg_spec_i, repr_i) ->
                     coIndHypSetArg hyp_i arg_spec_i <$> mrApplyRepr repr_i var)
                   hyp' (zip (arg_spec_0:eq_args) arg_reprs')
@@ -839,8 +839,7 @@ asBoolProp _ = Nothing
 -- it or its negation holds. If so, return: a function to decide the propostion,
 -- that returns 'Just' of a Boolean iff the proposition definitely does or does
 -- not hold; and a function to assume the proposition or its negation in a
--- sub-computation. This latter function also takes a 'TermLike' that it will
--- lift in the sense of 'withUVarLift' in the sub-computation.
+-- sub-computation.
 asDecProp :: Term -> Maybe (MRM t (Maybe Bool, AssumpFun t))
 asDecProp (asBoolProp -> Just condM) =
   Just $
@@ -876,8 +875,8 @@ asDecProp (asIsFinite -> Just n) =
                  AssumpFun $ \b tm m ->
                   if b then
                     (liftSC0 scNatType >>= \nat_tp ->
-                      (withUVarLift "n" (Type nat_tp) (n_norm, tm) $ \n_nat (n', tm') ->
-                        withDataTypeAssump n' (IsNum n_nat) (m tm')))
+                      (withFreshUVar "n" (Type nat_tp) $ \n_nat ->
+                        withDataTypeAssump n_norm (IsNum n_nat) (m tm)))
                   else
                     withDataTypeAssump n_norm IsInf (m tm))
 asDecProp _ = Nothing
@@ -982,12 +981,12 @@ mrRefines' (Eithers ((tp,f1):elims) t1) m2 =
     _ -> let lnm = maybe "x_left" id (compFunVarName f1)
              rnm = "x_right" in
          elimsEithersType elims >>= \elims_tp ->
-         withUVarLift lnm tp (f1, t1', m2) (\x (f1', t1'', m2') ->
-           applyNormCompFun f1' x >>= withDataTypeAssump t1'' (IsLeft x)
-                                      . flip mrRefines m2') >>
-         withUVarLift rnm elims_tp (elims, t1', m2)
-           (\x (elims', t1'', m2') ->
-             withDataTypeAssump t1'' (IsRight x) (mrRefines (Eithers elims' x) m2'))
+         withFreshUVar lnm tp (\x ->
+           applyNormCompFun f1 x >>= withDataTypeAssump t1' (IsLeft x)
+                                      . flip mrRefines m2) >>
+         withFreshUVar rnm elims_tp
+           (\x ->
+             withDataTypeAssump t1' (IsRight x) (mrRefines (Eithers elims x) m2))
 
 mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
   mrNormOpenTerm t2 >>= \t2' ->
@@ -1000,12 +999,12 @@ mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
     _ -> let lnm = maybe "x_left" id (compFunVarName f2)
              rnm = "x_right" in
          elimsEithersType elims >>= \elims_tp ->
-         withUVarLift lnm tp (f2, t2', m1) (\x (f2', t2'', m1') ->
-           applyNormCompFun f2' x >>= withDataTypeAssump t2'' (IsLeft x)
-                                      . mrRefines m1') >>
-         withUVarLift rnm elims_tp (elims, t2', m1)
-           (\x (elims', t2'', m1') ->
-             withDataTypeAssump t2'' (IsRight x) (mrRefines m1' (Eithers elims' x)))
+         withFreshUVar lnm tp (\x ->
+           applyNormCompFun f2 x >>= withDataTypeAssump t2' (IsLeft x)
+                                      . mrRefines m1) >>
+         withFreshUVar rnm elims_tp
+           (\x ->
+             withDataTypeAssump t2' (IsRight x) (mrRefines m1 (Eithers elims x)))
 
 mrRefines' m1 (AssumeBoolBind cond2 k2) =
   do m2 <- liftSC0 scUnitValue >>= applyCompFun k2
@@ -1032,17 +1031,17 @@ mrRefines' (AssertBoolBind cond1 k1) m2 =
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
-  withUVarLift nm (Type tp') (m1,f2) $ \x (m1',f2') ->
+  withFreshUVar nm (Type tp') $ \x ->
   mrApplyRepr r x >>= \x' ->
-  applyNormCompFun f2' x' >>= \m2' ->
-  mrRefines m1' m2'
+  applyNormCompFun f2 x' >>= \m2' ->
+  mrRefines m1 m2'
 mrRefines' (ExistsBind tp f1) m2 =
   let nm = maybe "x" id (compFunVarName f1) in
   mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
-  withUVarLift nm (Type tp') (f1,m2) $ \x (f1',m2') ->
+  withFreshUVar nm (Type tp') $ \x ->
   mrApplyRepr r x >>= \x' ->
-  applyNormCompFun f1' x' >>= \m1' ->
-  mrRefines m1' m2'
+  applyNormCompFun f1 x' >>= \m1' ->
+  mrRefines m1' m2
 
 mrRefines' m1 (OrS m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
@@ -1103,7 +1102,7 @@ mrRefines' m1@(FunBind f1 args1 k1)
                         return "|=",
                         prettyTermApp (funNameTerm f2) args2']
        evars <- mrFreshEVars ctx
-       (args1'', args2'') <- substTermLike 0 evars (args1', args2')
+       (args1'', args2'') <- substTermLike evars (args1', args2')
        zipWithM_ mrAssertProveEqBiRef args1'' args1
        zipWithM_ mrAssertProveEqBiRef args2'' args2
        recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
@@ -1136,7 +1135,7 @@ mrRefines' m1@(FunBind f1 args1 k1)
                             prettyInCtx rhs_tm]
        rhs' <- mrFunAssumpRHSAsNormComp rhs
        evars <- mrFreshEVars ctx
-       (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
+       (args1'', rhs'') <- substTermLike evars (args1', rhs')
        zipWithM_ mrAssertProveEqBiRef args1'' args1
        -- It's important to instantiate the evars here so that rhs is well-typed
        -- when bound with k1
@@ -1178,7 +1177,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
   Just fa@(FunAssump ctx _ args1' rhs _) ->
     do rhs' <- mrFunAssumpRHSAsNormComp rhs
        evars <- mrFreshEVars ctx
-       (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
+       (args1'', rhs'') <- substTermLike evars (args1', rhs')
        zipWithM_ mrAssertProveEqBiRef args1'' args1
        -- It's important to instantiate the evars here so that rhs is well-typed
        -- when bound with k1
@@ -1273,8 +1272,8 @@ mrRefinesFun tp1 f1 tp2 f2 =
      mrDebugPPPrefixSep 1 "mrRefinesFun" f1' "|=" f2'
      let nm1 = maybe "call_ret_val" id (compFunVarName f1)
          nm2 = maybe "call_ret_val" id (compFunVarName f2)
-     f1'' <- mrLambdaLift1 (nm1, tp1) f1' $ flip mrApply
-     f2'' <- mrLambdaLift1 (nm2, tp2) f2' $ flip mrApply
+     f1'' <- mrLambda1 (nm1, tp1) $ mrApply f1'
+     f2'' <- mrLambda1 (nm2, tp2) $ mrApply f2'
      piTp1 <- mrTypeOf f1'' >>= mrNormOpenTerm
      piTp2 <- mrTypeOf f2'' >>= mrNormOpenTerm
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
@@ -1340,20 +1339,20 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asBoolEq ->
   withAssumption eq $
   let nm = maybe "p" id $ find ((/=) '_' . Text.head)
                         $ [nm1] ++ catMaybes [ asLambdaName t1 ] in
-  withUVarLift nm (Type tp1) (vars,t1,piTp2,t2) $ \var (vars',t1',piTp2',t2') ->
-  do t1'' <- mrApplyAll t1' [var]
+  withFreshUVar nm (Type tp1) $ \var ->
+  do t1'' <- mrApplyAll t1 [var]
      piTp1' <- mrTypeOf t1''
-     mrRefinesFunH k (var : vars') piTp1' t1'' piTp2' t2'
+     mrRefinesFunH k (var : vars) piTp1' t1'' piTp2 t2
 mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asBoolEq ->
                                                        Just (b1, b2)), _)) t2 =
   liftSC2 scBoolEq b1 b2 >>= \eq ->
   withAssumption eq $
   let nm = maybe "p" id $ find ((/=) '_' . Text.head)
                         $ [nm2] ++ catMaybes [ asLambdaName t2 ] in
-  withUVarLift nm (Type tp2) (vars,piTp1,t1,t2) $ \var (vars',piTp1',t1',t2') ->
-  do t2'' <- mrApplyAll t2' [var]
+  withFreshUVar nm (Type tp2) $ \var ->
+  do t2'' <- mrApplyAll t2 [var]
      piTp2' <- mrTypeOf t2''
-     mrRefinesFunH k (var : vars') piTp1' t1' piTp2' t2''
+     mrRefinesFunH k (var : vars) piTp1 t1 piTp2' t2''
 
 -- We always curry pair values before introducing them (NOTE: we do this even
 -- when the have the same types to ensure we never have to unify a projection
@@ -1361,21 +1360,29 @@ mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asBoolEq ->
 -- FIXME: Only do this if we have corresponding pairs on both sides?
 mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1
                      (asPi -> Just (nm2, asPairType -> Just (tpL2, tpR2), _)) t2 =
-  do t1'' <- mrLambdaLift2 (nm1, tpL1) (nm1, tpR1) t1 $ \prj1 prj2 t1' ->
-               liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
-     t2'' <- mrLambdaLift2 (nm2, tpL2) (nm2, tpR2) t2 $ \prj1 prj2 t2' ->
-               liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
+  do nmL1 <- liftSC1 scFreshName nm1
+     nmR1 <- liftSC1 scFreshName nm1
+     nmL2 <- liftSC1 scFreshName nm2
+     nmR2 <- liftSC1 scFreshName nm2
+     t1'' <- mrLambda2 (nmL1, tpL1) (nmR1, tpR1) $ \prj1 prj2 ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t1
+     t2'' <- mrLambda2 (nmL2, tpL2) (nmR2, tpR2) $ \prj1 prj2 ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t2
      piTp1' <- mrTypeOf t1''
      piTp2' <- mrTypeOf t2''
      mrRefinesFunH k vars piTp1' t1'' piTp2' t2''
 mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1 tp2 t2 =
-  do t1'' <- mrLambdaLift2 (nm1, tpL1) (nm1, tpR1) t1 $ \prj1 prj2 t1' ->
-               liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
+  do nmL1 <- liftSC1 scFreshName nm1
+     nmR1 <- liftSC1 scFreshName nm1
+     t1'' <- mrLambda2 (nmL1, tpL1) (nmR1, tpR1) $ \prj1 prj2 ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t1
      piTp1' <- mrTypeOf t1''
      mrRefinesFunH k vars piTp1' t1'' tp2 t2
 mrRefinesFunH k vars tp1 t1 (asPi -> Just (nm2, asPairType -> Just (tpL2, tpR2), _)) t2 =
-  do t2'' <- mrLambdaLift2 (nm2, tpL2) (nm2, tpR2) t2 $ \prj1 prj2 t2' ->
-               liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
+  do nmL2 <- liftSC1 scFreshName nm2
+     nmR2 <- liftSC1 scFreshName nm2
+     t2'' <- mrLambda2 (nmL2, tpL2) (nmR2, tpR2) $ \prj1 prj2 ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t2
      piTp2' <- mrTypeOf t2''
      mrRefinesFunH k vars tp1 t1 piTp2' t2''
 
@@ -1391,14 +1398,14 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
     let nm = maybe "x" id $ find ((/=) '_' . Text.head)
                           $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                     , asLambdaName t2 ] in
-    withUVarLift nm (Type tp) (vars,r1,r2,t1,t2) $ \var (vars',r1',r2',t1',t2') ->
-    do tm1 <- mrApplyRepr r1' var
-       tm2 <- mrApplyRepr r2' var
-       t1'' <- mrApplyAll t1' [tm1]
-       t2'' <- mrApplyAll t2' [tm2]
+    withFreshUVar nm (Type tp) $ \var ->
+    do tm1 <- mrApplyRepr r1 var
+       tm2 <- mrApplyRepr r2 var
+       t1'' <- mrApplyAll t1 [tm1]
+       t2'' <- mrApplyAll t2 [tm2]
        piTp1' <- mrTypeOf t1'' >>= liftSC1 scWhnf
        piTp2' <- mrTypeOf t2'' >>= liftSC1 scWhnf
-       mrRefinesFunH k (var : vars') piTp1' t1'' piTp2' t2''
+       mrRefinesFunH k (var : vars) piTp1' t1'' piTp2' t2''
   -- Otherwise, error
   Nothing -> throwMRFailure (TypesNotUnifiable (Type tp1) (Type tp2))
 
@@ -1444,7 +1451,7 @@ askMRSolver ::
   (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
     {- ^ The callback to use for making SMT queries -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
-  [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
+  [(Name, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> TopLevel (Either MRFailure (SolverStats, MREvidence t))
 askMRSolver sc env timeout askSMT rs args t1 t2 =
   execMRM sc env timeout askSMT rs $
@@ -1464,15 +1471,15 @@ refinementTermH t1 t2 =
      (EvTerm  _, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
      -- FIXME: Add a direct way to check that the types are related, instead of
      -- calling 'mrRelTerm' on dummy variables and ignoring the result
-     withUVarLift "ret_val" (Type tp1) (tp1,tp2) $ \x1 (tp1',tp2') ->
-       withUVarLift "ret_val" (Type tp2') (tp1',tp2',x1) $ \x2 (tp1'',tp2'',x1') ->
-         do tp1''' <- mrSubstEVars tp1''
-            tp2''' <- mrSubstEVars tp2''
-            void $ mrRelTerm Nothing tp1''' x1' tp2''' x2
+     withFreshUVar "ret_val" (Type tp1) $ \x1 ->
+       withFreshUVar "ret_val" (Type tp2) $ \x2 ->
+         do tp1''' <- mrSubstEVars tp1
+            tp2''' <- mrSubstEVars tp2
+            void $ mrRelTerm Nothing tp1''' x1 tp2''' x2
      rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
      ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
-     liftSC2 scPiList uvars ref_tm
+     liftSC2 scGeneralizeExts (map (uncurry EC) uvars) ref_tm
 
 -- | Build the proposition stating that one function term refines another, after
 -- quantifying over all the given arguments as well as any additional arguments
@@ -1486,7 +1493,7 @@ refinementTerm ::
   (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
     {- ^ The callback to use for making SMT queries -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
-  [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
+  [(Name, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> TopLevel (Either MRFailure Term)
 refinementTerm sc env timeout askSMT rs args t1 t2 =
   evalMRM sc env timeout askSMT rs $

@@ -2311,23 +2311,25 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
   case sequentState (goalSequent goal) of
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (Prover.asRefinesS . unProp ->
-                Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2)) _ ->
-      do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
-         tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
-         let tt1 = TypedTerm (TypedTermOther tp1) t1
-             tt2 = TypedTerm (TypedTermOther tp2) t2
-         (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
-         env <- rwMRSolverEnv <$> get
-         time1 <- liftIO getCurrentTime
-         res <- Prover.askMRSolver sc env Nothing mrSolverAskSMT rs args m1 m2
-         time2 <- liftIO getCurrentTime
-         let diff = show $ diffUTCTime time2 time1
-             errStr = printf "Failure in %s" diff
-             succStr = printf "Success in %s" diff
-         (stats, mre) <- mrSolverGetResultOrFail env errStr (Just succStr) res
-         return ((), stats, [], leafEvidence $ MrSolverEvidence mre)
-    _ -> error "mrsolver: cannot apply mrsolver to a non-refinement goal"
+    ConclFocus (unProp -> trm) _ ->
+      io (Prover.asRefinesS sc trm) >>=
+      \case
+        Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2) ->
+          do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
+             tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
+             let tt1 = TypedTerm (TypedTermOther tp1) t1
+                 tt2 = TypedTerm (TypedTermOther tp2) t2
+             (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
+             env <- rwMRSolverEnv <$> get
+             time1 <- liftIO getCurrentTime
+             res <- Prover.askMRSolver sc env Nothing mrSolverAskSMT rs args m1 m2
+             time2 <- liftIO getCurrentTime
+             let diff = show $ diffUTCTime time2 time1
+                 errStr = printf "Failure in %s" diff
+                 succStr = printf "Success in %s" diff
+             (stats, mre) <- mrSolverGetResultOrFail env errStr (Just succStr) res
+             return ((), stats, [], leafEvidence $ MrSolverEvidence mre)
+        Nothing -> error "mrsolver: cannot apply mrsolver to a non-refinement goal"
 
 -- | Add a proved refinement theorem to a given refinement set
 addrefn :: Theorem -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
@@ -2335,7 +2337,8 @@ addrefn thm rs =
   getSharedContext >>= \sc ->
   io (scGetModuleMap sc) >>= \mm ->
   let ?mm = mm in
-  case Prover.asFunAssump (Just (thmNonce thm)) (unProp $ thmProp thm) of
+  io (Prover.asFunAssump sc (Just (thmNonce thm)) (unProp $ thmProp thm)) >>=
+  \case
     Nothing -> fail "addrefn: theorem is not a refinement"
     Just fassump -> pure (Prover.addFunAssump fassump rs)
 

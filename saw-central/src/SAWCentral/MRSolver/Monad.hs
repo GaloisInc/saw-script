@@ -27,6 +27,9 @@ module SAWCentral.MRSolver.Monad where
 
 import Data.Maybe
 import Data.List (find, findIndex, foldl')
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import Data.IORef
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
@@ -104,7 +107,7 @@ data MRFailure
   | AssumptionNotProvable Term
   | InvariantNotProvable FunName FunName Term
     -- | A local variable binding
-  | MRFailureLocalVar LocalName MRFailure
+  | MRFailureLocalVar Name MRFailure
     -- | Information about the context of the failure
   | MRFailureCtx FailCtx MRFailure
     -- | Records a disjunctive branch we took, where both cases failed
@@ -201,8 +204,8 @@ instance PrettyInCtx MRFailure where
     prettyAppList [return "Could not prove loop invariant for functions",
                    prettyInCtx f, return "and", prettyInCtx g,
                    return ":", prettyInCtx pre]
-  prettyInCtx (MRFailureLocalVar x err) =
-    local (fmap (x:)) $ prettyInCtx err
+  prettyInCtx (MRFailureLocalVar _x err) =
+    prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =
     do pp1 <- prettyInCtx ctx
        pp2 <- prettyInCtx err
@@ -300,10 +303,10 @@ coIndHypSetArg hyp@(CoIndHyp {..}) (Right i) x =
 -- updated coinductive hypothesis and a 'Term' which is the new variable
 coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM t (CoIndHyp, Term)
 coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm tp =
-  do var <- liftSC1 scLocalVar 0
-     let ctx' = mrVarCtxAppend (singletonMRVarCtx nm tp) ctx
-     (args1', args2') <- liftTermLike 0 1 (args1, args2)
-     return (CoIndHyp ctx' f1 f2 args1' args2' invar1 invar2, var)
+  do nm' <- liftSC1 scFreshName nm
+     var <- liftSC1 scVariable (EC nm' (typeTm tp))
+     let ctx' = mrVarCtxAppend (singletonMRVarCtx nm' tp) ctx
+     return (CoIndHyp ctx' f1 f2 args1 args2 invar1 invar2, var)
 
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
@@ -395,8 +398,7 @@ newtype MRM t a = MRM { unMRM :: ReaderT (MRInfo t) (StateT (MRState t)
 
 instance MonadTerm (MRM t) where
   mkTermF = liftSC1 scTermF
-  liftTerm = liftSC3 incVars
-  substTerm = liftSC3 instantiateVarList
+  substTerm = liftSC2 scInstantiateExt
 
 -- | Get the current value of 'mriSC'
 mrSC :: MRM t SharedContext
@@ -721,7 +723,7 @@ mrApply f arg = mrApplyAll f [arg]
 mrPiApplyAll :: Term -> [Term] -> MRM t Term
 mrPiApplyAll tp args
   | Just (_, body) <- asPiListN (length args) tp
-  = substTermLike 0 args body
+  = mapTermLike (liftSC3 instantiateVarList 0 args) body
 mrPiApplyAll _ _ = panic "mrPiApplyAll" ["Too many arguments for pi type"]
 
 -- | Return the unit type as a 'Type'
@@ -751,8 +753,8 @@ mrApplyGlobal f args = mrGlobalTerm f >>= \t -> mrApplyAll t args
 -- | Build an arrow type @a -> b@ using a return type @b@ that does not have an
 -- additional free deBruijn index for the input
 mrArrowType :: LocalName -> Term -> Term -> MRM t Term
-mrArrowType n tp_in tp_out =
-  liftSC3 scPi n tp_in =<< liftTermLike 0 1 tp_out
+mrArrowType _n tp_in tp_out =
+  liftSC2 scFun tp_in tp_out
 
 -- | Build the bitvector type @Vec n Bool@ from natural number term @n@
 mrBvType :: Term -> MRM t Term
@@ -808,13 +810,13 @@ mrBvCastInRange w1_t w2_t bv =
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
 -- the order as seen \"from the outside\"
-mrUVarsOuterToInner :: MRM t [(LocalName,Term)]
+mrUVarsOuterToInner :: MRM t [(Name, Term)]
 mrUVarsOuterToInner = mrVarCtxOuterToInner <$> mrUVars
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
 -- the order as seen \"from the inside\"
-mrUVarsInnerToOuter :: MRM t [(LocalName,Term)]
+mrUVarsInnerToOuter :: MRM t [(Name, Term)]
 mrUVarsInnerToOuter = mrVarCtxInnerToOuter <$> mrUVars
 
 -- | Get the type of a 'Term' in the current uvar context
@@ -856,87 +858,64 @@ uniquifyNames (nm:nms) nms_other =
   let nm' = uniquifyName nm nms_other in
   nm' : uniquifyNames nms (nm' : nms_other)
 
--- | Build a lambda term with the lifting (in the sense of 'incVars') of an
--- MR Solver term
+-- | Build a lambda term using higher-order abstract syntax.
 -- NOTE: The types in the given context can have earlier variables in the
--- context free. Thus, if passing a list of types all in the same context, later
--- types should be lifted.
-mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
-                ([Term] -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift [] t f = f [] t
-mrLambdaLift ctx t f =
-  do -- uniquifyNames doesn't care about the order of the names in its second,
-     -- argument, thus either inner-to-outer or outer-to-inner would work
-     nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVarsInnerToOuter
-     let ctx' = zipWith (\nm (_,tp) -> (nm,tp)) nms ctx
-     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
-     t' <- liftTermLike 0 (length ctx) t
-     f vars t' >>= liftSC2 scLambdaList ctx'
+-- context free.
+mrLambda :: [(Name, Term)] -> ([Term] -> MRM t Term) -> MRM t Term
+mrLambda [] f = f []
+mrLambda ctx f =
+  do let ecs = map (uncurry EC) ctx
+     vars <- traverse (liftSC1 scVariable) ecs
+     f vars >>= liftSC2 scAbstractExts ecs
 
--- Specialized versions of mrLambdaLift that expect a certain number of Term
--- arguments. As an alternative, we could change the type of mrLambdaLift to
--- take a length-indexed vector instead (thereby avoiding partial pattern
--- matches), but that is probably overkill for our needs.
+-- | Variant of 'mrLambda' with exactly one 'Term' argument.
+mrLambda1 :: (LocalName, Term) -> (Term -> MRM t Term) -> MRM t Term
+mrLambda1 (x, tp) f =
+  do nm <- liftSC1 scFreshName x
+     let ec = EC nm tp
+     var <- liftSC1 scVariable ec
+     f var >>= liftSC2 scAbstractExts [ec]
 
--- | Call 'mrLambdaLift' with exactly one 'Term' argument.
-mrLambdaLift1 :: TermLike tm => (LocalName,Term) -> tm ->
-                 (Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift1 (nm,tp) t f =
-  mrLambdaLift [(nm,tp)] t $ \vars t' ->
-    case vars of
-      [v] -> f v t'
-      _   -> panic "mrLambdaLift1" ["Expected exactly one Term argument"]
-
--- | Call 'mrLambdaLift' with exactly two 'Term' arguments which are both in the
+-- | Variant of 'mrLambda' with exactly two 'Term' arguments which are both in the
 -- same context. (To create two lambdas where the type of the second variable
--- depends on the value of the first, use 'mrLambdaLift' directly.)
-mrLambdaLift2 :: TermLike tm => (LocalName,Term) -> (LocalName,Term) -> tm ->
-                 (Term -> Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift2 (nm1,tp1) (nm2,tp2) t f =
-  liftTermLike 0 1 tp2 >>= \tp2' ->
-  mrLambdaLift [(nm1,tp1), (nm2,tp2')] t $ \vars t' ->
-    case vars of
-      [v1, v2] -> f v1 v2 t'
-      _        -> panic "mrLambdaLift2" ["Expected exactly two Term arguments"]
+-- depends on the value of the first, use 'mrLambda' directly.)
+mrLambda2 ::
+  (Name, Term) -> (Name, Term) ->
+  (Term -> Term -> MRM t Term) -> MRM t Term
+mrLambda2 (nm1, tp1) (nm2, tp2) f =
+  do let ec1 = EC nm1 tp1
+     let ec2 = EC nm2 tp2
+     var1 <- liftSC1 scVariable ec1
+     var2 <- liftSC1 scVariable ec2
+     f var1 var2 >>= liftSC2 scAbstractExts [ec1, ec2]
 
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
 -- assumptions made in the sub-computation will be lost when it completes.
-withUVar :: LocalName -> Type -> (Term -> MRM t a) -> MRM t a
+withUVar :: Name -> Type -> (Term -> MRM t a) -> MRM t a
 withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
   [v] -> m v
   _   -> panic "withUVar" ["impossible"]
 
--- | Run a MR Solver computation in a context extended with a universal variable
--- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
-withUVarLift :: TermLike tm => LocalName -> Type -> tm ->
-                (Term -> tm -> MRM t a) -> MRM t a
-withUVarLift nm tp t m =
-  withUVar nm tp (\x -> liftTermLike 0 1 t >>= m x)
+-- | Run a MR Solver computation in a context extended with a fresh universal
+-- variable, which is passed as a 'Term' to the sub-computation. Note that any
+-- assumptions made in the sub-computation will be lost when it completes.
+withFreshUVar :: LocalName -> Type -> (Term -> MRM t a) -> MRM t a
+withFreshUVar nm tp m =
+  do nm' <- liftSC1 scFreshName nm
+     withUVar nm' tp m
 
 -- | Run a MR Solver computation in a context extended with a list of universal
 -- variables, passing 'Term's for those variables to the supplied computation.
 withUVars :: MRVarCtx -> ([Term] -> MRM t a) -> MRM t a
 withUVars (mrVarCtxLength -> 0) f = f []
 withUVars ctx f =
-  do -- for uniquifyNames, we want to consider the oldest names first, thus we
-     -- must pass the first argument in outer-to-inner order. uniquifyNames
-     -- doesn't care about the order of the names in its second, argument, thus
-     -- either inner-to-outer or outer-to-inner would work
-     let ctx_l = mrVarCtxOuterToInner ctx
-     nms <- uniquifyNames (map fst ctx_l) <$> map fst <$> mrUVarsInnerToOuter
-     let ctx_u = mrVarCtxFromOuterToInner $ zip nms $ map snd ctx_l
-     -- lift all the variables in our assumptions by the number of new uvars
-     -- we're adding (we do not have to lift the types in our uvar context
-     -- itself, since each type is in the context of all older uvars - see the
-     -- definition of MRVarCtx)
-     assumps' <- mrAssumptions >>= liftTerm 0 (mrVarCtxLength ctx)
-     dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (mrVarCtxLength ctx))
+  do let ctx_l = mrVarCtxOuterToInner ctx
+     let ecs = map (uncurry EC) ctx_l
+     let nms = map fst ctx_l
      -- make terms for our new uvars, extend the context, and continue
-     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. mrVarCtxLength ctx - 1]
-     local (\info -> info { mriUVars = mrVarCtxAppend ctx_u (mriUVars info),
-                            mriAssumptions = assumps',
-                            mriDataTypeAssumps = dataTypeAssumps' }) $
+     vars <- traverse (liftSC1 scVariable) ecs
+     local (\info -> info { mriUVars = mrVarCtxAppend ctx (mriUVars info) }) $
        mapM (\t -> (t,) <$> mrTypeOf t) vars >>= \vars_with_types ->
        mrDebugPPPrefix 3 "withUVars:" vars_with_types >>
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
@@ -957,36 +936,42 @@ withOnlyUVars vars m = withNoUVars $ withUVars vars $ const m
 -- most recently bound
 getAllUVarTerms :: MRM t [Term]
 getAllUVarTerms =
-  (mrVarCtxLength <$> mrUVars) >>= \len ->
-  mapM (liftSC1 scLocalVar) [len-1, len-2 .. 0]
+  do ecs <- map (uncurry EC) <$> mrUVarsOuterToInner
+     traverse (liftSC1 scVariable) ecs
 
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
 -- recently bound variable being abstracted first
 lambdaUVarsM :: Term -> MRM t Term
-lambdaUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scLambdaList ctx t
+lambdaUVarsM t =
+  do ctx <- mrUVarsOuterToInner
+     let ecs = map (uncurry EC) ctx
+     liftSC2 scAbstractExts ecs t
 
 -- | Pi-abstract all the current uvars out of a 'Term', with the least recently
 -- bound variable being abstracted first
 piUVarsM :: Term -> MRM t Term
-piUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scPiList ctx t
+piUVarsM t =
+  do ctx <- mrUVarsOuterToInner
+     let ecs = map (uncurry EC) ctx
+     liftSC2 scGeneralizeExts ecs t
 
 -- | Instantiate all uvars in a term using the supplied function
 instantiateUVarsM :: forall a t. TermLike a =>
-                     (LocalName -> Term -> MRM t Term) -> a -> MRM t a
+                     (Name -> Term -> MRM t Term) -> a -> MRM t a
 instantiateUVarsM f a =
   do ctx <- mrUVarsOuterToInner
      -- Remember: the uvar context is outermost to innermost, so we bind
      -- variables from left to right, substituting earlier ones into the types
      -- of later ones, but all substitutions are in reverse order, since
      -- substTerm and friends like innermost bindings first
-     let helper :: [Term] -> [(LocalName,Term)] -> MRM t [Term]
+     let helper :: IntMap Term -> [(Name, Term)] -> MRM t (IntMap Term)
          helper tms [] = return tms
          helper tms ((nm,tp):vars) =
-           do tp' <- substTerm 0 tms tp
+           do tp' <- substTerm tms tp
               tm <- f nm tp'
-              helper (tm:tms) vars
-     ecs <- helper [] ctx
-     substTermLike 0 ecs a
+              helper (IntMap.insert (nameIndex nm) tm tms) vars
+     s <- helper IntMap.empty ctx
+     substTermLike s a
 
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
 mrVarTerm :: MRVar -> MRM t Term
@@ -1112,20 +1097,20 @@ mrFreshEVar nm (Type tp) =
      mrSetVarInfo var (EVarInfo ctx_len Nothing)
      mrVarTerm var
 
--- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
+-- | Return a fresh set of existential variables from a 'MRVarCtx'.
 -- Return the new evars all applied to the current uvars.
-mrFreshEVars :: MRVarCtx -> MRM t [Term]
-mrFreshEVars = helper [] . mrVarCtxOuterToInner where
+mrFreshEVars :: MRVarCtx -> MRM t (IntMap Term)
+mrFreshEVars = helper IntMap.empty . mrVarCtxOuterToInner where
   -- Return fresh evars for the suffix of a context of variable names and types,
   -- where the supplied Terms are evars that have already been generated for the
   -- earlier part of the context, and so must be substituted into the remaining
   -- types in the context. Since we want to make fresh evars for the oldest
   -- variables first, the second argument must be in outer-to-inner order.
-  helper :: [Term] -> [(LocalName,Term)] -> MRM t [Term]
-  helper evars [] = return evars
+  helper :: IntMap Term -> [(Name, Term)] -> MRM t (IntMap Term)
+  helper evars [] = pure evars
   helper evars ((nm,tp):ctx) =
-    do evar <- substTerm 0 evars tp >>= mrFreshEVar nm . Type
-       helper (evar:evars) ctx
+    do evar <- substTerm evars tp >>= mrFreshEVar (toShortName (nameInfo nm)) . Type
+       helper (IntMap.insert (nameIndex nm) evar evars) ctx
 
 -- | Set the value of an evar to a closed term
 mrSetEVarClosed :: MRVar -> Term -> MRM t ()
@@ -1160,41 +1145,33 @@ mrSetEVarClosed var val =
 -- each free uvar @xi@ in @e@ is one of the arguments @ej@ to @X@ (though it
 -- need not be the case that @i=j@). Return whether this succeeded.
 mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM t Bool
-mrTrySetAppliedEVar evar args t =
+mrTrySetAppliedEVar evar args t = do
   -- Get the first N argument variables of the type of evar, where N is the
   -- length of args; note that evar can have more than N arguments if t is a
   -- higher-order term
-  let (take (length args) -> evar_vars, _) = asPiList (mrVarType evar) in
+  (take (length args) -> evar_vars, _) <- liftSC1 scAsPiList (mrVarType evar)
   -- Get all the free variables of t
-  let free_vars = bitSetElems (looseVars t) in
+  let free_vars = IntSet.toList (freeVars t) -- :: [VarIndex]
   -- For each free var of t, find an arg equal to it
-  case mapM (\i -> findIndex (\case
-                                 (asLocalVar -> Just j) -> i == j
-                                 _ -> False) args) free_vars of
+  let isVariable i trm =
+        case asVariable trm of
+          Just ec -> i == ecVarIndex ec
+          Nothing -> False
+  case traverse (\i -> findIndex (isVariable i) args) free_vars of
     Just fv_arg_ixs
       -- Check to make sure we have the right number of args
       | length args == length evar_vars -> do
-          -- Build a list of the input vars x1 ... xn as terms, noting that the
-          -- first variable is the least recently bound and so has the highest
-          -- deBruijn index
-          let arg_ixs = reverse [0 .. length args - 1]
-          arg_vars <- mapM (liftSC1 scLocalVar) arg_ixs
+          -- Build a list of the input vars x1 ... xn as terms
+          arg_vars <- traverse (liftSC1 scVariable) evar_vars
 
           -- For each free variable of t, we substitute the corresponding
-          -- variable xi, substituting error terms for the variables that are
-          -- not free (since we have nothing else to substitute for them)
+          -- variable xi
           let var_map = zip free_vars fv_arg_ixs
-          let subst_vars = if free_vars == [] then [] else
-                             [0 .. maximum free_vars]
-          let subst = flip map subst_vars $ \i ->
-                maybe (error
-                       ("mrTrySetAppliedEVar: unexpected free variable "
-                        ++ show i ++ " in term\n" ++ showTerm t))
-                (arg_vars !!) (lookup i var_map)
-          body <- substTerm 0 subst t
+          let subst = IntMap.fromList [ (vi, arg_vars !! ix) | (vi, ix) <- var_map ]
+          body <- substTerm subst t
 
           -- Now instantiate evar to \x1 ... xn -> body
-          evar_inst <- liftSC2 scLambdaList evar_vars body
+          evar_inst <- liftSC2 scAbstractExts evar_vars body
           mrSetEVarClosed evar evar_inst
           return True
 
@@ -1292,8 +1269,8 @@ withCoIndHyp hyp m =
 instantiateCoIndHyp :: CoIndHyp -> MRM t ([Term], [Term])
 instantiateCoIndHyp (CoIndHyp {..}) =
   do evars <- mrFreshEVars coIndHypCtx
-     lhs <- substTermLike 0 evars coIndHypLHS
-     rhs <- substTermLike 0 evars coIndHypRHS
+     lhs <- substTermLike evars coIndHypLHS
+     rhs <- substTermLike evars coIndHypRHS
      return (lhs, rhs)
 
 -- | Apply the invariants of a 'CoIndHyp' to their respective arguments,
@@ -1302,14 +1279,7 @@ instantiateCoIndHyp (CoIndHyp {..}) =
 applyCoIndHypInvariants :: CoIndHyp -> MRM t (Term, Term)
 applyCoIndHypInvariants hyp =
   let apply_invariant :: Maybe Term -> [Term] -> MRM t Term
-      apply_invariant (Just (asLambdaList -> (vars, phi))) args
-        | length vars == length args
-          -- NOTE: applying to a list of arguments == substituting the reverse
-          -- of that list, because the first argument corresponds to the
-          -- greatest deBruijn index
-        = substTerm 0 (reverse args) phi
-      apply_invariant (Just _) _ =
-        error "applyCoIndHypInvariants: wrong number of arguments for invariant!"
+      apply_invariant (Just f) args = liftSC2 scApplyAllBeta f args
       apply_invariant Nothing _ = liftSC1 scBool True in
   do invar1 <- apply_invariant (coIndHypInvariantLHS hyp) (coIndHypLHS hyp)
      invar2 <- apply_invariant (coIndHypInvariantRHS hyp) (coIndHypRHS hyp)

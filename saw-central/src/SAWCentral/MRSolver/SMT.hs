@@ -51,6 +51,7 @@ import Data.Parameterized.BoolRepr
 
 import qualified SAWSupport.Pretty as PPS (render)
 
+import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
@@ -302,8 +303,8 @@ mrProvable bool_tm =
      prop_inst <- instantiateUVarsM instUVar prop >>= mrSubstLowerEVars
      mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Create a new global variable of the given name and type
-        instUVar :: LocalName -> Term -> MRM t Term
-        instUVar nm =
+        instUVar :: Name -> Term -> MRM t Term
+        instUVar (toShortName . nameInfo -> nm) =
           liftSC1 scWhnf >=> liftSC2 scFreshEC nm >=> liftSC1 scVariable
 
 
@@ -414,8 +415,8 @@ mrVecLenGen (ConstNatVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
      len_tm <- liftSC1 scNat len
      nat_tp <- liftSC0 scNatType
-     f' <- mrLambdaLift1 ("ix", nat_tp) f $ \x f' ->
-        liftSC2 scBvNat n_tm x >>= mrApply f'
+     f' <- mrLambda1 ("ix", nat_tp) $ \x ->
+        liftSC2 scBvNat n_tm x >>= mrApply f
      mrApplyGlobal "Prelude.gen" [len_tm, tp, f']
 mrVecLenGen (SymBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
@@ -548,8 +549,8 @@ mrApplyRepr (InjReprPair repr1 repr2) t =
      liftSC2 scPairValueReduced t1 t2
 mrApplyRepr (InjReprVec vlen tp repr) t =
   do ix_tp <- mrVecLenIxType vlen
-     f <- mrLambdaLift1 ("ix", ix_tp) (repr, t) $ \x (repr', t') ->
-       mrApplyRepr repr' =<< mrApply t' x
+     f <- mrLambda1 ("ix", ix_tp) $ \x ->
+       mrApplyRepr repr =<< mrApply t x
      mrVecLenGen vlen tp f
 
 newtype MaybeTerm b = MaybeTerm { unMaybeTerm :: If b Term () }
@@ -593,19 +594,18 @@ mkInjRepr b (asPairType -> Just (tp1, tp2)) t =
 
 mkInjRepr b (asVecTypeWithLen -> Just (vlen, tp@(asBoolType -> Nothing))) tm =
   do ix_tp <- mrVecLenIxType vlen
+     ix_nm <- liftSC1 scFreshName "ix"
      -- NOTE: these return values from mkInjRepr all have ix free
-     (tp_r', tm_r', r') <-
+     -- r should not have ix free
+     (tp_r', tm_r', r) <-
        give b $
-       withUVarLift "ix" (Type ix_tp) (vlen,tp,tm) $ \ix (vlen',tp',tm') ->
+       withUVar ix_nm (Type ix_tp) $ \ix ->
        do tm_elem <-
-            mapMaybeTermM b (\tm'' -> mrVecLenAt vlen' tp' tm'' ix) tm'
-          mkInjRepr b tp' tm_elem
-     -- r' should not have ix free, so it should be ok to substitute an error
-     -- term for ix...
-     r <- substTermLike 0 [error
-                           "mkInjRepr: unexpected free ix variable in repr"] r'
-     tp_r <- liftSC3 scPi "ix" ix_tp tp_r'
-     tm_r <- mapMaybeTermM b (liftSC3 scLambda "ix" ix_tp) tm_r'
+            mapMaybeTermM b (\tm'' -> mrVecLenAt vlen tp tm'' ix) tm
+          mkInjRepr b tp tm_elem
+     let ix_ec = EC ix_nm ix_tp
+     tp_r <- liftSC2 scGeneralizeExts [ix_ec] tp_r'
+     tm_r <- mapMaybeTermM b (liftSC2 scAbstractExts [ix_ec]) tm_r'
      return (tp_r, tm_r, InjReprVec vlen tp r)
 
 mkInjRepr _ tp tm = return (tp, tm, InjReprId)
@@ -819,26 +819,18 @@ asSimpleEq (asNumType -> Just ()) = Just $ \sc t1 t2 ->
 asSimpleEq _ = Nothing
 
 -- | A 'Term' in an extended context of universal variables, which are listed
--- \"outside in\", meaning the highest deBruijn index comes first
-data TermInCtx = TermInCtx [(LocalName,Term)] Term
+-- \"outside in\".
+data TermInCtx = TermInCtx [(Name, Term)] Term
 
 -- | Lift a binary operation on 'Term's to one on 'TermInCtx's
 liftTermInCtx2 :: (SharedContext -> Term -> Term -> IO Term) ->
                    TermInCtx -> TermInCtx -> MRM t TermInCtx
 liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
-  do
-    -- Insert the variables in ctx2 into the context of t1 starting at index 0,
-    -- by lifting its variables starting at 0 by length ctx2
-    t1' <- liftTermLike 0 (length ctx2) t1
-    -- Insert the variables in ctx1 into the context of t1 starting at index
-    -- length ctx2, by lifting its variables starting at length ctx2 by length
-    -- ctx1
-    t2' <- liftTermLike (length ctx2) (length ctx1) t2
-    TermInCtx (ctx1++ctx2) <$> liftSC2 op t1' t2'
+  TermInCtx (ctx1++ctx2) <$> liftSC2 op t1 t2
 
 -- | Extend the context of a 'TermInCtx' with additional universal variables
 -- bound \"outside\" the 'TermInCtx'
-extTermInCtx :: [(LocalName,Term)] -> TermInCtx -> TermInCtx
+extTermInCtx :: [(Name, Term)] -> TermInCtx -> TermInCtx
 extTermInCtx ctx (TermInCtx ctx' t) = TermInCtx (ctx++ctx') t
 
 -- | Run an 'MRM t' computation in the context of a 'TermInCtx', passing in the
@@ -955,13 +947,14 @@ mrRelTerm' _ piRel tp1@(asVecTypeWithLen -> Just (vlen1, tpA1)) t1
   mrVecLenUnify vlen1 vlen2 >>= \case
     Just (vlen1', vlen2') ->
       mrVecLenIxType vlen1' >>= \ix_tp ->
-      withUVarLift "ix" (Type ix_tp) (vlen1',vlen2',tpA1,tpA2,t1,t2) $
-      \ix (vlen1'',vlen2'',tpA1',tpA2',t1',t2') ->
-      do ix_bound <- mrVecLenIxBound vlen1'' ix
-         t1_prj <- mrVecLenAt vlen1'' tpA1' t1' ix
-         t2_prj <- mrVecLenAt vlen2'' tpA2' t2' ix
-         mrRelTerm piRel tpA1' t1_prj tpA2' t2_prj >>= mapM (\cond ->
-          extTermInCtx [("ix",ix_tp)] <$>
+      liftSC1 scFreshName "ix" >>= \ix_nm ->
+      withUVar ix_nm (Type ix_tp) $
+      \ix ->
+      do ix_bound <- mrVecLenIxBound vlen1' ix
+         t1_prj <- mrVecLenAt vlen1' tpA1 t1 ix
+         t2_prj <- mrVecLenAt vlen2' tpA2 t2 ix
+         mrRelTerm piRel tpA1 t1_prj tpA2 t2_prj >>= mapM (\cond ->
+          extTermInCtx [(ix_nm, ix_tp)] <$>
             liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond)
     Nothing -> throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 

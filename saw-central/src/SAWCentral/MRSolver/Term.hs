@@ -34,6 +34,7 @@ normalization - see @Solver.hs@ for the description of this normalization.
 module SAWCentral.MRSolver.Term where
 
 import Data.String
+import Data.IntMap (IntMap)
 import Data.IORef
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -131,7 +132,7 @@ newtype Type = Type { typeTm :: Term } deriving (Generic, Show)
 -- | A context of variables, with names and types. To avoid confusion as to
 -- how variables are ordered, do not use this type's constructor directly.
 -- Instead, use the combinators defined below.
-newtype MRVarCtx = MRVarCtx [(LocalName,Type)]
+newtype MRVarCtx = MRVarCtx [(Name, Type)]
                    -- ^ Internally, we store these names and types in order
                    -- from innermost to outermost variable, see
                    -- 'mrVarCtxInnerToOuter'
@@ -142,7 +143,7 @@ emptyMRVarCtx :: MRVarCtx
 emptyMRVarCtx = MRVarCtx []
 
 -- | Build a context with a single variable of the given name and type
-singletonMRVarCtx :: LocalName -> Type -> MRVarCtx
+singletonMRVarCtx :: Name -> Type -> MRVarCtx
 singletonMRVarCtx nm tp = MRVarCtx [(nm,tp)]
 
 -- | Add a context of new variables (the first argument) to an existing context
@@ -162,12 +163,12 @@ mrVarCtxLength (MRVarCtx ctx) = length ctx
 -- all the variables which come after it in the list (i.e. all the variables
 -- which come after a type in the list are free in that type). In other words,
 -- the list is ordered from newest to oldest variable.
-mrVarCtxInnerToOuter :: MRVarCtx -> [(LocalName,Term)]
+mrVarCtxInnerToOuter :: MRVarCtx -> [(Name, Term)]
 mrVarCtxInnerToOuter (MRVarCtx ctx) = map (\(nm, Type tp) -> (nm, tp)) ctx
 
 -- | Build a context of variables from a list of names and types in innermost
 -- to outermost order - see 'mrVarCtxInnerToOuter'.
-mrVarCtxFromInnerToOuter :: [(LocalName,Term)] -> MRVarCtx
+mrVarCtxFromInnerToOuter :: [(Name, Term)] -> MRVarCtx
 mrVarCtxFromInnerToOuter = MRVarCtx . map (\(nm,tp) -> (nm, Type tp))
 
 -- | Return a list of the names and types of the variables in the given
@@ -176,12 +177,12 @@ mrVarCtxFromInnerToOuter = MRVarCtx . map (\(nm,tp) -> (nm, Type tp))
 -- all the variables which come before it in the list (i.e. all the variables
 -- which come before a type in the list are free in that type). In other words,
 -- the list is ordered from oldest to newest variable.
-mrVarCtxOuterToInner :: MRVarCtx -> [(LocalName,Term)]
+mrVarCtxOuterToInner :: MRVarCtx -> [(Name, Term)]
 mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 
 -- | Build a context of variables from a list of names and types in outermost
 -- to innermost order - see 'mrVarCtxOuterToInner'.
-mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
+mrVarCtxFromOuterToInner :: [(Name, Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
 -- | A Haskell representation of a @SpecM@ in \"monadic normal form\"
@@ -321,15 +322,12 @@ asLambdaName _ = Nothing
 -- | The class of monads that can build terms and substitute into them
 class Monad m => MonadTerm m where
   mkTermF :: TermF Term -> m Term
-  liftTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> m Term
-  substTerm :: DeBruijnIndex -> [Term] -> Term -> m Term
-               -- ^ NOTE: the first term in the list is substituted for the most
-               -- recently-bound variable, i.e., deBruijn index 0
+  substTerm :: IntMap Term -> Term -> m Term
+    -- ^ The substitution is keyed by the 'VarIndex' of names to substitute.
 
 instance (MonadTerm m) => MonadTerm (MaybeT m) where
   mkTermF = lift . mkTermF
-  liftTerm n i t = lift $ liftTerm n i t
-  substTerm n s t = lift $ substTerm n s t
+  substTerm s t = lift $ substTerm s t
 
 ----------------------------------------------------------------------
 -- * Utility Functions for Transforming 'Term's
@@ -368,15 +366,9 @@ memoFixTermFun f = memoFixTermFunAccum (f .) ()
 -- * Lifting MR Solver Terms
 ----------------------------------------------------------------------
 
--- | Apply 'liftTerm' to all component terms in a 'TermLike' object
-liftTermLike :: (TermLike a, MonadTerm m) =>
-                DeBruijnIndex -> DeBruijnIndex -> a -> m a
-liftTermLike i n = mapTermLike (liftTerm i n)
-
 -- | Apply 'substTerm' to all component terms in a 'TermLike' object
-substTermLike :: (TermLike a, MonadTerm m) =>
-                DeBruijnIndex -> [Term] -> a -> m a
-substTermLike i s = mapTermLike (substTerm i s)
+substTermLike :: (TermLike a, MonadTerm m) => IntMap Term -> a -> m a
+substTermLike s = mapTermLike (substTerm s)
 
 -- | A term-like object is one that supports monadically mapping over all
 -- component terms. This is mainly used for lifting and substitution - see
@@ -455,16 +447,16 @@ deriving instance TermLike Comp
 -- | The monad for pretty-printing in a context of SAW core variables. The
 -- context is in innermost-to-outermost order, i.e. from newest to oldest
 -- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
--- 
+--
 -- NOTE: By convention, functions which return something of type 'PPInCtxM'
 -- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
 -- functions which return something of type 'PPS.Doc' have the prefix @pp@
 -- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
 -- the rest of saw-script (e.g. 'ppTerm' defined in @SAWCore.Term.Pretty@,
 -- 'ppFirstOrderValue' defined in @SAWCore.FiniteValue@).
-newtype PPInCtxM a = PPInCtxM (Reader (PPS.Opts, [LocalName]) a)
+newtype PPInCtxM a = PPInCtxM (Reader (PPS.Opts, [Name]) a)
                    deriving newtype (Functor, Applicative, Monad,
-                                     MonadReader (PPS.Opts, [LocalName]))
+                                     MonadReader (PPS.Opts, [Name]))
 
 -- | Locally set the context of SAW core variables for a 'PPInCtxM' computation
 prettyWithCtx :: MRVarCtx -> PPInCtxM a -> PPInCtxM a
@@ -490,8 +482,8 @@ class PrettyInCtx a where
   prettyInCtx :: a -> PPInCtxM PPS.Doc
 
 instance PrettyInCtx Term where
-  prettyInCtx t = do (opts, ctx) <- ask
-                     return $ ppTermInCtx opts ctx t
+  prettyInCtx t = do (opts, _) <- ask
+                     return $ ppTerm opts t
 
 -- | Combine a list of pretty-printed documents like applications are combined
 prettyAppList :: [PPInCtxM PPS.Doc] -> PPInCtxM PPS.Doc
@@ -512,14 +504,14 @@ instance PrettyInCtx MRVarCtx where
   prettyInCtx ctx_top = do
     (opts, _) <- ask
     return $ align $ sep $ helper opts [] $ mrVarCtxOuterToInner ctx_top
-    where helper :: PPS.Opts -> [LocalName] -> [(LocalName,Term)] -> [PPS.Doc]
+    where helper :: PPS.Opts -> [LocalName] -> [(Name, Term)] -> [PPS.Doc]
           helper _ _ [] = []
           helper opts ns [(n, tp)] =
-            [ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+            [ppTermInCtx opts ns (Unshared $ Variable (EC n tp)) <> ":" <>
              ppTermInCtx opts ns tp]
           helper opts ns ((n, tp):ctx) =
-            (ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
-             ppTermInCtx opts ns tp <> ",") : (helper opts (n:ns) ctx)
+            (ppTermInCtx opts ns (Unshared $ Variable (EC n tp)) <> ":" <>
+             ppTermInCtx opts ns tp <> ",") : (helper opts ns ctx)
 
 instance PrettyInCtx PPS.Doc where
   prettyInCtx pp = return pp
