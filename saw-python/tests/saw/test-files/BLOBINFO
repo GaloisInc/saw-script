@@ -1,0 +1,121 @@
+# Metadata for checked-in blobs:
+basic_mir.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_arrays.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_enums.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_fresh_expanded_value_enum.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_fresh_expanded_value.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_ghost.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_lifetime.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_points_to.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_proclaim.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_slices.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_statics.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_str_slices.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_structs.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_tuples.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+mir_unsafe_assume_spec.linked-mir.json
+   versions
+      rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+      mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+Add.class
+   versions
+      unknown javac
+alloc_aligned.bc
+   versions
+      unknown clang
+assume.bc
+   versions
+      unknown clang
+ghost.bc
+   versions
+      unknown clang
+global.bc
+   versions
+      unknown clang
+llvm_array_swap.bc
+   versions
+      unknown clang
+llvm_assert_null.bc
+   versions
+      unknown clang
+llvm_global.bc
+   versions
+      unknown clang
+llvm_lax_pointer_ordering.bc
+   versions
+      unknown clang
+llvm_pointer.bc
+   versions
+      unknown clang
+llvm_points_to_bitfield.bc
+   versions
+      unknown clang
+llvm_struct_type.bc
+   versions
+      unknown clang
+llvm_struct.bc
+   versions
+      unknown clang
+nested_struct.bc
+   versions
+      unknown clang
+null.bc
+   versions
+      unknown clang
+points_to_at_type.bc
+   versions
+      unknown clang
+salsa20.bc
+   versions
+      unknown clang
+seven.bc
+   versions
+      unknown clang
+swap.bc
+   versions
+      unknown clang
+test.bc
+   versions
+      unknown clang
