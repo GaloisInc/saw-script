@@ -1,9 +1,3 @@
-# The current checked-in artifacts were generated using the following tools:
-#    rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
-#    mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
-#
-# Notes: This format may be sensitive to changes in mir-json schema versions.
-
 all: post-test post-test-mut pre-test pre-test-mut clean-mir-json
 
 post-test: post-test.rs

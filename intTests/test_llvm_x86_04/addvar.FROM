@@ -1,0 +1,8 @@
+versions
+   Unknown yasm
+   Unknown ld
+versions-notes
+   Built and committed long ago without provenance notes; details
+   unknown.
+   That this was actually built with yasm and ld as indicated in
+   test.sh is likely but speculative.
