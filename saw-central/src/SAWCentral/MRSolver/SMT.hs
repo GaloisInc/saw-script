@@ -234,21 +234,6 @@ mrNormTerm t =
   mrDebugPPInCtx 2 t >>
   liftSC1 smtNorm t
 
--- | Normalize an open term by wrapping it in lambdas, normalizing, and then
--- removing those lambdas
-mrNormOpenTerm :: Term -> MRM t Term
-mrNormOpenTerm body =
-  do length_ctx <- mrVarCtxLength <$> mrUVars
-     fun_term <- lambdaUVarsM body
-     normed_fun <- mrNormTerm fun_term
-     return (peel_lambdas length_ctx normed_fun)
-       where
-         peel_lambdas :: Int -> Term -> Term
-         peel_lambdas 0 t = t
-         peel_lambdas i (asLambda -> Just (_, _, t)) = peel_lambdas (i-1) t
-         peel_lambdas _ _ = error "mrNormOpenTerm: unexpected non-lambda term!"
-
-
 ----------------------------------------------------------------------
 -- * Checking Provability with SMT
 ----------------------------------------------------------------------

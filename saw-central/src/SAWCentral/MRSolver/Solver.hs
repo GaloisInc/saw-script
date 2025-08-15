@@ -775,7 +775,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- injective representation for it, keeping track of the representation term
   -- and type
   let arg_tm_0 = coIndHypArg hyp arg_spec_0
-  arg_tp_0 <- mrTypeOf arg_tm_0 >>= mrNormOpenTerm
+  arg_tp_0 <- mrTypeOf arg_tm_0 >>= mrNormTerm
   (tp_r0, tm_r0, repr0) <- mkInjReprTerm arg_tp_0 arg_tm_0
 
   -- Attempt to unify the representation of arg 0 with each of the arg_specs
@@ -787,7 +787,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
     foldM
     (\(tp_r, tm_r, repr, eq_args, arg_reprs, uneq_args) arg_spec ->
       do let arg_tm = coIndHypArg hyp arg_spec
-         arg_tp <- mrTypeOf arg_tm >>= mrNormOpenTerm
+         arg_tp <- mrTypeOf arg_tm >>= mrNormTerm
          unify_res <- injUnifyRepr tp_r tm_r repr arg_tp arg_tm
          case unify_res of
            Just (tp_r',tm_r',repr',arg_repr) ->
@@ -854,7 +854,7 @@ asDecProp (asBoolProp -> Just condM) =
          False -> return (Nothing, AssumpFun assumeM)
 asDecProp (asIsFinite -> Just n) =
   Just $
-  do n_norm <- mrNormOpenTerm n
+  do n_norm <- mrNormTerm n
      maybe_assump <- mrGetDataTypeAssump n_norm
      -- The assumption function that requires b == req, in which case it is just
      -- the identity, and otherwise panics
@@ -971,7 +971,7 @@ mrRefines' m1 (Eithers [(_,f)] t2) =
   mrRefines m1 m2
 
 mrRefines' (Eithers ((tp,f1):elims) t1) m2 =
-  mrNormOpenTerm t1 >>= \t1' ->
+  mrNormTerm t1 >>= \t1' ->
   mrGetDataTypeAssump t1' >>= \mb_assump ->
   case (mb_assump, asEither t1') of
     (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
@@ -989,7 +989,7 @@ mrRefines' (Eithers ((tp,f1):elims) t1) m2 =
              withDataTypeAssump t1' (IsRight x) (mrRefines (Eithers elims x) m2))
 
 mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
-  mrNormOpenTerm t2 >>= \t2' ->
+  mrNormTerm t2 >>= \t2' ->
   mrGetDataTypeAssump t2' >>= \mb_assump ->
   case (mb_assump, asEither t2') of
     (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
@@ -1030,14 +1030,14 @@ mrRefines' (AssertBoolBind cond1 k1) m2 =
 
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
-  mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
+  mrNormTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
   withFreshUVar nm (Type tp') $ \x ->
   mrApplyRepr r x >>= \x' ->
   applyNormCompFun f2 x' >>= \m2' ->
   mrRefines m1 m2'
 mrRefines' (ExistsBind tp f1) m2 =
   let nm = maybe "x" id (compFunVarName f1) in
-  mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
+  mrNormTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
   withFreshUVar nm (Type tp') $ \x ->
   mrApplyRepr r x >>= \x' ->
   applyNormCompFun f1 x' >>= \m1' ->
@@ -1073,8 +1073,8 @@ mrRefines' m1@(FunBind f1 args1 k1)
            m2@(FunBind f2 args2 k2) =
   liftSC0 scGetModuleMap >>= \mm ->
   let ?mm = mm in
-  mrFunOutType f1 args1 >>= mapM mrNormOpenTerm >>= \(_, tp1) ->
-  mrFunOutType f2 args2 >>= mapM mrNormOpenTerm >>= \(_, tp2) ->
+  mrFunOutType f1 args1 >>= mapM mrNormTerm >>= \(_, tp1) ->
+  mrFunOutType f2 args2 >>= mapM mrNormTerm >>= \(_, tp2) ->
   injUnifyTypes tp1 tp2 >>= \mb_convs ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
@@ -1243,7 +1243,7 @@ mrRefines'' (AssumeBoolBind cond1 k1) m2 =
 
 mrRefines'' m1 (ExistsBind tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
-     tp' <- mrNormOpenTerm (typeTm tp)
+     tp' <- mrNormTerm (typeTm tp)
      evars <- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i ->
        mkInjReprType tp_i >>= \(tp_i', r) ->
        mrFreshEVar nm (Type tp_i') >>= mrApplyRepr r
@@ -1252,7 +1252,7 @@ mrRefines'' m1 (ExistsBind tp f2) =
      mrRefines m1 m2'
 mrRefines'' (ForallBind tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
-     tp' <- mrNormOpenTerm (typeTm tp)
+     tp' <- mrNormTerm (typeTm tp)
      evars <- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i ->
        mkInjReprType tp_i >>= \(tp_i', r) ->
        mrFreshEVar nm (Type tp_i') >>= mrApplyRepr r
@@ -1274,16 +1274,16 @@ mrRefinesFun tp1 f1 tp2 f2 =
          nm2 = maybe "call_ret_val" id (compFunVarName f2)
      f1'' <- mrLambda1 (nm1, tp1) $ mrApply f1'
      f2'' <- mrLambda1 (nm2, tp2) $ mrApply f2'
-     piTp1 <- mrTypeOf f1'' >>= mrNormOpenTerm
-     piTp2 <- mrTypeOf f2'' >>= mrNormOpenTerm
+     piTp1 <- mrTypeOf f1'' >>= mrNormTerm
+     piTp2 <- mrTypeOf f2'' >>= mrNormTerm
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
 
 -- | Prove that two functions both refine another for all inputs
 mrBiRefinesFuns :: MRRel t ()
 mrBiRefinesFuns piTp1 f1 piTp2 f2 =
   mrDebugPPPrefixSep 1 "mrBiRefinesFuns" f1 "=|=" f2 >>
-  mrNormOpenTerm piTp1 >>= \piTp1' ->
-  mrNormOpenTerm piTp2 >>= \piTp2' ->
+  mrNormTerm piTp1 >>= \piTp1' ->
+  mrNormTerm piTp2 >>= \piTp2' ->
   mrRefinesFunH mrRefines [] piTp1' f1 piTp2' f2 >>
   mrRefinesFunH mrRefines [] piTp2' f2 piTp1' f1
 
@@ -1456,8 +1456,8 @@ askMRSolver ::
 askMRSolver sc env timeout askSMT rs args t1 t2 =
   execMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
-    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormOpenTerm
-       tp2 <- liftSC1 scTypeOf t2 >>= mrNormOpenTerm
+    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormTerm
+       tp2 <- liftSC1 scTypeOf t2 >>= mrNormTerm
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
@@ -1498,6 +1498,6 @@ refinementTerm ::
 refinementTerm sc env timeout askSMT rs args t1 t2 =
   evalMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
-    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormOpenTerm
-       tp2 <- liftSC1 scTypeOf t2 >>= mrNormOpenTerm
+    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormTerm
+       tp2 <- liftSC1 scTypeOf t2 >>= mrNormTerm
        mrRefinesFunH refinementTermH [] tp1 t1 tp2 t2
