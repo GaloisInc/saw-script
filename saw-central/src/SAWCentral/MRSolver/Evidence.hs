@@ -1,4 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -40,7 +41,7 @@ import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts)
 
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name (Name(..))
-import SAWCore.Term.Functor
+import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats
@@ -57,7 +58,7 @@ import SAWCentral.MRSolver.Term
 data RefinesS = RefinesS {
   -- | The context of the refinement, i.e. @[(a1,A1), ..., (an,An)]@
   -- from the term above
-  refnCtx :: [(LocalName, Term)],
+  refnCtx :: [(Name, Term)],
   -- | The event type of the refinement, i.e. @ev@ above
   refnEv :: Term,
   -- | The LHS return type of the refinement, i.e. @rtp1@ above
@@ -74,16 +75,16 @@ data RefinesS = RefinesS {
 -- @(a1:A1) -> ... -> (an:An) -> refinesS ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
 -- and returns:
 -- @RefinesS [(a1,A1), ..., (an,An)] ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
-asRefinesS :: Recognizer Term RefinesS
-asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "SpecM.refinesS",
-                          [ev, rtp1, rtp2,
-                           asApplyAll -> (asGlobalDef -> Just "SpecM.eqRR", _),
-                           t1, t2]))) =
-  Just $ RefinesS args ev rtp1 rtp2 t1 t2
-asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "SpecM.refinesS", _))) =
-  error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation"
-asRefinesS _ = Nothing
+asRefinesS :: SharedContext -> Term -> IO (Maybe RefinesS)
+asRefinesS sc t =
+  do (ecs, body) <- scAsPiList sc t
+     let args = map (\ec -> (ecName ec, ecType ec)) ecs
+     case asGlobalApply "SpecM.refinesS" body of
+       Just [ev, rtp1, rtp2, asGlobalApply "SpecM.eqRR" -> Just _, t1, t2] ->
+         pure $ Just $ RefinesS args ev rtp1 rtp2 t1 t2
+       Just _ ->
+         error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation"
+       Nothing -> pure Nothing
 
 -- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
 -- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
@@ -118,17 +119,17 @@ data FunAssump t = FunAssump {
 -- where @ann@ is the given argument and @rhs@ is either
 -- @OpaqueFunAssump g [c1,...,cl]@ if @t2@ is @g c1 ... cl@,
 -- or @RewriteFunAssump t2@ otherwise
-asFunAssump :: (?mm :: ModuleMap) => Maybe t -> Recognizer Term (FunAssump t)
-asFunAssump ann (asRefinesS -> Just (RefinesS args
-                                     (asGlobalDef -> Just "SpecM.VoidEv")
-                                     _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))
-                                     t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2)))) =
-  let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2
-   in Just $ FunAssump { fassumpCtx = mrVarCtxFromOuterToInner args,
+asFunAssump :: (?mm :: ModuleMap) => SharedContext -> Maybe t -> Term -> IO (Maybe (FunAssump t))
+asFunAssump sc ann t =
+  asRefinesS sc t >>= \case
+    Just (RefinesS args (asGlobalDef -> Just "SpecM.VoidEv") _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1)) t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2))) ->
+      let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2 in
+      pure $
+      Just $ FunAssump { fassumpCtx = mrVarCtxFromOuterToInner args,
                          fassumpFun = f1, fassumpArgs = args1,
                          fassumpRHS = rhs,
                          fassumpAnnotation = ann }
-asFunAssump _ _ = Nothing
+    _ -> pure Nothing
 
 
 ----------------------------------------------------------------------
