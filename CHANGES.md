@@ -4,6 +4,23 @@ This release supports [version
 2](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#2) of
 `mir-json`'s schema.
 
+The `saw` executable's command-line handling has been changed to
+permit passing arguments to SAWScript scripts.
+Words on the command line following the script name are treated as
+arguments to the script and not interpreted by `saw`.
+The behavior of the `get_opt` SAWScript builtin has changed accordingly;
+it now retrieves these arguments (with the 0th being the script name)
+instead of `saw`'s own command line arguments.
+This is a breaking change in two ways:
+ - Options intended for `saw` but passed after the script name will no
+   longer be recognized.
+ - `get_opt` will essentially always return different strings from what
+   it did in previous versions.
+A `get_nopts` builtin has also been added to allow retrieving the number
+of arguments.
+These changes bring `saw` into line with the way other interpreters
+handle script arguments.
+
 The way git information gets compiled in (so it can be reported with
 e.g. saw --version) has been changed.
 You must build with build.sh after git changes for those changes to
@@ -40,6 +57,9 @@ frontend for MIR in the style of `crux-mir`, but extended with the ability to
 support compositional verification using techniques similar to SAW.
 
 ## New Features
+
+* There is now a `get_env` SAWScript builtin for inspecting the process
+  environment.
 
 * SAW now supports importing Cryptol code that uses enums.
 

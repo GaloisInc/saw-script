@@ -233,6 +233,7 @@ initialState readFileFn =
        _ -> return Nothing
      let ro = TopLevelRO
                 { roOptions = opts
+                , roArgv = []
                 , roHandleAlloc = halloc
 #if USE_BUILTIN_ABC
                 , roProxy = AIGProxy GIA.proxy

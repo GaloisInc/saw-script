@@ -13,6 +13,8 @@ import Control.Exception
 import Control.Monad
 
 import Data.Char (toLower)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Maybe (fromMaybe)
 import Text.Read (readMaybe)
 
@@ -337,12 +339,12 @@ warn opts msg = do
       hPutStrLn stderr msg
 
 -- Load (and run) a saw-script file.
-loadFile :: Options -> FilePath -> IO ()
-loadFile opts file = do
+loadFile :: Options -> FilePath -> [Text] -> IO ()
+loadFile opts file scriptArgv = do
   let aigProxy = AIGProxy AIG.compactProxy
       subsh = REPL.subshell (REPL.replBody Nothing (return ()))
       proofSubsh = REPL.proof_subshell (REPL.replBody Nothing (return ()))
-  processFile aigProxy opts file (Just subsh) (Just proofSubsh)
+  processFile aigProxy opts file scriptArgv (Just subsh) (Just proofSubsh)
     `catch`
     (\(ErrorCall msg) -> err opts msg)
 
@@ -351,7 +353,7 @@ main = do
   setLocaleEncoding utf8
   hSetBuffering stdout LineBuffering
   argv <- getArgs
-  let (rawOpts, files, errs) = getOpt Permute options argv
+  let (rawOpts, scriptArgv, errs) = getOpt RequireOrder options argv
   when (errs /= []) $ do
       hPutStrLn stderr (concat errs ++ usageText)
       exitProofUnknown
@@ -405,23 +407,21 @@ main = do
   case batchFile opts of
       Nothing
        | runInteractively opts -> do
-            when (files /= []) $
+            when (scriptArgv /= []) $
                 -- XXX: would be nicer to load and then drop into the
                 -- repl. That won't (usefully) work at the moment
                 -- because there's no way to retrieve the context from
                 -- loading a file and then feed it to the repl.
                 warn opts "Warning: files loaded along with -I are ignored"
             REPL.run opts
-       | [] <- files ->
+       | [] <- scriptArgv ->
             REPL.run opts
-       | [file] <- files ->
-            loadFile opts file
-       | otherwise ->
-            err opts "Multiple files not yet supported."
+       | file : _ <- scriptArgv ->
+            loadFile opts file (map Text.pack scriptArgv)
       Just f -> do
             when (runInteractively opts) $
                 err opts "Error: -B and -I cannot be used together"
-            when (files /= []) $
+            when (scriptArgv /= []) $
                 err opts $ "Error: cannot load ordinary saw-script files" ++
                            " along with -B"
             REPL.runFromFile f opts
