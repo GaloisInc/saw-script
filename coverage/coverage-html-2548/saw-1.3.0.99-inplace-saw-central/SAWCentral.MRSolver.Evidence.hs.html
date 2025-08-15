@@ -99,7 +99,7 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">do (ecs, body) &lt;- scAsPiList sc t</span>
 <span class="lineno">   81 </span><span class="spaces">     </span><span class="nottickedoff">let args = map (\ec -&gt; (ecName ec, ecType ec)) ecs</span>
 <span class="lineno">   82 </span><span class="spaces">     </span><span class="nottickedoff">case asGlobalApply &quot;SpecM.refinesS&quot; body of</span>
-<span class="lineno">   83 </span><span class="spaces">       </span><span class="nottickedoff">Just [ev, rtp1, rtp2, asGlobalApply &quot;SpecM.eqRR&quot; -&gt; Just [t1, t2]] -&gt;</span>
+<span class="lineno">   83 </span><span class="spaces">       </span><span class="nottickedoff">Just [ev, rtp1, rtp2, asGlobalApply &quot;SpecM.eqRR&quot; -&gt; Just _, t1, t2] -&gt;</span>
 <span class="lineno">   84 </span><span class="spaces">         </span><span class="nottickedoff">pure $ Just $ RefinesS args ev rtp1 rtp2 t1 t2</span>
 <span class="lineno">   85 </span><span class="spaces">       </span><span class="nottickedoff">Just _ -&gt;</span>
 <span class="lineno">   86 </span><span class="spaces">         </span><span class="nottickedoff">error &quot;FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation&quot;</span>
