@@ -141,7 +141,7 @@ span.spaces    { background: white }
 <span class="lineno">  122 </span>-- | Initial, empty environment.
 <span class="lineno">  123 </span>defaultRefs :: Bool -&gt; Options -&gt; IO Refs
 <span class="lineno">  124 </span><span class="decl"><span class="istickedoff">defaultRefs isBatch opts =</span>
-<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">do (_biContext, ro, rw) &lt;- buildTopLevelEnv <span class="nottickedoff">(AIGProxy AIG.compactProxy)</span> opts</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="istickedoff">do (_biContext, ro, rw) &lt;- buildTopLevelEnv <span class="nottickedoff">(AIGProxy AIG.compactProxy)</span> opts <span class="nottickedoff">[]</span></span>
 <span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">contRef &lt;- newIORef True</span>
 <span class="lineno">  127 </span><span class="spaces">     </span><span class="istickedoff">rwRef &lt;- newIORef rw</span>
 <span class="lineno">  128 </span><span class="spaces">     </span><span class="istickedoff">return Refs</span>
