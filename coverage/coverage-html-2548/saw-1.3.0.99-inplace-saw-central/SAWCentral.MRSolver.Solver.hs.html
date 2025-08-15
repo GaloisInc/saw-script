@@ -794,7 +794,7 @@ span.spaces    { background: white }
 <span class="lineno">  775 </span><span class="spaces">  </span><span class="nottickedoff">-- injective representation for it, keeping track of the representation term</span>
 <span class="lineno">  776 </span><span class="spaces">  </span><span class="nottickedoff">-- and type</span>
 <span class="lineno">  777 </span><span class="spaces">  </span><span class="nottickedoff">let arg_tm_0 = coIndHypArg hyp arg_spec_0</span>
-<span class="lineno">  778 </span><span class="spaces">  </span><span class="nottickedoff">arg_tp_0 &lt;- mrTypeOf arg_tm_0 &gt;&gt;= mrNormOpenTerm</span>
+<span class="lineno">  778 </span><span class="spaces">  </span><span class="nottickedoff">arg_tp_0 &lt;- mrTypeOf arg_tm_0 &gt;&gt;= mrNormTerm</span>
 <span class="lineno">  779 </span><span class="spaces">  </span><span class="nottickedoff">(tp_r0, tm_r0, repr0) &lt;- mkInjReprTerm arg_tp_0 arg_tm_0</span>
 <span class="lineno">  780 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  781 </span><span class="spaces">  </span><span class="nottickedoff">-- Attempt to unify the representation of arg 0 with each of the arg_specs</span>
@@ -806,7 +806,7 @@ span.spaces    { background: white }
 <span class="lineno">  787 </span><span class="spaces">    </span><span class="nottickedoff">foldM</span>
 <span class="lineno">  788 </span><span class="spaces">    </span><span class="nottickedoff">(\(tp_r, tm_r, repr, eq_args, arg_reprs, uneq_args) arg_spec -&gt;</span>
 <span class="lineno">  789 </span><span class="spaces">      </span><span class="nottickedoff">do let arg_tm = coIndHypArg hyp arg_spec</span>
-<span class="lineno">  790 </span><span class="spaces">         </span><span class="nottickedoff">arg_tp &lt;- mrTypeOf arg_tm &gt;&gt;= mrNormOpenTerm</span>
+<span class="lineno">  790 </span><span class="spaces">         </span><span class="nottickedoff">arg_tp &lt;- mrTypeOf arg_tm &gt;&gt;= mrNormTerm</span>
 <span class="lineno">  791 </span><span class="spaces">         </span><span class="nottickedoff">unify_res &lt;- injUnifyRepr tp_r tm_r repr arg_tp arg_tm</span>
 <span class="lineno">  792 </span><span class="spaces">         </span><span class="nottickedoff">case unify_res of</span>
 <span class="lineno">  793 </span><span class="spaces">           </span><span class="nottickedoff">Just (tp_r',tm_r',repr',arg_repr) -&gt;</span>
@@ -873,7 +873,7 @@ span.spaces    { background: white }
 <span class="lineno">  854 </span><span class="spaces">         </span><span class="nottickedoff">False -&gt; return (Nothing, AssumpFun assumeM)</span>
 <span class="lineno">  855 </span><span class="spaces"></span><span class="nottickedoff">asDecProp (asIsFinite -&gt; Just n) =</span>
 <span class="lineno">  856 </span><span class="spaces">  </span><span class="nottickedoff">Just $</span>
-<span class="lineno">  857 </span><span class="spaces">  </span><span class="nottickedoff">do n_norm &lt;- mrNormOpenTerm n</span>
+<span class="lineno">  857 </span><span class="spaces">  </span><span class="nottickedoff">do n_norm &lt;- mrNormTerm n</span>
 <span class="lineno">  858 </span><span class="spaces">     </span><span class="nottickedoff">maybe_assump &lt;- mrGetDataTypeAssump n_norm</span>
 <span class="lineno">  859 </span><span class="spaces">     </span><span class="nottickedoff">-- The assumption function that requires b == req, in which case it is just</span>
 <span class="lineno">  860 </span><span class="spaces">     </span><span class="nottickedoff">-- the identity, and otherwise panics</span>
@@ -990,7 +990,7 @@ span.spaces    { background: white }
 <span class="lineno">  971 </span><span class="spaces">  </span><span class="nottickedoff">mrRefines m1 m2</span>
 <span class="lineno">  972 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  973 </span><span class="spaces"></span><span class="nottickedoff">mrRefines' (Eithers ((tp,f1):elims) t1) m2 =</span>
-<span class="lineno">  974 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm t1 &gt;&gt;= \t1' -&gt;</span>
+<span class="lineno">  974 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm t1 &gt;&gt;= \t1' -&gt;</span>
 <span class="lineno">  975 </span><span class="spaces">  </span><span class="nottickedoff">mrGetDataTypeAssump t1' &gt;&gt;= \mb_assump -&gt;</span>
 <span class="lineno">  976 </span><span class="spaces">  </span><span class="nottickedoff">case (mb_assump, asEither t1') of</span>
 <span class="lineno">  977 </span><span class="spaces">    </span><span class="nottickedoff">(_, Just (Left  x)) -&gt; applyNormCompFun f1 x &gt;&gt;= flip mrRefines m2</span>
@@ -1008,7 +1008,7 @@ span.spaces    { background: white }
 <span class="lineno">  989 </span><span class="spaces">             </span><span class="nottickedoff">withDataTypeAssump t1' (IsRight x) (mrRefines (Eithers elims x) m2))</span>
 <span class="lineno">  990 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  991 </span><span class="spaces"></span><span class="nottickedoff">mrRefines' m1 (Eithers ((tp,f2):elims) t2) =</span>
-<span class="lineno">  992 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm t2 &gt;&gt;= \t2' -&gt;</span>
+<span class="lineno">  992 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm t2 &gt;&gt;= \t2' -&gt;</span>
 <span class="lineno">  993 </span><span class="spaces">  </span><span class="nottickedoff">mrGetDataTypeAssump t2' &gt;&gt;= \mb_assump -&gt;</span>
 <span class="lineno">  994 </span><span class="spaces">  </span><span class="nottickedoff">case (mb_assump, asEither t2') of</span>
 <span class="lineno">  995 </span><span class="spaces">    </span><span class="nottickedoff">(_, Just (Left  x)) -&gt; applyNormCompFun f2 x &gt;&gt;= mrRefines m1</span>
@@ -1049,14 +1049,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1030 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1031 </span><span class="spaces"></span><span class="nottickedoff">mrRefines' m1 (ForallBind tp f2) =</span>
 <span class="lineno"> 1032 </span><span class="spaces">  </span><span class="nottickedoff">let nm = maybe &quot;x&quot; id (compFunVarName f2) in</span>
-<span class="lineno"> 1033 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm (typeTm tp) &gt;&gt;= mkInjReprType &gt;&gt;= \(tp', r) -&gt;</span>
+<span class="lineno"> 1033 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm (typeTm tp) &gt;&gt;= mkInjReprType &gt;&gt;= \(tp', r) -&gt;</span>
 <span class="lineno"> 1034 </span><span class="spaces">  </span><span class="nottickedoff">withFreshUVar nm (Type tp') $ \x -&gt;</span>
 <span class="lineno"> 1035 </span><span class="spaces">  </span><span class="nottickedoff">mrApplyRepr r x &gt;&gt;= \x' -&gt;</span>
 <span class="lineno"> 1036 </span><span class="spaces">  </span><span class="nottickedoff">applyNormCompFun f2 x' &gt;&gt;= \m2' -&gt;</span>
 <span class="lineno"> 1037 </span><span class="spaces">  </span><span class="nottickedoff">mrRefines m1 m2'</span>
 <span class="lineno"> 1038 </span><span class="spaces"></span><span class="nottickedoff">mrRefines' (ExistsBind tp f1) m2 =</span>
 <span class="lineno"> 1039 </span><span class="spaces">  </span><span class="nottickedoff">let nm = maybe &quot;x&quot; id (compFunVarName f1) in</span>
-<span class="lineno"> 1040 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm (typeTm tp) &gt;&gt;= mkInjReprType &gt;&gt;= \(tp', r) -&gt;</span>
+<span class="lineno"> 1040 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm (typeTm tp) &gt;&gt;= mkInjReprType &gt;&gt;= \(tp', r) -&gt;</span>
 <span class="lineno"> 1041 </span><span class="spaces">  </span><span class="nottickedoff">withFreshUVar nm (Type tp') $ \x -&gt;</span>
 <span class="lineno"> 1042 </span><span class="spaces">  </span><span class="nottickedoff">mrApplyRepr r x &gt;&gt;= \x' -&gt;</span>
 <span class="lineno"> 1043 </span><span class="spaces">  </span><span class="nottickedoff">applyNormCompFun f1 x' &gt;&gt;= \m1' -&gt;</span>
@@ -1092,8 +1092,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1073 </span><span class="spaces">           </span><span class="nottickedoff">m2@(FunBind f2 args2 k2) =</span>
 <span class="lineno"> 1074 </span><span class="spaces">  </span><span class="nottickedoff">liftSC0 scGetModuleMap &gt;&gt;= \mm -&gt;</span>
 <span class="lineno"> 1075 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm in</span>
-<span class="lineno"> 1076 </span><span class="spaces">  </span><span class="nottickedoff">mrFunOutType f1 args1 &gt;&gt;= mapM mrNormOpenTerm &gt;&gt;= \(_, tp1) -&gt;</span>
-<span class="lineno"> 1077 </span><span class="spaces">  </span><span class="nottickedoff">mrFunOutType f2 args2 &gt;&gt;= mapM mrNormOpenTerm &gt;&gt;= \(_, tp2) -&gt;</span>
+<span class="lineno"> 1076 </span><span class="spaces">  </span><span class="nottickedoff">mrFunOutType f1 args1 &gt;&gt;= mapM mrNormTerm &gt;&gt;= \(_, tp1) -&gt;</span>
+<span class="lineno"> 1077 </span><span class="spaces">  </span><span class="nottickedoff">mrFunOutType f2 args2 &gt;&gt;= mapM mrNormTerm &gt;&gt;= \(_, tp2) -&gt;</span>
 <span class="lineno"> 1078 </span><span class="spaces">  </span><span class="nottickedoff">injUnifyTypes tp1 tp2 &gt;&gt;= \mb_convs -&gt;</span>
 <span class="lineno"> 1079 </span><span class="spaces">  </span><span class="nottickedoff">mrFunBodyRecInfo f1 args1 &gt;&gt;= \maybe_f1_body -&gt;</span>
 <span class="lineno"> 1080 </span><span class="spaces">  </span><span class="nottickedoff">mrFunBodyRecInfo f2 args2 &gt;&gt;= \maybe_f2_body -&gt;</span>
@@ -1262,7 +1262,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1243 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1244 </span><span class="spaces"></span><span class="nottickedoff">mrRefines'' m1 (ExistsBind tp f2) =</span>
 <span class="lineno"> 1245 </span><span class="spaces">  </span><span class="nottickedoff">do let nm = maybe &quot;x&quot; id (compFunVarName f2)</span>
-<span class="lineno"> 1246 </span><span class="spaces">     </span><span class="nottickedoff">tp' &lt;- mrNormOpenTerm (typeTm tp)</span>
+<span class="lineno"> 1246 </span><span class="spaces">     </span><span class="nottickedoff">tp' &lt;- mrNormTerm (typeTm tp)</span>
 <span class="lineno"> 1247 </span><span class="spaces">     </span><span class="nottickedoff">evars &lt;- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i -&gt;</span>
 <span class="lineno"> 1248 </span><span class="spaces">       </span><span class="nottickedoff">mkInjReprType tp_i &gt;&gt;= \(tp_i', r) -&gt;</span>
 <span class="lineno"> 1249 </span><span class="spaces">       </span><span class="nottickedoff">mrFreshEVar nm (Type tp_i') &gt;&gt;= mrApplyRepr r</span>
@@ -1271,7 +1271,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1252 </span><span class="spaces">     </span><span class="nottickedoff">mrRefines m1 m2'</span>
 <span class="lineno"> 1253 </span><span class="spaces"></span><span class="nottickedoff">mrRefines'' (ForallBind tp f1) m2 =</span>
 <span class="lineno"> 1254 </span><span class="spaces">  </span><span class="nottickedoff">do let nm = maybe &quot;x&quot; id (compFunVarName f1)</span>
-<span class="lineno"> 1255 </span><span class="spaces">     </span><span class="nottickedoff">tp' &lt;- mrNormOpenTerm (typeTm tp)</span>
+<span class="lineno"> 1255 </span><span class="spaces">     </span><span class="nottickedoff">tp' &lt;- mrNormTerm (typeTm tp)</span>
 <span class="lineno"> 1256 </span><span class="spaces">     </span><span class="nottickedoff">evars &lt;- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i -&gt;</span>
 <span class="lineno"> 1257 </span><span class="spaces">       </span><span class="nottickedoff">mkInjReprType tp_i &gt;&gt;= \(tp_i', r) -&gt;</span>
 <span class="lineno"> 1258 </span><span class="spaces">       </span><span class="nottickedoff">mrFreshEVar nm (Type tp_i') &gt;&gt;= mrApplyRepr r</span>
@@ -1293,16 +1293,16 @@ span.spaces    { background: white }
 <span class="lineno"> 1274 </span><span class="spaces">         </span><span class="nottickedoff">nm2 = maybe &quot;call_ret_val&quot; id (compFunVarName f2)</span>
 <span class="lineno"> 1275 </span><span class="spaces">     </span><span class="nottickedoff">f1'' &lt;- mrLambda1 (nm1, tp1) $ mrApply f1'</span>
 <span class="lineno"> 1276 </span><span class="spaces">     </span><span class="nottickedoff">f2'' &lt;- mrLambda1 (nm2, tp2) $ mrApply f2'</span>
-<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="nottickedoff">piTp1 &lt;- mrTypeOf f1'' &gt;&gt;= mrNormOpenTerm</span>
-<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="nottickedoff">piTp2 &lt;- mrTypeOf f2'' &gt;&gt;= mrNormOpenTerm</span>
+<span class="lineno"> 1277 </span><span class="spaces">     </span><span class="nottickedoff">piTp1 &lt;- mrTypeOf f1'' &gt;&gt;= mrNormTerm</span>
+<span class="lineno"> 1278 </span><span class="spaces">     </span><span class="nottickedoff">piTp2 &lt;- mrTypeOf f2'' &gt;&gt;= mrNormTerm</span>
 <span class="lineno"> 1279 </span><span class="spaces">     </span><span class="nottickedoff">mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''</span></span>
 <span class="lineno"> 1280 </span>
 <span class="lineno"> 1281 </span>-- | Prove that two functions both refine another for all inputs
 <span class="lineno"> 1282 </span>mrBiRefinesFuns :: MRRel t ()
 <span class="lineno"> 1283 </span><span class="decl"><span class="nottickedoff">mrBiRefinesFuns piTp1 f1 piTp2 f2 =</span>
 <span class="lineno"> 1284 </span><span class="spaces">  </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;mrBiRefinesFuns&quot; f1 &quot;=|=&quot; f2 &gt;&gt;</span>
-<span class="lineno"> 1285 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm piTp1 &gt;&gt;= \piTp1' -&gt;</span>
-<span class="lineno"> 1286 </span><span class="spaces">  </span><span class="nottickedoff">mrNormOpenTerm piTp2 &gt;&gt;= \piTp2' -&gt;</span>
+<span class="lineno"> 1285 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm piTp1 &gt;&gt;= \piTp1' -&gt;</span>
+<span class="lineno"> 1286 </span><span class="spaces">  </span><span class="nottickedoff">mrNormTerm piTp2 &gt;&gt;= \piTp2' -&gt;</span>
 <span class="lineno"> 1287 </span><span class="spaces">  </span><span class="nottickedoff">mrRefinesFunH mrRefines [] piTp1' f1 piTp2' f2 &gt;&gt;</span>
 <span class="lineno"> 1288 </span><span class="spaces">  </span><span class="nottickedoff">mrRefinesFunH mrRefines [] piTp2' f2 piTp1' f1</span></span>
 <span class="lineno"> 1289 </span>
@@ -1475,8 +1475,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1456 </span><span class="decl"><span class="nottickedoff">askMRSolver sc env timeout askSMT rs args t1 t2 =</span>
 <span class="lineno"> 1457 </span><span class="spaces">  </span><span class="nottickedoff">execMRM sc env timeout askSMT rs $</span>
 <span class="lineno"> 1458 </span><span class="spaces">  </span><span class="nottickedoff">withUVars (mrVarCtxFromOuterToInner args) $ \_ -&gt;</span>
-<span class="lineno"> 1459 </span><span class="spaces">    </span><span class="nottickedoff">do tp1 &lt;- liftSC1 scTypeOf t1 &gt;&gt;= mrNormOpenTerm</span>
-<span class="lineno"> 1460 </span><span class="spaces">       </span><span class="nottickedoff">tp2 &lt;- liftSC1 scTypeOf t2 &gt;&gt;= mrNormOpenTerm</span>
+<span class="lineno"> 1459 </span><span class="spaces">    </span><span class="nottickedoff">do tp1 &lt;- liftSC1 scTypeOf t1 &gt;&gt;= mrNormTerm</span>
+<span class="lineno"> 1460 </span><span class="spaces">       </span><span class="nottickedoff">tp2 &lt;- liftSC1 scTypeOf t2 &gt;&gt;= mrNormTerm</span>
 <span class="lineno"> 1461 </span><span class="spaces">       </span><span class="nottickedoff">mrDebugPPPrefixSep 1 &quot;mr_solver&quot; t1 &quot;|=&quot; t2</span>
 <span class="lineno"> 1462 </span><span class="spaces">       </span><span class="nottickedoff">mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2</span></span>
 <span class="lineno"> 1463 </span>
@@ -1517,8 +1517,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1498 </span><span class="decl"><span class="nottickedoff">refinementTerm sc env timeout askSMT rs args t1 t2 =</span>
 <span class="lineno"> 1499 </span><span class="spaces">  </span><span class="nottickedoff">evalMRM sc env timeout askSMT rs $</span>
 <span class="lineno"> 1500 </span><span class="spaces">  </span><span class="nottickedoff">withUVars (mrVarCtxFromOuterToInner args) $ \_ -&gt;</span>
-<span class="lineno"> 1501 </span><span class="spaces">    </span><span class="nottickedoff">do tp1 &lt;- liftSC1 scTypeOf t1 &gt;&gt;= mrNormOpenTerm</span>
-<span class="lineno"> 1502 </span><span class="spaces">       </span><span class="nottickedoff">tp2 &lt;- liftSC1 scTypeOf t2 &gt;&gt;= mrNormOpenTerm</span>
+<span class="lineno"> 1501 </span><span class="spaces">    </span><span class="nottickedoff">do tp1 &lt;- liftSC1 scTypeOf t1 &gt;&gt;= mrNormTerm</span>
+<span class="lineno"> 1502 </span><span class="spaces">       </span><span class="nottickedoff">tp2 &lt;- liftSC1 scTypeOf t2 &gt;&gt;= mrNormTerm</span>
 <span class="lineno"> 1503 </span><span class="spaces">       </span><span class="nottickedoff">mrRefinesFunH refinementTermH [] tp1 t1 tp2 t2</span></span>
 
 </pre>
