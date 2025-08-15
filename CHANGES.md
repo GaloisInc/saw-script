@@ -1,7 +1,7 @@
 # next -- TBA
 
 This release supports [version
-2](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#2) of
+3](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#3) of
 `mir-json`'s schema.
 
 The `saw` executable's command-line handling has been changed to
