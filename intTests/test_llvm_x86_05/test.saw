@@ -7,4 +7,4 @@ let returntest_setup = do {
 
   llvm_return (llvm_term {{ 42 : [32] }});
 };
-llvm_verify_x86 m "./test" "returntest" [] false returntest_setup w4;
+llvm_verify_x86 m "./returntest" "returntest" [] false returntest_setup w4;

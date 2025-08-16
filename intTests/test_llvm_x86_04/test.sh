@@ -1,6 +1,6 @@
 set -e
 
-#yasm -felf64 test.S
-#ld test.o -o test
+#yasm -felf64 addvar.S
+#ld addvar.o -o addvar
 clang -c -emit-llvm test.c
 $SAW test.saw

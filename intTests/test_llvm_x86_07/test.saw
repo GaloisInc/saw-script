@@ -11,4 +11,4 @@ let precondtest_setup = do {
   crucible_postcond {{ x' < 10 }};
 };
 
-llvm_verify_x86 m "./test" "precondtest" [] false precondtest_setup w4;
+llvm_verify_x86 m "./precondtest" "precondtest" [] false precondtest_setup w4;

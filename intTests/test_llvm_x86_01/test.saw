@@ -1,6 +1,6 @@
 enable_experimental;
 
-m <- llvm_load_module "test.bc";
+m <- llvm_load_module "bar.bc";
 
 let foo_setup = do {
   ptr <- llvm_alloc (llvm_int 64);
@@ -11,7 +11,7 @@ let foo_setup = do {
   val <- llvm_fresh_var "val'" (llvm_int 64);
   llvm_points_to ptr (llvm_term val);
 };
-foo_method_spec <- llvm_verify_x86 m "./test" "foo" [] false foo_setup w4;
+foo_method_spec <- llvm_verify_x86 m "./foo" "foo" [] false foo_setup w4;
 
 let bar_setup = do {
   llvm_execute_func [];

@@ -6,8 +6,8 @@ let discoverytest_setup = do {
   llvm_execute_func [];
 };
 
-fails (llvm_verify_x86 m "./test" "discoverytest" [] false discoverytest_setup w4);
+fails (llvm_verify_x86 m "./discoverytest" "discoverytest" [] false discoverytest_setup w4);
 
 add_x86_preserved_reg "rax";
-llvm_verify_x86 m "./test" "discoverytest" [] false discoverytest_setup w4;
+llvm_verify_x86 m "./discoverytest" "discoverytest" [] false discoverytest_setup w4;
 default_x86_preserved_reg;
