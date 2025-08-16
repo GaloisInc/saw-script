@@ -1,7 +1,5 @@
-all: test.linked-mir.json Test.class
+MIR_SRCS=test
+JAVA_SRCS=Test
 
-test.linked-mir.json: test.rs
-	saw-rustc $<
-
-Test.class: Test.java
-	javac -g $<
+include ../support/mir-blobs.mk
+include ../support/java-blobs.mk

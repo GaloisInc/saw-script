@@ -1,13 +1,7 @@
-all: test.bc test.linked-mir.json Test.class
+LLVM_C_SRCS=test
+JAVA_SRCS=Test
+MIR_SRCS=test
 
-test.bc: test.c
-	clang -emit-llvm -c -o $@ $<
-
-test.linked-mir.json: test.rs
-	saw-rustc $<
-
-Test.class: Test.java
-	javac -g $<
-
-clean:
-	rm -f *.class *.bc *.json *.rlib *.mir test
+include ../support/llvm-blobs.mk
+include ../support/java-blobs.mk
+include ../support/mir-blobs.mk
