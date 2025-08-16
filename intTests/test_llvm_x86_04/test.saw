@@ -16,4 +16,4 @@ let addvar_setup = do {
   valprime <- llvm_fresh_var "_val" (llvm_int 64);
   llvm_points_to ptr (llvm_term valprime);
 };
-llvm_verify_x86 m "./test" "addvar" [] false addvar_setup w4;
+llvm_verify_x86 m "./addvar" "addvar" [] false addvar_setup w4;
