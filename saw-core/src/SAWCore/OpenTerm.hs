@@ -253,7 +253,9 @@ arrayValueOpenTerm tp elems =
 -- | Create a SAW core term for a bitvector literal
 bvLitOpenTerm :: [Bool] -> OpenTerm
 bvLitOpenTerm bits =
-  arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
+  [natOpenTerm (fromIntegral (length bits)), natOpenTerm i]
+  where i = foldl (\a b -> 2 * a + if b then 1 else 0) 0 bits
 
 -- | Create a SAW core term for a vector type
 vectorTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
