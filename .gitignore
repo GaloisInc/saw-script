@@ -12,8 +12,6 @@ build-sandbox-version-pins.txt
 stack.yaml
 .DS_Store
 .ghc.environment*
-.class
-*.class
 dist-newstyle
 cabal.project.freeze
 *~
