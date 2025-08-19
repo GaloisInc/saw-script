@@ -1,7 +1,7 @@
 a <- java_load_class "Arr";
 
 print "**Extracting main";
-main <- jvm_extract j "main";
+main <- jvm_extract a "main";
 
 
 print "**Evaluating: single array ref";

@@ -4,7 +4,6 @@ $SAW statdyn_crucible.saw
 $SAW obj_crucible.saw
 $SAW sub_crucible.saw
 $SAW arr_crucible.saw
+$SAW arr_crucible2.saw
 $SAW ffs_crucible.saw
 $SAW teststr_crucible.saw
-
-
