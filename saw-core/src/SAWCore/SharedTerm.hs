@@ -2451,10 +2451,9 @@ scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
 -- representing the given 'Integer' value (if possible).
 scBvLit :: SharedContext -> Natural -> Integer -> IO Term
 scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
-  do bool_tp <- scBoolType sc
-     bits <- mapM (scBool sc . testBit v)
-                  [(fromIntegral w - 1), (fromIntegral w - 2) .. 0]
-     scVector sc bool_tp bits
+  do w' <- scNat sc w
+     v' <- scNat sc (fromIntegral v)
+     scBvNat sc w' v'
 
 -- | Create a term computing the bitvector of given length representing 0 if
 -- the other given term evaluates to @False@ and representing 1 if the other
