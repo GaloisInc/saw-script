@@ -11,6 +11,5 @@ test_llvm_x86_0[1234]/test.o
 test_llvm_x86_0[1234]/test.bc
 test1533/test.o
 test*/*.out
-test_crucible_jvm/Stat.class
 test_profiling/prof
 test_smtlib/*.smt2
