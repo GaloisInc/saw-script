@@ -1,6 +1,10 @@
 $SAW stat_crucible.saw
 $SAW dyn_crucible.saw
+$SAW statdyn_crucible.saw
+$SAW obj_crucible.saw
 $SAW sub_crucible.saw
+$SAW arr_crucible.saw
+$SAW ffs_crucible.saw
 $SAW teststr_crucible.saw
 
 
