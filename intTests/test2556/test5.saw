@@ -1,0 +1,5 @@
+// We accept mains that return something other than unit, as long as
+// they're in TopLevel.
+let main = do { print "hello"; return 6; };
+
+

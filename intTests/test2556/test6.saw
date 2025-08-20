@@ -1,0 +1,4 @@
+// We accept mains that return something other than unit, as long as
+// they're in TopLevel.
+// (This will currently instead complain about a non-monomorphic type.)
+main <- return (return 6);

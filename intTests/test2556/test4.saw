@@ -1,0 +1,5 @@
+// We accept mains that return something other than unit, as long as
+// they're in TopLevel.
+// (This version is monad-polymorphic and should also be accepted.)
+let main = return 6;
+
