@@ -966,15 +966,6 @@ mrRelTerm' _ piRel tp1@(asVecTypeWithLen -> Just (vlen1, tpA1)) t1
     Nothing -> throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- For pair types, prove both the left and right projections are related
--- FIXME: Don't re-associate tuples
-mrRelTerm' _ piRel (asPairType -> Just (asPairType -> Just (tp1a, tp1b), tp1c)) t1
-                   tp2 t2 =
-  do tp1' <- liftSC2 scPairType tp1a =<< liftSC2 scPairType tp1b tp1c
-     mrRelTerm piRel tp1' t1 tp2 t2
-mrRelTerm' _ piRel tp1 t1
-                   (asPairType -> Just (asPairType -> Just (tp2a, tp2b), tp2c)) t2 =
-  do tp2' <- liftSC2 scPairType tp2a =<< liftSC2 scPairType tp2b tp2c
-     mrRelTerm piRel tp1 t1 tp2' t2
 mrRelTerm' _ piRel (asPairType -> Just (tpL1, tpR1)) t1
                    (asPairType -> Just (tpL2, tpR2)) t2 =
   do t1L <- liftSC1 scPairLeft t1
