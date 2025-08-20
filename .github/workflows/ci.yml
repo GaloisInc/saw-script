@@ -916,7 +916,7 @@ jobs:
 
       - id: common-tag
         run: |
-          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
+          echo "name=common-tag::$GITHUB_REF_SLUG" >> $GITHUB_OUTPUT
           echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
 
       - uses: docker/setup-buildx-action@v1
