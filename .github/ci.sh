@@ -78,6 +78,20 @@ build() {
   cabal v2-build "$@" "${pkgs[@]}"
 }
 
+build_mir_json() {
+  rustup default nightly-2025-02-16
+  rustup component add rustc-dev rust-src
+  cd deps/mir-json
+  cargo install --locked
+  mir-json-translate-libs
+  mkdir -p ../../dist/bin
+  # Copy over each binary (built with --release) listed in Cargo.toml.
+  for bin in $(cargo read-manifest | jq -r '.targets[] | select([ .kind[] | contains("bin") ] | any) | .name'); do
+    cp "target/release/$bin" "../../dist/bin/$bin";
+  done
+  cp -Lr rlibs ../../dist/rlibs
+}
+
 haddock() {
   # It seems that the secret sauce for getting cabal to _not_ go
   # through building docs for every single sublibrary is to pass

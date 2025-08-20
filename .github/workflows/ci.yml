@@ -156,16 +156,6 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - if: matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-24.04' || matrix.os == 'macos-14'
-        shell: bash
-        name: Build mir-json
-        run: |
-          rustup default nightly-2025-02-16
-          rustup component add rustc-dev rust-src
-          cd deps/mir-json
-          cargo install --locked
-          mir-json-translate-libs
-
       - uses: actions/cache/restore@v4
         name: Restore cabal store cache
         with:
@@ -185,6 +175,10 @@ jobs:
         env:
           RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
+
+      - if: matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-24.04' || matrix.os == 'macos-14'
+        shell: bash
+        run: .github/ci.sh build_mir_json
 
       - if: matrix.haddock == true
         shell: bash
