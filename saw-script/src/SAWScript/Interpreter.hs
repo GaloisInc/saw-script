@@ -33,6 +33,7 @@ module SAWScript.Interpreter
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.Reader (ask, asks)
+import Control.Monad.State (gets)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe)
@@ -85,7 +86,7 @@ import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.Typechecker (checkStmt)
+import SAWScript.Typechecker (checkStmt, typesMatch)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
@@ -964,16 +965,37 @@ interpretFile file runMain =
 interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
+  avail <- gets rwPrimsAvail
+  tyenv <- gets rwTypeInfo
   let pos = SS.PosInternal "entry"
       mainName = Located "main" "main" pos
+
+      -- We need the type to be "TopLevel a", not just "TopLevel ()".
+      -- There are several (old) tests in the test suite whose main
+      -- returns something, e.g. several are TopLevel Theorem because
+      -- they call prove_print or prove_sat or whatever and don't
+      -- explicitly throw away the result.
+      tyRet = SS.TyVar pos "a"
+      tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
+      tyExpected = SS.Forall [(pos, "a")] tyMonadic
   case Map.lookup mainName (rwValueInfo rw) of
     Nothing ->
-      -- fail "No 'main' defined"
+      -- Don't fail or complain if there's no main.
       return ()
-    Just (Current, _ty, v) -> do
-      let v' = injectPositionIntoMonadicValue pos v
-          v'' = insertRefChain pos "main" v'
-      fromValue FromInterpreter v''
+    Just (Current, tyFound, v) -> case tyFound of
+        SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
+            -- It looks like a monadic value, so check more carefully.
+            case typesMatch avail tyenv tyFound tyExpected of
+              False ->
+                  fail "There is a 'main' defined but its type is not TopLevel ()"
+              True -> do
+                  let v' = injectPositionIntoMonadicValue pos v
+                      v'' = insertRefChain pos "main" v'
+                  fromValue FromInterpreter v''
+        _ ->
+            -- If the type is something entirely random, like a Term or a
+            -- String or something, just ignore it.
+            return ()
     Just (lc, _ty, _v) ->
       -- There is no way for things other than primitives to get marked
       -- experimental or deprecated, so this isn't possible. If we allow
@@ -982,6 +1004,7 @@ interpretMain = do
       panic "Interpreter" [
           "Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"
       ]
+
 
 buildTopLevelEnv :: AIGProxy
                  -> Options

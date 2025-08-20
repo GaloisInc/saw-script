@@ -1,0 +1,2 @@
+// A main of type TopLevel () should be implicitly executed.
+let main = print "hello";

@@ -1,0 +1,6 @@
+ Loading file "test6.saw"
+ Stack trace:
+   (builtin) (at top level)
+Not a monomorphic type: t.7 Int
+
+FAILED
