@@ -52,7 +52,7 @@ jobs:
       release: ${{ steps.config.outputs.release }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -125,7 +125,7 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: |
            git submodule update --init
 
@@ -136,7 +136,7 @@ jobs:
           .github/ci.sh output name $NAME
           echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
 
-      - uses: haskell-actions/setup@v2.8.1
+      - uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
@@ -156,7 +156,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/cache/restore@v4.2.4
+      - uses: actions/cache/restore@v4
         name: Restore cabal store cache
         with:
           path: |
@@ -184,7 +184,7 @@ jobs:
         shell: bash
         run: .github/ci.sh haddock
 
-      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.7.3
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
         with:
           # Keep this list in sync. There are four lists of tests:
@@ -204,13 +204,13 @@ jobs:
       # In the next 2 steps, we upload to different names depending on whether
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v4
         if: matrix.ghc == '9.4.8' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v4
         if: matrix.ghc == '9.4.8' && matrix.hpc == true
         with:
           path: dist-tests
@@ -268,7 +268,7 @@ jobs:
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
       - if: matrix.ghc == '9.4.8' && matrix.hpc == false
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}.tar.gz*"
@@ -276,7 +276,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - if: matrix.ghc == '9.4.8' && matrix.hpc == false
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
@@ -284,7 +284,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - if: matrix.ghc == '9.4.8' && matrix.run-tests && matrix.hpc == false
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
@@ -294,12 +294,12 @@ jobs:
         run: .github/ci.sh collect_hpc_files
 
       - if: matrix.hpc == true
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v4.2.4
+      - uses: actions/cache/save@v4
         name: Save cabal store cache
         if: always()
         with:
@@ -323,7 +323,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: git submodule update --init
       - name: make-source-distribution
         shell: bash
@@ -334,7 +334,7 @@ jobs:
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.config.outputs.name }}-sources (full source distribution)
           path: ${{ needs.config.outputs.name }}-sources.tar.gz
@@ -350,10 +350,10 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Cache Python environment
-        uses: actions/cache@v4.2.4
+        uses: actions/cache@v4
         with:
           path: doc/.venv
           key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
@@ -364,7 +364,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
       - name: Upload HTML artifact
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           name: html_docs
           path: doc/_build/html/
@@ -403,10 +403,10 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Download HTML artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: html_docs
           path: doc/_build/html
@@ -442,7 +442,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out gh-pages
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: gh-pages
 
@@ -482,7 +482,7 @@ jobs:
         os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -492,7 +492,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -517,7 +517,7 @@ jobs:
         os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -527,7 +527,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -571,7 +571,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repo and submodules
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -605,7 +605,7 @@ jobs:
           echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
 
       - name: Download test binaries
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
@@ -644,7 +644,7 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -654,7 +654,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -711,7 +711,7 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -721,7 +721,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -734,7 +734,7 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x bin/*
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
@@ -750,7 +750,7 @@ jobs:
           java-package: jdk
           architecture: x64
 
-      - uses: actions/cache/restore@v4.2.4
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -773,7 +773,7 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v4.2.4
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -798,11 +798,11 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - uses: haskell-actions/setup@v2.8.1
+      - uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: "9.4.8"
@@ -814,12 +814,12 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}-hpc
           path: dist-tests
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-hpc.tar.gz"
 
@@ -842,7 +842,7 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v4.2.4
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: ${{ matrix.suite }}.cache
@@ -869,7 +869,7 @@ jobs:
         run: |
           ./compute-coverage.sh
 
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v4
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
@@ -909,7 +909,7 @@ jobs:
             image: ghcr.io/galoisinc/crux-mir-comp
             cache: ghcr.io/galoisinc/cache-crux-mir-comp
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -1010,12 +1010,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p s2nTests/bin
 
       - name: Download previously-built SAW
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: ./s2nTests/bin
@@ -1031,7 +1031,7 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v4.2.4
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: s2nTests/cache
@@ -1048,7 +1048,7 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v4.2.4
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: always()
         with:
@@ -1064,12 +1064,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p exercises/bin
 
       - name: Download previously-built SAW
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: ./exercises/bin
