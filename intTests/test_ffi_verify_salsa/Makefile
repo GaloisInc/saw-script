@@ -1,6 +1,5 @@
-salsa.bc: salsa.c ecrypt-*.h
-	clang -Wall -Werror -g -c -emit-llvm $< -o $@
+LLVM_C_SRCS=salsa
+CFLAGS=-g -Wall -Werror
+include ../support/llvm-blobs.mk
 
-.PHONY: clean
-clean:
-	rm salsa.bc
+salsa.bc: ecrypt-*.h

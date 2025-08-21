@@ -1,6 +1,3 @@
-all: test.ll test.bc
-
-test.ll : test.rs
-	rustc --emit=llvm-ir test.rs
-test.bc : test.ll
-	llvm-as *.ll
+LLVM_RUST_SRCS=test
+MAKE_LL_FILES=yes
+include ../support/llvm-blobs.mk

@@ -1,8 +1,6 @@
-all : vectortest.ll vectortest.bc vectortest
+# This blob probably can only be regenerated on an x86 machine.
 
-vectortest.ll : vectortest.c
-	clang-3.8 -S -emit-llvm -O1 -g -mpclmul vectortest.c
-vectortest.bc : vectortest.c
-	clang-3.8 -c -emit-llvm -O1 -g -mpclmul vectortest.c
-vectortest : vectortest.c
-	clang-3.8 -o vectortest -O1 -g -mpclmul vectortest.c
+LLVM_C_SRCS=vectortest
+CFLAGS=-O1 -g -mpclmul
+MAKE_LL_FILES=yes
+include ../support/llvm-blobs.mk

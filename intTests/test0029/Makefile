@@ -1,6 +1,6 @@
-all: test.ll test.bc
+# The original version of this makefile explicitly ran clang-3.8
+#CLANG=clang-3.8
 
-test.ll : test.c
-	clang-3.8 -g -O0 -S -emit-llvm test.c
-test.bc : test.c
-	clang-3.8 -g -O0 -c -emit-llvm test.c
+LLVM_C_SRCS=test
+MAKE_LL_FILES=yes
+include ../support/llvm-blobs.mk

@@ -1,11 +1,2 @@
-CC = clang
-CFLAGS = -g -O0
-
-all: test.bc
-
-test.bc: test.c
-	$(CC) $(CFLAGS) -c -emit-llvm $< -o $@
-
-.PHONY: clean
-clean:
-	rm -f test.bc
+LLVM_C_SRCS=test
+include ../support/llvm-blobs.mk

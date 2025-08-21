@@ -1,17 +1,24 @@
-CC = clang
-CFLAGS = -g -frecord-command-line -O0
+# note: only attempt to regenerate on an x86_64 machine
 
-all: test.bc test.exe
+LLVM_C_SRCS=test
+include ../support/llvm-blobs.mk
 
-test.bc: test.c
-	$(CC) $(CFLAGS) -c -emit-llvm $< -o $@
+# We also want to compile test.c to an executable
+all: all-exe
+all-exe: test
 
-test.o: test.c
-	$(CC) $(CFLAGS) -c $< -o $@
+test: test.c
+	$(CLANG) $(CFLAGS) $< -o $@
+	$(CLANG) --version |\
+		$(SUPPORTDIR)/update-from.sh "$@.FROM"
 
-test.exe: test.o
-	$(CC) $(CFLAGS) $< -o $@
+regen: regen-exe
+regen-exe:
+	rm -f test
+	$(MAKE) test
 
-.PHONY: clean
-clean:
-	rm -f test.bc test.exe
+destroy: destroy-exe
+destroy-exe:
+	rm -f test
+
+.PHONY: all regen regen-exe destroy destroy-exe
