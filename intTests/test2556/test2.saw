@@ -1,0 +1,2 @@
+// A main of completely the wrong type should be ignored.
+let main = {{ True }};

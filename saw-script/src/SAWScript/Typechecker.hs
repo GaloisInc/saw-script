@@ -19,6 +19,7 @@ Stability   : provisional
 module SAWScript.Typechecker
        ( checkDecl
        , checkStmt
+       , typesMatch
        , checkSchemaPattern
        ) where
 
@@ -1815,6 +1816,33 @@ checkStmt avail env tenv ctx stmt =
 checkDecl :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl avail env tenv decl =
   evalTIWithEnv avail env tenv (inferDecl decl)
+
+-- | Check a found type (first argument) against an expected type
+--   (second argument) and return True if they can be unified.
+--
+--   Both types are schemes because that's what we need upstream.
+--
+--   (This is an external interface.)
+typesMatch :: Set PrimitiveLifecycle -> TyEnv -> Schema -> Schema -> Bool
+typesMatch avail tenv schema'found schema'expected =
+  let unpack (Forall as ty) = do
+        -- Generate unification vars for all the forall-bindings
+        let generate (pos'a, a) = do
+              ty'a <- getFreshTyVar pos'a
+              return (a, (Current, ConcreteType ty'a))
+        substs <- mapM generate as
+        -- Substitute them into the type
+        let ty' = substituteTyVars avail (M.fromList substs) ty
+        return ty'
+      match = do
+        -- Unpack the schemas and check if they match
+        ty'found <- unpack schema'found
+        ty'expected <- unpack schema'expected
+        matches ty'found ty'expected
+  in
+  case evalTIWithEnv avail M.empty tenv match of
+    (Left _errors, _warnings) -> False          -- not actually reachable
+    (Right b, _warnings) -> b                   -- return match success/failure
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)

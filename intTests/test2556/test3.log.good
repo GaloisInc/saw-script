@@ -1,0 +1,6 @@
+ Loading file "test3.saw"
+ Stack trace:
+   (builtin) (at top level)
+There is a 'main' defined but its type is not TopLevel ()
+
+FAILED

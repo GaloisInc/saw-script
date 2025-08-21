@@ -1,0 +1,2 @@
+// A main that is in the wrong monad should fail and print a diagnostic.
+let main = do { llvm_assert {{ True }}; return (); };

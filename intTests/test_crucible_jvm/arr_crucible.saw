@@ -20,7 +20,7 @@ print "**Evaluating: double array ref";
 sat_print abc {{ \(x:[32]) -> doub 0 == x }};
 
 print "**Evaluating: obj array ref";
-sat_print abc {{ \(x:[32]) -> obj 0 == x }};
+sat_print abc {{ \(x:[32]) -> h_ref 0 == x }};
 
 
 print "Done.";
