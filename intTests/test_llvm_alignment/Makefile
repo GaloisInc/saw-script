@@ -1,2 +1,3 @@
-test.bc : test.c
-	clang -c -emit-llvm -g -o test.bc test.c
+LLVM_C_SRCS=test
+CFLAGS=-g
+include ../support/llvm-blobs.mk

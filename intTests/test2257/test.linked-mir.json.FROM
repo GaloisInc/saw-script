@@ -1,0 +1,6 @@
+versions
+   rustc 1.86.0-nightly (9cd60bd2c 2025-02-15)
+   mir-json ae8c20d96b874ee977b5fba0f02059d6593943a8 from 2025-08-06
+persistent-notes
+   Neither the target nor the version is particularly significant
+   given that the test program is trivial.

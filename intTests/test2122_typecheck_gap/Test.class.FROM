@@ -1,0 +1,5 @@
+versions
+   javac 17.0.15
+persistent-notes
+   Bytecode is expected to be stable across JDK versions for this
+   simple method.

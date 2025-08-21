@@ -1,3 +1,3 @@
-test.bc : test.c
-	clang -O0 -c -emit-llvm -o test.bc test.c
+LLVM_C_SRCS=test
+include ../support/llvm-blobs.mk
 

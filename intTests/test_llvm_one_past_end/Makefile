@@ -1,4 +1,3 @@
-CLANG ?= clang
-
-test.bc: test.c
-	$(CLANG) -c -emit-llvm -g -o $@ $^
+LLVM_C_SRCS=test
+CFLAGS=-g
+include ../support/llvm-blobs.mk

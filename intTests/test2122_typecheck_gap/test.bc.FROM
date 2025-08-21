@@ -1,0 +1,8 @@
+versions
+   clang version 19.1.7
+   Target: x86_64-pc-linux-gnu
+   Thread model: posix
+   InstalledDir: /usr/bin
+persistent-notes
+   Neither the target nor the specific LLVM version is expected to
+   affect this test.

@@ -1,0 +1,8 @@
+versions
+   Apple clang version 15.0.0 (clang-1500.1.0.2.5)
+   Target: arm64-apple-darwin22.6.0
+   Thread model: posix
+   InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+persistent-notes
+   Neither the target nor the clang/llvm version is expected to be
+   significant.

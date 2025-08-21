@@ -11,4 +11,4 @@ let increment_setup = do {
   llvm_points_to ptr (llvm_term valprime);
   llvm_postcond {{ valprime == val }};
 };
-fails (llvm_verify_x86 m "./test" "increment" [] false increment_setup w4);
+fails (llvm_verify_x86 m "./increment" "increment" [] false increment_setup w4);
