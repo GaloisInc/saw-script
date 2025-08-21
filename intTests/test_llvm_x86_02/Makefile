@@ -1,22 +1,9 @@
 # note: only attempt to regenerate on an x86_64 machine
-AS = yasm
-ASFLAGS = -felf64
-LD = ld
-CC = clang
-CFLAGS = -O0
 
-all: increment test.bc
+LLVM_C_SRCS=test
+CFLAGS=-O0
 
-increment: increment.o
-	$(LD) increment.o -o $@
+X86_SRCS=increment
 
-increment.o:
-	$(AS) $(ASFLAGS) increment.S
-
-test.bc: test.c
-	$(CC) $(CFLAGS) -c -emit-llvm $< -o $@
-
-clean:
-	rm -f increment.o test.bc
-
-.PHONY: all clean
+include ../support/llvm-blobs.mk
+include ../support/x86-blobs.mk
