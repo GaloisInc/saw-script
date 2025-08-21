@@ -38,7 +38,7 @@ span.spaces    { background: white }
 <span class="lineno">   19 </span>module SAWScript.Typechecker
 <span class="lineno">   20 </span>       ( checkDecl
 <span class="lineno">   21 </span>       , checkStmt
-<span class="lineno">   22 </span>       , checkValue
+<span class="lineno">   22 </span>       , typesMatch
 <span class="lineno">   23 </span>       , checkSchemaPattern
 <span class="lineno">   24 </span>       ) where
 <span class="lineno">   25 </span>
@@ -1836,14 +1836,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1817 </span><span class="decl"><span class="nottickedoff">checkDecl avail env tenv decl =</span>
 <span class="lineno"> 1818 </span><span class="spaces">  </span><span class="nottickedoff">evalTIWithEnv avail env tenv (inferDecl decl)</span></span>
 <span class="lineno"> 1819 </span>
-<span class="lineno"> 1820 </span>-- | Check the type (of a value, so it might be a type scheme) against
-<span class="lineno"> 1821 </span>--   an expected type, which is also a type scheme because that's what
-<span class="lineno"> 1822 </span>--   we need upstream. (This is an external interface.)
-<span class="lineno"> 1823 </span>--
-<span class="lineno"> 1824 </span>--   The return type is somewhat silly but I want the sense of it to be
-<span class="lineno"> 1825 </span>--   clear, which wouldn't be the case for a Bool.
-<span class="lineno"> 1826 </span>checkValue :: Set PrimitiveLifecycle -&gt; TyEnv -&gt; Schema -&gt; Schema -&gt; Either () ()
-<span class="lineno"> 1827 </span><span class="decl"><span class="istickedoff">checkValue avail tenv schema'found schema'expected =</span>
+<span class="lineno"> 1820 </span>-- | Check a found type (first argument) against an expected type
+<span class="lineno"> 1821 </span>--   (second argument) and return True if they can be unified.
+<span class="lineno"> 1822 </span>--
+<span class="lineno"> 1823 </span>--   Both types are schemes because that's what we need upstream.
+<span class="lineno"> 1824 </span>--
+<span class="lineno"> 1825 </span>--   (This is an external interface.)
+<span class="lineno"> 1826 </span>typesMatch :: Set PrimitiveLifecycle -&gt; TyEnv -&gt; Schema -&gt; Schema -&gt; Bool
+<span class="lineno"> 1827 </span><span class="decl"><span class="istickedoff">typesMatch avail tenv schema'found schema'expected =</span>
 <span class="lineno"> 1828 </span><span class="spaces">  </span><span class="istickedoff">let unpack (Forall as ty) = do</span>
 <span class="lineno"> 1829 </span><span class="spaces">        </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
 <span class="lineno"> 1830 </span><span class="spaces">        </span><span class="istickedoff">let generate (pos'a, a) = do</span>
@@ -1860,59 +1860,58 @@ span.spaces    { background: white }
 <span class="lineno"> 1841 </span><span class="spaces">        </span><span class="istickedoff">matches ty'found ty'expected</span>
 <span class="lineno"> 1842 </span><span class="spaces">  </span><span class="istickedoff">in</span>
 <span class="lineno"> 1843 </span><span class="spaces">  </span><span class="istickedoff">case evalTIWithEnv avail <span class="nottickedoff">M.empty</span> tenv match of</span>
-<span class="lineno"> 1844 </span><span class="spaces">    </span><span class="istickedoff">(Left _errors, _warnings) -&gt; <span class="nottickedoff">Left ()</span>        -- not actually reachable</span>
-<span class="lineno"> 1845 </span><span class="spaces">    </span><span class="istickedoff">(Right False, _warnings) -&gt; Left ()         -- does not match, return failure</span>
-<span class="lineno"> 1846 </span><span class="spaces">    </span><span class="istickedoff">(Right True, _warnings) -&gt; Right ()</span></span>         -- matches, return success
-<span class="lineno"> 1847 </span>
-<span class="lineno"> 1848 </span>-- | Check a schema (type) pattern as used by :search. (This is an
-<span class="lineno"> 1849 </span>-- external interface.)
-<span class="lineno"> 1850 </span>--
-<span class="lineno"> 1851 </span>-- The first two arguments are the starting variable and typedef
-<span class="lineno"> 1852 </span>-- environments to use. The third argument is the pattern.
-<span class="lineno"> 1853 </span>--
-<span class="lineno"> 1854 </span>-- Returns a possibly updated pattern.
-<span class="lineno"> 1855 </span>--
-<span class="lineno"> 1856 </span>checkSchemaPattern :: Set PrimitiveLifecycle -&gt; VarEnv -&gt; TyEnv -&gt; SchemaPattern -&gt; Result SchemaPattern
-<span class="lineno"> 1857 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
-<span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
-<span class="lineno"> 1859 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
-<span class="lineno"> 1860 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
-<span class="lineno"> 1861 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
-<span class="lineno"> 1862 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
-<span class="lineno"> 1863 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
-<span class="lineno"> 1864 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
-<span class="lineno"> 1865 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
-<span class="lineno"> 1866 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
-<span class="lineno"> 1867 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
-<span class="lineno"> 1868 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
-<span class="lineno"> 1869 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
-<span class="lineno"> 1870 </span>
-<span class="lineno"> 1871 </span>-- }}}
+<span class="lineno"> 1844 </span><span class="spaces">    </span><span class="istickedoff">(Left _errors, _warnings) -&gt; <span class="nottickedoff">False</span>          -- not actually reachable</span>
+<span class="lineno"> 1845 </span><span class="spaces">    </span><span class="istickedoff">(Right b, _warnings) -&gt; b</span></span>                   -- return match success/failure
+<span class="lineno"> 1846 </span>
+<span class="lineno"> 1847 </span>-- | Check a schema (type) pattern as used by :search. (This is an
+<span class="lineno"> 1848 </span>-- external interface.)
+<span class="lineno"> 1849 </span>--
+<span class="lineno"> 1850 </span>-- The first two arguments are the starting variable and typedef
+<span class="lineno"> 1851 </span>-- environments to use. The third argument is the pattern.
+<span class="lineno"> 1852 </span>--
+<span class="lineno"> 1853 </span>-- Returns a possibly updated pattern.
+<span class="lineno"> 1854 </span>--
+<span class="lineno"> 1855 </span>checkSchemaPattern :: Set PrimitiveLifecycle -&gt; VarEnv -&gt; TyEnv -&gt; SchemaPattern -&gt; Result SchemaPattern
+<span class="lineno"> 1856 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
+<span class="lineno"> 1857 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
+<span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
+<span class="lineno"> 1859 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
+<span class="lineno"> 1860 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
+<span class="lineno"> 1861 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
+<span class="lineno"> 1862 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
+<span class="lineno"> 1863 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
+<span class="lineno"> 1864 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
+<span class="lineno"> 1865 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
+<span class="lineno"> 1866 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
+<span class="lineno"> 1867 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
+<span class="lineno"> 1868 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
+<span class="lineno"> 1869 </span>
+<span class="lineno"> 1870 </span>-- }}}
+<span class="lineno"> 1871 </span>
 <span class="lineno"> 1872 </span>
-<span class="lineno"> 1873 </span>
-<span class="lineno"> 1874 </span>{-
-<span class="lineno"> 1875 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
-<span class="lineno"> 1876 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 1877 </span>Various parts of SAW use irrefutable patterns in functions that assume that
-<span class="lineno"> 1878 </span>their arguments have particular shapes. For example, inferDecl in this module
-<span class="lineno"> 1879 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
-<span class="lineno"> 1880 </span>invariant that the list will have exactly one element. This lets inferDecl be
-<span class="lineno"> 1881 </span>slightly lazier when evaluated.
-<span class="lineno"> 1882 </span>
-<span class="lineno"> 1883 </span>Unfortunately, this use of irrefutable patterns is at odds with the
-<span class="lineno"> 1884 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
-<span class="lineno"> 1885 </span>produce a warning for any irrefutable pattern that does not cover all possible
-<span class="lineno"> 1886 </span>data constructors. While we could rewrite functions like `inferDecl` to
-<span class="lineno"> 1887 </span>explicitly provide a fall-through case, that would change its strictness
-<span class="lineno"> 1888 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
-<span class="lineno"> 1889 </span>in each part of SAW that uses irrefutable patterns.
-<span class="lineno"> 1890 </span>
-<span class="lineno"> 1891 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
-<span class="lineno"> 1892 </span>irrefutable patterns at all. GHC issue #14800
-<span class="lineno"> 1893 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
-<span class="lineno"> 1894 </span>If that issue is fixed in the future, we may want to reconsider whether we want
-<span class="lineno"> 1895 </span>to disable -Wincomplete-uni-patterns.
-<span class="lineno"> 1896 </span>-}
+<span class="lineno"> 1873 </span>{-
+<span class="lineno"> 1874 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
+<span class="lineno"> 1875 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 1876 </span>Various parts of SAW use irrefutable patterns in functions that assume that
+<span class="lineno"> 1877 </span>their arguments have particular shapes. For example, inferDecl in this module
+<span class="lineno"> 1878 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
+<span class="lineno"> 1879 </span>invariant that the list will have exactly one element. This lets inferDecl be
+<span class="lineno"> 1880 </span>slightly lazier when evaluated.
+<span class="lineno"> 1881 </span>
+<span class="lineno"> 1882 </span>Unfortunately, this use of irrefutable patterns is at odds with the
+<span class="lineno"> 1883 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
+<span class="lineno"> 1884 </span>produce a warning for any irrefutable pattern that does not cover all possible
+<span class="lineno"> 1885 </span>data constructors. While we could rewrite functions like `inferDecl` to
+<span class="lineno"> 1886 </span>explicitly provide a fall-through case, that would change its strictness
+<span class="lineno"> 1887 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
+<span class="lineno"> 1888 </span>in each part of SAW that uses irrefutable patterns.
+<span class="lineno"> 1889 </span>
+<span class="lineno"> 1890 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
+<span class="lineno"> 1891 </span>irrefutable patterns at all. GHC issue #14800
+<span class="lineno"> 1892 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
+<span class="lineno"> 1893 </span>If that issue is fixed in the future, we may want to reconsider whether we want
+<span class="lineno"> 1894 </span>to disable -Wincomplete-uni-patterns.
+<span class="lineno"> 1895 </span>-}
 
 </pre>
 </body>

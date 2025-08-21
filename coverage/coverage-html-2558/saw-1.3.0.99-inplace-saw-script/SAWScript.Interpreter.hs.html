@@ -105,7 +105,7 @@ span.spaces    { background: white }
 <span class="lineno">   86 </span>import SAWCentral.LLVMBuiltins
 <span class="lineno">   87 </span>import SAWCentral.Options
 <span class="lineno">   88 </span>import SAWScript.Lexer (lexSAW)
-<span class="lineno">   89 </span>import SAWScript.Typechecker (checkStmt, checkValue)
+<span class="lineno">   89 </span>import SAWScript.Typechecker (checkStmt, typesMatch)
 <span class="lineno">   90 </span>import SAWScript.Parser (parseSchema)
 <span class="lineno">   91 </span>import SAWScript.Panic (panic)
 <span class="lineno">   92 </span>import SAWCentral.TopLevel
@@ -1004,10 +1004,10 @@ span.spaces    { background: white }
 <span class="lineno">  985 </span><span class="spaces">    </span><span class="istickedoff">Just (Current, tyFound, v) -&gt; case tyFound of</span>
 <span class="lineno">  986 </span><span class="spaces">        </span><span class="istickedoff">SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -&gt;</span>
 <span class="lineno">  987 </span><span class="spaces">            </span><span class="istickedoff">-- It looks like a monadic value, so check more carefully.</span>
-<span class="lineno">  988 </span><span class="spaces">            </span><span class="istickedoff">case checkValue avail tyenv tyFound tyExpected of</span>
-<span class="lineno">  989 </span><span class="spaces">              </span><span class="istickedoff">Left () -&gt;</span>
+<span class="lineno">  988 </span><span class="spaces">            </span><span class="istickedoff">case typesMatch avail tyenv tyFound tyExpected of</span>
+<span class="lineno">  989 </span><span class="spaces">              </span><span class="istickedoff">False -&gt;</span>
 <span class="lineno">  990 </span><span class="spaces">                  </span><span class="istickedoff">fail &quot;There is a 'main' defined but its type is not TopLevel ()&quot;</span>
-<span class="lineno">  991 </span><span class="spaces">              </span><span class="istickedoff">Right () -&gt; do</span>
+<span class="lineno">  991 </span><span class="spaces">              </span><span class="istickedoff">True -&gt; do</span>
 <span class="lineno">  992 </span><span class="spaces">                  </span><span class="istickedoff">let v' = injectPositionIntoMonadicValue <span class="nottickedoff">pos</span> v</span>
 <span class="lineno">  993 </span><span class="spaces">                      </span><span class="istickedoff">v'' = insertRefChain pos &quot;main&quot; v'</span>
 <span class="lineno">  994 </span><span class="spaces">                  </span><span class="istickedoff">fromValue FromInterpreter v''</span>
