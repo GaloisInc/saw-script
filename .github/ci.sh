@@ -79,8 +79,6 @@ build() {
 }
 
 build_mir_json() {
-  rustup default nightly-2025-02-16
-  rustup component add rustc-dev rust-src
   cd deps/mir-json
   cargo install --locked
   mir-json-translate-libs
