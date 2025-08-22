@@ -19,6 +19,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import Data.Functor.Const
+import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.Kind as Kind
 import Data.Map (Map)
@@ -327,7 +328,24 @@ munge sym shp0 rv0 = do
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
-        go (TupleShape _ _ flds) rvs = goFields flds rvs
+        go (TupleShape _ elems) (MirAggregate totalSize m) = do
+            -- Zip together `elems` and `m`.  They should have the same
+            -- keys/offsets.
+            m' <- sequence $ IntMap.mergeWithKey
+              (\off (AgElemShape _ _ shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
+                  Refl <- case testEquality tpr (shapeType shp) of
+                      Just x -> return x
+                      Nothing -> error $ "type mismatch at offset " ++ show off
+                          ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
+                  rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+                  rv' <- go shp rv
+                  let rvPart' = W4.justPartExpr sym rv'
+                  return $ MirAggregateEntry sz tpr rvPart')
+              (\_ -> error "aggregate shape mismatch")
+              (\_ -> error "aggregate shape mismatch")
+              (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
+              m
+            return $ MirAggregate totalSize m'
         go (ArrayShape _ _ shp) vec = case vec of
             MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
             MirVector_PartialVector pv -> do
@@ -400,12 +418,12 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
           | fromIntegral (intValue w) == n -> Right ()
           | otherwise -> typeErr desc shp ty $
             "bitvector width " ++ show n ++ " does not match " ++ show (intValue w)
-        (TupleShape _ _ flds, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
-          | Ctx.sizeInt (Ctx.size flds) == n -> do
-            let flds' = toListFC Some flds
-            zipWithM_ (\(Some fld) ty' -> goOneField desc fld ty') flds' tys
+        (TupleShape _ elems, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
+          | length elems == n -> do
+            forM_ (zip elems tys) $ \(AgElemShape _off _sz shp', ty') -> do
+              goOne desc shp' ty'
           | otherwise -> typeErr desc shp ty $
-            "tuple size " ++ show n ++ " does not match " ++ show (Ctx.sizeInt $ Ctx.size flds)
+            "tuple size " ++ show n ++ " does not match " ++ show (length elems)
         (ArrayShape (M.TyArray _ n) _ shp',
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
@@ -420,10 +438,6 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
             "type mismatch in " ++ desc ++ ": Cryptol type " ++ show (Cry.pp ty) ++
             " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
-
-    goOneField :: forall tp. String -> FieldShape tp -> Cry.Type -> Either String ()
-    goOneField desc (OptField shp) ty = goOne desc shp ty
-    goOneField desc (ReqField shp) ty = goOne desc shp ty
 
 typecheckFnSig _ _ _ (SAW.TypedTermSchema sch) = Left $
     "polymorphic Cryptol functions are not supported (got signature: " ++

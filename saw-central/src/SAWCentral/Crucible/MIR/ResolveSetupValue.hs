@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Turns 'SetupValue's back into 'MIRVal's.
 module SAWCentral.Crucible.MIR.ResolveSetupValue
@@ -50,7 +51,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   ) where
 
 import           Control.Lens
-import           Control.Monad (guard, unless, zipWithM, zipWithM_)
+import           Control.Monad (forM, guard, unless, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
@@ -58,6 +59,8 @@ import qualified Data.BitVector.Sized as BV
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
 import           Data.Kind (Type)
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.List.Extra as List (firstJust)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
@@ -131,8 +134,7 @@ ppMIRVal sym (MIRVal shp val) =
       PP.pretty val
     PrimShape _ _ ->
       W4.printSymExpr val
-    TupleShape _ _ fldShp ->
-      PP.parens $ prettyAdtOrTuple fldShp val
+    TupleShape _ elems -> prettyAggregate elems val
     ArrayShape _ _ shp' ->
       case val of
         Mir.MirVector_Vector vec ->
@@ -212,6 +214,28 @@ ppMIRVal sym (MIRVal shp val) =
           readMaybeType sym "field" (shapeType shp') val'
         ReqField shp' ->
           ppMIRVal sym $ MIRVal shp' val'
+
+    prettyAggregate ::
+      [AgElemShape] ->
+      Mir.MirAggregate Sym ->
+      PP.Doc ann
+    prettyAggregate elems (Mir.MirAggregate _sz m) =
+      PP.braces $ commaList (map (prettyAgElem m) elems)
+
+    prettyAgElem ::
+      IntMap (Mir.MirAggregateEntry Sym) ->
+      AgElemShape ->
+      PP.Doc ann
+    prettyAgElem m (AgElemShape off _sz shp') =
+      let valDoc = case IntMap.lookup (fromIntegral off) m of
+            Just (Mir.MirAggregateEntry _sz tpr rv)
+              | Just Refl <- W4.testEquality tpr (shapeType shp') ->
+                  ppMIRVal sym $ MIRVal shp' $
+                  readMaybeType sym "elem" tpr rv
+              | otherwise -> "<type mismatch>"
+            Nothing -> "<unset>"
+      in
+      PP.viaShow off PP.<+> "->" PP.<+> valDoc
 
 type SetupValue = MS.SetupValue MIR
 
@@ -661,14 +685,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
-      Some fldAssn <-
-        pure $ Ctx.fromList $
-        map (\(MIRVal shp v) ->
-              Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
-            flds'
-      let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
-      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) fldMirTys fldShpAssn
-      pure $ MIRVal tupleShp valAssn
+      let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] flds']
+      let m = IntMap.fromList
+            [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
+              | (i, MIRVal shp rv) <- zip [0..] flds']
+      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) elems
+      let ag = Mir.MirAggregate (fromIntegral $ length flds) m
+      pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
       case slice of
         MirSetupSliceRaw{} ->
@@ -1022,13 +1045,12 @@ resolveSAWTerm mcc tp tm =
         else do
           let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
           let mirTupleTy = Mir.TyTuple mirTys
-          Some fldAssn <-
-            pure $ Ctx.fromList $
-            map (\(MIRVal shp val) ->
-                  Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym val)))
-                vals
-          let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
-          pure $ MIRVal (TupleShape mirTupleTy mirTys fldShpAssn) valAssn
+          let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] vals]
+          let m = IntMap.fromList
+                [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
+                  | (i, MIRVal shp rv) <- zip [0..] vals]
+          let ag = Mir.MirAggregate (fromIntegral $ length vals) m
+          pure $ MIRVal (TupleShape mirTupleTy elems) ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
@@ -1192,8 +1214,8 @@ equalValsPred cc mv1 mv2 =
       pure $ W4.truePred sym
     goTy (PrimShape _ _) v1 v2 =
       liftIO $ W4.isEq sym v1 v2
-    goTy (TupleShape _ _ fldShp) fldAssn1 fldAssn2 =
-      goFldAssn fldShp fldAssn1 fldAssn2
+    goTy (TupleShape _ elems) ag1 ag2 =
+      goAg elems ag1 ag2
     goTy (ArrayShape _ _ shp) vec1 vec2 =
       goVec shp vec1 vec2
     goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
@@ -1255,6 +1277,28 @@ equalValsPred cc mv1 mv2 =
           liftIO $ W4.andPred sym eq z)
         (W4.truePred sym)
         (Ctx.zipWith Functor.Pair fldAssn1 fldAssn2)
+
+    goAg :: [AgElemShape]
+         -> Mir.MirAggregate Sym
+         -> Mir.MirAggregate Sym
+         -> MaybeT IO (W4.Pred Sym)
+    goAg elems (Mir.MirAggregate totalSize1 m1) (Mir.MirAggregate totalSize2 m2) = do
+      guard (totalSize1 == totalSize2)
+      eqs <- forM elems $ \(AgElemShape (fromIntegral -> off) _sz shp) -> do
+        case (IntMap.lookup off m1, IntMap.lookup off m2) of
+          (Just (Mir.MirAggregateEntry sz1 tpr1 rvPart1),
+              Just (Mir.MirAggregateEntry sz2 tpr2 rvPart2)) -> do
+            guard (sz1 == sz2)
+            Refl <- testEquality tpr1 (shapeType shp)
+            Refl <- testEquality tpr2 (shapeType shp)
+            let rv1 = readMaybeType sym "aggregate element" tpr1 rvPart1
+            let rv2 = readMaybeType sym "aggregate element" tpr2 rvPart2
+            goTy shp rv1 rv2
+          -- Erroring out here on uninitialized fields seems okay, since the
+          -- `MirVector_PartialVector` case above does the same (via
+          -- `readMaybeType`).
+          (_, _) -> error $ "mismatched initialization state at offset " ++ show off
+      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
 
     goVariantAssn :: Ctx.Assignment VariantShape ctx
                   -> Ctx.Assignment (VariantBranch Sym) ctx

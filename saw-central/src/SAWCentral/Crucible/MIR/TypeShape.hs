@@ -13,6 +13,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   ( TypeShape(..)
   , FieldShape(..)
   , VariantShape(..)
+  , AgElemShape(..)
   , tyToShape
   , tyToShapeEq
   , shapeType
@@ -30,7 +31,6 @@ module SAWCentral.Crucible.MIR.TypeShape
 
 import Control.Lens ((^.), (^..), each)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Functor.Const (Const(..))
 import qualified Data.Map as Map
 import Data.Parameterized.Classes (ShowF)
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
@@ -62,7 +62,7 @@ import qualified SAWCore.SharedTerm as SAW
 data TypeShape (tp :: CrucibleType) where
     UnitShape :: M.Ty -> TypeShape UnitType
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
-    TupleShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
+    TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
     ArrayShape :: M.Ty -> M.Ty -> TypeShape tp -> TypeShape (MirVectorType tp)
     StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
@@ -148,6 +148,16 @@ instance PP.Pretty (FieldShape tp) where
 deriving instance Show (FieldShape tp)
 instance ShowF FieldShape
 
+data AgElemShape where
+    AgElemShape :: Word -> Word -> TypeShape tp -> AgElemShape
+
+-- TODO: Improve?
+instance PP.Pretty AgElemShape where
+  pretty = PP.viaShow
+
+deriving instance Show AgElemShape
+
+
 -- | The 'TypeShape' of an enum variant, which consists of some number of field
 -- types.
 --
@@ -216,11 +226,9 @@ tyToShape col = go
     goUnit ty = Some $ UnitShape ty
 
     goTuple :: M.Ty -> [M.Ty] -> Some TypeShape
-    goTuple ty tys | Some flds <- loop tys Empty = Some $ TupleShape ty tys flds
+    goTuple ty tys = Some $ TupleShape ty (zipWith mkElem [0..] tys)
       where
-        loop :: forall ctx. [M.Ty] -> Assignment FieldShape ctx -> Some (Assignment FieldShape)
-        loop [] flds = Some flds
-        loop (ty':tys') flds | Some fld <- go ty' = loop tys' (flds :> OptField fld)
+        mkElem i ty' | Some shp <- go ty' = AgElemShape i 1 shp
 
     goStruct :: M.Ty -> [M.Ty] -> Some TypeShape
     goStruct ty tys | Some flds <- goFields tys = Some $ StructShape ty tys flds
@@ -310,7 +318,7 @@ shapeType = go
     go :: forall tp. TypeShape tp -> TypeRepr tp
     go (UnitShape _) = UnitRepr
     go (PrimShape _ btpr) = baseToType btpr
-    go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
+    go (TupleShape _ _) = MirAggregateRepr
     go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
     go (StructShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (EnumShape _ _ variantTys _ discrShp) =
@@ -331,7 +339,7 @@ variantShapeType (VariantShape flds) =
 shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (UnitShape ty) = ty
 shapeMirTy (PrimShape ty _) = ty
-shapeMirTy (TupleShape ty _ _) = ty
+shapeMirTy (TupleShape ty _) = ty
 shapeMirTy (ArrayShape ty _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
 shapeMirTy (EnumShape ty _ _ _ _) = ty
@@ -355,8 +363,8 @@ shapeToTerm sc = go
     go (UnitShape _) = liftIO $ SAW.scUnitType sc
     go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
     go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
-    go (TupleShape _ _ flds) = do
-        tys <- toListFC getConst <$> traverseFC (\x -> Const <$> goField x) flds
+    go (TupleShape _ elems) = do
+        tys <- mapM goAgElem elems
         liftIO $ SAW.scTupleType sc tys
     go (ArrayShape (M.TyArray _ n) _ shp) = do
         ty <- go shp
@@ -364,9 +372,8 @@ shapeToTerm sc = go
         liftIO $ SAW.scVecType sc n' ty
     go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
 
-    goField :: forall tp'. FieldShape tp' -> m SAW.Term
-    goField (OptField shp) = go shp
-    goField (ReqField shp) = go shp
+    goAgElem :: AgElemShape -> m SAW.Term
+    goAgElem (AgElemShape _ _ shp) = go shp
 
 -- | A witness that a 'TypeShape' is equal to a 'PrimShape' that characterizes
 -- a bitvector.
@@ -449,3 +456,9 @@ instance TestEquality FieldShape where
         [t|FieldShape|]
         [ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])
         ])
+
+instance Eq AgElemShape where
+    AgElemShape off1 sz1 shp1 == AgElemShape off2 sz2 shp2 =
+        off1 == off2
+            && sz1 == sz2
+            && (case testEquality shp1 shp2 of Just _ -> True; _ -> False)

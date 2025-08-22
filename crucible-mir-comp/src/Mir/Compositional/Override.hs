@@ -397,7 +397,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
                         ""
-    go (TupleShape _ _ flds) rvs (MS.SetupTuple () svs) = goFields flds rvs svs
+    go (TupleShape _ elems) ag (MS.SetupTuple () svs) = goAgElems elems ag svs
     go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
@@ -438,6 +438,23 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         loop _ rvs svs = error $ "matchArg: type error: got RegValues for " ++
             show (Ctx.sizeInt $ Ctx.size rvs) ++ " fields, but got " ++
             show (length svs) ++ " SetupValues"
+
+    goAgElems ::
+      [AgElemShape] ->
+      MirAggregate sym ->
+      [MS.SetupValue MIR] -> 
+      MirOverrideMatcher sym ()
+    goAgElems elems (MirAggregate _totalSize m) svs = do
+      forM_ @_ @_ @_ @() (zip elems svs) $ \(AgElemShape off _sz shp, sv) -> do
+        MirAggregateEntry _sz' tpr rvPart <- case IntMap.lookup (fromIntegral off) m of
+          Just x -> return x
+          Nothing -> error $ "matchArg: missing entry at offset " ++ show off
+        Refl <- case W4.testEquality tpr (shapeType shp) of
+          Just x -> return x
+          Nothing -> error $ "type mismatch at offset " ++ show off
+            ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
+        rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+        go shp rv sv
 
     goRef :: forall tp'.
         M.Ty ->
@@ -529,7 +546,8 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ _ flds) (MS.SetupTuple _ svs) = goFields flds svs
+    go (TupleShape _ elems) (MS.SetupTuple _ svs) = do
+        goAggregate elems svs
     go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs
@@ -570,6 +588,15 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         loop shps svs = error $ "setupToReg: type error: got TypeShapes for " ++
             show (Ctx.sizeInt $ Ctx.size shps) ++ " fields, but got " ++
             show (length svs) ++ " SetupValues"
+
+    goAggregate :: [AgElemShape] -> [MS.SetupValue MIR] -> IO (MirAggregate sym)
+    goAggregate elems svs = do
+      let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
+      entries <- forM (zip elems svs) $ \(AgElemShape off sz shp, sv) -> do
+        rv <- go shp sv
+        let rvPart = W4.justPartExpr sym rv
+        return $ (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
+      return $ MirAggregate totalSize (IntMap.fromList entries)
 
 
 -- | Convert a `SetupCondition` from the MethodSpec into a boolean `SAW.Term`
