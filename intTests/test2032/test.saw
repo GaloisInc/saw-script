@@ -44,7 +44,7 @@ let mk_vec_i32 len contents = do {
     ]);
 };
 
-let rev_spec len = do {
+let rev_i32_spec_manual len = do {
     contents <- mir_fresh_var "contents" (mir_array len mir_i32);
     in_vec <- mk_vec_i32 len (mir_term contents);
     mir_execute_func [in_vec];
@@ -52,9 +52,9 @@ let rev_spec len = do {
     mir_return out_vec;
 };
 
-rev_ov <- mir_verify m "test::rev" [] false (rev_spec 10) z3;
+rev_i32_ov_manual <- mir_verify m "test::rev_i32" [] false (rev_i32_spec_manual 10) z3;
 
-let rev_rev_spec len = do {
+let rev_rev_i32_spec_manual len = do {
     contents <- mir_fresh_var "contents" (mir_array len mir_i32);
     in_vec <- mk_vec_i32 len (mir_term contents);
     mir_execute_func [in_vec];
@@ -62,4 +62,45 @@ let rev_rev_spec len = do {
     mir_return out_vec;
 };
 
-mir_verify m "test::rev_rev" [rev_ov] false (rev_rev_spec 10) z3;
+mir_verify m "test::rev_rev_i32" [rev_i32_ov_manual] false (rev_rev_i32_spec_manual 10) z3;
+
+let rev_spec_auto ty len = do {
+    contents <- mir_fresh_var "contents" (mir_array len ty);
+    in_vec <- mir_vec_of "in_vec" ty (mir_term contents);
+    mir_execute_func [in_vec];
+    out_vec <- mir_vec_of "out_vec" ty (mir_term {{ reverse contents }});
+    mir_return out_vec;
+};
+
+let rev_rev_spec_auto ty len = do {
+    contents <- mir_fresh_var "contents" (mir_array len ty);
+    in_vec <- mir_vec_of "in_vec" ty (mir_term contents);
+    mir_execute_func [in_vec];
+    out_vec <- mir_vec_of "out_vec" ty (mir_term contents);
+    mir_return out_vec;
+};
+
+rev_i32_ov_auto <- mir_verify m "test::rev_i32" [] false (rev_spec_auto mir_i32 10) z3;
+mir_verify m "test::rev_rev_i32" [rev_i32_ov_auto] false (rev_rev_spec_auto mir_i32 10) z3;
+
+rev_tuple_ov_auto <- mir_verify m "test::rev_tuple" [] false (rev_spec_auto (mir_tuple [mir_u8, mir_i64, mir_u128]) 10) z3;
+mir_verify m "test::rev_rev_tuple" [rev_tuple_ov_auto] false (rev_rev_spec_auto (mir_tuple [mir_u8, mir_i64, mir_u128]) 10) z3;
+
+// Uncomment this when Vec of ZST is supported in crucible
+// rev_unit_ov_auto <- mir_verify m "test::rev_unit" [] false (rev_spec_auto (mir_tuple []) 10) z3;
+// mir_verify m "test::rev_rev_unit" [rev_unit_ov_auto] false (rev_rev_spec_auto (mir_tuple []) 10) z3;
+
+let empty_spec = do {
+    mir_execute_func [];
+    out_vec <- mir_vec_of "out_vec" mir_i32 (mir_array_value mir_i32 []);
+    mir_return out_vec;
+};
+
+empty_ov <- mir_verify m "test::empty" [] false empty_spec z3;
+
+let empty_len_spec = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ 0 : [64] }});
+};
+
+mir_verify m "test::empty_len" [empty_ov] false empty_len_spec z3;
