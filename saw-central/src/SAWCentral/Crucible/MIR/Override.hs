@@ -372,6 +372,16 @@ cmpPathConcretely sym (Mir.ArrayAsMirVector_RefPath tpr1 p1) (Mir.ArrayAsMirVect
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
+cmpPathConcretely _ (Mir.ArrayAsMirVector_RefPath _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.ArrayAsMirVector_RefPath _ _) = PC.GTF
+
+-- AgElem_RefPath
+cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =
+  PC.compareF off1 off2 <<>>
+  PC.fromOrdering (compare sz1 sz2) <<>>
+  PC.compareF tpr1 tpr2 <<>>
+  cmpPathConcretely sym p1 p2 <<>>
+  PC.EQF
 
 -- | Compare two 'W4.SymBV' values that are known to be concrete. If they are
 -- not concrete, this function will panic.
