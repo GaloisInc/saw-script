@@ -1343,8 +1343,8 @@ matchArg opts sc cc cs prepost md = go False []
                   ]
 
         -- match the fields of a tuple point-wise
-        ([], MIRVal (TupleShape (Mir.TyTuple _) _ xsFldShps) xs, MS.SetupTuple () zs) ->
-          matchFields sym xsFldShps xs zs
+        ([], MIRVal (TupleShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
+          matchAgElems sym elems ag zs
 
         -- See Note [Matching slices in overrides]
         ([],
@@ -1481,6 +1481,26 @@ matchArg opts sc cc cs prepost md = go False []
           | (Some (Functor.Pair xFldShp (Crucible.RV x)), z) <-
               zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
                   zs ]
+
+      matchAgElems ::
+        Sym ->
+        [AgElemShape] ->
+        Mir.MirAggregate Sym ->
+        [SetupValue] ->
+        OverrideMatcher MIR w ()
+      matchAgElems sym elems (Mir.MirAggregate _ m) zs = do
+        unless (length elems == length zs) fail_
+        unless (IntMap.size m == length zs) fail_
+        forM_ @_ @_ @_ @() (zip elems zs) $ \(AgElemShape off _sz shp, z) -> do
+          Mir.MirAggregateEntry _sz' tpr rvPart <-
+            case IntMap.lookup (fromIntegral off) m of
+              Just x -> return x
+              Nothing -> fail_
+          Refl <- case W4.testEquality tpr (shapeType shp) of
+            Just x -> return x
+            Nothing -> fail_
+          let rv = readMaybeType sym "elem" tpr rvPart
+          go inCast [] (MIRVal shp rv) z
 
       -- Check that both the expected and actual values are the same sort of
       -- slice. We don't want to accidentally mix up a &[u8] value with a &str
@@ -1892,12 +1912,10 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> liftIO (toSC sym st val)
     (Cryptol.TVTuple [], UnitShape _) ->
       liftIO (scUnitValue sc)
-    (Cryptol.TVTuple tys, TupleShape _ _ flds)
-      |  length tys == Ctx.sizeInt (Ctx.size flds)
-      -> do terms <-
-              traverse
-                fieldToSC
-                (zip tys (FC.toListFC Some (Ctx.zipWith Functor.Pair flds val)))
+    (Cryptol.TVTuple tys, TupleShape _ elems)
+      |  length tys == length elems
+      -> do terms <- traverse (agElemToSC val) (zip tys elems)
+                --(zip tys (FC.toListFC Some (Ctx.zipWith Functor.Pair flds val)))
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
       |  Mir.MirVector_Vector vals <- val
@@ -1922,17 +1940,21 @@ valueToSC sym fail_ tval (MIRVal shp val) =
     st = sym ^. W4.userState
     sc = saw_ctx st
 
-    fieldToSC ::
-         (Cryptol.TValue, Some (Functor.Product FieldShape (Crucible.RegValue' Sym)))
+    agElemToSC ::
+         Mir.MirAggregate Sym
+      -> (Cryptol.TValue, AgElemShape)
       -> OverrideMatcher MIR w Term
-    fieldToSC (ty, Some (Functor.Pair fldShp (Crucible.RV tm))) = do
+    agElemToSC (Mir.MirAggregate _ m) (ty, AgElemShape off _sz elemShp) = do
       mirVal <-
-        case fldShp of
-          ReqField shp' ->
-            pure $ MIRVal shp' tm
-          OptField shp' ->
-            pure $ MIRVal shp'
-                 $ readMaybeType sym "field" (shapeType shp') tm
+        case IntMap.lookup (fromIntegral off) m of
+          Nothing -> fail $ "valueToSC: no value at offset " ++ show off
+          Just (Mir.MirAggregateEntry _sz' tpr rvPart) -> do
+            Refl <- case W4.testEquality tpr (shapeType elemShp) of
+              Just x -> return x
+              Nothing -> fail $ "valueToSC: wrong type at offset " ++ show off ++
+                                ": " ++ show (tpr, shapeType elemShp)
+            pure $ MIRVal elemShp
+                 $ readMaybeType sym "elem" tpr rvPart
       valueToSC sym fail_ ty mirVal
 
 -- | Apply a stack of projections to a 'Term'.

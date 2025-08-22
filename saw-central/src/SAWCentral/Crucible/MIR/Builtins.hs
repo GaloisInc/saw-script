@@ -400,8 +400,8 @@ constructExpandedSetupValue cc sc = go
         PrimShape ty _ -> do
           fv <- freshPrimVariable pfx ty
           pure $ MS.SetupTerm fv
-        TupleShape _ _ fldShps -> do
-          flds <- goFlds pfx fldShps
+        TupleShape _ elems -> do
+          flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
         ArrayShape ty elemTy elemShp ->
           case ty of
@@ -572,6 +572,13 @@ constructExpandedSetupValue cc sc = go
             ReqField shp' -> go pfx' shp'
             OptField shp' -> go pfx' shp')
         fldShps
+
+    goAgElem :: Text ->
+                (Int, AgElemShape) ->
+                CrucibleSetup MIR SetupValue
+    goAgElem pfx (idx, AgElemShape _off _sz shp) =
+      let pfx' = pfx <> "_" <> Text.pack (show idx) in
+      go pfx' shp
 
     -- Create a fresh variable of a primitive MIR type (where \"primitive\"
     -- is defined by the @cryptolTypeOfActual@ function).
