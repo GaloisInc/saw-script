@@ -1138,7 +1138,7 @@ Note that we are passing _references_ of arrays to `mir_slice_value` and
 `mir_slice_range_value`. It would be an error to pass a bare array to these
 functions, so the following specification would be invalid:
 
-:::
+:::{code-block} sawscript
 let f_fail_spec_ = do {
   let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
 
