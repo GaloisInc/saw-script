@@ -1052,29 +1052,39 @@ mir_vec_of prefix elemTy contents = do
       lenTerm <- transCry cryEnv $
         C.bvLit (fromIntegral len) (natValue sizeBits)
 
-      -- Return a Vec struct
-      pure $
-        MS.SetupStruct vecTAdt
-          [ MS.SetupStruct rawVecTAdt
-              [ MS.SetupStruct rawVecInnerTAdt
-                  [ MS.SetupStruct uniqueU8Adt
-                      [ MS.SetupStruct nonNullU8Adt
-                          [ mir_cast_raw_ptr ptr mir_u8
-                          ]
-                      , MS.SetupStruct phantomDataU8Adt []
-                      ]
-                  , MS.SetupStruct usizeNoHighBitAdt
-                      [ MS.SetupTerm cap
-                      ]
-                  , MS.SetupStruct typedAllocatorTAdt
-                      [ MS.SetupStruct phantomDataTAdt []
-                      ]
-                  ]
-              , MS.SetupStruct globalAllocAdt []
-              , MS.SetupStruct phantomDataTAdt []
-              ]
-          , MS.SetupTerm lenTerm
-          ]
+      -- Construct and return the Vec
+      let vec =
+            MS.SetupStruct vecTAdt
+                           [rawVec, MS.SetupTerm lenTerm]
+            where
+            rawVec =
+              MS.SetupStruct rawVecTAdt
+                             [rawVecInner, globalAlloc, phantomDataT]
+              where
+              rawVecInner =
+                MS.SetupStruct rawVecInnerTAdt
+                               [uniqueU8Ptr, capNoHighBit, typedAllocator]
+                where
+                uniqueU8Ptr =
+                  MS.SetupStruct uniqueU8Adt
+                                 [nonNullU8Ptr, phantomDataU8]
+                  where
+                  nonNullU8Ptr =
+                    MS.SetupStruct nonNullU8Adt
+                                   [u8Ptr]
+                    where
+                    u8Ptr = mir_cast_raw_ptr ptr mir_u8
+                capNoHighBit =
+                  MS.SetupStruct usizeNoHighBitAdt
+                                 [MS.SetupTerm cap]
+                typedAllocator =
+                  MS.SetupStruct typedAllocatorTAdt
+                                 [phantomDataT]
+              globalAlloc = MS.SetupStruct globalAllocAdt []
+            phantomDataT = MS.SetupStruct phantomDataTAdt []
+            phantomDataU8 = MS.SetupStruct phantomDataU8Adt []
+
+      pure vec
 
     _ -> MIRSetupM $ X.throwM $ MIRVecOfContentsNotArray contentsTy
 
