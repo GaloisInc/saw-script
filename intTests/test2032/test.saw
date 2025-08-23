@@ -2,6 +2,12 @@ enable_experimental;
 
 m <- mir_load_module "test.linked-mir.json";
 
+// We now have the mir_vec_of command for creating Vec values, which is tested
+// below, but we first test that we are able to construct a Vec using the
+// mir_alloc_raw_ptr_const_multi and mir_points_to_multi primitives in the same
+// way that mir_vec_of does internally. If this works but mir_vec_of fails then
+// we can isolate where the problem is coming from.
+
 let GlobalAlloc = mir_find_adt m "alloc::alloc::Global" [];
 let Vec_i32 = mir_find_adt m "alloc::vec::Vec" [mir_i32, mir_adt GlobalAlloc];
 let RawVec_i32 = mir_find_adt m "alloc::raw_vec::RawVec" [mir_i32, mir_adt GlobalAlloc];
@@ -64,6 +70,8 @@ let rev_rev_i32_spec_manual len = do {
 
 mir_verify m "test::rev_rev_i32" [rev_i32_ov_manual] false (rev_rev_i32_spec_manual 10) z3;
 
+// Test mir_vec_of.
+
 let rev_spec_auto ty len = do {
     contents <- mir_fresh_var "contents" (mir_array len ty);
     in_vec <- mir_vec_of "in_vec" ty (mir_term contents);
@@ -86,9 +94,13 @@ mir_verify m "test::rev_rev_i32" [rev_i32_ov_auto] false (rev_rev_spec_auto mir_
 rev_tuple_ov_auto <- mir_verify m "test::rev_tuple" [] false (rev_spec_auto (mir_tuple [mir_u8, mir_i64, mir_u128]) 10) z3;
 mir_verify m "test::rev_rev_tuple" [rev_tuple_ov_auto] false (rev_rev_spec_auto (mir_tuple [mir_u8, mir_i64, mir_u128]) 10) z3;
 
-// Uncomment this when Vec of ZST is supported in crucible
+// Uncomment this when Vec of ZST is supported in crucible (blocked by at least
+// crucible#1497 and #1504).
+
 // rev_unit_ov_auto <- mir_verify m "test::rev_unit" [] false (rev_spec_auto (mir_tuple []) 10) z3;
 // mir_verify m "test::rev_rev_unit" [rev_unit_ov_auto] false (rev_rev_spec_auto (mir_tuple []) 10) z3;
+
+// Test that empty Vecs work.
 
 let empty_spec = do {
     mir_execute_func [];
