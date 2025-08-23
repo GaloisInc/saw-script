@@ -1028,8 +1028,10 @@ mir_vec_of prefix elemTy contents = do
         case Map.lookup elemTy (col ^. Mir.layouts) of
           Just (Just Mir.Layout { Mir._laySize = elemSize })
             | elemSize == 0 ->
-              -- The ZST case won't work yet until crucible issues #1497 and
-              -- #1504 are fixed
+              -- The ZST case won't work yet at least until crucible issues
+              -- #1497 and #1504 are fixed. When that happens, uncomment the
+              -- code below and also the ZST tests in
+              -- intTests/test2032/test.saw.
               fail "mir_vec_of: Vec of ZST not supported yet"
               -- -- For ZST, cap is always 0
               -- transCry cryEnv $ C.bvLit 0 (natValue sizeBits)
