@@ -37,7 +37,9 @@ extra-source-files:
 
 -- declare GHC options once
 common ghc-options
-  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  --  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  ghc-options: -O2 -Wall -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  -- FIXME:MT:undo ^
 common ghc-options-executable
   ghc-options: -threaded -rtsopts
 
@@ -224,6 +226,7 @@ library cryptol-saw-core
     modern-uri,
     mtl,
     prettyprinter >= 1.7.0,
+    pretty-show,
     sbv,
     template-haskell,
     text,
