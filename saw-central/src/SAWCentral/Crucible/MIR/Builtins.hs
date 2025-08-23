@@ -1049,9 +1049,6 @@ mir_vec_of prefix elemTy contents = do
               pure cap
           Just Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNotSized elemTy
           Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNoLayoutInfo elemTy
-      orig_alloc <-
-        mir_fresh_expanded_value (prefix <> "_orig_alloc") $
-          mir_adt globalAllocAdt
       lenTerm <- transCry cryEnv $
         C.bvLit (fromIntegral len) (natValue sizeBits)
 
@@ -1073,7 +1070,7 @@ mir_vec_of prefix elemTy contents = do
                       [ MS.SetupStruct phantomDataTAdt []
                       ]
                   ]
-              , orig_alloc
+              , MS.SetupStruct globalAllocAdt []
               , MS.SetupStruct phantomDataTAdt []
               ]
           , MS.SetupTerm lenTerm

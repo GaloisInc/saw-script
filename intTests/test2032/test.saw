@@ -25,7 +25,6 @@ let mk_vec_i32 len contents = do {
     cap <- mir_fresh_var "cap" mir_usize;
     mir_assert {{ cap <= 0x7fff_ffff_ffff_ffff / (32 / 8) }};
     mir_assert {{ cap >= `len }};
-    orig_alloc <- mir_fresh_expanded_value "orig_alloc" (mir_adt GlobalAlloc);
     mir_points_to_multi ptr contents;
     return (mir_struct_value Vec_i32 [
         mir_struct_value RawVec_i32 [
@@ -43,7 +42,7 @@ let mk_vec_i32 len contents = do {
                     mir_struct_value PhantomData_i32 []
                 ]
             ],
-            orig_alloc,
+            mir_struct_value GlobalAlloc [],
             mir_struct_value PhantomData_i32 []
         ],
         mir_term {{ `len : [64] }}
