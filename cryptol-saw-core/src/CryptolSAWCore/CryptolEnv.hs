@@ -291,15 +291,16 @@ ioParseResult res = case res of
 -- Rename ----------------------------------------------------------------------
 --  FIXME: why ^ "Rename"?  I see we pass the result of this to 'MB.rename'
 
--- | getNamingEnv - <TODO>
--- FIXME
---  - replace next with this.
---  - [ ] add error when you access conflicting name.
---  - [ ] more testing.
+-- | getNamingEnv -
+--
+--  FIXME:TODO:
+--   - [ ] significant rewrite of old `getNamingEnv' : need to test changes!
+--   - [ ] change to report error when you access conflicting name.
+--   - [ ] more testing.
+--
 
-getNamingEnv2 :: CryptolEnv -> MR.NamingEnv
-getNamingEnv2 env =
-
+getNamingEnv :: CryptolEnv -> MR.NamingEnv
+getNamingEnv env =
   eExtraNames env `MR.shadowing` nameEnv
 
   where
@@ -856,7 +857,7 @@ resolveIdentifier env nm =
 
   where
   modEnv = eModuleEnv env
-  nameEnv = getNamingEnv2 env
+  nameEnv = getNamingEnv env
 
   doResolve pnm =
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
@@ -895,7 +896,7 @@ parseTypedTerm sc env input = do
     npe <- MM.interactive (MB.noPat pexpr)
 
     -- FIXME: WIP: copied from cryptol's `checkExpr`:
-    let nameEnv = getNamingEnv2 env
+    let nameEnv = getNamingEnv env
                -- ME.mctxNames <$> MM.getFocusedEnv OLD
                -- FIXME
                {- MT:  ::  M.ModContext -}
@@ -965,7 +966,7 @@ parseDecls sc env input = do
     let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- npdecls ]
 
     -- Resolve names
-    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv2 env) (MR.renameTopDecls interactiveName topdecls))
+    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
@@ -1015,7 +1016,7 @@ parseSchema env input = do
   fmap fst $ liftModuleM modEnv $ do
 
     -- Resolve names
-    let nameEnv = getNamingEnv2 env
+    let nameEnv = getNamingEnv env
     rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
 
     let ifDecls = getAllIfaceDecls modEnv
