@@ -42,7 +42,7 @@ module CryptolSAWCore.CryptolEnv
   where
 
 --import qualified Control.Exception as X
-import Data.ByteString (ByteString,readFile)
+import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -315,6 +315,8 @@ getNamingEnv env =
 -- compare to Cryptol.TypeCheck.Interface.genModDefines
 --   FIXME: this belongs rather in src/Cryptol/TypeCheck/Interface.hs?
 
+{-
+-- FIXME: DEAD forever?
 genSubmoduleExports :: T.ModuleG name -> Set.Set MN.Name
 genSubmoduleExports m = nestedInSet (T.mNested m)
   where
@@ -325,6 +327,7 @@ genSubmoduleExports m = nestedInSet (T.mNested m)
                              where
                                iface = T.smIface y
                   Nothing -> Set.empty -- must be signature or a functor
+-}
 
 --
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
@@ -557,22 +560,28 @@ loadCryptolModule sc env path = do
 
 -- FIXME: add sig.
 --   mkCryptolModule :: _ -> IO CryptolModule
+mkCryptolModule :: T.Module
+                -> Map MN.Name T.Schema
+                -> Map MN.Name Term
+                -> IO CryptolModule
 mkCryptolModule m types newTermEnv =
   do
   let names1 = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
         -- FIXME:
         --   This excludes both submodules and what they contain.
         -- mExports :: MEx.ExportSpec MN.Name
+        -- FIXME: Change name, if this is correct, remove below.
+  {-
+    EXPLORING:
       namesP = MI.ifsPublic (TIface.genIfaceNames m)
         -- This includes submodules, but does not contain
         -- names of defns inside them.
 
-  {-
       namesN = MI.ifsNested (TIface.genIfaceNames m)
         -- lists the submodules, but not the defs inside them
-  -}
       names = namesP
         -- names includes submodules (vs. names1)
+  -}
 
   -- TODO:MT:HIA:
   --   - you need to get the submodules 'expanded' into names!
