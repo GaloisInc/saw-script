@@ -47,6 +47,8 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_elem_ref
     -- ** MIR muxing
   , mir_mux_values
+    -- ** Rust Vecs
+  , mir_vec_of
     -- ** MIR types
   , mir_adt
   , mir_array
@@ -83,6 +85,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
+import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import qualified Data.Foldable.WithIndex as FWI
@@ -96,7 +99,7 @@ import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.NatRepr (knownNat, natValue)
+import Data.Parameterized.NatRepr (knownNat, maxSigned, natValue)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
@@ -110,6 +113,7 @@ import Data.Type.Equality (TestEquality(..))
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
+import qualified Cryptol.Parser.AST.Builder as C
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
 import qualified Lang.Crucible.Analysis.Postdom as Crucible
@@ -139,6 +143,7 @@ import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (ecShortName)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
+import qualified CryptolSAWCore.CryptolEnv as CryEnv
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Builtins (ghost_value)
@@ -959,6 +964,131 @@ mir_mux_values ::
 mir_mux_values = MS.SetupMux ()
 
 -----
+-- Rust Vecs
+-----
+
+mir_vec_of ::
+  Text ->
+  Mir.Ty ->
+  SetupValue ->
+  MIRSetupM SetupValue
+mir_vec_of prefix elemTy contents = do
+  st <- MIRSetupM get
+  let cc = st ^. Setup.csCrucibleContext
+      mspec = st ^. Setup.csMethodSpec
+      env = MS.csAllocations mspec
+      nameEnv = MS.csTypeNames mspec
+
+  -- Check the type of contents
+  contentsTy <- MIRSetupM $ typeOfSetupValue cc env nameEnv contents
+  case contentsTy of
+    Mir.TyArray elemTy' len -> do
+
+      -- Ensure array element type matches passed-in type
+      unless (checkCompatibleTys elemTy elemTy') $
+        MIRSetupM $ X.throwM $ MIRVecOfTypeMismatch elemTy elemTy'
+
+      -- Find all the internal ADTs used in Vec
+      let rm = cc ^. mccRustModule
+          col = rm ^. Mir.rmCS . Mir.collection
+          find name tyArgs = mirTopLevel $ mir_find_adt rm name tyArgs
+      globalAllocAdt <-
+        find "alloc::alloc::Global" []
+      vecTAdt <-
+        find "alloc::vec::Vec" [elemTy, mir_adt globalAllocAdt]
+      rawVecTAdt <-
+        find "alloc::raw_vec::RawVec" [elemTy, mir_adt globalAllocAdt]
+      typedAllocatorTAdt <-
+        find "crucible::alloc::TypedAllocator" [elemTy]
+      rawVecInnerTAdt <-
+        find "alloc::raw_vec::RawVecInner" [mir_adt typedAllocatorTAdt]
+      uniqueU8Adt <-
+        find "core::ptr::unique::Unique" [mir_u8]
+      nonNullU8Adt <-
+        find "core::ptr::non_null::NonNull" [mir_u8]
+      phantomDataU8Adt <-
+        find "core::marker::PhantomData" [mir_u8]
+      phantomDataTAdt <-
+        find "core::marker::PhantomData" [elemTy]
+      usizeNoHighBitAdt <-
+        find "core::num::niche_types::UsizeNoHighBit" []
+
+      -- Set up Cryptol environment
+      sc <- mirTopLevel getSharedContext
+      let transCry cryEnv =
+            let ?fileReader = BSS.readFile
+            in  MIRSetupM . liftIO . CryEnv.pExprToTypedTerm sc cryEnv
+      cryEnv <- mirTopLevel getCryptolEnv
+      let sizeBits = knownNat @Mir.SizeBits
+
+      -- Declare symbolic variables and assertions
+      ptr <- mir_alloc_raw_ptr_const_multi len elemTy
+      mir_points_to_multi ptr contents
+      cap <-
+        case Map.lookup elemTy (col ^. Mir.layouts) of
+          Just (Just Mir.Layout { Mir._laySize = elemSize })
+            | elemSize == 0 ->
+              -- The ZST case won't work yet at least until crucible issues
+              -- #1497 and #1504 are fixed. When that happens, uncomment the
+              -- code below and also the ZST tests in
+              -- intTests/test2032/test.saw.
+              fail "mir_vec_of: Vec of ZST not supported yet"
+              -- -- For ZST, cap is always 0
+              -- transCry cryEnv $ C.bvLit 0 (natValue sizeBits)
+            | otherwise -> do
+              cap <- mir_fresh_var (prefix <> "_cap") mir_usize
+              let capIdent = "cap"
+                  cryEnv' = CryEnv.bindTypedTerm (capIdent, cap) cryEnv
+                  maxCap = maxSigned sizeBits `div` toInteger elemSize
+              -- cap <= isize::MAX / sizeof::<elemTy>
+              mir_assert =<< transCry cryEnv'
+                (C.var capIdent C.<= C.intLit maxCap)
+              -- cap >= len
+              mir_assert =<< transCry cryEnv'
+                (C.var capIdent C.>= C.intLit len)
+              pure cap
+          Just Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNotSized elemTy
+          Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNoLayoutInfo elemTy
+      lenTerm <- transCry cryEnv $
+        C.bvLit (fromIntegral len) (natValue sizeBits)
+
+      -- Construct and return the Vec
+      let vec =
+            MS.SetupStruct vecTAdt
+                           [rawVec, MS.SetupTerm lenTerm]
+            where
+            rawVec =
+              MS.SetupStruct rawVecTAdt
+                             [rawVecInner, globalAlloc, phantomDataT]
+              where
+              rawVecInner =
+                MS.SetupStruct rawVecInnerTAdt
+                               [uniqueU8Ptr, capNoHighBit, typedAllocator]
+                where
+                uniqueU8Ptr =
+                  MS.SetupStruct uniqueU8Adt
+                                 [nonNullU8Ptr, phantomDataU8]
+                  where
+                  nonNullU8Ptr =
+                    MS.SetupStruct nonNullU8Adt
+                                   [u8Ptr]
+                    where
+                    u8Ptr = mir_cast_raw_ptr ptr mir_u8
+                capNoHighBit =
+                  MS.SetupStruct usizeNoHighBitAdt
+                                 [MS.SetupTerm cap]
+                typedAllocator =
+                  MS.SetupStruct typedAllocatorTAdt
+                                 [phantomDataT]
+              globalAlloc = MS.SetupStruct globalAllocAdt []
+            phantomDataT = MS.SetupStruct phantomDataTAdt []
+            phantomDataU8 = MS.SetupStruct phantomDataU8Adt []
+
+      pure vec
+
+    _ -> MIRSetupM $ X.throwM $ MIRVecOfContentsNotArray contentsTy
+
+-----
 -- Mir.Types
 -----
 
@@ -1759,6 +1889,12 @@ data MIRSetupError
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
   | MIREnumValueVariantNotFound Mir.DefId Text
   | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
+  | MIRVecOfContentsNotArray Mir.Ty
+  | MIRVecOfTypeMismatch
+      Mir.Ty -- ^ type passed as the second argument
+      Mir.Ty -- ^ element type of the contents argument
+  | MIRVecOfElemTyNotSized Mir.Ty
+  | MIRVecOfElemTyNoLayoutInfo Mir.Ty
 
 instance X.Exception MIRSetupError where
   toException = topLevelExceptionToException
@@ -1806,3 +1942,18 @@ instance Show MIRSetupError where
         [ "mir_enum_value: Expected enum, received " ++ what
         , show adtNm
         ]
+      MIRVecOfContentsNotArray contentsTy ->
+        "mir_vec_of: Expected array MIRValue as third argument, but got "
+          ++ show (PP.pretty contentsTy)
+      MIRVecOfTypeMismatch passedElemTy contentsElemTy ->
+        unlines
+        [ "mir_vec_of: Type mismatch between passed type and element type of contents array"
+        , "Passed type: " ++ show (PP.pretty passedElemTy)
+        , "Element type of contents array: " ++ show (PP.pretty contentsElemTy)
+        ]
+      MIRVecOfElemTyNotSized elemTy ->
+        "mir_vec_of: Cannot construct Vec of unsized element type "
+          ++ show (PP.pretty elemTy)
+      MIRVecOfElemTyNoLayoutInfo elemTy ->
+        "mir_vec_of: No layout info for element type "
+          ++ show (PP.pretty elemTy)

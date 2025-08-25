@@ -6091,6 +6091,17 @@ primitives = Map.fromList
     , "returned by mir_verify but without performing any verification."
     ]
 
+  , prim "mir_vec_of"
+    "String -> MIRType -> MIRValue -> MIRSetup MIRValue"
+    (pureVal mir_vec_of)
+    Experimental
+    [ "Create a MIR `Vec` value. The String argument is used as a prefix for"
+    , "naming the internal symbolic variables created as part of the `Vec`"
+    , "struct. The MIRType argument is the element type of the `Vec`. The"
+    , "MIRValue argument is the contents of the `Vec`, which must be a MIR"
+    , "array value whose element type matches the MIRType argument."
+    ]
+
   , prim "mir_verify"
     "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
     (pureVal mir_verify)

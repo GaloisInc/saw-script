@@ -23,6 +23,7 @@ module CryptolSAWCore.CryptolEnv
   , bindType
   , bindInteger
   , parseTypedTerm
+  , pExprToTypedTerm
   , parseDecls
   , parseSchema
   , declareName
@@ -645,10 +646,16 @@ parseTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
 parseTypedTerm sc env input = do
-  let modEnv = eModuleEnv env
-
   -- Parse
   pexpr <- ioParseExpr input
+
+  pExprToTypedTerm sc env pexpr
+
+pExprToTypedTerm ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
+pExprToTypedTerm sc env pexpr = do
+  let modEnv = eModuleEnv env
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
 
