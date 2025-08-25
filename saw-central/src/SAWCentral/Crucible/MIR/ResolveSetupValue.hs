@@ -82,13 +82,12 @@ import qualified Prettyprinter as PP
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
-import Lang.Crucible.Backend (IsSymInterface)
 import Lang.Crucible.Simulator
   ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
   , VariantBranch(..), injectVariant
   )
 import Lang.Crucible.Simulator.RegMap (muxRegForType)
-import Lang.Crucible.Types (MaybeType, TypeRepr(..))
+import Lang.Crucible.Types (TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
@@ -1576,32 +1575,6 @@ substsView (Mir.Substs tys) = SubstsView (map tyView tys)
 fnSigView :: Mir.FnSig -> FnSigView
 fnSigView (Mir.FnSig argTys retTy abi) =
   FnSigView (map tyView argTys) (tyView retTy) abi
-
--- | Read the value out of a 'MaybeType' expression that is assumed to be
--- assigned to a value. If this assumption does not hold (i.e., if the value is
--- unassigned), then this function will raise an error.
-readMaybeType ::
-     IsSymInterface sym
-  => sym
-  -> String
-  -> TypeRepr tp
-  -> RegValue sym (MaybeType tp)
-  -> RegValue sym tp
-readMaybeType sym desc tpr rv =
-  case readPartExprMaybe sym rv of
-    Just x -> x
-    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
-
-readPartExprMaybe ::
-     IsSymInterface sym
-  => sym
-  -> W4.PartExpr (W4.Pred sym) a
-  -> Maybe a
-readPartExprMaybe _sym W4.Unassigned = Nothing
-readPartExprMaybe _sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = Just v
-  | otherwise = Nothing
 
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
 -- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.

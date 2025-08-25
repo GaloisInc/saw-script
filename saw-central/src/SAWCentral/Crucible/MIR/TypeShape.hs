@@ -27,6 +27,9 @@ module SAWCentral.Crucible.MIR.TypeShape
   , IsRefShape(..)
   , testRefShape
   , sliceShapeParts
+  -- Misc helpers
+  , readMaybeType
+  , readPartExprMaybe
   ) where
 
 import Control.Lens ((^.), (^..), each)
@@ -40,6 +43,11 @@ import Data.Parameterized.TraversableFC
 import GHC.Stack (HasCallStack)
 import qualified Prettyprinter as PP
 
+import qualified What4.Interface as W4
+import qualified What4.Partial as W4
+
+import Lang.Crucible.Backend (IsSymInterface)
+import Lang.Crucible.Simulator.RegValue (RegValue)
 import Lang.Crucible.Types
 
 import Mir.Intrinsics
@@ -429,6 +437,36 @@ sliceShapeParts referentTy refMutbl referentTpr =
     -- avoid unnecessary clobbering.
     refTy = M.TyRef referentTy refMutbl
     usizeTy = M.TyUint M.USize
+
+
+-- Misc helpers
+
+-- | Read the value out of a 'MaybeType' expression that is assumed to be
+-- assigned to a value. If this assumption does not hold (i.e., if the value is
+-- unassigned), then this function will raise an error.
+readMaybeType ::
+  IsSymInterface sym =>
+  sym ->
+  String ->
+  TypeRepr tp ->
+  RegValue sym (MaybeType tp) ->
+  RegValue sym tp
+readMaybeType sym desc tpr rv =
+  case readPartExprMaybe sym rv of
+    Just x -> x
+    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
+        " of type " ++ show tpr
+
+readPartExprMaybe ::
+  IsSymInterface sym =>
+  sym ->
+  W4.PartExpr (W4.Pred sym) a ->
+  Maybe a
+readPartExprMaybe _sym W4.Unassigned = Nothing
+readPartExprMaybe _sym (W4.PE p v)
+  | Just True <- W4.asConstantPred p = Just v
+  | otherwise = Nothing
+
 
 $(pure [])
 

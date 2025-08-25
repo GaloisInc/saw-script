@@ -31,9 +31,6 @@ import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Mir as M
 import Mir.TransTy (pattern CTyUnsafeCell)
 
-import Mir.Compositional.Convert
-
-
 
 -- Helper functions for generating clobbering PointsTos
 
@@ -75,7 +72,7 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
                   Just x -> return x
                   Nothing -> die $ "type mismatch at offset " ++ show off
                       ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
-              rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+              let rv = readMaybeType sym "elem" tpr rvPart
               rv' <- f shp rv
               let rvPart' = W4.justPartExpr sym rv'
               return $ MirAggregateEntry sz tpr rvPart')
@@ -118,7 +115,7 @@ traverseFieldShape sym f shp0 rv0 = goField shp0 rv0
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
     goField (ReqField shp) (RV rv) = RV <$> f shp rv
     goField (OptField shp) (RV rv) = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        let rv' = readMaybeType sym "field" (shapeType shp) rv
         rv'' <- f shp rv'
         return $ RV $ W4.justPartExpr sym rv''
 

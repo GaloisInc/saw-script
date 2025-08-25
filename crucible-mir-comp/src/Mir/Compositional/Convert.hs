@@ -128,21 +128,6 @@ visitExprVars cache e0 f = go Set.empty e0
         W4.SemiRingLiteral _ _ _ -> return ()
 
 
-readMaybeType :: forall tp sym. IsSymInterface sym =>
-    sym -> String -> TypeRepr tp -> RegValue sym (MaybeType tp) ->
-    IO (RegValue sym tp)
-readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
-    Just x' -> return x'
-    Nothing -> error $ "regToSetup: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
-
-readPartExprMaybe :: IsSymInterface sym => sym -> W4.PartExpr (W4.Pred sym) a -> IO (Maybe a)
-readPartExprMaybe _sym W4.Unassigned = return Nothing
-readPartExprMaybe _sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = return $ Just v
-  | otherwise = return Nothing
-
-
 -- | Convert a `SAW.Term` into a `W4.Expr`.
 termToExpr :: forall sym t fs.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
@@ -375,7 +360,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
                     Just x -> return x
                     Nothing -> fail $ "type mismatch at offset " ++ show off
                         ++ ": " ++ show (tpr, shapeType shp)
-                rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+                let rv = readMaybeType sym "elem" tpr rvPart
                 go shp rv
             Nothing -> fail $ "missing entry at offset " ++ show off
 
@@ -386,7 +371,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
     goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
     goVector shp (MirVector_PartialVector pv) = do
         forM (toList pv) $ \rv -> do
-            rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+            let rv' = readMaybeType sym "field" (shapeType shp) rv
             go shp rv'
     goVector _shp (MirVector_Array _) = fail $
         "regToTerm: MirVector_Array not supported"

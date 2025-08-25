@@ -710,7 +710,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
             MirVector_PartialVector v -> forM (toList v) $ \p -> do
-                rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
+                let rv = readMaybeType sym "vector element" (shapeType shp) p
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
         return $ MS.SetupArray elemTy svs
@@ -727,7 +727,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' _ tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
-        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
                     BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
@@ -774,7 +774,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         loop (flds :> fld) (rvs :> RV rv) svs = do
             sv <- case fld of
                 ReqField shp -> go shp rv
-                OptField shp -> liftIO (readMaybeType sym "field" (shapeType shp) rv) >>= go shp
+                OptField shp -> go shp $ readMaybeType sym "field" (shapeType shp) rv
             loop flds rvs (sv : svs)
 
     goAgElem :: MirAggregate sym -> AgElemShape ->
@@ -786,7 +786,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                     Just x -> return x
                     Nothing -> fail $ "type mismatch at offset " ++ show off
                         ++ ": " ++ show (tpr, shapeType shp)
-                rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+                let rv = readMaybeType sym "elem" tpr rvPart
                 go shp rv
             Nothing -> fail $ "missing entry at offset " ++ show off
 

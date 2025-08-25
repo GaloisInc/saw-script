@@ -337,7 +337,7 @@ munge sym shp0 rv0 = do
                       Just x -> return x
                       Nothing -> error $ "type mismatch at offset " ++ show off
                           ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
-                  rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+                  let rv = readMaybeType sym "elem" tpr rvPart
                   rv' <- go shp rv
                   let rvPart' = W4.justPartExpr sym rv'
                   return $ MirAggregateEntry sz tpr rvPart')
@@ -350,7 +350,7 @@ munge sym shp0 rv0 = do
             MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
             MirVector_PartialVector pv -> do
                 pv' <- forM pv $ \p -> do
-                    rv <- readMaybeType sym "vector element" (shapeType shp) p
+                    let rv = readMaybeType sym "vector element" (shapeType shp) p
                     W4.justPartExpr sym <$> go shp rv
                 return $ MirVector_PartialVector pv'
             MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
@@ -381,7 +381,7 @@ munge sym shp0 rv0 = do
         goField :: forall tp. FieldShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         goField (ReqField shp) rv = go shp rv
         goField (OptField shp) rv = do
-            rv' <- readMaybeType sym "field" (shapeType shp) rv
+            let rv' = readMaybeType sym "field" (shapeType shp) rv
             W4.justPartExpr sym <$> go shp rv'
 
     go shp0 rv0

@@ -401,7 +401,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
-            rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
+            let rv = readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
     go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
@@ -432,7 +432,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             case fld of
                 ReqField shp -> go shp rv sv
                 OptField shp -> do
-                    rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+                    let rv' = readMaybeType sym "field" (shapeType shp) rv
                     go shp rv' sv
             loop flds rvs svs
         loop _ rvs svs = error $ "matchArg: type error: got RegValues for " ++
@@ -453,7 +453,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
           Just x -> return x
           Nothing -> error $ "type mismatch at offset " ++ show off
             ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
-        rv <- liftIO $ readMaybeType sym "elem" tpr rvPart
+        let rv = readMaybeType sym "elem" tpr rvPart
         go shp rv sv
 
     goRef :: forall tp'.
@@ -468,7 +468,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         MirOverrideMatcher sym ()
     goRef refTy pointeeTy mutbl tpr ref alloc refOffset = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
-        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
                     BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
