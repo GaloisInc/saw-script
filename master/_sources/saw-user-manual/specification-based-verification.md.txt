@@ -1138,7 +1138,7 @@ Note that we are passing _references_ of arrays to `mir_slice_value` and
 `mir_slice_range_value`. It would be an error to pass a bare array to these
 functions, so the following specification would be invalid:
 
-:::
+:::{code-block} sawscript
 let f_fail_spec_ = do {
   let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
 
@@ -1263,6 +1263,29 @@ On the other hand, SAW will allow you define a slice of the form
 `mir_str_slice_range r 0 3`, where `r` is a reference to `"ro\200\153u"`. It is
 the responsibility of the SAW user to ensure that `mir_str_slice_range` indices
 align with character boundaries.
+
+### MIR `Vec`s
+
+[`Vec`](https://doc.rust-lang.org/std/vec/struct.Vec.html) is a commonly used
+data type in the Rust standard library. `Vec` values can be created from array
+values in MIR specifications with the following command:
+
+- `mir_vec_of : String -> MIRType -> MIRValue -> MIRSetup MIRValue`
+
+The `String` argument is used as a prefix for naming the internal symbolic
+variables created as part of the `Vec` struct (think of it just as a name you
+give to the `Vec` variable). The `MIRType` argument is the element type of the
+`Vec`. The `MIRValue` argument is the contents of the `Vec`, which must be a MIR
+array value whose element type matches the `MIRType` argument. Note that this
+could either be created with `mir_array_value` or obtained from a `Term` like a
+fresh variable or a Cryptol sequence expression.
+
+`Vec` is just a regular struct and not a special language construct, so
+technically you could write specifications for `Vec`s just using the primitive
+MIR specification commands (in fact, this is what `mir_vec_of` does internally).
+However, you would need to explicitly specify all the internal details and
+invariants of `Vec`, and that can get quite messy. Therefore, this command
+exists for convenience reasons.
 
 ### Finding MIR algebraic data types
 

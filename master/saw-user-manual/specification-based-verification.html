@@ -102,6 +102,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#working-with-compound-types">Working with Compound Types</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#mir-slices">MIR slices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mir-vecs">MIR <code class="docutils literal notranslate"><span class="pre">Vec</span></code>s</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#finding-mir-algebraic-data-types">Finding MIR algebraic data types</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#bitfields">Bitfields</a></li>
 </ul>
@@ -1215,12 +1216,14 @@ Because this is a half-open range, the resulting slice has length 2:</p>
 <p>Note that we are passing <em>references</em> of arrays to <code class="docutils literal notranslate"><span class="pre">mir_slice_value</span></code> and
 <code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code>. It would be an error to pass a bare array to these
 functions, so the following specification would be invalid:</p>
-<div class="docutils">
-<p>let f_fail_spec_ = do {
-let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};</p>
-<p>mir_execute_func [mir_slice_value arr]; // BAD: <code class="docutils literal notranslate"><span class="pre">arr</span></code> is not a reference</p>
-<p>mir_return (mir_term {{ 3 : [32] }});
-};</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kr">let</span><span class="w"> </span><span class="n">f_fail_spec_</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kr">let</span><span class="w"> </span><span class="n">arr</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">]</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">5</span><span class="p">][</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+
+<span class="w">  </span><span class="n">mir_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">mir_slice_value</span><span class="w"> </span><span class="n">arr</span><span class="p">];</span><span class="w"> </span><span class="c c-Singleline">// BAD: `arr` is not a reference</span>
+
+<span class="w">  </span><span class="n">mir_return</span><span class="w"> </span><span class="p">(</span><span class="n">mir_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
 </div>
 <p>Note that The <code class="docutils literal notranslate"><span class="pre">mir_slice_range_value</span></code> function must accept bare <code class="docutils literal notranslate"><span class="pre">Int</span></code> arguments
 to specify the lower and upper bounds of the range. A consequence of this
@@ -1327,6 +1330,28 @@ would panic:</p>
 the responsibility of the SAW user to ensure that <code class="docutils literal notranslate"><span class="pre">mir_str_slice_range</span></code> indices
 align with character boundaries.</p>
 </section>
+</section>
+<section id="mir-vecs">
+<h3>MIR <code class="docutils literal notranslate"><span class="pre">Vec</span></code>s<a class="headerlink" href="#mir-vecs" title="Link to this heading"></a></h3>
+<p><a class="reference external" href="https://doc.rust-lang.org/std/vec/struct.Vec.html"><code class="docutils literal notranslate"><span class="pre">Vec</span></code></a> is a commonly used
+data type in the Rust standard library. <code class="docutils literal notranslate"><span class="pre">Vec</span></code> values can be created from array
+values in MIR specifications with the following command:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_vec_of</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">MIRType</span> <span class="pre">-&gt;</span> <span class="pre">MIRValue</span> <span class="pre">-&gt;</span> <span class="pre">MIRSetup</span> <span class="pre">MIRValue</span></code></p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">String</span></code> argument is used as a prefix for naming the internal symbolic
+variables created as part of the <code class="docutils literal notranslate"><span class="pre">Vec</span></code> struct (think of it just as a name you
+give to the <code class="docutils literal notranslate"><span class="pre">Vec</span></code> variable). The <code class="docutils literal notranslate"><span class="pre">MIRType</span></code> argument is the element type of the
+<code class="docutils literal notranslate"><span class="pre">Vec</span></code>. The <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> argument is the contents of the <code class="docutils literal notranslate"><span class="pre">Vec</span></code>, which must be a MIR
+array value whose element type matches the <code class="docutils literal notranslate"><span class="pre">MIRType</span></code> argument. Note that this
+could either be created with <code class="docutils literal notranslate"><span class="pre">mir_array_value</span></code> or obtained from a <code class="docutils literal notranslate"><span class="pre">Term</span></code> like a
+fresh variable or a Cryptol sequence expression.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Vec</span></code> is just a regular struct and not a special language construct, so
+technically you could write specifications for <code class="docutils literal notranslate"><span class="pre">Vec</span></code>s just using the primitive
+MIR specification commands (in fact, this is what <code class="docutils literal notranslate"><span class="pre">mir_vec_of</span></code> does internally).
+However, you would need to explicitly specify all the internal details and
+invariants of <code class="docutils literal notranslate"><span class="pre">Vec</span></code>, and that can get quite messy. Therefore, this command
+exists for convenience reasons.</p>
 </section>
 <section id="finding-mir-algebraic-data-types">
 <h3>Finding MIR algebraic data types<a class="headerlink" href="#finding-mir-algebraic-data-types" title="Link to this heading"></a></h3>
