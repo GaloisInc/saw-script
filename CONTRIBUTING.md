@@ -236,9 +236,6 @@ The top-level repository directories are:
 
 * `saw-version` - A library encapsulating the build version data.
 
-* `rme` - A library implementing a Reed-Muller Expansion datatype for
-  representing Boolean formulas.
-
 * `saw-core` - Source code for the SAWCore intermediate language used
   within SAW.
 

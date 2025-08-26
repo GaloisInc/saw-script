@@ -96,7 +96,6 @@ haddock() {
   # haddocks for SAW (which doesn't have an external-facing library
   # interface) is to serve as an internals reference.
   local COMPONENTS='
-    rme
     saw:saw-version
     saw:saw-core
     saw:cryptol-saw-core
