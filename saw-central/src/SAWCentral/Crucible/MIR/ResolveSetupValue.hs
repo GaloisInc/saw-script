@@ -681,6 +681,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
               panic "resolveSetupVal" [
                   "Expected enum type, received union: " <> Text.pack (show nm)
               ]
+    MS.SetupTuple () [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
@@ -1034,22 +1035,20 @@ resolveSAWTerm mcc tp tm =
                $ Mir.MirVector_Vector vals
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
+    Cryptol.TVTuple [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     Cryptol.TVTuple tps -> do
       st <- sawCoreState sym
       let sc = saw_ctx st
       tms <- traverse (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
-      if null vals
-        then pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
-        else do
-          let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
-          let mirTupleTy = Mir.TyTuple mirTys
-          let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] vals]
-          let m = IntMap.fromList
-                [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
-                  | (i, MIRVal shp rv) <- zip [0..] vals]
-          let ag = Mir.MirAggregate (fromIntegral $ length vals) m
-          pure $ MIRVal (TupleShape mirTupleTy elems) ag
+      let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
+      let mirTupleTy = Mir.TyTuple mirTys
+      let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] vals]
+      let m = IntMap.fromList
+            [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
+              | (i, MIRVal shp rv) <- zip [0..] vals]
+      let ag = Mir.MirAggregate (fromIntegral $ length vals) m
+      pure $ MIRVal (TupleShape mirTupleTy elems) ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
