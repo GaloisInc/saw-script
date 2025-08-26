@@ -30,9 +30,6 @@ import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Mir as M
 import Mir.TransTy (pattern CTyUnsafeCell)
 
-import Mir.Compositional.Convert
-
-
 
 -- Helper functions for generating clobbering PointsTos
 
@@ -65,8 +62,8 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (f shp)) pv
         MirVector_Array _ -> die "MirVector_Array is unsupported"
-    go (TupleShape _ _ flds) rvs =
-        Ctx.zipWithM (traverseFieldShape sym f) flds rvs
+    go (TupleShape _ elems) ag =
+        traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (StructShape _ _ flds) rvs =
         Ctx.zipWithM (traverseFieldShape sym f) flds rvs
     go (TransparentShape _ shp) rv = f shp rv
@@ -101,7 +98,7 @@ traverseFieldShape sym f shp0 rv0 = goField shp0 rv0
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
     goField (ReqField shp) (RV rv) = RV <$> f shp rv
     goField (OptField shp) (RV rv) = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        let rv' = readMaybeType sym "field" (shapeType shp) rv
         rv'' <- f shp rv'
         return $ RV $ W4.justPartExpr sym rv''
 

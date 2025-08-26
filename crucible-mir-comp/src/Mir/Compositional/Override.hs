@@ -397,11 +397,13 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
                         ""
-    go (TupleShape _ _ flds) rvs (MS.SetupTuple () svs) = goFields flds rvs svs
+    go (TupleShape _ elems) ag (MS.SetupTuple () svs) =
+      void $ accessMirAggregate' sym elems svs ag $
+        \_off _sz shp rv sv -> go shp rv sv
     go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
-            rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
+            let rv = readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
     go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
@@ -432,7 +434,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             case fld of
                 ReqField shp -> go shp rv sv
                 OptField shp -> do
-                    rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+                    let rv' = readMaybeType sym "field" (shapeType shp) rv
                     go shp rv' sv
             loop flds rvs svs
         loop _ rvs svs = error $ "matchArg: type error: got RegValues for " ++
@@ -451,7 +453,7 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         MirOverrideMatcher sym ()
     goRef refTy pointeeTy mutbl tpr ref alloc refOffset = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
-        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
                     BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
@@ -529,7 +531,8 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ _ flds) (MS.SetupTuple _ svs) = goFields flds svs
+    go (TupleShape _ elems) (MS.SetupTuple _ svs) =
+        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
     go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs

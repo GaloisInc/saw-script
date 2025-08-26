@@ -4,9 +4,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Turns 'SetupValue's back into 'MIRVal's.
 module SAWCentral.Crucible.MIR.ResolveSetupValue
@@ -58,6 +60,8 @@ import qualified Data.BitVector.Sized as BV
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
 import           Data.Kind (Type)
+import           Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.List.Extra as List (firstJust)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
@@ -79,13 +83,12 @@ import qualified Prettyprinter as PP
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
-import Lang.Crucible.Backend (IsSymInterface)
 import Lang.Crucible.Simulator
   ( GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
   , VariantBranch(..), injectVariant
   )
 import Lang.Crucible.Simulator.RegMap (muxRegForType)
-import Lang.Crucible.Types (MaybeType, TypeRepr(..))
+import Lang.Crucible.Types (TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
@@ -131,8 +134,7 @@ ppMIRVal sym (MIRVal shp val) =
       PP.pretty val
     PrimShape _ _ ->
       W4.printSymExpr val
-    TupleShape _ _ fldShp ->
-      PP.parens $ prettyAdtOrTuple fldShp val
+    TupleShape _ elems -> prettyAggregate elems val
     ArrayShape _ _ shp' ->
       case val of
         Mir.MirVector_Vector vec ->
@@ -212,6 +214,49 @@ ppMIRVal sym (MIRVal shp val) =
           readMaybeType sym "field" (shapeType shp') val'
         ReqField shp' ->
           ppMIRVal sym $ MIRVal shp' val'
+
+    prettyAggregate ::
+      [AgElemShape] ->
+      Mir.MirAggregate Sym ->
+      PP.Doc ann
+    prettyAggregate elems (Mir.MirAggregate _sz m) =
+      PP.braces $ commaList (map (prettyAgElem m) elems)
+
+    prettyAgElem ::
+      IntMap (Mir.MirAggregateEntry Sym) ->
+      AgElemShape ->
+      PP.Doc ann
+    prettyAgElem m (AgElemShape off _sz shp') =
+      let valDoc = case IntMap.lookup (fromIntegral off) m of
+            Just (Mir.MirAggregateEntry _sz tpr rv)
+              | Just Refl <- W4.testEquality tpr (shapeType shp') ->
+                  ppMIRVal sym $ MIRVal shp' $
+                  readMaybeType sym "elem" tpr rv
+              | otherwise -> "<type mismatch>"
+            Nothing -> "<unset>"
+      in
+      PP.viaShow off PP.<+> "->" PP.<+> valDoc
+
+
+-- | Wrapper around `buildMirAggregate` for the case where the additional
+-- values are `MIRVal`s.  This automatically checks that the `MIRVal`'s
+-- `TypeShape` matches the shape of the `Mir.MirAggregateEntry` and just passes
+-- the `MIRVal`'s inner `RegValue` to the callback.
+buildMirAggregateWithVal ::
+  (Monad m, MonadFail m) =>
+  Sym ->
+  [AgElemShape] ->
+  [MIRVal] ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue Sym tp -> m (RegValue Sym tp)) ->
+  m (Mir.MirAggregate Sym)
+buildMirAggregateWithVal sym elems vals f =
+  buildMirAggregate sym elems vals $
+    \off sz shp (MIRVal shp' rv) ->
+      case W4.testEquality shp shp' of
+        Just Refl -> f off sz shp rv
+        Nothing -> fail $ "buildMirAggregateWithVal: type mismatch at offset "
+          ++ show off ++ ": expected " ++ show shp ++ ", but the MIRVal contained " ++ show shp'
+
 
 type SetupValue = MS.SetupValue MIR
 
@@ -658,17 +703,15 @@ resolveSetupVal mcc env tyenv nameEnv val =
               panic "resolveSetupVal" [
                   "Expected enum type, received union: " <> Text.pack (show nm)
               ]
+    MS.SetupTuple () [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
-      Some fldAssn <-
-        pure $ Ctx.fromList $
-        map (\(MIRVal shp v) ->
-              Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
-            flds'
-      let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
-      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) fldMirTys fldShpAssn
-      pure $ MIRVal tupleShp valAssn
+      -- TODO: get proper tuple layout
+      let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] flds']
+      ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) elems
+      pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
       case slice of
         MirSetupSliceRaw{} ->
@@ -1012,23 +1055,18 @@ resolveSAWTerm mcc tp tm =
                $ Mir.MirVector_Vector vals
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
+    Cryptol.TVTuple [] -> pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
     Cryptol.TVTuple tps -> do
       st <- sawCoreState sym
       let sc = saw_ctx st
       tms <- traverse (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
-      if null vals
-        then pure $ MIRVal (UnitShape (Mir.TyTuple [])) ()
-        else do
-          let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
-          let mirTupleTy = Mir.TyTuple mirTys
-          Some fldAssn <-
-            pure $ Ctx.fromList $
-            map (\(MIRVal shp val) ->
-                  Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym val)))
-                vals
-          let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
-          pure $ MIRVal (TupleShape mirTupleTy mirTys fldShpAssn) valAssn
+      let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
+      -- TODO: get proper tuple layout
+      let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] vals]
+      ag <- buildMirAggregateWithVal sym elems vals $ \_off _sz _shp rv -> return rv
+      let tupleShp = TupleShape (Mir.TyTuple mirTys) elems
+      pure $ MIRVal tupleShp ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
@@ -1192,8 +1230,8 @@ equalValsPred cc mv1 mv2 =
       pure $ W4.truePred sym
     goTy (PrimShape _ _) v1 v2 =
       liftIO $ W4.isEq sym v1 v2
-    goTy (TupleShape _ _ fldShp) fldAssn1 fldAssn2 =
-      goFldAssn fldShp fldAssn1 fldAssn2
+    goTy (TupleShape _ elems) ag1 ag2 =
+      goAg elems ag1 ag2
     goTy (ArrayShape _ _ shp) vec1 vec2 =
       goVec shp vec1 vec2
     goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
@@ -1255,6 +1293,15 @@ equalValsPred cc mv1 mv2 =
           liftIO $ W4.andPred sym eq z)
         (W4.truePred sym)
         (Ctx.zipWith Functor.Pair fldAssn1 fldAssn2)
+
+    goAg :: [AgElemShape]
+         -> Mir.MirAggregate Sym
+         -> Mir.MirAggregate Sym
+         -> MaybeT IO (W4.Pred Sym)
+    goAg elems ag1 ag2 = do
+      eqs <- zipMirAggregates sym elems ag1 ag2 $
+        \_off _sz shp rv1 rv2 -> goTy shp rv1 rv2
+      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
 
     goVariantAssn :: Ctx.Assignment VariantShape ctx
                   -> Ctx.Assignment (VariantBranch Sym) ctx
@@ -1532,32 +1579,6 @@ substsView (Mir.Substs tys) = SubstsView (map tyView tys)
 fnSigView :: Mir.FnSig -> FnSigView
 fnSigView (Mir.FnSig argTys retTy abi) =
   FnSigView (map tyView argTys) (tyView retTy) abi
-
--- | Read the value out of a 'MaybeType' expression that is assumed to be
--- assigned to a value. If this assumption does not hold (i.e., if the value is
--- unassigned), then this function will raise an error.
-readMaybeType ::
-     IsSymInterface sym
-  => sym
-  -> String
-  -> TypeRepr tp
-  -> RegValue sym (MaybeType tp)
-  -> RegValue sym tp
-readMaybeType sym desc tpr rv =
-  case readPartExprMaybe sym rv of
-    Just x -> x
-    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
-
-readPartExprMaybe ::
-     IsSymInterface sym
-  => sym
-  -> W4.PartExpr (W4.Pred sym) a
-  -> Maybe a
-readPartExprMaybe _sym W4.Unassigned = Nothing
-readPartExprMaybe _sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = Just v
-  | otherwise = Nothing
 
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
 -- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.

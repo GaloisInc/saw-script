@@ -327,12 +327,13 @@ munge sym shp0 rv0 = do
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
-        go (TupleShape _ _ flds) rvs = goFields flds rvs
+        go (TupleShape _ elems) ag =
+            traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
         go (ArrayShape _ _ shp) vec = case vec of
             MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
             MirVector_PartialVector pv -> do
                 pv' <- forM pv $ \p -> do
-                    rv <- readMaybeType sym "vector element" (shapeType shp) p
+                    let rv = readMaybeType sym "vector element" (shapeType shp) p
                     W4.justPartExpr sym <$> go shp rv
                 return $ MirVector_PartialVector pv'
             MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
@@ -363,7 +364,7 @@ munge sym shp0 rv0 = do
         goField :: forall tp. FieldShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         goField (ReqField shp) rv = go shp rv
         goField (OptField shp) rv = do
-            rv' <- readMaybeType sym "field" (shapeType shp) rv
+            let rv' = readMaybeType sym "field" (shapeType shp) rv
             W4.justPartExpr sym <$> go shp rv'
 
     go shp0 rv0
@@ -400,12 +401,12 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
           | fromIntegral (intValue w) == n -> Right ()
           | otherwise -> typeErr desc shp ty $
             "bitvector width " ++ show n ++ " does not match " ++ show (intValue w)
-        (TupleShape _ _ flds, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
-          | Ctx.sizeInt (Ctx.size flds) == n -> do
-            let flds' = toListFC Some flds
-            zipWithM_ (\(Some fld) ty' -> goOneField desc fld ty') flds' tys
+        (TupleShape _ elems, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
+          | length elems == n -> do
+            forM_ (zip elems tys) $ \(AgElemShape _off _sz shp', ty') -> do
+              goOne desc shp' ty'
           | otherwise -> typeErr desc shp ty $
-            "tuple size " ++ show n ++ " does not match " ++ show (Ctx.sizeInt $ Ctx.size flds)
+            "tuple size " ++ show n ++ " does not match " ++ show (length elems)
         (ArrayShape (M.TyArray _ n) _ shp',
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
@@ -420,10 +421,6 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
             "type mismatch in " ++ desc ++ ": Cryptol type " ++ show (Cry.pp ty) ++
             " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
-
-    goOneField :: forall tp. String -> FieldShape tp -> Cry.Type -> Either String ()
-    goOneField desc (OptField shp) ty = goOne desc shp ty
-    goOneField desc (ReqField shp) ty = goOne desc shp ty
 
 typecheckFnSig _ _ _ (SAW.TypedTermSchema sch) = Left $
     "polymorphic Cryptol functions are not supported (got signature: " ++

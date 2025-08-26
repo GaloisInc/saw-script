@@ -21,7 +21,7 @@ import Data.Functor.Const
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
@@ -127,21 +127,6 @@ visitExprVars cache e0 f = go Set.empty e0
         W4.SemiRingLiteral _ _ _ -> return ()
 
 
-readMaybeType :: forall tp sym. IsSymInterface sym =>
-    sym -> String -> TypeRepr tp -> RegValue sym (MaybeType tp) ->
-    IO (RegValue sym tp)
-readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
-    Just x' -> return x'
-    Nothing -> error $ "regToSetup: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
-
-readPartExprMaybe :: IsSymInterface sym => sym -> W4.PartExpr (W4.Pred sym) a -> IO (Maybe a)
-readPartExprMaybe _sym W4.Unassigned = return Nothing
-readPartExprMaybe _sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = return $ Just v
-  | otherwise = return Nothing
-
-
 -- | Convert a `SAW.Term` into a `W4.Expr`.
 termToExpr :: forall sym t fs.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
@@ -182,9 +167,9 @@ termToReg sym varMap term shp0 = do
                 _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
                     ", but simulator returned a vector containing " ++ show x
             buildBitVector w bits
-        (TupleShape _ _ flds, _) -> do
-            svs <- tupleToListRev (Ctx.sizeInt $ Ctx.size flds) [] sv
-            goTuple flds svs
+        (TupleShape _ elems, _) -> do
+            svs <- reverse <$> tupleToListRev (length elems) [] sv
+            buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape (M.TyArray _ n) _ shp', SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= n) $ fail $
@@ -220,21 +205,6 @@ termToReg sym varMap term shp0 = do
     tupleToListRev n _ _ | n < 2 = error $ "bad tuple size " ++ show n
     tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
         " elements, but got " ++ show v
-
-    goTuple :: forall ctx.
-        Assignment FieldShape ctx ->
-        [SValue sym] ->
-        IO (RegValue sym (StructType ctx))
-    goTuple Empty [] = return Empty
-    goTuple (flds :> fld) (sv : svs) = do
-        rv <- goField fld sv
-        rvs <- goTuple flds svs
-        return (rvs :> RV rv)
-    goTuple _ _ = fail "termToReg: mismatched tuple size"
-
-    goField :: forall tp'. FieldShape tp' -> SValue sym -> IO (RegValue sym tp')
-    goField (ReqField shp) sv = go shp sv
-    goField (OptField shp) sv = W4.justPartExpr sym <$> go shp sv
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
     -- required to match `tw`.
@@ -354,24 +324,15 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
     go shp rv = case (shp, rv) of
         (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
         (PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
-        (TupleShape _ _ flds, rvs) -> do
-            terms <- Ctx.zipWithM (\fld (RV rvi) -> Const <$> goField fld rvi) flds rvs
-            liftIO $ SAW.scTuple sc (toListFC getConst terms)
+        (TupleShape _ elems, ag) -> do
+            terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
+            liftIO $ SAW.scTuple sc terms
         (ArrayShape _ _ shp', vec) -> do
             terms <- goVector shp' vec
             tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
-
-    goField :: forall tp.
-        FieldShape tp ->
-        RegValue sym tp ->
-        m SAW.Term
-    goField (OptField shp) rv = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
-        go shp rv'
-    goField (ReqField shp) rv = go shp rv
 
     goVector :: forall tp.
         TypeShape tp ->
@@ -380,7 +341,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
     goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
     goVector shp (MirVector_PartialVector pv) = do
         forM (toList pv) $ \rv -> do
-            rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+            let rv' = readMaybeType sym "field" (shapeType shp) rv
             go shp rv'
     goVector _shp (MirVector_Array _) = fail $
         "regToTerm: MirVector_Array not supported"

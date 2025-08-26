@@ -705,12 +705,14 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         visitExprVars cache expr $ \var -> do
             msbPrePost pp . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ _ flds) rvs = MS.SetupTuple () <$> goFields flds rvs
+    go (TupleShape _ elems) ag = do
+      svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
+      return $ MS.SetupTuple () svs
     go (ArrayShape _ elemTy shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
             MirVector_PartialVector v -> forM (toList v) $ \p -> do
-                rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
+                let rv = readMaybeType sym "vector element" (shapeType shp) p
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
         return $ MS.SetupArray elemTy svs
@@ -727,7 +729,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' _ tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
-        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
                     BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
@@ -774,7 +776,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         loop (flds :> fld) (rvs :> RV rv) svs = do
             sv <- case fld of
                 ReqField shp -> go shp rv
-                OptField shp -> liftIO (readMaybeType sym "field" (shapeType shp) rv) >>= go shp
+                OptField shp -> go shp $ readMaybeType sym "field" (shapeType shp) rv
             loop flds rvs (sv : svs)
 
 refToAlloc :: forall sym bak t fs tp p rtp args ret.

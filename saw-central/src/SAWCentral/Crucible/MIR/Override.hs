@@ -30,7 +30,7 @@ module SAWCentral.Crucible.MIR.Override
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception as X
 import Control.Lens
-import Control.Monad (filterM, forM, forM_, unless, zipWithM)
+import Control.Monad (filterM, forM, forM_, unless, void, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
@@ -369,6 +369,16 @@ cmpPathConcretely _ _ (Mir.VectorAsMirVector_RefPath _ _) = PC.GTF
 
 -- ArrayAsMirVector_RefPath
 cmpPathConcretely sym (Mir.ArrayAsMirVector_RefPath tpr1 p1) (Mir.ArrayAsMirVector_RefPath tpr2 p2) =
+  PC.compareF tpr1 tpr2 <<>>
+  cmpPathConcretely sym p1 p2 <<>>
+  PC.EQF
+cmpPathConcretely _ (Mir.ArrayAsMirVector_RefPath _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.ArrayAsMirVector_RefPath _ _) = PC.GTF
+
+-- AgElem_RefPath
+cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =
+  PC.compareF off1 off2 <<>>
+  PC.fromOrdering (compare sz1 sz2) <<>>
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
@@ -1333,8 +1343,9 @@ matchArg opts sc cc cs prepost md = go False []
                   ]
 
         -- match the fields of a tuple point-wise
-        ([], MIRVal (TupleShape (Mir.TyTuple _) _ xsFldShps) xs, MS.SetupTuple () zs) ->
-          matchFields sym xsFldShps xs zs
+        ([], MIRVal (TupleShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
+          void $ accessMirAggregate' sym elems zs ag $
+            \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
         -- See Note [Matching slices in overrides]
         ([],
@@ -1882,12 +1893,9 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> liftIO (toSC sym st val)
     (Cryptol.TVTuple [], UnitShape _) ->
       liftIO (scUnitValue sc)
-    (Cryptol.TVTuple tys, TupleShape _ _ flds)
-      |  length tys == Ctx.sizeInt (Ctx.size flds)
-      -> do terms <-
-              traverse
-                fieldToSC
-                (zip tys (FC.toListFC Some (Ctx.zipWith Functor.Pair flds val)))
+    (Cryptol.TVTuple tys, TupleShape _ elems)
+      -> do terms <- accessMirAggregate' sym elems tys val $
+              \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val') 
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ arrShp)
       |  Mir.MirVector_Vector vals <- val
@@ -1911,19 +1919,6 @@ valueToSC sym fail_ tval (MIRVal shp val) =
   where
     st = sym ^. W4.userState
     sc = saw_ctx st
-
-    fieldToSC ::
-         (Cryptol.TValue, Some (Functor.Product FieldShape (Crucible.RegValue' Sym)))
-      -> OverrideMatcher MIR w Term
-    fieldToSC (ty, Some (Functor.Pair fldShp (Crucible.RV tm))) = do
-      mirVal <-
-        case fldShp of
-          ReqField shp' ->
-            pure $ MIRVal shp' tm
-          OptField shp' ->
-            pure $ MIRVal shp'
-                 $ readMaybeType sym "field" (shapeType shp') tm
-      valueToSC sym fail_ ty mirVal
 
 -- | Apply a stack of projections to a 'Term'.
 applyProjToTerm ::
