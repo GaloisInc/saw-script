@@ -47,6 +47,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Map as Map
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Parameterized.Classes (ShowF)
@@ -671,4 +672,4 @@ instance Eq AgElemShape where
     AgElemShape off1 sz1 shp1 == AgElemShape off2 sz2 shp2 =
         off1 == off2
             && sz1 == sz2
-            && (case testEquality shp1 shp2 of Just _ -> True; _ -> False)
+            && isJust (testEquality shp1 shp2)
