@@ -1020,7 +1020,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1001 </span>
 <span class="lineno"> 1002 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno"> 1003 </span>proveRME :: ProofScript ()
-<span class="lineno"> 1004 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
+<span class="lineno"> 1004 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
 <span class="lineno"> 1005 </span>
 <span class="lineno"> 1006 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno"> 1007 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
