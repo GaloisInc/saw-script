@@ -491,7 +491,7 @@ buildMirAggregate sym elems xs f = do
   entries <- forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
     rv <- f off sz shp x
     let rvPart = W4.justPartExpr sym rv
-    return $ (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
+    return (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
   return $ MirAggregate totalSize (IntMap.fromList entries)
 
 -- | Modify the value of each entry in a `MirAggregate`.  The callback gets the
@@ -505,7 +505,7 @@ traverseMirAggregate ::
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> m (RegValue sym tp)) ->
   m (MirAggregate sym)
 traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
-  agCheckKeysEq "accessMirAggregate'" elems m
+  agCheckKeysEq "traverseMirAggregate" elems m
   m' <- sequence $ IntMap.mergeWithKey
     (\_off' (AgElemShape off _sz' shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
         Refl <- case testEquality tpr (shapeType shp) of
@@ -516,8 +516,8 @@ traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
         rv' <- f off sz shp rv
         let rvPart' = W4.justPartExpr sym rv'
         return $ MirAggregateEntry sz tpr rvPart')
-    (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
-    (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
+    (\_ -> panic "traverseMirAggregate" ["mismatched keys in aggregate"])
+    (\_ -> panic "traverseMirAggregate" ["mismatched keys in aggregate"])
     (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
     m
   return $ MirAggregate totalSize m'
@@ -577,8 +577,8 @@ zipMirAggregates ::
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> m b) ->
   m [b]
 zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do
-  agCheckKeysEq "zipMirAggregate'" elems m1
-  agCheckKeysEq "zipMirAggregate'" elems m2
+  agCheckKeysEq "zipMirAggregates" elems m1
+  agCheckKeysEq "zipMirAggregates" elems m2
   -- We don't require the `totalSize`s of the two aggregates to match.
   -- `buildMirAggregate` sets the `totalSize` to the end of the last field, but
   -- other methods of building aggregates use the actual layout from rustc,
@@ -587,23 +587,23 @@ zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSiz
     MirAggregateEntry _sz1 tpr1 rvPart1 <-
       case IntMap.lookup (fromIntegral off) m1 of
         Just e -> return e
-        Nothing -> panic "zipMirAggregate"
+        Nothing -> panic "zipMirAggregates"
           [Text.pack $ "missing MirAggregateEntry at offset " ++ show off
             ++ " (in first input)"]
     MirAggregateEntry _sz2 tpr2 rvPart2 <-
       case IntMap.lookup (fromIntegral off) m2 of
         Just e -> return e
-        Nothing -> panic "zipMirAggregate"
+        Nothing -> panic "zipMirAggregates"
           [Text.pack $ "missing MirAggregateEntry at offset " ++ show off
             ++ " (in second input)"]
     Refl <- case testEquality tpr1 (shapeType shp) of
       Just pf -> return pf
-      Nothing -> fail $ "zipMirAggregate: ill-typed field value at offset "
+      Nothing -> fail $ "zipMirAggregates: ill-typed field value at offset "
         ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr1
         ++ " (in first aggregate)"
     Refl <- case testEquality tpr2 (shapeType shp) of
       Just pf -> return pf
-      Nothing -> fail $ "zipMirAggregate: ill-typed field value at offset "
+      Nothing -> fail $ "zipMirAggregates: ill-typed field value at offset "
         ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr2
         ++ " (in second aggregate)"
     let rv1 = readMaybeType sym "elem" tpr1 rvPart1
