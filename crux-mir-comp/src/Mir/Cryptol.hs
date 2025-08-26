@@ -19,7 +19,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import Data.Functor.Const
-import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.Kind as Kind
 import Data.Map (Map)
@@ -328,24 +327,8 @@ munge sym shp0 rv0 = do
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go (UnitShape _) () = return ()
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
-        go (TupleShape _ elems) (MirAggregate totalSize m) = do
-            -- Zip together `elems` and `m`.  They should have the same
-            -- keys/offsets.
-            m' <- sequence $ IntMap.mergeWithKey
-              (\off (AgElemShape _ _ shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
-                  Refl <- case testEquality tpr (shapeType shp) of
-                      Just x -> return x
-                      Nothing -> error $ "type mismatch at offset " ++ show off
-                          ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
-                  let rv = readMaybeType sym "elem" tpr rvPart
-                  rv' <- go shp rv
-                  let rvPart' = W4.justPartExpr sym rv'
-                  return $ MirAggregateEntry sz tpr rvPart')
-              (\_ -> error "aggregate shape mismatch")
-              (\_ -> error "aggregate shape mismatch")
-              (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
-              m
-            return $ MirAggregate totalSize m'
+        go (TupleShape _ elems) ag =
+            traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
         go (ArrayShape _ _ shp) vec = case vec of
             MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
             MirVector_PartialVector pv -> do

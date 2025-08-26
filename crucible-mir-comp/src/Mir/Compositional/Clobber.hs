@@ -10,7 +10,6 @@ where
 import Control.Lens ((^.), (^?), ix)
 import Control.Monad (forM_)
 import Control.Monad.IO.Class (MonadIO(..))
-import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Vector as V
@@ -63,24 +62,8 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (f shp)) pv
         MirVector_Array _ -> die "MirVector_Array is unsupported"
-    go (TupleShape _ elems) (MirAggregate totalSize m) = do
-        -- Zip together `elems` and `m`.  They should have the same
-        -- keys/offsets.
-        m' <- sequence $ IntMap.mergeWithKey
-          (\off (AgElemShape _ _ shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
-              W4.Refl <- case W4.testEquality tpr (shapeType shp) of
-                  Just x -> return x
-                  Nothing -> die $ "type mismatch at offset " ++ show off
-                      ++ ": " ++ show tpr ++ " != " ++ show (shapeType shp)
-              let rv = readMaybeType sym "elem" tpr rvPart
-              rv' <- f shp rv
-              let rvPart' = W4.justPartExpr sym rv'
-              return $ MirAggregateEntry sz tpr rvPart')
-          (\_ -> error "aggregate shape mismatch")
-          (\_ -> error "aggregate shape mismatch")
-          (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
-          m
-        return $ MirAggregate totalSize m'
+    go (TupleShape _ elems) ag =
+        traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (StructShape _ _ flds) rvs =
         Ctx.zipWithM (traverseFieldShape sym f) flds rvs
     go (TransparentShape _ shp) rv = f shp rv

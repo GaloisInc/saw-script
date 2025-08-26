@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -27,14 +29,28 @@ module SAWCentral.Crucible.MIR.TypeShape
   , IsRefShape(..)
   , testRefShape
   , sliceShapeParts
+  -- `MirAggregate` / `AgElemShape` helpers
+  , buildMirAggregate
+  , traverseMirAggregate
+  , traverseMirAggregate'
+  , accessMirAggregate
+  , accessMirAggregate'
+  , zipMirAggregates
+  , zipMirAggregates'
   -- Misc helpers
   , readMaybeType
   , readPartExprMaybe
   ) where
 
 import Control.Lens ((^.), (^..), each)
+import Control.Monad (when, forM)
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import qualified Data.Map as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Parameterized.Classes (ShowF)
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import Data.Parameterized.Some
@@ -55,6 +71,7 @@ import qualified Mir.Mir as M
 import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
                    , isUnsized, reprTransparentFieldTy )
 
+import SAWCentral.Panic (panic)
 import qualified SAWCore.SharedTerm as SAW
 
 -- | TypeShape is used to classify MIR `Ty`s and their corresponding
@@ -437,6 +454,196 @@ sliceShapeParts referentTy refMutbl referentTpr =
     -- avoid unnecessary clobbering.
     refTy = M.TyRef referentTy refMutbl
     usizeTy = M.TyUint M.USize
+
+
+-- Helpers for manipulating `MirAggregate` with matching `AgElemShape`s.
+
+agCheckLengthsEq :: Monad m => Text -> [AgElemShape] -> [a] -> m ()
+agCheckLengthsEq loc elems xs =
+  when (length elems /= length xs) $
+    panic loc
+      [Text.pack $ "got " ++ show (length elems) ++ " elems, but " ++ show (length xs) ++ " xs"]
+
+agCheckKeysEq :: MonadFail m => String -> [AgElemShape] -> IntMap (MirAggregateEntry sym) -> m ()
+agCheckKeysEq loc elems m = do
+  let mKeys = IntMap.keysSet m
+  let elemsKeys = IntSet.fromList [fromIntegral off | AgElemShape off _ _ <- elems]
+  when (mKeys /= elemsKeys) $
+    if mKeys `IntSet.isSubsetOf` elemsKeys
+      then fail $ loc ++ ": missing or uninitialized fields at offsets "
+        ++ show (elemsKeys IntSet.\\ mKeys)
+      else fail $ loc ++ ": expected aggregate to have fields at offsets "
+        ++ show elemsKeys ++ ", but got fields at offsets " ++ show mKeys
+
+-- | Build a `MirAggregate` with one entry for each provided `AgElemShape`.
+-- The callback receives the offset, size, and type of the entry, along with
+-- the corresponding value from @xs@ (which must have as many items as there
+-- are `AgElemShape`s), and the result of the callback is used as the value for
+-- the entry.
+buildMirAggregate ::
+  (IsSymInterface sym, Monad m, MonadFail m) =>
+  sym ->
+  [AgElemShape] ->
+  [a] ->
+  (forall tp. Word -> Word -> TypeShape tp -> a -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+buildMirAggregate sym elems xs f = do
+  agCheckLengthsEq "buildMirAggregate" elems xs
+  let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
+  entries <- forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
+    rv <- f off sz shp x
+    let rvPart = W4.justPartExpr sym rv
+    return $ (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
+  return $ MirAggregate totalSize (IntMap.fromList entries)
+
+-- | Modify the value of each entry in a `MirAggregate`.  The callback gets the
+-- offset, size, type, and value of the entry, and its result is stored as the
+-- new value in the output.
+traverseMirAggregate ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+traverseMirAggregate sym elems ag f =
+  traverseMirAggregate' sym elems [() | _ <- elems] ag $
+    \off sz shp val () -> f off sz shp val
+
+-- | Modify the value of each entry in a `MirAggregate`.  This is like
+-- `traverseMirAggregate`, but the callback also gets the value from the input
+-- list @xs@ that corresponds to the current entry.
+traverseMirAggregate' ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  [a] ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> a -> m (RegValue sym tp)) ->
+  m (MirAggregate sym)
+traverseMirAggregate' sym elems xs (MirAggregate totalSize m) f = do
+  agCheckLengthsEq "traverseMirAggregate'" elems xs
+  agCheckKeysEq "accessMirAggregate'" elems m
+  m' <- sequence $ IntMap.mergeWithKey
+    (\_off' (AgElemShape off _sz' shp, x) (MirAggregateEntry sz tpr rvPart) -> Just $ do
+        Refl <- case testEquality tpr (shapeType shp) of
+            Just pf -> return pf
+            Nothing -> fail $ "traverseMirAggregate: ill-typed field value at offset "
+              ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr
+        let rv = readMaybeType sym "elem" tpr rvPart
+        rv' <- f off sz shp rv x
+        let rvPart' = W4.justPartExpr sym rv'
+        return $ MirAggregateEntry sz tpr rvPart')
+    (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
+    (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
+    (IntMap.fromList [(fromIntegral off, (e, x)) | (e@(AgElemShape off _ _), x) <- zip elems xs])
+    m
+  return $ MirAggregate totalSize m'
+
+-- | Extract values from a `MirAggregate`, one for each entry.  The callback
+-- gets the offset, size, type, and value of the entry.  Callback results are
+-- returned in a list in the same order as @elems@.
+accessMirAggregate ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> m b) ->
+  m [b]
+accessMirAggregate sym elems ag f =
+  accessMirAggregate' sym elems [() | _ <- elems] ag $
+    \off sz shp val () -> f off sz shp val
+
+-- | Extract values from a `MirAggregate`, one for each entry.  This is like
+-- `accessMirAggregate`, but the callback also gets the value from the input
+-- list @xs@ that corresponds to the current entry.
+accessMirAggregate' ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  [a] ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> a -> m b) ->
+  m [b]
+accessMirAggregate' sym elems xs (MirAggregate _totalSize m) f = do
+  agCheckLengthsEq "accessMirAggregate'" elems xs
+  agCheckKeysEq "accessMirAggregate'" elems m
+  forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
+    MirAggregateEntry _sz' tpr rvPart <-
+      case IntMap.lookup (fromIntegral off) m of
+        Just e -> return e
+        -- Should be impossible, since we checked above that the key sets
+        -- match.
+        Nothing -> panic "accessMirAggregate"
+          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off]
+    Refl <- case testEquality tpr (shapeType shp) of
+      Just pf -> return pf
+      Nothing -> fail $ "accessMirAggregate: ill-typed field value at offset "
+        ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr
+    let rv = readMaybeType sym "elem" tpr rvPart
+    f off sz shp rv x
+
+-- | Zip together two `MirAggregate`s and extract values from them.  The callback
+-- gets the offset, size, type, and the value at that offset in each aggregate.
+-- Callback results are returned in a list in the same order as @elems@.
+zipMirAggregates ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  MirAggregate sym ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> m b) ->
+  m [b]
+zipMirAggregates sym elems ag1 ag2 f =
+  zipMirAggregates' sym elems [() | _ <- elems] ag1 ag2 $
+    \off sz shp val1 val2 () -> f off sz shp val1 val2
+
+-- | Zip together two `MirAggregate`s and extract values from them.  This is
+-- like `zipMirAggregate`, but the callback also gets the value from the
+-- input list @xs@ that corresponds to the current entry.
+zipMirAggregates' ::
+  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  sym ->
+  [AgElemShape] ->
+  [a] ->
+  MirAggregate sym ->
+  MirAggregate sym ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> a -> m b) ->
+  m [b]
+zipMirAggregates' sym elems xs (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do
+  agCheckLengthsEq "zipMirAggregate'" elems xs
+  agCheckKeysEq "zipMirAggregate'" elems m1
+  agCheckKeysEq "zipMirAggregate'" elems m2
+  -- We don't require the `totalSize`s of the two aggregates to match.
+  -- `buildMirAggregate` sets the `totalSize` to the end of the last field, but
+  -- other methods of building aggregates use the actual layout from rustc,
+  -- which may have extra padding at the end.
+  forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
+    MirAggregateEntry _sz1 tpr1 rvPart1 <-
+      case IntMap.lookup (fromIntegral off) m1 of
+        Just e -> return e
+        Nothing -> panic "zipMirAggregate"
+          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off
+            ++ " (in first input)"]
+    MirAggregateEntry _sz2 tpr2 rvPart2 <-
+      case IntMap.lookup (fromIntegral off) m2 of
+        Just e -> return e
+        Nothing -> panic "zipMirAggregate"
+          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off
+            ++ " (in second input)"]
+    Refl <- case testEquality tpr1 (shapeType shp) of
+      Just pf -> return pf
+      Nothing -> fail $ "zipMirAggregate: ill-typed field value at offset "
+        ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr1
+        ++ " (in first aggregate)"
+    Refl <- case testEquality tpr2 (shapeType shp) of
+      Just pf -> return pf
+      Nothing -> fail $ "zipMirAggregate: ill-typed field value at offset "
+        ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr2
+        ++ " (in second aggregate)"
+    let rv1 = readMaybeType sym "elem" tpr1 rvPart1
+    let rv2 = readMaybeType sym "elem" tpr2 rvPart2
+    f off sz shp rv1 rv2 x
 
 
 -- Misc helpers

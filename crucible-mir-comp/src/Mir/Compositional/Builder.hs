@@ -705,7 +705,9 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         visitExprVars cache expr $ \var -> do
             msbPrePost pp . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ elems) ag = MS.SetupTuple () <$> mapM (goAgElem ag) elems
+    go (TupleShape _ elems) ag = do
+      svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
+      return $ MS.SetupTuple () svs
     go (ArrayShape _ elemTy shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
@@ -776,19 +778,6 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                 ReqField shp -> go shp rv
                 OptField shp -> go shp $ readMaybeType sym "field" (shapeType shp) rv
             loop flds rvs (sv : svs)
-
-    goAgElem :: MirAggregate sym -> AgElemShape ->
-        BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-    goAgElem (MirAggregate _ m) (AgElemShape off _sz shp) = do
-        case IntMap.lookup (fromIntegral off) m of
-            Just (MirAggregateEntry _sz' tpr rvPart) -> do
-                Refl <- case testEquality tpr (shapeType shp) of
-                    Just x -> return x
-                    Nothing -> fail $ "type mismatch at offset " ++ show off
-                        ++ ": " ++ show (tpr, shapeType shp)
-                let rv = readMaybeType sym "elem" tpr rvPart
-                go shp rv
-            Nothing -> fail $ "missing entry at offset " ++ show off
 
 refToAlloc :: forall sym bak t fs tp p rtp args ret.
     (IsSymBackend sym bak, sym ~ MirSym t fs) =>

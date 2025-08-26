@@ -18,7 +18,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.Functor.Const
-import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -169,8 +168,8 @@ termToReg sym varMap term shp0 = do
                     ", but simulator returned a vector containing " ++ show x
             buildBitVector w bits
         (TupleShape _ elems, _) -> do
-            svs <- tupleToListRev (length elems) [] sv
-            goTuple elems (reverse svs)
+            svs <- reverse <$> tupleToListRev (length elems) [] sv
+            buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape (M.TyArray _ n) _ shp', SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= n) $ fail $
@@ -206,20 +205,6 @@ termToReg sym varMap term shp0 = do
     tupleToListRev n _ _ | n < 2 = error $ "bad tuple size " ++ show n
     tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
         " elements, but got " ++ show v
-
-    goTuple ::
-        [AgElemShape] ->
-        [SValue sym] ->
-        IO (RegValue sym MirAggregateType)
-    goTuple elems svs = do
-      when (length elems /= length svs) $ fail "termToReg: mismatched tuple size"
-      -- Set `totalSize` to the end address of the last element.
-      let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
-      entries <- forM (zip elems svs) $ \(AgElemShape off sz shp, sv) -> do
-        rv <- go shp sv
-        let rvPart = W4.justPartExpr sym rv
-        return $ (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
-      return $ MirAggregate totalSize (IntMap.fromList entries)
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
     -- required to match `tw`.
@@ -340,7 +325,7 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
         (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
         (PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
         (TupleShape _ elems, ag) -> do
-            terms <- mapM (goAgElem ag) elems
+            terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
         (ArrayShape _ _ shp', vec) -> do
             terms <- goVector shp' vec
@@ -348,21 +333,6 @@ regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
             liftIO $ SAW.scVector sc tyTerm terms
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
-
-    goAgElem ::
-        MirAggregate sym ->
-        AgElemShape ->
-        m SAW.Term
-    goAgElem (MirAggregate _ m) (AgElemShape off _sz shp) = do
-        case IntMap.lookup (fromIntegral off) m of
-            Just (MirAggregateEntry _sz' tpr rvPart) -> do
-                Refl <- case testEquality tpr (shapeType shp) of
-                    Just x -> return x
-                    Nothing -> fail $ "type mismatch at offset " ++ show off
-                        ++ ": " ++ show (tpr, shapeType shp)
-                let rv = readMaybeType sym "elem" tpr rvPart
-                go shp rv
-            Nothing -> fail $ "missing entry at offset " ++ show off
 
     goVector :: forall tp.
         TypeShape tp ->

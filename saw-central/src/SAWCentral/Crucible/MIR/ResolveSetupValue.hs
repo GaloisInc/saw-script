@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -51,7 +52,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   ) where
 
 import           Control.Lens
-import           Control.Monad (forM, guard, unless, zipWithM, zipWithM_)
+import           Control.Monad (guard, unless, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
@@ -235,6 +236,27 @@ ppMIRVal sym (MIRVal shp val) =
             Nothing -> "<unset>"
       in
       PP.viaShow off PP.<+> "->" PP.<+> valDoc
+
+
+-- | Wrapper around `buildMirAggregate` for the case where the additional
+-- values are `MIRVal`s.  This automatically checks that the `MIRVal`'s
+-- `TypeShape` matches the shape of the `Mir.MirAggregateEntry` and just passes
+-- the `MIRVal`'s inner `RegValue` to the callback.
+buildMirAggregateWithVal ::
+  (Monad m, MonadFail m) =>
+  Sym ->
+  [AgElemShape] ->
+  [MIRVal] ->
+  (forall tp. Word -> Word -> TypeShape tp -> RegValue Sym tp -> m (RegValue Sym tp)) ->
+  m (Mir.MirAggregate Sym)
+buildMirAggregateWithVal sym elems vals f =
+  buildMirAggregate sym elems vals $
+    \off sz shp (MIRVal shp' rv) ->
+      case W4.testEquality shp shp' of
+        Just Refl -> f off sz shp rv
+        Nothing -> fail $ "buildMirAggregateWithVal: type mismatch at offset "
+          ++ show off ++ ": expected " ++ show shp ++ ", but the MIRVal contained " ++ show shp'
+
 
 type SetupValue = MS.SetupValue MIR
 
@@ -685,12 +707,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+      -- TODO: get proper tuple layout
       let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] flds']
-      let m = IntMap.fromList
-            [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
-              | (i, MIRVal shp rv) <- zip [0..] flds']
+      ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
       let tupleShp = TupleShape (Mir.TyTuple fldMirTys) elems
-      let ag = Mir.MirAggregate (fromIntegral $ length flds) m
       pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
       case slice of
@@ -1042,13 +1062,11 @@ resolveSAWTerm mcc tp tm =
       tms <- traverse (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
-      let mirTupleTy = Mir.TyTuple mirTys
+      -- TODO: get proper tuple layout
       let elems = [AgElemShape i 1 shp | (i, MIRVal shp _) <- zip [0..] vals]
-      let m = IntMap.fromList
-            [(i, Mir.MirAggregateEntry 1 (shapeType shp) (W4.justPartExpr sym rv))
-              | (i, MIRVal shp rv) <- zip [0..] vals]
-      let ag = Mir.MirAggregate (fromIntegral $ length vals) m
-      pure $ MIRVal (TupleShape mirTupleTy elems) ag
+      ag <- buildMirAggregateWithVal sym elems vals $ \_off _sz _shp rv -> return rv
+      let tupleShp = TupleShape (Mir.TyTuple mirTys) elems
+      pure $ MIRVal tupleShp ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
@@ -1280,22 +1298,9 @@ equalValsPred cc mv1 mv2 =
          -> Mir.MirAggregate Sym
          -> Mir.MirAggregate Sym
          -> MaybeT IO (W4.Pred Sym)
-    goAg elems (Mir.MirAggregate totalSize1 m1) (Mir.MirAggregate totalSize2 m2) = do
-      guard (totalSize1 == totalSize2)
-      eqs <- forM elems $ \(AgElemShape (fromIntegral -> off) _sz shp) -> do
-        case (IntMap.lookup off m1, IntMap.lookup off m2) of
-          (Just (Mir.MirAggregateEntry sz1 tpr1 rvPart1),
-              Just (Mir.MirAggregateEntry sz2 tpr2 rvPart2)) -> do
-            guard (sz1 == sz2)
-            Refl <- testEquality tpr1 (shapeType shp)
-            Refl <- testEquality tpr2 (shapeType shp)
-            let rv1 = readMaybeType sym "aggregate element" tpr1 rvPart1
-            let rv2 = readMaybeType sym "aggregate element" tpr2 rvPart2
-            goTy shp rv1 rv2
-          -- Erroring out here on uninitialized fields seems okay, since the
-          -- `MirVector_PartialVector` case above does the same (via
-          -- `readMaybeType`).
-          (_, _) -> error $ "mismatched initialization state at offset " ++ show off
+    goAg elems ag1 ag2 = do
+      eqs <- zipMirAggregates sym elems ag1 ag2 $
+        \_off _sz shp rv1 rv2 -> goTy shp rv1 rv2
       liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
 
     goVariantAssn :: Ctx.Assignment VariantShape ctx
