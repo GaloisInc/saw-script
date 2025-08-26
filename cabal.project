@@ -1,6 +1,5 @@
 packages:
     saw.cabal
-    rme
     crucible-mir-comp
     crux-mir-comp
 
@@ -40,6 +39,8 @@ packages:
     deps/argo/tasty-script-exitcode
     deps/cryptol/cryptol-remote-api
     deps/language-rust
+    deps/rme/rme
+    deps/rme/rme-what4
 
 source-repository-package
     type: git

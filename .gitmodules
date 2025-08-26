@@ -52,3 +52,6 @@
 [submodule "deps/mir-json"]
 	path = deps/mir-json
 	url = https://github.com/GaloisInc/mir-json.git
+[submodule "deps/rme"]
+	path = deps/rme
+	url = https://github.com/GaloisInc/rme
