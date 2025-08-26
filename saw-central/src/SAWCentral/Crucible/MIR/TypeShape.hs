@@ -32,11 +32,9 @@ module SAWCentral.Crucible.MIR.TypeShape
   -- `MirAggregate` / `AgElemShape` helpers
   , buildMirAggregate
   , traverseMirAggregate
-  , traverseMirAggregate'
   , accessMirAggregate
   , accessMirAggregate'
   , zipMirAggregates
-  , zipMirAggregates'
   -- Misc helpers
   , readMaybeType
   , readPartExprMaybe
@@ -506,37 +504,21 @@ traverseMirAggregate ::
   MirAggregate sym ->
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> m (RegValue sym tp)) ->
   m (MirAggregate sym)
-traverseMirAggregate sym elems ag f =
-  traverseMirAggregate' sym elems [() | _ <- elems] ag $
-    \off sz shp val () -> f off sz shp val
-
--- | Modify the value of each entry in a `MirAggregate`.  This is like
--- `traverseMirAggregate`, but the callback also gets the value from the input
--- list @xs@ that corresponds to the current entry.
-traverseMirAggregate' ::
-  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
-  sym ->
-  [AgElemShape] ->
-  [a] ->
-  MirAggregate sym ->
-  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> a -> m (RegValue sym tp)) ->
-  m (MirAggregate sym)
-traverseMirAggregate' sym elems xs (MirAggregate totalSize m) f = do
-  agCheckLengthsEq "traverseMirAggregate'" elems xs
+traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
   agCheckKeysEq "accessMirAggregate'" elems m
   m' <- sequence $ IntMap.mergeWithKey
-    (\_off' (AgElemShape off _sz' shp, x) (MirAggregateEntry sz tpr rvPart) -> Just $ do
+    (\_off' (AgElemShape off _sz' shp) (MirAggregateEntry sz tpr rvPart) -> Just $ do
         Refl <- case testEquality tpr (shapeType shp) of
             Just pf -> return pf
             Nothing -> fail $ "traverseMirAggregate: ill-typed field value at offset "
               ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr
         let rv = readMaybeType sym "elem" tpr rvPart
-        rv' <- f off sz shp rv x
+        rv' <- f off sz shp rv
         let rvPart' = W4.justPartExpr sym rv'
         return $ MirAggregateEntry sz tpr rvPart')
     (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
     (\_ -> panic "traverseMirAggregate'" ["mismatched keys in aggregate"])
-    (IntMap.fromList [(fromIntegral off, (e, x)) | (e@(AgElemShape off _ _), x) <- zip elems xs])
+    (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
     m
   return $ MirAggregate totalSize m'
 
@@ -594,31 +576,14 @@ zipMirAggregates ::
   MirAggregate sym ->
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> m b) ->
   m [b]
-zipMirAggregates sym elems ag1 ag2 f =
-  zipMirAggregates' sym elems [() | _ <- elems] ag1 ag2 $
-    \off sz shp val1 val2 () -> f off sz shp val1 val2
-
--- | Zip together two `MirAggregate`s and extract values from them.  This is
--- like `zipMirAggregate`, but the callback also gets the value from the
--- input list @xs@ that corresponds to the current entry.
-zipMirAggregates' ::
-  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
-  sym ->
-  [AgElemShape] ->
-  [a] ->
-  MirAggregate sym ->
-  MirAggregate sym ->
-  (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> a -> m b) ->
-  m [b]
-zipMirAggregates' sym elems xs (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do
-  agCheckLengthsEq "zipMirAggregate'" elems xs
+zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do
   agCheckKeysEq "zipMirAggregate'" elems m1
   agCheckKeysEq "zipMirAggregate'" elems m2
   -- We don't require the `totalSize`s of the two aggregates to match.
   -- `buildMirAggregate` sets the `totalSize` to the end of the last field, but
   -- other methods of building aggregates use the actual layout from rustc,
   -- which may have extra padding at the end.
-  forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
+  forM elems $ \(AgElemShape off sz shp) -> do
     MirAggregateEntry _sz1 tpr1 rvPart1 <-
       case IntMap.lookup (fromIntegral off) m1 of
         Just e -> return e
@@ -643,7 +608,7 @@ zipMirAggregates' sym elems xs (MirAggregate _totalSize1 m1) (MirAggregate _tota
         ++ " (in second aggregate)"
     let rv1 = readMaybeType sym "elem" tpr1 rvPart1
     let rv2 = readMaybeType sym "elem" tpr2 rvPart2
-    f off sz shp rv1 rv2 x
+    f off sz shp rv1 rv2
 
 
 -- Misc helpers
