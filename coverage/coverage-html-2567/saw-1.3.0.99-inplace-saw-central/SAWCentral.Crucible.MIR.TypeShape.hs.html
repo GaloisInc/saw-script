@@ -510,7 +510,7 @@ span.spaces    { background: white }
 <span class="lineno">  491 </span><span class="spaces">  </span><span class="istickedoff">entries &lt;- forM (zip elems xs) $ \(AgElemShape off sz shp, x) -&gt; do</span>
 <span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">rv &lt;- f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp x</span>
 <span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">let rvPart = W4.justPartExpr sym rv</span>
-<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">return $ (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)</span>
+<span class="lineno">  494 </span><span class="spaces">    </span><span class="istickedoff">return (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)</span>
 <span class="lineno">  495 </span><span class="spaces">  </span><span class="istickedoff">return $ MirAggregate totalSize (IntMap.fromList entries)</span></span>
 <span class="lineno">  496 </span>
 <span class="lineno">  497 </span>-- | Modify the value of each entry in a `MirAggregate`.  The callback gets the
@@ -524,7 +524,7 @@ span.spaces    { background: white }
 <span class="lineno">  505 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; m (RegValue sym tp)) -&gt;
 <span class="lineno">  506 </span>  m (MirAggregate sym)
 <span class="lineno">  507 </span><span class="decl"><span class="nottickedoff">traverseMirAggregate sym elems (MirAggregate totalSize m) f = do</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;accessMirAggregate'&quot; elems m</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;traverseMirAggregate&quot; elems m</span>
 <span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">m' &lt;- sequence $ IntMap.mergeWithKey</span>
 <span class="lineno">  510 </span><span class="spaces">    </span><span class="nottickedoff">(\_off' (AgElemShape off _sz' shp) (MirAggregateEntry sz tpr rvPart) -&gt; Just $ do</span>
 <span class="lineno">  511 </span><span class="spaces">        </span><span class="nottickedoff">Refl &lt;- case testEquality tpr (shapeType shp) of</span>
@@ -535,8 +535,8 @@ span.spaces    { background: white }
 <span class="lineno">  516 </span><span class="spaces">        </span><span class="nottickedoff">rv' &lt;- f off sz shp rv</span>
 <span class="lineno">  517 </span><span class="spaces">        </span><span class="nottickedoff">let rvPart' = W4.justPartExpr sym rv'</span>
 <span class="lineno">  518 </span><span class="spaces">        </span><span class="nottickedoff">return $ MirAggregateEntry sz tpr rvPart')</span>
-<span class="lineno">  519 </span><span class="spaces">    </span><span class="nottickedoff">(\_ -&gt; panic &quot;traverseMirAggregate'&quot; [&quot;mismatched keys in aggregate&quot;])</span>
-<span class="lineno">  520 </span><span class="spaces">    </span><span class="nottickedoff">(\_ -&gt; panic &quot;traverseMirAggregate'&quot; [&quot;mismatched keys in aggregate&quot;])</span>
+<span class="lineno">  519 </span><span class="spaces">    </span><span class="nottickedoff">(\_ -&gt; panic &quot;traverseMirAggregate&quot; [&quot;mismatched keys in aggregate&quot;])</span>
+<span class="lineno">  520 </span><span class="spaces">    </span><span class="nottickedoff">(\_ -&gt; panic &quot;traverseMirAggregate&quot; [&quot;mismatched keys in aggregate&quot;])</span>
 <span class="lineno">  521 </span><span class="spaces">    </span><span class="nottickedoff">(IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) &lt;- elems])</span>
 <span class="lineno">  522 </span><span class="spaces">    </span><span class="nottickedoff">m</span>
 <span class="lineno">  523 </span><span class="spaces">  </span><span class="nottickedoff">return $ MirAggregate totalSize m'</span></span>
@@ -596,8 +596,8 @@ span.spaces    { background: white }
 <span class="lineno">  577 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; RegValue sym tp -&gt; m b) -&gt;
 <span class="lineno">  578 </span>  m [b]
 <span class="lineno">  579 </span><span class="decl"><span class="nottickedoff">zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do</span>
-<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;zipMirAggregate'&quot; elems m1</span>
-<span class="lineno">  581 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;zipMirAggregate'&quot; elems m2</span>
+<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;zipMirAggregates&quot; elems m1</span>
+<span class="lineno">  581 </span><span class="spaces">  </span><span class="nottickedoff">agCheckKeysEq &quot;zipMirAggregates&quot; elems m2</span>
 <span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">-- We don't require the `totalSize`s of the two aggregates to match.</span>
 <span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">-- `buildMirAggregate` sets the `totalSize` to the end of the last field, but</span>
 <span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">-- other methods of building aggregates use the actual layout from rustc,</span>
@@ -606,23 +606,23 @@ span.spaces    { background: white }
 <span class="lineno">  587 </span><span class="spaces">    </span><span class="nottickedoff">MirAggregateEntry _sz1 tpr1 rvPart1 &lt;-</span>
 <span class="lineno">  588 </span><span class="spaces">      </span><span class="nottickedoff">case IntMap.lookup (fromIntegral off) m1 of</span>
 <span class="lineno">  589 </span><span class="spaces">        </span><span class="nottickedoff">Just e -&gt; return e</span>
-<span class="lineno">  590 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;zipMirAggregate&quot;</span>
+<span class="lineno">  590 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;zipMirAggregates&quot;</span>
 <span class="lineno">  591 </span><span class="spaces">          </span><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span>
 <span class="lineno">  592 </span><span class="spaces">            </span><span class="nottickedoff">++ &quot; (in first input)&quot;]</span>
 <span class="lineno">  593 </span><span class="spaces">    </span><span class="nottickedoff">MirAggregateEntry _sz2 tpr2 rvPart2 &lt;-</span>
 <span class="lineno">  594 </span><span class="spaces">      </span><span class="nottickedoff">case IntMap.lookup (fromIntegral off) m2 of</span>
 <span class="lineno">  595 </span><span class="spaces">        </span><span class="nottickedoff">Just e -&gt; return e</span>
-<span class="lineno">  596 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;zipMirAggregate&quot;</span>
+<span class="lineno">  596 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;zipMirAggregates&quot;</span>
 <span class="lineno">  597 </span><span class="spaces">          </span><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span>
 <span class="lineno">  598 </span><span class="spaces">            </span><span class="nottickedoff">++ &quot; (in second input)&quot;]</span>
 <span class="lineno">  599 </span><span class="spaces">    </span><span class="nottickedoff">Refl &lt;- case testEquality tpr1 (shapeType shp) of</span>
 <span class="lineno">  600 </span><span class="spaces">      </span><span class="nottickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  601 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;zipMirAggregate: ill-typed field value at offset &quot;</span>
+<span class="lineno">  601 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span>
 <span class="lineno">  602 </span><span class="spaces">        </span><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr1</span>
 <span class="lineno">  603 </span><span class="spaces">        </span><span class="nottickedoff">++ &quot; (in first aggregate)&quot;</span>
 <span class="lineno">  604 </span><span class="spaces">    </span><span class="nottickedoff">Refl &lt;- case testEquality tpr2 (shapeType shp) of</span>
 <span class="lineno">  605 </span><span class="spaces">      </span><span class="nottickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  606 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;zipMirAggregate: ill-typed field value at offset &quot;</span>
+<span class="lineno">  606 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span>
 <span class="lineno">  607 </span><span class="spaces">        </span><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr2</span>
 <span class="lineno">  608 </span><span class="spaces">        </span><span class="nottickedoff">++ &quot; (in second aggregate)&quot;</span>
 <span class="lineno">  609 </span><span class="spaces">    </span><span class="nottickedoff">let rv1 = readMaybeType sym &quot;elem&quot; tpr1 rvPart1</span>
