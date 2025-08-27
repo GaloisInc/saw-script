@@ -228,7 +228,7 @@ initCryptolEnv sc = do
   let refMod = T.tcTopEntityToModule refTop
 
   -- Set up reference implementation redirections
-  --  FIXME:MT: what's going on here?
+  --  FIXME: Unclear, add some documentation here.
   let refDecls = T.mDecls refMod
   let nms = Set.toList (MI.ifsPublic (TIface.genIfaceNames refMod))
 
@@ -289,17 +289,10 @@ ioParseResult res = case res of
   Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e) -- X.throwIO (ParseError e)
 
 
--- Rename ----------------------------------------------------------------------
---  FIXME: why ^ "Rename"?  I see we pass the result of this to 'MB.rename'
+-- NamingEnv and Related -------------------------------------------------------
 
--- | getNamingEnv -
+-- | getNamingEnv env - get the full MR.NamingEnv based on all the `eImports`
 --
---  FIXME:TODO:
---   - [ ] did significant rewrite of `getNamingEnv': add more thorough tests
---   - [ ] change to report error when you access conflicting name.
---   - [ ] more testing.
--- -- FIXME: WIP: copied from cryptol's `checkExpr` (true?)
-
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
@@ -330,26 +323,7 @@ getNamingEnv env =
                    ["expecting module to be loaded: "
                     <> Text.pack (show (pp fm))]
 
--- | Generate all the names in a module that are inside submodules.
---    TODO: ... that are public.
--- compare to Cryptol.TypeCheck.Interface.genModDefines
---   FIXME: this belongs rather in src/Cryptol/TypeCheck/Interface.hs?
 
-{-
--- FIXME: DEAD forever?
-genSubmoduleExports :: T.ModuleG name -> Set.Set MN.Name
-genSubmoduleExports m = nestedInSet (T.mNested m)
-  where
-  nestedInSet = Set.unions . map inNested . Set.toList
-  inNested x  = case Map.lookup x (T.mSubmodules m) of
-                  Just y  -> MI.ifsDefines iface
-                               `Set.union` nestedInSet (MI.ifsNested iface)
-                             where
-                               iface = T.smIface y
-                  Nothing -> Set.empty -- must be signature or a functor
--}
-
---
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me =
   mconcat
@@ -800,7 +774,6 @@ importModule sc env src as vis imps = do
           (newImport : eImports env)
     putStrLn ""
     putStrLn $ ppShow $ ppListX "newTermEnv=" (Map.keys newTermEnv)
-      -- OK: has D::D2::d2
 
   return $
     (updateFFITypes m env{ eModuleEnv = modEnv'
@@ -934,15 +907,13 @@ pExprToTypedTerm sc env pexpr = do
       print $ pp (eExtraNames env)
       putStrLn "- LOG: ParseTypedTerm: pp nameEnv:"
       print $ pp nameEnv
-        -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
         -- FIXME: NOTE: if load:   has D::D2::d2
         -- but in both cases, we get Value not in scope in next line:
 
     let npe' = MR.rename npe
-    -- MM.io $ print npe'  (FIXME: HUH?)
     when debug $ MM.io $ putStrLn "- LOG parseTypedTerm: point 0"
     re <- MM.interactive (MB.rename interactiveName nameEnv npe')
-      -- FIXME: NOTE: this ^ where we get Value not in scope.    :HIA:
+      -- FIXME: NOTE: this ^ where we get Value not in scope.
     when debug $ MM.io $ putStrLn "- LOG parseTypedTerm: point 1"
 
     -- Infer types
