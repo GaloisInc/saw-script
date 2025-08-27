@@ -295,14 +295,16 @@ ioParseResult res = case res of
 -- | getNamingEnv -
 --
 --  FIXME:TODO:
---   - [ ] significant rewrite of old `getNamingEnv' : need to test changes!
+--   - [ ] did significant rewrite of `getNamingEnv': add more thorough tests
 --   - [ ] change to report error when you access conflicting name.
 --   - [ ] more testing.
---
+-- -- FIXME: WIP: copied from cryptol's `checkExpr` (true?)
+
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
-  eExtraNames env `MR.shadowing` nameEnv
+  eExtraNames env
+  `MR.shadowing` nameEnv
 
   where
   mods = map importToModImp (eImports env)
@@ -559,8 +561,7 @@ loadCryptolModule sc env path = do
              --     notes above).
          )
 
--- FIXME: add sig.
---   mkCryptolModule :: _ -> IO CryptolModule
+
 mkCryptolModule :: T.Module
                 -> Map MN.Name T.Schema
                 -> Map MN.Name Term
@@ -744,11 +745,6 @@ importModule sc env src as vis imps = do
                        , ",", show vis
                        , ")"
                        ]
-    case src of
-      Left fp -> do
-                 writeFile (fp ++ ".ast-im") (ppShow m)
-                 logModuleEnv (fp ++ ".im.modenv") modEnv'
-      Right _ -> return ()
 
   -- Regenerate SharedTerm environment:
   let oldModNames   = map ME.lmName
@@ -770,23 +766,26 @@ importModule sc env src as vis imps = do
                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
        return (C.envE newCryEnv)
 
+  let newImport = (vis, P.Import { T.iModule= locate $ T.mName m
+                                 , T.iAs    = as
+                                 , T.iSpec  = imps
+                                 , T.iInst  = Nothing
+                                 , T.iDoc   = Nothing
+                                 }
+                  )
   when debug $ do
+    putStrLn $ "newImports:"
+    mapM_ (\i-> putStrLn ("  " ++ show i))
+          (newImport : eImports env)
+    putStrLn ""
     putStrLn $ ppShow $ ppListX "newTermEnv=" (Map.keys newTermEnv)
-     -- OK: has D::D2::d2
+      -- OK: has D::D2::d2
 
   return $
     (updateFFITypes m env{ eModuleEnv = modEnv'
                          , eTermEnv   = newTermEnv
                          })
-    {eImports = (vis, P.Import { T.iModule= locate $ T.mName m
-                               , T.iAs    = as
-                               , T.iSpec  = imps
-                               , T.iInst  = Nothing
-                               , T.iDoc   = Nothing
-                               }
-                )
-                : eImports env
-    }
+    {eImports = newImport : eImports env}
     where
       -- XXX: it would be better to have the real position, but it
       -- seems to have been thrown away on the Cryptol side.
@@ -911,25 +910,12 @@ pExprToTypedTerm sc env pexpr = do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
-    -- FIXME: WIP: copied from cryptol's `checkExpr`:
+
     let nameEnv = getNamingEnv env
-               -- ME.mctxNames <$> MM.getFocusedEnv OLD
-               -- FIXME
-               {- MT:  ::  M.ModContext -}
-                {- MT:  ::  M.NamingEnv -}
-
-        -- FIXME:WIP:MT:
-        --  - this is empty when nothing focused.
-        --  - this WORKS after we've `sawscript> focus MODULENAME`
-        --    - for both load and import
-        -- FIXME:WIP:MT:
-        --  - are there other means by which other top-levels are in env?
-
-    -- Resolve names
-    -- let nameEnv = getNamingEnv env       -- FIXME:MT:restore
-    -- nameEnv <- MM.io $ getNamingEnvLog env  -- FIXME:MT:undo
     when debug $ MM.io $ do
-      putStrLn "- LOG: nameEnv:"
+      putStrLn "- LOG: ParseTypedTerm: pp (eExtraNames env):"
+      print $ pp (eExtraNames env)
+      putStrLn "- LOG: ParseTypedTerm: pp nameEnv:"
       print $ pp nameEnv
         -- FIXME: NOTE: if import: has D::D2 but not D::D2::d2
         -- FIXME: NOTE: if load:   has D::D2::d2
