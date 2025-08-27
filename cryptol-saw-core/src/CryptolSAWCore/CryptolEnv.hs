@@ -783,6 +783,10 @@ importModule sc env src as vis imps = do
                                  , T.iDoc   = Nothing
                                  }
                   )
+      -- XXX: it would be better to have the real position, but it
+      -- seems to have been thrown away on the Cryptol side.
+      locate x = P.Located P.emptyRange x
+
   when debug $ do
     putStrLn $ "newImports:"
     mapM_ (\i-> putStrLn ("  " ++ show i))
@@ -796,10 +800,6 @@ importModule sc env src as vis imps = do
                          , eTermEnv   = newTermEnv
                          })
     {eImports = newImport : eImports env}
-    where
-      -- XXX: it would be better to have the real position, but it
-      -- seems to have been thrown away on the Cryptol side.
-      locate x = P.Located P.emptyRange x
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
