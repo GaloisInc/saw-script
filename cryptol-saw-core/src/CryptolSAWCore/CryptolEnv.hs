@@ -304,14 +304,24 @@ ioParseResult res = case res of
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
-  `MR.shadowing` nameEnv
+  `MR.shadowing`
+  (mconcat $ map importToNamingEnv (eImports env))
 
   where
-  mods = map importToModImp (eImports env)
   modEnv = eModuleEnv env
-  nameEnv = ME.mctxNames $ ME.focusedEnvL mods modEnv
 
-  importToModImp (_,imprt) = P.ImpTop $ P.thing $ T.iModule imprt
+  importToNamingEnv (vis,imprt) =
+      MN.interpImportEnv imprt -- adjust with qualifier (and ...?)
+    $ ME.mctxNames
+    $ modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
+    -- FIXME: handle `vis`
+
+  modContextOf' fm =
+    case ME.modContextOf fm modEnv of
+      Just c  -> c
+      Nothing -> panic "getNamingEnv"
+                   ["expecting module to be loaded: "
+                    <> Text.pack (show (pp fm))]
 
 -- | Generate all the names in a module that are inside submodules.
 --    TODO: ... that are public.
