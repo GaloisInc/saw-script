@@ -311,10 +311,17 @@ getNamingEnv env =
   modEnv = eModuleEnv env
 
   importToNamingEnv (vis,imprt) =
-      MN.interpImportEnv imprt -- adjust with qualifier (and ...?)
-    $ ME.mctxNames
-    $ modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
-    -- FIXME: handle `vis`
+      MN.interpImportEnv imprt -- adjust for qualified imports
+    $ adjustVisible            -- adjust if OnlyPublic names
+    $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
+
+    where
+    mctx = modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
+
+    adjustVisible = case vis of
+      PublicAndPrivate -> id
+      OnlyPublic       ->
+        \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
 
   modContextOf' fm =
     case ME.modContextOf fm modEnv of
