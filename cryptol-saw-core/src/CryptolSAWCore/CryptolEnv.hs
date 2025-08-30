@@ -298,23 +298,26 @@ getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
   `MR.shadowing`
-  (mconcat $ map importToNamingEnv (eImports env))
+  (mconcat $ map
+               (importToNamingEnv (eModuleEnv env))
+               (eImports env)
+  )
+
+importToNamingEnv :: ME.ModuleEnv
+                  -> (ImportVisibility, T.Import)
+                  -> MR.NamingEnv
+importToNamingEnv modEnv (vis,imprt) =
+    MN.interpImportEnv imprt -- adjust for qualified imports
+  $ adjustVisible            -- adjust if OnlyPublic names
+  $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
 
   where
-  modEnv = eModuleEnv env
+  mctx = modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
 
-  importToNamingEnv (vis,imprt) =
-      MN.interpImportEnv imprt -- adjust for qualified imports
-    $ adjustVisible            -- adjust if OnlyPublic names
-    $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
-
-    where
-    mctx = modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
-
-    adjustVisible = case vis of
-      PublicAndPrivate -> id
-      OnlyPublic       ->
-        \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
+  adjustVisible = case vis of
+    PublicAndPrivate -> id
+    OnlyPublic       ->
+      \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
 
   modContextOf' fm =
     case ME.modContextOf fm modEnv of
