@@ -1,2 +1,0 @@
-D <- cryptol_load "D.cry";
-print (eval_int {{D::D2::d2}}); // should succeed

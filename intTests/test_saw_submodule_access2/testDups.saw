@@ -1,0 +1,5 @@
+import "D.cry";
+import "F.cry";
+
+print (eval_int {{top0}});  // no problem!
+print (eval_int {{d00}});   // should fail with "Multiple Definitions"

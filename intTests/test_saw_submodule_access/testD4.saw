@@ -1,2 +1,0 @@
-import "D.cry";
-print (eval_int {{d2}});  // should fail
