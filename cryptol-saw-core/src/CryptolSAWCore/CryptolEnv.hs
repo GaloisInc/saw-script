@@ -1095,7 +1095,9 @@ moduleCmdResult (res, ws) = do
 
 -- testing/logging:
 -- FIXME:MT: remove? *just* for debugging?
+{-
 logModuleEnv :: FilePath -> ME.ModuleEnv -> IO ()
 logModuleEnv path me =
    writeFile (path ++ ".me")
              (ppShow $ ME.loadedModules me)
+-}
