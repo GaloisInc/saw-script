@@ -512,7 +512,9 @@ loadCryptolModule sc env path = do
      -- NOTE: -ld2/these three are all identical and look good ^.
      -- NOTE: "d2" is different as it is Qual, all else is UnQual.
 
-  -- NOTE: at this point (all above) completely in cryptol-land!
+  -- NOTE:
+  --   - at this point (all above) completely in cryptol-land,
+  --   - now we turn to translating things to SAWCore:
 
   -- Regenerate SharedTerm environment:
   let oldModNames = map ME.lmName
@@ -1098,6 +1100,7 @@ moduleCmdResult (res, ws) = do
 
 
 -- testing/logging:
+-- FIXME:MT: remove? *just* for debugging?
 logModuleEnv :: FilePath -> ME.ModuleEnv -> IO ()
 logModuleEnv path me =
    writeFile (path ++ ".me")
