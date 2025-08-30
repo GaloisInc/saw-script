@@ -504,13 +504,6 @@ loadCryptolModule sc env path = do
               , ppListX "types(nmd):" (Map.keys types)
               ]
        )
-    writeFile (path ++ ".ast-ld1") (ppShow m)
-    logModuleEnv (path ++ ".ld.modenv") modEnv''
-    -- NOTE:MT:
-    -- writeFile (path ++ ".ast-ld2") (ppShow (last $ ME.loadedModules modEnv'))
-    -- writeFile (path ++ ".ast-ld3") (ppShow (last $ ME.loadedModules modEnv''))
-     -- NOTE: -ld2/these three are all identical and look good ^.
-     -- NOTE: "d2" is different as it is Qual, all else is UnQual.
 
   -- NOTE:
   --   - at this point (all above) completely in cryptol-land,
@@ -774,11 +767,14 @@ importModule sc env src as vis imps = do
       locate x = P.Located P.emptyRange x
 
   when debug $ do
-    putStrLn $ "newImports:"
+    putStrLn $ "LOG: newImports:"
     mapM_ (\i-> putStrLn ("  " ++ show i))
           (newImport : eImports env)
     putStrLn ""
-    putStrLn $ ppShow $ ppListX "newTermEnv=" (Map.keys newTermEnv)
+    -- putStrLn $ ppShow $ ppListX "newTermEnv=" (Map.keys newTermEnv)
+    putStrLn "- (importToNamingEnv):"
+    print $ pp (importToNamingEnv  modEnv' newImport)
+    putStrLn ""
 
   return $
     (updateFFITypes m env{ eModuleEnv = modEnv'
@@ -908,9 +904,7 @@ pExprToTypedTerm sc env pexpr = do
 
     let nameEnv = getNamingEnv env
     when debug $ MM.io $ do
-      putStrLn "- LOG: ParseTypedTerm: pp (eExtraNames env):"
-      print $ pp (eExtraNames env)
-      putStrLn "- LOG: ParseTypedTerm: pp nameEnv:"
+      putStrLn "- LOG: parseTypedTerm: pp nameEnv:"
       print $ pp nameEnv
         -- FIXME: NOTE: if load:   has D::D2::d2
         -- but in both cases, we get Value not in scope in next line:
