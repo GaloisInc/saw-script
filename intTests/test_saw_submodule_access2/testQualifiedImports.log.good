@@ -1,0 +1,33 @@
+ Loading file "testQualifiedImports.saw"
+ 2114
+ 12114
+ 14229
+ 2
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testQualifiedImports.saw:13:1-13:30 (at top level)
+Cryptol error:
+[error] at testQualifiedImports.saw:13:22--13:25
+    Value not in scope: d00
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testQualifiedImports.saw:14:1-14:34 (at top level)
+Cryptol error:
+[error] at testQualifiedImports.saw:14:22--14:29
+    Value not in scope: MyD::d2
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testQualifiedImports.saw:15:1-15:40 (at top level)
+Cryptol error:
+[error] at testQualifiedImports.saw:15:22--15:35
+    Value not in scope: NOTINSCOPEVar
+
+ done

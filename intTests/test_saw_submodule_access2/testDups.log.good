@@ -1,0 +1,14 @@
+ Loading file "testDups.saw"
+ 2114
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testDups.saw:7:1-7:44 (at top level)
+Cryptol error:
+[error] at testDups.saw:7:33--7:36
+    Multiple definitions for symbol: d00
+    (at ../test_saw_submodule_access1/D.cry:5:1--5:4, D::d00)
+    (at ../test_saw_submodule_access1/F.cry:10:1--10:4, F::d00)
+
+ done
