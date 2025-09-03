@@ -1,6 +1,0 @@
-include "exp_explosion.saw";
-
-import "exp_explosion.cry";
-
-let exp_explosion = parse_core_mod "exp_explosion" "exp_explosion";
-prove_extcore mrsolver (refines [] exp_explosion {{ exp_explosion_spec }});

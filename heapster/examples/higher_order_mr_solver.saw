@@ -1,5 +1,0 @@
-enable_experimental;
-
-import "higher_order.cry";
-
-prove_extcore mrsolver (refines [] {{ higher_order_1 }} {{ higher_order_2 }});
