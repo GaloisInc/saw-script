@@ -22,8 +22,6 @@ extra-source-files:
 -- extra files for cryptol-saw-core
 extra-source-files:
   cryptol-saw-core/saw/Cryptol.sawcore
-  cryptol-saw-core/saw/SpecM.sawcore
-  cryptol-saw-core/saw/CryptolM.sawcore
 
 -- extra files for saw-script
 extra-source-files:
@@ -239,7 +237,6 @@ library cryptol-saw-core
     CryptolSAWCore.Cryptol
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.Prelude
-    CryptolSAWCore.PreludeM
     CryptolSAWCore.Simpset
     CryptolSAWCore.TypedTerm
   other-modules:
