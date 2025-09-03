@@ -70,7 +70,6 @@ import qualified CryptolSAWCore.Prelude as CryptolSAW
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import CryptolSAWCore.Monadify (defaultMonEnv)
-import SAWCentral.Prover.MRSolver (emptyMREnv)
 import SAWCentral.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo
@@ -254,7 +253,6 @@ initialState readFileFn =
                 , rwStackTrace = Trace.empty
                 , rwLocalEnv = []
                 , rwMonadify = let ?mm = mm in defaultMonEnv
-                , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB

@@ -259,9 +259,6 @@ Cryptol-to-saw-core translation in the cryptol-saw-core package.
 
 * _subsystem: hardware_ - issues related to verification of hardware.
 
-* _subsystem: MRSolver_ - issues related to the Mr. Solver
-monadic-recursive solver in Heapster.
-
 * _subsystem: saw-core_ - issues related to the saw-core
 representation or the saw-core subsystem.
 
