@@ -5,7 +5,7 @@ use crucible::method_spec::{MethodSpec, MethodSpecBuilder, clobber_globals};
 struct S(u8, u8);
 
 impl Symbolic for S {
-    fn symbolic(desc: &'static str) -> Self {
+    fn symbolic(desc: &str) -> Self {
         S(u8::symbolic(desc), u8::symbolic(desc))
     }
 }
