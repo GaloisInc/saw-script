@@ -13,4 +13,3 @@ From CryptolToCoq Require Import SAWCorePrelude_proofs.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-(* From CryptolToCoq Require Import SpecMExtra. *)

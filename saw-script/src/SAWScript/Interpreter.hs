@@ -2159,13 +2159,11 @@ do_write_coq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
 do_write_coq_sawcore_prelude outfile notations skips =
   writeCoqSAWCorePrelude (Text.unpack outfile) notations skips
 
-do_write_coq_cryptol_primitives_for_sawcore :: Text -> Text -> Text -> [(Text, Text)] -> [Text] -> IO ()
-do_write_coq_cryptol_primitives_for_sawcore cryfile specfile crymfile notations skips =
+do_write_coq_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_coq_cryptol_primitives_for_sawcore cryfile notations skips =
   let cryfile' = Text.unpack cryfile
-      specfile' = Text.unpack specfile
-      crymfile' = Text.unpack crymfile
   in
-  writeCoqCryptolPrimitivesForSAWCore cryfile' specfile' crymfile' notations skips
+  writeCoqCryptolPrimitivesForSAWCore cryfile' notations skips
 
 do_offline_coq :: Text -> ProofScript ()
 do_offline_coq f =
@@ -3213,18 +3211,18 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_primitives_for_sawcore"
-    "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal do_write_coq_cryptol_primitives_for_sawcore)
     Experimental
-    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
-    , "CryptolM.sawcore in Gallina syntax for Coq."
-    , "The first three arguments are the names of the output files for translating "
-    , "Cryptol.sawcore, SpecM.sawcore, and CryptolM.sawcore, respectively."
+    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore"
+    , "in Gallina syntax for Coq."
+    , "The first argument is the name of the output file for translating"
+    , "Cryptol.sawcore."
     , "Use an empty string to output to standard output."
-    , "The fourth argument is a list of pairs of notation substitutions:"
+    , "The second argument is a list of pairs of notation substitutions:"
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
-    , "The fifth argument is a list of identifiers to skip translating."
+    , "The third argument is a list of identifiers to skip translating."
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
