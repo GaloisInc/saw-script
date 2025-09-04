@@ -49,12 +49,12 @@ llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> Proo
  -- Int String
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
-12 more matches tagged experimental; use enable_experimental to see them
+6 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- String Int
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
-12 more matches tagged experimental; use enable_experimental to see them
+6 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (TopLevel Int)
 No matches.
