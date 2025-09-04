@@ -2,7 +2,11 @@ C_FILES    := $(wildcard *.c)
 BC_FILES   := $(C_FILES:.c=.bc)
 RS_FILES   := $(wildcard *.rs)
 EXE_FILES  := $(RS_FILES:.rs=)
+MIR_SRCS   := $(RS_FILES:.rs=)
 JSON_FILES := $(RS_FILES:.rs=.linked-mir.json)
+
+SUPPORTDIR=../../../../intTests/support
+include $(SUPPORTDIR)/mir-blobs.mk
 
 all: $(BC_FILES) $(JSON_FILES)
 
