@@ -400,23 +400,29 @@ translateIdentToIdent i =
 translateSort :: Sort -> Coq.Sort
 translateSort s = if s == propSort then Coq.Prop else Coq.Type
 
+translateTuple :: [Coq.Term] -> Coq.Term
+translateTuple [] = Coq.Var "tt"
+translateTuple (x : xs) = Coq.App (Coq.Var "pair") [x, translateTuple xs]
+
+translateTupleType :: [Coq.Term] -> Coq.Term
+translateTupleType [] = Coq.Ascription (Coq.Var "unit") (Coq.Sort Coq.Type)
+  -- We need to explicitly tell Coq that we want unit to be a Type, since
+  -- all SAW core sorts are translated to Types
+translateTupleType (x : xs) = Coq.App (Coq.Var "prod") [x, translateTupleType xs]
+
+translateTupleSelector :: Int -> Coq.Term -> Coq.Term
+translateTupleSelector i x
+  | i == 0 = Coq.App (Coq.Var "SAWCoreScaffolding.fst") [x]
+  | otherwise = translateTupleSelector (i - 1) (Coq.App (Coq.Var "SAWCoreScaffolding.snd") [x])
+
 flatTermFToExpr ::
   TermTranslationMonad m =>
   FlatTermF Term ->
   m Coq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    UnitValue     -> pure (Coq.Var "tt")
-    UnitType      ->
-      -- We need to explicitly tell Coq that we want unit to be a Type, since
-      -- all SAW core sorts are translated to Types
-      pure (Coq.Ascription (Coq.Var "unit") (Coq.Sort Coq.Type))
-    PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
-    PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse translateTerm [x, y]
-    PairLeft t    ->
-      Coq.App <$> pure (Coq.Var "fst") <*> traverse translateTerm [t]
-    PairRight t   ->
-      Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
+    TupleValue xs -> translateTuple <$> traverse translateTerm (Vector.toList xs)
+    TupleSelector x i -> translateTupleSelector i <$> translateTerm x
 
     RecursorType _d _params motive motiveTy ->
       -- type of the motive looks like
@@ -826,10 +832,8 @@ defaultTermForType typ = do
       defaultT <- defaultTermForType typ'
       return $ Coq.App seqConst [ nT, typ'T, defaultT ]
 
-    (asPairType -> Just (x,y)) -> do
-      x' <- defaultTermForType x
-      y' <- defaultTermForType y
-      return $ Coq.App (Coq.Var "pair") [x',y']
+    (asTupleType -> Just xs) ->
+      translateTuple <$> traverse defaultTermForType xs
 
     (asPiList -> (bs,body))
       | not (null bs)

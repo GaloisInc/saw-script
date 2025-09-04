@@ -264,10 +264,8 @@ flattenSValue nm v = do
     Just w -> return ([w], "")
     Nothing ->
       case v of
-        VUnit                     -> return ([], "")
-        VPair x y                 -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm =<< force y
-                                        return (xs ++ ys, sx ++ sy)
+        VTuple (V.toList -> ts)   -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
+                                        pure (concat xss, concat ss)
         VRecordValue elems        -> do (xss, sxs) <-
                                           unzip <$>
                                           mapM (flattenSValue nm <=< force . snd) elems
@@ -666,13 +664,10 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VUnitType
-      -> return VUnit
-
-    (VPairType ty1 ty2)
-      -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
-            x2 <- parseUninterpreted cws (nm ++ ".R") ty2
-            return (VPair (ready x1) (ready x2))
+    VTupleType tys
+      -> do let mkElem i ty' = parseUninterpreted cws (nm ++ "." ++ show i) ty'
+            xs <- V.imapM mkElem tys
+            pure (VTuple (fmap ready xs))
 
     (VRecordType elem_tps)
       -> (VRecordValue <$>
@@ -927,16 +922,11 @@ sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do
      Just ws -> do svCgOutputArr ("out_"++show i) ws
                    return $! i+1
      Nothing -> foldM (\i' x -> sbvSetOutput checkSz t x i') i xs
-sbvSetOutput _checkSz (FOTTuple []) VUnit i =
-   return i
-sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i
-sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
-   l' <- liftIO $ force l
-   r' <- liftIO $ force r
-   sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
-
-sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
-   return i
+sbvSetOutput checkSz (FOTTuple ts) (VTuple xs) i =
+  do unless (length ts == V.length xs) $
+       fail "sbvCodeGen: vector length mismatch when setting output values"
+     vs <- liftIO $ traverse force xs
+     foldM (\i' (t, v) -> sbvSetOutput checkSz t v i') i (zip ts (V.toList vs))
 
 sbvSetOutput _checkSz (FOTRec fs) (VRecordValue []) i | Map.null fs = return i
 

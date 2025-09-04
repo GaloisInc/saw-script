@@ -1059,7 +1059,7 @@ resolveSAWTerm mcc tp tm =
     Cryptol.TVTuple tps -> do
       st <- sawCoreState sym
       let sc = saw_ctx st
-      tms <- traverse (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
+      tms <- traverse (scTupleSelector sc tm) [0 .. length tps - 1]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
       -- TODO: get proper tuple layout

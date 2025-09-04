@@ -363,12 +363,9 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
 flattenSValue :: IsSymExprBuilder sym => sym -> W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
 flattenSValue _ (Sim.VBool b) = return [Some b]
 flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]
-flattenSValue sym (Sim.VPair l r) =
-  do lv <- Sim.force l
-     rv <- Sim.force r
-     ls <- flattenSValue sym lv
-     rs <- flattenSValue sym rv
-     return (ls ++ rs)
+flattenSValue sym (Sim.VTuple thunks) =
+  do vs <- traverse Sim.force (V.toList thunks)
+     concat <$> traverse (flattenSValue sym) vs
 flattenSValue sym (Sim.VVector ts) =
   do vs <- mapM Sim.force ts
      let getBool (Sim.VBool b) = Just b

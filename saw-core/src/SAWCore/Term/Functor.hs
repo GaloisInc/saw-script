@@ -184,14 +184,9 @@ sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
-    -- Tuples are represented as nested pairs, grouped to the right,
-    -- terminated with unit at the end.
-  = UnitValue
-  | UnitType
-  | PairValue e e
-  | PairType e e
-  | PairLeft e
-  | PairRight e
+  = TupleValue (Vector e)
+    -- | A zero-indexed tuple field selection.
+  | TupleSelector e Int
 
     -- | The type of a recursor, which is specified by the datatype name,
     --   the parameters to the data type, the motive function, and the
@@ -295,17 +290,15 @@ zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same
--- constructor; otherwise, return 'Nothing' if they use different constructors
+-- constructor; otherwise, return 'Nothing' if they use different constructors.
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go UnitValue UnitValue = Just UnitValue
-    go UnitType UnitType = Just UnitType
-    go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
-    go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
-    go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
-    go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
+    go (TupleValue xs) (TupleValue ys)
+      | V.length xs == V.length ys = Just $ TupleValue (V.zipWith f xs ys)
+    go (TupleSelector x i) (TupleSelector y j)
+      | i == j = Just (TupleSelector (f x y) i)
 
     go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
       do d <- zipName d1 d2
@@ -337,12 +330,8 @@ zipWithFlatTermF f = go
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
-    go UnitValue      _ = Nothing
-    go UnitType       _ = Nothing
-    go PairValue{}    _ = Nothing
-    go PairType{}     _ = Nothing
-    go PairLeft{}     _ = Nothing
-    go PairRight{}    _ = Nothing
+    go TupleValue{}   _ = Nothing
+    go TupleSelector{}_ = Nothing
     go RecursorType{} _ = Nothing
     go Recursor{}     _ = Nothing
     go RecursorApp{}  _ = Nothing

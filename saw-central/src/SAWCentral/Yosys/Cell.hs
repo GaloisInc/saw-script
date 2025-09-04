@@ -263,8 +263,8 @@ primCellToMap sc c args = case c ^. cellType of
     fun <- liftIO . SC.scAbstractExts sc [bitEC, accEC] =<< do
       bit <- liftIO $ SC.scVariable sc bitEC
       acc <- liftIO $ SC.scVariable sc accEC
-      idx <- liftIO $ SC.scPairLeft sc acc
-      aval <- liftIO $ SC.scPairRight sc acc
+      idx <- liftIO $ SC.scTupleSelector sc acc 0
+      aval <- liftIO $ SC.scTupleSelector sc acc 1
       bval <- liftIO $ SC.scAtWithDefault sc swidth widthBv aval splitb idx
       newidx <- liftIO $ SC.scAddNat sc idx width
       newval <- liftIO $ SC.scIte sc widthBv bit bval aval
@@ -272,7 +272,7 @@ primCellToMap sc c args = case c ^. cellType of
 
     scFoldr <- liftIO . SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
     resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
-    res <- liftIO $ SC.scPairRight sc resPair
+    res <- liftIO $ SC.scTupleSelector sc resPair 1
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
   CellTypeBmux -> do
     ia <- input "A"

@@ -868,7 +868,7 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVTuple tps ->
         do st <- sawCoreState sym
            let sc = saw_ctx st
-           tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
+           tms <- mapM (scTupleSelector sc tm) [0 .. length tps - 1]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
              case toLLVMType dl tp of
@@ -1089,8 +1089,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
               inner_saw_term <- liftIO $ scTupleSelector
                 saw_context
                 saw_term
-                (field_index + 1)
-                (length tuple_element_cryptol_types)
+                field_index
               setBytes
                 tuple_element_cryptol_type
                 inner_saw_term

@@ -2,10 +2,10 @@ module testDrop where
 import Prelude;
 
 my3Types : ListSort;
-my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+my3Types = LS_Cons Bool (LS_Cons #() (LS_Cons Bool LS_Nil));
 
 my4Types : ListSort;
-my4Types = LS_Cons UnitType my3Types;
+my4Types = LS_Cons #() my3Types;
 
 test1a : ListSort = listSortDrop my4Types 0;
 test1b : ListSort = listSortDrop my4Types 1;
