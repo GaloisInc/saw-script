@@ -73,8 +73,8 @@ mir_verify m "test::id_usize" [] false (id_spec mir_usize) z3;
 mir_verify m "test::id_unit" [] false id_unit z3;
 
 // Test using fully disambiguated names
-mir_verify m "test/f1c5a8d6::id_u8" [] false (id_spec mir_u8) z3;
-mir_verify m "test/f1c5a8d6::id_u8[0]" [] false (id_spec mir_u8) z3;
+mir_verify m "test/233c8eaf::id_u8" [] false (id_spec mir_u8) z3;
+mir_verify m "test/233c8eaf::id_u8[0]" [] false (id_spec mir_u8) z3;
 
 mir_verify m "test::id_array" [] false id_array_cryptol_spec z3;
 mir_verify m "test::id_tuple" [] false id_tuple_cryptol_spec z3;
