@@ -22,57 +22,43 @@ sawLet : (a b : sort 1) -> a -> (a -> b) -> b;
 sawLet _ _ x f = f x;
 
 
--- FIXME: below are some defined data-types that could be used in place of
--- the SAW primitive types
-
 --------------------------------------------------------------------------------
--- The Unit type
+-- Tuple types
 
-data UnitType : sort 0 where {
-    Unit : UnitType;
+-- TypeNil, TypeCons and Tuple are used to represent the #(a, b, c)
+-- syntax for tuple types, so it is important that they be defined
+-- before any uses of tuple types in this file.
+
+data TypeList : sort 1 where {
+    TypeNil : TypeList;
+    TypeCons : sort 0 -> TypeList -> TypeList;
   }
 
--- The recursor for the Unit type at sort 0
--- UnitType__rec : (p : UnitType -> sort 0) -> p Unit -> (u : UnitType) -> p u;
--- UnitType__rec p f1 u = UnitType#rec p f1 u;
-UnitType__rec (p : UnitType -> sort 0) (f1 : p Unit) (u : UnitType) : p u
-  = UnitType#rec p f1 u;
+TypeList__rec
+  (p : TypeList -> sort 1)
+  (f1 : p TypeNil)
+  (f2 : (t : sort 0) -> (ts : TypeList) -> p ts -> p (TypeCons t ts))
+  (ts : TypeList)
+  : p ts
+  = TypeList#rec p f1 f2 ts;
+
+primitive Tuple : TypeList -> sort 0;
+
+primitive headTuple : (t : sort 0) -> (ts : TypeList) -> Tuple (TypeCons t ts) -> t;
+primitive tailTuple : (t : sort 0) -> (ts : TypeList) -> Tuple (TypeCons t ts) -> Tuple ts;
+primitive consTuple : (t : sort 0) -> (ts : TypeList) -> t -> Tuple ts -> Tuple (TypeCons t ts);
 
 --------------------------------------------------------------------------------
 -- Pair types
 
-data PairType (a b : sort 0) : sort 0 where {
-  PairValue : a -> b -> PairType a b;
-}
+fst : (a b : sort 0) -> #(a, b) -> a;
+fst a b tup = tup.0;
 
-pair_example : (a b : sort 0) -> a -> b -> PairType a b;
-pair_example a b x y = PairValue a b x y;
+snd : (a b : sort 0) -> #(a, b) -> b;
+snd a b tup = tup.1;
 
--- The recursor for primitive pair types at sort 1
-Pair__rec
-  (a b : sort 0)
-  (p : PairType a b -> sort 0)
-  (f : (x:a) -> (y:b) -> p (PairValue a b x y))
-  (pair : PairType a b)
-  : p pair
-  = PairType#rec a b p f pair;
-
-Pair_fst : (a b : sort 0) -> PairType a b -> a;
-Pair_fst a b = Pair__rec a b (\ (p:PairType a b) -> a)
-                             (\ (x:a) -> \ (y: b) -> x);
-
-Pair_snd : (a b : sort 0) -> PairType a b -> b;
-Pair_snd a b = Pair__rec a b (\ (p:PairType a b) -> b)
-                             (\ (x:a) -> \ (y:b) -> y);
-
-fst : (a b : sort 0) -> a * b -> a;
-fst a b tup = tup.(1);
-
-snd : (a b : sort 0) -> a * b -> b;
-snd a b tup = tup.(2);
-
-uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
-  = (\ (x : a * b) -> f x.(1) x.(2));
+uncurry (a b c : sort 0) (f : a -> b -> c) : #(a, b) -> c
+  = (\ (x : #(a, b)) -> f x.0 x.1);
 
 --------------------------------------------------------------------------------
 -- String values
@@ -426,11 +412,19 @@ implies__eq a b = Refl Bool (implies a b);
 
 
 
-unitEq : UnitType -> UnitType -> Bool;
+unitEq : Tuple TypeNil -> Tuple TypeNil -> Bool;
 unitEq _ _ = True;
 
-pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) -> a * b -> a * b -> Bool;
-pairEq a b f g x y = and ( f x.(1) y.(1) ) ( g x.(2) y.(2) );
+pairEq :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  (t -> t -> Bool) ->
+  (Tuple ts -> Tuple ts -> Bool) ->
+  Tuple (TypeCons t ts) -> Tuple (TypeCons t ts) -> Bool;
+pairEq t ts f g x y =
+  and
+  (f (headTuple t ts x) (headTuple t ts y))
+  (g (tailTuple t ts x) (tailTuple t ts y));
 
 
 --
@@ -1029,13 +1023,13 @@ expNat b e =
   Nat_cases Nat 1 (\ (e':Nat) -> \ (exp_b_e:Nat) -> mulNat b exp_b_e) e;
 
 -- | Natural division and modulus
-primitive divModNat : Nat -> Nat -> Nat * Nat;
+primitive divModNat : Nat -> Nat -> #(Nat, Nat);
 
 divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).(1);
+divNat x y = (divModNat x y).0;
 
 modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).(2);
+modNat x y = (divModNat x y).1;
 
 -- There are implicit constructors from integer literals.
 
@@ -1196,7 +1190,7 @@ single = replicate 1;
 axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Zip together two lists (truncating the longer of the two).
-primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
+primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
@@ -1405,7 +1399,7 @@ bvCarry n x y = bvult n (bvAdd n x y) x;
 bvSCarry : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Bool;
 bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
 
-bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool * Vec n Bool;
+bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> #(Bool, Vec n Bool);
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
 axiom bvAddZeroL : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n (bvNat n 0) x) x;
@@ -1753,20 +1747,20 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
 
-unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
+unfoldList : (a:sort 0) -> List a -> Either #() #(a, List a);
 unfoldList a l =
-  List__rec a (\ (_:List a) -> Either #() (a * List a))
-  (Left #() (a * List a) ())
-  (\ (x:a) (l:List a) (_:Either #() (a * List a)) ->
-     Right #() (a * List a) (x, l))
+  List__rec a (\ (_:List a) -> Either #() #(a, List a))
+  (Left #() #(a, List a) ())
+  (\ (x:a) (l:List a) (_:Either #() #(a, List a)) ->
+     Right #() #(a, List a) (x, l))
   l;
 
-foldList : (a:sort 0) -> Either #() (a * List a) -> List a;
+foldList : (a:sort 0) -> Either #() #(a, List a) -> List a;
 foldList a =
-  either #() (a * List a) (List a)
+  either #() #(a, List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (a * List a)) ->
-            Cons a tup.(1) tup.(2));
+         (\ (tup : #(a, List a)) ->
+            Cons a tup.0 tup.1);
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1
@@ -1985,29 +1979,27 @@ data W64List : sort 0 where {
 
 unfoldedW64List : sort 0;
 unfoldedW64List =
-  Either #()
-  (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #());
+  Either #() #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List);
 
 unfoldW64List : W64List -> unfoldedW64List;
 unfoldW64List l =
   W64List#rec (\ (_:W64List) -> unfoldedW64List)
-  (Left #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #()) ())
+  (Left #() #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List) ())
   (\ (bv:Vec 64 Bool) (l':W64List) (_:unfoldedW64List) ->
-     Right #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
+     Right #() #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List)
                (exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv (),
-                l', ()))
+                l'))
   l;
 
 foldW64List : unfoldedW64List -> W64List;
 foldW64List =
-  either #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
+  either #() #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List)
          W64List
          (\ (_:#()) -> W64Nil)
-         (\ (bv_l:(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #())
-                   * W64List * #())) ->
+         (\ (bv_l : #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List)) ->
             W64Cons (Sigma_proj1 (Vec 64 Bool)
-                                 (\ (_:Vec 64 Bool) -> #()) bv_l.(1))
-                    bv_l.(2).(1));
+                                 (\ (_:Vec 64 Bool) -> #()) bv_l.0)
+                    bv_l.1);
 
 
 --------------------------------------------------------------------------------

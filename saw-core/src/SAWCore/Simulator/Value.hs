@@ -55,8 +55,7 @@ The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
-  | VUnit
-  | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
+  | VTuple !(Vector (Thunk l))
   | VCtorApp !(ExtCns (TValue l)) ![Thunk l] ![Thunk l]
   | VCtorMux ![Thunk l] !(IntMap (VBool l, ExtCns (TValue l), [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
@@ -93,9 +92,8 @@ data TValue l
   | VArrayType !(TValue l) !(TValue l)
   | VPiType LocalName !(TValue l) !(PiBody l)
   | VStringType
-  | VUnitType
-  | VPairType !(TValue l) !(TValue l)
   | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
+  | VTupleType !(Vector (TValue l))
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
@@ -115,8 +113,7 @@ data PiBody l
 --   is being hidden, etc.)
 data NeutralTerm
   = NeutralBox Term -- the thing blocking evaluation
-  | NeutralPairLeft NeutralTerm   -- left pair projection
-  | NeutralPairRight NeutralTerm  -- right pair projection
+  | NeutralTupleProj NeutralTerm Int -- tuple projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
   | NeutralRecursor
@@ -184,8 +181,7 @@ instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VUnit          -> showString "()"
-      VPair{}        -> showString "<<tuple>>"
+      VTuple xv      -> showString "<<" . shows (V.length xv) . showString "-tuple>>"
       VCtorApp s _ps _xv -> shows (toAbsoluteName (ecNameInfo s))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
@@ -218,8 +214,7 @@ instance Show (Extra l) => Show (TValue l) where
       VArrayType{}   -> showString "Array"
       VPiType _ t _    -> showParen True
                         (shows t . showString " -> ...")
-      VUnitType      -> showString "#()"
-      VPairType x y  -> showParen True (shows x . showString " * " . shows y)
+      VTupleType ts  -> showString "#" . showParen True (showCommas (map shows (V.toList ts)))
       VDataType s ps vs
         | null (ps++vs) -> shows s
         | otherwise  -> shows s . showList (ps++vs)
@@ -232,6 +227,10 @@ instance Show (Extra l) => Show (TValue l) where
       VRecursorType{} -> showString "RecursorType"
 
       VTyTerm _ tm   -> showString "TyTerm (" . (\x -> showTerm tm ++ x) . showString ")"
+    where
+      showCommas [] = id
+      showCommas [x] = x
+      showCommas (x : xs) = x . showString "," . showCommas xs
 
 data Nil = Nil
 
@@ -242,23 +241,10 @@ instance Show Nil where
 -- Basic operations on values
 
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VUnit
-vTuple [_] = error "vTuple: unsupported 1-tuple"
-vTuple [x, y] = VPair x y
-vTuple (x : xs) = VPair x (ready (vTuple xs))
+vTuple xs = VTuple (V.fromList xs)
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
-vTupleType [] = VUnitType
-vTupleType [t] = t
-vTupleType (t : ts) = VPairType t (vTupleType ts)
-
-valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairLeft (VPair t1 _) = force t1
-valPairLeft v = panic "valPairLeft" ["Not a pair value: " <> Text.pack (show v)]
-
-valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairRight (VPair _ t2) = force t2
-valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
+vTupleType ts = VTupleType (V.fromList ts)
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
@@ -301,13 +287,8 @@ asFiniteTypeTValue v =
     VVecType n v1 -> do
       t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
-    VUnitType -> return (FTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFiniteTypeTValue v1
-      t2 <- asFiniteTypeTValue v2
-      case t2 of
-        FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> return (FTTuple [t1, t2])
+    VTupleType vs ->
+      FTTuple <$> traverse asFiniteTypeTValue (V.toList vs)
     VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>
       mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
@@ -328,13 +309,8 @@ asFirstOrderTypeTValue v =
     VIntModType m -> return (FOTIntMod m)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
-    VUnitType -> return (FOTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFirstOrderTypeTValue v1
-      t2 <- asFirstOrderTypeTValue v2
-      case t2 of
-        FOTTuple ts -> return (FOTTuple (t1 : ts))
-        _ -> return (FOTTuple [t1, t2])
+    VTupleType vs ->
+      FOTTuple <$> traverse asFirstOrderTypeTValue (V.toList vs)
     VRecordType elem_tps ->
       FOTRec . Map.fromList <$>
         mapM (traverse asFirstOrderTypeTValue) elem_tps
@@ -363,11 +339,9 @@ suffixTValue tv =
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
     VPiType _ _ _ -> Nothing
-    VUnitType -> Just "_Unit"
-    VPairType a b ->
-      do a' <- suffixTValue a
-         b' <- suffixTValue b
-         Just ("_Pair" ++ a' ++ b')
+    VTupleType vs ->
+      do vs' <- traverse suffixTValue (V.toList vs)
+         Just ("_Tuple" ++ show (V.length vs) ++ concat vs')
 
     VStringType -> Nothing
     VDataType {} -> Nothing
@@ -381,10 +355,8 @@ neutralToTerm :: NeutralTerm -> Term
 neutralToTerm = loop
   where
   loop (NeutralBox tm) = tm
-  loop (NeutralPairLeft nt) =
-    Unshared (FTermF (PairLeft (loop nt)))
-  loop (NeutralPairRight nt) =
-    Unshared (FTermF (PairRight (loop nt)))
+  loop (NeutralTupleProj nt i) =
+    Unshared (FTermF (TupleSelector (loop nt) i))
   loop (NeutralRecordProj nt f) =
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
@@ -400,10 +372,9 @@ neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
   where
   loop (NeutralBox tm) = pure tm
-  loop (NeutralPairLeft nt) =
-    scFlatTermF sc . PairLeft =<< loop nt
-  loop (NeutralPairRight nt) =
-    scFlatTermF sc . PairRight =<< loop nt
+  loop (NeutralTupleProj nt i) =
+    do tm <- loop nt
+       scFlatTermF sc (TupleSelector tm i)
   loop (NeutralRecordProj nt f) =
     do tm <- loop nt
        scFlatTermF sc (RecordProj tm f)

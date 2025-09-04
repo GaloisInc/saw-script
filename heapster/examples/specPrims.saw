@@ -1,9 +1,0 @@
-/* Helper SAW script for using specification primitives in Cryptol */
-
-import "SpecPrims.cry";
-
-set_monadification "exists" "SpecM.existsS" true;
-set_monadification "forall" "SpecM.forallS" true;
-set_monadification "asserting" "SpecM.asserting" true;
-set_monadification "assuming" "SpecM.assuming" true;
-set_monadification "invariantHint" "SpecM.invariantHint" true;

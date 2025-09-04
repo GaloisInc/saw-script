@@ -354,9 +354,9 @@ setupToTerm opts sc =
              typ <- lift $ scTypeOf sc et
              lift $ scAt sc lent typ art ixt
 
-        SetupStruct _ fs ->
+        SetupStruct _ _fs ->
           do st <- setupToTerm opts sc base
-             lift $ scTupleSelector sc st ind (length fs)
+             lift $ scTupleSelector sc st ind
 
         _ -> MaybeT $ return Nothing
 

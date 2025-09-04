@@ -270,7 +270,7 @@ scTyp sc (TRecord fields) =
 splitInputs :: SharedContext -> Typ -> Term -> IO [Term]
 splitInputs _sc TBool x = return [x]
 splitInputs sc (TTuple ts) x =
-    do xs <- mapM (\i -> scTupleSelector sc x i (length ts)) [1 .. length ts]
+    do xs <- mapM (scTupleSelector sc x) [0 .. length ts - 1]
        yss <- sequence (zipWith (splitInputs sc) ts xs)
        return (concat yss)
 splitInputs _ (TVec _ TBool) x = return [x]

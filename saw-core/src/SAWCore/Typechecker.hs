@@ -248,23 +248,19 @@ typeInferCompleteTerm (Un.RecordType _ elems) =
 typeInferCompleteTerm (Un.RecordProj t prj) =
   (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
 
--- Unit
-typeInferCompleteTerm (Un.UnitValue _) =
-  typeInferComplete (UnitValue :: FlatTermF SCTypedTerm)
-typeInferCompleteTerm (Un.UnitType _) =
-  typeInferComplete (UnitType :: FlatTermF SCTypedTerm)
-
--- Simple pairs
-typeInferCompleteTerm (Un.PairValue _ t1 t2) =
-  (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)
+-- Tuples
+typeInferCompleteTerm (Un.TupleValue _ ts) =
+  (TupleValue <$> traverse typeInferComplete (V.fromList ts))
   >>= typeInferComplete
-typeInferCompleteTerm (Un.PairType _ t1 t2) =
-  (PairType <$> typeInferComplete t1 <*> typeInferComplete t2)
-  >>= typeInferComplete
-typeInferCompleteTerm (Un.PairLeft t) =
-  (PairLeft <$> typeInferComplete t) >>= typeInferComplete
-typeInferCompleteTerm (Un.PairRight t) =
-  (PairRight <$> typeInferComplete t) >>= typeInferComplete
+typeInferCompleteTerm (Un.TupleType _ ts) =
+  do tts <- traverse typeInferComplete ts
+     v <- liftTCM scTupleType (map typedVal tts)
+     -- Ensure all arguments have type 'sort 0'
+     s0 <- liftTCM scSort (mkSort 0)
+     mapM_ (\tt -> checkSubtype tt s0) tts
+     pure (SCTypedTerm v s0)
+typeInferCompleteTerm (Un.TupleProj t i) =
+  (TupleSelector <$> typeInferComplete t <*> pure i) >>= typeInferComplete
 
 -- Type ascriptions
 typeInferCompleteTerm (Un.TypeConstraint t _ tp) =

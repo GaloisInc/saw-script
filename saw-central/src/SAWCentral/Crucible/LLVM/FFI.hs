@@ -255,7 +255,7 @@ setupInArg tenv = go
           Nothing -> pure ox
       pure (x, cryTerm)
     tupleInArgs (unzip -> (terms, inArgss)) =
-      (tupleOpenTerm' terms, concat inArgss)
+      (tupleOpenTerm terms, concat inArgss)
 
 -- | Do setup for the return value, returning a list of output arguments to pass
 -- to the LLVM function and a function that asserts functional correctness given
@@ -308,7 +308,6 @@ setupOutArg tenv = go "out"
         -- represents records by tuples in canonical order
         (outArgss, posts) <- unzip <$> setupRecordArgs go name ffiTypeMap
         let canonFields = map fst $ canonicalFields ffiTypeMap
-            len = fromIntegral $ length canonFields
             post ret = zipWithM_
               (\field p -> do
                 let ix = fromIntegral
@@ -316,7 +315,7 @@ setupOutArg tenv = go "out"
                         Just i -> i
                         Nothing -> panic "setupOutArg"
                           ["Bad record field access"]
-                p (projTupleOpenTerm' len ix ret))
+                p (projTupleOpenTerm ix ret))
               (displayOrder ffiTypeMap)
               posts
         pure (concat outArgss, post)

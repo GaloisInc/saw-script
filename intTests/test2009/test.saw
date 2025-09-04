@@ -1,4 +1,4 @@
-let pairEq = parse_core "pairEq (Vec 32 Bool) (Vec 32 Bool) (bvEq 32) (bvEq 32)";
+let pairEq = parse_core "pairEq (Vec 32 Bool) (TypeCons (Vec 32 Bool) TypeNil) (bvEq 32) (pairEq (Vec 32 Bool) TypeNil (bvEq 32) unitEq)";
 t <- prove_print w4 {{ \x -> pairEq (x, x + 1) (x, 1 + x) }};
 print_term (rewrite (addsimp t empty_ss) {{ (0 : [32], 0 + 1 : [32]) }});
 

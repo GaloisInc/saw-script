@@ -192,7 +192,7 @@ cryptolRecordSelect ::
   m SC.Term
 cryptolRecordSelect sc fields r nm =
   case List.elemIndex nm ord of
-    Just i -> liftIO $ SC.scTupleSelector sc r (i + 1) (length ord)
+    Just i -> liftIO $ SC.scTupleSelector sc r i
     Nothing -> throw . YosysError $ mconcat
       [ "Could not build record selector term for field name \""
       , nm

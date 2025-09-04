@@ -25,6 +25,12 @@ preludeZeroIdent =  mkIdent preludeModuleName "Zero"
 preludeSuccIdent :: Ident
 preludeSuccIdent =  mkIdent preludeModuleName "Succ"
 
+preludeTypeNilIdent :: Ident
+preludeTypeNilIdent = mkIdent preludeModuleName "TypeNil"
+
+preludeTypeConsIdent :: Ident
+preludeTypeConsIdent = mkIdent preludeModuleName "TypeCons"
+
 preludeIntegerIdent :: Ident
 preludeIntegerIdent =  mkIdent preludeModuleName "Integer"
 

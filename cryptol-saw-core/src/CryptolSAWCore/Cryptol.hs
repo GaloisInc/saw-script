@@ -101,14 +101,12 @@ import SAWCore.Term.Pretty (showTerm)
 -- local modules:
 import CryptolSAWCore.Panic
 
--- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
+-- Type-check the Prelude and Cryptol modules at compile time
 import Language.Haskell.TH
 import CryptolSAWCore.Prelude
-import CryptolSAWCore.PreludeM
 
 $(runIO (mkSharedContext >>= \sc ->
-          scLoadPreludeModule sc >> scLoadCryptolModule sc >>
-          scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
+          scLoadPreludeModule sc >> scLoadCryptolModule sc >> pure []))
 
 --------------------------------------------------------------------------------
 
@@ -354,6 +352,7 @@ importType sc env ty =
   where
     go = importType sc env
 
+
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
@@ -527,11 +526,9 @@ provePropRec sc env prop0 prop =
         (C.pIsLogic -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PLogicUnit" []
         -- instance (Logic a, Logic b) => Logic (a, b)
-        (C.pIsLogic -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pLogic t)
         (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
+                b <- scTypeList sc =<< traverse (importType sc env) ts
                 pa <- provePropRec sc env prop0 (C.pLogic t)
                 pb <- provePropRec sc env prop0 (C.pLogic (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
@@ -574,11 +571,9 @@ provePropRec sc env prop0 prop =
         (C.pIsRing -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PRingUnit" []
         -- instance (Ring a, Ring b) => Ring (a, b)
-        (C.pIsRing -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pRing t)
         (C.pIsRing -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
+                b <- scTypeList sc =<< traverse (importType sc env) ts
                 pa <- provePropRec sc env prop0 (C.pRing t)
                 pb <- provePropRec sc env prop0 (C.pRing (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
@@ -648,11 +643,9 @@ provePropRec sc env prop0 prop =
         (C.pIsEq -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PEqUnit" []
         -- instance (Eq a, Eq b) => Eq (a, b)
-        (C.pIsEq -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pEq t)
         (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
+                b <- scTypeList sc =<< traverse (importType sc env) ts
                 pa <- provePropRec sc env prop0 (C.pEq t)
                 pb <- provePropRec sc env prop0 (C.pEq (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
@@ -688,11 +681,9 @@ provePropRec sc env prop0 prop =
         (C.pIsCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PCmpUnit" []
         -- instance (Cmp a, Cmp b) => Cmp (a, b)
-        (C.pIsCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pCmp t)
         (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
+                b <- scTypeList sc =<< traverse (importType sc env) ts
                 pa <- provePropRec sc env prop0 (C.pCmp t)
                 pb <- provePropRec sc env prop0 (C.pCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
@@ -714,11 +705,9 @@ provePropRec sc env prop0 prop =
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
         -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
-        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pSignedCmp t)
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
+                b <- scTypeList sc =<< traverse (importType sc env) ts
                 pa <- provePropRec sc env prop0 (C.pSignedCmp t)
                 pb <- provePropRec sc env prop0 (C.pSignedCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
@@ -1056,13 +1045,7 @@ importExpr sc env expr =
       case sel of
         C.TupleSel i _maybeLen ->
           do e' <- importExpr sc env e
-             let t = fastTypeOf (envC env) e
-             case C.tIsTuple t of
-               Just ts -> scTupleSelector sc e' (i+1) (length ts)
-               Nothing -> panic "importExpr" [
-                              "Invalid tuple selector: " <> Text.pack (show i),
-                              "Type: " <> Text.pack (pretty t)
-                          ]
+             scTupleSelector sc e' i
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
@@ -1071,7 +1054,7 @@ importExpr sc env expr =
                  do i <- the
                       ("Expected field " <> Text.pack (show x) <> " in normal RecordSel")
                       (elemIndex x (map fst (C.canonicalFields fm)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
+                    scTupleSelector sc e' i
                C.TNominal nt _args ->
                  do let fs = case C.ntDef nt of
                                C.Struct s -> C.ntFields s
@@ -1087,7 +1070,7 @@ importExpr sc env expr =
                                  ]
                     i <- the ("Expected field " <> Text.pack (show x) <> " in Newtype Record Sel")
                           (elemIndex x (map fst (C.canonicalFields fs)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
+                    scTupleSelector sc e' i
                _ -> panic "importExpr" [
                         "Invalid record selector: " <> Text.pack (pretty x),
                         "Type: " <> Text.pack (pretty t)
@@ -2009,13 +1992,10 @@ scCryptolType sc t =
 
       SC.VDataType _ _ _ -> Nothing
 
-      SC.VUnitType -> return (Right (C.tTuple []))
-      SC.VPairType v1 v2 -> do
-        Right t1 <- asCryptolTypeValue v1
-        Right t2 <- asCryptolTypeValue v2
-        case C.tIsTuple t2 of
-          Just ts -> return (Right (C.tTuple (t1 : ts)))
-          Nothing -> return (Right (C.tTuple [t1, t2]))
+      SC.VTupleType vs ->
+        do es <- traverse asCryptolTypeValue vs
+           ts <- traverse asRight es
+           pure (Right (C.tTuple (Vector.toList ts)))
 
       SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
         do Right t1 <- asCryptolTypeValue v1
@@ -2032,6 +2012,8 @@ scCryptolType sc t =
       SC.VRecordType{} -> Nothing
       SC.VRecursorType{} -> Nothing
       SC.VTyTerm{} -> Nothing
+    where
+      asRight = either (const Nothing) Just
 
 --------------------------------------------------------------------------------
 -- exporting functions:
@@ -2099,24 +2081,25 @@ exportValue ty v = case ty of
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
-  case (tys, v) of
-    ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [exportValue t v]
-    (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
-    _                      -> error $ "exportValue: expected tuple"
+  case v of
+    SC.VTuple (Vector.toList -> xs)
+      | length xs == length tys ->
+        [ exportValue t (run x) | (t, x) <- zip tys xs ]
+    _ -> panic "Verifier.SAW.Cryptol.exportValue" ["expected tuple"]
   where
     run = SC.runIdentity . force
 
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
-  case (fields, v) of
-    ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
-    (_, SC.VRecordValue (alistAllFields
-                         (map (C.identText . fst) fields) -> Just ths)) ->
+  case v of
+    -- TODO: remove VTuple case when cryptol-saw-core importer switches record imports to use record types.
+    SC.VTuple (Vector.toList -> xs)
+      | length xs == length fields ->
+        [ (n, exportValue t (run x)) | ((n, t), x) <- zip (Map.assocs (Map.fromList fields)) xs ]
+    SC.VRecordValue (alistAllFields
+                      (map (C.identText . fst) fields) -> Just ths) ->
       zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
-    _                              -> error $ "exportValue: expected record"
+    _ -> panic "Verifier.SAW.Cryptol.exportValue" ["expected record"]
   where
     run = SC.runIdentity . force
 
@@ -2387,8 +2370,7 @@ genCodeForEnum sc env nt ctors =
                          let n = length (C.ecFields ctor)
                          scAbstractTerms sc [x]
                            =<< scApplyAll sc funcVar
-                           =<< forM [1..n]
-                                 (\i-> scTupleSelector sc x i n)
+                           =<< forM [0 .. n-1] (scTupleSelector sc x)
 
       addTypeAbstractions
         =<< scAbstractTerms sc [b]

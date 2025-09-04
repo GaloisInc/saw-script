@@ -530,18 +530,10 @@ instance TypeInfer (TermF SCTypedTerm) where
 -- terms. Intuitively, this represents the case where each immediate subterm of
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF SCTypedTerm) where
-  typeInfer UnitValue = liftTCM scUnitType
-  typeInfer UnitType = liftTCM scSort (mkSort 0)
-  typeInfer (PairValue (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =
-    liftTCM scPairType tx ty
-  typeInfer (PairType (SCTypedTerm _ tx) (SCTypedTerm _ ty)) =
-    do sx <- ensureSort tx
-       sy <- ensureSort ty
-       liftTCM scSort (max sx sy)
-  typeInfer (PairLeft (SCTypedTerm _ tp)) =
-    ensurePairType tp >>= \(t1,_) -> return t1
-  typeInfer (PairRight (SCTypedTerm _ tp)) =
-    ensurePairType tp >>= \(_,t2) -> return t2
+  typeInfer (TupleValue tts) =
+    liftTCM scTupleType (map typedType (V.toList tts))
+  typeInfer (TupleSelector (SCTypedTerm _ tp) i) =
+    ensureTupleType tp >>= \ts -> pure (ts !! i)
 
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty
@@ -602,10 +594,10 @@ ensureRecognizer f err trm =
 ensureSort :: Term -> TCM Sort
 ensureSort tp = ensureRecognizer asSort (NotSort tp) tp
 
--- | Ensure a 'Term' is a pair type, normalizing if necessary, and return the
--- two components of that pair type
-ensurePairType :: Term -> TCM (Term, Term)
-ensurePairType tp = ensureRecognizer asPairType (NotTupleType tp) tp
+-- | Ensure a 'Term' is a tuple type, normalizing if necessary, and return the
+-- components of that tuple type
+ensureTupleType :: Term -> TCM [Term]
+ensureTupleType tp = ensureRecognizer asTupleType (NotTupleType tp) tp
 
 -- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
 -- components of that record type

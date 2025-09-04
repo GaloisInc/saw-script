@@ -244,7 +244,7 @@ stateFromApp :: TermF Term -> TopLevel Term
 stateFromApp app = do
   sc <- getSharedContext
   case app of
-    App _ arg -> io $ scFlatTermF sc $ PairLeft arg
+    App _ arg -> io $ scTupleSelector sc arg 0
     _ -> do
       term <- io $ scTermF sc app
       fail $ "Error: " ++ showTerm term ++ " is not an App"

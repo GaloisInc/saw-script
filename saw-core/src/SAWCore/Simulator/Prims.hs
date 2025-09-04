@@ -163,6 +163,12 @@ vectorFun unpack = PrimFilterFun "expected vector" r
         r (VWord w)    = fmap (ready . VBool) <$> lift (unpack w)
         r _ = mzero
 
+-- | A primitive that requires a tuple argument
+tupleFun :: VMonad l => (Vector (Thunk l) -> Prim l) -> Prim l
+tupleFun = PrimFilterFun "expected Tuple" r
+  where r (VTuple b) = pure b
+        r _ = mzero
+
 ------------------------------------------------------------
 --
 
@@ -280,6 +286,11 @@ constMap bp = Map.fromList
   , ("Prelude.or"    , boolBinOp (bpOr bp))
   , ("Prelude.xor"   , boolBinOp (bpXor bp))
   , ("Prelude.boolEq", boolBinOp (bpBoolEq bp))
+  -- Tuples
+  , ("Prelude.Tuple"    , tupleOp)
+  , ("Prelude.headTuple", headTupleOp)
+  , ("Prelude.tailTuple", tailTupleOp)
+  , ("Prelude.consTuple", consTupleOp)
   -- Bitwise
   , ("Prelude.bvAnd" , wordBinOp (bpPack bp) (bpBvAnd bp))
   , ("Prelude.bvOr"  , wordBinOp (bpPack bp) (bpBvOr  bp))
@@ -496,6 +507,56 @@ selectV mux maxValue valueFn v = impl len 0
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 x = valueFn x
     impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
+
+------------------------------------------------------------
+-- Tuple primitives
+
+-- | Deconstruct a value of type @TypeList@ as a list of 'TValue's.
+vAsTypeList :: (VMonad l, Show (Extra l)) => Value l -> EvalM l [TValue l]
+vAsTypeList val =
+  case val of
+    VCtorApp _ec [] [] -> pure []
+    VCtorApp _ec [] [x1, x2] ->
+      do v1 <- force x1
+         t <-
+           case v1 of
+             TValue tv -> pure tv
+             _ -> panic "vAsTypeList" ["Expected type"]
+         v2 <- force x2
+         ts <- vAsTypeList v2
+         pure (t : ts)
+    _ -> panic "vAsTypeList" ["Expected type list, got: " <> Text.pack (show val)]
+
+-- Tuple : TypeList -> sort 0;
+tupleOp :: (VMonad l, Show (Extra l)) => Prim l
+tupleOp =
+  strictFun $ \v ->
+  Prim (TValue . VTupleType . V.fromList <$> vAsTypeList v)
+
+-- headTuple : (t : sort 0) -> (ts : TypeList) -> Tuple (TypeCons t ts) -> t;
+headTupleOp :: (VMonad l) => Prim l
+headTupleOp =
+  constFun $
+  constFun $
+  tupleFun $ \xs ->
+  Prim (force (V.head xs))
+
+-- tailTuple : (t : sort 0) -> (ts : TypeList) -> Tuple (TypeCons t ts) -> Tuple ts;
+tailTupleOp :: (VMonad l) => Prim l
+tailTupleOp =
+  constFun $
+  constFun $
+  tupleFun $ \xs ->
+  PrimValue (VTuple (V.tail xs))
+
+-- consTuple : (t : sort 0) -> (ts : TypeList) -> t -> Tuple ts -> Tuple (TypeCons t ts);
+consTupleOp :: (VMonad l) => Prim l
+consTupleOp =
+  constFun $
+  constFun $
+  primFun $ \x ->
+  tupleFun $ \xs ->
+  PrimValue (VTuple (V.cons x xs))
 
 ------------------------------------------------------------
 -- Values for common primitives
@@ -1337,9 +1398,9 @@ muxValue bp tp0 b = value tp0
               y <- g a
               value tp' x y
 
-    value VUnitType VUnit VUnit = return VUnit
-    value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =
-      VPair <$> thunk t1 x1 y1 <*> thunk t2 x2 y2
+    value (VTupleType ts) (VTuple xs) (VTuple ys)
+      | V.length ts == V.length xs && V.length ts == V.length ys
+      = VTuple <$> V.sequence (V.zipWith3 thunk ts xs ys)
 
     value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =
       do let em1 = Map.fromList elems1

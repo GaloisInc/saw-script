@@ -70,7 +70,6 @@ data Prec
   = PrecCommas -- ^ Nonterminal @sepBy(Term, \',\')@
   | PrecTerm   -- ^ Nonterminal @Term@
   | PrecLambda -- ^ Nonterminal @LTerm@
-  | PrecProd   -- ^ Nonterminal @ProdTerm@
   | PrecApp    -- ^ Nonterminal @AppTerm@
   | PrecArg    -- ^ Nonterminal @AtomTerm@
   deriving (Eq, Ord)
@@ -336,13 +335,14 @@ ppLetBlock defs body =
         pure $ mv <+> pretty '=' <+> d
 
 
--- | Pretty-print pairs as "(x, y)"
-ppPair :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-ppPair prec x y = ppParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
+ppCommaSep :: [PPS.Doc] -> PPS.Doc
+ppCommaSep [] = emptyDoc
+ppCommaSep [x] = x
+ppCommaSep (x : xs) = group (vcat [x <> pretty ',', ppCommaSep xs])
 
--- | Pretty-print pair types as "x * y"
-ppPairType :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
+-- | Pretty-print tuples as "(x, y, z)"
+ppTuple :: [PPS.Doc] -> PPS.Doc
+ppTuple xs = parens (align (ppCommaSep xs))
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
 -- is 'True'), where the latter are preceded by the string @#@, either as:
@@ -390,12 +390,8 @@ ppPi tp (name, body) = vsep [lhs, "->" <+> body]
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 ppFlatTermF prec tf =
   case tf of
-    UnitValue     -> return "(-empty-)"
-    UnitType      -> return "#(-empty-)"
-    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
-    PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
-    PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
-    PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
+    TupleValue xs -> ppTuple <$> traverse (ppTerm' PrecCommas) (V.toList xs)
+    TupleSelector t i -> ppProj (Text.pack (show i)) <$> ppTerm' PrecArg t
 
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
@@ -562,8 +558,7 @@ scTermCountAux doBinders = go
 shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
-    FTermF UnitValue -> False
-    FTermF UnitType -> False
+    FTermF (TupleValue xs) -> not (V.null xs)
     FTermF Sort{} -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False

@@ -1,4 +1,0 @@
-
-module loops where
-
-import SpecM;

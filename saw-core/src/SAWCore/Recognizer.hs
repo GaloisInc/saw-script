@@ -28,9 +28,6 @@ module SAWCore.Recognizer
   , (<@>), (@>), (<@)
   , asApplyAll
   , asGlobalApply
-  , asPairType
-  , asPairValue
-  , asPairSelector
   , asTupleType
   , asTupleValue
   , asTupleSelector
@@ -172,63 +169,29 @@ asGlobalApply i t =
      isGlobalDef i f
      pure xs
 
-asPairType :: Recognizer Term (Term, Term)
-asPairType t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairType x y -> return (x, y)
-    _            -> Nothing
-
-asPairValue :: Recognizer Term (Term, Term)
-asPairValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairValue x y -> return (x, y)
-    _             -> Nothing
-
-asPairSelector :: Recognizer Term (Term, Bool)
-asPairSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, False)
-    PairRight x -> return (x, True)
-    _           -> Nothing
-
-destTupleType :: Term -> [Term]
-destTupleType t =
-  case unwrapTermF t of
-    FTermF (PairType x y) -> x : destTupleType y
-    _ -> [t]
-
-destTupleValue :: Term -> [Term]
-destTupleValue t =
-  case unwrapTermF t of
-    FTermF (PairValue x y) -> x : destTupleType y
-    _ -> [t]
+asTypeList :: Recognizer Term [Term]
+asTypeList (asGlobalApply preludeTypeNilIdent -> Just []) =
+  Just []
+asTypeList (asGlobalApply preludeTypeConsIdent -> Just [t, asTypeList -> Just ts]) =
+  Just (t : ts)
+asTypeList _ = Nothing
 
 asTupleType :: Recognizer Term [Term]
-asTupleType t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitType     -> Just []
-       PairType x y -> Just (x : destTupleType y)
-       _            -> Nothing
+asTupleType = isGlobalDef "Prelude.Tuple" @> asTypeList
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
   do ftf <- asFTermF t
      case ftf of
-       UnitValue     -> Just []
-       PairValue x y -> Just (x : destTupleValue y)
+       TupleValue xs -> Just (V.toList xs)
        _             -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
-asTupleSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, 1)
-    PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
-    _           -> Nothing
+asTupleSelector t =
+  do ftf <- asFTermF t
+     case ftf of
+       TupleSelector x i -> Just (x, i)
+       _                 -> Nothing
 
 asRecordType :: Recognizer Term (Map FieldName Term)
 asRecordType t = do

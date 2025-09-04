@@ -102,14 +102,12 @@ scDecEq sc fot args = case fot of
       Nothing -> scGlobalDef sc "Prelude.unitEq"
       Just _  -> scBool sc True
 
-  FOTTuple [t] -> scDecEq sc t args
-
   FOTTuple (t:ts) ->
     do fnLeft  <- scDecEq sc t Nothing
        fnRight <- scDecEq sc (FOTTuple ts) Nothing
        fn      <- scGlobalDef sc "Prelude.pairEq"
        t'      <- scFirstOrderType sc t
-       ts'     <- scFirstOrderType sc (FOTTuple ts)
+       ts'     <- scTypeList sc =<< traverse (scFirstOrderType sc) ts
        case args of
          Nothing    -> scApplyAll sc fn [t',ts',fnLeft,fnRight]
          Just (x,y) -> scApplyAll sc fn [t',ts',fnLeft,fnRight,x,y]
@@ -119,7 +117,7 @@ scDecEq sc fot args = case fot of
       Just (x,y) ->
            mkRecordEqBody (Map.toList fs) x y
 
-      Nothing -> 
+      Nothing ->
         do x <- scLocalVar sc 1
            y <- scLocalVar sc 0
            tp   <- scFirstOrderType sc fot
