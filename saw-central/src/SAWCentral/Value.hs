@@ -248,7 +248,7 @@ import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import qualified SAWCentral.Options as Opt
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
+import SAWCentral.MRSolver.Term (funNameTerm, ppTermAppInCtx)
 import SAWCentral.MRSolver.Evidence as MRSolver
 import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
@@ -686,8 +686,8 @@ showRefnset opts ss =
        , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
     ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
       ppTermAppInCtx opts ctx (funNameTerm f) args
-    ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
-      SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
+    ppFunAssumpRHS _ctx (RewriteFunAssump rhs) =
+      SAWCorePP.ppTerm opts rhs
 
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
