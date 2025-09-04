@@ -887,7 +887,7 @@ span.spaces    { background: white }
 <span class="lineno">  868 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVTuple tps -&gt;</span>
 <span class="lineno">  869 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
 <span class="lineno">  870 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_ctx st</span>
-<span class="lineno">  871 </span><span class="spaces">           </span><span class="istickedoff">tms &lt;- mapM (\i -&gt; scTupleSelector sc tm i) [0 .. length tps - 1]</span>
+<span class="lineno">  871 </span><span class="spaces">           </span><span class="istickedoff">tms &lt;- mapM (scTupleSelector sc tm) [0 .. length tps - 1]</span>
 <span class="lineno">  872 </span><span class="spaces">           </span><span class="istickedoff">vals &lt;- zipWithM (resolveSAWTerm cc) tps tms</span>
 <span class="lineno">  873 </span><span class="spaces">           </span><span class="istickedoff">storTy &lt;-</span>
 <span class="lineno">  874 </span><span class="spaces">             </span><span class="istickedoff">case toLLVMType dl tp of</span>

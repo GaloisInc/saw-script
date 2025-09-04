@@ -1078,7 +1078,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1059 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVTuple tps -&gt; do</span>
 <span class="lineno"> 1060 </span><span class="spaces">      </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
 <span class="lineno"> 1061 </span><span class="spaces">      </span><span class="istickedoff">let sc = saw_ctx st</span>
-<span class="lineno"> 1062 </span><span class="spaces">      </span><span class="istickedoff">tms &lt;- traverse (\i -&gt; scTupleSelector sc tm i) [0 .. length tps - 1]</span>
+<span class="lineno"> 1062 </span><span class="spaces">      </span><span class="istickedoff">tms &lt;- traverse (scTupleSelector sc tm) [0 .. length tps - 1]</span>
 <span class="lineno"> 1063 </span><span class="spaces">      </span><span class="istickedoff">vals &lt;- zipWithM (resolveSAWTerm mcc) tps tms</span>
 <span class="lineno"> 1064 </span><span class="spaces">      </span><span class="istickedoff">let mirTys = map (\(MIRVal shp _) -&gt; shapeMirTy shp) vals</span>
 <span class="lineno"> 1065 </span><span class="spaces">      </span><span class="istickedoff">-- TODO: get proper tuple layout</span>

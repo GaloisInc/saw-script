@@ -736,8 +736,8 @@ span.spaces    { background: white }
 <span class="lineno">  717 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  718 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry</span>
 <span class="lineno">  719 </span><span class="spaces">       </span><span class="nottickedoff">applied_func &lt;- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments</span>
-<span class="lineno">  720 </span><span class="spaces">       </span><span class="nottickedoff">applied_func_selectors &lt;- forM [0 .. (length fixpoint_substitution_as_list -1)] $ \i -&gt;</span>
-<span class="lineno">  721 </span><span class="spaces">         </span><span class="nottickedoff">scTupleSelector sc applied_func i</span>
+<span class="lineno">  720 </span><span class="spaces">       </span><span class="nottickedoff">applied_func_selectors &lt;- forM [0 .. (length fixpoint_substitution_as_list - 1)] $ \i -&gt;</span>
+<span class="lineno">  721 </span><span class="spaces">         </span><span class="nottickedoff">scTupleSelector' sc applied_func i (length fixpoint_substitution_as_list)</span>
 <span class="lineno">  722 </span><span class="spaces">       </span><span class="nottickedoff">result_substitution &lt;- MapF.fromList &lt;$&gt; zipWithM</span>
 <span class="lineno">  723 </span><span class="spaces">         </span><span class="nottickedoff">(\(MapF.Pair variable _) applied_func_selector -&gt;</span>
 <span class="lineno">  724 </span><span class="spaces">           </span><span class="nottickedoff">MapF.Pair variable &lt;$&gt; bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)</span>
@@ -757,7 +757,7 @@ span.spaces    { background: white }
 <span class="lineno">  738 </span><span class="spaces">       </span><span class="nottickedoff">step_arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  739 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry</span>
 <span class="lineno">  740 </span><span class="spaces">       </span><span class="nottickedoff">tail_applied_func &lt;- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments</span>
-<span class="lineno">  741 </span><span class="spaces">       </span><span class="nottickedoff">explicit_parameters_tuple &lt;- scTuple sc explicit_parameters</span>
+<span class="lineno">  741 </span><span class="spaces">       </span><span class="nottickedoff">explicit_parameters_tuple &lt;- scTuple' sc explicit_parameters</span>
 <span class="lineno">  742 </span><span class="spaces">       </span><span class="nottickedoff">let lhs = Prelude.last step_arguments</span>
 <span class="lineno">  743 </span><span class="spaces">       </span><span class="nottickedoff">w &lt;- scNat sc 64</span>
 <span class="lineno">  744 </span><span class="spaces">       </span><span class="nottickedoff">let implicit_parameter_head =</span>
@@ -767,7 +767,7 @@ span.spaces    { background: white }
 <span class="lineno">  748 </span><span class="spaces">                           </span><span class="nottickedoff">[&quot;No implicit parameters&quot;]</span>
 <span class="lineno">  749 </span><span class="spaces">       </span><span class="nottickedoff">rhs &lt;- scBvMul sc w implicit_parameter_head =&lt;&lt; scBvNat sc w =&lt;&lt; scNat sc 128</span>
 <span class="lineno">  750 </span><span class="spaces">       </span><span class="nottickedoff">loop_condition &lt;- scBvULt sc w lhs rhs</span>
-<span class="lineno">  751 </span><span class="spaces">       </span><span class="nottickedoff">output_tuple_type &lt;- scTupleType sc =&lt;&lt; mapM (scTypeOf sc) explicit_parameters</span>
+<span class="lineno">  751 </span><span class="spaces">       </span><span class="nottickedoff">output_tuple_type &lt;- scTupleType' sc =&lt;&lt; mapM (scTypeOf sc) explicit_parameters</span>
 <span class="lineno">  752 </span><span class="spaces">       </span><span class="nottickedoff">loop_body &lt;- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple</span>
 <span class="lineno">  753 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  754 </span><span class="spaces">       </span><span class="nottickedoff">induction_step_condition &lt;- scEq sc loop_body func_body</span>
@@ -814,10 +814,10 @@ span.spaces    { background: white }
 <span class="lineno">  795 </span><span class="spaces">       </span><span class="nottickedoff">implicit_parameters &lt;- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet tms</span>
 <span class="lineno">  796 </span><span class="spaces">       </span><span class="nottickedoff">arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  797 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry</span>
-<span class="lineno">  798 </span><span class="spaces">       </span><span class="nottickedoff">arguments_tuple &lt;- scTuple sc arguments</span>
+<span class="lineno">  798 </span><span class="spaces">       </span><span class="nottickedoff">arguments_tuple &lt;- scTuple' sc arguments</span>
 <span class="lineno">  799 </span><span class="spaces">       </span><span class="nottickedoff">applied_func &lt;- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]</span>
-<span class="lineno">  800 </span><span class="spaces">       </span><span class="nottickedoff">applied_func_selectors &lt;- forM [0 .. (length fixpoint_substitution_as_list -1)] $ \i -&gt;</span>
-<span class="lineno">  801 </span><span class="spaces">         </span><span class="nottickedoff">scTupleSelector sc applied_func i</span>
+<span class="lineno">  800 </span><span class="spaces">       </span><span class="nottickedoff">applied_func_selectors &lt;- forM [0 .. (length fixpoint_substitution_as_list - 1)] $ \i -&gt;</span>
+<span class="lineno">  801 </span><span class="spaces">         </span><span class="nottickedoff">scTupleSelector' sc applied_func i (length fixpoint_substitution_as_list)</span>
 <span class="lineno">  802 </span><span class="spaces">       </span><span class="nottickedoff">result_substitution &lt;- MapF.fromList &lt;$&gt; zipWithM</span>
 <span class="lineno">  803 </span><span class="spaces">         </span><span class="nottickedoff">(\(MapF.Pair variable _) applied_func_selector -&gt;</span>
 <span class="lineno">  804 </span><span class="spaces">           </span><span class="nottickedoff">MapF.Pair variable &lt;$&gt; bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)</span>
@@ -826,7 +826,7 @@ span.spaces    { background: white }
 <span class="lineno">  807 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  808 </span><span class="spaces">       </span><span class="nottickedoff">explicit_parameters &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) -&gt;</span>
 <span class="lineno">  809 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst variable</span>
-<span class="lineno">  810 </span><span class="spaces">       </span><span class="nottickedoff">explicit_parameters_tuple &lt;- scTuple sc explicit_parameters</span>
+<span class="lineno">  810 </span><span class="spaces">       </span><span class="nottickedoff">explicit_parameters_tuple &lt;- scTuple' sc explicit_parameters</span>
 <span class="lineno">  811 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  812 </span><span class="spaces">       </span><span class="nottickedoff">maybe_fix_body &lt;- scAsFixConstant sc (ttTerm func)</span>
 <span class="lineno">  813 </span><span class="spaces">       </span><span class="nottickedoff">inner_func &lt;-</span>
@@ -838,11 +838,11 @@ span.spaces    { background: white }
 <span class="lineno">  819 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  820 </span><span class="spaces">       </span><span class="nottickedoff">step_arguments &lt;- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) -&gt;</span>
 <span class="lineno">  821 </span><span class="spaces">         </span><span class="nottickedoff">toSC sym sawst $ Crucible.LLVM.FixpointCHC.bodyValue fixpoint_entry</span>
-<span class="lineno">  822 </span><span class="spaces">       </span><span class="nottickedoff">step_arguments_tuple &lt;- scTuple sc step_arguments</span>
+<span class="lineno">  822 </span><span class="spaces">       </span><span class="nottickedoff">step_arguments_tuple &lt;- scTuple' sc step_arguments</span>
 <span class="lineno">  823 </span><span class="spaces">       </span><span class="nottickedoff">tail_applied_func &lt;- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]</span>
 <span class="lineno">  824 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  825 </span><span class="spaces">       </span><span class="nottickedoff">loop_condition &lt;- toSC sym sawst condition</span>
-<span class="lineno">  826 </span><span class="spaces">       </span><span class="nottickedoff">output_tuple_type &lt;- scTupleType sc =&lt;&lt; mapM (scTypeOf sc) explicit_parameters</span>
+<span class="lineno">  826 </span><span class="spaces">       </span><span class="nottickedoff">output_tuple_type &lt;- scTupleType' sc =&lt;&lt; mapM (scTypeOf sc) explicit_parameters</span>
 <span class="lineno">  827 </span><span class="spaces">       </span><span class="nottickedoff">loop_body &lt;- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple</span>
 <span class="lineno">  828 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  829 </span><span class="spaces">       </span><span class="nottickedoff">induction_step_condition &lt;- scEq sc loop_body func_body</span>
@@ -904,8 +904,8 @@ span.spaces    { background: white }
 <span class="lineno">  885 </span><span class="spaces">           </span><span class="nottickedoff">\ (MapF.Pair _var (SimpleInvariant.InvariantEntry _init current)) -&gt;</span>
 <span class="lineno">  886 </span><span class="spaces">               </span><span class="nottickedoff">toSC sym sawst current</span>
 <span class="lineno">  887 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  888 </span><span class="spaces">       </span><span class="nottickedoff">initial_tuple &lt;- scTuple sc initial_exprs</span>
-<span class="lineno">  889 </span><span class="spaces">       </span><span class="nottickedoff">current_tuple &lt;- scTuple sc current_exprs</span>
+<span class="lineno">  888 </span><span class="spaces">       </span><span class="nottickedoff">initial_tuple &lt;- scTuple' sc initial_exprs</span>
+<span class="lineno">  889 </span><span class="spaces">       </span><span class="nottickedoff">current_tuple &lt;- scTuple' sc current_exprs</span>
 <span class="lineno">  890 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  891 </span><span class="spaces">       </span><span class="nottickedoff">-- use the provided logging function to print the discovered</span>
 <span class="lineno">  892 </span><span class="spaces">       </span><span class="nottickedoff">-- implicit parameters</span>

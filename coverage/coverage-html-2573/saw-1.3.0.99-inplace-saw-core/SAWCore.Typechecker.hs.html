@@ -417,7 +417,7 @@ span.spaces    { background: white }
 <span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">let dt_ixs' = map (\(x, t) -&gt; (Un.termVarLocalName x, t)) dt_ixs</span>
 <span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">dt_ixs_typed &lt;- typeInferCompleteCtxEC dt_ixs'</span>
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">let dtIndices = map (\(_,ec,_) -&gt; ec) dt_ixs_typed</span>
-<span class="lineno">  401 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map (\(_,_,s) -&gt; s) dt_ixs_typed)</span>
+<span class="lineno">  401 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map <span class="nottickedoff">(\(_,_,s) -&gt; s)</span> dt_ixs_typed)</span>
 <span class="lineno">  402 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  403 </span><span class="spaces">  </span><span class="istickedoff">-- Step 3: do the necessary universe inclusion checking for any predicative</span>
 <span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">-- (non-Prop) inductive type, which includes:</span>

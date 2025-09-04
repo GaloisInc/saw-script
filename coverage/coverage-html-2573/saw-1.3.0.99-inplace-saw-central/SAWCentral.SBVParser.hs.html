@@ -289,7 +289,7 @@ span.spaces    { background: white }
 <span class="lineno">  270 </span>splitInputs :: SharedContext -&gt; Typ -&gt; Term -&gt; IO [Term]
 <span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">splitInputs _sc TBool x = return [x]</span>
 <span class="lineno">  272 </span><span class="spaces"></span><span class="nottickedoff">splitInputs sc (TTuple ts) x =</span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">do xs &lt;- mapM (\i -&gt; scTupleSelector sc x i) [0 .. length ts - 1]</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">do xs &lt;- mapM (scTupleSelector sc x) [0 .. length ts - 1]</span>
 <span class="lineno">  274 </span><span class="spaces">       </span><span class="nottickedoff">yss &lt;- sequence (zipWith (splitInputs sc) ts xs)</span>
 <span class="lineno">  275 </span><span class="spaces">       </span><span class="nottickedoff">return (concat yss)</span>
 <span class="lineno">  276 </span><span class="spaces"></span><span class="nottickedoff">splitInputs _ (TVec _ TBool) x = return [x]</span>
