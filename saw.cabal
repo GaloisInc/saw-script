@@ -920,6 +920,7 @@ executable saw-remote-api
     directory,
     lens,
     mtl,
+    optparse-applicative,
     silently,
     text,
     unordered-containers,
@@ -942,7 +943,8 @@ executable saw-remote-api
     saw:saw-core,
     saw:cryptol-saw-core,
     saw:saw-central,
-    saw:saw-server
+    saw:saw-server,
+    saw:saw-version
 
   hs-source-dirs: saw-remote-api
   main-is: Main.hs

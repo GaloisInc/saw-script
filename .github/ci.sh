@@ -142,7 +142,10 @@ install_system_deps() {
 }
 
 build_cryptol() {
-  cabal build exe:cryptol
+  # Although we don't include the cryptol-remote-api executables in binary
+  # distributions, it is nevertheless worthwhile to build them here to ensure
+  # that they are compatible with the particular submodule commits in use.
+  cabal build exe:cryptol exe:cryptol-remote-api exe:cryptol-eval-server
 }
 
 bundle_files() {
@@ -205,7 +208,7 @@ zip_dist_with_solvers() {
 
 make_source_distribution() {
     # Ideally one makes source distributions with "git archive", but
-    # "git archive" and submodules do not work together. 
+    # "git archive" and submodules do not work together.
     #
     # We get a freshly checked out tree that's had all its submodules
     # cloned and checked out. Make a tarball that looks like it was
