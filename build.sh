@@ -79,7 +79,8 @@ tgt_build() {
 
     echo "cabal build $JOBSOPT ..."
     cabal build $JOBSOPT \
-                exe:cryptol exe:saw exe:saw-remote-api \
+                exe:cryptol exe:cryptol-remote-api exe:cryptol-eval-server \
+                exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:crux-mir-comp-tests \
