@@ -151,18 +151,16 @@ The following can be run with `cabal test`:
 - `saw-core-tests`
 - `cryptol-saw-core-tests`
 - `saw-core-coq-tests`
-- `heapster-prover-tests`
 - `crux-mir-comp-tests`
 
-There are three other sets of tests:
+There are two other sets of tests:
 
 - `saw-remote-api tests`
 - `mr-solver-tests`
-- `heapster-tests`
 
 The saw-remote-api tests can be run with the script
 `saw-remote-api/scripts/run_rpc_tests.sh`.
-The other two are run by the CI but are not currently really intended
+The other one is run by the CI but is not currently really intended
 to be run by hand.
 
 The s2n proofs that are also run by the CI are driven by scripts found

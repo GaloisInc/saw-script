@@ -255,8 +255,6 @@ The top-level repository directories are:
   solver queries using the [What4](https://github.com/GaloisInc/what4)
   library.
 
-* `heapster` - The Heapster tool.
-
 * `saw-central` - A library containing the bulk of SAW.
 
 * `saw-script` - A library containing the SAWScript interpreter.
