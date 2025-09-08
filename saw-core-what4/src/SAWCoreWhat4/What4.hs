@@ -76,7 +76,7 @@ import qualified Data.Vector as V
 
 import Data.Traversable as T
 import qualified Control.Exception as X
-import Control.Monad ((<=<), foldM, unless)
+import Control.Monad ((<=<), foldM, unless, zipWithM)
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
@@ -982,13 +982,12 @@ parseUninterpreted sym ref app ty =
       -> (VArray . SArray) <$>
           mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    VUnitType
-      -> return VUnit
-
-    VPairType ty1 ty2
-      -> do x1 <- parseUninterpreted sym ref (suffixUnintApp "_L" app) ty1
-            x2 <- parseUninterpreted sym ref (suffixUnintApp "_R" app) ty2
-            return (VPair (ready x1) (ready x2))
+    VTupleType tys
+      -> do let mkElem i ty' =
+                  do let app' = suffixUnintApp ("_" ++ show i) app
+                     parseUninterpreted sym ref app' ty'
+            xs <- V.imapM mkElem tys
+            pure (VTuple (fmap ready xs))
 
     VRecordType elem_tps
       -> (VRecordValue <$>
@@ -1047,10 +1046,7 @@ applyUnintApp ::
   IO (UnintApp (SymExpr sym))
 applyUnintApp sym app0 v =
   case v of
-    VUnit                     -> return app0
-    VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
-                                    app2 <- applyUnintApp sym app1 =<< force y
-                                    return app2
+    VTuple xv                 -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VRecordValue elems        -> foldM (applyUnintApp sym) app0 =<< traverse (force . snd) elems
     VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
@@ -1233,14 +1229,8 @@ vAsFirstOrderType v =
       -> FOTVec n <$> vAsFirstOrderType v2
     VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
-    VUnitType
-      -> return (FOTTuple [])
-    VPairType v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> return (FOTTuple [t1, t2])
+    VTupleType tvs
+      -> FOTTuple <$> traverse vAsFirstOrderType (V.toList tvs)
     VRecordType tps
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
@@ -1418,18 +1408,15 @@ rebuildTerm sym st sc tv sv =
   case sv of
     VFun _ _ ->
       chokeOn "lambdas (VFun)"
-    VUnit ->
-      scUnitValue sc
-    VPair x y ->
+    VTuple xs ->
       case tv of
-        VPairType tx ty ->
-          do vx <- force x
-             vy <- force y
-             x' <- rebuildTerm sym st sc tx vx
-             y' <- rebuildTerm sym st sc ty vy
-             scPairValue sc x' y'
+        VTupleType txs
+          | V.length xs == V.length txs ->
+              do vxs <- traverse force xs
+                 xs' <- zipWithM (rebuildTerm sym st sc) (V.toList txs) (V.toList vxs)
+                 scTuple sc xs'
         _ -> panic "rebuildTerm" [
-                 "Pair wasn't a pair: found " <> Text.pack (show tv)
+                 "Tuple wasn't a tuple: found " <> Text.pack (show tv)
              ]
     VCtorApp _ _ _ ->
       chokeOn "constructors (VCtorApp)"
@@ -1659,15 +1646,13 @@ parseUninterpretedSAW sym st sc ref trm app ty =
       -> (VArray . SArray) <$>
           mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    VUnitType
-      -> return VUnit
-
-    VPairType ty1 ty2
-      -> do let trm1 = ArgTermPairLeft trm
-            let trm2 = ArgTermPairRight trm
-            x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp "_L" app) ty1
-            x2 <- parseUninterpretedSAW sym st sc ref trm2 (suffixUnintApp "_R" app) ty2
-            return (VPair (ready x1) (ready x2))
+    VTupleType tys
+      -> do let mkElem i ty' =
+                  do let trm' = ArgTermTupleProj trm i
+                     let app' = suffixUnintApp ("_" ++ show i) app
+                     parseUninterpretedSAW sym st sc ref trm' app' ty'
+            xs <- V.imapM mkElem tys
+            pure (VTuple (fmap ready xs))
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
@@ -1697,15 +1682,13 @@ data ArgTerm
   | ArgTermToIntMod Natural ArgTerm -- ^ toIntMod n x
   | ArgTermFromIntMod Natural ArgTerm -- ^ fromIntMod n x
   | ArgTermVector Term [ArgTerm] -- ^ element type, elements
-  | ArgTermUnit
-  | ArgTermPair ArgTerm ArgTerm
+  | ArgTermTuple [ArgTerm]
   | ArgTermRecord [(FieldName, ArgTerm)]
   | ArgTermConst Term
   | ArgTermApply ArgTerm ArgTerm
   | ArgTermAt Natural Term ArgTerm Natural
     -- ^ length, element type, list, index
-  | ArgTermPairLeft ArgTerm
-  | ArgTermPairRight ArgTerm
+  | ArgTermTupleProj ArgTerm Int
   | ArgTermBVToNat Natural ArgTerm
 
 -- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
@@ -1742,14 +1725,10 @@ reconstructArgTerm atrm sc ts =
           do (xs, ts1) <- parseList ats ts0
              x <- scVectorReduced sc ty xs
              return (x, ts1)
-        ArgTermUnit ->
-          do x <- scUnitValue sc
-             return (x, ts0)
-        ArgTermPair at1 at2 ->
-          do (x1, ts1) <- parse at1 ts0
-             (x2, ts2) <- parse at2 ts1
-             x <- scPairValue sc x1 x2
-             return (x, ts2)
+        ArgTermTuple ats ->
+          do (xs, ts1) <- parseList ats ts0
+             x <- scTupleReduced sc xs
+             pure (x, ts1)
         ArgTermRecord flds ->
           do let (tags, ats) = unzip flds
              (xs, ts1) <- parseList ats ts0
@@ -1768,14 +1747,10 @@ reconstructArgTerm atrm sc ts =
              i' <- scNat sc i
              x <- scAt sc n' ty x1 i'
              return (x, ts1)
-        ArgTermPairLeft at1 ->
+        ArgTermTupleProj at1 i ->
           do (x1, ts1) <- parse at1 ts0
-             x <- scPairLeft sc x1
-             return (x, ts1)
-        ArgTermPairRight at1 ->
-          do (x1, ts1) <- parse at1 ts0
-             x <- scPairRight sc x1
-             return (x, ts1)
+             x <- scTupleSelector sc x1 i
+             pure (x, ts1)
         ArgTermBVToNat w at1 ->
           do (x1, ts1) <- parse at1 ts0
              x <- scBvToNat sc w x1
@@ -1800,7 +1775,6 @@ mkArgTerm sc ty val =
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
-    (VUnitType, VUnit)   -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
     (VVecType _ ety, VVector vv) ->
@@ -1809,10 +1783,10 @@ mkArgTerm sc ty val =
          ety' <- termOfTValue sc ety
          return (ArgTermVector ety' xs)
 
-    (VPairType ty1 ty2, VPair v1 v2) ->
-      do x1 <- mkArgTerm sc ty1 =<< force v1
-         x2 <- mkArgTerm sc ty2 =<< force v2
-         return (ArgTermPair x1 x2)
+    (VTupleType tys, VTuple ts) | V.length tys == V.length ts ->
+      do vs <- traverse force ts
+         xs <- sequence (V.zipWith (mkArgTerm sc) tys vs)
+         pure (ArgTermTuple (V.toList xs))
 
     (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds ->
       do let tags = map fst tys
@@ -1851,15 +1825,13 @@ termOfTValue sc val =
   case val of
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
-    VUnitType -> scUnitType sc
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a
          scVecType sc n' a'
-    VPairType a b
-      -> do a' <- termOfTValue sc a
-            b' <- termOfTValue sc b
-            scPairType sc a' b'
+    VTupleType vs ->
+      do vs' <- traverse (termOfTValue sc) vs
+         scTupleType sc (V.toList vs')
     VRecordType flds
       -> do flds' <- traverse (traverse (termOfTValue sc)) flds
             scRecordType sc flds'
@@ -1868,8 +1840,10 @@ termOfTValue sc val =
 termOfSValue :: SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
   case val of
-    VUnit -> scUnitValue sc
-    VNat n
-      -> scNat sc n
+    VNat n -> scNat sc n
+    VTuple ts ->
+      do vs <- traverse force ts
+         vs' <- traverse (termOfSValue sc) vs
+         scTuple sc (V.toList vs')
     TValue tv -> termOfTValue sc tv
     _ -> fail $ "termOfSValue: " ++ show val

@@ -243,7 +243,6 @@ readBackTValue sc cfg = loop
   where
   loop tv =
     case tv of
-      VUnitType -> scUnitType sc
       VBoolType -> scBoolType sc
       VStringType -> scStringType sc
       VIntType -> scIntegerType sc
@@ -259,10 +258,9 @@ readBackTValue sc cfg = loop
         do n' <- scNat sc n
            t' <- loop t
            scVecType sc n' t'
-      VPairType t1 t2 ->
-        do t1' <- loop t1
-           t2' <- loop t2
-           scPairType sc t1' t2'
+      VTupleType ts ->
+        do ts' <- traverse loop (V.toList ts)
+           scTupleType sc ts'
       VRecordType fs ->
         do fs' <- traverse (traverse loop) fs
            scRecordType sc fs'
@@ -325,7 +323,6 @@ reflectTerm ::
 reflectTerm sc cfg = loop
   where
   loop tv tm = case tv of
-    VUnitType -> pure VUnit
     VBoolType -> return (VBool (Left tm))
     VIntType  -> return (VInt (Left tm))
     VIntModType m -> return (VIntMod m (Left tm))
@@ -361,7 +358,7 @@ reflectTerm sc cfg = loop
 
     VStringType{}   -> return (VExtra (VExtraTerm tv tm))
     VRecordType{}   -> return (VExtra (VExtraTerm tv tm))
-    VPairType{}     -> return (VExtra (VExtraTerm tv tm))
+    VTupleType{}    -> return (VExtra (VExtraTerm tv tm))
     VDataType{}     -> return (VExtra (VExtraTerm tv tm))
     VRecursorType{} -> return (VExtra (VExtraTerm tv tm))
     VTyTerm{}       -> return (VExtra (VExtraTerm tv tm))
@@ -377,8 +374,6 @@ readBackValue ::
   IO Term
 readBackValue sc cfg = loop
   where
-    loop _ VUnit = scUnitValue sc
-
     loop _ (VNat n) = scNat sc n
 
     loop _ (VBVToNat w n) =
@@ -417,10 +412,9 @@ readBackValue sc cfg = loop
       do (ecs, tm) <- readBackFuns tv v
          scAbstractExtsEtaCollapse sc ecs tm
 
-    loop (VPairType t1 t2) (VPair v1 v2) =
-      do tm1 <- loop t1 =<< force v1
-         tm2 <- loop t2 =<< force v2
-         scPairValueReduced sc tm1 tm2
+    loop (VTupleType ts) (VTuple vs) | V.length ts == V.length vs =
+      do tms <- V.sequence $ V.zipWith (\t v -> loop t =<< force v) ts vs
+         scTupleReduced sc (V.toList tms)
 
     loop (VVecType _n tp) (VVector vs) =
       do tp' <- readBackTValue sc cfg tp

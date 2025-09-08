@@ -1,9 +1,0 @@
-module GlobalVar where
-
-import SpecM;
-
-acquireLockM : Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool * Vec 64 Bool);
-acquireLockM u = retS VoidEv (Vec 64 Bool * Vec 64 Bool) (u,u);
-
-releaseLockM : Vec 64 Bool -> Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool);
-releaseLockM u new_u = retS VoidEv (Vec 64 Bool) new_u;

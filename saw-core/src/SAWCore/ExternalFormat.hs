@@ -139,13 +139,8 @@ scWriteExternal t0 =
               pure $ unwords ["Variable", show (ecVarIndex ec), show (ecType ec)]
         FTermF ftf     ->
           case ftf of
-            UnitValue           -> pure $ unwords ["Unit"]
-            UnitType            -> pure $ unwords ["UnitT"]
-            PairValue x y       -> pure $ unwords ["Pair", show x, show y]
-            PairType x y        -> pure $ unwords ["PairT", show x, show y]
-            PairLeft e          -> pure $ unwords ["ProjL", show e]
-            PairRight e         -> pure $ unwords ["ProjR", show e]
-
+            TupleValue xs       -> pure $ unwords ("Tuple" : map show (V.toList xs))
+            TupleSelector x i   -> pure $ unwords ["TupleSelector", show x, show i]
             RecursorType d ps motive motive_ty ->
               do stashName d
                  pure $ unwords
@@ -299,12 +294,9 @@ scReadExternal sc input =
         ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i]      -> Constant <$> readName i
         ["ConstantOpaque",i]  -> Constant <$> readName i
-        ["Unit"]            -> pure $ FTermF UnitValue
-        ["UnitT"]           -> pure $ FTermF UnitType
-        ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)
-        ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
-        ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
-        ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
+        ("Tuple" : xs)      -> FTermF <$> (TupleValue <$> (V.fromList <$> traverse readIdx xs))
+        ["TupleSelector", x, i]
+                            -> FTermF <$> (TupleSelector <$> readIdx x <*> pure (read i))
 
         ("RecursorType" : i :
          (separateArgs ->

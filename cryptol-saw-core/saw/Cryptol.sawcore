@@ -21,11 +21,11 @@ bvExp n x y = foldr Bool (Vec n Bool) n
   (bvNat n 1)
   (reverse n Bool y);
 
-updFst : (a b : sort 0) -> (a -> a) -> (a * b) -> (a * b);
-updFst a b f x = (f x.(1), x.(2));
+updFst : (a b : sort 0) -> (a -> a) -> #(a, b) -> #(a, b);
+updFst a b f x = (f x.0, x.1);
 
-updSnd : (a b : sort 0) -> (b -> b) -> (a * b) -> (a * b);
-updSnd a b f x = (x.(1), f x.(2));
+updSnd : (a b : sort 0) -> (b -> b) -> #(a, b) -> #(a, b);
+updSnd a b f x = (x.0, f x.1);
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
@@ -313,23 +313,25 @@ fun_cong a b c d eq_ab eq_cd =
     (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x:sort 0) -> (x -> c)))
     (eq_cong (sort 0) c d eq_cd (sort 0) (\ (x:sort 0) -> (b -> x)));
 
-pair_cong : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
-  Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) (a * b) (a' * b');
+pair_cong :
+  (a : sort 0) -> (a' : sort 0) ->
+  (b : sort 0) -> (b' : sort 0) ->
+  Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) #(a, b) #(a', b');
 pair_cong a a' b b' eq_a eq_b =
   trans
-    (sort 0) (a * b) (a' * b) (a' * b')
-    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> (x * b)))
-    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a' * x)));
+    (sort 0) #(a, b) #(a', b) #(a', b')
+    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x, b)))
+    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a', x)));
 
 pair_cong1 : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) ->
-  Eq (sort 0) a a' -> Eq (sort 0) (a * b) (a' * b);
+  Eq (sort 0) a a' -> Eq (sort 0) #(a, b) #(a', b);
 pair_cong1 a a' b eq_a =
-  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> (x * b)));
+  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x, b)));
 
 pair_cong2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
-  Eq (sort 0) b b' -> Eq (sort 0) (a * b) (a * b');
+  Eq (sort 0) b b' -> Eq (sort 0) #(a, b) #(a, b');
 pair_cong2 a b b' eq_b =
-  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a * x)));
+  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a, x)));
 
 axiom unsafeAssert_same_Num :
   (n : Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
@@ -347,105 +349,105 @@ eListSel a n =
 -- List comprehensions
 
 from : (a b : isort 0) -> (m n : Num) -> seq m a -> (a -> seq n b) ->
-        seq (tcMul m n) (a * b);
+        seq (tcMul m n) #(a, b);
 from a b m n =
   Num#rec
-    (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) (a * b))
+    (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b))
     (\ (m:Nat) ->
        Num#rec
          (\ (n:Num) -> Vec m a -> (a -> seq n b) ->
-                        seq (tcMul (TCNum m) n) (a * b))
+                        seq (tcMul (TCNum m) n) #(a, b))
          -- Case 1: (TCNum m, TCNum n)
          (\ (n:Nat) ->
             \ (xs : Vec m a) ->
             \ (k : a -> Vec n b) ->
-              join m n (a * b)
-                   (map a (Vec n (a * b))
+              join m n #(a, b)
+                   (map a (Vec n #(a, b))
                         (\ (x : a) ->
-                           map b (a * b) (\ (y : b) -> (x, y)) n (k x))
+                           map b #(a, b) (\ (y : b) -> (x, y)) n (k x))
                         m xs))
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
             (\ (m':Nat) -> (Vec m' a -> (a -> Stream b) ->
-               seq (if0Nat Num m' (TCNum 0) TCInf) (a * b)))
+               seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
             (\ (xs : Vec 0 a) ->
-             \ (k : a -> Stream b) -> EmptyVec (a * b))
+             \ (k : a -> Stream b) -> EmptyVec #(a, b))
             (\ (m' : Nat) ->
              \ (xs : Vec (Succ m') a) ->
              \ (k : a -> Stream b) ->
-               (\ (x : a) -> streamMap b (a * b) (\ (y:b) -> (x, y)) (k x))
+               (\ (x : a) -> streamMap b #(a, b) (\ (y:b) -> (x, y)) (k x))
                (at (Succ m') a xs 0))
             m)
          n)
     (Num#rec
-       (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) (a * b))
+       (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
        -- Case 3: (TCInf, TCNum n)
        (\ (n:Nat) ->
           natCase
             (\ (n':Nat) -> (Stream a -> (a -> Vec n' b) ->
-                seq (if0Nat Num n' (TCNum 0) TCInf) (a * b)))
+                seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
             (\ (xs : Stream a) ->
-             \ (k : a -> Vec 0 b) -> EmptyVec (a * b))
+             \ (k : a -> Vec 0 b) -> EmptyVec #(a, b))
             (\ (n' : Nat) ->
              \ (xs : Stream a) ->
              \ (k : a -> Vec (Succ n') b) ->
                streamJoin
-                 (a * b) n'
+                 #(a, b) n'
                  (streamMap
-                    a (Vec (Succ n') (a * b))
+                    a (Vec (Succ n') #(a, b))
                     (\ (x:a) ->
-                       map b (a * b) (\ (y:b) -> (x, y)) (Succ n') (k x))
+                       map b #(a, b) (\ (y:b) -> (x, y)) (Succ n') (k x))
                     xs))
             n)
        -- Case 4: (TCInf, TCInf)
        (\ (xs : Stream a) ->
         \ (k : a -> Stream b) ->
-          (\ (x : a) -> streamMap b (a * b) (\ (y : b) -> (x, y)) (k x))
+          (\ (x : a) -> streamMap b #(a, b) (\ (y : b) -> (x, y)) (k x))
           (streamGet a xs 0))
        n)
     m;
 
 
-mlet : (a b : isort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n (a * b);
+mlet : (a b : isort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n #(a, b);
 mlet a b n =
   Num#rec
-    (\ (n:Num) -> a -> (a -> seq n b) -> seq n (a * b))
+    (\ (n:Num) -> a -> (a -> seq n b) -> seq n #(a, b))
     (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec n b) ->
-       map b (a * b) (\ (y : b) -> (x, y)) n (f x))
+       map b #(a, b) (\ (y : b) -> (x, y)) n (f x))
     (\ (x:a) -> \ (f:a -> Stream b) ->
-       streamMap b (a * b) (\ (y : b) -> (x, y)) (f x))
+       streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x))
     n;
 
 seqZip : (a b : isort 0) -> (m n : Num) -> seq m a -> seq n b ->
-          seq (tcMin m n) (a * b);
+          seq (tcMin m n) #(a, b);
 seqZip a b m n =
   Num#rec
-    (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) (a * b))
+    (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
     (\ (m : Nat) ->
        Num#rec
-         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) (a * b))
+         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
          (\ (n:Nat) -> zip a b m n)
          (\ (xs:Vec m a) -> \ (ys:Stream b) ->
-            gen m (a * b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
+            gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
          n)
     (Num#rec
-       (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) (a * b))
+       (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
        (\ (n:Nat) ->
         \ (xs:Stream a) -> \ (ys:Vec n b) ->
-          gen n (a * b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
-       (streamMap2 a b (a * b) (\ (x:a) -> \ (y:b) -> (x, y)))
+          gen n #(a, b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
+       (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y)))
        n)
     m;
 
-zipSame : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
-zipSame a b n x y = gen n (a*b) (\ (i : Nat) -> (at n a x i, at n b y i));
+zipSame : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n #(a, b);
+zipSame a b n x y = gen n #(a, b) (\ (i : Nat) -> (at n a x i, at n b y i));
 
-seqZipSame : (a b : isort 0) -> (n : Num) -> seq n a -> seq n b -> seq n (a * b);
+seqZipSame : (a b : isort 0) -> (n : Num) -> seq n a -> seq n b -> seq n #(a, b);
 seqZipSame a b n =
   Num#rec
-    (\ (n : Num) -> seq n a -> seq n b -> seq n (a * b))
+    (\ (n : Num) -> seq n a -> seq n b -> seq n #(a, b))
     (\ (n : Nat) -> zipSame a b n)
-    (streamMap2 a b (a*b) (\ (x:a) -> \ (y:b) -> (x,y)))
+    (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x,y)))
     n;
 
 --------------------------------------------------------------------------------
@@ -466,13 +468,27 @@ unitUnary _ = ();
 unitBinary : #() -> #() -> #();
 unitBinary _ _ = ();
 
-pairUnary : (a b : sort 0) -> (a -> a) -> (b -> b) -> (a * b) -> (a * b);
-pairUnary a b f g xy = (f (fst a b xy), g (snd a b xy));
+pairUnary :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  (t -> t) ->
+  (Tuple ts -> Tuple ts) ->
+  Tuple (TypeCons t ts) -> Tuple (TypeCons t ts);
+pairUnary t ts f g x =
+  consTuple t ts
+  (f (headTuple t ts x))
+  (g (tailTuple t ts x));
 
-pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
-           -> (a * b) -> (a * b) -> (a * b);
-pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12),
-                              g (snd a b x12) (snd a b y12));
+pairBinary :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  (t -> t -> t) ->
+  (Tuple ts -> Tuple ts -> Tuple ts) ->
+  Tuple (TypeCons t ts) -> Tuple (TypeCons t ts) -> Tuple (TypeCons t ts);
+pairBinary t ts f g x y =
+  consTuple t ts
+  (f (headTuple t ts x) (headTuple t ts y))
+  (g (tailTuple t ts x) (tailTuple t ts y));
 
 funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
@@ -528,16 +544,24 @@ unitLe _ _ = True;
 unitLt : #() -> #() -> Bool;
 unitLt _ _ = False;
 
-pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
-        -> a * b -> a * b -> Bool -> Bool;
-pairCmp a b f g x12 y12 k =
-  f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
+pairCmp :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  (t -> t -> Bool -> Bool) ->
+  (Tuple ts -> Tuple ts -> Bool -> Bool) ->
+  Tuple (TypeCons t ts) -> Tuple (TypeCons t ts) -> Bool -> Bool;
+pairCmp t ts f g x12 y12 k =
+  f (headTuple t ts x12) (headTuple t ts y12)
+    (g (tailTuple t ts x12) (tailTuple t ts y12) k);
 
 pairLt :
-  (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool) ->
-  a * b -> a * b -> Bool;
-pairLt a b f g x y =
-  f (fst a b x) (fst a b y) (g (snd a b x) (snd a b y));
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  (t -> t -> Bool -> Bool) ->
+  (Tuple ts -> Tuple ts -> Bool) ->
+  Tuple (TypeCons t ts) -> Tuple (TypeCons t ts) -> Bool;
+pairLt t ts f g x y =
+  f (headTuple t ts x) (headTuple t ts y) (g (tailTuple t ts x) (tailTuple t ts y));
 
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
@@ -586,7 +610,7 @@ PEqSeqBool n =
 PEqUnit : PEq #();
 PEqUnit = { eq = \ (x y : #()) -> True };
 
-PEqPair : (a b : sort 0) -> PEq a -> PEq b -> PEq (a * b);
+PEqPair : (t : sort 0) -> (ts : TypeList) -> PEq t -> PEq (Tuple ts) -> PEq (Tuple (TypeCons t ts));
 PEqPair a b pa pb = { eq = pairEq a b pa.eq pb.eq };
 
 
@@ -638,7 +662,10 @@ PCmpSeqBool n =
 PCmpUnit : PCmp #();
 PCmpUnit = { cmpEq = PEqUnit, cmp = unitCmp, le = unitLe, lt = unitLt };
 
-PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
+PCmpPair :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  PCmp t -> PCmp (Tuple ts) -> PCmp (Tuple (TypeCons t ts));
 PCmpPair a b pa pb =
   { cmpEq  = PEqPair a b pa.cmpEq pb.cmpEq
   , cmp = pairCmp a b pa.cmp pb.cmp
@@ -685,7 +712,12 @@ PSignedCmpSeqBool n =
 PSignedCmpUnit : PSignedCmp #();
 PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp, sle = unitLe, slt = unitLt };
 
-PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
+PSignedCmpPair :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  PSignedCmp t ->
+  PSignedCmp (Tuple ts) ->
+  PSignedCmp (Tuple (TypeCons t ts));
 PSignedCmpPair a b pa pb =
   { signedCmpEq = PEqPair a b pa.signedCmpEq pb.signedCmpEq
   , scmp = pairCmp a b pa.scmp pb.scmp
@@ -804,9 +836,12 @@ PLogicUnit =
   , not  = unitUnary
   };
 
-PLogicPair : (a b : sort 0) -> PLogic a -> PLogic b -> PLogic (a * b);
+PLogicPair :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  PLogic t -> PLogic (Tuple ts) -> PLogic (Tuple (TypeCons t ts));
 PLogicPair a b pa pb =
-  { logicZero = (pa.logicZero, pb.logicZero)
+  { logicZero = consTuple a b pa.logicZero pb.logicZero
   , and  = pairBinary a b pa.and pb.and
   , or   = pairBinary a b pa.or  pb.or
   , xor  = pairBinary a b pa.xor pb.xor
@@ -923,14 +958,17 @@ PRingUnit =
   , int = \ (i : Integer) -> ()
   };
 
-PRingPair : (a b : sort 0) -> PRing a -> PRing b -> PRing (a * b);
+PRingPair :
+  (t : sort 0) ->
+  (ts : TypeList) ->
+  PRing t -> PRing (Tuple ts) -> PRing (Tuple (TypeCons t ts));
 PRingPair a b pa pb =
-  { ringZero = (pa.ringZero, pb.ringZero)
+  { ringZero = consTuple a b pa.ringZero pb.ringZero
   , add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
   , mul = pairBinary a b pa.mul pb.mul
   , neg = pairUnary a b pa.neg pb.neg
-  , int = \ (i : Integer) -> (pa.int i, pb.int i)
+  , int = \ (i : Integer) -> consTuple a b (pa.int i) (pb.int i)
   };
 
 -- Integral class
@@ -1917,35 +1955,35 @@ processSHA2_512 n x =
 
 ec_double :
   (p : Num) ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p);
 ec_double p x =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_double";
+  error #(IntModNum p, IntModNum p, IntModNum p) "Unimplemented: ec_double";
 
 ec_add_nonzero :
   (p : Num) ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p);
 ec_add_nonzero p x y =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_add_nonzero";
+  error #(IntModNum p, IntModNum p, IntModNum p) "Unimplemented: ec_add_nonzero";
 
 ec_mult :
   (p : Num) ->
   IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p);
 ec_mult p x y =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_mult";
+  error #(IntModNum p, IntModNum p, IntModNum p) "Unimplemented: ec_mult";
 
 ec_twin_mult :
   (p : Num) ->
   IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p ->
-  IntModNum p * IntModNum p * IntModNum p;
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p) ->
+  #(IntModNum p, IntModNum p, IntModNum p);
 ec_twin_mult p x y z =
-  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_twin_mult";
+  error #(IntModNum p, IntModNum p, IntModNum p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------
 -- Rewrite rules

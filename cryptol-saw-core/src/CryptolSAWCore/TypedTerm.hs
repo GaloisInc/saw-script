@@ -156,8 +156,8 @@ destTupleTypedTerm sc (TypedTerm tp t) =
     Nothing -> fail "asTupleTypedTerm: not a tuple type"
     Just ctys ->
       do let len = length ctys
-         let idxs = take len [1 ..]
-         ts <- traverse (\i -> scTupleSelector sc t i len) idxs
+         let idxs = take len [0..]
+         ts <- traverse (scTupleSelector sc t) idxs
          pure $ zipWith TypedTerm (map (TypedTermSchema . C.tMono) ctys) ts
 
 -- First order types and values ------------------------------------------------

@@ -717,8 +717,8 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
        applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
-       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
-         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       applied_func_selectors <- forM [0 .. (length fixpoint_substitution_as_list - 1)] $ \i ->
+         scTupleSelector' sc applied_func i (length fixpoint_substitution_as_list)
        result_substitution <- MapF.fromList <$> zipWithM
          (\(MapF.Pair variable _) applied_func_selector ->
            MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
@@ -738,7 +738,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
        tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
-       explicit_parameters_tuple <- scTuple sc explicit_parameters
+       explicit_parameters_tuple <- scTuple' sc explicit_parameters
        let lhs = Prelude.last step_arguments
        w <- scNat sc 64
        let implicit_parameter_head =
@@ -748,7 +748,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
                            ["No implicit parameters"]
        rhs <- scBvMul sc w implicit_parameter_head =<< scBvNat sc w =<< scNat sc 128
        loop_condition <- scBvULt sc w lhs rhs
-       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+       output_tuple_type <- scTupleType' sc =<< mapM (scTypeOf sc) explicit_parameters
        loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
 
        induction_step_condition <- scEq sc loop_body func_body
@@ -795,10 +795,10 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
        implicit_parameters <- mapM (scVariable sc) $ Set.toList $ foldMap getAllExtSet tms
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry
-       arguments_tuple <- scTuple sc arguments
+       arguments_tuple <- scTuple' sc arguments
        applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
-       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
-         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       applied_func_selectors <- forM [0 .. (length fixpoint_substitution_as_list - 1)] $ \i ->
+         scTupleSelector' sc applied_func i (length fixpoint_substitution_as_list)
        result_substitution <- MapF.fromList <$> zipWithM
          (\(MapF.Pair variable _) applied_func_selector ->
            MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
@@ -807,7 +807,7 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
 
        explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
          toSC sym sawst variable
-       explicit_parameters_tuple <- scTuple sc explicit_parameters
+       explicit_parameters_tuple <- scTuple' sc explicit_parameters
 
        maybe_fix_body <- scAsFixConstant sc (ttTerm func)
        inner_func <-
@@ -819,11 +819,11 @@ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
 
        step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.FixpointCHC.bodyValue fixpoint_entry
-       step_arguments_tuple <- scTuple sc step_arguments
+       step_arguments_tuple <- scTuple' sc step_arguments
        tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
 
        loop_condition <- toSC sym sawst condition
-       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+       output_tuple_type <- scTupleType' sc =<< mapM (scTypeOf sc) explicit_parameters
        loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
 
        induction_step_condition <- scEq sc loop_body func_body
@@ -885,8 +885,8 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
            \ (MapF.Pair _var (SimpleInvariant.InvariantEntry _init current)) ->
                toSC sym sawst current
 
-       initial_tuple <- scTuple sc initial_exprs
-       current_tuple <- scTuple sc current_exprs
+       initial_tuple <- scTuple' sc initial_exprs
+       current_tuple <- scTuple' sc current_exprs
 
        -- use the provided logging function to print the discovered
        -- implicit parameters

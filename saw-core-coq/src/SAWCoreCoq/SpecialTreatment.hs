@@ -199,9 +199,6 @@ stringModule =
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
-specMModule :: ModuleName
-specMModule = mkModuleName ["SpecM"]
-
 tpDescModule :: ModuleName
 tpDescModule = mkModuleName ["TpDesc"]
 
@@ -226,7 +223,6 @@ specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
   , ("Prelude", sawCorePreludeSpecialTreatmentMap configuration)
-  , ("SpecM", specMSpecialTreatmentMap configuration)
   ]
 
 cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
@@ -548,55 +544,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Cons1", mapsToExpl polyListModule "pcons")
   ]
   -}
-
-specMSpecialTreatmentMap :: TranslationConfiguration ->
-                            Map.Map String IdentSpecialTreatment
-specMSpecialTreatmentMap _configuration =
-  Map.fromList $
-
-  -- Type descriptions
-  map (\str -> (str, mapsTo specMModule (Coq.Ident str)))
-  [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
-  , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
-  , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
-  , "KindDesc", "Kind_Expr", "Kind_Tp"
-  , "TpExpr", "TpExpr_Const", "TpExpr_Var", "TpExpr_UnOp", "TpExpr_BinOp"
-  , "TpDesc", "Tp_M", "Tp_Pi", "Tp_Arr", "Tp_Kind", "Tp_Pair", "Tp_Sum"
-  , "Tp_Sigma", "Tp_Seq", "Tp_Void", "Tp_Ind", "Tp_Var", "Tp_TpSubst"
-  , "Tp_ExprSubst"
-  , "tpSubst", "elimTpEnvElem", "tpElemEnv"
-  , "indElem", "indToTpElem", "tpToIndElem"
-  , "FunFlag", "IsFun", "IsData"
-  ]
-
-  -- The specification monad
-  ++
-  [ ("EvType",               mapsTo specMModule "EvType")
-  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
-  , ("evTypeType",           mapsTo specMModule "evTypeType")
-  , ("evRetType",            mapsTo specMModule "evRetType")
-  , ("SpecM",                mapsTo specMModule "SpecM")
-  , ("retS",                 mapsToExpl specMModule "retS")
-  , ("bindS",                mapsToExpl specMModule "bindS")
-  , ("triggerS",             mapsToExpl specMModule "triggerS")
-  , ("errorS",               mapsToExpl specMModule "errorS")
-  , ("forallS",              mapsToExplInferArg "SpecM.forallS" 2)
-  , ("existsS",              mapsToExplInferArg "SpecM.existsS" 2)
-  , ("assumeS",              mapsToExpl specMModule "assumeS")
-  , ("assertS",              mapsToExpl specMModule "assertS")
-  , ("FixS",                 mapsToExpl specMModule "FixS")
-  , ("MultiFixS",            mapsToExpl specMModule "MultiFixS")
-  , ("LetRecS",              mapsToExpl specMModule "LetRecS")
-    {-
-  , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
-  , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
-  , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
-  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel") -}
-  , ("refinesS",             skip)
-  , ("refinesS_eq",          skip)
-  ]
-
-
 
 escapeIdent :: Coq.Ident -> Coq.Ident
 escapeIdent (Coq.Ident str)

@@ -73,6 +73,7 @@ import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector as V
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
@@ -623,9 +624,9 @@ asBetaRedex t =
 
 asPairRedex :: R.Recognizer Term Term
 asPairRedex t =
-    do (u, b) <- R.asPairSelector t
-       (x, y) <- R.asPairValue u
-       return (if b then y else x)
+    do (u, i) <- R.asTupleSelector t
+       ts <- R.asTupleValue u
+       return (ts !! i)
 
 asRecordRedex :: R.Recognizer Term Term
 asRecordRedex t =
@@ -674,7 +675,7 @@ appCollectedArgs t = step0 (unshared t) []
     step1 f args = foldl (++) [] (map (\ x -> step2 f $ unshared x) args)
     -- step2: analyse an arg.  look inside tuples, sequences (TBD), more calls to f
     step2 :: TermF Term -> TermF Term -> [Term]
-    step2 f (FTermF (PairValue x y)) = (step2 f $ unshared x) ++ (step2 f $ unshared y)
+    step2 f (FTermF (TupleValue xs)) = concatMap (step2 f . unshared) (V.toList xs)
     step2 f (s@(App g a)) = possibly_curried_args s f (unshared g) (step2 f $ unshared a)
     step2 _ a = [Unshared a]
     --
@@ -823,12 +824,8 @@ rewriteSharedTermTypeSafe sc ss t0 =
                      FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF ftf =
         case ftf of
-          UnitValue        -> return ftf
-          UnitType         -> return ftf
-          PairValue{}      -> traverse rewriteAll ftf
-          PairType{}       -> return ftf -- doesn't matter
-          PairLeft{}       -> traverse rewriteAll ftf
-          PairRight{}      -> traverse rewriteAll ftf
+          TupleValue{}     -> traverse rewriteAll ftf
+          TupleSelector{}  -> traverse rewriteAll ftf
 
           -- NOTE: we don't rewrite arguments of constructors, datatypes, or
           -- recursors because of dependent types, as we could potentially cause

@@ -376,14 +376,13 @@ pureApp mx y = do
   mkTermF (App x y)
 
 mkTuple :: [TermBuilder Term] -> TermBuilder Term
-mkTuple []       = mkTermF (FTermF UnitValue)
-mkTuple (t : ts) = mkTermF . FTermF =<< (PairValue <$> t <*> mkTuple ts)
+mkTuple ts = mkTermF . FTermF . TupleValue . V.fromList =<< sequence ts
 
+-- | Zero-indexed tuple field selection.
 mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
-  | i == 1 = mkTermF (FTermF (PairLeft t))
-  | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = panic "mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
+  | i < 0 = panic "Verifier.SAW.Conversion.mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
+  | otherwise = mkTermF (FTermF (TupleSelector t i))
 
 mkCtor :: Name -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =

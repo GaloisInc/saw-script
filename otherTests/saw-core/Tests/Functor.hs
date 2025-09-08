@@ -12,6 +12,7 @@ module Tests.Functor (functorTests) where
 
 import Control.Monad (when)
 import Data.Hashable
+import qualified Data.Vector as V
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -173,12 +174,12 @@ instance TestIt Term where
       -- build and test more stuff
       when (depth < 2) $ do
         let depth' = depth + 1
-            unit = Unshared $ FTermF $ UnitValue
+            unit = Unshared $ FTermF $ TupleValue V.empty
             zero = Unshared $ FTermF $ NatLit 0
             localvar = Unshared $ LocalVar 0
-        testOne depth' $ PairValue t t
-        testOne depth' $ PairValue t zero
-        testOne depth' $ PairValue unit t
+        testOne depth' $ TupleValue $ V.fromList [t, t]
+        testOne depth' $ TupleValue $ V.fromList [t, zero]
+        testOne depth' $ TupleValue $ V.fromList [unit, t]
         testOne depth' $ App t t
         testOne depth' $ App t zero
         testOne depth' $ App unit t
@@ -209,7 +210,7 @@ instance TestIt Term where
 tests :: Result
 tests = do
   let unit, zero, one :: FlatTermF Term
-      unit = UnitValue
+      unit = TupleValue V.empty
       zero = NatLit 0
       one = NatLit 1
   testOne 0 unit

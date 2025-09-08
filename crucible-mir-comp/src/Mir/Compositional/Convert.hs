@@ -156,7 +156,6 @@ termToReg sym varMap term shp0 = do
   where
     go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
     go shp sv = case (shp, sv) of
-        (UnitShape _, SAW.VUnit) -> return ()
         (PrimShape _ BaseBoolRepr, SAW.VBool b) -> return b
         (PrimShape _ (BaseBVRepr w), SAW.VWord (W4.DBV e))
           | Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> return e
@@ -167,8 +166,8 @@ termToReg sym varMap term shp0 = do
                 _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
                     ", but simulator returned a vector containing " ++ show x
             buildBitVector w bits
-        (TupleShape _ elems, _) -> do
-            svs <- reverse <$> tupleToListRev (length elems) [] sv
+        (TupleShape _ elems, SAW.VTuple thunks) -> do
+            svs <- mapM SAW.force $ toList thunks
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape (M.TyArray _ n) _ shp', SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
@@ -190,21 +189,6 @@ termToReg sym varMap term shp0 = do
             return $ MirVector_Vector v
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
-
-    -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
-    -- the inner `SValue`s, in reverse order.
-    tupleToListRev :: Int -> [SValue sym] -> SValue sym -> IO [SValue sym]
-    tupleToListRev 2 acc (SAW.VPair x y) = do
-        x' <- SAW.force x
-        y' <- SAW.force y
-        return $ y' : x' : acc
-    tupleToListRev n acc (SAW.VPair x xs) | n > 2 = do
-        x' <- SAW.force x
-        xs' <- SAW.force xs
-        tupleToListRev (n - 1) (x' : acc) xs'
-    tupleToListRev n _ _ | n < 2 = error $ "bad tuple size " ++ show n
-    tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
-        " elements, but got " ++ show v
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
     -- required to match `tw`.

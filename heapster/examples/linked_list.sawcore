@@ -1,9 +1,0 @@
-
-module linked_list where
-
-import SpecM;
-
-mallocSpec : (sz:Vec 64 Bool) -> SpecM VoidEv (BVVec 64 sz #());
-mallocSpec sz =
-  retS VoidEv (BVVec 64 sz #())
-       (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()));

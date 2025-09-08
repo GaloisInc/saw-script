@@ -449,7 +449,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           extracted_func <-
             io $ scAbstractExts shared_context input_parameters
-            =<< scTuple shared_context output_values
+            =<< scTuple' shared_context output_values
           when ([] /= getAllExts extracted_func) $
             fail "Non-functional simulation summary."
 
@@ -461,9 +461,9 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           input_terms <- io $ traverse (scVariable shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           applied_extracted_func_selectors <-
-            io $ forM [1 .. (length output_parameters)] $ \i ->
+            io $ forM [0 .. (length output_parameters - 1)] $ \i ->
             mkTypedTerm shared_context
-              =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
+              =<< scTupleSelector' shared_context applied_extracted_func i (length output_parameters)
           let output_parameter_substitution =
                 IntMap.fromList $
                 zip (map ecVarIndex output_parameters) (map ttTerm applied_extracted_func_selectors)
