@@ -2688,7 +2688,7 @@ primitives = Map.fromList
     Experimental
     [ "Disable checking of safety obligations encountered during symbolic"
     , "execution. This is unsound! However, it can be useful during"
-    , "initial proof construction to focus only on the stated correcness"
+    , "initial proof construction to focus only on the stated correctness"
     , "specifications."
     ]
 
