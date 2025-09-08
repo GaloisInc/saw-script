@@ -51,6 +51,7 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack, splitOn)
 import Control.Monad(when)
+import GHC.Stack
 
 import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
@@ -101,7 +102,6 @@ import Cryptol.Utils.Logger (quietLogger)
 import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
-
 
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
@@ -216,7 +216,7 @@ initCryptolEnv sc = do
          return ()
 
   -- Load Cryptol reference implementations
-  ((_,refTop), modEnv) <-
+  ((_,refTop), modEnv3) <-
     liftModuleM modEnv2 $
       MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
   let refMod = T.tcTopEntityToModule refTop
@@ -233,7 +233,7 @@ initCryptolEnv sc = do
   let cryEnv0 = C.emptyEnv{ C.envRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
-  termEnv <- genTermEnv sc modEnv cryEnv0
+  termEnv <- genTermEnv sc modEnv3 cryEnv0
 
   -- The module names in P.Import are now Located, so give them an empty position.
   let preludeName' = P.Located P.emptyRange preludeName
@@ -245,7 +245,7 @@ initCryptolEnv sc = do
                     , (OnlyPublic, P.Import preludeReferenceName' (Just preludeReferenceName) Nothing Nothing Nothing)
                     , (OnlyPublic, P.Import arrayName' Nothing Nothing Nothing Nothing)
                     ]
-    , eModuleEnv  = modEnv
+    , eModuleEnv  = modEnv3
     , eExtraNames = mempty
     , eExtraTypes = Map.empty
     , eExtraTSyns = Map.empty
@@ -302,8 +302,11 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
       return $ MN.interpImportEnv i syms
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
-getAllIfaceDecls me = mconcat (map (both . ME.lmInterface) (ME.getLoadedModules (ME.meLoadedModules me)))
-  where both = MI.ifDefines
+getAllIfaceDecls me =
+  mconcat
+    (map (MI.ifDefines . ME.lmInterface)
+         (ME.getLoadedModules (ME.meLoadedModules me)))
+
 
 -- Typecheck -------------------------------------------------------------------
 
