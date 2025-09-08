@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 
 load_sawcore_from_file "mr_solver_test_funs.sawcore";
 

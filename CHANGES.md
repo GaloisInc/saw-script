@@ -174,6 +174,14 @@ support compositional verification using techniques similar to SAW.
 
 ## Deprecations
 
+* Heapster and Mr. Solver have been deprecated.
+  They are now only available with `enable_deprecated` (skipping ahead in
+  the deprecation process) and will be removed in the next release.
+  This affects the `HeapsterEnv` and `Refnset` types, all the `heapster_*`
+  and `mrsolver_*` builtins, plus `write_coq_cryptol_module_monadic`,
+  `refines`, `monadify_term`, `set_monadification`,
+  `empty_rs`, `addrefn`, and `addrefns`.
+
 * The "highly experimental" SAWScript `callcc` builtin (an
   implementation of call-with-current-continuation) has been removed.
   Its behavior was, justifiably, described as "somewhat

@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env_from_file "rust_lifetimes.sawcore" "rust_lifetimes.bc";
 
 /***

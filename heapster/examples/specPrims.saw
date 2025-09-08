@@ -1,4 +1,5 @@
 /* Helper SAW script for using specification primitives in Cryptol */
+enable_deprecated;
 
 import "SpecPrims.cry";
 

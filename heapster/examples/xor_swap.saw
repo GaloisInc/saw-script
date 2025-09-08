@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env "xor_swap" "xor_swap.bc";
 
 // Integer types

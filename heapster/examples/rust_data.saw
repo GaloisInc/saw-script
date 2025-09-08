@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";
 
 /***

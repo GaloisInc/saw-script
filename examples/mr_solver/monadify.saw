@@ -1,5 +1,6 @@
 
 enable_experimental;
+enable_deprecated;
 import "SpecPrims.cry" as SpecPrims;
 import "monadify.cry";
 // load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";

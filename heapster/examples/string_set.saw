@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 
 // Create a Heapster environment from a SAW core file
 env <- heapster_init_env_from_file "string_set.sawcore" "string_set.bc";

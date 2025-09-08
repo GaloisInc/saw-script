@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env "tutorial_c" "tutorial_c.bc";
 print "File loaded";
 

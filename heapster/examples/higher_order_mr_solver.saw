@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 
 import "higher_order.cry";
 
