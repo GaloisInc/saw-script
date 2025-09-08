@@ -307,18 +307,6 @@ piCong1 r x y eq =
 
 
 --------------------------------------------------------------------------------
--- Bits
-
-data Bit : sort 0 where {
-    Bit1 : Bit;
-    Bit0 : Bit;
-  }
-
-Bit__rec : (p : Bit -> sort 1) -> (p Bit1) -> (p Bit0) -> (b:Bit) -> p b;
-Bit__rec p f1 f2 b = Bit#rec p f1 f2 b;
-
-
---------------------------------------------------------------------------------
 -- Booleans
 
 -- Boolean is a primitive type, because it is handled specially by some of the
@@ -327,9 +315,9 @@ primitive Bool : sort 0;
 primitive True : Bool;
 primitive False : Bool;
 
--- Elimination form for Bool is dependent if-then-else. This is exactly the same
--- as the recursor for Bit, but it is declared as a primitive because Bool is.
--- It also rearranges the arguments to look more like normal if-then-else.
+-- Elimination form for Bool is dependent if-then-else. It is declared
+-- as a primitive because Bool is. It also rearranges the arguments to
+-- look more like normal if-then-else.
 primitive iteDep : (p : Bool -> sort 1) -> (b:Bool) ->
                     p True -> p False -> p b;
 
@@ -369,29 +357,6 @@ iteWithProof a b f1 f2 =
 -- A version of ite that includes an Eq proof term only in the True branch
 ifWithProof : (a : sort 0) -> (b:Bool) -> a -> (Eq Bool b True -> a) -> a;
 ifWithProof a b x f = iteWithProof a b f (\(_:Eq Bool b False) -> x);
-
---
--- Converting between Bools and Bits (cause why not?)
---
-
-bool2bit : Bool -> Bit;
-bool2bit b = iteDep (\ (_:Bool) -> Bit) b Bit1 Bit0;
-
-bool2bit_True : Eq Bit (bool2bit True) Bit1;
-bool2bit_True = iteDep_True (\ (_:Bool) -> Bit) Bit1 Bit0;
-
-bool2bit_False : Eq Bit (bool2bit False) Bit0;
-bool2bit_False = iteDep_False (\ (_:Bool) -> Bit) Bit1 Bit0;
-
-bit2bool : Bit -> Bool;
-bit2bool = Bit__rec (\ (_:Bit) -> Bool) True False;
-
-bit2bool_Bit1 : Eq Bool (bit2bool Bit1) True;
-bit2bool_Bit1 = Refl Bool True;
-
-bit2bool_Bit0 : Eq Bool (bit2bool Bit0) False;
-bit2bool_Bit0 = Refl Bool False;
-
 
 --
 -- The Boolean operations
