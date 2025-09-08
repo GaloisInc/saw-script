@@ -16,7 +16,7 @@ module CryptolSAWCore.CryptolEnv
   , initCryptolEnv
   , loadCryptolModule
   , bindCryptolModule
-  , lookupCryptolModule
+  , extractDefFromCryptolModule
   , combineCryptolEnv
   , importModule
   , bindTypedTerm
@@ -523,8 +523,9 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
-lookupCryptolModule :: CryptolModule -> Text -> IO TypedTerm
-lookupCryptolModule (CryptolModule _ tm) name =
+-- | NOTE: this is only used in the "cryptol_extract" primitive.
+extractDefFromCryptolModule :: CryptolModule -> Text -> IO TypedTerm
+extractDefFromCryptolModule (CryptolModule _ tm) name =
   case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
     Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
     Just t -> return t
