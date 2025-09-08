@@ -141,9 +141,9 @@ library saw-core
 
     -- packages in git submodules
     parameterized-utils,
+    rme,
 
     -- internal subpackages in the saw tree
-    rme,
     saw:saw-support,
 
   hs-source-dirs: saw-core/src
@@ -576,13 +576,13 @@ library saw-central
     macaw-symbolic,
     macaw-x86-symbolic,
     parameterized-utils,
+    rme,
     what4 >= 0.4,
     what4-transition-system,
     -- apparently no longer used:
     --   flexdis86
 
     -- internal subpackages/sublibraries in the saw tree
-    rme,
     saw:saw-support,
     saw:saw-core,
     saw:saw-core-aig,
