@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env "SHA512" "sha512.bc";
 
 // heapster_set_debug_level env 1;

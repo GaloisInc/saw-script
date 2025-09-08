@@ -1,3 +1,4 @@
 enable_experimental;
+enable_deprecated;
 // write_coq_cryptol_module "monadify.cry" "monadify_gen.v" [] ["fib"];
 write_coq_cryptol_module_monadic "monadify.cry" "monadify_gen_m.v" [] [];

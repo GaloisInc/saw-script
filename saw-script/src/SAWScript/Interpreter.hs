@@ -2418,7 +2418,7 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "HeapsterEnv" Experimental
+  , abstype "HeapsterEnv" HideDeprecated
   , abstype "JVMSetup" Current
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
@@ -2431,7 +2431,7 @@ primTypes = Map.fromList
   , abstype "MIRValue" Experimental
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
-  , abstype "Refnset" Experimental
+  , abstype "Refnset" HideDeprecated
   , abstype "SatResult" Current
   , abstype "SetupValue" Current
   , abstype "Simpset" Current
@@ -3278,7 +3278,7 @@ primitives = Map.fromList
 
   , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal (do_write_coq_cryptol_module True))
-    Experimental
+    HideDeprecated
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq, using the monadified version of the given module."
     , "The first argument is the file containing the module to export."
@@ -6323,48 +6323,48 @@ primitives = Map.fromList
 
   , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
-    Experimental
+    HideDeprecated
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
 
   , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebugDepth)
-    Experimental
+    HideDeprecated
     [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
     , "and debug output to a maximum depth" ]
 
   , prim "mrsolver" "ProofScript ()"
     (pureVal (mrSolver emptyRefnset))
-    Experimental
+    HideDeprecated
     [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
     , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
 
   , prim "empty_rs"            "Refnset"
     (pureVal (emptyRefnset :: SAWRefnset))
-    Experimental
+    HideDeprecated
     [ "The empty refinement set, containing no refinements." ]
 
   , prim "addrefn"             "Theorem -> Refnset -> Refnset"
     (funVal2 addrefn)
-    Experimental
+    HideDeprecated
     [ "Add a proved refinement theorem to a given refinement set." ]
 
   , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
     (funVal2 addrefns)
-    Experimental
+    HideDeprecated
     [ "Add proved refinement theorems to a given refinement set." ]
 
   , prim "mrsolver_with" "Refnset -> ProofScript ()"
     (pureVal mrSolver)
-    Experimental
+    HideDeprecated
     [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
     , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
     , " the given set of refinements taken as assumptions" ]
 
   , prim "refines" "[Term] -> Term -> Term -> Term"
     (funVal3 refinesTerm)
-    Experimental
+    HideDeprecated
     [ "Given a list of 'fresh_symbolic' variables over which to quantify"
     , " as as well as two terms containing those variables, which may be"
     , " either terms or functions in the SpecM monad, construct the"
@@ -6376,13 +6376,13 @@ primitives = Map.fromList
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
-    Experimental
+    HideDeprecated
     [ "Monadify a Cryptol term, converting it to a form where all recursion"
     , " and errors are represented as monadic operators"]
 
   , prim "set_monadification" "String -> String -> Bool -> TopLevel ()"
     (scVal setMonadification)
-    Experimental
+    HideDeprecated
     [ "Set the monadification of a specific Cryptol identifer to a SAW core "
     , "identifier of monadic type. The supplied Boolean flag indicates if the "
     , "SAW core term is polymorphic in the event type and function stack of the"
@@ -6391,7 +6391,7 @@ primitives = Map.fromList
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file."
     ]
@@ -6399,7 +6399,7 @@ primitives = Map.fromList
   , prim "heapster_init_env_debug"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env_debug)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file with debug tracing turned on"
     ]
@@ -6407,7 +6407,7 @@ primitives = Map.fromList
   , prim "heapster_init_env_from_file"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env_from_file)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file."
     ]
@@ -6415,7 +6415,7 @@ primitives = Map.fromList
   , prim "heapster_init_env_from_file_debug"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env_from_file_debug)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file, with debug"
     , " tracing turned on"
@@ -6431,7 +6431,7 @@ primitives = Map.fromList
   , prim "heapster_init_env_for_files"
     "String -> [String] -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env_for_files)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file."
     ]
@@ -6439,7 +6439,7 @@ primitives = Map.fromList
   , prim "heapster_init_env_for_files_debug"
     "String -> [String] -> TopLevel HeapsterEnv"
     (bicVal do_heapster_init_env_for_files_debug)
-    Experimental
+    HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file, with debug"
     , " tracing turned on"
@@ -6448,7 +6448,7 @@ primitives = Map.fromList
   , prim "heapster_get_cfg"
     "HeapsterEnv -> String -> TopLevel CFG"
     (bicVal heapster_get_cfg)
-    Experimental
+    HideDeprecated
     [ "Extract out the Crucible CFG associated with a symbol in a"
     , " Heapster environemnt"
     ]
@@ -6456,7 +6456,7 @@ primitives = Map.fromList
   , prim "heapster_define_opaque_perm"
     "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_opaque_perm)
-    Experimental
+    HideDeprecated
     [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
     , " Heapster permission named nm with arguments parsed from args and type"
     , " tp that translates to the SAW core type trans with type description d"
@@ -6465,7 +6465,7 @@ primitives = Map.fromList
   , prim "heapster_define_recursive_perm"
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_recursive_perm)
-    Experimental
+    HideDeprecated
     [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
     , " type parsed from tp that translates to permissions p, which can"
@@ -6475,7 +6475,7 @@ primitives = Map.fromList
   , prim "heapster_define_reachability_perm"
     "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_reachability_perm)
-    Experimental
+    HideDeprecated
     [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
     , " defines a recursive named Heapster permission named nm with arguments"
     , " parsed from args_ctx and type parsed from value_type that unfolds to p,"
@@ -6488,7 +6488,7 @@ primitives = Map.fromList
   , prim "heapster_define_recursive_shape"
     "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
     (bicVal heapster_define_recursive_shape)
-    Experimental
+    HideDeprecated
     [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
     , " defines a recursive named Heapser shape named nm with arguments"
     , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
@@ -6498,7 +6498,7 @@ primitives = Map.fromList
   , prim "heapster_define_perm"
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_perm)
-    Experimental
+    HideDeprecated
     [ "heapster_define_perm nm args tp p defines a Heapster permission named"
     , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
     , " such that nm<x1,...,xn> is equivalent to the permission p."
@@ -6507,7 +6507,7 @@ primitives = Map.fromList
   , prim "heapster_define_llvmshape"
     "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
     (bicVal heapster_define_llvmshape)
-    Experimental
+    HideDeprecated
     [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
     , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
     , " such that nm<x1,...,xn> is equivalent to the permission p."
@@ -6516,7 +6516,7 @@ primitives = Map.fromList
   , prim "heapster_define_opaque_llvmshape"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_define_opaque_llvmshape)
-    Experimental
+    HideDeprecated
     [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
     , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
     , " Heapster does not know or care about the contents of memory of this shape"
@@ -6534,7 +6534,7 @@ primitives = Map.fromList
   , prim "heapster_define_rust_type"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_define_rust_type)
-    Experimental
+    HideDeprecated
     [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
     , "a string representing a top-level struct or enum definition."
     ]
@@ -6542,7 +6542,7 @@ primitives = Map.fromList
   , prim "heapster_define_rust_type_qual"
     "HeapsterEnv -> String -> String -> TopLevel ()"
     (bicVal heapster_define_rust_type_qual)
-    Experimental
+    HideDeprecated
     [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
     , " shape from tp, a string representing a top-level Rust struct or enum"
     , " definition. The type is qualified by crate, meaning that \"crate::\""
@@ -6552,7 +6552,7 @@ primitives = Map.fromList
   , prim "heapster_block_entry_hint"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_block_entry_hint)
-    Experimental
+    HideDeprecated
     [ "heapster_block_entry_hint env nm block top_args ghosts perms adds a hint"
     , " to the Heapster type-checker that Crucible block number block in nm"
     , " should have permissions perms on its inputs, assuming that top_args"
@@ -6563,7 +6563,7 @@ primitives = Map.fromList
   , prim "heapster_gen_block_perms_hint"
     "HeapsterEnv -> String -> [Int] -> TopLevel ()"
     (bicVal heapster_gen_block_perms_hint)
-    Experimental
+    HideDeprecated
     [ "heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster"
     , " type-checker to *generalize* (recursively replace all instances of"
     , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
@@ -6574,7 +6574,7 @@ primitives = Map.fromList
   , prim "heapster_join_point_hint"
     "HeapsterEnv -> String -> [Int] -> TopLevel ()"
     (bicVal heapster_join_point_hint)
-    Experimental
+    HideDeprecated
     [ "heapster_join_point_hint env nm blocks adds a hint to the Heapster"
     , " type-checker to make a join point at each of the given block numbers,"
     , " meaning that all entries to the given blocks are merged into a single"
@@ -6585,7 +6585,7 @@ primitives = Map.fromList
   , prim "heapster_find_symbol"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_symbol)
-    Experimental
+    HideDeprecated
     [ "Search for a symbol in any module contained in a HeapsterEnv that"
     , " contains the supplied string as a substring. Raise an error if there"
     , " is not exactly one such symbol"
@@ -6594,7 +6594,7 @@ primitives = Map.fromList
   , prim "heapster_find_symbols"
     "HeapsterEnv -> String -> TopLevel [String]"
     (bicVal heapster_find_symbols)
-    Experimental
+    HideDeprecated
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
     , " contain the supplied string as a substring"
     ]
@@ -6602,7 +6602,7 @@ primitives = Map.fromList
   , prim "heapster_find_symbol_with_type"
     "HeapsterEnv -> String -> String -> TopLevel String"
     (bicVal heapster_find_symbol_with_type)
-    Experimental
+    HideDeprecated
     [ "Search for a symbol in any module contained in a HeapsterEnv that"
     , " contains the supplied string as a substring and that has the specified"
     , " LLVM type. Raise an error if there is not exactly one such symbol."
@@ -6611,7 +6611,7 @@ primitives = Map.fromList
   , prim "heapster_find_symbols_with_type"
     "HeapsterEnv -> String -> String -> TopLevel [String]"
     (bicVal heapster_find_symbols_with_type)
-    Experimental
+    HideDeprecated
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
     , " contain the supplied string as a substring and that have the specified"
     , " LLVM type"
@@ -6620,7 +6620,7 @@ primitives = Map.fromList
   , prim "heapster_find_symbol_commands"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_symbol_commands)
-    Experimental
+    HideDeprecated
     [ "Map a search string str to a newline-separated sequence of SAW-script "
     , " commands \"heapster_find_symbol_with_type str tp\", one for each LLVM "
     , " type tp associated with a symbol whose name contains str" ]
@@ -6628,7 +6628,7 @@ primitives = Map.fromList
   , prim "heapster_find_trait_method_symbol"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_trait_method_symbol)
-    Experimental
+    HideDeprecated
     [ "Search for a symbol in any module contained in a HeapsterEnv that"
     , "corresponds to the given trait method implementation. The search"
     , "string should be of the form: trait::method<type>, e.g."
@@ -6638,7 +6638,7 @@ primitives = Map.fromList
   , prim "heapster_assume_fun"
     "HeapsterEnv -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun)
-    Experimental
+    HideDeprecated
     [ "heapster_assume_fun env nm perms trans assumes that function nm has"
     , " permissions perms and translates to the SAW core term trans"
     ]
@@ -6646,7 +6646,7 @@ primitives = Map.fromList
   , prim "heapster_assume_fun_rename"
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun_rename)
-    Experimental
+    HideDeprecated
     [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
@@ -6655,7 +6655,7 @@ primitives = Map.fromList
   , prim "heapster_assume_fun_rename_prim"
     "HeapsterEnv -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_assume_fun_rename_prim)
-    Experimental
+    HideDeprecated
     [
       "heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm"
     , " has permissions perms as a primitive."
@@ -6664,7 +6664,7 @@ primitives = Map.fromList
   , prim "heapster_assume_fun_multi"
     "HeapsterEnv -> String -> [(String, String)] -> TopLevel ()"
     (bicVal heapster_assume_fun_multi)
-    Experimental
+    HideDeprecated
     [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
     , " nm can be typed with 0 or more permissions, each with the corresponding"
     , " translation to SAW core"
@@ -6673,7 +6673,7 @@ primitives = Map.fromList
   , prim "heapster_typecheck_fun"
     "HeapsterEnv -> String -> String -> TopLevel ()"
     (bicVal heapster_typecheck_fun)
-    Experimental
+    HideDeprecated
     [ "Translate an LLVM function to a SAW core term using Heapster"
     , " type-checking, and store the result in the current Heapster SAW module."
     ]
@@ -6681,7 +6681,7 @@ primitives = Map.fromList
   , prim "heapster_typecheck_fun_rename"
     "HeapsterEnv -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_typecheck_fun_rename)
-    Experimental
+    HideDeprecated
     [ "Translate the LLVM function named by the first String to a SAW core term"
     , " using Heapster type-checking, and store the result in the current"
     , " Heapster SAW module as a definition named with the second string."
@@ -6690,7 +6690,7 @@ primitives = Map.fromList
   , prim "heapster_typecheck_mut_funs"
     "HeapsterEnv -> [(String, String)] -> TopLevel ()"
     (bicVal heapster_typecheck_mut_funs)
-    Experimental
+    HideDeprecated
     [ "Translate a set of mutually recursive LLVM function to a set of SAW "
     , "core terms using Heapster type-checking. Store the results in the "
     , "current Heapster SAW module."
@@ -6699,7 +6699,7 @@ primitives = Map.fromList
   , prim "heapster_set_event_type"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_set_event_type)
-    Experimental
+    HideDeprecated
     [ "Set the event type for the remaining Heapster translations to a SAW "
     , "core term of type EvType. It is recommended that this is done at most "
     , "once in a SAW script, at the beginning, because changing the event type "
@@ -6709,33 +6709,33 @@ primitives = Map.fromList
   , prim "heapster_print_fun_trans"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_print_fun_trans)
-    Experimental
+    HideDeprecated
     [ "Print the translation to SAW of a function that has been type-checked."
     ]
 
   , prim "heapster_export_coq"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal do_heapster_export_coq)
-    Experimental
+    HideDeprecated
     [ "Export a Heapster environment to a Coq file" ]
 
   , prim "heapster_set_debug_level"
     "HeapsterEnv -> Int -> TopLevel ()"
     (bicVal heapster_set_debug_level)
-    Experimental
+    HideDeprecated
     [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output" ]
 
   , prim "heapster_set_translation_checks"
     "HeapsterEnv -> Bool -> TopLevel ()"
     (bicVal heapster_set_translation_checks)
-    Experimental
+    HideDeprecated
     [ "Tell Heapster whether to perform its translation-time checks of the "
     , "well-formedness of type-checking proofs" ]
 
   , prim "heapster_trans_rust_type"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_translate_rust_type)
-    Experimental
+    HideDeprecated
     [ "Parse a Rust function type and print the equivalent Heapser type. "
     , "Ideal for learning how Rust types are translated into Heapster. "
     ]
@@ -6743,14 +6743,14 @@ primitives = Map.fromList
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
-    Experimental
+    HideDeprecated
     [ "Parse and print back a set of Heapster permissions for a function"
     ]
 
   , prim "heapster_dump_ide_info"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal do_heapster_dump_ide_info)
-    Experimental
+    HideDeprecated
     [ "Dump environment info to a JSON file for IDE integration."
     ]
 

@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env_from_file "memcpy.sawcore" "memcpy.bc";
 
 // Integer types

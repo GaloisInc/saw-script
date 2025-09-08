@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 // Initialization
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env_from_file "mbox.sawcore" "mbox.bc";
 
 

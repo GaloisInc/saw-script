@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env "xor_swap_rust" "xor_swap_rust.bc";
 
 heapster_define_llvmshape env "i64" 64 "" "fieldsh(exists x:bv 64.eq(llvmword(x)))";

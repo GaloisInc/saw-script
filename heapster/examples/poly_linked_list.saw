@@ -1,5 +1,6 @@
 // This script expects to be run from the directory it is in
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env "poly_linked_list" "poly_linked_list.bc";
 
 heapster_define_recursive_perm env "list64" "l:lifetime, rw:rwmodality" "llvmptr 64" ["eq(llvmword(0))","[l]ptr((rw,0) |-> exists x:(bv 64).eq(llvmword(x))) * ptr((rw,8) |-> list64<l,rw>)"] "W64List" "foldW64List" "unfoldW64List";

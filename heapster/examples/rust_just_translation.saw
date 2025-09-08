@@ -1,6 +1,7 @@
 // This file demonstrates how to use the `heapster_trans_rust_type`
 // command to translate rust signatures to heapster.
 enable_experimental;
+enable_deprecated;
 
 // Integer types This is wrong... we don't need an environment. 
 env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";

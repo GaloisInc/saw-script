@@ -1,4 +1,5 @@
 enable_experimental;
+enable_deprecated;
 env <- heapster_init_env_from_file "iter_linked_list.sawcore" "iter_linked_list.bc";
 
 // Integer types
