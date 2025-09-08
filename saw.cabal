@@ -606,8 +606,6 @@ library saw-central
     SAWCentral.JavaExpr
     SAWCentral.JavaPretty
     SAWCentral.ImportAIG
-    SAWCentral.SBVParser
-    SAWCentral.SBVModel
 
     SAWCentral.Yosys.Utils
     SAWCentral.Yosys.Theorem

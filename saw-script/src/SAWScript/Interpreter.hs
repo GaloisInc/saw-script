@@ -1592,13 +1592,6 @@ instance FromValue MIR.Ty where
     fromValue _ (VMIRType t) = t
     fromValue _ _ = error "fromValue MIRType"
 
-instance IsValue Uninterp where
-    toValue _name me = VUninterp me
-
-instance FromValue Uninterp where
-    fromValue _ (VUninterp me) = me
-    fromValue _ _ = error "fromValue Uninterp"
-
 instance IsValue CryptolModule where
     toValue _name m = VCryptolModule m
 
@@ -2437,7 +2430,6 @@ primTypes = Map.fromList
   , abstype "Simpset" Current
   , abstype "SkeletonState" Experimental
   , abstype "Theorem" Current
-  , abstype "Uninterp" HideDeprecated
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
   ]
@@ -3086,14 +3078,6 @@ primitives = Map.fromList
     , "replaced function."
     ]
 
-  , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
-    (pureVal sbvUninterpreted)
-    HideDeprecated
-    [ "Indicate that the given term should be used as the definition of the"
-    , "named function when loading an SBV file. This command returns an"
-    , "object that can be passed to 'read_sbv'."
-    ]
-
   , prim "is_convertible"  "Term -> Term -> TopLevel Bool"
     (pureVal isConvertiblePrim)
     Current
@@ -3120,13 +3104,6 @@ primitives = Map.fromList
     (pureVal readBytes)
     Current
     [ "Read binary file as a value of type [n][8]." ]
-
-  , prim "read_sbv"            "String -> [Uninterp] -> TopLevel Term"
-    (pureVal readSBV)
-    HideDeprecated
-    [ "Read an SBV file produced by Cryptol 1, using the given set of"
-    , "overrides for any uninterpreted functions that appear in the file."
-    ]
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)

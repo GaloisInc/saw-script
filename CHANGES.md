@@ -174,6 +174,9 @@ support compositional verification using techniques similar to SAW.
 
 ## Deprecations
 
+* The long-deprecated builtins `sbv_uninterpreted`, `read_sbv`, and their
+  type `Uninterp` have been, finally, removed.
+
 * The `env` primitive has been marked deprecated. Use the `:env` REPL
   command (or `:search`, which is typically more effective) instead.
 

@@ -5,5 +5,5 @@
 // the thing I picked finally gets removed, just update the reference
 // file accordingly.
 
-typedef t = Uninterp;
+typedef t = HeapsterEnv;
 
