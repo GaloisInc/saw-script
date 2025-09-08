@@ -119,9 +119,13 @@ data InputText = InputText
 -- are for focused modules in the Cryptol REPL) or only public symbols?
 -- Making all symbols visible is useful for verification and code
 -- generation.
+--
+-- NOTE: PublicAndPrivate is specific to SAWScript (Cryptol cannot do such).
 data ImportVisibility
   = OnlyPublic
   | PublicAndPrivate
+  deriving (Eq, Show)
+
 
 -- | The environment for capturing the Cryptol interpreter state as well as the
 --   SAWCore translations and associated state.
@@ -181,12 +185,6 @@ nameMatcher xs =
 
 -- Initialize ------------------------------------------------------------------
 
--- FIXME: Code duplication, these three functions are relatively similar (and last 2 are 85% similar):
---  - initCryptolEnv
---  - loadCryptolModule
---  - importModule
---- TODO: common up the common code.
-
 initCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> IO CryptolEnv
@@ -224,8 +222,11 @@ initCryptolEnv sc = do
   let refMod = T.tcTopEntityToModule refTop
 
   -- Set up reference implementation redirections
+  --  FIXME: Unclear, add some documentation here.
   let refDecls = T.mDecls refMod
   let nms = Set.toList (MI.ifsPublic (TIface.genIfaceNames refMod))
+
+   -- FIXME: assuming we have same "bug" were we to have submodules in prelude. ?
   let refPrims = Map.fromList
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
@@ -281,7 +282,11 @@ ioParseResult res = case res of
   Right a -> return a
   Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e) -- X.throwIO (ParseError e)
 
--- Rename ----------------------------------------------------------------------
+
+-- NamingEnv and Related -------------------------------------------------------
+
+-- | getNamingEnv env - get the full MR.NamingEnv based on all the `eImports`
+--
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
@@ -420,6 +425,24 @@ loadCryptolModule sc primOpts env path = do
     prims <- MB.getPrimMap
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
 
+-- FIXME: Code duplication, these two functions are highly similar
+--  - loadCryptolModule
+--  - importModule
+-- TODO:
+--   - determine if these are correctly (vs. accidentally) dissimilar
+--      - handling prims differently
+--      - returned CryptolEnv's are subtly different for the two.
+--      - import _ as X
+--   - obvious differences
+--      - return of CryptolModule
+--   - common up the common code
+
+-- | loadCryptolModule - load a cryptol module and return a handle to
+-- the `CryptolModule`.  The contents of the module are not imported.
+--
+-- This is used to implement the "cryptol_load" primitive in which a
+-- handle to the module is returned and can be bound to a SAWScript
+-- variable.
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
   let oldModNames = map ME.lmName
