@@ -76,10 +76,16 @@ tgt_build() {
     #   - .github/workflows/ci.yml
     #   - doc/developer/developer.md
     #   - and of course the definitions in the *.cabal files
+    #
+    # Note that although we don't include the cryptol-remote-api executables in
+    # binary distributions, it is nevertheless worthwhile to build them here to
+    # ensure that they are compatible with the particular submodule commits in
+    # use.
 
     echo "cabal build $JOBSOPT ..."
     cabal build $JOBSOPT \
-                exe:cryptol exe:saw exe:saw-remote-api \
+                exe:cryptol exe:cryptol-remote-api exe:cryptol-eval-server \
+                exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:crux-mir-comp-tests \

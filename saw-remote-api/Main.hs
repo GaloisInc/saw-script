@@ -2,10 +2,14 @@
 module Main (main) where
 
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
+import Options.Applicative
+    ( Parser, help, hidden, infoOption, long, short )
 
 import qualified Argo
-import qualified Argo.DefaultMain as Argo (defaultMain)
+import qualified Argo.DefaultMain as Argo (customMain, parseNoOpts)
 import qualified Argo.Doc as Doc
+
+import SAWVersion.Version (shortVersionText)
 
 import SAWServer.SAWServer ( SAWState, initialState )
 import SAWServer.ClearState
@@ -66,7 +70,25 @@ main = do
                Argo.MutableState)
                initialState
                sawMethods
-  Argo.defaultMain description theApp
+  Argo.customMain
+    Argo.parseNoOpts
+    Argo.parseNoOpts
+    Argo.parseNoOpts
+    Argo.parseNoOpts
+    versionParser
+    description
+    (const (pure theApp))
+
+-- | Display the version number when the @--version@/@-v@ option is supplied.
+versionParser :: Parser (a -> a)
+versionParser =
+  infoOption shortVersionText $
+  mconcat
+    [ long "version"
+    , short 'v'
+    , help "Display version number"
+    , hidden
+    ]
 
 serverDocs :: [Doc.Block]
 serverDocs =
