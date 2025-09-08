@@ -508,15 +508,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Right",       mapsToExpl datatypesModule "inr")
   ]
 
-  -- Dependent pairs
-  ++
-  [ ("Sigma", replace (Coq.ExplVar "sigT"))
-  , ("exists", replace (Coq.ExplVar "existT"))
-  , ("Sigma__rec", replace (Coq.ExplVar "sigT_rect"))
-  , ("Sigma_proj1", replace (Coq.ExplVar "projT1"))
-  , ("Sigma_proj2", replace (Coq.ExplVar "projT2"))
-  ]
-
   -- Lists
   ++
   [ ("List", mapsToExpl datatypesModule "list")
@@ -524,16 +515,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Cons", mapsToExpl datatypesModule "cons")
   , ("List__rec", mapsToExpl datatypesModule "list_rect")
   ]
-
-  -- Lists at sort 1
-  {- FIXME: in order to support lists at a higher sort, we need a universe
-     polymorphic version of them
-  ++
-  [ ("List1", mapsToExpl polyListModule "plist")
-  , ("Nil1", mapsToExpl polyListModule "pnil")
-  , ("Cons1", mapsToExpl polyListModule "pcons")
-  ]
-  -}
 
 escapeIdent :: Coq.Ident -> Coq.Ident
 escapeIdent (Coq.Ident str)
