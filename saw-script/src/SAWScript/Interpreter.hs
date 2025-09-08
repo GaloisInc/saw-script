@@ -2411,7 +2411,7 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "HeapsterEnv" HideDeprecated
+  , abstype "HeapsterEnv" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "JVMSetup" Current
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
@@ -2424,7 +2424,7 @@ primTypes = Map.fromList
   , abstype "MIRValue" Experimental
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
-  , abstype "Refnset" HideDeprecated
+  , abstype "Refnset" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "SatResult" Current
   , abstype "SetupValue" Current
   , abstype "Simpset" Current
@@ -2829,7 +2829,10 @@ primitives = Map.fromList
     (pureVal envCmd)
     WarnDeprecated
     [ "Print all sawscript values in scope."
-    , "Deprecated; use the :env REPL command instead." ]
+    , "Deprecated; use the :env REPL command instead."
+    , ""
+    , "Expected to be hidden by default in SAW 1.5."
+    ]
 
   , prim "set_ascii"           "Bool -> TopLevel ()"
     (pureVal set_ascii)
@@ -3266,6 +3269,8 @@ primitives = Map.fromList
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
     , "The fourth argument is a list of identifiers to skip translating."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
@@ -4147,6 +4152,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Add an arbitrary equality term to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimp` instead."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
@@ -4154,6 +4161,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Add arbitrary equality terms to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimps` instead."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
@@ -4347,6 +4356,8 @@ primitives = Map.fromList
     WarnDeprecated
     [ "Legacy alternative name for `llvm_alias`."
     , "If you are trying to create a struct type from its contents, you want llvm_struct_type."
+    , ""
+    , "Expected to be hidden by default in SAW 1.5."
     ]
 
   , prim "llvm_pointer"        "LLVMType -> LLVMType"
@@ -5425,6 +5436,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   -- Ghost state support
@@ -6304,41 +6317,62 @@ primitives = Map.fromList
     HideDeprecated
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
     , " 1 = basic debug output, 2 = verbose debug output,"
-    , " 3 = all debug output" ]
+    , " 3 = all debug output"
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebugDepth)
     HideDeprecated
     [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
-    , "and debug output to a maximum depth" ]
+    , "and debug output to a maximum depth."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "mrsolver" "ProofScript ()"
     (pureVal (mrSolver emptyRefnset))
     HideDeprecated
     [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
-    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`"
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "empty_rs"            "Refnset"
     (pureVal (emptyRefnset :: SAWRefnset))
     HideDeprecated
-    [ "The empty refinement set, containing no refinements." ]
+    [ "The empty refinement set, containing no refinements."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "addrefn"             "Theorem -> Refnset -> Refnset"
     (funVal2 addrefn)
     HideDeprecated
-    [ "Add a proved refinement theorem to a given refinement set." ]
+    [ "Add a proved refinement theorem to a given refinement set."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
     (funVal2 addrefns)
     HideDeprecated
-    [ "Add proved refinement theorems to a given refinement set." ]
+    [ "Add proved refinement theorems to a given refinement set."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "mrsolver_with" "Refnset -> ProofScript ()"
     (pureVal mrSolver)
     HideDeprecated
     [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
     , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
-    , " the given set of refinements taken as assumptions" ]
+    , " the given set of refinements taken as assumptions"
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "refines" "[Term] -> Term -> Term -> Term"
     (funVal3 refinesTerm)
@@ -6347,7 +6381,10 @@ primitives = Map.fromList
     , " as as well as two terms containing those variables, which may be"
     , " either terms or functions in the SpecM monad, construct the"
     , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
-    , " given terms, with the given variables generalized with a Pi type." ]
+    , " given terms, with the given variables generalized with a Pi type."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
     ----------------------------------------
     -- Heapster commands
@@ -6356,7 +6393,10 @@ primitives = Map.fromList
     (scVal monadifyTypedTerm)
     HideDeprecated
     [ "Monadify a Cryptol term, converting it to a form where all recursion"
-    , " and errors are represented as monadic operators"]
+    , " and errors are represented as monadic operators"
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "set_monadification" "String -> String -> Bool -> TopLevel ()"
     (scVal setMonadification)
@@ -6364,7 +6404,10 @@ primitives = Map.fromList
     [ "Set the monadification of a specific Cryptol identifer to a SAW core "
     , "identifier of monadic type. The supplied Boolean flag indicates if the "
     , "SAW core term is polymorphic in the event type and function stack of the"
-    , "SpecM monad."]
+    , "SpecM monad."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"
@@ -6372,6 +6415,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_init_env_debug"
@@ -6380,6 +6425,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Create a new Heapster environment with the given SAW module name"
     , " from the named LLVM bitcode file with debug tracing turned on"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_init_env_from_file"
@@ -6388,6 +6435,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_init_env_from_file_debug"
@@ -6397,6 +6446,8 @@ primitives = Map.fromList
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file, with debug"
     , " tracing turned on"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "load_sawcore_from_file"
@@ -6412,6 +6463,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_init_env_for_files_debug"
@@ -6421,6 +6474,8 @@ primitives = Map.fromList
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file, with debug"
     , " tracing turned on"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_get_cfg"
@@ -6429,6 +6484,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Extract out the Crucible CFG associated with a symbol in a"
     , " Heapster environemnt"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_opaque_perm"
@@ -6438,6 +6495,8 @@ primitives = Map.fromList
     [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
     , " Heapster permission named nm with arguments parsed from args and type"
     , " tp that translates to the SAW core type trans with type description d"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_recursive_perm"
@@ -6448,6 +6507,8 @@ primitives = Map.fromList
     , " Heapster permission named nm with arguments parsed from args_ctx and"
     , " type parsed from tp that translates to permissions p, which can"
     , " resurively use nm (with no arguments) in those permissions"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_reachability_perm"
@@ -6461,6 +6522,8 @@ primitives = Map.fromList
     , " have the form eq(x) or q for some permission q, where x is the last"
     , " argument argument in arg_ctx and q can contain nm with no arguments to"
     , " refer to the entire permission recursively."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_recursive_shape"
@@ -6471,6 +6534,8 @@ primitives = Map.fromList
     , " defines a recursive named Heapser shape named nm with arguments"
     , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
     , " whichx can contain name for recursive occurrences of the shape"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_perm"
@@ -6480,6 +6545,8 @@ primitives = Map.fromList
     [ "heapster_define_perm nm args tp p defines a Heapster permission named"
     , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
     , " such that nm<x1,...,xn> is equivalent to the permission p."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_llvmshape"
@@ -6489,6 +6556,8 @@ primitives = Map.fromList
     [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
     , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
     , " such that nm<x1,...,xn> is equivalent to the permission p."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_opaque_llvmshape"
@@ -6507,6 +6576,8 @@ primitives = Map.fromList
     , " tp gives the translation of the shape as a SAW core type over the"
     , " translation of the arguments to SAW core variables, and d is a SAW core"
     , " term of type TpDesc that describes the SAW core type."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_rust_type"
@@ -6515,6 +6586,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
     , "a string representing a top-level struct or enum definition."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_define_rust_type_qual"
@@ -6525,6 +6598,8 @@ primitives = Map.fromList
     , " shape from tp, a string representing a top-level Rust struct or enum"
     , " definition. The type is qualified by crate, meaning that \"crate::\""
     , " is prepended to its name."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_block_entry_hint"
@@ -6535,7 +6610,9 @@ primitives = Map.fromList
     , " to the Heapster type-checker that Crucible block number block in nm"
     , " should have permissions perms on its inputs, assuming that top_args"
     , " lists the top-level ghost and normal arguments to function nm and"
-    , " ghosts gives the ghost arguments to block"
+    , " ghosts gives the ghost arguments to block."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_gen_block_perms_hint"
@@ -6547,6 +6624,8 @@ primitives = Map.fromList
     , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
     , " given Crucible blocks numbers. If the given list is empty, do so for"
     , " every block in the CFG."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_join_point_hint"
@@ -6558,6 +6637,8 @@ primitives = Map.fromList
     , " meaning that all entries to the given blocks are merged into a single"
     , " entrypoint, whose permissions are given by the first call to the block."
     , " If the given list is empty, do so for every block in the CFG."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_find_symbol"
@@ -6567,6 +6648,8 @@ primitives = Map.fromList
     [ "Search for a symbol in any module contained in a HeapsterEnv that"
     , " contains the supplied string as a substring. Raise an error if there"
     , " is not exactly one such symbol"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_find_symbols"
@@ -6574,7 +6657,9 @@ primitives = Map.fromList
     (bicVal heapster_find_symbols)
     HideDeprecated
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
-    , " contain the supplied string as a substring"
+    , " contain the supplied string as a substring."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_find_symbol_with_type"
@@ -6584,6 +6669,8 @@ primitives = Map.fromList
     [ "Search for a symbol in any module contained in a HeapsterEnv that"
     , " contains the supplied string as a substring and that has the specified"
     , " LLVM type. Raise an error if there is not exactly one such symbol."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_find_symbols_with_type"
@@ -6592,7 +6679,9 @@ primitives = Map.fromList
     HideDeprecated
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
     , " contain the supplied string as a substring and that have the specified"
-    , " LLVM type"
+    , " LLVM type."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_find_symbol_commands"
@@ -6601,7 +6690,10 @@ primitives = Map.fromList
     HideDeprecated
     [ "Map a search string str to a newline-separated sequence of SAW-script "
     , " commands \"heapster_find_symbol_with_type str tp\", one for each LLVM "
-    , " type tp associated with a symbol whose name contains str" ]
+    , " type tp associated with a symbol whose name contains str"
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "heapster_find_trait_method_symbol"
     "HeapsterEnv -> String -> TopLevel String"
@@ -6611,6 +6703,8 @@ primitives = Map.fromList
     , "corresponds to the given trait method implementation. The search"
     , "string should be of the form: trait::method<type>, e.g."
     , "core::fmt::Debug::fmt<Foo>"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_assume_fun"
@@ -6618,7 +6712,9 @@ primitives = Map.fromList
     (bicVal heapster_assume_fun)
     HideDeprecated
     [ "heapster_assume_fun env nm perms trans assumes that function nm has"
-    , " permissions perms and translates to the SAW core term trans"
+    , " permissions perms and translates to the SAW core term trans."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_assume_fun_rename"
@@ -6628,6 +6724,8 @@ primitives = Map.fromList
     [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_assume_fun_rename_prim"
@@ -6637,6 +6735,8 @@ primitives = Map.fromList
     [
       "heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm"
     , " has permissions perms as a primitive."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_assume_fun_multi"
@@ -6646,6 +6746,8 @@ primitives = Map.fromList
     [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
     , " nm can be typed with 0 or more permissions, each with the corresponding"
     , " translation to SAW core"
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_typecheck_fun"
@@ -6654,6 +6756,8 @@ primitives = Map.fromList
     HideDeprecated
     [ "Translate an LLVM function to a SAW core term using Heapster"
     , " type-checking, and store the result in the current Heapster SAW module."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_typecheck_fun_rename"
@@ -6663,6 +6767,8 @@ primitives = Map.fromList
     [ "Translate the LLVM function named by the first String to a SAW core term"
     , " using Heapster type-checking, and store the result in the current"
     , " Heapster SAW module as a definition named with the second string."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_typecheck_mut_funs"
@@ -6672,6 +6778,8 @@ primitives = Map.fromList
     [ "Translate a set of mutually recursive LLVM function to a set of SAW "
     , "core terms using Heapster type-checking. Store the results in the "
     , "current Heapster SAW module."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_set_event_type"
@@ -6682,6 +6790,8 @@ primitives = Map.fromList
     , "core term of type EvType. It is recommended that this is done at most "
     , "once in a SAW script, at the beginning, because changing the event type "
     , "yields incompatible specifications."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_print_fun_trans"
@@ -6689,40 +6799,55 @@ primitives = Map.fromList
     (bicVal heapster_print_fun_trans)
     HideDeprecated
     [ "Print the translation to SAW of a function that has been type-checked."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_export_coq"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal do_heapster_export_coq)
     HideDeprecated
-    [ "Export a Heapster environment to a Coq file" ]
+    [ "Export a Heapster environment to a Coq file."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "heapster_set_debug_level"
     "HeapsterEnv -> Int -> TopLevel ()"
     (bicVal heapster_set_debug_level)
     HideDeprecated
-    [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output" ]
+    [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "heapster_set_translation_checks"
     "HeapsterEnv -> Bool -> TopLevel ()"
     (bicVal heapster_set_translation_checks)
     HideDeprecated
     [ "Tell Heapster whether to perform its translation-time checks of the "
-    , "well-formedness of type-checking proofs" ]
+    , "well-formedness of type-checking proofs."
+    , ""
+    , "Expected to be removed in SAW 1.5."
+    ]
 
   , prim "heapster_trans_rust_type"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_translate_rust_type)
     HideDeprecated
-    [ "Parse a Rust function type and print the equivalent Heapser type. "
-    , "Ideal for learning how Rust types are translated into Heapster. "
+    [ "Parse a Rust function type and print the equivalent Heapser type."
+    , "Ideal for learning how Rust types are translated into Heapster."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
     HideDeprecated
-    [ "Parse and print back a set of Heapster permissions for a function"
+    [ "Parse and print back a set of Heapster permissions for a function."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "heapster_dump_ide_info"
@@ -6730,6 +6855,8 @@ primitives = Map.fromList
     (bicVal do_heapster_dump_ide_info)
     HideDeprecated
     [ "Dump environment info to a JSON file for IDE integration."
+    , ""
+    , "Expected to be removed in SAW 1.5."
     ]
 
     ----------------------------------------

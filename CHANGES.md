@@ -176,6 +176,9 @@ support compositional verification using techniques similar to SAW.
 
 * The long-deprecated builtins `sbv_uninterpreted`, `read_sbv`, and their
   type `Uninterp` have been, finally, removed.
+  The deprecated builtins `addsimp'`, `addsimps'`, and
+  `crucible_setup_val_to_typed_term` remain for now but will be removed in
+  the next release.
 
 * The `env` primitive has been marked deprecated. Use the `:env` REPL
   command (or `:search`, which is typically more effective) instead.
