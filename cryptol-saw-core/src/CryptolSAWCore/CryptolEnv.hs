@@ -450,21 +450,19 @@ loadCryptolModule sc env path = do
   let oldModNames = map ME.lmName
                   $ ME.lmLoadedModules
                   $ ME.meLoadedModules modEnv
-
-  let isNew m'    = T.mName m' `notElem` oldModNames
-  let newModules  = filter isNew
+      isNew m'    = T.mName m' `notElem` oldModNames
+      newModules  = filter isNew
                   $ map ME.lmModule
                   $ ME.lmLoadedModules
                   $ ME.meLoadedModules modEnv''
-
-  let newDeclGroups = concatMap T.mDecls newModules
-  let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+      newDeclGroups = concatMap T.mDecls newModules
+      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
                                      (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
     do cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups
-                     sc  C.defaultPrimitiveOptions cEnv newDeclGroups
+                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
        return (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
@@ -537,8 +535,13 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 extractDefFromCryptolModule :: CryptolModule -> Text -> IO TypedTerm
 extractDefFromCryptolModule (CryptolModule _ tm) name =
   case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
+    Just t  -> return t
     Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
-    Just t -> return t
+               -- FIXME: unfortunate we have lost the name of the module.
+
+    -- FIXME: bug: we can't access definitions in submodules.
+    -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
+
 
 --------------------------------------------------------------------------------
 
@@ -553,15 +556,15 @@ importModule ::
   IO CryptolEnv
 importModule sc env src as vis imps = do
   let modEnv = eModuleEnv env
-  (mtop, modEnv') <-
-    liftModuleM modEnv $
+  (mtop, modEnv') <- liftModuleM modEnv $
     case src of
       Left path -> MB.loadModuleByPath True path
-      Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
+      Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
   m <- case mtop of
-         T.TCTopModule m -> pure m
+         T.TCTopModule mod'  -> pure mod'
          T.TCTopSignature {} ->
-            fail "Expected a module but found an interface."
+           fail "Expected a module but found an interface."
+
   checkNotParameterized m
 
   -- Regenerate SharedTerm environment.
@@ -569,13 +572,13 @@ importModule sc env src as vis imps = do
   let oldModNames   = map ME.lmName
                     $ ME.lmLoadedModules
                     $ ME.meLoadedModules modEnv
-  let isNew m'      = T.mName m' `notElem` oldModNames
-  let newModules    = filter isNew
+      isNew m'      = T.mName m' `notElem` oldModNames
+      newModules    = filter isNew
                     $ map ME.lmModule
                     $ ME.lmLoadedModules
                     $ ME.meLoadedModules modEnv'
-  let newDeclGroups = concatMap T.mDecls newModules
-  let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+      newDeclGroups = concatMap T.mDecls newModules
+      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
                                      (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
