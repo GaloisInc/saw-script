@@ -5,11 +5,11 @@ print (get_nopts());
 // arguments so we can't get them.
 print (get_opt 0);
 //print (get_opt 1);
-// XXX: fails does not successfully trap this failure (see #2424)
-//fails (return (print (get_opt 2)));
+// Note: need a do-block to trap the failure (see #2424)
+fails (do { return (print (get_opt 2)); });
 print (get_env "SAW_TEST_ENV");
-// XXX: fails does not successfully trap this failure either
-//fails (get_env "SAW_MISSING_ENV");
+// Note: need a do-block to trap the failure (see #2424)
+fails (do { return (get_env "SAW_MISSING_ENV"); });
 
 // now check show
 print (false, show false);

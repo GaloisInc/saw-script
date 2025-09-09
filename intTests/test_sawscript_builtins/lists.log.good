@@ -5,12 +5,44 @@
  nth:
  (1,1)
  (4,4)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in nth
+   lists.saw:11:21-11:36 in (callback)
+   (builtin) in fails
+   lists.saw:11:1-11:40 (at top level)
+nth: index too large
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in nth
+   lists.saw:12:21-12:29 in (callback)
+   (builtin) in fails
+   lists.saw:12:1-12:33 (at top level)
+nth: index too large
+
  head:
  (1,1)
  (3,3)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in head
+   lists.saw:18:21-18:28 in (callback)
+   (builtin) in fails
+   lists.saw:18:1-18:32 (at top level)
+head: empty list
+
  tail:
  ([],[])
  ([4,5],[4,5])
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in tail
+   lists.saw:24:21-24:28 in (callback)
+   (builtin) in fails
+   lists.saw:24:1-24:32 (at top level)
+tail: empty list
+
  length
  (0,0)
  (1,1)

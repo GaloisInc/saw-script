@@ -4551,6 +4551,10 @@ primitives = Map.fromList
     , "if the inner action does NOT raise an exception. This is primarily used"
     , "for unit testing purposes, to ensure that we can elicit expected"
     , "failing behaviors."
+    , ""
+    , "Note: to catch a failure that occurs in non-monadic code, you must wrap"
+    , "the non-monadic code in a do-block; otherwise it will be evaluated before"
+    , "fails runs."
     ]
 
   , prim "time"                "{a} TopLevel a -> TopLevel a"
