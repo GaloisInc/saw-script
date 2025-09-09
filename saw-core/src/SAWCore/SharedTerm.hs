@@ -23,7 +23,6 @@ Portability : non-portable (language extensions)
 
 module SAWCore.SharedTerm
   ( TermF(..)
-  , Uninterp(..)
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
@@ -347,8 +346,6 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.Unique
-
-newtype Uninterp = Uninterp { getUninterp :: (String, Term) } deriving Show
 
 ------------------------------------------------------------
 -- TermFMaps

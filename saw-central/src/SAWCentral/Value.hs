@@ -580,7 +580,6 @@ data Value
   | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
-  | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
@@ -757,7 +756,6 @@ showsPrecValue opts nenv p v =
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
-    VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
     VCFG (LLVM_CFG g) -> showString (show g)
     VCFG (JVM_CFG g) -> showString (show g)

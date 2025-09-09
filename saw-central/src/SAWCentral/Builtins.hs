@@ -22,7 +22,7 @@ Stability   : provisional
 module SAWCentral.Builtins where
 
 import Control.Lens (view)
-import Control.Monad (foldM, forM, unless, when)
+import Control.Monad (foldM, forM, unless)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (asks)
@@ -118,14 +118,12 @@ import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
-import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
+import qualified Cryptol.Utils.Ident as C (packModName,
                                            textToModName, PrimIdent(..))
-import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 -- crucible
 import Lang.Crucible.CFG.Common (freshGlobalVar)
 
-import qualified SAWCentral.SBVParser as SBV
 import SAWCentral.ImportAIG
 
 import SAWCentral.AST (getVal, Located(..))
@@ -170,9 +168,6 @@ definePrim _name (TypedTerm tp _) =
     , show (ppTypedTermType tp)
     ]
 
-sbvUninterpreted :: Text -> Term -> TopLevel Uninterp
-sbvUninterpreted s t = return $ Uninterp (Text.unpack s, t)
-
 readBytes :: Text -> TopLevel TypedTerm
 readBytes pathtxt = do
   let path :: FilePath = Text.unpack pathtxt
@@ -185,34 +180,6 @@ readBytes pathtxt = do
   trm <- io $ scVector sc e xs
   let schema = C.Forall [] [] (C.tSeq (C.tNum len) (C.tSeq (C.tNum (8::Int)) C.tBit))
   return (TypedTerm (TypedTermSchema schema) trm)
-
-readSBV :: Text -> [Uninterp] -> TopLevel TypedTerm
-readSBV pathtxt unintlst = do
-       let path = Text.unpack pathtxt
-       sc <- getSharedContext
-       opts <- getOptions
-       pgm <- io $ SBV.loadSBV path
-       let schema = C.Forall [] [] (toCType (SBV.typOf pgm))
-       trm <- io $ SBV.parseSBVPgm opts sc (\s _ -> Map.lookup s unintmap) pgm
-       when (extraChecks opts) $ do
-         tcr <- io $ scTypeCheck sc Nothing trm
-         case tcr of
-           Left err ->
-             printOutLnTop Error $ unlines $
-             ("Type error reading " ++ path ++ ":") : prettyTCError err
-           Right _ -> return () -- TODO: check that it matches 'schema'?
-       return (TypedTerm (TypedTermSchema schema) trm)
-    where
-      unintmap = Map.fromList $ map getUninterp unintlst
-
-      toCType :: SBV.Typ -> C.Type
-      toCType typ =
-        case typ of
-          SBV.TBool      -> C.tBit
-          SBV.TFun t1 t2 -> C.tFun (toCType t1) (toCType t2)
-          SBV.TVec n t   -> C.tSeq (C.tNum n) (toCType t)
-          SBV.TTuple ts  -> C.tTuple (map toCType ts)
-          SBV.TRecord bs -> C.tRec (C.recordFromFields [ (C.mkIdent n, toCType t) | (n, t) <- bs ])
 
 
 
