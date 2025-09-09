@@ -2,6 +2,9 @@
 
 ## next -- TBA
 
+* Require urllib 2.5.0 or later to avoid a security alert.
+  This in turn requires Python 3.9, so Python 3.8 is no longer supported.
+
 * Add a `alloc_global(name)` method to `Contract`, which declares that the
   memory for the mutable global with the name `name` should be allocated. This
   function can only be used with LLVM verification, and attempting to use this
