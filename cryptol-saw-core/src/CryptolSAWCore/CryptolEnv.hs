@@ -289,17 +289,37 @@ ioParseResult res = case res of
 --
 
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
-getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
+getNamingEnv env =
+  eExtraNames env
+  `MR.shadowing`
+  (mconcat $ map
+               (importToNamingEnv (eModuleEnv env))
+               (eImports env)
+  )
+
+importToNamingEnv :: ME.ModuleEnv
+                  -> (ImportVisibility, T.Import)
+                  -> MR.NamingEnv
+importToNamingEnv modEnv (vis,imprt) =
+    MN.interpImportEnv imprt -- adjust for qualified imports
+  $ adjustVisible            -- adjust if OnlyPublic names
+  $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
+
   where
-    nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
-    loadImport (vis, i) = do
-      lm <- ME.lookupModule (P.thing $ T.iModule i) (eModuleEnv env)
-      let ifc = MI.ifNames (ME.lmInterface lm)
-          syms = MN.namingEnvFromNames $
-                 case vis of
-                   OnlyPublic       -> MI.ifsPublic ifc
-                   PublicAndPrivate -> MI.ifsDefines ifc
-      return $ MN.interpImportEnv i syms
+  mctx = modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
+
+  adjustVisible = case vis of
+    PublicAndPrivate -> id
+    OnlyPublic       ->
+      \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
+
+  modContextOf' fm =
+    case ME.modContextOf fm modEnv of
+      Just c  -> c
+      Nothing -> panic "getNamingEnv"
+                   ["expecting module to be loaded: "
+                    <> Text.pack (show (pp fm))]
+
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me =
