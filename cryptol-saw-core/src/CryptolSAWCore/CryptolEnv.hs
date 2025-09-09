@@ -489,10 +489,9 @@ loadCryptolModule sc env path = do
 updateFFITypes :: T.Module -> CryptolEnv -> CryptolEnv
 updateFFITypes m env = env { eFFITypes = eFFITypes' }
   where
-  eFFITypes' = foldr
-    (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
-    (eFFITypes env)
-    (T.findForeignDecls m)
+  eFFITypes' = foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
+                     (eFFITypes env)
+                     (T.findForeignDecls m)
   getNameInfo nm =
     case Map.lookup nm (eTermEnv env) of
       Just tm ->
@@ -509,6 +508,13 @@ updateFFITypes m env = env { eFFITypes = eFFITypes' }
             "Cannot find foreign function in term environment: " <> Text.pack (show nm)
         ]
 
+-- | bindCryptolModule - ad hoc function called when we do `D <-cryptol_load`
+--     on the command line.
+--
+--   FIXME:
+--    - submodules are not handled correctly below.
+--    - the code is duplicating functionality that we have with imports.
+--
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
@@ -518,10 +524,11 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
       , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
       }
   where
-    -- select out those typed terms that have Cryptol schemas
+    -- select out those typed terms from `tm' that have Cryptol schemas
     tm' = Map.mapMaybe f tm
-    f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
-    f _ = Nothing
+          where
+          f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
+          f _                                 = Nothing
 
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
@@ -595,13 +602,18 @@ bindIdent ident env = (name, env')
     modEnv = eModuleEnv env
     supply = ME.meSupply modEnv
     fixity = Nothing
-    (name, supply') = MN.mkDeclared C.NSValue (C.TopModule interactiveName) MN.UserName ident fixity P.emptyRange supply
+    (name, supply') = MN.mkDeclared
+                        C.NSValue
+                        (C.TopModule interactiveName)
+                        MN.UserName
+                        ident fixity P.emptyRange supply
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
 bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSValue pname name) (eExtraNames env)
+  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSValue pname name)
+                                    (eExtraNames env)
        , eExtraTypes = Map.insert name schema (eExtraTypes env)
        , eTermEnv    = Map.insert name trm (eTermEnv env)
        }
@@ -640,14 +652,17 @@ meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
 meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 
 resolveIdentifier ::
-  (?fileReader :: FilePath -> IO ByteString) =>
+  (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> Text -> IO (Maybe T.Name)
 resolveIdentifier env nm =
   case splitOn (pack "::") nm of
     []  -> pure Nothing
+           -- FIXME: shouldn't this be error?
     [i] -> doResolve (P.UnQual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
-            in doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
+           in  doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
+    -- FIXME: Is there no function that parses Text into PName?
+
   where
   modEnv = eModuleEnv env
   nameEnv = getNamingEnv env
@@ -686,13 +701,13 @@ pExprToTypedTerm sc env pexpr = do
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
 
-    -- Eliminate patterns
+    -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
-    -- Resolve names
     let nameEnv = getNamingEnv env
-
-    re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
+    let npe' = MR.rename npe
+    re <- MM.interactive (MB.rename interactiveName nameEnv npe')
+      -- NOTE: if a Value not in scope, reported here.
 
     -- Infer types
     let ifDecls = getAllIfaceDecls modEnv
