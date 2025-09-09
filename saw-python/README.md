@@ -33,7 +33,7 @@ $ docker run --name=saw-remote-api -d \
   galoisinc/saw-remote-api:nightly
 $ export SAW_SERVER_URL="http://localhost:8080/"
 ```
-6. Install the Python client (requires Python v3.8 or newer -- we recommend using [`poetry`](https://python-poetry.org/docs/#installation) to install the package):
+6. Install the Python client (requires Python v3.9 or newer -- we recommend using [`poetry`](https://python-poetry.org/docs/#installation) to install the package):
 ```
 $ poetry install 
 ```
@@ -156,7 +156,7 @@ configured properly) should then appear as `saw-remote-api` in a user's `PATH`.
 # Running Python SAW verification scripts
 
 Once the server is setup and any path variables are setup as desired, the
-Python (>= v3.8) client can be installed using
+Python (>= v3.9) client can be installed using
 [`poetry`](https://python-poetry.org/docs/#installation) as follows:
 
 ```
