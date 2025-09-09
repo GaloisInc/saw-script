@@ -2437,7 +2437,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2418 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;FunctionProfile&quot; <span class="nottickedoff">Experimental</span></span>
 <span class="lineno"> 2419 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;FunctionSkeleton&quot; <span class="nottickedoff">Experimental</span></span>
 <span class="lineno"> 2420 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;Ghost&quot; Current</span>
-<span class="lineno"> 2421 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;HeapsterEnv&quot; <span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 2421 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;HeapsterEnv&quot; <span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 2422 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;JVMSetup&quot; Current</span>
 <span class="lineno"> 2423 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;JVMValue&quot; Current</span>
 <span class="lineno"> 2424 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;JavaClass&quot; Current</span>
@@ -2450,7 +2450,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2431 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;MIRValue&quot; Experimental</span>
 <span class="lineno"> 2432 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;ModuleSkeleton&quot; <span class="nottickedoff">Experimental</span></span>
 <span class="lineno"> 2433 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;ProofResult&quot; Current</span>
-<span class="lineno"> 2434 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;Refnset&quot; <span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 2434 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;Refnset&quot; <span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 2435 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;SatResult&quot; Current</span>
 <span class="lineno"> 2436 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;SetupValue&quot; Current</span>
 <span class="lineno"> 2437 </span><span class="spaces">  </span><span class="istickedoff">, abstype &quot;Simpset&quot; Current</span>
@@ -3297,7 +3297,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3278 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3279 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;write_coq_cryptol_module_monadic&quot; &quot;String -&gt; String -&gt; [(String, String)] -&gt; [String] -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 3280 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal (do_write_coq_cryptol_module True))</span></span>
-<span class="lineno"> 3281 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 3281 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 3282 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Write out a representation of a Cryptol module in Gallina syntax for&quot;</span></span>
 <span class="lineno"> 3283 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Coq, using the monadified version of the given module.&quot;</span></span>
 <span class="lineno"> 3284 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The first argument is the file containing the module to export.&quot;</span></span>
@@ -6342,48 +6342,48 @@ span.spaces    { background: white }
 <span class="lineno"> 6323 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6324 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mrsolver_set_debug_level&quot; &quot;Int -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6325 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mrSolverSetDebug)</span></span>
-<span class="lineno"> 6326 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6326 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6327 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Set the debug level for Mr. Solver; 0 = no debug output,&quot;</span></span>
 <span class="lineno"> 6328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; 1 = basic debug output, 2 = verbose debug output,&quot;</span></span>
 <span class="lineno"> 6329 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; 3 = all debug output&quot; ]</span></span>
 <span class="lineno"> 6330 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6331 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mrsolver_set_debug_printing_depth&quot; &quot;Int -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6332 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mrSolverSetDebugDepth)</span></span>
-<span class="lineno"> 6333 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6333 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6334 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Limit the printing of terms in all subsequent Mr. Solver error messages&quot;</span></span>
 <span class="lineno"> 6335 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;and debug output to a maximum depth&quot; ]</span></span>
 <span class="lineno"> 6336 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6337 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mrsolver&quot; &quot;ProofScript ()&quot;</span>
 <span class="lineno"> 6338 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal (mrSolver emptyRefnset))</span></span>
-<span class="lineno"> 6339 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6339 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6340 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use MRSolver to prove a current refinement goal, i.e. a goal of&quot;</span></span>
 <span class="lineno"> 6341 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; the form `(a1:A1) -&gt; ... -&gt; (an:An) -&gt; refinesS_eq ...`&quot; ]</span></span>
 <span class="lineno"> 6342 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6343 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;empty_rs&quot;            &quot;Refnset&quot;</span>
 <span class="lineno"> 6344 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal (emptyRefnset :: SAWRefnset))</span></span>
-<span class="lineno"> 6345 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6345 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6346 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The empty refinement set, containing no refinements.&quot; ]</span></span>
 <span class="lineno"> 6347 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6348 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;addrefn&quot;             &quot;Theorem -&gt; Refnset -&gt; Refnset&quot;</span>
 <span class="lineno"> 6349 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal2 addrefn)</span></span>
-<span class="lineno"> 6350 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6350 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Add a proved refinement theorem to a given refinement set.&quot; ]</span></span>
 <span class="lineno"> 6352 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6353 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;addrefns&quot;            &quot;[Theorem] -&gt; Refnset -&gt; Refnset&quot;</span>
 <span class="lineno"> 6354 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal2 addrefns)</span></span>
-<span class="lineno"> 6355 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6355 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6356 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Add proved refinement theorems to a given refinement set.&quot; ]</span></span>
 <span class="lineno"> 6357 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6358 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mrsolver_with&quot; &quot;Refnset -&gt; ProofScript ()&quot;</span>
 <span class="lineno"> 6359 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mrSolver)</span></span>
-<span class="lineno"> 6360 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6360 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6361 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Use MRSolver to prove a current refinement goal, i.e. a goal of&quot;</span></span>
 <span class="lineno"> 6362 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; the form `(a1:A1) -&gt; ... -&gt; (an:An) -&gt; refinesS_eq ...`, with&quot;</span></span>
 <span class="lineno"> 6363 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; the given set of refinements taken as assumptions&quot; ]</span></span>
 <span class="lineno"> 6364 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6365 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;refines&quot; &quot;[Term] -&gt; Term -&gt; Term -&gt; Term&quot;</span>
 <span class="lineno"> 6366 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal3 refinesTerm)</span></span>
-<span class="lineno"> 6367 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6367 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6368 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a list of 'fresh_symbolic' variables over which to quantify&quot;</span></span>
 <span class="lineno"> 6369 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; as as well as two terms containing those variables, which may be&quot;</span></span>
 <span class="lineno"> 6370 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; either terms or functions in the SpecM monad, construct the&quot;</span></span>
@@ -6395,13 +6395,13 @@ span.spaces    { background: white }
 <span class="lineno"> 6376 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6377 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;monadify_term&quot; &quot;Term -&gt; TopLevel Term&quot;</span>
 <span class="lineno"> 6378 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(scVal monadifyTypedTerm)</span></span>
-<span class="lineno"> 6379 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6379 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6380 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Monadify a Cryptol term, converting it to a form where all recursion&quot;</span></span>
 <span class="lineno"> 6381 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; and errors are represented as monadic operators&quot;]</span></span>
 <span class="lineno"> 6382 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6383 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;set_monadification&quot; &quot;String -&gt; String -&gt; Bool -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6384 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(scVal setMonadification)</span></span>
-<span class="lineno"> 6385 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6385 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6386 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Set the monadification of a specific Cryptol identifer to a SAW core &quot;</span></span>
 <span class="lineno"> 6387 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;identifier of monadic type. The supplied Boolean flag indicates if the &quot;</span></span>
 <span class="lineno"> 6388 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;SAW core term is polymorphic in the event type and function stack of the&quot;</span></span>
@@ -6410,7 +6410,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6391 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env&quot;</span>
 <span class="lineno"> 6392 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; String -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6393 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env)</span></span>
-<span class="lineno"> 6394 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6394 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6395 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment with the given SAW module name&quot;</span></span>
 <span class="lineno"> 6396 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; from the named LLVM bitcode file.&quot;</span></span>
 <span class="lineno"> 6397 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6418,7 +6418,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6399 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env_debug&quot;</span>
 <span class="lineno"> 6400 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; String -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6401 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env_debug)</span></span>
-<span class="lineno"> 6402 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6402 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment with the given SAW module name&quot;</span></span>
 <span class="lineno"> 6404 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; from the named LLVM bitcode file with debug tracing turned on&quot;</span></span>
 <span class="lineno"> 6405 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6426,7 +6426,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6407 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env_from_file&quot;</span>
 <span class="lineno"> 6408 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; String -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6409 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env_from_file)</span></span>
-<span class="lineno"> 6410 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6410 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6411 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment from the named LLVM bitcode file,&quot;</span></span>
 <span class="lineno"> 6412 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; initialized with the module in the given SAW core file.&quot;</span></span>
 <span class="lineno"> 6413 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6434,7 +6434,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6415 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env_from_file_debug&quot;</span>
 <span class="lineno"> 6416 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; String -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6417 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env_from_file_debug)</span></span>
-<span class="lineno"> 6418 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6418 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6419 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment from the named LLVM bitcode file,&quot;</span></span>
 <span class="lineno"> 6420 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; initialized with the module in the given SAW core file, with debug&quot;</span></span>
 <span class="lineno"> 6421 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; tracing turned on&quot;</span></span>
@@ -6450,7 +6450,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6431 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env_for_files&quot;</span>
 <span class="lineno"> 6432 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; [String] -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6433 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env_for_files)</span></span>
-<span class="lineno"> 6434 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6434 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6435 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment from the named LLVM bitcode files,&quot;</span></span>
 <span class="lineno"> 6436 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; initialized with the module in the given SAW core file.&quot;</span></span>
 <span class="lineno"> 6437 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6458,7 +6458,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6439 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_init_env_for_files_debug&quot;</span>
 <span class="lineno"> 6440 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; [String] -&gt; TopLevel HeapsterEnv&quot;</span>
 <span class="lineno"> 6441 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_init_env_for_files_debug)</span></span>
-<span class="lineno"> 6442 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6442 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6443 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a new Heapster environment from the named LLVM bitcode files,&quot;</span></span>
 <span class="lineno"> 6444 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; initialized with the module in the given SAW core file, with debug&quot;</span></span>
 <span class="lineno"> 6445 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; tracing turned on&quot;</span></span>
@@ -6467,7 +6467,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6448 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_get_cfg&quot;</span>
 <span class="lineno"> 6449 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel CFG&quot;</span>
 <span class="lineno"> 6450 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_get_cfg)</span></span>
-<span class="lineno"> 6451 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6451 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6452 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Extract out the Crucible CFG associated with a symbol in a&quot;</span></span>
 <span class="lineno"> 6453 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; Heapster environemnt&quot;</span></span>
 <span class="lineno"> 6454 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6475,7 +6475,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6456 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_opaque_perm&quot;</span>
 <span class="lineno"> 6457 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6458 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_opaque_perm)</span></span>
-<span class="lineno"> 6459 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6459 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6460 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_opaque_perm nm args tp trans d defines an opaque named&quot;</span></span>
 <span class="lineno"> 6461 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; Heapster permission named nm with arguments parsed from args and type&quot;</span></span>
 <span class="lineno"> 6462 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; tp that translates to the SAW core type trans with type description d&quot;</span></span>
@@ -6484,7 +6484,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6465 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_recursive_perm&quot;</span>
 <span class="lineno"> 6466 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6467 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_recursive_perm)</span></span>
-<span class="lineno"> 6468 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6468 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6469 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive&quot;</span></span>
 <span class="lineno"> 6470 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; Heapster permission named nm with arguments parsed from args_ctx and&quot;</span></span>
 <span class="lineno"> 6471 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; type parsed from tp that translates to permissions p, which can&quot;</span></span>
@@ -6494,7 +6494,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6475 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_reachability_perm&quot;</span>
 <span class="lineno"> 6476 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6477 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_reachability_perm)</span></span>
-<span class="lineno"> 6478 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6478 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6479 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun&quot;</span></span>
 <span class="lineno"> 6480 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; defines a recursive named Heapster permission named nm with arguments&quot;</span></span>
 <span class="lineno"> 6481 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; parsed from args_ctx and type parsed from value_type that unfolds to p,&quot;</span></span>
@@ -6507,7 +6507,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6488 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_recursive_shape&quot;</span>
 <span class="lineno"> 6489 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; Int -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6490 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_recursive_shape)</span></span>
-<span class="lineno"> 6491 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6491 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6492 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_irt_recursive_shape env name w arg_ctx body_sh&quot;</span></span>
 <span class="lineno"> 6493 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; defines a recursive named Heapser shape named nm with arguments&quot;</span></span>
 <span class="lineno"> 6494 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; parsed from args_ctx and width w that unfolds to the shape body_sh,&quot;</span></span>
@@ -6517,7 +6517,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6498 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_perm&quot;</span>
 <span class="lineno"> 6499 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6500 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_perm)</span></span>
-<span class="lineno"> 6501 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6501 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6502 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_perm nm args tp p defines a Heapster permission named&quot;</span></span>
 <span class="lineno"> 6503 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; nm with arguments x1,...,xn parsed from args and type parsed from tp&quot;</span></span>
 <span class="lineno"> 6504 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; such that nm&lt;x1,...,xn&gt; is equivalent to the permission p.&quot;</span></span>
@@ -6526,7 +6526,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6507 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_llvmshape&quot;</span>
 <span class="lineno"> 6508 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; Int -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6509 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_llvmshape)</span></span>
-<span class="lineno"> 6510 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6510 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6511 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape&quot;</span></span>
 <span class="lineno"> 6512 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; nm with type llvmshape w and arguments x1,...,xn parsed from args&quot;</span></span>
 <span class="lineno"> 6513 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; such that nm&lt;x1,...,xn&gt; is equivalent to the permission p.&quot;</span></span>
@@ -6535,7 +6535,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6516 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_opaque_llvmshape&quot;</span>
 <span class="lineno"> 6517 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; Int -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6518 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_opaque_llvmshape)</span></span>
-<span class="lineno"> 6519 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6519 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6520 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster&quot;</span></span>
 <span class="lineno"> 6521 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where&quot;</span></span>
 <span class="lineno"> 6522 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; Heapster does not know or care about the contents of memory of this shape&quot;</span></span>
@@ -6553,7 +6553,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6534 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_rust_type&quot;</span>
 <span class="lineno"> 6535 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6536 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_rust_type)</span></span>
-<span class="lineno"> 6537 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6537 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6538 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,&quot;</span></span>
 <span class="lineno"> 6539 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a string representing a top-level struct or enum definition.&quot;</span></span>
 <span class="lineno"> 6540 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6561,7 +6561,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6542 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_define_rust_type_qual&quot;</span>
 <span class="lineno"> 6543 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6544 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_define_rust_type_qual)</span></span>
-<span class="lineno"> 6545 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6545 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6546 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_define_rust_type_qual env crate tp defines a Heapster LLVM&quot;</span></span>
 <span class="lineno"> 6547 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; shape from tp, a string representing a top-level Rust struct or enum&quot;</span></span>
 <span class="lineno"> 6548 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; definition. The type is qualified by crate, meaning that \&quot;crate::\&quot;&quot;</span></span>
@@ -6571,7 +6571,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6552 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_block_entry_hint&quot;</span>
 <span class="lineno"> 6553 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; Int -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6554 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_block_entry_hint)</span></span>
-<span class="lineno"> 6555 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6555 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6556 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_block_entry_hint env nm block top_args ghosts perms adds a hint&quot;</span></span>
 <span class="lineno"> 6557 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; to the Heapster type-checker that Crucible block number block in nm&quot;</span></span>
 <span class="lineno"> 6558 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; should have permissions perms on its inputs, assuming that top_args&quot;</span></span>
@@ -6582,7 +6582,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6563 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_gen_block_perms_hint&quot;</span>
 <span class="lineno"> 6564 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; [Int] -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6565 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_gen_block_perms_hint)</span></span>
-<span class="lineno"> 6566 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6566 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6567 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster&quot;</span></span>
 <span class="lineno"> 6568 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; type-checker to *generalize* (recursively replace all instances of&quot;</span></span>
 <span class="lineno"> 6569 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; eq(const) with (exists x. eq(x))) all permissions on the inputs of the&quot;</span></span>
@@ -6593,7 +6593,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6574 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_join_point_hint&quot;</span>
 <span class="lineno"> 6575 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; [Int] -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6576 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_join_point_hint)</span></span>
-<span class="lineno"> 6577 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 6577 </span><span class="spaces">    </span><span class="istickedoff">HideDeprecated</span>
 <span class="lineno"> 6578 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_join_point_hint env nm blocks adds a hint to the Heapster&quot;</span></span>
 <span class="lineno"> 6579 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; type-checker to make a join point at each of the given block numbers,&quot;</span></span>
 <span class="lineno"> 6580 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; meaning that all entries to the given blocks are merged into a single&quot;</span></span>
@@ -6604,7 +6604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6585 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_symbol&quot;</span>
 <span class="lineno"> 6586 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel String&quot;</span>
 <span class="lineno"> 6587 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_symbol)</span></span>
-<span class="lineno"> 6588 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6588 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6589 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Search for a symbol in any module contained in a HeapsterEnv that&quot;</span></span>
 <span class="lineno"> 6590 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; contains the supplied string as a substring. Raise an error if there&quot;</span></span>
 <span class="lineno"> 6591 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; is not exactly one such symbol&quot;</span></span>
@@ -6613,7 +6613,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6594 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_symbols&quot;</span>
 <span class="lineno"> 6595 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel [String]&quot;</span>
 <span class="lineno"> 6596 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_symbols)</span></span>
-<span class="lineno"> 6597 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6597 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6598 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Search for all symbols in any module contained in a HeapsterEnv that&quot;</span></span>
 <span class="lineno"> 6599 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; contain the supplied string as a substring&quot;</span></span>
 <span class="lineno"> 6600 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6621,7 +6621,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6602 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_symbol_with_type&quot;</span>
 <span class="lineno"> 6603 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; TopLevel String&quot;</span>
 <span class="lineno"> 6604 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_symbol_with_type)</span></span>
-<span class="lineno"> 6605 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6605 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6606 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Search for a symbol in any module contained in a HeapsterEnv that&quot;</span></span>
 <span class="lineno"> 6607 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; contains the supplied string as a substring and that has the specified&quot;</span></span>
 <span class="lineno"> 6608 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; LLVM type. Raise an error if there is not exactly one such symbol.&quot;</span></span>
@@ -6630,7 +6630,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6611 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_symbols_with_type&quot;</span>
 <span class="lineno"> 6612 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; TopLevel [String]&quot;</span>
 <span class="lineno"> 6613 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_symbols_with_type)</span></span>
-<span class="lineno"> 6614 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6614 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6615 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Search for all symbols in any module contained in a HeapsterEnv that&quot;</span></span>
 <span class="lineno"> 6616 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; contain the supplied string as a substring and that have the specified&quot;</span></span>
 <span class="lineno"> 6617 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; LLVM type&quot;</span></span>
@@ -6639,7 +6639,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6620 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_symbol_commands&quot;</span>
 <span class="lineno"> 6621 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel String&quot;</span>
 <span class="lineno"> 6622 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_symbol_commands)</span></span>
-<span class="lineno"> 6623 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6623 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6624 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Map a search string str to a newline-separated sequence of SAW-script &quot;</span></span>
 <span class="lineno"> 6625 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; commands \&quot;heapster_find_symbol_with_type str tp\&quot;, one for each LLVM &quot;</span></span>
 <span class="lineno"> 6626 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; type tp associated with a symbol whose name contains str&quot; ]</span></span>
@@ -6647,7 +6647,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6628 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_find_trait_method_symbol&quot;</span>
 <span class="lineno"> 6629 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel String&quot;</span>
 <span class="lineno"> 6630 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_find_trait_method_symbol)</span></span>
-<span class="lineno"> 6631 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6631 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6632 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Search for a symbol in any module contained in a HeapsterEnv that&quot;</span></span>
 <span class="lineno"> 6633 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;corresponds to the given trait method implementation. The search&quot;</span></span>
 <span class="lineno"> 6634 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;string should be of the form: trait::method&lt;type&gt;, e.g.&quot;</span></span>
@@ -6657,7 +6657,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6638 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_assume_fun&quot;</span>
 <span class="lineno"> 6639 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6640 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_assume_fun)</span></span>
-<span class="lineno"> 6641 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6641 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6642 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_assume_fun env nm perms trans assumes that function nm has&quot;</span></span>
 <span class="lineno"> 6643 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; permissions perms and translates to the SAW core term trans&quot;</span></span>
 <span class="lineno"> 6644 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6665,7 +6665,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6646 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_assume_fun_rename&quot;</span>
 <span class="lineno"> 6647 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6648 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_assume_fun_rename)</span></span>
-<span class="lineno"> 6649 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6649 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6650 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm&quot;</span></span>
 <span class="lineno"> 6651 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; has permissions perms and translates to the SAW core term trans. If&quot;</span></span>
 <span class="lineno"> 6652 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; trans is not an identifier then it is bound to the defined name nm_to.&quot;</span></span>
@@ -6674,7 +6674,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6655 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_assume_fun_rename_prim&quot;</span>
 <span class="lineno"> 6656 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6657 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_assume_fun_rename_prim)</span></span>
-<span class="lineno"> 6658 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6658 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6659 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[</span></span>
 <span class="lineno"> 6660 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm&quot;</span></span>
 <span class="lineno"> 6661 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; has permissions perms as a primitive.&quot;</span></span>
@@ -6683,7 +6683,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6664 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_assume_fun_multi&quot;</span>
 <span class="lineno"> 6665 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; [(String, String)] -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6666 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_assume_fun_multi)</span></span>
-<span class="lineno"> 6667 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6667 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6668 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function&quot;</span></span>
 <span class="lineno"> 6669 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; nm can be typed with 0 or more permissions, each with the corresponding&quot;</span></span>
 <span class="lineno"> 6670 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; translation to SAW core&quot;</span></span>
@@ -6692,7 +6692,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6673 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_typecheck_fun&quot;</span>
 <span class="lineno"> 6674 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6675 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_typecheck_fun)</span></span>
-<span class="lineno"> 6676 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6676 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6677 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Translate an LLVM function to a SAW core term using Heapster&quot;</span></span>
 <span class="lineno"> 6678 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; type-checking, and store the result in the current Heapster SAW module.&quot;</span></span>
 <span class="lineno"> 6679 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6700,7 +6700,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6681 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_typecheck_fun_rename&quot;</span>
 <span class="lineno"> 6682 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6683 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_typecheck_fun_rename)</span></span>
-<span class="lineno"> 6684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6685 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Translate the LLVM function named by the first String to a SAW core term&quot;</span></span>
 <span class="lineno"> 6686 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; using Heapster type-checking, and store the result in the current&quot;</span></span>
 <span class="lineno"> 6687 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot; Heapster SAW module as a definition named with the second string.&quot;</span></span>
@@ -6709,7 +6709,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6690 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_typecheck_mut_funs&quot;</span>
 <span class="lineno"> 6691 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; [(String, String)] -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6692 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_typecheck_mut_funs)</span></span>
-<span class="lineno"> 6693 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6693 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6694 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Translate a set of mutually recursive LLVM function to a set of SAW &quot;</span></span>
 <span class="lineno"> 6695 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;core terms using Heapster type-checking. Store the results in the &quot;</span></span>
 <span class="lineno"> 6696 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;current Heapster SAW module.&quot;</span></span>
@@ -6718,7 +6718,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6699 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_set_event_type&quot;</span>
 <span class="lineno"> 6700 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6701 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_set_event_type)</span></span>
-<span class="lineno"> 6702 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6702 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6703 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Set the event type for the remaining Heapster translations to a SAW &quot;</span></span>
 <span class="lineno"> 6704 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;core term of type EvType. It is recommended that this is done at most &quot;</span></span>
 <span class="lineno"> 6705 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;once in a SAW script, at the beginning, because changing the event type &quot;</span></span>
@@ -6728,33 +6728,33 @@ span.spaces    { background: white }
 <span class="lineno"> 6709 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_print_fun_trans&quot;</span>
 <span class="lineno"> 6710 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6711 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_print_fun_trans)</span></span>
-<span class="lineno"> 6712 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6712 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6713 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print the translation to SAW of a function that has been type-checked.&quot;</span></span>
 <span class="lineno"> 6714 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6715 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6716 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_export_coq&quot;</span>
 <span class="lineno"> 6717 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6718 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_export_coq)</span></span>
-<span class="lineno"> 6719 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6719 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6720 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Export a Heapster environment to a Coq file&quot; ]</span></span>
 <span class="lineno"> 6721 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6722 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_set_debug_level&quot;</span>
 <span class="lineno"> 6723 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; Int -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6724 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_set_debug_level)</span></span>
-<span class="lineno"> 6725 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6725 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6726 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Set the debug level for Heapster; 0 = no debug output, 1 = debug output&quot; ]</span></span>
 <span class="lineno"> 6727 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6728 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_set_translation_checks&quot;</span>
 <span class="lineno"> 6729 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; Bool -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6730 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_set_translation_checks)</span></span>
-<span class="lineno"> 6731 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6731 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6732 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Tell Heapster whether to perform its translation-time checks of the &quot;</span></span>
 <span class="lineno"> 6733 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;well-formedness of type-checking proofs&quot; ]</span></span>
 <span class="lineno"> 6734 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6735 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_trans_rust_type&quot;</span>
 <span class="lineno"> 6736 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6737 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_translate_rust_type)</span></span>
-<span class="lineno"> 6738 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6738 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6739 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Parse a Rust function type and print the equivalent Heapser type. &quot;</span></span>
 <span class="lineno"> 6740 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Ideal for learning how Rust types are translated into Heapster. &quot;</span></span>
 <span class="lineno"> 6741 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
@@ -6762,14 +6762,14 @@ span.spaces    { background: white }
 <span class="lineno"> 6743 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_parse_test&quot;</span>
 <span class="lineno"> 6744 </span><span class="spaces">    </span><span class="istickedoff">&quot;LLVMModule -&gt; String -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6745 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal heapster_parse_test)</span></span>
-<span class="lineno"> 6746 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6746 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6747 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Parse and print back a set of Heapster permissions for a function&quot;</span></span>
 <span class="lineno"> 6748 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6749 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6750 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;heapster_dump_ide_info&quot;</span>
 <span class="lineno"> 6751 </span><span class="spaces">    </span><span class="istickedoff">&quot;HeapsterEnv -&gt; String -&gt; TopLevel ()&quot;</span>
 <span class="lineno"> 6752 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(bicVal do_heapster_dump_ide_info)</span></span>
-<span class="lineno"> 6753 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Experimental</span></span>
+<span class="lineno"> 6753 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">HideDeprecated</span></span>
 <span class="lineno"> 6754 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Dump environment info to a JSON file for IDE integration.&quot;</span></span>
 <span class="lineno"> 6755 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6756 </span><span class="spaces"></span><span class="istickedoff"></span>
