@@ -2,6 +2,10 @@
 
 ## next -- TBA
 
+Nothing yet
+
+## 1.4 - release date still TBD
+
 * Require urllib 2.5.0 or later to avoid a security alert.
   This in turn requires Python 3.9, so Python 3.8 is no longer supported.
 

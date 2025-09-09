@@ -4,6 +4,14 @@ This release supports [version
 4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
 `mir-json`'s schema.
 
+Nothing yet.
+
+# Version 1.4 -- date still TBD
+
+This release supports [version
+4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
+`mir-json`'s schema.
+
 The `saw` executable's command-line handling has been changed to
 permit passing arguments to SAWScript scripts.
 Words on the command line following the script name are treated as

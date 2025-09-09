@@ -2,6 +2,10 @@
 
 ## next -- TBA
 
+Nothing yet.
+
+## 1.4 -- release date still TBD
+
 * Add a `"mutable globals"` field to specification objects, which contains a
   list of strings representing the names of mutable global variables that
   should be allocated. This field can only be used with LLVM, and attempting to
