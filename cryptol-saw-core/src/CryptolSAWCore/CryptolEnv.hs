@@ -670,12 +670,12 @@ resolveIdentifier env nm =
 
 
 parseTypedTerm ::
-  (?fileReader :: FilePath -> IO ByteString) =>
+  (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
 parseTypedTerm sc env input = do
-  -- Parse
+  -- Parse:
   pexpr <- ioParseExpr input
-
+  -- Translate:
   pExprToTypedTerm sc env pexpr
 
 pExprToTypedTerm ::
