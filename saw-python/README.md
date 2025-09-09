@@ -30,7 +30,7 @@ cd saw-python
 $ docker run --name=saw-remote-api -d \
   -v $PWD/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
-  galoisinc/saw-remote-api:nightly
+  ghcr.io/galoisinc/saw-remote-api:nightly
 $ export SAW_SERVER_URL="http://localhost:8080/"
 ```
 6. Install the Python client (requires Python v3.9 or newer -- we recommend using [`poetry`](https://python-poetry.org/docs/#installation) to install the package):
@@ -39,9 +39,13 @@ $ poetry install
 ```
 7. Run tests or individual scripts:
 ```
-$ poetry run python -m unittest discover tests/saw
+$ env CLASSPATH=/home/saw/tests/saw/test-files poetry run python -m unittest discover tests/saw
 $ poetry run python tests/saw/test_salsa20.py
 ```
+
+Note that the CLASSPATH setting is set on the client side but points
+to server-side files, in this case the test files that we mounted
+inside the Docker container.
 
 (We're aware the tests currently emit some `ResourceWarning`s regarding
 subprocesses when run via `unittest` even though they pass and successfully
