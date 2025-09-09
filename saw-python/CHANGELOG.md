@@ -1,5 +1,9 @@
 # Revision history for saw-client
 
+## next -- TBA
+
+Nothing yet
+
 ## 1.4 - release date still TBD
 
 * Require urllib 2.5.0 or later to avoid a security alert.

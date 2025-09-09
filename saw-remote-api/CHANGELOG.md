@@ -1,5 +1,9 @@
 # Revision history for saw-remote-api
 
+## next -- TBA
+
+Nothing yet.
+
 ## 1.4 -- release date still TBD
 
 * Add a `"mutable globals"` field to specification objects, which contains a
