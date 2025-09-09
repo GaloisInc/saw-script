@@ -1,0 +1,10 @@
+import "../test_saw_submodule_access1/D.cry";
+import "../test_saw_submodule_access1/F.cry";
+
+print (eval_int {{top0}});  // no problem!
+
+// expected failures:
+fails (do { return (eval_int {{ d00  }}); } );
+  // should fail with "Multiple Definitions"
+
+print "done";

@@ -1,0 +1,19 @@
+module D where
+import B
+import C
+
+d00 = 2000 + b + c
+d01 = 5 + D2::d2
+
+type DTySy = [32]
+
+submodule D2 where
+  d2 = d00 + 10000
+
+  type D2TySy = [32]
+
+  submodule D3 where
+  d3 = d00 + d2 + 1
+
+  type D3TySy = [32]
+

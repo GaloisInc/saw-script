@@ -1,0 +1,4 @@
+module C where
+import A as A'
+c = A'::a + 100
+a = A'::a

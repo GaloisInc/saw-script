@@ -1,0 +1,11 @@
+module E where
+import D
+
+e = 5
+e2 = d00
+
+// NOT legal: D2::d2
+// But this works:
+
+import submodule D2
+e3 = d2

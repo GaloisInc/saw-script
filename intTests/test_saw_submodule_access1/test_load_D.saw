@@ -1,0 +1,9 @@
+D <- cryptol_load "D.cry";
+
+print (eval_int {{D::D2::d2}}); // should succeed
+
+// confirming fails of things that shouldn't be in scope:
+fails (do {return {{ d2 }};});
+fails (do {return {{ D::d2 }};});
+
+print "done";

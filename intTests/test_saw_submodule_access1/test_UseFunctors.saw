@@ -1,0 +1,10 @@
+import "UseFunctors.cry";
+
+print (eval_int {{ex1}});  // should succeed.
+print (eval_int {{ex2}});  // should succeed.
+
+// confirming fails of things that shouldn't be in scope:
+fails (do {return {{ I::FM::z }};});
+  // see comments in .cry file.
+
+print "done";

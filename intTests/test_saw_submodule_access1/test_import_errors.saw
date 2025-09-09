@@ -1,0 +1,3 @@
+import "IgnoredImportErrors.cry";
+
+print "done";
