@@ -1,0 +1,17 @@
+import "../test_saw_submodule_access1/D.cry" as MyD;
+
+// testing visible exports:
+
+print (eval_int {{MyD::d00}});
+print (eval_int {{MyD::D2::d2}});
+print (eval_int {{MyD::D2::D3::d3}});
+
+// testing visible in MyD variables:
+print (eval_int {{MyD::a}});
+
+// confirming fails of things that shouldn't be in scope:
+fails (do {return {{ d00 }};});
+fails (do {return {{ MyD::d2 }};});
+fails (do {return {{ NOTINSCOPEVar }};});
+
+print "done";
