@@ -409,11 +409,10 @@ checkNotParameterized m =
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
-  C.ImportPrimitiveOptions ->
   CryptolEnv ->
   FilePath ->
   IO (CryptolModule, CryptolEnv)
-loadCryptolModule sc primOpts env path = do
+loadCryptolModule sc env path = do
 
   let modEnv = eModuleEnv env
   (mtop, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath True path)
@@ -464,7 +463,8 @@ loadCryptolModule sc primOpts env path = do
 
   newTermEnv <-
     do cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-       newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
+       newCryEnv <- C.importTopLevelDeclGroups
+                     sc  C.defaultPrimitiveOptions cEnv newDeclGroups
        return (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
