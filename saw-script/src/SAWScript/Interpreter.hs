@@ -2835,8 +2835,9 @@ primitives = Map.fromList
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
-    Current
-    [ "Print all sawscript values in scope." ]
+    WarnDeprecated
+    [ "Print all sawscript values in scope."
+    , "Deprecated; use the :env REPL command instead." ]
 
   , prim "set_ascii"           "Bool -> TopLevel ()"
     (pureVal set_ascii)

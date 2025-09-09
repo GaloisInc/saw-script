@@ -174,6 +174,9 @@ support compositional verification using techniques similar to SAW.
 
 ## Deprecations
 
+* The `env` primitive has been marked deprecated. Use the `:env` REPL
+  command (or `:search`, which is typically more effective) instead.
+
 * Heapster and Mr. Solver have been deprecated.
   They are now only available with `enable_deprecated` (skipping ahead in
   the deprecation process) and will be removed in the next release.
