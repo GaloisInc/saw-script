@@ -1,0 +1,88 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# Language ScopedTypeVariables #-}
+<span class="lineno">    2 </span>{-# Language GADTs #-}
+<span class="lineno">    3 </span>module Heapster.NamePropagation where
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import Data.Functor.Constant
+<span class="lineno">    6 </span>import Data.Parameterized.TraversableFC ( FoldableFC(toListFC), FunctorFC(fmapFC) )
+<span class="lineno">    7 </span>import Lang.Crucible.Analysis.Fixpoint
+<span class="lineno">    8 </span>import Lang.Crucible.CFG.Core ( Some(Some), CFG(cfgHandle) )
+<span class="lineno">    9 </span>import Lang.Crucible.FunctionHandle ( FnHandle(handleArgTypes) )
+<span class="lineno">   10 </span>import Lang.Crucible.LLVM.Extension ( LLVM, LLVMStmt(..), LLVM_Dbg(..) )
+<span class="lineno">   11 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   12 </span>import qualified Data.Parameterized.Map as PM
+<span class="lineno">   13 </span>import qualified Text.LLVM.AST as L
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>type NameDom = Pointed (Constant String)
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>nameJoin :: Constant String a -&gt; Constant String a -&gt; NameDom a
+<span class="lineno">   18 </span><span class="decl"><span class="nottickedoff">nameJoin (Constant x) (Constant y) | x == y = Pointed (Constant x)</span>
+<span class="lineno">   19 </span><span class="spaces"></span><span class="nottickedoff">nameJoin _ _ = Top</span></span>
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>nameDomain :: Domain (Pointed (Constant String))
+<span class="lineno">   22 </span><span class="decl"><span class="nottickedoff">nameDomain = pointed nameJoin (==) WTO</span></span>
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>nameInterpretation :: Interpretation LLVM NameDom
+<span class="lineno">   25 </span><span class="decl"><span class="nottickedoff">nameInterpretation =  Interpretation</span>
+<span class="lineno">   26 </span><span class="spaces">  </span><span class="nottickedoff">{ interpExpr        = \_ _ _     names -&gt; (Just names, Bottom)</span>
+<span class="lineno">   27 </span><span class="spaces">  </span><span class="nottickedoff">, interpCall        = \_ _ _ _ _ names -&gt; (Just names, Bottom)</span>
+<span class="lineno">   28 </span><span class="spaces">  </span><span class="nottickedoff">, interpReadGlobal  = \_         names -&gt; (Just names, Bottom)</span>
+<span class="lineno">   29 </span><span class="spaces">  </span><span class="nottickedoff">, interpWriteGlobal = \_ _       names -&gt; Just names</span>
+<span class="lineno">   30 </span><span class="spaces">  </span><span class="nottickedoff">, interpBr          = \_ _ _ _   names -&gt; (Just names, Just names)</span>
+<span class="lineno">   31 </span><span class="spaces">  </span><span class="nottickedoff">, interpMaybe       = \_ _ _     names -&gt; (Just names, Bottom, Just names)</span>
+<span class="lineno">   32 </span><span class="spaces">  </span><span class="nottickedoff">, interpExt         = \_ stmt    names -&gt;</span>
+<span class="lineno">   33 </span><span class="spaces">      </span><span class="nottickedoff">let names' =</span>
+<span class="lineno">   34 </span><span class="spaces">            </span><span class="nottickedoff">case stmt of</span>
+<span class="lineno">   35 </span><span class="spaces">              </span><span class="nottickedoff">LLVM_Debug (LLVM_Dbg_Declare ptr di _) | Just n &lt;- L.dilvName di -&gt;</span>
+<span class="lineno">   36 </span><span class="spaces">                </span><span class="nottickedoff">modifyAbstractRegValue names ptr (\_ -&gt; Pointed (Constant (&quot;&amp;&quot; ++ n)))</span>
+<span class="lineno">   37 </span><span class="spaces">              </span><span class="nottickedoff">LLVM_Debug (LLVM_Dbg_Addr ptr di _) | Just n &lt;- L.dilvName di -&gt;</span>
+<span class="lineno">   38 </span><span class="spaces">                </span><span class="nottickedoff">modifyAbstractRegValue names ptr (\_ -&gt; Pointed (Constant (&quot;&amp;&quot; ++ n)))</span>
+<span class="lineno">   39 </span><span class="spaces">              </span><span class="nottickedoff">LLVM_Debug (LLVM_Dbg_Value _ val di _) | Just n &lt;- L.dilvName di -&gt;</span>
+<span class="lineno">   40 </span><span class="spaces">                </span><span class="nottickedoff">modifyAbstractRegValue names val (\_ -&gt; Pointed (Constant n))</span>
+<span class="lineno">   41 </span><span class="spaces">              </span><span class="nottickedoff">_ -&gt; names</span>
+<span class="lineno">   42 </span><span class="spaces">      </span><span class="nottickedoff">in (Just names', Bottom)             </span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>computeNames ::
+<span class="lineno">   46 </span>  forall blocks init ret.
+<span class="lineno">   47 </span>  CFG LLVM blocks init ret -&gt;
+<span class="lineno">   48 </span>  Ctx.Assignment (Constant [Maybe String]) blocks
+<span class="lineno">   49 </span><span class="decl"><span class="nottickedoff">computeNames cfg =</span>
+<span class="lineno">   50 </span><span class="spaces">  </span><span class="nottickedoff">case alg of</span>
+<span class="lineno">   51 </span><span class="spaces">    </span><span class="nottickedoff">(_, end, _) -&gt; fmapFC (\(Ignore (Some p)) -&gt; Constant (toListFC flatten (_paRegisters p))) end</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">flatten :: NameDom a -&gt; Maybe String</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="nottickedoff">flatten Top = Nothing</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">flatten Bottom = Nothing</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="nottickedoff">flatten (Pointed (Constant x)) = Just x</span>
+<span class="lineno">   57 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">sz = Ctx.size (handleArgTypes (cfgHandle cfg))</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">alg =</span>
+<span class="lineno">   60 </span><span class="spaces">      </span><span class="nottickedoff">forwardFixpoint'</span>
+<span class="lineno">   61 </span><span class="spaces">      </span><span class="nottickedoff">nameDomain</span>
+<span class="lineno">   62 </span><span class="spaces">      </span><span class="nottickedoff">nameInterpretation</span>
+<span class="lineno">   63 </span><span class="spaces">      </span><span class="nottickedoff">cfg</span>
+<span class="lineno">   64 </span><span class="spaces">      </span><span class="nottickedoff">PM.empty</span>
+<span class="lineno">   65 </span><span class="spaces">      </span><span class="nottickedoff">(Ctx.replicate sz Bottom)</span></span>
+
+</pre>
+</body>
+</html>
