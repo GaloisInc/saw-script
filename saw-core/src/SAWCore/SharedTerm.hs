@@ -239,7 +239,6 @@ module SAWCore.SharedTerm
 --  , scFalse
    , scOpenTerm
    , scCloseTerm
-   , scLambdaBody
   , scAsLambda
   , scAsLambdaList
   , scAsPi
@@ -3121,17 +3120,6 @@ scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
     close sc (ecShortName ec) (ecType ec) body'
-
--- | Compute the body of 0 or more nested lambda-abstractions by applying the
--- lambdas to fresh 'ExtCns's. Note that we do this lambda-by-lambda, rather
--- than generating all of the 'ExtCns's at the same time, because later
--- variables could have types that depend on earlier variables, and so the
--- substitution of earlier 'ExtCns's has to happen before we generate later
--- ones.
-scLambdaBody :: SharedContext -> Term -> IO Term
-scLambdaBody sc (asLambda -> Just (nm, tp, body)) =
-  scOpenTerm sc nm tp 0 body >>= scLambdaBody sc . snd
-scLambdaBody _sc t = return t
 
 -- | Deconstruct a lambda term into a bound variable and a body, using
 -- a fresh 'ExtCns' for the bound variable.
