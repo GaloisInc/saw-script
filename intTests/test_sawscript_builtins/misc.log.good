@@ -1,7 +1,23 @@
  Loading file "misc.saw"
  1
  misc.saw
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in get_opt
+   misc.saw:9:28-9:37 in (callback)
+   (builtin) in fails
+   misc.saw:9:1-9:42 (at top level)
+nth: index too large
+
  fnord
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in get_env
+   misc.saw:12:21-12:46 in (callback)
+   (builtin) in fails
+   misc.saw:12:1-12:50 (at top level)
+Environment variable not found: SAW_MISSING_ENV
+
  (false,"false")
  ("0","0")
  ("()","()")
