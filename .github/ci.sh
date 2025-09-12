@@ -41,6 +41,7 @@ setup_dist_bins() {
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
+  $IS_WIN || chmod +x dist/bin/*
 }
 
 build() {
@@ -153,7 +154,6 @@ bundle_files() {
   mkdir -p dist/doc/{llvm-java-verification-with-saw,rust-verification-with-saw,saw-user-manual}
 
   cp LICENSE README.md dist/
-  $IS_WIN || chmod +x dist/bin/*
 
   (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
   cp doc/pdfs/llvm-java-verification-with-saw.pdf dist/doc/llvm-java-verification-with-saw
