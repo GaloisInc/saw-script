@@ -100,27 +100,28 @@ data TCEnv =
 -- * Memoizes the most general type inferred for each expression; AND
 --
 -- * Can throw 'TCError's
-type TCM = ReaderT TCEnv (StateT TCState (ExceptT TCError IO))
+newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
+  deriving (Functor, Applicative, Monad, MonadFail, MonadIO)
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
 runTCM ::
   TCM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   IO (Either TCError a)
-runTCM m sc mnm ctx =
+runTCM (TCM m) sc mnm ctx =
   runExceptT $ evalStateT (runReaderT m (TCEnv sc mnm ctx Map.empty)) Map.empty
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
-askCtx = asks tcCtx
+askCtx = TCM (asks tcCtx)
 
 -- | Read the current context of named variables
 askCtxEC :: TCM (Map LocalName (ExtCns Term))
-askCtxEC = asks tcCtxEC
+askCtxEC = TCM (asks tcCtxEC)
 
 -- | Read the current module name
 askModName :: TCM (Maybe ModuleName)
-askModName = asks tcModName
+askModName = TCM (asks tcModName)
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -130,7 +131,8 @@ askModName = asks tcModName
 -- NOTE: the type given for the variable should be in WHNF, so that we do not
 -- have to normalize the types of variables each time we see them.
 withVar :: LocalName -> Term -> TCM a -> TCM a
-withVar x tp m =
+withVar x tp (TCM m) =
+  TCM $
   flip catchError (throwError . ErrorCtx x tp) $
   do saved_table <- get
      put Map.empty
@@ -139,7 +141,8 @@ withVar x tp m =
      return a
 
 withEC :: LocalName -> ExtCns Term -> TCM a -> TCM a
-withEC x ec m =
+withEC x ec (TCM m) =
+  TCM $
   flip catchError (throwError . ErrorCtx x (ecType ec)) $
   do saved_table <- get
      put Map.empty
@@ -160,7 +163,7 @@ withCtxEC = flip (foldr (\(x,ec) -> withEC x ec))
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorTerm' constructor
 withErrorTerm :: Term -> TCM a -> TCM a
-withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
+withErrorTerm tm (TCM m) = TCM $ catchError m (throwError . ErrorTerm tm)
 
 -- | Lift @withErrorTerm@ to `TermF Term`
 withErrorTermF :: TermF Term -> TCM a -> TCM a
@@ -174,7 +177,7 @@ withErrorSCTypedTermF tm = withErrorTermF (fmap typedVal tm)
 -- given position, using the 'ErrorPos' constructor, unless that error is
 -- already tagged with a position
 atPos :: Pos -> TCM a -> TCM a
-atPos p m = catchError m (throwError . ErrorPos p)
+atPos p (TCM m) = TCM $ catchError m (throwError . ErrorPos p)
 
 -- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
 -- 'TCM' computations
@@ -185,7 +188,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- asks tcSharedContext
+    do sc <- TCM (asks tcSharedContext)
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where
@@ -221,7 +224,7 @@ data TCError
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
-throwTCError = throwError
+throwTCError e = TCM (throwError e)
 
 type PPErrM = Reader ([LocalName], Maybe Pos)
 
@@ -427,13 +430,13 @@ typeInferCompleteInCtxEC ctx f =
 instance TypeInfer Term where
   typeInfer t@(Unshared tf) = withErrorTerm t $ typeInfer tf
   typeInfer t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
-    do table <- get
+    do table <- TCM get
        case Map.lookup i table of
          Just x  -> return x
          Nothing ->
            do x  <- withErrorTerm t $ typeInfer tf
               x' <- typeCheckWHNF x
-              modify (Map.insert i x')
+              TCM (modify (Map.insert i x'))
               return x'
   typeInferComplete trm = SCTypedTerm trm <$> withErrorTerm trm (typeInfer trm)
 
