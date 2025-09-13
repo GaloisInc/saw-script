@@ -38,7 +38,6 @@ module SAWCore.SCTypeCheck
   , TypeInfer(..)
   , typeCheckWHNF
   , typeInferCompleteWHNF
-  , TypeInferCtx(..)
   , typeInferCompleteCtxEC
   , typeInferCompleteInCtx
   , typeInferCompleteInCtxEC
@@ -384,19 +383,16 @@ typeInferCompleteWHNF a =
 
 
 -- | Perform type inference on a context, i.e., a list of variable names and
--- their associated types. The type @var@ gives the type of variable names,
--- while @a@ is the type of types. This will give us 'Term's for each type, as
+-- their associated types. This will give us 'Term's for each type, as
 -- well as their 'Sort's, since the type of any type is a 'Sort'.
-class TypeInferCtx var a where
-  typeInferCompleteCtx :: [(var,a)] -> TCM [(LocalName, Term, Sort)]
-
-instance TypeInfer a => TypeInferCtx LocalName a where
-  typeInferCompleteCtx [] = return []
-  typeInferCompleteCtx ((x,tp):ctx) =
-    do typed_tp <- typeInferComplete tp
-       s <- ensureSort (typedType typed_tp)
-       ((x,typedVal typed_tp,s):) <$>
-         withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
+typeInferCompleteCtx ::
+  TypeInfer a => [(LocalName, a)] -> TCM [(LocalName, Term, Sort)]
+typeInferCompleteCtx [] = return []
+typeInferCompleteCtx ((x,tp):ctx) =
+  do typed_tp <- typeInferComplete tp
+     s <- ensureSort (typedType typed_tp)
+     ((x,typedVal typed_tp,s):) <$>
+       withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
 
 typeInferCompleteCtxEC ::
   TypeInfer a => [(LocalName, a)] -> TCM [(LocalName, ExtCns Term, Sort)]
@@ -411,8 +407,7 @@ typeInferCompleteCtxEC ((x, tp) : ctx) =
 -- run a computation in that context via 'withCtx', also passing in that context
 -- to the computation
 typeInferCompleteInCtx ::
-  TypeInferCtx var tp => [(var, tp)] ->
-  ([(LocalName, Term, Sort)] -> TCM a) -> TCM a
+  TypeInfer tp => [(LocalName, tp)] -> ([(LocalName, Term, Sort)] -> TCM a) -> TCM a
 typeInferCompleteInCtx ctx f =
   do typed_ctx <- typeInferCompleteCtx ctx
      withCtx (map (\(x,tp,_) -> (x,tp)) typed_ctx) (f typed_ctx)
