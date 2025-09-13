@@ -300,11 +300,6 @@ typeInferCompleteTerm (Un.BadTerm _) =
   panic "typeInferCompleteTerm" ["Type inference encountered a BadTerm"]
 
 
-instance TypeInferCtx Un.UTermVar Un.UTerm where
-  typeInferCompleteCtx =
-    typeInferCompleteCtx . map (\(x,tp) -> (Un.termVarLocalName x, tp))
-
-
 --
 -- Type-checking modules
 --
