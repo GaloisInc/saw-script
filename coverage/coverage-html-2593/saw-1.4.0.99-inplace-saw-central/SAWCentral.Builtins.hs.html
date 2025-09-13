@@ -2003,16 +2003,16 @@ span.spaces    { background: white }
 <span class="lineno"> 1984 </span><span class="spaces">     </span><span class="nottickedoff">return (TypedTerm (TypedTermKind C.KNum) tm)</span></span>
 <span class="lineno"> 1985 </span>
 <span class="lineno"> 1986 </span>nthPrim :: [a] -&gt; Int -&gt; TopLevel a
-<span class="lineno"> 1987 </span><span class="decl"><span class="istickedoff">nthPrim [] _ = <span class="nottickedoff">fail &quot;nth: index too large&quot;</span></span>
+<span class="lineno"> 1987 </span><span class="decl"><span class="istickedoff">nthPrim [] _ = fail &quot;nth: index too large&quot;</span>
 <span class="lineno"> 1988 </span><span class="spaces"></span><span class="istickedoff">nthPrim (x : _) 0 = return x</span>
 <span class="lineno"> 1989 </span><span class="spaces"></span><span class="istickedoff">nthPrim (_ : xs) i = nthPrim xs (i - 1)</span></span>
 <span class="lineno"> 1990 </span>
 <span class="lineno"> 1991 </span>headPrim :: [a] -&gt; TopLevel a
-<span class="lineno"> 1992 </span><span class="decl"><span class="istickedoff">headPrim [] = <span class="nottickedoff">fail &quot;head: empty list&quot;</span></span>
+<span class="lineno"> 1992 </span><span class="decl"><span class="istickedoff">headPrim [] = fail &quot;head: empty list&quot;</span>
 <span class="lineno"> 1993 </span><span class="spaces"></span><span class="istickedoff">headPrim (x : _) = return x</span></span>
 <span class="lineno"> 1994 </span>
 <span class="lineno"> 1995 </span>tailPrim :: [a] -&gt; TopLevel [a]
-<span class="lineno"> 1996 </span><span class="decl"><span class="istickedoff">tailPrim [] = <span class="nottickedoff">fail &quot;tail: empty list&quot;</span></span>
+<span class="lineno"> 1996 </span><span class="decl"><span class="istickedoff">tailPrim [] = fail &quot;tail: empty list&quot;</span>
 <span class="lineno"> 1997 </span><span class="spaces"></span><span class="istickedoff">tailPrim (_ : xs) = return xs</span></span>
 <span class="lineno"> 1998 </span>
 <span class="lineno"> 1999 </span>parseCoreMod :: Text -&gt; Text -&gt; TopLevel Term
@@ -2120,7 +2120,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2101 </span><span class="decl"><span class="istickedoff">get_env name = do</span>
 <span class="lineno"> 2102 </span><span class="spaces">  </span><span class="istickedoff">mbValue &lt;- io $ Env.lookupEnv (Text.unpack name)</span>
 <span class="lineno"> 2103 </span><span class="spaces">  </span><span class="istickedoff">case mbValue of</span>
-<span class="lineno"> 2104 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;Environment variable not found: &quot; ++ Text.unpack name</span></span>
+<span class="lineno"> 2104 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; fail $ &quot;Environment variable not found: &quot; ++ Text.unpack name</span>
 <span class="lineno"> 2105 </span><span class="spaces">    </span><span class="istickedoff">Just v -&gt; return $ Text.pack v</span></span>
 <span class="lineno"> 2106 </span>
 <span class="lineno"> 2107 </span>cryptol_prims :: TopLevel CryptolModule
