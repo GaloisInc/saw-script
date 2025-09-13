@@ -1,0 +1,12 @@
+module IgnoredImportErrors where
+
+// NOTE: none of the foobar* variables are in the code.
+//  - but this error is not caught by saw or cryptol.
+
+import D as D1 (foobar1)
+import D as D2 hiding (foobar2)
+
+import D (foobar3)
+import D hiding (foobar4)
+
+x = 5

@@ -1,0 +1,26 @@
+module UseFunctors where
+
+submodule M where
+    x = 0x02
+
+    submodule M1 where
+      x = 0x03
+
+ex1 = M::x + M::M1::x  // This is OK because of implicit imports of M and M1
+
+// This is a functor
+submodule F where
+  parameter
+    p: [8]
+
+  submodule FM where
+    z = 0x03 + p
+
+  f = 2 * p
+
+submodule I = submodule F where
+  p = 11
+
+ex2 = I::f + 2  // This is OK because of implicit import of I
+
+// ex3 = I::FM::z  This is not OK, becase FM is not syntactically visible in I, so we can't add an implicit import
