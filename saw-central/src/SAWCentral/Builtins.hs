@@ -79,7 +79,7 @@ import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
-import SAWCore.Typechecker (tcInsertModule, typeInferCompleteUTerm)
+import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
@@ -2010,10 +2010,10 @@ parseCoreMod mnm_str input =
      let mnm =
            mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
-     err_or_t <- io $ runTCM (typeInferCompleteUTerm uterm) sc (Just mnm) []
+     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) [] uterm
      case err_or_t of
        Left err -> fail (show err)
-       Right (SCTypedTerm x _) -> return x
+       Right x -> pure x
 
 parseCore :: Text -> TopLevel Term
 parseCore input = parseCoreMod "Cryptol" input

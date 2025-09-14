@@ -24,8 +24,8 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Typechecker
   ( inferCompleteTerm
+  , inferCompleteTermCtx
   , tcInsertModule
-  , typeInferCompleteUTerm
   ) where
 
 import Control.Monad (forM, forM_, void, unless)
