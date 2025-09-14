@@ -770,6 +770,27 @@ def mir_find_adt(module: MIRModule,
     return mir.MIRAdt(adt_orig_name, adt_server_name)
 
 
+def mir_find_mangled_adt(module: MIRModule,
+                         adt_mangled_name: str,
+                         adt_server_name_hint: Optional[str] = None) -> mir.MIRAdt:
+    """Consult the given MIR module (``module``) to find an algebraic data type
+       (ADT) with ``adt_mangled_name`` as its mangled identifier. A mangled
+       identifier is one that refers to an ADT that is already instantiated
+       with its type arguments (e.g., ``foo::Bar::_adt123456789`` is a mangled
+       identifier, but ``foo::Bar`` is not). If such an ADT cannot be found in
+       the module, this will raise an error.
+
+       Due to the fact that mangled identifiers can change easily when
+       recompiling Rust code, this function's use is discouraged in favor of
+       using `mir_find_adt` whenever possible.
+    """
+    if adt_server_name_hint is None:
+        adt_server_name_hint = adt_mangled_name
+    adt_server_name = __fresh_server_name(adt_server_name_hint)
+    __get_designated_connection().mir_find_mangled_adt(module.server_name, adt_mangled_name, adt_server_name).result()
+    return mir.MIRAdt(adt_mangled_name, adt_server_name)
+
+
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
     """Atempts to prove that the expression given as the first argument, `goal`, is

@@ -1349,6 +1349,22 @@ let s_8_16  = mir_find_adt m "example::S" [mir_u8,  mir_u16];
 let s_32_64 = mir_find_adt m "example::S" [mir_u32, mir_u64];
 :::
 
+Note that there is also a command to look up ADTs by their full, _mangled_
+identifiers that include the `_adt<num>` suffix:
+
+- `mir_find_mangled_adt : MIRModule -> String -> MIRAdt`
+
+Note that unlike `mir_find_adt`, `mir_find_mangled_adt` lacks `[MirType]`
+arguments, as the type information is already encoded into the mangled
+identifier.
+
+It is recommended to use `mir_find_adt` over `mir_find_mangled_adt` whenever
+possible, as mangled identifiers can change easily when recompiling Rust code.
+`mir_find_mangled_adt` is generally only needed to work around limitations in
+what `mir_find_adt` can look up. For instance, SAW currently does not have a
+way to look up instantiations of ADTs that use const generics, so
+`mir_find_mangled_adt` is the only way to look up such ADTs at present.
+
 The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
 constructing a struct value), and `mir_enum_value` (for constructing an enum
 value) commands in turn take a `MIRAdt` as an argument.

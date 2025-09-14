@@ -2,7 +2,12 @@
 
 ## next -- TBA
 
-Nothing yet.
+* Add a `SAW/MIR/find mangled ADT` command, which allows looking up MIR
+  ADTs by their full, mangled names. `SAW/MIR/find mangled ADT`'s use is
+  discouraged in favor of using `SAW/MIR/find ADT` instead, but `SAW/MIR/find
+  mangled ADT` can be useful in scenarios where `SAW/MIR/find ADT` isn't
+  expressive enough to look up particular ADTs (e.g., ADTs that use const
+  generics).
 
 ## 1.4 -- release date still TBD
 

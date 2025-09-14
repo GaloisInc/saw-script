@@ -23,6 +23,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_execute_func
   , mir_equal
   , mir_find_adt
+  , mir_find_mangled_adt
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
   , mir_fresh_var
@@ -332,6 +333,17 @@ mir_equal val1 val2 =
        , show ty2
        ]
      Setup.crucible_equal loc val1 val2
+
+-- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt' with the given
+-- 'String' as a mangled identifier (i.e., an identifier for an ADT that is
+-- already instantiated with type arguments). If such a 'Mir.Adt' cannot be
+-- found in the 'Mir.RustModule', this will raise an error.
+mir_find_mangled_adt :: Mir.RustModule -> Text -> TopLevel Mir.Adt
+mir_find_mangled_adt rm name = do
+  let cs = rm ^. Mir.rmCS
+      col = cs ^. Mir.collection
+  did <- findDefId cs name
+  findAdtMangled col did
 
 -- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'" with the given
 -- 'String' as an identifier and the given 'Mir.Ty's as the types used to
@@ -1643,6 +1655,16 @@ findAdt col origName substs =
         Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
+
+-- | Find the ADT definition corresponding to a mangled identifier (i.e., an
+-- identifier for an ADT that is already instantiated with type arguments). See
+-- 'findAdt' for a variant of this function that looks up non-mangled
+-- identifiers.
+findAdtMangled :: Mir.Collection -> Mir.DefId -> TopLevel Mir.Adt
+findAdtMangled col name =
+  case col ^. Mir.adts . at name of
+    Just x -> return x
+    Nothing -> fail $ "Unknown ADT: " ++ show name
 
 -- | Find the 'Mir.Fn' corresponding to the given function name (supplied as a
 -- 'String'). If none can be found or if there are multiple functions

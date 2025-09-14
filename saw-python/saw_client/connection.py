@@ -283,6 +283,27 @@ class SAWConnection:
             MIRFindADT(self, module_server_name, adt_orig_name, tys, adt_server_name, timeout)
         return self.most_recent_result
 
+    def mir_find_mangled_adt(self,
+                             module_server_name : str,
+                             adt_mangled_name : str,
+                             adt_server_name: str,
+                             timeout : Optional[float] = None) -> Command:
+        """Consult the given MIR module (``module_server_name``) to find an
+           algebraic data type (ADT) with ``adt_mangled_name`` as its mangled
+           identifier. A mangled identifier is one that refers to an ADT that
+           is already instantiated with its type arguments (e.g.,
+           ``foo::Bar::_adt123456789`` is a mangled identifier, but
+           ``foo::Bar`` is not). If such an ADT cannot be found in the module,
+           this will raise an error.
+
+           Due to the fact that mangled identifiers can change easily when
+           recompiling Rust code, this function's use is discouraged in favor
+           of using `mir_find_adt` whenever possible.
+        """
+        self.most_recent_result = \
+            MIRFindMangledADT(self, module_server_name, adt_mangled_name, adt_server_name, timeout)
+        return self.most_recent_result
+
     def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
         self.most_recent_result = YosysImport(self, name, path, timeout)
         return self.most_recent_result

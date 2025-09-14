@@ -327,6 +327,22 @@ class MIRFindADT(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class MIRFindMangledADT(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module_server_name : str,
+            adt_mangled_name : str,
+            adt_server_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': module_server_name,
+                  'ADT mangled name': adt_mangled_name,
+                  'ADT server name': adt_server_name}
+        super(MIRFindMangledADT, self).__init__('SAW/MIR/find mangled ADT', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class Prove(SAWCommand):
     def __init__(
             self,

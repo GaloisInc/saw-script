@@ -5825,6 +5825,21 @@ primitives = Map.fromList
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_find_mangled_adt" "MIRModule -> String -> MIRAdt"
+    (funVal2 mir_find_mangled_adt)
+    Experimental
+    [ "Consult the given MIRModule to find an algebraic data type (MIRAdt)"
+    , "with the given String as a mangled identifier. A mangled identifier is"
+    , "one that refers to an ADT that is already instantiated with its type"
+    , "arguments (e.g., foo::Bar::_adt123456789 is a mangled identifier, but"
+    , "foo::Bar is not). If such a MIRAdt cannot be found in the MIRModule,"
+    , "this will raise an error."
+    , ""
+    , "Due to the fact that mangled identifiers can change easily when"
+    , "recompiling Rust code, this function's use is discouraged in favor of"
+    , "using mir_find_adt whenever possible."
+    ]
+
   , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
     (pureVal mir_fresh_cryptol_var)
     Experimental
