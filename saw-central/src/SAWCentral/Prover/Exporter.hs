@@ -530,7 +530,8 @@ writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule sc env inputFile
-             -- NOTE: this allows 'unknownPrimitives', see definition
+               -- NOTE: implementation of loadCryptolModule, now uses this default:
+               --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
   cry_env <- mkCryEnv env
   mm <- scGetModuleMap sc
   let ?mm = mm
