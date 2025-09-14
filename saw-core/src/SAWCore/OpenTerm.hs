@@ -177,10 +177,8 @@ bindPPOpenTerm (OpenTerm m) f =
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
 openTermType (OpenTerm m) =
-  OpenTerm $ do SCTypedTerm _ tp <- m
-                ctx <- askCtx
-                tp_tp <- liftTCM scTypeOf' (map snd ctx) tp
-                return (SCTypedTerm tp tp_tp)
+  OpenTerm $ do t <- m
+                liftTCM scTypeOfTypedTerm t
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
@@ -347,17 +345,13 @@ dataTypeOpenTerm d all_args = applyOpenTermMulti dt_open_term all_args
 -- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (do trm <- liftTCM scGlobalDef ident
-               tp <- liftTCM scTypeOfIdent ident
-               return $ SCTypedTerm trm tp)
+  OpenTerm (liftTCM scGlobalTypedTerm ident)
 
 -- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
 -- a constructor, or a datatype
 identOpenTerm :: Ident -> OpenTerm
 identOpenTerm ident =
-  OpenTerm $
-  do ident_app <- liftTCM scGlobalDef ident
-     typeInferComplete ident_app
+  OpenTerm (liftTCM scGlobalTypedTerm ident)
 
 -- | Build an 'OpenTerm' for a named variable.
 variableOpenTerm :: ExtCns Term -> OpenTerm
@@ -385,9 +379,7 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
   do f <- m_f
      arg <- m_arg
      ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedVal f) arg
-     ctx <- askCtx
-     ret_tp <- liftTCM scTypeOf' (map snd ctx) ret
-     return (SCTypedTerm ret ret_tp)
+     typeInferComplete ret
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
 -- not a function type
@@ -521,12 +513,12 @@ bindOpenTermAuxM ::
   OpenTermM (SCTypedTerm, SCTypedTerm, a)
 bindOpenTermAuxM x (OpenTerm tpM) body_f =
   OpenTermM $
-  do SCTypedTerm tp tp_tp <- tpM
-     tp_whnf <- typeCheckWHNF tp
+  do tp <- tpM
+     tp_whnf <- liftTCM scTypedTermWHNF tp
      (OpenTerm bodyM, a) <-
-       withVar x tp_whnf (openTermTopVar >>= (unOpenTermM . body_f))
+       withVar x (typedVal tp_whnf) (openTermTopVar >>= (unOpenTermM . body_f))
      body <- bodyM
-     return (SCTypedTerm tp_whnf tp_tp, body, a)
+     return (tp_whnf, body, a)
 
 -- | Build a lambda abstraction in the 'OpenTermM' monad
 lambdaOpenTermM ::
