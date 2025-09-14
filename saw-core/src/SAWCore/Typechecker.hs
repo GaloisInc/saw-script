@@ -45,15 +45,13 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( ctorName
-  , dtExtCns
-  , dtName
+  ( dtExtCns
   , emptyModule
   , findDataTypeInMap
   , resolveNameInMap
+  , resolvedNameName
   , DataType(..)
   , DefQualifier(..)
-  , ResolvedName(..)
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Position
@@ -115,18 +113,10 @@ inferResolveNameApp n args =
        (_, Just ec, _) ->
          do t <- typeInferComplete (Variable ec)
             inferApplyAll t args
-       (_, _, Just (ResolvedCtor ctor)) ->
-         do let c = ctorName ctor
+       (_, _, Just rn) ->
+         do let c = resolvedNameName rn
             t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
-       (_, _, Just (ResolvedDataType dt)) ->
-         do let c = dtName dt
-            t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
-            inferApplyAll t args
-       (_, _, Just (ResolvedDef d)) ->
-         do t <- liftTCM scDefTerm d
-            f <- SCTypedTerm t <$> liftTCM scTypeOf t
-            inferApplyAll f args
        (Nothing, Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
