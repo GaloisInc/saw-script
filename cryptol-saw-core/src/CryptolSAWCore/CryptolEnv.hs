@@ -511,10 +511,10 @@ loadCryptolModule sc env path = do
   --       command line.
 
   return ( cryptolModule
-         , updateFFITypes m
-             env { eModuleEnv = modEnv''
-                 , eTermEnv = newTermEnv
-                 }
+         , env { eModuleEnv = modEnv''
+               , eTermEnv   = newTermEnv
+               , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+               }
              -- NOTE here the difference between this function and
              -- `importModule`:
              --  1. the `eImports` field is not updated, as
@@ -557,14 +557,14 @@ mkCryptolModule m types newTermEnv =
            newTermEnv
       )
 
-updateFFITypes :: T.Module -> CryptolEnv -> CryptolEnv
-updateFFITypes m env = env { eFFITypes = eFFITypes' }
+updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
+updateFFITypes m eTermEnv' eFFITypes' =
+  foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
+                       eFFITypes'
+                       (T.findForeignDecls m)
   where
-  eFFITypes' = foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
-                     (eFFITypes env)
-                     (T.findForeignDecls m)
   getNameInfo nm =
-    case Map.lookup nm (eTermEnv env) of
+    case Map.lookup nm eTermEnv' of
       Just tm ->
         case asConstant tm of
           Just n -> nameInfo n
@@ -685,10 +685,11 @@ importModule sc env src as vis imps = do
       locate x = P.Located P.emptyRange x
 
   return $
-    (updateFFITypes m env{ eModuleEnv = modEnv'
-                         , eTermEnv   = newTermEnv
-                         })
-    {eImports = newImport : eImports env}
+    env{ eModuleEnv = modEnv'
+       , eTermEnv   = newTermEnv
+       , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+       , eImports   = newImport : eImports env
+       }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
