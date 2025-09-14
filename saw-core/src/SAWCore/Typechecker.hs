@@ -32,6 +32,7 @@ import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift)
 import Data.List (findIndex)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -88,6 +89,7 @@ inferCompleteTermCtx sc mnm ctx t =
 data CheckEnv =
   CheckEnv
   { tcModName :: Maybe ModuleName -- ^ the current module name
+  , tcCtxEC :: Map LocalName (ExtCns Term) -- ^ the mapping of names to named variables
   }
 
 -- | The monad for computations to typecheck a SAWCore parser AST.
@@ -97,11 +99,15 @@ runCheckM ::
   CheckM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   IO (Either TC.TCError a)
 runCheckM m sc mnm ctx =
-  TC.runTCM (runReaderT m (CheckEnv mnm)) sc ctx
+  TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc ctx
 
 -- | Read the current module name
 askModName :: CheckM (Maybe ModuleName)
 askModName = asks tcModName
+
+-- | Read the current context of named variables
+askCtxEC :: CheckM (Map LocalName (ExtCns Term))
+askCtxEC = asks tcCtxEC
 
 -- | Look up the current module name, raising an error if it is not set
 getModuleName :: CheckM ModuleName
@@ -134,7 +140,7 @@ inferApplyAll t (arg:args) =
 inferResolveNameApp :: Text -> [SCTypedTerm] -> CheckM SCTypedTerm
 inferResolveNameApp n args =
   do ctx <- lift $ TC.askCtx
-     nctx <- lift $ TC.askCtxEC
+     nctx <- askCtxEC
      mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
@@ -510,7 +516,12 @@ withVar :: LocalName -> Term -> CheckM a -> CheckM a
 withVar x tp m = ReaderT $ \env -> TC.withVar x tp (runReaderT m env)
 
 withEC :: LocalName -> ExtCns Term -> CheckM a -> CheckM a
-withEC x ec m = ReaderT $ \env -> TC.withEC x ec (runReaderT m env)
+withEC x ec m =
+  ReaderT $ \env ->
+  let env' = env { tcCtxEC = Map.insert x ec (tcCtxEC env) } in
+  TC.rethrowTCError (ErrorCtx x (ecType ec)) $
+  TC.withEmptyTCState $
+  runReaderT m env'
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.

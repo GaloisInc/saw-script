@@ -28,10 +28,10 @@ module SAWCore.SCTypeCheck
   , TCM
   , runTCM
   , askCtx
-  , askCtxEC
   , withVar
-  , withEC
   , withCtx
+  , rethrowTCError
+  , withEmptyTCState
   , atPos
   , LiftTCM(..)
   , SCTypedTerm(..)
@@ -85,7 +85,6 @@ data TCEnv =
   TCEnv
   { tcSharedContext :: SharedContext -- ^ the SAW context
   , tcCtx :: [(LocalName, Term)]     -- ^ the mapping of names to de Bruijn bound variables
-  , tcCtxEC :: Map LocalName (ExtCns Term) -- ^ the mapping of names to named variables
   }
 
 -- | The monad for type checking and inference, which:
@@ -104,15 +103,11 @@ newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
 runTCM ::
   TCM a -> SharedContext -> [(LocalName, Term)] -> IO (Either TCError a)
 runTCM (TCM m) sc ctx =
-  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx Map.empty)) Map.empty
+  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) Map.empty
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
 askCtx = TCM (asks tcCtx)
-
--- | Read the current context of named variables
-askCtxEC :: TCM (Map LocalName (ExtCns Term))
-askCtxEC = TCM (asks tcCtxEC)
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -123,28 +118,29 @@ askCtxEC = TCM (asks tcCtxEC)
 -- have to normalize the types of variables each time we see them.
 withVar :: LocalName -> Term -> TCM a -> TCM a
 withVar x tp (TCM m) =
-  TCM $
-  flip catchError (throwError . ErrorCtx x tp) $
-  do saved_table <- get
-     put Map.empty
-     a <- local (\env -> env { tcCtx = (x,tp) : tcCtx env }) m
-     put saved_table
-     return a
-
-withEC :: LocalName -> ExtCns Term -> TCM a -> TCM a
-withEC x ec (TCM m) =
-  TCM $
-  flip catchError (throwError . ErrorCtx x (ecType ec)) $
-  do saved_table <- get
-     put Map.empty
-     a <- local (\env -> env { tcCtxEC = Map.insert x ec (tcCtxEC env) }) m
-     put saved_table
-     return a
+  rethrowTCError (ErrorCtx x tp) $
+  withEmptyTCState $
+  TCM $ local (\env -> env { tcCtx = (x,tp) : tcCtx env }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
 withCtx :: [(LocalName, Term)] -> TCM a -> TCM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
+
+-- | Augment and rethrow any 'TCError' thrown by the given computation.
+rethrowTCError :: (TCError -> TCError) -> TCM a -> TCM a
+rethrowTCError f (TCM m) = TCM $ catchError m (throwError . f)
+
+-- | Clear the memoization table before running the sub-computation,
+-- and restore it afterward.
+withEmptyTCState :: TCM a -> TCM a
+withEmptyTCState (TCM m) =
+  TCM $
+  do saved_table <- get
+     put Map.empty
+     a <- m
+     put saved_table
+     pure a
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorTerm' constructor
@@ -163,7 +159,7 @@ withErrorSCTypedTermF tm = withErrorTermF (fmap typedVal tm)
 -- given position, using the 'ErrorPos' constructor, unless that error is
 -- already tagged with a position
 atPos :: Pos -> TCM a -> TCM a
-atPos p (TCM m) = TCM $ catchError m (throwError . ErrorPos p)
+atPos p = rethrowTCError (ErrorPos p)
 
 -- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
 -- 'TCM' computations
