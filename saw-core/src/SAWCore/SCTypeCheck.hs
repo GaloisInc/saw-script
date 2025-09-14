@@ -31,16 +31,16 @@ module SAWCore.SCTypeCheck
   , askCtxEC
   , askModName
   , withVar
+  , withEC
   , withCtx
+  , withCtxEC
   , atPos
   , LiftTCM(..)
   , SCTypedTerm(..)
   , TypeInfer(..)
   , typeCheckWHNF
   , typeInferCompleteWHNF
-  , typeInferCompleteCtxEC
   , typeInferCompleteInCtx
-  , typeInferCompleteInCtxEC
   , checkSubtype
   , ensureSort
   , applyPiTyped
@@ -397,15 +397,6 @@ typeInferCompleteCtx ((x,tp):ctx) =
      ((x,typedVal typed_tp,s):) <$>
        withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
 
-typeInferCompleteCtxEC ::
-  TypeInfer a => [(LocalName, a)] -> TCM [(LocalName, ExtCns Term, Sort)]
-typeInferCompleteCtxEC [] = pure []
-typeInferCompleteCtxEC ((x, tp) : ctx) =
-  do typed_tp <- typeInferComplete tp
-     s <- ensureSort (typedType typed_tp)
-     ec <- liftTCM scFreshEC x (typedVal typed_tp)
-     ((x, ec, s) :) <$> withEC x ec (typeInferCompleteCtxEC ctx)
-
 -- | Perform type inference on a context via 'typeInferCompleteCtx', and then
 -- run a computation in that context via 'withCtx', also passing in that context
 -- to the computation
@@ -414,16 +405,6 @@ typeInferCompleteInCtx ::
 typeInferCompleteInCtx ctx f =
   do typed_ctx <- typeInferCompleteCtx ctx
      withCtx (map (\(x,tp,_) -> (x,tp)) typed_ctx) (f typed_ctx)
-
--- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
--- run a computation in that context via 'withCtxEC', also passing in that context
--- to the computation
-typeInferCompleteInCtxEC ::
-  TypeInfer tp => [(LocalName, tp)] ->
-  ([(LocalName, ExtCns Term, Sort)] -> TCM a) -> TCM a
-typeInferCompleteInCtxEC ctx f =
-  do typed_ctx <- typeInferCompleteCtxEC ctx
-     withCtxEC (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work

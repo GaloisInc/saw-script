@@ -1,6 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
--- The above is needed because we want our orphan TypeInfer instance below
-
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -28,6 +25,7 @@ Portability : non-portable (language extensions)
 module SAWCore.Typechecker
   ( inferCompleteTerm
   , tcInsertModule
+  , typeInferCompleteUTerm
   ) where
 
 import Control.Monad (forM, forM_, void, unless)
@@ -76,7 +74,7 @@ inferCompleteTermCtx ::
   SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   Un.UTerm -> IO (Either PPS.Doc Term)
 inferCompleteTermCtx sc mnm ctx t =
-  do res <- runTCM (typeInferComplete t) sc mnm ctx
+  do res <- runTCM (typeInferCompleteUTerm t) sc mnm ctx
      case res of
        -- TODO: avoid intermediate 'String's from 'prettyTCError'
        Left err -> return $ Left $ vsep $ map pretty $ prettyTCError err
@@ -145,24 +143,21 @@ typeInferDebug :: String -> TCM ()
 typeInferDebug str | debugLevel > 0 = liftIO $ traceIO str
 typeInferDebug _ = return ()
 
--- The type inference engine for untyped terms, which mostly just dispatches to
--- the type inference engine for (FTermF SCTypedTerm) defined in SCTypeCheck.hs
-instance TypeInfer Un.UTerm where
-  typeInfer t = typedVal <$> typeInferComplete t
-
-  typeInferComplete t =
-    do typeInferDebug ("typechecking term: " ++ show t)
-       res <- atPos (pos t) $ typeInferCompleteTerm t
-       typeInferDebug ("completed typechecking term: " ++ show t ++ "\n"
-                       ++ "type = " ++ show (typedType res))
-       return res
+-- | Completely typecheck an untyped SAWCore AST.
+typeInferCompleteUTerm :: Un.UTerm -> TCM SCTypedTerm
+typeInferCompleteUTerm t =
+  do typeInferDebug ("typechecking term: " ++ show t)
+     res <- atPos (pos t) $ typeInferCompleteTerm t
+     typeInferDebug ("completed typechecking term: " ++ show t ++ "\n"
+                     ++ "type = " ++ show (typedType res))
+     return res
 
 -- | Main workhorse function for type inference on untyped terms
 typeInferCompleteTerm :: Un.UTerm -> TCM SCTypedTerm
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
-  mapM typeInferComplete args >>= inferResolveNameApp n
+  mapM typeInferCompleteUTerm args >>= inferResolveNameApp n
 typeInferCompleteTerm (Un.Name (PosPair _ n)) =
   -- NOTE: this is actually covered by the previous case, but we put it here
   -- so GHC doesn't complain about coverage
@@ -180,7 +175,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
      dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
-     typed_args <- mapM typeInferComplete args
+     typed_args <- mapM typeInferCompleteUTerm args
      case typed_args of
        (splitAt (length $ dtParams dt) ->
         (params,
@@ -201,42 +196,42 @@ typeInferCompleteTerm (Un.Recursor _) =
 
 -- Applications, lambdas, and pis
 typeInferCompleteTerm (Un.App f arg) =
-  (App <$> typeInferComplete f <*> typeInferComplete arg)
+  (App <$> typeInferCompleteUTerm f <*> typeInferCompleteUTerm arg)
   >>= typeInferComplete
-typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferCompleteUTerm t
 typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
-  do tp_trm <- typeInferComplete tp
+  do tp_trm <- typeInferCompleteUTerm tp
      -- NOTE: we need the type of x to be normalized when we add it to the
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
      tp_whnf <- typeCheckWHNF $ typedVal tp_trm
      body <- withVar x tp_whnf $
-       typeInferComplete $ Un.Lambda p ctx t
+       typeInferCompleteUTerm $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
-typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Pi _ [] t) = typeInferCompleteUTerm t
 typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
-  do tp_trm <- typeInferComplete tp
+  do tp_trm <- typeInferCompleteUTerm tp
      -- NOTE: we need the type of x to be normalized when we add it to the
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
      tp_whnf <- typeCheckWHNF $ typedVal tp_trm
      body <- withVar x tp_whnf $
-       typeInferComplete $ Un.Pi p ctx t
+       typeInferCompleteUTerm $ Un.Pi p ctx t
      typeInferComplete (Pi x tp_trm body)
 
 -- Non-dependent records
 typeInferCompleteTerm (Un.RecordValue _ elems) =
   do typed_elems <-
-       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
+       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferCompleteUTerm t) elems
      typeInferComplete (RecordValue typed_elems)
 typeInferCompleteTerm (Un.RecordType _ elems) =
   do typed_elems <-
-       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
+       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferCompleteUTerm t) elems
      typeInferComplete (RecordType typed_elems)
 typeInferCompleteTerm (Un.RecordProj t prj) =
-  (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
+  (RecordProj <$> typeInferCompleteUTerm t <*> return prj) >>= typeInferComplete
 
 -- Unit
 typeInferCompleteTerm (Un.UnitValue _) =
@@ -246,20 +241,20 @@ typeInferCompleteTerm (Un.UnitType _) =
 
 -- Simple pairs
 typeInferCompleteTerm (Un.PairValue _ t1 t2) =
-  (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)
+  (PairValue <$> typeInferCompleteUTerm t1 <*> typeInferCompleteUTerm t2)
   >>= typeInferComplete
 typeInferCompleteTerm (Un.PairType _ t1 t2) =
-  (PairType <$> typeInferComplete t1 <*> typeInferComplete t2)
+  (PairType <$> typeInferCompleteUTerm t1 <*> typeInferCompleteUTerm t2)
   >>= typeInferComplete
 typeInferCompleteTerm (Un.PairLeft t) =
-  (PairLeft <$> typeInferComplete t) >>= typeInferComplete
+  (PairLeft <$> typeInferCompleteUTerm t) >>= typeInferComplete
 typeInferCompleteTerm (Un.PairRight t) =
-  (PairRight <$> typeInferComplete t) >>= typeInferComplete
+  (PairRight <$> typeInferCompleteUTerm t) >>= typeInferComplete
 
 -- Type ascriptions
 typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
-  do typed_t <- typeInferComplete t
-     typed_tp <- typeInferComplete tp
+  do typed_t <- typeInferCompleteUTerm t
+     typed_tp <- typeInferCompleteUTerm tp
      _ <- ensureSort (typedType typed_tp)
      checkSubtype typed_t (typedVal typed_tp)
      return typed_t
@@ -271,7 +266,7 @@ typeInferCompleteTerm (Un.StringLit _ str) =
   typeInferComplete (StringLit str :: FlatTermF SCTypedTerm)
 typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.VecLit _ ts) =
-  do typed_ts <- mapM typeInferComplete ts
+  do typed_ts <- mapM typeInferCompleteUTerm ts
      tp <- case typed_ts of
        (t1:_) -> return $ typedType t1
        [] -> throwTCError $ EmptyVectorLit
@@ -313,7 +308,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
   (atPos p $
    do
      -- Step 1: type-check the type annotation, and make sure it is a type
-     typed_tp <- typeInferComplete tp
+     typed_tp <- typeInferCompleteUTerm tp
      void $ ensureSort $ typedType typed_tp
      let def_tp = typedVal typed_tp
      def_tp_whnf <- liftTCM scTypeCheckWHNF def_tp
@@ -334,7 +329,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- variables, and build a function that takes in those variables
      def_tm <-
        withCtx ctx $
-       do typed_body <- typeInferComplete body
+       do typed_body <- typeInferCompleteUTerm body
           checkSubtype typed_body req_body_tp
           liftTCM scLambdaList ctx (typedVal typed_body)
 
@@ -353,7 +348,7 @@ processDecls (Un.TypeDecl _ (PosPair p nm) _ :
 
 processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
   (atPos p $
-   do typed_tp <- typeInferComplete tp
+   do typed_tp <- typeInferCompleteUTerm tp
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
       let ident = mkIdent mnm nm
@@ -411,7 +406,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
-           (c,) <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
+           (c,) <$> typeInferCompleteUTerm (Un.Pi p' ctx body)) c_decls
   ctors <-
     forM typed_ctors $ \(c, typed_tp) ->
     -- Check that the universe level of the type of each constructor
@@ -469,3 +464,25 @@ matchPiWithNames (var:vars) (asPi -> Just (_, arg_tp, body_tp)) =
   do (ctx,body) <- matchPiWithNames vars body_tp
      return ((var,arg_tp):ctx,body)
 matchPiWithNames _ _ = Nothing
+
+-- | Perform type inference on a context, i.e., a list of variable names and
+-- their associated types. This will give us 'Term's for each type, as
+-- well as their 'Sort's, since the type of any type is a 'Sort'.
+typeInferCompleteCtxEC ::
+  [(LocalName, Un.UTerm)] -> TCM [(LocalName, ExtCns Term, Sort)]
+typeInferCompleteCtxEC [] = pure []
+typeInferCompleteCtxEC ((x, tp) : ctx) =
+  do typed_tp <- typeInferCompleteUTerm tp
+     s <- ensureSort (typedType typed_tp)
+     ec <- liftTCM scFreshEC x (typedVal typed_tp)
+     ((x, ec, s) :) <$> withEC x ec (typeInferCompleteCtxEC ctx)
+
+-- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
+-- run a computation in that context via 'withCtxEC', also passing in that context
+-- to the computation
+typeInferCompleteInCtxEC ::
+  [(LocalName, Un.UTerm)] ->
+  ([(LocalName, ExtCns Term, Sort)] -> TCM a) -> TCM a
+typeInferCompleteInCtxEC ctx f =
+  do typed_ctx <- typeInferCompleteCtxEC ctx
+     withCtxEC (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
