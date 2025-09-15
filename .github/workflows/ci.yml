@@ -502,7 +502,6 @@ jobs:
         shell: bash
         run: |
           saw monadify.saw
-          saw mr_solver_unit_tests.saw
 
   heapster-tests:
     needs: [build]

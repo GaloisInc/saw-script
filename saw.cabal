@@ -526,17 +526,10 @@ library saw-central
     SAWCentral.Yosys.TransitionSystem
     SAWCentral.Yosys
 
-    SAWCentral.MRSolver.Monad
-    SAWCentral.MRSolver.SMT
-    SAWCentral.MRSolver.Solver
-    SAWCentral.MRSolver.Evidence
-    SAWCentral.MRSolver.Term
-
     SAWCentral.Prover.Rewrite
     SAWCentral.Prover.SolverStats
     SAWCentral.Prover.Util
     SAWCentral.Prover.SBV
-    SAWCentral.Prover.MRSolver
     SAWCentral.Prover.RME
     SAWCentral.Prover.ABC
     SAWCentral.Prover.What4

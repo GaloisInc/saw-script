@@ -97,7 +97,6 @@ import SAWCentral.SolverVersions
 import SAWCentral.Proof (ProofResult(..), Theorem, emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
-import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys -- XXX remove in favor of the following later
 import qualified SAWCentral.Yosys as Yo (YosysIR)
 import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
@@ -1070,7 +1069,6 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
                    , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
-                   , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
@@ -1548,13 +1546,6 @@ instance IsValue SAWSimpset where
 instance FromValue SAWSimpset where
     fromValue _ (VSimpset ss) = ss
     fromValue _ _ = error "fromValue Simpset"
-
-instance IsValue SAWRefnset where
-    toValue _name rs = VRefnset rs
-
-instance FromValue SAWRefnset where
-    fromValue _ (VRefnset rs) = rs
-    fromValue _ _ = error "fromValue Refnset"
 
 instance IsValue Theorem where
     toValue _name t = VTheorem t
@@ -2379,7 +2370,6 @@ primTypes = Map.fromList
   , abstype "MIRValue" Experimental
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
-  , abstype "Refnset" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "SatResult" Current
   , abstype "SetupValue" Current
   , abstype "Simpset" Current
@@ -6266,83 +6256,6 @@ primitives = Map.fromList
     , "The second parameter is the path to write the resulting Sally input."
     , "The third parameter is the query, which should be a boolean function of three parameters: an 8-bit cycle counter, a record of \"fixed\" inputs, and a record of circuit outputs."
     , "The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function."
-    ]
-
-    ----------------------------------------
-    -- Mr. Solver commands
-
-  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
-    (pureVal mrSolverSetDebug)
-    HideDeprecated
-    [ "Set the debug level for Mr. Solver; 0 = no debug output,"
-    , " 1 = basic debug output, 2 = verbose debug output,"
-    , " 3 = all debug output"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
-    (pureVal mrSolverSetDebugDepth)
-    HideDeprecated
-    [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
-    , "and debug output to a maximum depth."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver" "ProofScript ()"
-    (pureVal (mrSolver emptyRefnset))
-    HideDeprecated
-    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
-    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "empty_rs"            "Refnset"
-    (pureVal (emptyRefnset :: SAWRefnset))
-    HideDeprecated
-    [ "The empty refinement set, containing no refinements."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
-    (funVal2 addrefn)
-    HideDeprecated
-    [ "Add a proved refinement theorem to a given refinement set."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
-    (funVal2 addrefns)
-    HideDeprecated
-    [ "Add proved refinement theorems to a given refinement set."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver_with" "Refnset -> ProofScript ()"
-    (pureVal mrSolver)
-    HideDeprecated
-    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
-    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
-    , " the given set of refinements taken as assumptions"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "refines" "[Term] -> Term -> Term -> Term"
-    (funVal3 refinesTerm)
-    HideDeprecated
-    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
-    , " as as well as two terms containing those variables, which may be"
-    , " either terms or functions in the SpecM monad, construct the"
-    , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
-    , " given terms, with the given variables generalized with a Pi type."
-    , ""
-    , "Expected to be removed in SAW 1.5."
     ]
 
     ----------------------------------------

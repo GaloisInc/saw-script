@@ -31,8 +31,6 @@ module SAWCentral.Value (
 
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
     SAWSimpset,
-    -- used by SAWCentral.Builtins, SAWScript.Interpreter
-    SAWRefnset,
     -- used by SAWCentral.Builtins
     AIGNetwork(..),
     -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
@@ -244,8 +242,6 @@ import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import qualified SAWCentral.Options as Opt
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
-import SAWCentral.MRSolver.Evidence as MRSolver
 import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
 import SAWCentral.X86 (X86Unsupported(..), X86Error(..))
@@ -534,7 +530,6 @@ data Value
     --   Like a VTopLevel, except in the other monad.
   | VProofScript SS.Pos RefChain (ProofScript Value)
   | VSimpset SAWSimpset
-  | VRefnset SAWRefnset
   | VTheorem Theorem
   | VBisimTheorem BisimTheorem
   -----
@@ -580,7 +575,6 @@ data Value
   | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
-type SAWRefnset = MRSolver.Refnset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -640,22 +634,6 @@ showSimpset opts ss =
        , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
     ppTerm t = SAWCorePP.ppTerm opts t
 
--- | Pretty-print a 'Refnset' to a 'String'
-showRefnset :: PPS.Opts -> MRSolver.Refnset a -> String
-showRefnset opts ss =
-  unlines ("Refinements" : "=============" : map (show . ppFunAssump)
-                                                 (MRSolver.listFunAssumps ss))
-  where
-    ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
-      PP.pretty '*' PP.<+>
-      (PP.nest 2 $ PP.fillSep
-       [ ppTermAppInCtx opts ctx (funNameTerm f) args
-       , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
-    ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
-      ppTermAppInCtx opts ctx (funNameTerm f) args
-    ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
-      SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
-
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
@@ -700,7 +678,6 @@ showsPrecValue opts nenv p v =
       v1' . showString " >>= " . v2'
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
-    VRefnset ss -> showString (showRefnset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
@@ -846,7 +823,7 @@ data TopLevelRW =
     --   either passed around or the position in the current AST
     --   element, and those positions should be used instead.
   , rwPosition :: SS.Pos
-  
+
     -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: Trace
 
@@ -855,7 +832,6 @@ data TopLevelRW =
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
   , rwMonadify   :: Monadify.MonadifyEnv
-  , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext
