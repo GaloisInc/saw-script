@@ -50,13 +50,11 @@ llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> Proo
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
 6 more matches tagged experimental; use enable_experimental to see them
-6 more matches tagged deprecated; use enable_deprecated to see them
  --------------------------------
  -- String Int
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
 6 more matches tagged experimental; use enable_experimental to see them
-6 more matches tagged deprecated; use enable_deprecated to see them
  --------------------------------
  -- (TopLevel Int)
 No matches.

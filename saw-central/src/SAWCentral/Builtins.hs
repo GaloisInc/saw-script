@@ -42,6 +42,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
+import qualified Data.Text.Lazy.IO as TLIO
 import Data.Time.Clock
 import Data.Typeable
 
@@ -66,7 +67,8 @@ import qualified CryptolSAWCore.Monadify as Monadify
 import qualified SAWSupport.Pretty as PPS (Doc, MemoStyle(..), Opts(..), defaultOpts, render, pShow)
 
 -- saw-core
-import SAWCore.Parser.Grammar (parseSAWTerm)
+import qualified SAWCore.Parser.AST as Un
+import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
@@ -80,6 +82,7 @@ import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
+import SAWCore.Typechecker (tcInsertModule)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
@@ -2510,3 +2513,22 @@ ghost_value ghost val =
               , MS.conditionContext = ""
               }
      addCondition (MS.SetupCond_Ghost md ghost val)
+
+-- | Based on the function of the same name in SAWCore.ParserUtils.
+-- Unlike that function, this calls 'fail' instead of 'error'.
+--
+-- XXX: we only need one; unify these once the error handling gets fixed.
+readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
+readModuleFromFile path =
+  do base <- liftIO getCurrentDirectory
+     txt <- liftIO $ TLIO.readFile path
+     case parseSAW base path txt of
+       Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
+       Left err -> fail $ "Module parsing failed:\n" ++ show err
+
+load_sawcore_from_file :: FilePath -> TopLevel ()
+load_sawcore_from_file mod_filename =
+  do sc <- getSharedContext
+     liftIO $ Monadify.ensureCryptolMLoaded sc
+     (saw_mod, _) <- readModuleFromFile mod_filename
+     liftIO $ tcInsertModule sc saw_mod

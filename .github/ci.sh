@@ -104,7 +104,6 @@ haddock() {
     saw:saw-core-sbv
     saw:saw-core-aig
     saw:saw-core-coq
-    saw:heapster
     saw:saw-central
     saw:saw-script
     saw:saw-server

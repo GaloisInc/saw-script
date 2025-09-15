@@ -194,7 +194,6 @@ jobs:
             cryptol-saw-core-tests
             crux-mir-comp-tests
             saw-core-coq-tests
-            heapster-prover-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -551,10 +550,6 @@ jobs:
       # should become their own build artifact, to avoid re-compiling the Coq
       # libraries
       - working-directory: saw-core-coq/coq
-        shell: bash
-        run: opam exec -- make -j
-
-      - working-directory: heapster/examples
         shell: bash
         run: opam exec -- make -j
 
