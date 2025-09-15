@@ -60,7 +60,6 @@ import qualified Cryptol.Utils.PP as CryptolPP
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
-import qualified CryptolSAWCore.Monadify as Monadify
 
 -- saw-support
 import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShow)
@@ -2188,97 +2187,6 @@ importSchemaCEnv sc cenv schema =
   do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
      Cryptol.importSchema sc cry_env schema
 
-monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-monadifyTypedTerm sc t =
-  do rw <- get
-     let menv = rwMonadify rw
-     (ret_t, menv') <-
-       liftIO $
-       case ttType t of
-         TypedTermSchema schema ->
-           do tp <- importSchemaCEnv sc (rwCryptol rw) schema
-              Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
-         TypedTermKind _ ->
-           fail "monadify_term applied to a type"
-         TypedTermOther tp ->
-           Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
-     modify (\s -> s { rwMonadify = menv' })
-     tp <- liftIO $ scTypeOf sc ret_t
-     return $ TypedTerm (TypedTermOther tp) ret_t
-
--- | Ensure that a 'TypedTerm' has been monadified
-ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-ensureMonadicTerm sc t
-  | TypedTermOther tp <- ttType t =
-    io (isSpecFunType sc tp) >>= \case
-      True -> return t
-      False -> monadifyTypedTerm sc t
-ensureMonadicTerm sc t = monadifyTypedTerm sc t
-
--- | Match a type as being of the form @SpecM E a@ for some @E@ and @a@
-asSpecM :: Term -> Maybe (Term, Term)
-asSpecM (asApplyAll -> (isGlobalDef "SpecM.SpecM" -> Just (), [ev, tp])) =
-  return (ev, tp)
-asSpecM _ = fail "not a SpecM type, or event type is not closed!"
-
--- | Test if a type normalizes to a monadic function type of 0 or more arguments
-isSpecFunType :: SharedContext -> Term -> IO Bool
-isSpecFunType sc t = scWhnf sc t >>= \case
-  (asPiList -> (_, asSpecM -> Just _)) -> return True
-  _ -> return False
-
-setMonadification :: SharedContext -> Text -> Text -> Bool -> TopLevel ()
-setMonadification sc cry_str saw_str poly_p =
-  do rw <- get
-
-     -- Step 1: convert the first string to a Cryptol name
-     cry_nm <-
-       let ?fileReader = StrictBS.readFile in
-       liftIO (CEnv.resolveIdentifier
-               (rwCryptol rw) cry_str) >>= \case
-       Just n -> return n
-       Nothing -> fail $ Text.unpack $ "No such Cryptol identifer: " <> cry_str
-     cry_nmi <- liftIO $ Cryptol.importName cry_nm
-
-     -- Step 2: get the monadified type for this Cryptol name
-     --
-     -- FIXME: not sure if this is the correct way to get the type of a Cryptol
-     -- name, so we are falling back on just translating the name to SAW core
-     -- and monadifying its type there
-     cry_saw_tp <-
-       liftIO $
-       case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
-         Just schema ->
-           -- TextIO.putStrLn $ "Found Cryptol type for name: " <> show cry_str >>
-           importSchemaCEnv sc (rwCryptol rw) schema
-         Nothing
-           | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
-                                                     rwCryptol rw) ->
-             -- TextIO.putStrLn $ "No Cryptol type for name: " <> cry_str >>
-             scTypeOf sc cry_nm_trans
-         _ -> fail $ Text.unpack $ "Could not find type for Cryptol name: " <> cry_str
-     cry_mon_tp <-
-       liftIO $
-       Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp poly_p
-
-     -- Step 3: convert the second string to a typed SAW core term, and if it
-     -- has an existing macro, check that it has the same type as the type for
-     -- the cryptol name, or if no macro exists, check that it has the same
-     -- type as the monadified type for the Cryptol name and generate a macro
-     -- which maps the Cryptol name to the SAW core term
-     let saw_ident = parseIdent (Text.unpack saw_str)
-     saw_trm <- liftIO $ scGlobalDef sc saw_ident
-     saw_tp <- liftIO $ scTypeOf sc saw_trm
-     let (tp_to_check, macro) =
-           case Monadify.monEnvLookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
-             Just existing_macro -> (cry_saw_tp, existing_macro)
-             Nothing -> (cry_mon_tp,
-                         Monadify.argGlobalMacro cry_nmi saw_ident poly_p)
-     liftIO $ scCheckSubtype sc Nothing (SCTypedTerm saw_trm saw_tp) tp_to_check
-
-     -- Step 4: Add the generated macro
-     put (rw { rwMonadify = Monadify.monEnvAdd cry_nmi macro (rwMonadify rw) })
-
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
   where
@@ -2397,6 +2305,5 @@ readModuleFromFile path =
 load_sawcore_from_file :: FilePath -> TopLevel ()
 load_sawcore_from_file mod_filename =
   do sc <- getSharedContext
-     liftIO $ Monadify.ensureCryptolMLoaded sc
      (saw_mod, _) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod

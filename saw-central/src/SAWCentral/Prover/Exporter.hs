@@ -76,7 +76,6 @@ import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule,
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.PreludeM (cryptolMModule, specMModule,
                                       scLoadSpecMModule, scLoadCryptolMModule)
-import CryptolSAWCore.Monadify (defaultMonEnv, monadifyCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
@@ -511,8 +510,6 @@ writeCoqProp name notations skips path t =
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
 writeCoqCryptolModule ::
-  -- | Translate the "monadified" version of the module when 'True'
-  Bool ->
   -- | Path to module to export
   FilePath ->
   -- | Path for output Coq file
@@ -523,7 +520,7 @@ writeCoqCryptolModule ::
   -- | List of identifiers to skip during translation
   [Text] ->
   TopLevel ()
-writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
+writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -535,7 +532,6 @@ writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   cry_env <- mkCryEnv env
   mm <- scGetModuleMap sc
   let ?mm = mm
-  cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
   let cryptolPreludeDecls =
         map Coq.Ident $
         mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
@@ -546,7 +542,7 @@ writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = Coq.Ident (takeBaseName inputFile)
-  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm'
+  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc ->

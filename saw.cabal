@@ -238,7 +238,6 @@ library cryptol-saw-core
   exposed-modules:
     CryptolSAWCore.Cryptol
     CryptolSAWCore.CryptolEnv
-    CryptolSAWCore.Monadify
     CryptolSAWCore.Prelude
     CryptolSAWCore.PreludeM
     CryptolSAWCore.Simpset

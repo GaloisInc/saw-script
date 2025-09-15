@@ -251,7 +251,6 @@ import SAWCentral.Yosys.State (YosysSequential)
 
 import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
-import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import SAWCore.SharedTerm
@@ -831,7 +830,6 @@ data TopLevelRW =
 
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
-  , rwMonadify   :: Monadify.MonadifyEnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext

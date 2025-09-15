@@ -469,40 +469,6 @@ jobs:
           publish_dir: gh-pages
           keep_files: true
 
-  mr-solver-tests:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-bins"
-          path: dist/bin
-
-      - name: Update PATH to include SAW
-        shell: bash
-        run: |
-          chmod +x dist/bin/*
-          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
-
-      - working-directory: examples/mr_solver
-        shell: bash
-        run: |
-          saw monadify.saw
-
   heapster-tests:
     needs: [build]
     strategy:

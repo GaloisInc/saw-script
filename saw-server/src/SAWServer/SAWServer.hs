@@ -50,7 +50,7 @@ import qualified SAWCentral.Trace as Trace (empty)
 
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
-import SAWCore.SharedTerm (mkSharedContext, scLoadModule, scGetModuleMap)
+import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
 import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
@@ -69,7 +69,6 @@ import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
-import CryptolSAWCore.Monadify (defaultMonEnv)
 import SAWCentral.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo
@@ -217,7 +216,6 @@ initialState readFileFn =
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
-     mm <- scGetModuleMap sc
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
      let bic = BuiltinContext { biSharedContext = sc
@@ -252,7 +250,6 @@ initialState readFileFn =
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
                 , rwLocalEnv = []
-                , rwMonadify = let ?mm = mm in defaultMonEnv
                 , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB

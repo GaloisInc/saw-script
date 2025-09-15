@@ -109,7 +109,6 @@ import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
-import qualified CryptolSAWCore.Monadify as Monadify
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 
@@ -1059,7 +1058,6 @@ buildTopLevelEnv proxy opts scriptArgv =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       mm <- scGetModuleMap sc
        let rw0 = TopLevelRW
                    { rwValueInfo  = primValueEnv opts bic
                    , rwTypeInfo   = primNamedTypeEnv
@@ -1068,7 +1066,6 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
-                   , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
@@ -2154,9 +2151,9 @@ do_write_coq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLeve
 do_write_coq_term name notations skips path t =
   writeCoqTerm name notations skips (Text.unpack path) t
 
-do_write_coq_cryptol_module :: Bool -> Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
-do_write_coq_cryptol_module monadic infile outfile notations skips =
-  writeCoqCryptolModule monadic (Text.unpack infile) (Text.unpack outfile) notations skips
+do_write_coq_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_coq_cryptol_module infile outfile notations skips =
+  writeCoqCryptolModule (Text.unpack infile) (Text.unpack outfile) notations skips
 
 do_write_coq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
 do_write_coq_sawcore_prelude outfile notations skips =
@@ -3189,7 +3186,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (do_write_coq_cryptol_module False))
+    (pureVal do_write_coq_cryptol_module)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq."
@@ -3200,22 +3197,6 @@ primitives = Map.fromList
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
     , "The fourth argument is a list of identifiers to skip translating."
-    ]
-
-  , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (do_write_coq_cryptol_module True))
-    HideDeprecated
-    [ "Write out a representation of a Cryptol module in Gallina syntax for"
-    , "Coq, using the monadified version of the given module."
-    , "The first argument is the file containing the module to export."
-    , "The second argument is the name of the file to output into,"
-    , "use an empty string to output to standard output."
-    , "The third argument is a list of pairs of notation substitutions:"
-    , "the operator on the left will be replaced with the identifier on"
-    , "the right, as we do not support notations on the Coq side."
-    , "The fourth argument is a list of identifiers to skip translating."
-    , ""
-    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
@@ -6259,27 +6240,7 @@ primitives = Map.fromList
     ]
 
     ----------------------------------------
-    -- Monadification commands
-
-  , prim "monadify_term" "Term -> TopLevel Term"
-    (scVal monadifyTypedTerm)
-    HideDeprecated
-    [ "Monadify a Cryptol term, converting it to a form where all recursion"
-    , " and errors are represented as monadic operators"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "set_monadification" "String -> String -> Bool -> TopLevel ()"
-    (scVal setMonadification)
-    HideDeprecated
-    [ "Set the monadification of a specific Cryptol identifer to a SAW core "
-    , "identifier of monadic type. The supplied Boolean flag indicates if the "
-    , "SAW core term is polymorphic in the event type and function stack of the"
-    , "SpecM monad."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
+    -- SAWCore loading command
 
   , prim "load_sawcore_from_file"
     "String -> TopLevel ()"
