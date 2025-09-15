@@ -279,7 +279,7 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span>  }
 <span class="lineno">  261 </span>
 <span class="lineno">  262 </span>bpBool :: VMonad l =&gt; BasePrims l -&gt; Bool -&gt; MBool l
-<span class="lineno">  263 </span><span class="decl"><span class="istickedoff">bpBool bp True = return (bpTrue bp)</span>
+<span class="lineno">  263 </span><span class="decl"><span class="istickedoff">bpBool bp True = <span class="nottickedoff">return (bpTrue bp)</span></span>
 <span class="lineno">  264 </span><span class="spaces"></span><span class="istickedoff">bpBool bp False = return (bpFalse bp)</span></span>
 <span class="lineno">  265 </span>
 <span class="lineno">  266 </span>-- | Given implementations of the base primitives, construct a table
