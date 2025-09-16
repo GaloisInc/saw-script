@@ -199,9 +199,6 @@ stringModule =
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
-tpDescModule :: ModuleName
-tpDescModule = mkModuleName ["TpDesc"]
-
 {-
 polyListModule :: ModuleName
 polyListModule = mkModuleName ["PolyList"]
@@ -227,15 +224,8 @@ specialTreatmentMap configuration = Map.fromList $
 
 cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
-
-  -- NOTE: Num has to be defined in the entree-specs library, because it must be
-  -- defined *before* type descriptions, so we have to map Num and some of its
-  -- operations to that library
   ++
-  [ ("Num",                   mapsTo tpDescModule "Num")
-  , ("TCNum",                 mapsTo tpDescModule "TCNum")
-  , ("TCInf",                 mapsTo tpDescModule "TCInf")
-  , ("Num_rec",               mapsTo tpDescModule "Num_rect")
+  [ ("Num_rec",               rename "Num__rec")
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 

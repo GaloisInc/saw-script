@@ -18,7 +18,7 @@ Import ListNotations.
 (** It is annoying to have to wrap natural numbers into [TCNum] to use them at
 type [Num], so these coercions will do it for us.
  *)
-Coercion TCNum : nat >-> TpDesc.Num.
+Coercion TCNum : nat >-> Num.
 Definition natToNat (n : nat) : Nat := n.
 Coercion natToNat : nat >-> Nat.
 
@@ -81,7 +81,7 @@ Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
 
 Definition iter {a : Type} (n : Num) (f : a -> a) : a -> a :=
     match n with
-    | TpDesc.TCNum n => fun xs => iterNat n f xs
-    | TpDesc.TCInf   => fun xs => xs
+    | TCNum n => fun xs => iterNat n f xs
+    | TCInf   => fun xs => xs
     end
 .

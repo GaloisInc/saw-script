@@ -12,15 +12,6 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import SAWCorePrelude.
 
-(* NOTE: the Num type has to be defined in the TpDesc module in entree-specs
-because it must be defined *before* type descriptions so type descriptions can
-refer to it. Thus we map the definition in Cryptol.sawcore to that definition,
-and we re-export it here. *)
-Definition Num := TpDesc.Num.
-Definition Num_rect := TpDesc.Num_rect.
-Definition TCNum := TpDesc.TCNum.
-Definition TCInf := TpDesc.TCInf.
-
 
 Fixpoint Nat_cases2_match a f1 f2 f3 (x y : nat) : a :=
   match (x, y) with
