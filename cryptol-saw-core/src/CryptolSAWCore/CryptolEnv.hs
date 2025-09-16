@@ -585,8 +585,8 @@ updateFFITypes m eTermEnv' eFFITypes' =
 --    - submodules are not handled correctly below.
 --    - the code is duplicating functionality that we have with `importModule`
 --   TODO:
---    - new design in PR#2569 should replace this function such that the
---      fundamental work is done via `importModule`.
+--    - new design in PR #2593 (addressing issue #2569) should replace
+--      this function so that the fundamental work is done via `importModule`.
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
