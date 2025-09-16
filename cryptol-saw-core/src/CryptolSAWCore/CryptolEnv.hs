@@ -633,6 +633,56 @@ extractDefFromCryptolModule (CryptolModule _ tm) name =
 
 --------------------------------------------------------------------------------
 
+loadAndTranslateModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext             {- ^ Shared context for creating terms -} ->
+  CryptolEnv                {- ^ Extend this environment -} ->
+  Either FilePath P.ModName {- ^ Where to find the module -} ->
+  IO (P.Located P.ModName, CryptolEnv)
+loadAndTranslateModule sc env src =
+  do let modEnv = eModuleEnv env
+     (mtop, modEnv') <- liftModuleM modEnv $
+       case src of
+         Left path -> MB.loadModuleByPath True path
+         Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
+     m <- case mtop of
+            T.TCTopModule mod'  -> pure mod'
+            T.TCTopSignature {} ->
+              fail "Expected a module but found an interface."
+
+     checkNotParameterized m
+
+     -- Regenerate SharedTerm environment:
+     let oldModNames   = map ME.lmName
+                       $ ME.lmLoadedModules
+                       $ ME.meLoadedModules modEnv
+         isNew m'      = T.mName m' `notElem` oldModNames
+         newModules    = filter isNew
+                       $ map ME.lmModule
+                       $ ME.lmLoadedModules
+                       $ ME.meLoadedModules modEnv'
+         newDeclGroups = concatMap T.mDecls newModules
+         newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+                                        (ME.loadedNominalTypes modEnv)
+
+     newTermEnv <-
+       do oldCryEnv <- mkCryEnv env
+          cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
+          newCryEnv <- C.importTopLevelDeclGroups
+                        sc C.defaultPrimitiveOptions cEnv newDeclGroups
+          return (C.envE newCryEnv)
+
+     let -- XXX: it would be better to have the real position, but it
+         -- seems to have been thrown away on the Cryptol side.
+         locate x = P.Located P.emptyRange x
+
+     return ( locate $ T.mName m
+            , env{ eModuleEnv = modEnv'
+                , eTermEnv   = newTermEnv
+                , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+                }
+            )
+
 -- | @'importModule' sc env src as vis imps@ - extend the Cryptol
 --   environment with a module.  Closely mirrors the sawscript command "import".
 --
@@ -650,56 +700,17 @@ importModule ::
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importModule sc env src as vis imps = do
-  let modEnv = eModuleEnv env
-  (mtop, modEnv') <- liftModuleM modEnv $
-    case src of
-      Left path -> MB.loadModuleByPath True path
-      Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
-  m <- case mtop of
-         T.TCTopModule mod'  -> pure mod'
-         T.TCTopSignature {} ->
-           fail "Expected a module but found an interface."
-
-  checkNotParameterized m
-
-  -- Regenerate SharedTerm environment:
-  let oldModNames   = map ME.lmName
-                    $ ME.lmLoadedModules
-                    $ ME.meLoadedModules modEnv
-      isNew m'      = T.mName m' `notElem` oldModNames
-      newModules    = filter isNew
-                    $ map ME.lmModule
-                    $ ME.lmLoadedModules
-                    $ ME.meLoadedModules modEnv'
-      newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
-                                     (loadedNonParamNominalTypes modEnv)
-
-  newTermEnv <-
-    do oldCryEnv <- mkCryEnv env
-       cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-       newCryEnv <- C.importTopLevelDeclGroups
-                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
-       return (C.envE newCryEnv)
-
-  let newImport = (vis, P.Import { T.iModule= locate $ T.mName m
+importModule sc env src as vis imps =
+  do
+  (modName, env') <- loadAndTranslateModule sc env src
+  let newImport = (vis, P.Import { T.iModule= modName
                                  , T.iAs    = as
                                  , T.iSpec  = imps
                                  , T.iInst  = Nothing
                                  , T.iDoc   = Nothing
                                  }
                   )
-      -- XXX: it would be better to have the real position, but it
-      -- seems to have been thrown away on the Cryptol side.
-      locate x = P.Located P.emptyRange x
-
-  return $
-    env{ eModuleEnv = modEnv'
-       , eTermEnv   = newTermEnv
-       , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-       , eImports   = newImport : eImports env
-       }
+  return $ env'{ eImports = newImport : eImports env }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
