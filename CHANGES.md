@@ -4,7 +4,70 @@ This release supports [version
 4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
 `mir-json`'s schema.
 
-Nothing yet.
+## Changes
+
+* The deprecated Heapster, MRSolver, and Monadify features have been
+  removed.
+  The following SAW commands are no longer available:
+
+  - write_coq_cryptol_module_monadic
+  - mrsolver_set_debug_level
+  - mrsolver_set_debug_printing_depth
+  - mrsolver
+  - empty_rs
+  - addrefn
+  - addrefns
+  - mrsolver_with
+  - refines
+  - monadify_term
+  - set_monadification
+  - heapster_init_env
+  - heapster_init_env_debug
+  - heapster_init_env_from_file
+  - heapster_init_env_from_file_debug
+  - heapster_init_env_for_files
+  - heapster_init_env_for_files_debug
+  - heapster_get_cfg
+  - heapster_define_opaque_perm
+  - heapster_define_recursive_perm
+  - heapster_define_reachability_perm
+  - heapster_define_recursive_shape
+  - heapster_define_perm
+  - heapster_define_llvmshape
+  - heapster_define_opaque_llvmshape
+  - heapster_define_rust_type
+  - heapster_define_rust_type_qual
+  - heapster_block_entry_hint
+  - heapster_gen_block_perms_hint
+  - heapster_join_point_hint
+  - heapster_find_symbol
+  - heapster_find_symbols
+  - heapster_find_symbol_with_type
+  - heapster_find_symbols_with_type
+  - heapster_find_symbol_commands
+  - heapster_find_trait_method_symbol
+  - heapster_assume_fun
+  - heapster_assume_fun_rename
+  - heapster_assume_fun_rename_prim
+  - heapster_assume_fun_multi
+  - heapster_typecheck_fun
+  - heapster_typecheck_fun_rename
+  - heapster_typecheck_mut_funs
+  - heapster_set_event_type
+  - heapster_print_fun_trans
+  - heapster_export_coq
+  - heapster_set_debug_level
+  - heapster_set_translation_checks
+  - heapster_trans_rust_type
+  - heapster_parse_test
+  - heapster_dump_ide_info
+
+* Function `write_coq_cryptol_primitives_for_sawcore` no longer
+  generates Coq translations of SAWCore modules `SpecM.sawcore` and
+  `CryptolM.sawcore`, which have been removed.
+  Accordingly, the second and third `String` arguments to
+  `write_coq_cryptol_primitives_for_sawcore` have been removed.
+
 
 # Version 1.4 -- date still TBD
 
