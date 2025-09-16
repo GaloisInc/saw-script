@@ -185,14 +185,13 @@ nameMatcher xs =
 
 -- Initialize ------------------------------------------------------------------
 
--- | initCryptolEnv - Create initial CryptolEnv, this involves loading the built-in modules
---   (preludeName, arrayName, preludeReferenceName) and translating them into SAWCore, and
+-- | initCryptolEnv - Create initial CryptolEnv, this involves loading
+--   the built-in modules (preludeName, arrayName,
+--   preludeReferenceName) and translating them into SAWCore, and
 --   putting them into scope.
 --
---   NOTE: submodules in these built-in modules would be suppported here.
+--   NOTE: submodules in these built-in modules are supported in this code.
 --
---   FIXME: There is some code duplication between this and `loadCryptolModule` and `importModule`.
-
 initCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> IO CryptolEnv
@@ -230,7 +229,6 @@ initCryptolEnv sc = do
   let refMod = T.tcTopEntityToModule refTop
 
   -- Set up reference implementation redirections
-  --  FIXME: Unclear, add some documentation here.
   let refDecls = T.mDecls refMod
   let nms = Set.toList (MI.ifsPublic (TIface.genIfaceNames refMod))
 
@@ -434,9 +432,7 @@ checkNotParameterized m =
 -- FIXME: Code duplication, these two functions are highly similar:
 --   - loadCryptolModule
 --   - importModule
---
--- TODO:
---   - common up the common code
+-- - TODO: "common up" the common code per #2569.
 
 -- | loadCryptolModule - load a cryptol module and return a handle to
 -- the `CryptolModule`.  The contents of the module are not imported.
@@ -585,7 +581,10 @@ updateFFITypes m eTermEnv' eFFITypes' =
 --   FIXME:
 --    - submodules are not handled correctly below.
 --    - the code is duplicating functionality that we have with `importModule`
---
+--   TODO:
+--    - new design in PR#2569 should replace this function such that the
+--      fundamental work is done via `importModule`.
+
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
@@ -604,7 +603,6 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
           f _                                 = Nothing
 
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-      -- FIXME: suspicious. (Do we need to do any C.NSModule?)
 
     addSubModule name = MN.shadowing (MN.singletonNS C.NSModule (P.mkQual modName (MN.nameIdent name)) name)
 
@@ -628,8 +626,9 @@ extractDefFromCryptolModule (CryptolModule _ tm) name =
 --   environment with a module.  Closely mirrors the sawscript command "import".
 --
 -- NOTE:
---  - the module can be qualified or not (per 'as' argument).
---  - per 'vis' we can import public definitions or *all* (i.e., kinternal and public) definitions.
+--  - the module can be qualified or not (per 'as' argument).  per
+--  - 'vis' we can import public definitions or *all* (i.e., internal
+--    and public) definitions.
 
 importModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
