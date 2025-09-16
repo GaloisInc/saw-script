@@ -953,7 +953,7 @@ interpretFile file runMain =
       if showLoc then
         let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
             withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
-        in                                              
+        in
         withOptions withPrint (interpretTopStmt False s)
       else
         interpretTopStmt False s
