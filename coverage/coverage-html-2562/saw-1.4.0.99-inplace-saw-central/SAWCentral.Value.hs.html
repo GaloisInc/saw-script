@@ -1226,7 +1226,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1207 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
 <span class="lineno"> 1208 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
 <span class="lineno"> 1209 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
-<span class="lineno"> 1210 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">pure $ CEnv.bindCryptolModule (modname, m) ce</span></span>
+<span class="lineno"> 1210 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindCryptolModule (modname, m) ce</span>
 <span class="lineno"> 1211 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
 <span class="lineno"> 1212 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfString sc (Text.unpack s)</span>
 <span class="lineno"> 1213 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
@@ -1243,7 +1243,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1224 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1225 </span><span class="spaces">    </span><span class="istickedoff">-- XXX why is this using getOrig?</span>
 <span class="lineno"> 1226 </span><span class="spaces">    </span><span class="istickedoff">ident = T.mkIdent (SS.getOrig name)</span>
-<span class="lineno"> 1227 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">modname = T.packModName [SS.getOrig name]</span></span>
+<span class="lineno"> 1227 </span><span class="spaces">    </span><span class="istickedoff">modname = T.packModName [SS.getOrig name]</span>
 <span class="lineno"> 1228 </span><span class="spaces">    </span><span class="istickedoff">ce = rwCryptol rw</span></span>
 <span class="lineno"> 1229 </span>
 <span class="lineno"> 1230 </span>typedTermOfString :: SharedContext -&gt; String -&gt; IO TypedTerm
