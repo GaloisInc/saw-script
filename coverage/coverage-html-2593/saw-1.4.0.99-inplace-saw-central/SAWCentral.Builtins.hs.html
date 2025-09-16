@@ -2160,14 +2160,14 @@ span.spaces    { background: white }
 <span class="lineno"> 2141 </span><span class="spaces">      </span><span class="nottickedoff">return (n', TypedTerm (TypedTermSchema s') t')</span></span>
 <span class="lineno"> 2142 </span>
 <span class="lineno"> 2143 </span>cryptol_load :: (FilePath -&gt; IO StrictBS.ByteString) -&gt; FilePath -&gt; TopLevel CryptolModule
-<span class="lineno"> 2144 </span><span class="decl"><span class="nottickedoff">cryptol_load fileReader path = do</span>
-<span class="lineno"> 2145 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 2146 </span><span class="spaces">  </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno"> 2147 </span><span class="spaces">  </span><span class="nottickedoff">let ce = rwCryptol rw</span>
-<span class="lineno"> 2148 </span><span class="spaces">  </span><span class="nottickedoff">let ?fileReader = fileReader</span>
-<span class="lineno"> 2149 </span><span class="spaces">  </span><span class="nottickedoff">(m, ce') &lt;- io $ CEnv.loadCryptolModule sc ce path</span>
-<span class="lineno"> 2150 </span><span class="spaces">  </span><span class="nottickedoff">putTopLevelRW $ rw { rwCryptol = ce' }</span>
-<span class="lineno"> 2151 </span><span class="spaces">  </span><span class="nottickedoff">return m</span></span>
+<span class="lineno"> 2144 </span><span class="decl"><span class="istickedoff">cryptol_load fileReader path = do</span>
+<span class="lineno"> 2145 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno"> 2146 </span><span class="spaces">  </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 2147 </span><span class="spaces">  </span><span class="istickedoff">let ce = rwCryptol rw</span>
+<span class="lineno"> 2148 </span><span class="spaces">  </span><span class="istickedoff">let ?fileReader = fileReader</span>
+<span class="lineno"> 2149 </span><span class="spaces">  </span><span class="istickedoff">(m, ce') &lt;- io $ CEnv.loadCryptolModule sc ce path</span>
+<span class="lineno"> 2150 </span><span class="spaces">  </span><span class="istickedoff">putTopLevelRW $ rw { rwCryptol = ce' }</span>
+<span class="lineno"> 2151 </span><span class="spaces">  </span><span class="istickedoff">return m</span></span>
 <span class="lineno"> 2152 </span>
 <span class="lineno"> 2153 </span>cryptol_add_path :: FilePath -&gt; TopLevel ()
 <span class="lineno"> 2154 </span><span class="decl"><span class="nottickedoff">cryptol_add_path path =</span>
