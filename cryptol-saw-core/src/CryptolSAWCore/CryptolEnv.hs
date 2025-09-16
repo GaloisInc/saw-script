@@ -260,6 +260,20 @@ initCryptolEnv sc = do
     , eFFITypes   = Map.empty
     }
 
+-- | Translate all declarations in all loaded modules to SAWCore terms
+--   NOTE: used only for initialization code.
+
+genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
+genTermEnv sc modEnv cryEnv0 = do
+  let declGroups = concatMap T.mDecls
+                 $ filter (not . T.isParametrizedModule)
+                 $ ME.loadedModules modEnv
+      nominals   = ME.loadedNominalTypes modEnv
+  cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
+  cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
+  return (C.envE cryEnv2)
+
+
 -- Parse -----------------------------------------------------------------------
 
 ioParseExpr :: InputText -> IO (P.Expr P.PName)
@@ -399,17 +413,6 @@ translateDeclGroups sc env dgs =
            , eExtraTypes = Map.union (eExtraTypes env) newTypes
            , eTermEnv    = C.envE cryEnv'
            }
-
--- | Translate all declarations in all loaded modules to SAWCore terms
-genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
-genTermEnv sc modEnv cryEnv0 = do
-  let declGroups = concatMap T.mDecls
-                 $ filter (not . T.isParametrizedModule)
-                 $ ME.loadedModules modEnv
-      nominals   = ME.loadedNominalTypes modEnv
-  cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
-  cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return (C.envE cryEnv2)
 
 --------------------------------------------------------------------------------
 
@@ -669,7 +672,7 @@ importModule sc env src as vis imps = do
     do oldCryEnv <- mkCryEnv env
        cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups
-                     sc C.defaultPrimitiveOptions cEnv newDeclGroups
+                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
        return (C.envE newCryEnv)
 
   let newImport = (vis, P.Import { T.iModule= locate $ T.mName m
