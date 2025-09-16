@@ -469,7 +469,7 @@ jobs:
           publish_dir: gh-pages
           keep_files: true
 
-  heapster-tests:
+  saw-core-coq-tests:
     needs: [build]
     strategy:
       fail-fast: false
@@ -1052,7 +1052,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - build
-      - heapster-tests
+      - saw-core-coq-tests
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
