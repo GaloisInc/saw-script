@@ -61,8 +61,11 @@ gitbranch() {
         echo Nothing
     else
         # Strip off the leading "  " or "* "
-        # and in casae we get more than one, combine on one line
+        # and in case we get more than one, combine on one line
         output=$(echo "$output" | sed 's/^..//' | tr '\n' ' ' | sed 's/ $//')
+        # Replace "HEAD detached at v1.4" with "release tag v1.4"
+        output=$(echo "$output" |\
+            sed 's/HEAD detached at \(v[0-9][0-9]*\.\)/release tag \1/g')
         echo 'Just "'"$output"'"'
     fi
 }
