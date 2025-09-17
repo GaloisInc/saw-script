@@ -27,7 +27,6 @@ import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (asks)
 import Control.Monad.State (MonadState(..), gets, modify)
-import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
@@ -42,6 +41,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
+import qualified Data.Text.Lazy.IO as TLIO
 import Data.Time.Clock
 import Data.Typeable
 
@@ -60,26 +60,26 @@ import qualified Cryptol.Utils.PP as CryptolPP
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
-import qualified CryptolSAWCore.Monadify as Monadify
 
 -- saw-support
-import qualified SAWSupport.Pretty as PPS (Doc, MemoStyle(..), Opts(..), defaultOpts, render, pShow)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), pShow)
 
 -- saw-core
-import SAWCore.Parser.Grammar (parseSAWTerm)
+import qualified SAWCore.Parser.AST as Un
+import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Module (ModuleMap)
 import SAWCore.Name (ecShortName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
+import SAWCore.Typechecker (tcInsertModule)
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 import CryptolSAWCore.TypedTerm
@@ -147,7 +147,6 @@ import qualified SAWCentral.Prover.RME as Prover
 import qualified SAWCentral.Prover.ABC as Prover
 import qualified SAWCentral.Prover.What4 as Prover
 import qualified SAWCentral.Prover.Exporter as Prover
-import qualified SAWCentral.Prover.MRSolver as Prover
 import SAWCentral.VerificationSummary
 
 showPrim :: SV.Value -> TopLevel Text
@@ -2188,226 +2187,6 @@ importSchemaCEnv sc cenv schema =
   do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
      Cryptol.importSchema sc cry_env schema
 
-monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-monadifyTypedTerm sc t =
-  do rw <- get
-     let menv = rwMonadify rw
-     (ret_t, menv') <-
-       liftIO $
-       case ttType t of
-         TypedTermSchema schema ->
-           do tp <- importSchemaCEnv sc (rwCryptol rw) schema
-              Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
-         TypedTermKind _ ->
-           fail "monadify_term applied to a type"
-         TypedTermOther tp ->
-           Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
-     modify (\s -> s { rwMonadify = menv' })
-     tp <- liftIO $ scTypeOf sc ret_t
-     return $ TypedTerm (TypedTermOther tp) ret_t
-
--- | Ensure that a 'TypedTerm' has been monadified
-ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-ensureMonadicTerm sc t
-  | TypedTermOther tp <- ttType t =
-    io (Prover.isSpecFunType sc tp) >>= \case
-      True -> return t
-      False -> monadifyTypedTerm sc t
-ensureMonadicTerm sc t = monadifyTypedTerm sc t
-
--- | Normalizes the given 'TypedTerm's for calling 'Prover.askMRSolver' or
--- 'Prover.refinementTerm' and ensures they are of the expected form.
--- Additionally, if the second argument is @Just str@, prints out @str@
--- followed by an abridged version of the refinement represented by the two
--- terms.
-mrSolverNormalizeAndPrintArgs ::
-  SharedContext -> Maybe PPS.Doc ->
-  TypedTerm -> TypedTerm -> TopLevel (Term, Term)
-mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
-  do mm <- io $ scGetModuleMap sc
-     let ?mm = mm
-     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
-     m2 <- ttTerm <$> ensureMonadicTerm sc tt2
-     m1' <- io $ collapseEta <$> betaNormalize sc m1
-     m2' <- io $ collapseEta <$> betaNormalize sc m2
-     case printStr of
-       Nothing -> return ()
-       Just str -> printOutLnTop Info $ PPS.render PPS.defaultOpts $
-         "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
-                               " |= " <> ppTmHead m2'
-     return (m1', m2')
-  where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
-        collapseEta :: Term -> Term
-        collapseEta (asLambdaList -> (lamVars,
-                     asApplyAll -> (t@(smallestLooseVar -> Nothing),
-                                    mapM asLocalVar -> Just argVars)))
-          | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
-        collapseEta t = t
-        -- Pretty-print the name of the top-level function call, followed by
-        -- "..." if it is given any arguments, or just "..." if there is no
-        -- top-level call
-        ppTmHead :: (?mm :: ModuleMap) => Term -> PPS.Doc
-        ppTmHead (asLambdaList -> (_,
-                  asApplyAll -> (t@(
-                  Prover.asProjAll -> (
-                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
-          ppTerm PPS.defaultOpts t <> if length args > 0 then " ..." else ""
-        ppTmHead _ = "..."
-
--- | The calback to be used by MRSolver for making SMT queries
-mrSolverAskSMT :: Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)
-mrSolverAskSMT = applyProverToGoal [What4, Z3] [] (Prover.proveWhat4_z3 True)
-
--- | Given the result of calling 'Prover.askMRSolver' or
--- 'Prover.refinementTerm', fails and prints out@`err@ followed by the second
--- argument if the given result is @Left err@ for some @err@, or otherwise
--- returns @a@ if the result is@`Right a@ for some @a@. Additionally, if the
--- third argument is @Just str@, prints out @str@ on success (i.e. 'Right').
-mrSolverGetResultOrFail ::
-  Prover.MREnv ->
-  String {- The string to print out on failure -} ->
-  Maybe String {- The string to print out on success, if any -} ->
-  Either Prover.MRFailure a {- The result, printed out on error -} ->
-  TopLevel a
-mrSolverGetResultOrFail env errStr succStr res = case res of
-  Left err | Prover.mreDebugLevel env == 0 ->
-    fail (Prover.showMRFailure env err ++ "\n[MRSolver] " ++ errStr)
-  Left err ->
-    -- we ignore the MRFailure context here since it will have already
-    -- been printed by the debug trace
-    fail (Prover.showMRFailureNoCtx env err ++ "\n[MRSolver] " ++ errStr)
-  Right a | Just s <- succStr ->
-    printOutLnTop Info s >> return a
-  Right a -> return a
-
--- | Invokes MRSolver to attempt to solve a focused goal of the form
--- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ...@, assuming the refinements
--- in the given 'Refnset', and printing an error message and exiting if
--- this cannot be done
-mrSolver :: SV.SAWRefnset -> ProofScript ()
-mrSolver rs = execTactic $ Tactic $ \goal -> lift $
-  getSharedContext >>= \sc ->
-  case sequentState (goalSequent goal) of
-    Unfocused -> fail "mrsolver: focus required"
-    HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (Prover.asRefinesS . unProp ->
-                Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2)) _ ->
-      do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
-         tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
-         let tt1 = TypedTerm (TypedTermOther tp1) t1
-             tt2 = TypedTerm (TypedTermOther tp2) t2
-         (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
-         env <- rwMRSolverEnv <$> get
-         time1 <- liftIO getCurrentTime
-         res <- Prover.askMRSolver sc env Nothing mrSolverAskSMT rs args m1 m2
-         time2 <- liftIO getCurrentTime
-         let diff = show $ diffUTCTime time2 time1
-             errStr = printf "Failure in %s" diff
-             succStr = printf "Success in %s" diff
-         (stats, mre) <- mrSolverGetResultOrFail env errStr (Just succStr) res
-         return ((), stats, [], leafEvidence $ MrSolverEvidence mre)
-    _ -> error "mrsolver: cannot apply mrsolver to a non-refinement goal"
-
--- | Add a proved refinement theorem to a given refinement set
-addrefn :: Theorem -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
-addrefn thm rs =
-  getSharedContext >>= \sc ->
-  io (scGetModuleMap sc) >>= \mm ->
-  let ?mm = mm in
-  case Prover.asFunAssump (Just (thmNonce thm)) (unProp $ thmProp thm) of
-    Nothing -> fail "addrefn: theorem is not a refinement"
-    Just fassump -> pure (Prover.addFunAssump fassump rs)
-
--- | Add proved refinement theorems to a given refinement set
-addrefns :: [Theorem] -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
-addrefns thms ss = foldM (flip addrefn) ss thms
-
--- | Set the debug level of the 'Prover.MREnv'
-mrSolverSetDebug :: Int -> TopLevel ()
-mrSolverSetDebug dlvl =
-  modify (\rw -> rw { rwMRSolverEnv =
-                        Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
-
--- | Modify the 'PPOpts' of the current 'MREnv' to have a maximum printing depth
-mrSolverSetDebugDepth :: Int -> TopLevel ()
-mrSolverSetDebugDepth depth =
-  modify (\rw -> rw { rwMRSolverEnv = (rwMRSolverEnv rw) {
-                        Prover.mrePPOpts = (Prover.mrePPOpts (rwMRSolverEnv rw)) {
-                          PPS.ppMaxDepth = Just depth }}})
-
--- | Given a list of names and types representing variables over which to
--- quantify as as well as two terms containing those variables, which may be
--- terms or functions in the SpecM monad, construct the SAWCore term which is
--- the refinement (@SpecM.refinesS@) of the given terms, with the given
--- variables generalized with a Pi type.
-refinesTerm :: [TypedTerm] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
-refinesTerm vars tt1 tt2 =
-  do sc <- getSharedContext
-     tt1' <- lambdas vars tt1
-     tt2' <- lambdas vars tt2
-     (m1, m2) <- mrSolverNormalizeAndPrintArgs sc Nothing tt1' tt2'
-     env <- rwMRSolverEnv <$> get
-     time1 <- liftIO getCurrentTime
-     res <- Prover.refinementTerm sc env Nothing mrSolverAskSMT
-                                  Prover.emptyRefnset [] m1 m2
-     time2 <- liftIO getCurrentTime
-     let diff = show $ diffUTCTime time2 time1
-         errStr = printf "[MRSolver] Failed to build refinement term (%s)" diff
-     ttRes <- mrSolverGetResultOrFail env errStr Nothing res
-     io $ mkTypedTerm sc ttRes
-
-setMonadification :: SharedContext -> Text -> Text -> Bool -> TopLevel ()
-setMonadification sc cry_str saw_str poly_p =
-  do rw <- get
-
-     -- Step 1: convert the first string to a Cryptol name
-     cry_nm <-
-       let ?fileReader = StrictBS.readFile in
-       liftIO (CEnv.resolveIdentifier
-               (rwCryptol rw) cry_str) >>= \case
-       Just n -> return n
-       Nothing -> fail $ Text.unpack $ "No such Cryptol identifer: " <> cry_str
-     cry_nmi <- liftIO $ Cryptol.importName cry_nm
-
-     -- Step 2: get the monadified type for this Cryptol name
-     --
-     -- FIXME: not sure if this is the correct way to get the type of a Cryptol
-     -- name, so we are falling back on just translating the name to SAW core
-     -- and monadifying its type there
-     cry_saw_tp <-
-       liftIO $
-       case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
-         Just schema ->
-           -- TextIO.putStrLn $ "Found Cryptol type for name: " <> show cry_str >>
-           importSchemaCEnv sc (rwCryptol rw) schema
-         Nothing
-           | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
-                                                     rwCryptol rw) ->
-             -- TextIO.putStrLn $ "No Cryptol type for name: " <> cry_str >>
-             scTypeOf sc cry_nm_trans
-         _ -> fail $ Text.unpack $ "Could not find type for Cryptol name: " <> cry_str
-     cry_mon_tp <-
-       liftIO $
-       Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp poly_p
-
-     -- Step 3: convert the second string to a typed SAW core term, and if it
-     -- has an existing macro, check that it has the same type as the type for
-     -- the cryptol name, or if no macro exists, check that it has the same
-     -- type as the monadified type for the Cryptol name and generate a macro
-     -- which maps the Cryptol name to the SAW core term
-     let saw_ident = parseIdent (Text.unpack saw_str)
-     saw_trm <- liftIO $ scGlobalDef sc saw_ident
-     saw_tp <- liftIO $ scTypeOf sc saw_trm
-     let (tp_to_check, macro) =
-           case Monadify.monEnvLookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
-             Just existing_macro -> (cry_saw_tp, existing_macro)
-             Nothing -> (cry_mon_tp,
-                         Monadify.argGlobalMacro cry_nmi saw_ident poly_p)
-     liftIO $ scCheckSubtype sc Nothing (SCTypedTerm saw_trm saw_tp) tp_to_check
-
-     -- Step 4: Add the generated macro
-     put (rw { rwMonadify = Monadify.monEnvAdd cry_nmi macro (rwMonadify rw) })
-
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
   where
@@ -2510,3 +2289,21 @@ ghost_value ghost val =
               , MS.conditionContext = ""
               }
      addCondition (MS.SetupCond_Ghost md ghost val)
+
+-- | Based on the function of the same name in SAWCore.ParserUtils.
+-- Unlike that function, this calls 'fail' instead of 'error'.
+--
+-- XXX: we only need one; unify these once the error handling gets fixed.
+readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
+readModuleFromFile path =
+  do base <- liftIO getCurrentDirectory
+     txt <- liftIO $ TLIO.readFile path
+     case parseSAW base path txt of
+       Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
+       Left err -> fail $ "Module parsing failed:\n" ++ show err
+
+load_sawcore_from_file :: FilePath -> TopLevel ()
+load_sawcore_from_file mod_filename =
+  do sc <- getSharedContext
+     (saw_mod, _) <- readModuleFromFile mod_filename
+     liftIO $ tcInsertModule sc saw_mod

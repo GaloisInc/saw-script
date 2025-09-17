@@ -31,15 +31,6 @@ sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.
 opam init
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install -y coq-bits
-opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#f104f6b3e6fe5987d543d90265cdc52f532de5fe
-```
-
-We have pinned the `entree-specs` dependency's commit to ensure that it points
-to a known working version. If you are an advanced user who wishes to use the
-latest `entree-specs commit, you can omit the commit hash:
-
-```
-opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git
 ```
 
 If you run into any issue that is probably due to the version mismatch between the `ocamlc`
@@ -47,8 +38,6 @@ and the `ocaml` base system installed on your machine and it can be fixed as exp
 [here](https://github.com/ocaml/opam/issues/3708).
 
 Currently, the Coq support libraries for `saw-core-coq` requires Coq 8.15.
-Note that the `entree-specs` dependency does not currently build with Coq 8.16
-(see [this issue](https://github.com/GaloisInc/entree-specs/issues/1)).
 
 ## Building the and Using the Coq Support Libraries
 

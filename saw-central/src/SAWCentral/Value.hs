@@ -31,20 +31,16 @@ module SAWCentral.Value (
 
     -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWServer.SAWServer
     SAWSimpset,
-    -- used by SAWCentral.Builtins, SAWScript.Interpreter
-    SAWRefnset,
     -- used by SAWCentral.Builtins
     AIGNetwork(..),
     -- used by SAWCentral.Prover.Exporter, SAWCentral.Builtins,
     --    SAWScript.Interpreter and more, SAWServer.SAWServer
     AIGProxy(..),
-    -- used by SAWCentral.Crucible.LLVM.Builtins, SAWScript.HeapsterBuiltins
+    -- used by SAWCentral.Crucible.LLVM.Builtins
     SAW_CFG(..),
-    -- used by SAWScript.Interpreter, SAWScript.HeapsterBuiltins,
+    -- used by SAWScript.Interpreter
     --    SAWServer.SAWServer, SAWServer.*CrucibleSetup
     BuiltinContext(..),
-    -- used by SAWScript.HeapsterBuiltins (and the Value type)
-    HeapsterEnv(..),
     -- used by SAWCentral.Builtins.hs, and appears in the Value type and showsSatResult
     SatResult(..),
     -- used by SAWCentral.Bisimulation, SAWCentral.Builtins, SAWScript.REPL.Monad
@@ -206,9 +202,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import Data.IORef
 import Data.Foldable(foldrM)
-import Data.List ( intersperse )
 import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -248,8 +242,6 @@ import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import qualified SAWCentral.Options as Opt
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
-import SAWCentral.MRSolver.Evidence as MRSolver
 import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
 import SAWCentral.X86 (X86Unsupported(..), X86Error(..))
@@ -259,13 +251,11 @@ import SAWCentral.Yosys.State (YosysSequential)
 
 import SAWCore.Name (ecShortName, DisplayNameEnv, emptyDisplayNameEnv)
 import CryptolSAWCore.CryptolEnv as CEnv
-import CryptolSAWCore.Monadify as Monadify
 import SAWCore.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import SAWCore.SharedTerm
 import qualified SAWCore.Term.Pretty as SAWCorePP
 import CryptolSAWCore.TypedTerm
-import SAWCore.Term.Functor (ModuleName)
 
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -290,9 +280,6 @@ import           Mir.Intrinsics (MIR)
 import qualified Mir.Mir as MIR
 
 import           What4.ProgramLoc (ProgramLoc(..))
-
-import Heapster.Permissions
-import Heapster.SAWTranslation (ChecksFlag,SomeTypedCFG(..))
 
 -- Values ----------------------------------------------------------------------
 
@@ -542,7 +529,6 @@ data Value
     --   Like a VTopLevel, except in the other monad.
   | VProofScript SS.Pos RefChain (ProofScript Value)
   | VSimpset SAWSimpset
-  | VRefnset SAWRefnset
   | VTheorem Theorem
   | VBisimTheorem BisimTheorem
   -----
@@ -577,7 +563,6 @@ data Value
   | VLLVMModule (Some CMSLLVM.LLVMModule)
   | VMIRModule RustModule
   | VMIRAdt MIR.Adt
-  | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
   | VAIG AIGNetwork
@@ -589,7 +574,6 @@ data Value
   | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
-type SAWRefnset = MRSolver.Refnset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -604,29 +588,6 @@ data SAW_CFG where
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biBasicSS       :: SAWSimpset
                                      }
-
--- | All the context maintained by Heapster
-data HeapsterEnv = HeapsterEnv {
-  heapsterEnvSAWModule :: ModuleName,
-  -- ^ The SAW module containing all our Heapster definitions
-  heapsterEnvPermEnvRef :: IORef PermEnv,
-  -- ^ The current permissions environment
-  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule],
-  -- ^ The list of underlying 'LLVMModule's that we are translating
-  heapsterEnvTCFGs :: IORef [Some SomeTypedCFG],
-  -- ^ The typed CFGs for output debugging/IDE info
-  heapsterEnvDebugLevel :: IORef DebugLevel,
-  -- ^ The current debug level
-  heapsterEnvChecksFlag :: IORef ChecksFlag
-  -- ^ Whether translation checks are currently enabled
-  }
-
-showHeapsterEnv :: HeapsterEnv -> String
-showHeapsterEnv env =
-  concat $ intersperse "\n\n" $
-  map (\some_lm -> case some_lm of
-          Some lm -> CMSLLVM.showLLVMModule lm) $
-  heapsterEnvLLVMModules env
 
 data SatResult
   = Unsat SolverStats
@@ -672,22 +633,6 @@ showSimpset opts ss =
        , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
     ppTerm t = SAWCorePP.ppTerm opts t
 
--- | Pretty-print a 'Refnset' to a 'String'
-showRefnset :: PPS.Opts -> MRSolver.Refnset a -> String
-showRefnset opts ss =
-  unlines ("Refinements" : "=============" : map (show . ppFunAssump)
-                                                 (MRSolver.listFunAssumps ss))
-  where
-    ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
-      PP.pretty '*' PP.<+>
-      (PP.nest 2 $ PP.fillSep
-       [ ppTermAppInCtx opts ctx (funNameTerm f) args
-       , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
-    ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
-      ppTermAppInCtx opts ctx (funNameTerm f) args
-    ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
-      SAWCorePP.ppTermInCtx opts (map fst $ mrVarCtxInnerToOuter ctx) rhs
-
 -- XXX the precedence in here needs to be cleaned up
 showsPrecValue :: PPS.Opts -> DisplayNameEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
@@ -732,7 +677,6 @@ showsPrecValue opts nenv p v =
       v1' . showString " >>= " . v2'
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
-    VRefnset ss -> showString (showRefnset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
@@ -752,7 +696,6 @@ showsPrecValue opts nenv p v =
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
     VMIRAdt adt -> shows (PP.pretty adt)
-    VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -879,7 +822,7 @@ data TopLevelRW =
     --   either passed around or the position in the current AST
     --   element, and those positions should be used instead.
   , rwPosition :: SS.Pos
-  
+
     -- | The current stack trace. The most recent frame is at the front.
   , rwStackTrace :: Trace
 
@@ -887,8 +830,6 @@ data TopLevelRW =
 
   , rwJavaCodebase  :: JavaCodebase -- ^ Current state of Java sub-system.
 
-  , rwMonadify   :: Monadify.MonadifyEnv
-  , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPS.Opts
   , rwSharedContext :: SharedContext

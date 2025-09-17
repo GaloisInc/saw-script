@@ -101,14 +101,12 @@ import SAWCore.Term.Pretty (showTerm)
 -- local modules:
 import CryptolSAWCore.Panic
 
--- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
+-- Type-check the Prelude and Cryptol modules at compile time
 import Language.Haskell.TH
 import CryptolSAWCore.Prelude
-import CryptolSAWCore.PreludeM
 
 $(runIO (mkSharedContext >>= \sc ->
-          scLoadPreludeModule sc >> scLoadCryptolModule sc >>
-          scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
+          scLoadPreludeModule sc >> scLoadCryptolModule sc >> pure []))
 
 --------------------------------------------------------------------------------
 

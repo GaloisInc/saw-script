@@ -90,8 +90,7 @@ tgt_build() {
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:crux-mir-comp-tests \
                 test-suite:cryptol-saw-core-tests \
-                test-suite:saw-core-coq-tests \
-                test-suite:heapster-prover-tests
+                test-suite:saw-core-coq-tests
 
     echo "rm -rf bin && mkdir bin"
     rm -rf bin && mkdir bin

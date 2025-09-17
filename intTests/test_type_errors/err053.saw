@@ -5,5 +5,4 @@
 // the thing I picked finally gets removed, just update the reference
 // file accordingly.
 
-typedef t = HeapsterEnv;
-
+typedef t = __DEPRECATED__;

@@ -24,7 +24,7 @@ term_eval_unint : [String] -> Term -> Term
 time : {a} TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
 19 more matches tagged experimental; use enable_experimental to see them
-5 more matches tagged deprecated; use enable_deprecated to see them
+2 more matches tagged deprecated; use enable_deprecated to see them
  --------------------------------
  -- {a} (a -> String)
 show : {a} a -> String

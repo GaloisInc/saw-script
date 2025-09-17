@@ -81,7 +81,6 @@ import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.HeapsterBuiltins
 import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
@@ -98,7 +97,6 @@ import SAWCentral.SolverVersions
 import SAWCentral.Proof (ProofResult(..), Theorem, emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
-import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys -- XXX remove in favor of the following later
 import qualified SAWCentral.Yosys as Yo (YosysIR)
 import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
@@ -111,7 +109,6 @@ import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
-import qualified CryptolSAWCore.Monadify as Monadify
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 
@@ -1061,7 +1058,6 @@ buildTopLevelEnv proxy opts scriptArgv =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       mm <- scGetModuleMap sc
        let rw0 = TopLevelRW
                    { rwValueInfo  = primValueEnv opts bic
                    , rwTypeInfo   = primNamedTypeEnv
@@ -1070,8 +1066,6 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
                    , rwLocalEnv = []
-                   , rwMonadify   = let ?mm = mm in Monadify.defaultMonEnv
-                   , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
@@ -1550,13 +1544,6 @@ instance FromValue SAWSimpset where
     fromValue _ (VSimpset ss) = ss
     fromValue _ _ = error "fromValue Simpset"
 
-instance IsValue SAWRefnset where
-    toValue _name rs = VRefnset rs
-
-instance FromValue SAWRefnset where
-    fromValue _ (VRefnset rs) = rs
-    fromValue _ _ = error "fromValue Refnset"
-
 instance IsValue Theorem where
     toValue _name t = VTheorem t
 
@@ -1629,13 +1616,6 @@ instance IsValue MIR.Adt where
 instance FromValue MIR.Adt where
     fromValue _ (VMIRAdt adt) = adt
     fromValue _ _ = error "fromValue Adt"
-
-instance IsValue HeapsterEnv where
-    toValue _name m = VHeapsterEnv m
-
-instance FromValue HeapsterEnv where
-    fromValue _ (VHeapsterEnv m) = m
-    fromValue _ _ = error "fromValue HeapsterEnv"
 
 instance IsValue ProofResult where
    toValue _name r = VProofResult r
@@ -2171,21 +2151,19 @@ do_write_coq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLeve
 do_write_coq_term name notations skips path t =
   writeCoqTerm name notations skips (Text.unpack path) t
 
-do_write_coq_cryptol_module :: Bool -> Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
-do_write_coq_cryptol_module monadic infile outfile notations skips =
-  writeCoqCryptolModule monadic (Text.unpack infile) (Text.unpack outfile) notations skips
+do_write_coq_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_coq_cryptol_module infile outfile notations skips =
+  writeCoqCryptolModule (Text.unpack infile) (Text.unpack outfile) notations skips
 
 do_write_coq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
 do_write_coq_sawcore_prelude outfile notations skips =
   writeCoqSAWCorePrelude (Text.unpack outfile) notations skips
 
-do_write_coq_cryptol_primitives_for_sawcore :: Text -> Text -> Text -> [(Text, Text)] -> [Text] -> IO ()
-do_write_coq_cryptol_primitives_for_sawcore cryfile specfile crymfile notations skips =
+do_write_coq_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_coq_cryptol_primitives_for_sawcore cryfile notations skips =
   let cryfile' = Text.unpack cryfile
-      specfile' = Text.unpack specfile
-      crymfile' = Text.unpack crymfile
   in
-  writeCoqCryptolPrimitivesForSAWCore cryfile' specfile' crymfile' notations skips
+  writeCoqCryptolPrimitivesForSAWCore cryfile' notations skips
 
 do_offline_coq :: Text -> ProofScript ()
 do_offline_coq f =
@@ -2304,43 +2282,6 @@ do_yosys_verify_sequential_sally :: Yo.YosysSequential -> Text -> TypedTerm -> [
 do_yosys_verify_sequential_sally s path q fixed =
   yosys_verify_sequential_sally s (Text.unpack path) q fixed
 
--- XXX why are these being passed bic and opts if they don't use them?
--- (they were that way in HeapsterBuiltins, I took the opportunity to
--- drop the extra args there; and note that a bunch of other heapster
--- builtins are also using bicVal for apparently no reason)
-
-do_heapster_init_env :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
-do_heapster_init_env _bic _opts mod_str llvm_filename =
-  heapster_init_env mod_str (Text.unpack llvm_filename)
-
-do_heapster_init_env_debug :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
-do_heapster_init_env_debug _bic _opts mod_str llvm_filename =
-  heapster_init_env_debug mod_str (Text.unpack llvm_filename)
-
-do_heapster_init_env_from_file :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
-do_heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
-  heapster_init_env_from_file (Text.unpack mod_filename) (Text.unpack llvm_filename)
-
-do_heapster_init_env_from_file_debug :: BuiltinContext -> Options -> Text -> Text -> TopLevel HeapsterEnv
-do_heapster_init_env_from_file_debug _bic _opts mod_filename llvm_filename =
-  heapster_init_env_from_file_debug (Text.unpack mod_filename) (Text.unpack llvm_filename)
-
-do_heapster_init_env_for_files :: BuiltinContext -> Options -> Text -> [Text] -> TopLevel HeapsterEnv
-do_heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
-  heapster_init_env_for_files (Text.unpack mod_filename) (map Text.unpack llvm_filenames)
-
-do_heapster_init_env_for_files_debug :: BuiltinContext -> Options -> Text -> [Text] -> TopLevel HeapsterEnv
-do_heapster_init_env_for_files_debug _bic _opts mod_filename llvm_filenames =
-  heapster_init_env_for_files_debug (Text.unpack mod_filename) (map Text.unpack llvm_filenames)
-
-do_heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv -> Text -> TopLevel ()
-do_heapster_export_coq _bic _opts henv filename =
-  heapster_export_coq henv (Text.unpack filename)
-
-do_heapster_dump_ide_info :: BuiltinContext -> Options -> HeapsterEnv -> Text -> TopLevel ()
-do_heapster_dump_ide_info _bic _opts henv filename =
-  heapster_dump_ide_info henv (Text.unpack filename)
-
 do_load_sawcore_from_file :: BuiltinContext -> Options -> Text -> TopLevel ()
 do_load_sawcore_from_file _ _ mod_filename =
   load_sawcore_from_file (Text.unpack mod_filename)
@@ -2411,7 +2352,6 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "HeapsterEnv" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "JVMSetup" Current
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
@@ -2424,7 +2364,6 @@ primTypes = Map.fromList
   , abstype "MIRValue" Experimental
   , abstype "ModuleSkeleton" Experimental
   , abstype "ProofResult" Current
-  , abstype "Refnset" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "SatResult" Current
   , abstype "SetupValue" Current
   , abstype "Simpset" Current
@@ -2432,6 +2371,7 @@ primTypes = Map.fromList
   , abstype "Theorem" Current
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
+  , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
     -- abstract type
@@ -3244,7 +3184,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (do_write_coq_cryptol_module False))
+    (pureVal do_write_coq_cryptol_module)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq."
@@ -3255,22 +3195,6 @@ primitives = Map.fromList
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
     , "The fourth argument is a list of identifiers to skip translating."
-    ]
-
-  , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal (do_write_coq_cryptol_module True))
-    HideDeprecated
-    [ "Write out a representation of a Cryptol module in Gallina syntax for"
-    , "Coq, using the monadified version of the given module."
-    , "The first argument is the file containing the module to export."
-    , "The second argument is the name of the file to output into,"
-    , "use an empty string to output to standard output."
-    , "The third argument is a list of pairs of notation substitutions:"
-    , "the operator on the left will be replaced with the identifier on"
-    , "the right, as we do not support notations on the Coq side."
-    , "The fourth argument is a list of identifiers to skip translating."
-    , ""
-    , "Expected to be removed in SAW 1.5."
     ]
 
   , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
@@ -3287,18 +3211,18 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_primitives_for_sawcore"
-    "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal do_write_coq_cryptol_primitives_for_sawcore)
     Experimental
-    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
-    , "CryptolM.sawcore in Gallina syntax for Coq."
-    , "The first three arguments are the names of the output files for translating "
-    , "Cryptol.sawcore, SpecM.sawcore, and CryptolM.sawcore, respectively."
+    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore"
+    , "in Gallina syntax for Coq."
+    , "The first argument is the name of the output file for translating"
+    , "Cryptol.sawcore."
     , "Use an empty string to output to standard output."
-    , "The fourth argument is a list of pairs of notation substitutions:"
+    , "The second argument is a list of pairs of notation substitutions:"
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
-    , "The fifth argument is a list of identifiers to skip translating."
+    , "The third argument is a list of identifiers to skip translating."
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
@@ -6314,553 +6238,13 @@ primitives = Map.fromList
     ]
 
     ----------------------------------------
-    -- Mr. Solver commands
-
-  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
-    (pureVal mrSolverSetDebug)
-    HideDeprecated
-    [ "Set the debug level for Mr. Solver; 0 = no debug output,"
-    , " 1 = basic debug output, 2 = verbose debug output,"
-    , " 3 = all debug output"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
-    (pureVal mrSolverSetDebugDepth)
-    HideDeprecated
-    [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
-    , "and debug output to a maximum depth."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver" "ProofScript ()"
-    (pureVal (mrSolver emptyRefnset))
-    HideDeprecated
-    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
-    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "empty_rs"            "Refnset"
-    (pureVal (emptyRefnset :: SAWRefnset))
-    HideDeprecated
-    [ "The empty refinement set, containing no refinements."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
-    (funVal2 addrefn)
-    HideDeprecated
-    [ "Add a proved refinement theorem to a given refinement set."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
-    (funVal2 addrefns)
-    HideDeprecated
-    [ "Add proved refinement theorems to a given refinement set."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "mrsolver_with" "Refnset -> ProofScript ()"
-    (pureVal mrSolver)
-    HideDeprecated
-    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
-    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
-    , " the given set of refinements taken as assumptions"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "refines" "[Term] -> Term -> Term -> Term"
-    (funVal3 refinesTerm)
-    HideDeprecated
-    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
-    , " as as well as two terms containing those variables, which may be"
-    , " either terms or functions in the SpecM monad, construct the"
-    , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
-    , " given terms, with the given variables generalized with a Pi type."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-    ----------------------------------------
-    -- Heapster commands
-
-  , prim "monadify_term" "Term -> TopLevel Term"
-    (scVal monadifyTypedTerm)
-    HideDeprecated
-    [ "Monadify a Cryptol term, converting it to a form where all recursion"
-    , " and errors are represented as monadic operators"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "set_monadification" "String -> String -> Bool -> TopLevel ()"
-    (scVal setMonadification)
-    HideDeprecated
-    [ "Set the monadification of a specific Cryptol identifer to a SAW core "
-    , "identifier of monadic type. The supplied Boolean flag indicates if the "
-    , "SAW core term is polymorphic in the event type and function stack of the"
-    , "SpecM monad."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_init_env"
-    "String -> String -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env)
-    HideDeprecated
-    [ "Create a new Heapster environment with the given SAW module name"
-    , " from the named LLVM bitcode file."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_init_env_debug"
-    "String -> String -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env_debug)
-    HideDeprecated
-    [ "Create a new Heapster environment with the given SAW module name"
-    , " from the named LLVM bitcode file with debug tracing turned on"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_init_env_from_file"
-    "String -> String -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env_from_file)
-    HideDeprecated
-    [ "Create a new Heapster environment from the named LLVM bitcode file,"
-    , " initialized with the module in the given SAW core file."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_init_env_from_file_debug"
-    "String -> String -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env_from_file_debug)
-    HideDeprecated
-    [ "Create a new Heapster environment from the named LLVM bitcode file,"
-    , " initialized with the module in the given SAW core file, with debug"
-    , " tracing turned on"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
+    -- SAWCore loading command
 
   , prim "load_sawcore_from_file"
     "String -> TopLevel ()"
     (bicVal do_load_sawcore_from_file)
     Experimental
     [ "Load a SAW core module from a file"
-    ]
-
-  , prim "heapster_init_env_for_files"
-    "String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env_for_files)
-    HideDeprecated
-    [ "Create a new Heapster environment from the named LLVM bitcode files,"
-    , " initialized with the module in the given SAW core file."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_init_env_for_files_debug"
-    "String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal do_heapster_init_env_for_files_debug)
-    HideDeprecated
-    [ "Create a new Heapster environment from the named LLVM bitcode files,"
-    , " initialized with the module in the given SAW core file, with debug"
-    , " tracing turned on"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_get_cfg"
-    "HeapsterEnv -> String -> TopLevel CFG"
-    (bicVal heapster_get_cfg)
-    HideDeprecated
-    [ "Extract out the Crucible CFG associated with a symbol in a"
-    , " Heapster environemnt"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_opaque_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_opaque_perm)
-    HideDeprecated
-    [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
-    , " Heapster permission named nm with arguments parsed from args and type"
-    , " tp that translates to the SAW core type trans with type description d"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_recursive_perm)
-    HideDeprecated
-    [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
-    , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from tp that translates to permissions p, which can"
-    , " resurively use nm (with no arguments) in those permissions"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_reachability_perm)
-    HideDeprecated
-    [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
-    , " defines a recursive named Heapster permission named nm with arguments"
-    , " parsed from args_ctx and type parsed from value_type that unfolds to p,"
-    , " which should form a reachability permission, meaning that it should"
-    , " have the form eq(x) or q for some permission q, where x is the last"
-    , " argument argument in arg_ctx and q can contain nm with no arguments to"
-    , " refer to the entire permission recursively."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_recursive_shape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_recursive_shape)
-    HideDeprecated
-    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
-    , " defines a recursive named Heapser shape named nm with arguments"
-    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
-    , " whichx can contain name for recursive occurrences of the shape"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_perm)
-    HideDeprecated
-    [ "heapster_define_perm nm args tp p defines a Heapster permission named"
-    , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
-    , " such that nm<x1,...,xn> is equivalent to the permission p."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_llvmshape)
-    HideDeprecated
-    [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
-    , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
-    , " such that nm<x1,...,xn> is equivalent to the permission p."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_opaque_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_opaque_llvmshape)
-    HideDeprecated
-    [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
-    , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
-    , " Heapster does not know or care about the contents of memory of this shape"
-    , " but instead treats that memory as an opaque object, defined only by its"
-    , " length and its translation to a SAW core type."
-    , ""
-    , " The henv argument is the Heapster environment this new shape is added to,"
-    , " nm is its name, args is a context of argument variables for this shape,"
-    , " len is an expression for the length of the shape in terms of the arguments,"
-    , " tp gives the translation of the shape as a SAW core type over the"
-    , " translation of the arguments to SAW core variables, and d is a SAW core"
-    , " term of type TpDesc that describes the SAW core type."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_rust_type"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_define_rust_type)
-    HideDeprecated
-    [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
-    , "a string representing a top-level struct or enum definition."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_define_rust_type_qual"
-    "HeapsterEnv -> String -> String -> TopLevel ()"
-    (bicVal heapster_define_rust_type_qual)
-    HideDeprecated
-    [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
-    , " shape from tp, a string representing a top-level Rust struct or enum"
-    , " definition. The type is qualified by crate, meaning that \"crate::\""
-    , " is prepended to its name."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_block_entry_hint"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_block_entry_hint)
-    HideDeprecated
-    [ "heapster_block_entry_hint env nm block top_args ghosts perms adds a hint"
-    , " to the Heapster type-checker that Crucible block number block in nm"
-    , " should have permissions perms on its inputs, assuming that top_args"
-    , " lists the top-level ghost and normal arguments to function nm and"
-    , " ghosts gives the ghost arguments to block."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_gen_block_perms_hint"
-    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
-    (bicVal heapster_gen_block_perms_hint)
-    HideDeprecated
-    [ "heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster"
-    , " type-checker to *generalize* (recursively replace all instances of"
-    , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
-    , " given Crucible blocks numbers. If the given list is empty, do so for"
-    , " every block in the CFG."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_join_point_hint"
-    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
-    (bicVal heapster_join_point_hint)
-    HideDeprecated
-    [ "heapster_join_point_hint env nm blocks adds a hint to the Heapster"
-    , " type-checker to make a join point at each of the given block numbers,"
-    , " meaning that all entries to the given blocks are merged into a single"
-    , " entrypoint, whose permissions are given by the first call to the block."
-    , " If the given list is empty, do so for every block in the CFG."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_symbol"
-    "HeapsterEnv -> String -> TopLevel String"
-    (bicVal heapster_find_symbol)
-    HideDeprecated
-    [ "Search for a symbol in any module contained in a HeapsterEnv that"
-    , " contains the supplied string as a substring. Raise an error if there"
-    , " is not exactly one such symbol"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_symbols"
-    "HeapsterEnv -> String -> TopLevel [String]"
-    (bicVal heapster_find_symbols)
-    HideDeprecated
-    [ "Search for all symbols in any module contained in a HeapsterEnv that"
-    , " contain the supplied string as a substring."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_symbol_with_type"
-    "HeapsterEnv -> String -> String -> TopLevel String"
-    (bicVal heapster_find_symbol_with_type)
-    HideDeprecated
-    [ "Search for a symbol in any module contained in a HeapsterEnv that"
-    , " contains the supplied string as a substring and that has the specified"
-    , " LLVM type. Raise an error if there is not exactly one such symbol."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_symbols_with_type"
-    "HeapsterEnv -> String -> String -> TopLevel [String]"
-    (bicVal heapster_find_symbols_with_type)
-    HideDeprecated
-    [ "Search for all symbols in any module contained in a HeapsterEnv that"
-    , " contain the supplied string as a substring and that have the specified"
-    , " LLVM type."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_symbol_commands"
-    "HeapsterEnv -> String -> TopLevel String"
-    (bicVal heapster_find_symbol_commands)
-    HideDeprecated
-    [ "Map a search string str to a newline-separated sequence of SAW-script "
-    , " commands \"heapster_find_symbol_with_type str tp\", one for each LLVM "
-    , " type tp associated with a symbol whose name contains str"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_find_trait_method_symbol"
-    "HeapsterEnv -> String -> TopLevel String"
-    (bicVal heapster_find_trait_method_symbol)
-    HideDeprecated
-    [ "Search for a symbol in any module contained in a HeapsterEnv that"
-    , "corresponds to the given trait method implementation. The search"
-    , "string should be of the form: trait::method<type>, e.g."
-    , "core::fmt::Debug::fmt<Foo>"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_assume_fun"
-    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_assume_fun)
-    HideDeprecated
-    [ "heapster_assume_fun env nm perms trans assumes that function nm has"
-    , " permissions perms and translates to the SAW core term trans."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_assume_fun_rename"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_assume_fun_rename)
-    HideDeprecated
-    [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
-    , " has permissions perms and translates to the SAW core term trans. If"
-    , " trans is not an identifier then it is bound to the defined name nm_to."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_assume_fun_rename_prim"
-    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_assume_fun_rename_prim)
-    HideDeprecated
-    [
-      "heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm"
-    , " has permissions perms as a primitive."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_assume_fun_multi"
-    "HeapsterEnv -> String -> [(String, String)] -> TopLevel ()"
-    (bicVal heapster_assume_fun_multi)
-    HideDeprecated
-    [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
-    , " nm can be typed with 0 or more permissions, each with the corresponding"
-    , " translation to SAW core"
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_typecheck_fun"
-    "HeapsterEnv -> String -> String -> TopLevel ()"
-    (bicVal heapster_typecheck_fun)
-    HideDeprecated
-    [ "Translate an LLVM function to a SAW core term using Heapster"
-    , " type-checking, and store the result in the current Heapster SAW module."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_typecheck_fun_rename"
-    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
-    (bicVal heapster_typecheck_fun_rename)
-    HideDeprecated
-    [ "Translate the LLVM function named by the first String to a SAW core term"
-    , " using Heapster type-checking, and store the result in the current"
-    , " Heapster SAW module as a definition named with the second string."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_typecheck_mut_funs"
-    "HeapsterEnv -> [(String, String)] -> TopLevel ()"
-    (bicVal heapster_typecheck_mut_funs)
-    HideDeprecated
-    [ "Translate a set of mutually recursive LLVM function to a set of SAW "
-    , "core terms using Heapster type-checking. Store the results in the "
-    , "current Heapster SAW module."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_set_event_type"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_set_event_type)
-    HideDeprecated
-    [ "Set the event type for the remaining Heapster translations to a SAW "
-    , "core term of type EvType. It is recommended that this is done at most "
-    , "once in a SAW script, at the beginning, because changing the event type "
-    , "yields incompatible specifications."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_print_fun_trans"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_print_fun_trans)
-    HideDeprecated
-    [ "Print the translation to SAW of a function that has been type-checked."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_export_coq"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal do_heapster_export_coq)
-    HideDeprecated
-    [ "Export a Heapster environment to a Coq file."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_set_debug_level"
-    "HeapsterEnv -> Int -> TopLevel ()"
-    (bicVal heapster_set_debug_level)
-    HideDeprecated
-    [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_set_translation_checks"
-    "HeapsterEnv -> Bool -> TopLevel ()"
-    (bicVal heapster_set_translation_checks)
-    HideDeprecated
-    [ "Tell Heapster whether to perform its translation-time checks of the "
-    , "well-formedness of type-checking proofs."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_trans_rust_type"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal heapster_translate_rust_type)
-    HideDeprecated
-    [ "Parse a Rust function type and print the equivalent Heapser type."
-    , "Ideal for learning how Rust types are translated into Heapster."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_parse_test"
-    "LLVMModule -> String -> String -> TopLevel ()"
-    (bicVal heapster_parse_test)
-    HideDeprecated
-    [ "Parse and print back a set of Heapster permissions for a function."
-    , ""
-    , "Expected to be removed in SAW 1.5."
-    ]
-
-  , prim "heapster_dump_ide_info"
-    "HeapsterEnv -> String -> TopLevel ()"
-    (bicVal do_heapster_dump_ide_info)
-    HideDeprecated
-    [ "Dump environment info to a JSON file for IDE integration."
-    , ""
-    , "Expected to be removed in SAW 1.5."
     ]
 
     ----------------------------------------

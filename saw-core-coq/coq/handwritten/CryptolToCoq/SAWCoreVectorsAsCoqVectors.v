@@ -23,8 +23,6 @@ From mathcomp Require Import tuple.
 From Coq Require Export ZArith.BinIntDef.
 From Coq Require Export PArith.BinPos.
 
-From EnTree Require Import EnTreeSpecs.
-
 Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
@@ -88,41 +86,6 @@ Qed.
 Instance Inhabited_Vec (n:nat) (a:Type) {Ha:Inhabited a} : Inhabited (Vec n a) :=
   MkInhabited (Vec n a) (gen n a (fun _ => inhabitant)).
 
-(* Build the encoding of the N-tuple of a given encoding *)
-Fixpoint QEnc_NTuple n (qenc : QuantEnc) : QuantEnc :=
- match n with
- | 0 => QEnc_prop True
- | S n' => QEnc_pair qenc (QEnc_NTuple n' qenc)
- end.
-
-(* The quantEnum function for Vec n a *)
-Definition quantEnum_Vec n A `{QuantType A} :
- encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A :=
- nat_rect
-   (fun n => encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A)
-   (fun _ => VectorDef.nil _)
-   (fun n enumF x => VectorDef.cons _ (quantEnum (fst x)) _ (enumF (snd x)))
-   n.
-
-(* The quantEnumInv function for Vec n a *)
-Definition quantEnumInv_Vec n A `{QuantType A} :
- Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))) :=
- nat_rect
-   (fun n => Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))))
-   (fun _ => I)
-   (fun n enumInvF x => (quantEnumInv (VectorDef.hd x), enumInvF (VectorDef.tl x)))
-   n.
-
-Program Instance QuantType_Vec n A `{QuantType A} : QuantType (Vec n A) :=
- { quantEnc := QEnc_NTuple n (quantEnc (A:=A));
-   quantEnum := quantEnum_Vec n A;
-   quantEnumInv := quantEnumInv_Vec n A }.
-Next Obligation.
- induction a.
- - reflexivity.
- - simpl. rewrite quantEnumSurjective. rewrite IHa. reflexivity.
-Defined.
-  
 Theorem gen_domain_eq n T : forall f g (domain_eq : forall i, f i = g i),
     gen n T f = gen n T g.
 Proof.

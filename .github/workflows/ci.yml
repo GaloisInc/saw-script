@@ -194,7 +194,6 @@ jobs:
             cryptol-saw-core-tests
             crux-mir-comp-tests
             saw-core-coq-tests
-            heapster-prover-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -470,42 +469,7 @@ jobs:
           publish_dir: gh-pages
           keep_files: true
 
-  mr-solver-tests:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-bins"
-          path: dist/bin
-
-      - name: Update PATH to include SAW
-        shell: bash
-        run: |
-          chmod +x dist/bin/*
-          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
-
-      - working-directory: examples/mr_solver
-        shell: bash
-        run: |
-          saw monadify.saw
-          saw mr_solver_unit_tests.saw
-
-  heapster-tests:
+  saw-core-coq-tests:
     needs: [build]
     strategy:
       fail-fast: false
@@ -542,19 +506,11 @@ jobs:
 
       - run: opam install -y coq=8.15.2 coq-bits=1.1.0
 
-        # If you change the entree-specs commit below, make sure you update the
-        # documentation in saw-core-coq/README.md accordingly.
-      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#f104f6b3e6fe5987d543d90265cdc52f532de5fe
-
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Coq
       # libraries
       - working-directory: saw-core-coq/coq
-        shell: bash
-        run: opam exec -- make -j
-
-      - working-directory: heapster/examples
         shell: bash
         run: opam exec -- make -j
 
@@ -1092,7 +1048,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - build
-      - heapster-tests
+      - saw-core-coq-tests
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
