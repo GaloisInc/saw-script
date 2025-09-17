@@ -141,7 +141,7 @@ reverseTopSort =
 
 -- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
 validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
-validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
+validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc t) >>= \case
   Right _ -> pure t
   Left err ->
     throw
@@ -155,7 +155,7 @@ validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
                       SC.Term -> SC.Term -> m ()
 validateTermAtType sc msg trm tp =
   liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
-                         SC.TC.checkSubtype tp_trm tp) sc Nothing []) >>= \case
+                         SC.TC.checkSubtype tp_trm tp) sc []) >>= \case
   Right _ -> return ()
   Left err ->
     throw

@@ -29,18 +29,15 @@ module SAWCore.SCTypeCheck
   , runTCM
   , askCtx
   , askCtxEC
-  , askModName
   , withVar
   , withEC
   , withCtx
-  , withCtxEC
   , atPos
   , LiftTCM(..)
   , SCTypedTerm(..)
   , TypeInfer(..)
   , typeCheckWHNF
   , typeInferCompleteWHNF
-  , typeInferCompleteInCtx
   , checkSubtype
   , ensureSort
   , applyPiTyped
@@ -87,15 +84,14 @@ type TCState = Map TermIndex Term
 data TCEnv =
   TCEnv
   { tcSharedContext :: SharedContext -- ^ the SAW context
-  , tcModName :: Maybe ModuleName    -- ^ the current module name, if any
   , tcCtx :: [(LocalName, Term)]     -- ^ the mapping of names to de Bruijn bound variables
   , tcCtxEC :: Map LocalName (ExtCns Term) -- ^ the mapping of names to named variables
   }
 
 -- | The monad for type checking and inference, which:
 --
--- * Maintains a 'SharedContext', the name of the current module, and a variable
--- context, where the latter assigns types to the deBruijn indices in scope;
+-- * Maintains a 'SharedContext' and a variable context, where the
+--   latter assigns types to the deBruijn indices in scope;
 --
 -- * Memoizes the most general type inferred for each expression; AND
 --
@@ -106,10 +102,9 @@ newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
 runTCM ::
-  TCM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
-  IO (Either TCError a)
-runTCM (TCM m) sc mnm ctx =
-  runExceptT $ evalStateT (runReaderT m (TCEnv sc mnm ctx Map.empty)) Map.empty
+  TCM a -> SharedContext -> [(LocalName, Term)] -> IO (Either TCError a)
+runTCM (TCM m) sc ctx =
+  runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx Map.empty)) Map.empty
 
 -- | Read the current typing context
 askCtx :: TCM [(LocalName, Term)]
@@ -118,10 +113,6 @@ askCtx = TCM (asks tcCtx)
 -- | Read the current context of named variables
 askCtxEC :: TCM (Map LocalName (ExtCns Term))
 askCtxEC = TCM (asks tcCtxEC)
-
--- | Read the current module name
-askModName :: TCM (Maybe ModuleName)
-askModName = TCM (asks tcModName)
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
@@ -154,11 +145,6 @@ withEC x ec (TCM m) =
 -- variables and their types. See 'withVar'.
 withCtx :: [(LocalName, Term)] -> TCM a -> TCM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
-
--- | Run a type-checking computation in a typing context extended by a list of
--- variables and their types. See 'withEC'.
-withCtxEC :: [(LocalName, ExtCns Term)] -> TCM a -> TCM a
-withCtxEC = flip (foldr (\(x,ec) -> withEC x ec))
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- 'ErrorTerm' constructor
@@ -317,53 +303,51 @@ instance Show TCError where
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
 scTypeCheckError :: TypeInfer a => SharedContext -> a -> IO Term
 scTypeCheckError sc t0 =
-  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc Nothing t0
+  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc t0
 
 -- | Infer the type of a 'Term', ensuring in the process that the entire term is
 -- well-formed and that all internal type annotations are correct. Types are
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
-scTypeCheck :: TypeInfer a => SharedContext -> Maybe ModuleName -> a ->
-               IO (Either TCError Term)
-scTypeCheck sc mnm = scTypeCheckInCtx sc mnm []
+scTypeCheck :: TypeInfer a => SharedContext -> a -> IO (Either TCError Term)
+scTypeCheck sc = scTypeCheckInCtx sc []
 
 -- | Like 'scTypeCheck', but type-check the term relative to a typing context,
 -- which assigns types to free variables in the term
 scTypeCheckInCtx ::
-  TypeInfer a => SharedContext -> Maybe ModuleName ->
+  TypeInfer a => SharedContext ->
   [(LocalName, Term)] -> a -> IO (Either TCError Term)
-scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc mnm ctx
+scTypeCheckInCtx sc ctx t0 = runTCM (typeInfer t0) sc ctx
 
 -- | Infer the type of an @a@ and complete it to a term using
 -- 'scTypeCheckComplete', calling 'fail' on failure
-scTypeCheckCompleteError :: TypeInfer a => SharedContext ->
-                            Maybe ModuleName -> a -> IO SCTypedTerm
-scTypeCheckCompleteError sc mnm t0 =
+scTypeCheckCompleteError ::
+  TypeInfer a => SharedContext -> a -> IO SCTypedTerm
+scTypeCheckCompleteError sc t0 =
   either (fail . unlines . prettyTCError) return =<<
-  scTypeCheckComplete sc mnm t0
+  scTypeCheckComplete sc t0
 
 -- | Infer the type of an @a@ and complete it to a term, ensuring in the
 -- process that the entire term is well-formed and that all internal type
 -- annotations are correct. Types are evaluated to WHNF as necessary, and the
 -- returned type is in WHNF, though the returned term may not be.
-scTypeCheckComplete :: TypeInfer a => SharedContext -> Maybe ModuleName ->
-                       a -> IO (Either TCError SCTypedTerm)
-scTypeCheckComplete sc mnm = scTypeCheckCompleteInCtx sc mnm []
+scTypeCheckComplete ::
+  TypeInfer a => SharedContext -> a -> IO (Either TCError SCTypedTerm)
+scTypeCheckComplete sc = scTypeCheckCompleteInCtx sc []
 
 -- | Like 'scTypeCheckComplete', but type-check the term relative to a typing
 -- context, which assigns types to free variables in the term
 scTypeCheckCompleteInCtx :: TypeInfer a => SharedContext ->
-                            Maybe ModuleName -> [(LocalName, Term)] -> a ->
+                            [(LocalName, Term)] -> a ->
                             IO (Either TCError SCTypedTerm)
-scTypeCheckCompleteInCtx sc mnm ctx t0 =
-  runTCM (typeInferComplete t0) sc mnm ctx
+scTypeCheckCompleteInCtx sc ctx t0 =
+  runTCM (typeInferComplete t0) sc ctx
 
 -- | Check that one type is a subtype of another using 'checkSubtype', calling
 -- 'fail' on failure
-scCheckSubtype :: SharedContext -> Maybe ModuleName ->
-                  SCTypedTerm -> Term -> IO ()
-scCheckSubtype sc mnm arg req_tp =
+scCheckSubtype :: SharedContext -> SCTypedTerm -> Term -> IO ()
+scCheckSubtype sc arg req_tp =
   either (fail . unlines . prettyTCError) return =<<
-  runTCM (checkSubtype arg req_tp) sc mnm []
+  runTCM (checkSubtype arg req_tp) sc []
 
 -- | A pair of a 'Term' and its type
 data SCTypedTerm = SCTypedTerm { typedVal :: Term, typedType :: Term }
@@ -384,27 +368,6 @@ typeInferCompleteWHNF a =
      a_whnf <- typeCheckWHNF a_trm
      return $ SCTypedTerm a_whnf a_tp
 
-
--- | Perform type inference on a context, i.e., a list of variable names and
--- their associated types. This will give us 'Term's for each type, as
--- well as their 'Sort's, since the type of any type is a 'Sort'.
-typeInferCompleteCtx ::
-  TypeInfer a => [(LocalName, a)] -> TCM [(LocalName, Term, Sort)]
-typeInferCompleteCtx [] = return []
-typeInferCompleteCtx ((x,tp):ctx) =
-  do typed_tp <- typeInferComplete tp
-     s <- ensureSort (typedType typed_tp)
-     ((x,typedVal typed_tp,s):) <$>
-       withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
-
--- | Perform type inference on a context via 'typeInferCompleteCtx', and then
--- run a computation in that context via 'withCtx', also passing in that context
--- to the computation
-typeInferCompleteInCtx ::
-  TypeInfer tp => [(LocalName, tp)] -> ([(LocalName, Term, Sort)] -> TCM a) -> TCM a
-typeInferCompleteInCtx ctx f =
-  do typed_ctx <- typeInferCompleteCtx ctx
-     withCtx (map (\(x,tp,_) -> (x,tp)) typed_ctx) (f typed_ctx)
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work

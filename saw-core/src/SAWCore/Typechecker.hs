@@ -30,6 +30,7 @@ module SAWCore.Typechecker
 
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (ReaderT(..), asks, lift)
 import Data.List (findIndex)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -58,7 +59,8 @@ import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.SCTypeCheck
+import SAWCore.SCTypeCheck (SCTypedTerm, typedVal, typedType, TCError(..))
+import qualified SAWCore.SCTypeCheck as TC
 
 import Debug.Trace
 
@@ -74,14 +76,35 @@ inferCompleteTermCtx ::
   SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
   Un.UTerm -> IO (Either PPS.Doc Term)
 inferCompleteTermCtx sc mnm ctx t =
-  do res <- runTCM (typeInferCompleteUTerm t) sc mnm ctx
+  do res <- runCheckM (typeInferCompleteUTerm t) sc mnm ctx
      case res of
        -- TODO: avoid intermediate 'String's from 'prettyTCError'
-       Left err -> return $ Left $ vsep $ map pretty $ prettyTCError err
+       Left err -> return $ Left $ vsep $ map pretty $ TC.prettyTCError err
        Right t' -> return $ Right $ typedVal t'
 
+
+-- | The 'ReaderT' environment for a computation to typecheck a
+-- SAWCore parser AST.
+data CheckEnv =
+  CheckEnv
+  { tcModName :: Maybe ModuleName -- ^ the current module name
+  }
+
+-- | The monad for computations to typecheck a SAWCore parser AST.
+type CheckM = ReaderT CheckEnv TC.TCM
+
+runCheckM ::
+  CheckM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  IO (Either TC.TCError a)
+runCheckM m sc mnm ctx =
+  TC.runTCM (runReaderT m (CheckEnv mnm)) sc ctx
+
+-- | Read the current module name
+askModName :: CheckM (Maybe ModuleName)
+askModName = asks tcModName
+
 -- | Look up the current module name, raising an error if it is not set
-getModuleName :: TCM ModuleName
+getModuleName :: CheckM ModuleName
 getModuleName =
   do maybe_modname <- askModName
      case maybe_modname of
@@ -89,20 +112,31 @@ getModuleName =
        Nothing ->
          panic "getModuleName" ["Current module name not set during typechecking"]
 
+atPos :: Pos -> CheckM a -> CheckM a
+atPos p m = ReaderT $ \env -> TC.atPos p (runReaderT m env)
+
+throwTCError :: TC.TCError -> CheckM a
+throwTCError e = lift $ TC.throwTCError e
+
+----------------------------------------------------------------------
+
+typeInferComplete :: TC.TypeInfer a => a -> CheckM SCTypedTerm
+typeInferComplete x = lift $ TC.typeInferComplete x
+
 -- | Build a multi-arity application of 'SCTypedTerm's
-inferApplyAll :: SCTypedTerm -> [SCTypedTerm] -> TCM SCTypedTerm
+inferApplyAll :: SCTypedTerm -> [SCTypedTerm] -> CheckM SCTypedTerm
 inferApplyAll t [] = return t
 inferApplyAll t (arg:args) =
   do app1 <- typeInferComplete (App t arg)
      inferApplyAll app1 args
 
 -- | Resolve a name in the current module and apply it to some arguments
-inferResolveNameApp :: Text -> [SCTypedTerm] -> TCM SCTypedTerm
+inferResolveNameApp :: Text -> [SCTypedTerm] -> CheckM SCTypedTerm
 inferResolveNameApp n args =
-  do ctx <- askCtx
-     nctx <- askCtxEC
+  do ctx <- lift $ TC.askCtx
+     nctx <- lift $ TC.askCtxEC
      mnm <- getModuleName
-     mm <- liftTCM scGetModuleMap
+     mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
      case (findIndex ((== n) . fst) ctx, Map.lookup n nctx, resolveNameInMap mm ident) of
        (Just i, _, _) ->
@@ -139,12 +173,12 @@ debugLevel :: Int
 debugLevel = 0
 
 -- | Print debugging output if 'debugLevel' is greater than 0
-typeInferDebug :: String -> TCM ()
+typeInferDebug :: String -> CheckM ()
 typeInferDebug str | debugLevel > 0 = liftIO $ traceIO str
 typeInferDebug _ = return ()
 
 -- | Completely typecheck an untyped SAWCore AST.
-typeInferCompleteUTerm :: Un.UTerm -> TCM SCTypedTerm
+typeInferCompleteUTerm :: Un.UTerm -> CheckM SCTypedTerm
 typeInferCompleteUTerm t =
   do typeInferDebug ("typechecking term: " ++ show t)
      res <- atPos (pos t) $ typeInferCompleteTerm t
@@ -153,7 +187,7 @@ typeInferCompleteUTerm t =
      return res
 
 -- | Main workhorse function for type inference on untyped terms
-typeInferCompleteTerm :: Un.UTerm -> TCM SCTypedTerm
+typeInferCompleteTerm :: Un.UTerm -> CheckM SCTypedTerm
 
 -- Names
 typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
@@ -170,7 +204,7 @@ typeInferCompleteTerm (Un.Sort _ srt h) =
 -- Recursors (must come before applications)
 typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
   do mnm <- getModuleName
-     mm <- liftTCM scGetModuleMap
+     mm <- lift $ TC.liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
      dt <- case findDataTypeInMap dt_ident mm of
        Just d -> return d
@@ -184,7 +218,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
           (elims,
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
-         do crec    <- compileRecursor dt params motive elims
+         do crec    <- lift $ TC.compileRecursor dt params motive elims
             r       <- typeInferComplete (Recursor crec)
             typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
@@ -205,7 +239,7 @@ typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
-     tp_whnf <- typeCheckWHNF $ typedVal tp_trm
+     tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
      body <- withVar x tp_whnf $
        typeInferCompleteUTerm $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
@@ -216,7 +250,7 @@ typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
-     tp_whnf <- typeCheckWHNF $ typedVal tp_trm
+     tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
      body <- withVar x tp_whnf $
        typeInferCompleteUTerm $ Un.Pi p ctx t
      typeInferComplete (Pi x tp_trm body)
@@ -255,8 +289,8 @@ typeInferCompleteTerm (Un.PairRight t) =
 typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
   do typed_t <- typeInferCompleteUTerm t
      typed_tp <- typeInferCompleteUTerm tp
-     _ <- ensureSort (typedType typed_tp)
-     checkSubtype typed_t (typedVal typed_tp)
+     _ <- lift $ TC.ensureSort (typedType typed_tp)
+     lift $ TC.checkSubtype typed_t (typedVal typed_tp)
      return typed_t
 
 -- Literals
@@ -270,13 +304,13 @@ typeInferCompleteTerm (Un.VecLit _ ts) =
      tp <- case typed_ts of
        (t1:_) -> return $ typedType t1
        [] -> throwTCError $ EmptyVectorLit
-     type_of_tp <- typeInfer tp
-     typeInferComplete (ArrayValue (SCTypedTerm tp type_of_tp) $
+     typed_tp <- typeInferComplete tp
+     typeInferComplete (ArrayValue typed_tp $
                         V.fromList typed_ts)
 typeInferCompleteTerm (Un.BVLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.BVLit _ bits) =
-  do tp <- liftTCM scBoolType
-     bit_tms <- mapM (liftTCM scBool) bits
+  do tp <- lift $ TC.liftTCM scBoolType
+     bit_tms <- lift $ mapM (TC.liftTCM scBool) bits
      typeInferComplete $ ArrayValue tp $ V.fromList bit_tms
 
 typeInferCompleteTerm (Un.BadTerm _) =
@@ -290,12 +324,12 @@ typeInferCompleteTerm (Un.BadTerm _) =
 --
 
 -- | Type-check a list of declarations and insert them into the current module
-processDecls :: [Un.Decl] -> TCM ()
+processDecls :: [Un.Decl] -> CheckM ()
 processDecls [] = return ()
 
 processDecls (Un.InjectCodeDecl ns txt : rest) =
   do mnm <- getModuleName
-     liftTCM scInjectCode mnm ns txt
+     lift $ TC.liftTCM scInjectCode mnm ns txt
      processDecls rest
 
 processDecls (Un.TypedDef nm params rty body : rest) =
@@ -309,9 +343,9 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
    do
      -- Step 1: type-check the type annotation, and make sure it is a type
      typed_tp <- typeInferCompleteUTerm tp
-     void $ ensureSort $ typedType typed_tp
+     void $ lift $ TC.ensureSort $ typedType typed_tp
      let def_tp = typedVal typed_tp
-     def_tp_whnf <- liftTCM scTypeCheckWHNF def_tp
+     def_tp_whnf <- lift $ TC.liftTCM TC.scTypeCheckWHNF def_tp
 
      -- Step 2: assign types to the bound variables of the definition, by
      -- peeling off the pi-abstraction variables in the type annotation. Any
@@ -330,13 +364,13 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      def_tm <-
        withCtx ctx $
        do typed_body <- typeInferCompleteUTerm body
-          checkSubtype typed_body req_body_tp
-          liftTCM scLambdaList ctx (typedVal typed_body)
+          lift $ TC.checkSubtype typed_body req_body_tp
+          lift $ TC.liftTCM scLambdaList ctx (typedVal typed_body)
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
      let ident = mkIdent mnm nm
-     liftTCM scInsertDef ident def_tp def_tm) >>
+     lift $ TC.liftTCM scInsertDef ident def_tp def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
@@ -349,11 +383,11 @@ processDecls (Un.TypeDecl _ (PosPair p nm) _ :
 processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
   (atPos p $
    do typed_tp <- typeInferCompleteUTerm tp
-      void $ ensureSort $ typedType typed_tp
+      void $ lift $ TC.ensureSort $ typedType typed_tp
       mnm <- getModuleName
       let ident = mkIdent mnm nm
       let def_tp = typedVal typed_tp
-      liftTCM scDeclarePrim ident q def_tp) >>
+      lift $ TC.liftTCM scDeclarePrim ident q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
@@ -368,7 +402,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   typeInferCompleteInCtxEC param_ctx' $ \params -> do
   let dtParams = map (\(_,ec,_) -> ec) params
   let param_sort = maxSort (map (\(_,_,s) -> s) params)
-  let err :: String -> TCM a
+  let err :: String -> CheckM a
       err msg = throwTCError $ DeclError nm msg
 
   -- Step 2: type-check the type given for d, and make sure it is of the form
@@ -401,7 +435,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
   let dtIdent = mkIdent mnm nm
-  pn <- liftTCM scBeginDataType dtIdent dtParams dtIndices dtSort
+  pn <- lift $ TC.liftTCM scBeginDataType dtIdent dtParams dtIndices dtSort
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
@@ -424,14 +458,14 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                    "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
                ]
        let tp = typedVal typed_tp
-       result <- liftTCM mkCtorArgStruct pn dtParams dtIndices tp
+       result <- lift $ TC.liftTCM mkCtorArgStruct pn dtParams dtIndices tp
        case result of
          Just arg_struct ->
-           liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
+           lift $ TC.liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
          Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
-  liftTCM scCompleteDataType dtIdent ctors
+  lift $ TC.liftTCM scCompleteDataType dtIdent ctors
 
 
 -- | Typecheck a module and, on success, insert it into the current context
@@ -446,9 +480,9 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
        scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
-  decls_res <- runTCM (processDecls decls) sc (Just mnm) []
+  decls_res <- runCheckM (processDecls decls) sc (Just mnm) []
   case decls_res of
-    Left err -> fail $ unlines $ prettyTCError err
+    Left err -> fail $ unlines $ TC.prettyTCError err
     Right _ -> return ()
 
 
@@ -465,16 +499,39 @@ matchPiWithNames (var:vars) (asPi -> Just (_, arg_tp, body_tp)) =
      return ((var,arg_tp):ctx,body)
 matchPiWithNames _ _ = Nothing
 
+-- | Run a type-checking computation in a typing context extended with a new
+-- variable with the given type. This throws away the memoization table while
+-- running the sub-computation, as memoization tables are tied to specific sets
+-- of bindings.
+--
+-- NOTE: the type given for the variable should be in WHNF, so that we do not
+-- have to normalize the types of variables each time we see them.
+withVar :: LocalName -> Term -> CheckM a -> CheckM a
+withVar x tp m = ReaderT $ \env -> TC.withVar x tp (runReaderT m env)
+
+withEC :: LocalName -> ExtCns Term -> CheckM a -> CheckM a
+withEC x ec m = ReaderT $ \env -> TC.withEC x ec (runReaderT m env)
+
+-- | Run a type-checking computation in a typing context extended by a list of
+-- variables and their types. See 'withVar'.
+withCtx :: [(LocalName, Term)] -> CheckM a -> CheckM a
+withCtx = flip (foldr (\(x,tp) -> withVar x tp))
+
+-- | Run a type-checking computation in a typing context extended by a list of
+-- variables and their types. See 'withEC'.
+withCtxEC :: [(LocalName, ExtCns Term)] -> CheckM a -> CheckM a
+withCtxEC = flip (foldr (\(x,ec) -> withEC x ec))
+
 -- | Perform type inference on a context, i.e., a list of variable names and
 -- their associated types. This will give us 'Term's for each type, as
 -- well as their 'Sort's, since the type of any type is a 'Sort'.
 typeInferCompleteCtxEC ::
-  [(LocalName, Un.UTerm)] -> TCM [(LocalName, ExtCns Term, Sort)]
+  [(LocalName, Un.UTerm)] -> CheckM [(LocalName, ExtCns Term, Sort)]
 typeInferCompleteCtxEC [] = pure []
 typeInferCompleteCtxEC ((x, tp) : ctx) =
   do typed_tp <- typeInferCompleteUTerm tp
-     s <- ensureSort (typedType typed_tp)
-     ec <- liftTCM scFreshEC x (typedVal typed_tp)
+     s <- lift $ TC.ensureSort (typedType typed_tp)
+     ec <- lift $ TC.liftTCM scFreshEC x (typedVal typed_tp)
      ((x, ec, s) :) <$> withEC x ec (typeInferCompleteCtxEC ctx)
 
 -- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
@@ -482,7 +539,7 @@ typeInferCompleteCtxEC ((x, tp) : ctx) =
 -- to the computation
 typeInferCompleteInCtxEC ::
   [(LocalName, Un.UTerm)] ->
-  ([(LocalName, ExtCns Term, Sort)] -> TCM a) -> TCM a
+  ([(LocalName, ExtCns Term, Sort)] -> CheckM a) -> CheckM a
 typeInferCompleteInCtxEC ctx f =
   do typed_ctx <- typeInferCompleteCtxEC ctx
      withCtxEC (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
