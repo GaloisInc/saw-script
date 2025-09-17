@@ -253,22 +253,24 @@ span.spaces    { background: white }
 <span class="lineno">  234 </span>-- terms.
 <span class="lineno">  235 </span>
 <span class="lineno">  236 </span>data CryptolModule =
-<span class="lineno">  237 </span>  CryptolModule (Map C.Name C.TySyn) (Map C.Name TypedTerm)
-<span class="lineno">  238 </span>
-<span class="lineno">  239 </span>showCryptolModule :: CryptolModule -&gt; String
-<span class="lineno">  240 </span><span class="decl"><span class="nottickedoff">showCryptolModule (CryptolModule sm tm) =</span>
-<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">unlines $</span>
-<span class="lineno">  242 </span><span class="spaces">    </span><span class="nottickedoff">(if Map.null sm then [] else</span>
-<span class="lineno">  243 </span><span class="spaces">       </span><span class="nottickedoff">&quot;Type Synonyms&quot; : &quot;=============&quot; : map showTSyn (Map.elems sm) ++ [&quot;&quot;]) ++</span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="nottickedoff">&quot;Symbols&quot; : &quot;=======&quot; : concatMap showBinding (Map.assocs tm)</span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  246 </span><span class="spaces">    </span><span class="nottickedoff">showTSyn (C.TySyn name params _props rhs _doc) =</span>
-<span class="lineno">  247 </span><span class="spaces">      </span><span class="nottickedoff">&quot;    &quot; ++ unwords (C.pretty (nameIdent name) : map C.pretty params) ++ &quot; = &quot; ++ C.pretty rhs</span>
-<span class="lineno">  248 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  249 </span><span class="spaces">    </span><span class="nottickedoff">showBinding (name, TypedTerm (TypedTermSchema schema) _) =</span>
-<span class="lineno">  250 </span><span class="spaces">      </span><span class="nottickedoff">[&quot;    &quot; ++ C.pretty (nameIdent name) ++ &quot; : &quot; ++ C.pretty schema]</span>
-<span class="lineno">  251 </span><span class="spaces">    </span><span class="nottickedoff">showBinding _ =</span>
-<span class="lineno">  252 </span><span class="spaces">      </span><span class="nottickedoff">[]</span></span>
+<span class="lineno">  237 </span>  CryptolModule
+<span class="lineno">  238 </span>    (Map C.Name C.TySyn)    -- type synonyms
+<span class="lineno">  239 </span>    (Map C.Name TypedTerm)  -- symbols (mapping to SawCore things).
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>showCryptolModule :: CryptolModule -&gt; String
+<span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">showCryptolModule (CryptolModule sm tm) =</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="nottickedoff">unlines $</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="nottickedoff">(if Map.null sm then [] else</span>
+<span class="lineno">  245 </span><span class="spaces">       </span><span class="nottickedoff">&quot;Type Synonyms&quot; : &quot;=============&quot; : map showTSyn (Map.elems sm) ++ [&quot;&quot;]) ++</span>
+<span class="lineno">  246 </span><span class="spaces">    </span><span class="nottickedoff">&quot;Symbols&quot; : &quot;=======&quot; : concatMap showBinding (Map.assocs tm)</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  248 </span><span class="spaces">    </span><span class="nottickedoff">showTSyn (C.TySyn name params _props rhs _doc) =</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="nottickedoff">&quot;    &quot; ++ unwords (C.pretty (nameIdent name) : map C.pretty params) ++ &quot; = &quot; ++ C.pretty rhs</span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="nottickedoff">showBinding (name, TypedTerm (TypedTermSchema schema) _) =</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="nottickedoff">[&quot;    &quot; ++ C.pretty (nameIdent name) ++ &quot; : &quot; ++ C.pretty schema]</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="nottickedoff">showBinding _ =</span>
+<span class="lineno">  254 </span><span class="spaces">      </span><span class="nottickedoff">[]</span></span>
 
 </pre>
 </body>

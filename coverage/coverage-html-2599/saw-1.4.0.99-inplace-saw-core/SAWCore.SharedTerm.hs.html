@@ -1066,7 +1066,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1047 </span><span class="spaces">      </span><span class="istickedoff">do zs'  &lt;- traverse <span class="nottickedoff">(traverse (scInstantiateExt sc pre_xs))</span> zs</span>
 <span class="lineno"> 1048 </span><span class="spaces">         </span><span class="istickedoff">ixs' &lt;- traverse (scInstantiateExt <span class="nottickedoff">sc</span> pre_xs) ixs</span>
 <span class="lineno"> 1049 </span><span class="spaces">         </span><span class="istickedoff">recx &lt;- mk_rec_arg zs' ixs' x</span>
-<span class="lineno"> 1050 </span><span class="spaces">         </span><span class="istickedoff">tl   &lt;- mk_args (IntMap.insert (nameIndex nm) x pre_xs) xs_args</span>
+<span class="lineno"> 1050 </span><span class="spaces">         </span><span class="istickedoff">tl   &lt;- mk_args <span class="nottickedoff">(IntMap.insert (nameIndex nm) x pre_xs)</span> xs_args</span>
 <span class="lineno"> 1051 </span><span class="spaces">         </span><span class="istickedoff">pure (x : recx : tl)</span>
 <span class="lineno"> 1052 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1053 </span><span class="spaces">    </span><span class="istickedoff">-- Build an individual recursive call, given the parameters, the bindings</span>

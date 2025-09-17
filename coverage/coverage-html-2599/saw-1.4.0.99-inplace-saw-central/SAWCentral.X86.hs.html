@@ -152,7 +152,7 @@ span.spaces    { background: white }
 <span class="lineno">  133 </span>import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 <span class="lineno">  134 </span>
 <span class="lineno">  135 </span>-- Cryptol Verifier
-<span class="lineno">  136 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
+<span class="lineno">  136 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 <span class="lineno">  137 </span>import CryptolSAWCore.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 <span class="lineno">  138 </span>
 <span class="lineno">  139 </span>-- SAWCentral
@@ -406,7 +406,7 @@ span.spaces    { background: white }
 <span class="lineno">  387 </span><span class="spaces">     </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
 <span class="lineno">  388 </span><span class="spaces">     </span><span class="nottickedoff">case mb of</span>
 <span class="lineno">  389 </span><span class="spaces">       </span><span class="nottickedoff">Nothing   -&gt; return env</span>
-<span class="lineno">  390 </span><span class="spaces">       </span><span class="nottickedoff">Just file -&gt; snd &lt;$&gt; loadCryptolModule sc defaultPrimitiveOptions env file</span></span>
+<span class="lineno">  390 </span><span class="spaces">       </span><span class="nottickedoff">Just file -&gt; snd &lt;$&gt; loadCryptolModule sc env file</span></span>
 <span class="lineno">  391 </span>
 <span class="lineno">  392 </span>
 <span class="lineno">  393 </span>--------------------------------------------------------------------------------
