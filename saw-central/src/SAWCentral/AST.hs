@@ -120,7 +120,8 @@ type LName = Located Name
 -- Expr Level {{{
 
 data Import = Import
-  { iModule    :: Either FilePath P.ModName
+  { iIsSubmodule :: Bool
+  , iModule    :: Either FilePath P.ModName
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos

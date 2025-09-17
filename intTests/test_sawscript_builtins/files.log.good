@@ -4,8 +4,8 @@
  [104, 101, 108, 108, 111, 10]
  dump_file_AST:
  Loading file "include/syntax.saw"
-StmtImport include/syntax.saw:5:1-5:30 (Import {iModule = Left "Foo.cry", iAs = Just (ModName "Foo" NormalName), iSpec = Just (Only [Ident False NormalName "foo"]), iPos = include/syntax.saw:5:8-5:30})
-StmtImport include/syntax.saw:6:1-6:30 (Import {iModule = Left "Bar.cry", iAs = Nothing, iSpec = Just (Hiding [Ident False NormalName "bar"]), iPos = include/syntax.saw:6:8-6:30})
+StmtImport include/syntax.saw:5:1-5:30 (Import {iIsSubmodule = False, iModule = Left "Foo.cry", iAs = Just (ModName "Foo" NormalName), iSpec = Just (Only [Ident False NormalName "foo"]), iPos = include/syntax.saw:5:8-5:30})
+StmtImport include/syntax.saw:6:1-6:30 (Import {iIsSubmodule = False, iModule = Left "Bar.cry", iAs = Nothing, iSpec = Just (Hiding [Ident False NormalName "bar"]), iPos = include/syntax.saw:6:8-6:30})
 StmtBind include/syntax.saw:8:1-8:4 (PWild include/syntax.saw:8:1-8:1 Nothing) (Int include/syntax.saw:8:1-8:4 123)
 StmtBind include/syntax.saw:9:1-9:16 (PVar include/syntax.saw:9:1-9:2 "a" (include/syntax.saw:9:1-9:2) Nothing) (Application include/syntax.saw:9:6-9:16 (Var "return" (include/syntax.saw:9:6-9:12)) (Int include/syntax.saw:9:13-9:16 456))
 StmtLet include/syntax.saw:11:1-11:12 (NonRecursive (Decl {dPos = include/syntax.saw:11:5-11:12, dPat = PVar include/syntax.saw:11:5-11:6 "f" (include/syntax.saw:11:5-11:6) Nothing, dType = Nothing, dDef = Lambda include/syntax.saw:11:7-11:12 (Just "f") (PVar include/syntax.saw:11:7-11:8 "x" (include/syntax.saw:11:7-11:8) Nothing) (Var "x" (include/syntax.saw:11:11-11:12))}))

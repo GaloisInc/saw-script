@@ -47,7 +47,7 @@ $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
 $codechar  = [$graphic $whitechar \n]
 
-@reservedid  = import|and|let|rec|in|do|if|then|else|as|hiding|typedef
+@reservedid  = import|submodule|and|let|rec|in|do|if|then|else|as|hiding|typedef
              |JavaSetup|LLVMSetup|MIRSetup|ProofScript|TopLevel|CrucibleSetup
              |Int|String|Term|Type|Bool|AIG|CFG
              |CrucibleMethodSpec|LLVMSpec|JVMMethodSpec|JVMSpec|MIRSpec
