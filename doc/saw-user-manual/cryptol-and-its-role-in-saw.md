@@ -4,7 +4,7 @@ Cryptol is a domain-specific modeling and specification language.
 It is integrated into SAW and used for a broad range of tasks.
 Use of SAW for essentially any purpose requires use of Cryptol.
 <!-- XXX Update the Cryptol repository to publish a canonical link for this. -->
-Thus, the 
+Thus, the
 [Cryptol manual](https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf)
 is an important additional resource for SAW users.
 
