@@ -2352,7 +2352,6 @@ primTypes = Map.fromList
   , abstype "FunctionProfile" Experimental
   , abstype "FunctionSkeleton" Experimental
   , abstype "Ghost" Current
-  , abstype "HeapsterEnv" HideDeprecated -- Note: expected to be removed in 1.5
   , abstype "JVMSetup" Current
   , abstype "JVMValue" Current
   , abstype "JavaClass" Current
@@ -2372,6 +2371,7 @@ primTypes = Map.fromList
   , abstype "Theorem" Current
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
+  , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
     -- abstract type
