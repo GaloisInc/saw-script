@@ -5899,40 +5899,40 @@ span.spaces    { background: white }
 <span class="lineno"> 5880 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;predicate, but potentially more efficient.&quot;</span></span>
 <span class="lineno"> 5881 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 5882 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 5883 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_exact_adt&quot; &quot;MIRModule -&gt; String -&gt; MIRAdt&quot;</span>
-<span class="lineno"> 5884 </span><span class="spaces">    </span><span class="istickedoff">(funVal2 mir_exact_adt)</span>
+<span class="lineno"> 5883 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_execute_func&quot; &quot;[MIRValue] -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 5884 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_execute_func)</span>
 <span class="lineno"> 5885 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 5886 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Consult the given MIRModule to find an algebraic data type (MIRAdt)&quot;</span></span>
-<span class="lineno"> 5887 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with the given String as an exact identifier. An exact identifier is&quot;</span></span>
-<span class="lineno"> 5888 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;one that refers to an ADT that is already instantiated with its type&quot;</span></span>
-<span class="lineno"> 5889 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;arguments (e.g., foo::Bar::_adt123456789 is an exact identifier, but&quot;</span></span>
-<span class="lineno"> 5890 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;foo::Bar is not). If such a MIRAdt cannot be found in the MIRModule,&quot;</span></span>
-<span class="lineno"> 5891 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this will raise an error.&quot;</span></span>
-<span class="lineno"> 5892 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 5893 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Due to the fact that exact identifiers can change easily when&quot;</span></span>
-<span class="lineno"> 5894 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;recompiling Rust code, this function's use is discouraged in favor of&quot;</span></span>
-<span class="lineno"> 5895 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;using mir_find_adt whenever possible.&quot;</span></span>
-<span class="lineno"> 5896 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 5897 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 5898 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_execute_func&quot; &quot;[MIRValue] -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 5899 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_execute_func)</span>
-<span class="lineno"> 5900 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 5901 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given list of values as the arguments of the method.&quot;</span></span>
-<span class="lineno"> 5902 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">,  &quot;&quot;</span></span>
-<span class="lineno"> 5903 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The mir_execute_func statement also serves to separate the pre-state&quot;</span></span>
-<span class="lineno"> 5904 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section of the spec (before mir_execute_func) from the post-state&quot;</span></span>
-<span class="lineno"> 5905 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section (after mir_execute_func). The effects of some MIRSetup&quot;</span></span>
-<span class="lineno"> 5906 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;statements depend on whether they occur in the pre-state or post-state&quot;</span></span>
-<span class="lineno"> 5907 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section.&quot;</span></span>
-<span class="lineno"> 5908 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 5909 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 5910 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_find_adt&quot; &quot;MIRModule -&gt; String -&gt; [MIRType] -&gt; MIRAdt&quot;</span>
-<span class="lineno"> 5911 </span><span class="spaces">    </span><span class="istickedoff">(funVal3 mir_find_adt)</span>
-<span class="lineno"> 5912 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 5913 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Consult the given MIRModule to find an algebraic data type (MIRAdt)&quot;</span></span>
-<span class="lineno"> 5914 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with the given String as an identifier and the given MIRTypes as the&quot;</span></span>
-<span class="lineno"> 5915 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;types used to instantiate the type parameters. If such a MIRAdt cannot&quot;</span></span>
-<span class="lineno"> 5916 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;be found in the MIRModule, this will raise an error.&quot;</span></span>
+<span class="lineno"> 5886 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given list of values as the arguments of the method.&quot;</span></span>
+<span class="lineno"> 5887 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">,  &quot;&quot;</span></span>
+<span class="lineno"> 5888 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The mir_execute_func statement also serves to separate the pre-state&quot;</span></span>
+<span class="lineno"> 5889 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section of the spec (before mir_execute_func) from the post-state&quot;</span></span>
+<span class="lineno"> 5890 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section (after mir_execute_func). The effects of some MIRSetup&quot;</span></span>
+<span class="lineno"> 5891 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;statements depend on whether they occur in the pre-state or post-state&quot;</span></span>
+<span class="lineno"> 5892 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section.&quot;</span></span>
+<span class="lineno"> 5893 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 5894 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 5895 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_find_adt&quot; &quot;MIRModule -&gt; String -&gt; [MIRType] -&gt; MIRAdt&quot;</span>
+<span class="lineno"> 5896 </span><span class="spaces">    </span><span class="istickedoff">(funVal3 mir_find_adt)</span>
+<span class="lineno"> 5897 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 5898 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Consult the given MIRModule to find an algebraic data type (MIRAdt)&quot;</span></span>
+<span class="lineno"> 5899 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with the given String as an identifier and the given MIRTypes as the&quot;</span></span>
+<span class="lineno"> 5900 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;types used to instantiate the type parameters. If such a MIRAdt cannot&quot;</span></span>
+<span class="lineno"> 5901 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;be found in the MIRModule, this will raise an error.&quot;</span></span>
+<span class="lineno"> 5902 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 5903 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 5904 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_find_mangled_adt&quot; &quot;MIRModule -&gt; String -&gt; MIRAdt&quot;</span>
+<span class="lineno"> 5905 </span><span class="spaces">    </span><span class="istickedoff">(funVal2 mir_find_mangled_adt)</span>
+<span class="lineno"> 5906 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 5907 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Consult the given MIRModule to find an algebraic data type (MIRAdt)&quot;</span></span>
+<span class="lineno"> 5908 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with the given String as a mangled identifier. A mangled identifier is&quot;</span></span>
+<span class="lineno"> 5909 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;one that refers to an ADT that is already instantiated with its type&quot;</span></span>
+<span class="lineno"> 5910 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;arguments (e.g., foo::Bar::_adt123456789 is a mangled identifier, but&quot;</span></span>
+<span class="lineno"> 5911 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;foo::Bar is not). If such a MIRAdt cannot be found in the MIRModule,&quot;</span></span>
+<span class="lineno"> 5912 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this will raise an error.&quot;</span></span>
+<span class="lineno"> 5913 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 5914 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Due to the fact that mangled identifiers can change easily when&quot;</span></span>
+<span class="lineno"> 5915 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;recompiling Rust code, this function's use is discouraged in favor of&quot;</span></span>
+<span class="lineno"> 5916 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;using mir_find_adt whenever possible.&quot;</span></span>
 <span class="lineno"> 5917 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 5918 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 5919 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_cryptol_var&quot; &quot;String -&gt; Type -&gt; MIRSetup Term&quot;</span>

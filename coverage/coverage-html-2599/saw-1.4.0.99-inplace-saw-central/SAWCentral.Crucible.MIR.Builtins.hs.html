@@ -41,8 +41,8 @@ span.spaces    { background: white }
 <span class="lineno">   22 </span>  , mir_cast_raw_ptr
 <span class="lineno">   23 </span>  , mir_execute_func
 <span class="lineno">   24 </span>  , mir_equal
-<span class="lineno">   25 </span>  , mir_exact_adt
-<span class="lineno">   26 </span>  , mir_find_adt
+<span class="lineno">   25 </span>  , mir_find_adt
+<span class="lineno">   26 </span>  , mir_find_mangled_adt
 <span class="lineno">   27 </span>  , mir_fresh_cryptol_var
 <span class="lineno">   28 </span>  , mir_fresh_expanded_value
 <span class="lineno">   29 </span>  , mir_fresh_var
@@ -354,15 +354,15 @@ span.spaces    { background: white }
 <span class="lineno">  335 </span><span class="spaces">     </span><span class="istickedoff">Setup.crucible_equal <span class="nottickedoff">loc</span> val1 val2</span></span>
 <span class="lineno">  336 </span>
 <span class="lineno">  337 </span>-- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt' with the given
-<span class="lineno">  338 </span>-- 'String' as an exact identifier (i.e., an identifier for an ADT that is
+<span class="lineno">  338 </span>-- 'String' as a mangled identifier (i.e., an identifier for an ADT that is
 <span class="lineno">  339 </span>-- already instantiated with type arguments). If such a 'Mir.Adt' cannot be
 <span class="lineno">  340 </span>-- found in the 'Mir.RustModule', this will raise an error.
-<span class="lineno">  341 </span>mir_exact_adt :: Mir.RustModule -&gt; Text -&gt; TopLevel Mir.Adt
-<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">mir_exact_adt rm name = do</span>
+<span class="lineno">  341 </span>mir_find_mangled_adt :: Mir.RustModule -&gt; Text -&gt; TopLevel Mir.Adt
+<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">mir_find_mangled_adt rm name = do</span>
 <span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">let cs = rm ^. Mir.rmCS</span>
 <span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">col = cs ^. Mir.collection</span>
 <span class="lineno">  345 </span><span class="spaces">  </span><span class="istickedoff">did &lt;- findDefId cs name</span>
-<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">findAdtExact col did</span></span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">findAdtMangled col did</span></span>
 <span class="lineno">  347 </span>
 <span class="lineno">  348 </span>-- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'&quot; with the given
 <span class="lineno">  349 </span>-- 'String' as an identifier and the given 'Mir.Ty's as the types used to
@@ -1675,12 +1675,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1656 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1657 </span><span class="spaces">    </span><span class="istickedoff">insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe <span class="nottickedoff">[]</span>)</span></span>
 <span class="lineno"> 1658 </span>
-<span class="lineno"> 1659 </span>-- Find the ADT definition corresponding to an exact identifier (i.e., an
+<span class="lineno"> 1659 </span>-- | Find the ADT definition corresponding to a mangled identifier (i.e., an
 <span class="lineno"> 1660 </span>-- identifier for an ADT that is already instantiated with type arguments). See
-<span class="lineno"> 1661 </span>-- 'findAdt' for a variant of this function that looks up non-exact
+<span class="lineno"> 1661 </span>-- 'findAdt' for a variant of this function that looks up non-mangled
 <span class="lineno"> 1662 </span>-- identifiers.
-<span class="lineno"> 1663 </span>findAdtExact :: Mir.Collection -&gt; Mir.DefId -&gt; TopLevel Mir.Adt
-<span class="lineno"> 1664 </span><span class="decl"><span class="istickedoff">findAdtExact col name =</span>
+<span class="lineno"> 1663 </span>findAdtMangled :: Mir.Collection -&gt; Mir.DefId -&gt; TopLevel Mir.Adt
+<span class="lineno"> 1664 </span><span class="decl"><span class="istickedoff">findAdtMangled col name =</span>
 <span class="lineno"> 1665 </span><span class="spaces">  </span><span class="istickedoff">case col ^. Mir.adts . at name of</span>
 <span class="lineno"> 1666 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; return x</span>
 <span class="lineno"> 1667 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;Unknown ADT: &quot; ++ show name</span></span></span>
