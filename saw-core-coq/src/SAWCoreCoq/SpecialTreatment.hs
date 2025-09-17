@@ -375,7 +375,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
   , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("at_gen_BVVec",  mapsTo preludeExtraModule "at_gen_BVVec")
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
   , ("atWithProof",   mapsTo vectorsModule "atWithProof")
   , ("at_single",     skip) -- is boring, could be proved on the Coq side
@@ -405,7 +404,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("foldl",         mapsTo vectorsModule "foldl")
   , ("foldl_nil",     mapsTo vectorsModule "foldl_nil")
   , ("foldl_cons",    mapsTo vectorsModule "foldl_cons")
-  , ("gen_at_BVVec",  mapsTo preludeExtraModule "gen_at_BVVec")
   , ("genWithProof",  mapsTo vectorsModule "genWithProof")
   , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
