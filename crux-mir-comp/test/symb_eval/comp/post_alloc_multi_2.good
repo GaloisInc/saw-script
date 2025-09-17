@@ -1,0 +1,4 @@
+test post_alloc_multi_2/<DISAMB>::f_equiv[0]: ok
+test post_alloc_multi_2/<DISAMB>::g_equiv[0]: ok
+
+[Crux] Overall status: Valid.
