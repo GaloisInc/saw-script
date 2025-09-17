@@ -1584,7 +1584,7 @@ instance IsValue CryptolModule where
 
 instance FromValue CryptolModule where
     fromValue _ (VCryptolModule m) = m
-    fromValue _ _ = error "fromValue ModuleEnv"
+    fromValue _ _ = error "fromValue CryptolModule"
 
 instance IsValue JSS.Class where
     toValue _name c = VJavaClass c
@@ -2628,7 +2628,7 @@ primitives = Map.fromList
     Experimental
     [ "Disable checking of safety obligations encountered during symbolic"
     , "execution. This is unsound! However, it can be useful during"
-    , "initial proof construction to focus only on the stated correcness"
+    , "initial proof construction to focus only on the stated correctness"
     , "specifications."
     ]
 
@@ -4123,7 +4123,7 @@ primitives = Map.fromList
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
-    (pureVal CEnv.lookupCryptolModule)
+    (pureVal CEnv.extractDefFromCryptolModule)
     Current
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."

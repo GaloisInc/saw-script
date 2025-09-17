@@ -1138,7 +1138,7 @@ maybeInsert k (Just x) m = M.insert k x m
 extendEnv ::
   SharedContext ->
   SS.LName -> SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
-extendEnv sc x ty md v rw =
+extendEnv sc name ty md v rw =
   do ce' <-
        case v of
          VTerm t ->
@@ -1163,10 +1163,9 @@ extendEnv sc x ty md v rw =
          , rwCryptol = ce'
          }
   where
-    name = x
     -- XXX why is this using getOrig?
-    ident = T.mkIdent (SS.getOrig x)
-    modname = T.packModName [SS.getOrig x]
+    ident = T.mkIdent (SS.getOrig name)
+    modname = T.packModName [SS.getOrig name]
     ce = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm

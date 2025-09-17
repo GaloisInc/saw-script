@@ -1,0 +1,4 @@
+module A where
+
+a : [32]
+a = 2

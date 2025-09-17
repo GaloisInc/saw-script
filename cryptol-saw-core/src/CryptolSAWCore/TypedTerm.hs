@@ -234,7 +234,9 @@ abstractTypedExts sc tecs (TypedTerm (TypedTermOther _tp) trm) =
 -- terms.
 
 data CryptolModule =
-  CryptolModule (Map C.Name C.TySyn) (Map C.Name TypedTerm)
+  CryptolModule
+    (Map C.Name C.TySyn)    -- type synonyms
+    (Map C.Name TypedTerm)  -- symbols (mapping to SawCore things).
 
 showCryptolModule :: CryptolModule -> String
 showCryptolModule (CryptolModule sm tm) =
