@@ -8,8 +8,10 @@ This release supports [version
 
 * The deprecated Heapster, MRSolver, and Monadify features have been
   removed.
-  The following SAW commands are no longer available:
+  The following SAW commands and types are no longer available:
 
+  - HeapsterEnv (type)
+  - Refnset (type)
   - write_coq_cryptol_module_monadic
   - mrsolver_set_debug_level
   - mrsolver_set_debug_printing_depth
