@@ -640,7 +640,13 @@ loadAndTranslateModule sc env src =
      m <- case mtop of
             T.TCTopModule mod'  -> pure mod'
             T.TCTopSignature {} ->
-              fail "Expected a module but found an interface."
+              fail $
+                "Expected a module, but "
+                ++ (case src of
+                      Left  path -> show path
+                      Right mn   -> show mn
+                   )
+                ++ " is an interface."
 
      checkNotParameterized m
 
