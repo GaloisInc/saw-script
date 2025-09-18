@@ -27,6 +27,7 @@ JAVA_BLOBS=$(patsubst %, %.class, $(JAVA_SRCS))
 # "all" builds all blobs
 all: all-java-blobs
 all-java-blobs: $(JAVA_BLOBS)
+	$(MAKE) tidy-java-blobs
 
 $(JAVA_BLOBS): %.class: %.java
 	$(JAVAC) $(JAVACFLAGS) $<
