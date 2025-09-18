@@ -455,10 +455,9 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
 
          pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
 
-    RecursorApp r indices termEliminated ->
+    RecursorApp r indices ->
       do r' <- translateTerm r
-         let args = indices ++ [termEliminated]
-         Coq.App r' <$> mapM translateTerm args
+         Coq.App r' <$> mapM translateTerm indices
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
