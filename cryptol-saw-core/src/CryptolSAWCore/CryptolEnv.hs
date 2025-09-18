@@ -470,22 +470,6 @@ loadCryptolModule sc env path = do
 
   checkNotParameterized m
 
-
-  let ifaceDecls = getAllIfaceDecls modEnv'
-  (types, modEnv'') <- liftModuleM modEnv' $ do
-    do prims <- MB.getPrimMap
-                  -- generate the primitive map; a monad reader
-       TM.inpVars `fmap`
-         MB.genInferInput P.emptyRange prims NoParams ifaceDecls
-
-         -- NOTE: inpVars are the variables that are in scope.
-         -- FIXME: we are possibly doing unnecessary computation here (see
-         --        source code for MB.getPrimMap and MB.genInferInput.)
-
-     -- FIXME: it appears (need to verify) that modEnv'' == modEnv'
-     --   if this true, we can simplify and move this section
-     --   into `mkCryptolModule`.
-
   -- Regenerate SharedTerm environment:
   let oldModNames = map ME.lmName
                   $ ME.lmLoadedModules
@@ -494,7 +478,7 @@ loadCryptolModule sc env path = do
       newModules  = filter isNew
                   $ map ME.lmModule
                   $ ME.lmLoadedModules
-                  $ ME.meLoadedModules modEnv''
+                  $ ME.meLoadedModules modEnv'
       newDeclGroups = concatMap T.mDecls newModules
       newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
                                      (loadedNonParamNominalTypes modEnv)
@@ -506,18 +490,15 @@ loadCryptolModule sc env path = do
                       sc C.defaultPrimitiveOptions cEnv newDeclGroups
        return (C.envE newCryEnv)
 
-  cryptolModule <- mkCryptolModule m types newTermEnv
-
   -- NOTE: Bringing the module-handle into {{-}} scope is not handled
   --       here; it is done rather in `bindCryptolModule`, ONLY if the
   --       user binds the `cryptolModule` returned here at the saw
   --       command line.
 
-  return ( cryptolModule
-         , env { eModuleEnv = modEnv''
-               , eTermEnv   = newTermEnv
-               , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-               }
+  let env' = env { eModuleEnv = modEnv'
+                 , eTermEnv   = newTermEnv
+                 , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+                 }
              -- NOTE here the difference between this function and
              -- `importModule`:
              --  1. the `eImports` field is not updated, as
@@ -525,7 +506,9 @@ loadCryptolModule sc env path = do
              --     brought into scope inside {{ }} constructs.
              --  2. modEnv'' vs modEnv' (which may not be different, see
              --     notes above).
-         )
+
+  cryptolModule <- mkCryptolModule m env'
+  return (cryptolModule, env')
 
 -- | mkCryptolModule
 --
@@ -533,15 +516,28 @@ loadCryptolModule sc env path = do
 --   - This incorrectly excludes both submodules and their contents from
 --     the NamingEnvs in `CryptolModule`
 
---   - Regarding the CLI API: the `CryptolModule` type is exposed to
---     the SAWScript CLI, is this necessary?
-
-mkCryptolModule :: T.Module
-                -> Map MN.Name T.Schema
-                -> Map MN.Name Term
-                -> IO CryptolModule
-mkCryptolModule m types newTermEnv =
+mkCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  T.Module -> CryptolEnv -> IO CryptolModule
+mkCryptolModule m env =
   do
+  let newTermEnv = eTermEnv env
+      modEnv     = eModuleEnv env
+      ifaceDecls = getAllIfaceDecls modEnv
+  (types, _modEnv) <- liftModuleM modEnv $ do
+    -- NOTE: _modEnv == modEnv
+    --   - as we elaborate below, the monadic actions are all 'readers'
+    do prims <- MB.getPrimMap
+                  -- generate the primitive map; a monad reader
+       TM.inpVars `fmap`
+         MB.genInferInput P.emptyRange prims NoParams ifaceDecls
+         -- NOTE: inpVars are the variables that are in scope.
+         -- FIXME:
+         --   - Why are we calling mB.genInferInput then projecting out
+         --     `inpVars`?
+         --   - If we had inlined, it appears that this is functional code.
+         --   - (Maybe because of information hiding?)
+
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
   return $
     CryptolModule
