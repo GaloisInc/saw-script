@@ -307,18 +307,6 @@ piCong1 r x y eq =
 
 
 --------------------------------------------------------------------------------
--- Bits
-
-data Bit : sort 0 where {
-    Bit1 : Bit;
-    Bit0 : Bit;
-  }
-
-Bit__rec : (p : Bit -> sort 1) -> (p Bit1) -> (p Bit0) -> (b:Bit) -> p b;
-Bit__rec p f1 f2 b = Bit#rec p f1 f2 b;
-
-
---------------------------------------------------------------------------------
 -- Booleans
 
 -- Boolean is a primitive type, because it is handled specially by some of the
@@ -327,9 +315,9 @@ primitive Bool : sort 0;
 primitive True : Bool;
 primitive False : Bool;
 
--- Elimination form for Bool is dependent if-then-else. This is exactly the same
--- as the recursor for Bit, but it is declared as a primitive because Bool is.
--- It also rearranges the arguments to look more like normal if-then-else.
+-- Elimination form for Bool is dependent if-then-else. It is declared
+-- as a primitive because Bool is. It also rearranges the arguments to
+-- look more like normal if-then-else.
 primitive iteDep : (p : Bool -> sort 1) -> (b:Bool) ->
                     p True -> p False -> p b;
 
@@ -369,29 +357,6 @@ iteWithProof a b f1 f2 =
 -- A version of ite that includes an Eq proof term only in the True branch
 ifWithProof : (a : sort 0) -> (b:Bool) -> a -> (Eq Bool b True -> a) -> a;
 ifWithProof a b x f = iteWithProof a b f (\(_:Eq Bool b False) -> x);
-
---
--- Converting between Bools and Bits (cause why not?)
---
-
-bool2bit : Bool -> Bit;
-bool2bit b = iteDep (\ (_:Bool) -> Bit) b Bit1 Bit0;
-
-bool2bit_True : Eq Bit (bool2bit True) Bit1;
-bool2bit_True = iteDep_True (\ (_:Bool) -> Bit) Bit1 Bit0;
-
-bool2bit_False : Eq Bit (bool2bit False) Bit0;
-bool2bit_False = iteDep_False (\ (_:Bool) -> Bit) Bit1 Bit0;
-
-bit2bool : Bit -> Bool;
-bit2bool = Bit__rec (\ (_:Bit) -> Bool) True False;
-
-bit2bool_Bit1 : Eq Bool (bit2bool Bit1) True;
-bit2bool_Bit1 = Refl Bool True;
-
-bit2bool_Bit0 : Eq Bool (bit2bool Bit0) False;
-bit2bool_Bit0 = Refl Bool False;
-
 
 --
 -- The Boolean operations
@@ -1711,33 +1676,6 @@ primitive mkDouble : Integer -> Integer -> Float;
 -- primitive doubleToBV : Double -> Vec 64 Bool;
 
 
--------------------------------------------------------------------------------
--- Dependent sums
-
-data Sigma (a : sort 0) (b : a -> sort 0) : sort 0
-  where {
-    exists : (pa : a) -> b pa -> Sigma a b;
-  }
-
-Sigma__rec
-  (a : sort 0) (b : a -> sort 0) (p : Sigma a b -> sort 0)
-  (f1 : (pa : a) -> (pb : b pa) -> p (exists a b pa pb)) (u : Sigma a b) : p u
-  = Sigma#rec a b p f1 u;
-
-Sigma_proj1 (a : sort 0) (b : a -> sort 0) : Sigma a b -> a
-  = Sigma__rec a b (\ (_ : Sigma a b) -> a) (\ (pa : a) (_ : b pa) -> pa);
-
-Sigma_proj2 (a : sort 0) (b : a -> sort 0)
-  : (p : Sigma a b) -> b (Sigma_proj1 a b p)
-  = Sigma__rec a b
-      (\ (p : Sigma a b) -> b (Sigma_proj1 a b p))
-      (\ (pa : a) (pb : b pa) -> pb);
-
-uncurrySigma : (a : sort 0) -> (b : a -> sort 0) -> (c : sort 0) ->
-               ((pa : a) -> b pa -> c) -> Sigma a b -> c;
-uncurrySigma a b c = Sigma__rec a b (\ (_:Sigma a b) -> c);
-
-
 --------------------------------------------------------------------------------
 -- Lists
 
@@ -1851,14 +1789,6 @@ efq a contra =
       ))
     ();
 
--- Ex Falso Quodlibet at sort 1
-efq1 : (a : sort 1) -> Eq Bool True False -> a;
-efq1 a contra =
-  Eq__rec Bit Bit1
-          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
-          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
-
-
 --------------------------------------------------------------------------------
 -- Nested Either types
 
@@ -1950,8 +1880,6 @@ eithersV a =
 --------------------------------------------------------------------------------
 -- Nested Sigma types
 
--- FIXME: Sigmas isn't used yet, but is here in case we need it later
-
 -- Form the multiple arrow type a1 -> ... -> an -> b
 arrowsType : ListSort -> sort 0 -> sort 0;
 arrowsType as b =
@@ -1965,49 +1893,6 @@ arrowsSort as =
   ListSort#rec (\ (_:ListSort) -> sort 1) (sort 0)
     (\ (a:sort 0) (_:ListSort) (rec:sort 1) -> a -> rec)
     as;
-
--- The right-nested sigma type Sigma a1 (\ x1 -> Sigma a2 (\ x2 -> ... (b x1 ... xn)))
-Sigmas : (as:ListSort) -> arrowsSort as -> sort 0;
-Sigmas =
-  ListSort__rec (\ (as:ListSort) -> arrowsSort as -> sort 0)
-    (\ (b:sort 0) -> b)
-    (\ (a:sort 0) (as:ListSort) (rec:arrowsSort as -> sort 0)
-       (b:a -> arrowsSort as) -> Sigma a (\ (x:a) -> rec (b x)));
-
-
---------------------------------------------------------------------------------
--- Lists of 64-bit words (for testing Heapster)
-
-data W64List : sort 0 where {
-  W64Nil : W64List;
-  W64Cons : Vec 64 Bool -> W64List -> W64List;
-}
-
-unfoldedW64List : sort 0;
-unfoldedW64List =
-  Either #()
-  (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #());
-
-unfoldW64List : W64List -> unfoldedW64List;
-unfoldW64List l =
-  W64List#rec (\ (_:W64List) -> unfoldedW64List)
-  (Left #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #()) ())
-  (\ (bv:Vec 64 Bool) (l':W64List) (_:unfoldedW64List) ->
-     Right #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
-               (exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv (),
-                l', ()))
-  l;
-
-foldW64List : unfoldedW64List -> W64List;
-foldW64List =
-  either #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
-         W64List
-         (\ (_:#()) -> W64Nil)
-         (\ (bv_l:(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #())
-                   * W64List * #())) ->
-            W64Cons (Sigma_proj1 (Vec 64 Bool)
-                                 (\ (_:Vec 64 Bool) -> #()) bv_l.(1))
-                    bv_l.(2).(1));
 
 
 --------------------------------------------------------------------------------
@@ -2099,162 +1984,6 @@ axiom IsLtNat_to_bvult : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
 axiom bvult_to_IsLtNat : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
                          is_bvult n (bvNat n i) x -> IsLtNat i (bvToNat n x);
 
--- The type of a bitvector-indexed array of length len : Vec n Bool
-BVVec : (n:Nat) -> Vec n Bool -> sort 0 -> sort 0;
-BVVec n len = Vec (bvToNat n len);
-
--- Generate a BVVec of length len whose elements are given by a function
-genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-           ((i:Vec n Bool) -> is_bvult n i len -> a) ->
-           BVVec n len a;
-genBVVec n len a f =
-  genWithProof (bvToNat n len) a
-    (\ (i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
-       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
-
--- Generate a BVVec from a function from bitvector indices to elements, in a
--- manner similar to genBVVec but where the function does not take proofs
-genBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-               (Vec n Bool -> a) -> BVVec n len a;
-genBVVecNoPf n len a f =
-  gen (bvToNat n len) a (\ (i:Nat) -> f (bvNat n i));
-
--- Generate a BVVec from the elements of an existing vector, using a default
--- value when we run out of the existing vector
-genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
-                  (n : Nat) -> (len : Vec n Bool) -> BVVec n len a;
-genBVVecFromVec m a v def n len =
-  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
-                      atWithDefault m a def v (bvToNat n i));
-
--- Generate a vector from the elements of an existing BVVec, using a default
--- value when we run out of the existing BVVec - the inverse of genBVVecFromVec
-genFromBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-               BVVec n len a -> a -> (m : Nat) -> Vec m a;
-genFromBVVec n len a v def m =
-  gen m a (\ (i:Nat) -> atWithDefault (bvToNat n len) a def v i);
-
--- Generate an empty BVVec
-emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
-emptyBVVec n a =
-  genBVVec n (bvNat n 0) a
-           (\ (i:Vec n Bool) (pf:is_bvult n i (bvNat n 0)) ->
-              efq a (trans Bool True (bvult n i (bvNat n 0)) False
-                            (sym Bool (bvult n i (bvNat n 0)) True pf)
-                            (not_bvult_zero n i)));
-
--- Generate a BVVec by repeating a single element
-repeatBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) -> a ->
-              BVVec n len a;
-repeatBVVec n len a x =
-  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) -> x);
-
--- Generate a BVVec with 1 element
-singletonBVVec : (n : Nat) -> (a : sort 0) -> a -> BVVec n (bvNat n 1) a;
-singletonBVVec n a x = repeatBVVec n (bvNat n 1) a x;
-
--- Read the ixth element of a BVVec, assuming that ix < len
-atBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-          BVVec n len a -> (ix : Vec n Bool) ->
-          is_bvult n ix len -> a;
-atBVVec n len a x ix pf =
-  atWithProof (bvToNat n len) a x (bvToNat n ix)
-    (bvult_to_IsLtNat n len (bvToNat n ix)
-      (trans Bool (bvult n (bvNat n (bvToNat n ix)) len) (bvult n ix len) True
-        (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
-          (bvNat_bvToNat n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
-        pf));
-
--- Read the ixth element of a BVVec, assuming that ix < len but with no proof of
--- that fact
-atBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
-              BVVec n len a -> (ix : Vec n Bool) -> a;
-atBVVecNoPf n len a v ix = at (bvToNat n len) a v (bvToNat n ix);
-
--- Indexing a generated BVVec just returns the generating function
-axiom at_gen_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-                     (f : (i:Vec n Bool) -> is_bvult n i len -> a) ->
-                     (ix : Vec n Bool) -> (pf : is_bvult n ix len) ->
-                     Eq a (atBVVec n len a (genBVVec n len a f) ix pf) (f ix pf);
-
--- Generating a BVVec by indexing another just returns the other BVVec
-axiom gen_at_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-                     (x : BVVec n len a) ->
-                     Eq (BVVec n len a) (genBVVec n len a (atBVVec n len a x)) x;
-
--- Update the value at a specific index in a BVVec if it is in range, otherwise
--- do nothing
-updBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-           BVVec n len a -> (ix : Vec n Bool) ->
-           a -> BVVec n len a;
-updBVVec n len a v ix elem =
-  genBVVec n len a (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-                      ite a (bvEq n i ix) elem (atBVVec n len a v i pf));
-
--- Adjust the value at a specific index in a BVVec by applying a function
-adjustBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-              BVVec n len a -> (a -> a) -> Vec n Bool ->
-              BVVec n len a;
-adjustBVVec n len a v f ix =
-  genBVVec n len a (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-                      ite a (bvEq n i ix)
-                          (f (atBVVec n len a v i pf))
-                          (atBVVec n len a v i pf));
-
--- Take the first i elements of a BVVec, assuming i <= len
-takeBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-            (i : Vec n Bool) -> is_bvule n i len ->
-            BVVec n len a -> BVVec n i a;
-takeBVVec n len a i pf v =
-  genBVVec n i a
-    (\ (j:Vec n Bool) (pf2:is_bvult n j i) ->
-       atBVVec n len a v j (trans_bvult_bvule n j i len pf2 pf));
-
--- Drop the first i elements of a BVVec, assuming i <= len
-dropBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-            (i : Vec n Bool) -> is_bvule n i len ->
-            BVVec n len a -> BVVec n (bvSub n len i) a;
-dropBVVec n len a i pf v =
-  genBVVec n (bvSub n len i) a
-    (\ (j:Vec n Bool) (pf2:is_bvult n j (bvSub n len i)) ->
-       atBVVec n len a v (bvAdd n i j) (bvult_sub_add_bvult n j i len pf pf2));
-
--- Combined drop and take
-sliceBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-             (start' len' : Vec n Bool) -> is_bvule n start' len ->
-             is_bvule n len' (bvSub n len start') ->
-             BVVec n len a -> BVVec n len' a;
-sliceBVVec n len a start' len' pf1 pf2 v =
-  takeBVVec n (bvSub n len start') a len' pf2
-    (dropBVVec n len a start' pf1 v);
-
--- Update a slice of a BVVec
-updSliceBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
-                BVVec n len a -> (start' len' : Vec n Bool) ->
-                BVVec n len' a -> BVVec n len a;
-updSliceBVVec n len a v start' len' v_sub =
-  genBVVec n len a
-    (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-       ite a (bvule n start' i)
-           (ifWithProof a (bvult n (bvSub n i start') len')
-              (atBVVec n len a v i pf)
-              (\ (pf_sub:is_bvult n (bvSub n i start') len') ->
-                 atBVVec n len' a v_sub (bvSub n i start') pf_sub))
-           (atBVVec n len a v i pf));
-
--- Append two BVVecs
-appendBVVec : (n : Nat) -> (len1 len2 : Vec n Bool) -> (a : sort 0) ->
-              BVVec n len1 a -> BVVec n len2 a -> BVVec n (bvAdd n len1 len2) a;
-appendBVVec n len1 len2 a v1 v2 =
-  genBVVec n (bvAdd n len1 len2) a
-    (\ (i:Vec n Bool) (pf12:is_bvult n i (bvAdd n len1 len2)) ->
-       iteWithProof a (bvult n i len1)
-         (\ (pf1:is_bvult n i len1) -> atBVVec n len1 a v1 i pf1)
-         (\ (not_pf1:Eq Bool (bvult n i len1) False) ->
-            atBVVec n len2 a v2 (bvSub n i len1)
-                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1)));
-
-
 -- | The complete induction principle on bitvectors
 BV_complete_induction :
   (w: Nat) ->
@@ -2276,52 +2005,6 @@ BV_complete_induction w p f x0 =
 	   )
     )
     (bvToNat w x0) x0 (IsLeNat_base (bvToNat w x0));
-
-
---------------------------------------------------------------------------------
--- Lists at sort 1
-
--- The type List1 itself
-data List1 (a:sort 1) : sort 1 where {
-  Nil1 : List1 a;
-  Cons1 : a -> List1 a -> List1 a;
-}
-
--- The length of a List1
-length1 : (a:sort 1) -> List1 a -> Nat;
-length1 a l =
-  List1#rec a (\ (_:List1 a) -> Nat) 0
-            (\ (_:a) (_:List1 a) (rec:Nat) -> Succ rec) l;
-
--- Append two List1s
-app1 : (a:sort 1) -> List1 a -> List1 a -> List1 a;
-app1 a l1 l2 =
-  List1#rec a (\ (_:List1 a) -> List1 a) l2
-              (\ (x:a) (_:List1 a) (rec:List1 a) -> Cons1 a x rec) l1;
-
--- Concatenate a List1 of List1s
-concat1 : (a:sort 1) -> List1 (List1 a) -> List1 a;
-concat1 a ls =
-  List1#rec (List1 a) (\ (_:List1 (List1 a)) -> List1 a)
-            (Nil1 a)
-            (\ (xs:List1 a) (_:List1 (List1 a)) (rec:List1 a) -> app1 a xs rec)
-            ls;
-
--- Map a function across a List1
-map1 : (a b:sort 1) -> (f : a -> b) -> List1 a -> List1 b;
-map1 a b f l =
-  List1#rec
-    a (\ (_:List1 a) -> List1 b) (Nil1 b)
-    (\ (x:a) (_:List1 a) (rec:List1 b) -> Cons1 b (f x) rec) l;
-
--- Return the nth element of a List1, or a default value if n is too big
-nth_default1 : (a:sort 1) -> a -> List1 a -> Nat -> a;
-nth_default1 a d l =
-  List1#rec a (\ (_:List1 a) -> Nat -> a)
-    (\ (_:Nat) -> d)
-    (\ (x:a) (_:List1 a) (rec:Nat -> a) (n:Nat) ->
-       Nat_cases a x (\ (m:Nat) (_:a) -> rec m) n)
-    l;
 
 
 --------------------------------------------------------------------------------

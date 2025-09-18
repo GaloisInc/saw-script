@@ -375,7 +375,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
   , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("at_gen_BVVec",  mapsTo preludeExtraModule "at_gen_BVVec")
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
   , ("atWithProof",   mapsTo vectorsModule "atWithProof")
   , ("at_single",     skip) -- is boring, could be proved on the Coq side
@@ -405,7 +404,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("foldl",         mapsTo vectorsModule "foldl")
   , ("foldl_nil",     mapsTo vectorsModule "foldl_nil")
   , ("foldl_cons",    mapsTo vectorsModule "foldl_cons")
-  , ("gen_at_BVVec",  mapsTo preludeExtraModule "gen_at_BVVec")
   , ("genWithProof",  mapsTo vectorsModule "genWithProof")
   , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
@@ -508,15 +506,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Right",       mapsToExpl datatypesModule "inr")
   ]
 
-  -- Dependent pairs
-  ++
-  [ ("Sigma", replace (Coq.ExplVar "sigT"))
-  , ("exists", replace (Coq.ExplVar "existT"))
-  , ("Sigma__rec", replace (Coq.ExplVar "sigT_rect"))
-  , ("Sigma_proj1", replace (Coq.ExplVar "projT1"))
-  , ("Sigma_proj2", replace (Coq.ExplVar "projT2"))
-  ]
-
   -- Lists
   ++
   [ ("List", mapsToExpl datatypesModule "list")
@@ -524,16 +513,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Cons", mapsToExpl datatypesModule "cons")
   , ("List__rec", mapsToExpl datatypesModule "list_rect")
   ]
-
-  -- Lists at sort 1
-  {- FIXME: in order to support lists at a higher sort, we need a universe
-     polymorphic version of them
-  ++
-  [ ("List1", mapsToExpl polyListModule "plist")
-  , ("Nil1", mapsToExpl polyListModule "pnil")
-  , ("Cons1", mapsToExpl polyListModule "pcons")
-  ]
-  -}
 
 escapeIdent :: Coq.Ident -> Coq.Ident
 escapeIdent (Coq.Ident str)

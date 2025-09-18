@@ -69,9 +69,7 @@ module SAWCore.OpenTerm (
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
   piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
-  bitvectorTypeOpenTerm, bvVecTypeOpenTerm, listOpenTerm, list1OpenTerm,
-  eitherTypeOpenTerm, sigmaTypeOpenTerm, sigmaTypeOpenTermMulti, sigmaOpenTerm,
-  sigmaOpenTermMulti, sigmaElimOpenTermMulti,
+  bitvectorTypeOpenTerm, listOpenTerm, eitherTypeOpenTerm,
   -- * Monadic operations for building terms including 'IO' actions
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -95,7 +93,6 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
-import qualified Data.Text as Text
 import Data.Text (Text)
 import Numeric.Natural
 
@@ -474,76 +471,15 @@ bitvectorTypeOpenTerm :: OpenTerm -> OpenTerm
 bitvectorTypeOpenTerm w =
   applyGlobalOpenTerm "Prelude.Vec" [w, globalOpenTerm "Prelude.Bool"]
 
--- | Build the SAW core type @BVVec n len d@
-bvVecTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
-bvVecTypeOpenTerm w_term len_term elem_tp =
-  applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp]
-
 -- | Build a SAW core term for a list with the given element type
 listOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
 listOpenTerm tp elems =
   foldr (\x l -> ctorOpenTerm "Prelude.Cons" [tp, x, l])
   (ctorOpenTerm "Prelude.Nil" [tp]) elems
 
--- | Build an 'OpenTerm' of type @List1 tp@ from 'OpenTerm's of type @tp@
-list1OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
-list1OpenTerm tp xs =
-  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
-  (ctorOpenTerm "Prelude.Nil1" [tp])
-  xs
-
 -- | Build the type @Either a b@ from types @a@ and @b@
 eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
 eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
-
--- | Build the type @Sigma a (\ (x:a) -> b)@ from variable name @x@, type @a@,
--- and type-level function @b@
-sigmaTypeOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
-sigmaTypeOpenTerm x tp f =
-  dataTypeOpenTerm "Prelude.Sigma" [tp, lambdaOpenTerm x tp f]
-
--- | Build the type @Sigma a1 (\ (x1:a1) -> Sigma a2 (\ (x2:a2) -> ...))@
-sigmaTypeOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
-                          OpenTerm
-sigmaTypeOpenTermMulti _ [] f = f []
-sigmaTypeOpenTermMulti x (tp:tps) f =
-  sigmaTypeOpenTerm x tp $ \ t ->
-  sigmaTypeOpenTermMulti x tps $ \ts -> f (t:ts)
-
--- | Build the dependent pair @exists a (\ (x:a) -> b) x y@ whose type is given
--- by 'sigmaTypeOpenTerm'
-sigmaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) ->
-                 OpenTerm -> OpenTerm -> OpenTerm
-sigmaOpenTerm x tp tp_f trm_l trm_r =
-  ctorOpenTerm "Prelude.exists" [tp, lambdaOpenTerm x tp tp_f, trm_l, trm_r]
-
--- | Build the right-nested dependent pair @(x1, (x2, ...(xn, y)))@ whose type
--- is given by 'sigmaTypeOpenTermMulti'
-sigmaOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
-                      [OpenTerm] -> OpenTerm -> OpenTerm
-sigmaOpenTermMulti _ [] _ [] trm = trm
-sigmaOpenTermMulti x (tp:tps) tp_f (trm_l:trms_l) trm_r =
-  sigmaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:))) trm_l $
-  sigmaOpenTermMulti x tps (tp_f . (trm_l:)) trms_l trm_r
-sigmaOpenTermMulti _ tps _ trms _ =
-  panic "sigmaOpenTermMulti" [
-     "The number of types and arguments disagree:",
-     Text.pack (show $ length tps) <> " Remaining types",
-     Text.pack (show $ length trms) <> " remaining terms",
-     "(sorry, the values themselves are unresolved monadic computations)"
-  ]
-
--- | Take a nested dependent pair (of the type returned by
--- 'sigmaTypeOpenTermMulti') and apply a function @f@ to all of its projections
-sigmaElimOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
-                          OpenTerm -> ([OpenTerm] -> OpenTerm) -> OpenTerm
-sigmaElimOpenTermMulti _ [] _ t f_elim = f_elim [t]
-sigmaElimOpenTermMulti x (tp:tps) tp_f sig f_elim =
-  let b_fun = lambdaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:)))
-      proj1 = applyGlobalOpenTerm "Prelude.Sigma_proj1" [tp, b_fun, sig]
-      proj2 = applyGlobalOpenTerm "Prelude.Sigma_proj2" [tp, b_fun, sig] in
-  sigmaElimOpenTermMulti x tps (tp_f . (proj1:)) proj2 (f_elim . (proj1:))
-
 
 --------------------------------------------------------------------------------
 -- Monadic operations for building terms including 'IO' actions

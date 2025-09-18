@@ -8,11 +8,11 @@ Expected term:
 let { x@1 = Prelude.Vec 32 Prelude.Bool
       x@2 = Cryptol.TCNum 32
     }
- in Cryptol.ecMul x@1 (Cryptol.PRingSeqBool x@2) fresh:x#1580
+ in Cryptol.ecMul x@1 (Cryptol.PRingSeqBool x@2) fresh:x#1520
       (Cryptol.ecNumber (Cryptol.TCNum 3) x@1
          (Cryptol.PLiteralSeqBool x@2))
 Actual term:
-Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#1580
+Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#1520
 
  SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
  ----------Counterexample----------
