@@ -470,10 +470,6 @@ loadCryptolModule sc env path = do
 
   checkNotParameterized m
 
-  -- NOTE: unclear what's happening here!
-  --   - FIXME: understand and doc.
-  --   - `m` not used (directly) but translating the modEnv'
-  --   - this behavior is not in `importModule`
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
@@ -554,13 +550,13 @@ mkCryptolModule m types newTermEnv =
          (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
          (T.mTySyns m)
       )
-        -- FIXME: TODO: ensure type synonym in submodule is included.
+        -- FIXME: TODO: ensure type synonyms in submodule are included.
 
       -- create the map of symbols:
       ( Map.filterWithKey (\k _ -> Set.member k names)
       $ Map.intersectionWith
            (\t x -> TypedTerm (TypedTermSchema t) x)
-           types          -- NOTE: only use of this variable.
+           types
            newTermEnv
       )
 
@@ -678,9 +674,9 @@ loadAndTranslateModule sc env src =
 
      return ( locate $ T.mName m
             , env{ eModuleEnv = modEnv'
-                , eTermEnv   = newTermEnv
-                , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-                }
+                 , eTermEnv   = newTermEnv
+                 , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+                 }
             )
 
 -- | @'importModule' sc env src as vis imps@ - extend the Cryptol
