@@ -216,6 +216,12 @@ There are also a number of SAW commands related to solver caching.
   then all entries in the cache already in use will be copied to the new cache
   being opened.
 
+- `set_solver_cache_timeout` sets the cache's timeout (in microseconds) used
+  for database lookups and inserts. The default timeout value is 2,000,000
+  microseconds (2 seconds). This is a reasonably large timeout for most cache
+  operations, but it may be convenient to increase this timeout for especially
+  large proof goals.
+
 - `clean_mismatched_versions_solver_cache` will remove all entries in the
   solver result cache which were created using solver backend versions which do
   not match the versions in the current environment. This can be run after an
