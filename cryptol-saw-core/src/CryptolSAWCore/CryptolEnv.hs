@@ -622,7 +622,7 @@ loadAndTranslateModule ::
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
-  IO (P.Located P.ModName, CryptolEnv)
+  IO (T.Module, CryptolEnv)
 loadAndTranslateModule sc env src =
   do let modEnv = eModuleEnv env
      (mtop, modEnv') <- liftModuleM modEnv $
@@ -656,11 +656,7 @@ loadAndTranslateModule sc env src =
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
           return (C.envE newCryEnv)
 
-     let -- XXX: it would be better to have the real position, but it
-         -- seems to have been thrown away on the Cryptol side.
-         locate x = P.Located P.emptyRange x
-
-     return ( locate $ T.mName m
+     return ( m
             , env{ eModuleEnv = modEnv'
                  , eTermEnv   = newTermEnv
                  , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
@@ -686,8 +682,8 @@ importModule ::
   IO CryptolEnv
 importModule sc env src as vis imps =
   do
-  (modName, env') <- loadAndTranslateModule sc env src
-  let newImport = (vis, P.Import { T.iModule= modName
+  (mod', env') <- loadAndTranslateModule sc env src
+  let newImport = (vis, P.Import { T.iModule= locatedUnknown (T.mName mod')
                                  , T.iAs    = as
                                  , T.iSpec  = imps
                                  , T.iInst  = Nothing
@@ -695,6 +691,12 @@ importModule sc env src as vis imps =
                                  }
                   )
   return $ env'{ eImports = newImport : eImports env }
+
+locatedUnknown :: a -> P.Located a
+locatedUnknown x = P.Located P.emptyRange x
+  -- XXX: it would be better to have the real position, but it
+  -- seems to have been thrown away on the Cryptol side in the uses
+  -- of this function.
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
