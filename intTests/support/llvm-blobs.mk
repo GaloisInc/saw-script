@@ -36,6 +36,7 @@ endif
 # "all" builds all blobs
 all: all-llvm-blobs
 all-llvm-blobs: $(LLVM_BLOBS)
+	$(MAKE) tidy-llvm-blobs
 
 $(LLVM_C_BITCODE): %.bc: %.c
 	$(CLANG) $(CFLAGS) -c -emit-llvm $< -o $@

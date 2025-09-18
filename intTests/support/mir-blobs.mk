@@ -28,6 +28,7 @@ MIR_TIDY=$(MIR_TIDY_PROGS) $(MIR_TIDY_MIR) $(MIR_TIDY_RLIB)
 # "all" builds all blobs
 all: all-mir-blobs
 all-mir-blobs: $(MIR_BLOBS)
+	$(MAKE) tidy-mir-blobs
 
 $(MIR_BLOBS): %.linked-mir.json: %.rs
 	saw-rustc $<
