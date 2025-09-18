@@ -934,7 +934,7 @@ span.spaces    { background: white }
 <span class="lineno">  915 </span><span class="spaces">         </span><span class="istickedoff">let mLoc = iModule imp</span>
 <span class="lineno">  916 </span><span class="spaces">             </span><span class="istickedoff">qual = iAs imp</span>
 <span class="lineno">  917 </span><span class="spaces">             </span><span class="istickedoff">spec = iSpec imp</span>
-<span class="lineno">  918 </span><span class="spaces">         </span><span class="istickedoff">cenv' &lt;- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec</span>
+<span class="lineno">  918 </span><span class="spaces">         </span><span class="istickedoff">cenv' &lt;- io $ CEnv.importCryptolModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec</span>
 <span class="lineno">  919 </span><span class="spaces">         </span><span class="istickedoff">putTopLevelRW $ rw { rwCryptol = cenv' }</span>
 <span class="lineno">  920 </span><span class="spaces">         </span><span class="istickedoff">--showCryptolEnv</span>
 <span class="lineno">  921 </span><span class="spaces"></span><span class="istickedoff"></span>
