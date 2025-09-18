@@ -917,7 +917,7 @@ interpretTopStmt printBinds stmt = do
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
-         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
+         cenv' <- io $ CEnv.importCryptolModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 

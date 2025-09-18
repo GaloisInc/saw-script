@@ -18,7 +18,7 @@ module CryptolSAWCore.CryptolEnv
   , bindCryptolModule
   , extractDefFromCryptolModule
   , combineCryptolEnv
-  , importModule
+  , importCryptolModule
   , bindTypedTerm
   , bindType
   , bindInteger
@@ -115,7 +115,7 @@ data InputText = InputText
 
 --------------------------------------------------------------------------------
 
--- | 'ImportVisibility' - Should a given import (see 'importModule')
+-- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
 -- result in all symbols being visible (as they are for focused
 -- modules in the Cryptol REPL) or only public symbols?  Making all
 -- symbols visible is useful for verification and code generation.
@@ -537,10 +537,10 @@ updateFFITypes m eTermEnv' eFFITypes' =
 --
 --   FIXME:
 --    - submodules are not handled correctly below.
---    - the code is duplicating functionality that we have with `importModule`
+--    - the code is duplicating functionality that we have with `importCryptolModule`
 --   TODO:
 --    - new design in PR #2593 (addressing issue #2569) should replace
---      this function so that the fundamental work is done via `importModule`.
+--      this function so that the fundamental work is done via `importCryptolModule`.
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
@@ -631,7 +631,7 @@ loadAndTranslateModule sc env src =
                  }
             )
 
--- | @'importModule' sc env src as vis imps@ - extend the Cryptol
+-- | @'importCryptolModule' sc env src as vis imps@ - extend the Cryptol
 --   environment with a module.  Closely mirrors the sawscript command "import".
 --
 -- NOTE:
@@ -639,7 +639,7 @@ loadAndTranslateModule sc env src =
 --  - 'vis' we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
 
-importModule ::
+importCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
@@ -648,7 +648,7 @@ importModule ::
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importModule sc env src as vis imps =
+importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let newImport = (vis, P.Import { T.iModule= locatedUnknown (T.mName mod')
