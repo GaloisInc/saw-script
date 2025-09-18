@@ -443,6 +443,11 @@ checkNotParameterized m =
 -- | loadCryptolModule - load a cryptol module and return a handle to
 -- the `CryptolModule`.  The contents of the module are not imported.
 --
+-- NOTE: Bringing the module-handle into {{-}} scope is not handled
+--       here; it is done rather in `bindCryptolModule`, ONLY if the
+--       user binds the `cryptolModule` returned here at the SAW
+--       command line.
+--
 -- This is used to implement the "cryptol_load" primitive in which a
 -- handle to the module is returned and can be bound to a SAWScript
 -- variable.
@@ -456,21 +461,15 @@ loadCryptolModule ::
 loadCryptolModule sc env path =
   do
   (mod', env') <- loadAndTranslateModule sc env (Left path)
-
-  -- NOTE: Bringing the module-handle into {{-}} scope is not handled
-  --       here; it is done rather in `bindCryptolModule`, ONLY if the
-  --       user binds the `cryptolModule` returned here at the SAW
-  --       command line.
-
   cryptolModule <- mkCryptolModule mod' env'
   return (cryptolModule, env')
 
--- | mkCryptolModule
+-- | mkCryptolModule - translate a T.Module to a CryptolModule
 --
 -- FIXME:
 --   - This incorrectly excludes both submodules and their contents from
---     the NamingEnvs in `CryptolModule`
-
+--     both of the NamingEnvs in `CryptolModule`
+--
 mkCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   T.Module -> CryptolEnv -> IO CryptolModule
@@ -661,11 +660,12 @@ importModule sc env src as vis imps =
                   )
   return $ env'{ eImports = newImport : eImports env }
 
-locatedUnknown :: a -> P.Located a
-locatedUnknown x = P.Located P.emptyRange x
-  -- XXX: it would be better to have the real position, but it
-  -- seems to have been thrown away on the Cryptol side in the uses
-  -- of this function.
+  where
+  locatedUnknown :: a -> P.Located a
+  locatedUnknown x = P.Located P.emptyRange x
+    -- XXX: it would be better to have the real position, but it
+    -- seems to have been thrown away on the Cryptol side in the uses
+    -- of this function.
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
