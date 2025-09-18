@@ -443,7 +443,7 @@ checkNotParameterized m =
 -- This is used to implement the "cryptol_load" primitive in which a
 -- handle to the module is returned and can be bound to a SAWScript
 -- variable.
-
+--
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
@@ -484,7 +484,7 @@ loadCryptolModule sc env path = do
 
   -- NOTE: Bringing the module-handle into {{-}} scope is not handled
   --       here; it is done rather in `bindCryptolModule`, ONLY if the
-  --       user binds the `cryptolModule` returned here at the saw
+  --       user binds the `cryptolModule` returned here at the SAW
   --       command line.
 
   let env' = env { eModuleEnv = modEnv'
@@ -528,7 +528,7 @@ mkCryptolModule m env =
          --   - Why are we calling mB.genInferInput then projecting out
          --     `inpVars`?
          --   - If we had inlined, it appears that this is functional code.
-         --   - (Maybe because of information hiding?)
+         --   - (Possibly because of information hiding?)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
   return $
