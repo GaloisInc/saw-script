@@ -1,0 +1,20 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+// SAW doesn't have a way to look up instantiations of ADTs that use const
+// generics, so as a workaround, we look up the mangled identifiers instead.
+let words4_adt = mir_find_mangled_adt m "test::Words::_adta4a904df508e9aad";
+let words7_adt = mir_find_mangled_adt m "test::Words::_adt96fbb9234cd1add7";
+
+let h_spec words_adt N = do {
+    a_arr <- mir_fresh_var "a_arr" (mir_array N mir_u8);
+    let a = mir_struct_value words_adt [mir_term a_arr];
+
+    mir_execute_func [a];
+
+    mir_return (mir_term a_arr);
+};
+
+mir_verify m "test::h4" [] false (h_spec words4_adt 4) z3;
+mir_verify m "test::h7" [] false (h_spec words7_adt 7) z3;

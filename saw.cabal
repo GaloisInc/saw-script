@@ -746,6 +746,7 @@ library saw-server
     SAWServer.LLVMVerify,
     SAWServer.MIRCrucibleSetup,
     SAWServer.MIRFindADT,
+    SAWServer.MIRFindMangledADT,
     SAWServer.MIRVerify,
     SAWServer.NoParams,
     SAWServer.OK,

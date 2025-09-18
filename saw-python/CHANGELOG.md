@@ -2,7 +2,11 @@
 
 ## next -- TBA
 
-Nothing yet
+* Add a `mir_find_mangled_adt` function, which allows looking up MIR ADTs by
+  their full, mangled names. `mir_find_mangled_adt`'s use is discouraged in
+  favor of using `mir_find_adt` instead, but `mir_find_mangled_adt` can be
+  useful in scenarios where `mir_find_adt` isn't expressive enough to look up
+  particular ADTs (e.g., ADTs that use const generics).
 
 ## 1.4 - release date still TBD
 

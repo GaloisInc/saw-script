@@ -568,6 +568,37 @@ No return fields
 
 
 
+SAW/MIR/find mangled ADT (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consult the a MIR module to find an algebraic data type (ADT) with the supplied mangled identifier. A mangled identifier is one that refers to an ADT that is already instantiated with its type arguments (e.g., foo::Bar::_adt123456789 is a mangled identifier, but foo::Bar is not). If such an ADT cannot be found in the module, this will raise an error. Due to the fact that mangled identifiers can change easily when recompiling Rust code, this command's use is discouraged in favor of using 'SAW/MIR/find ADT' whenever possible.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The server name of the MIR module containing the ADT.
+  
+  
+
+``ADT mangled name``
+  The ADT name, which should be a mangled identifier.
+  
+  
+
+``ADT server name``
+  The server name to refer to the ADT by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/Yosys/import (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
