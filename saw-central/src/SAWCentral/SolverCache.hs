@@ -68,6 +68,7 @@ module SAWCentral.SolverCache
   , lookupInSolverCache
   , insertInSolverCache
   , setSolverCachePath
+  , setSolverCacheTimeout
   , printSolverCacheByHex
   , cleanMismatchedVersionsSolverCache
   , printSolverCacheStats
@@ -397,7 +398,7 @@ data SolverCache =
   , solverCacheDB      :: Maybe (LMDB.Database SolverCacheKey SolverCacheValue)
   , solverCacheStats   :: IORef (Map SolverCacheStat Integer)
   , solverCacheMapSize :: Int
-  , solverCacheTimeout :: Int
+  , solverCacheTimeout :: Int -- ^ In microseconds.
   }
 
 -- | A statistic to track in 'solverCacheStats'
@@ -530,6 +531,12 @@ setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} ->
                               (if length kvs == 1 then "" else "s") ++ " to disk")
         return ((), cache')
       _ -> return ((), cache')
+
+-- | Set the solver result cache's timeout to use for database lookups and
+-- inserts.
+setSolverCacheTimeout :: Int -> SolverCacheOp ()
+setSolverCacheTimeout tout = SCOpOrFail $ \_opts cache ->
+  pure ((), cache { solverCacheTimeout = tout })
 
 -- | Print all entries in the solver result cache whose SHA256 hash keys start
 -- with the given string

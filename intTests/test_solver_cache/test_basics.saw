@@ -1,5 +1,8 @@
 // Testing the basic features of solver result caching
 
+// Ensure that we can increase the cache timeout
+set_solver_cache_timeout 3000000; // 3 seconds
+
 // The solver cache starts out empty
 test_solver_cache_stats 0 0 0 0 0;
 

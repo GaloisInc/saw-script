@@ -1894,6 +1894,10 @@ set_solver_cache_path pathtxt = do
     Nothing -> do cache <- io $ openSolverCache path
                   putTopLevelRW rw { rwSolverCache = Just cache }
 
+set_solver_cache_timeout :: Int -> TopLevel ()
+set_solver_cache_timeout tout =
+  onSolverCache (setSolverCacheTimeout tout)
+
 clean_mismatched_versions_solver_cache :: TopLevel ()
 clean_mismatched_versions_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
@@ -2705,6 +2709,14 @@ primitives = Map.fromList
     , "SAW_SOLVER_CACHE_PATH environment variable was set at startup but solver"
     , "caching has yet to actually be used, then the value of the environment"
     , "variable is ignored."
+    ]
+
+  , prim "set_solver_cache_timeout" "Int -> TopLevel ()"
+    (pureVal set_solver_cache_timeout)
+    Current
+    [ "Set the solver result cache's timeout (in microseconds) to use for"
+    , "database lookups and inserts. The default timeout is 2,000,000"
+    , "microseconds (2 seconds)."
     ]
 
   , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"

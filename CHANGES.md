@@ -79,6 +79,10 @@ This release supports [version
   `mir_find_adt` isn't expressive enough to look up particular ADTs (e.g., ADTs
   that use const generics).
 
+* Add a `set_solver_cache_timeout : Int -> TopLevel ()` command that allows
+  configuring the solver result cache's timeout for database lookups and
+  inserts.
+
 # Version 1.4 -- date still TBD
 
 This release supports [version
