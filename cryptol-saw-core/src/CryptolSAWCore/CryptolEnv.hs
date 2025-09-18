@@ -440,11 +440,6 @@ checkNotParameterized m =
                    , "Either use a ` import, or make a module instantiation."
                    ]
 
--- FIXME: Code duplication, these two functions are highly similar:
---   - loadCryptolModule
---   - importModule
--- - TODO: "common up" the common code per #2569.
-
 -- | loadCryptolModule - load a cryptol module and return a handle to
 -- the `CryptolModule`.  The contents of the module are not imported.
 --
@@ -458,56 +453,16 @@ loadCryptolModule ::
   CryptolEnv ->
   FilePath ->
   IO (CryptolModule, CryptolEnv)
-loadCryptolModule sc env path = do
-  let modEnv = eModuleEnv env
-  (mtop, modEnv') <- liftModuleM modEnv $
-                       MB.loadModuleByPath True path
-  m <- case mtop of
-         T.TCTopModule mod' -> pure mod'
-         T.TCTopSignature {} ->
-             fail $
-               "Expected a module, but " ++ show path ++ " is an interface."
-
-  checkNotParameterized m
-
-  -- Regenerate SharedTerm environment:
-  let oldModNames = map ME.lmName
-                  $ ME.lmLoadedModules
-                  $ ME.meLoadedModules modEnv
-      isNew m'    = T.mName m' `notElem` oldModNames
-      newModules  = filter isNew
-                  $ map ME.lmModule
-                  $ ME.lmLoadedModules
-                  $ ME.meLoadedModules modEnv'
-      newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
-                                     (loadedNonParamNominalTypes modEnv)
-
-  newTermEnv <-
-    do oldCryEnv <- mkCryEnv env
-       cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-       newCryEnv <- C.importTopLevelDeclGroups
-                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
-       return (C.envE newCryEnv)
+loadCryptolModule sc env path =
+  do
+  (mod', env') <- loadAndTranslateModule sc env (Left path)
 
   -- NOTE: Bringing the module-handle into {{-}} scope is not handled
   --       here; it is done rather in `bindCryptolModule`, ONLY if the
   --       user binds the `cryptolModule` returned here at the SAW
   --       command line.
 
-  let env' = env { eModuleEnv = modEnv'
-                 , eTermEnv   = newTermEnv
-                 , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-                 }
-             -- NOTE here the difference between this function and
-             -- `importModule`:
-             --  1. the `eImports` field is not updated, as
-             --     this module (as a whole) is not being
-             --     brought into scope inside {{ }} constructs.
-             --  2. modEnv'' vs modEnv' (which may not be different, see
-             --     notes above).
-
-  cryptolModule <- mkCryptolModule m env'
+  cryptolModule <- mkCryptolModule mod' env'
   return (cryptolModule, env')
 
 -- | mkCryptolModule
