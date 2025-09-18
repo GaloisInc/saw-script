@@ -25,7 +25,7 @@ env:
   # version is changed but older .so files are cached, which can have various
   # effects (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 10
+  CABAL_CACHE_VERSION: 12
   CARGO_CACHE_VERSION: 1
   SOLVER_CACHE_VERSION: 1
 
