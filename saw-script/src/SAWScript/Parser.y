@@ -51,6 +51,7 @@ import Control.Exception
 
 %token
   'import'       { TReserved _ "import"         }
+  'submodule'    { TReserved _ "submodule"      }
   'and'          { TReserved _ "and"            }
   'as'           { TReserved _ "as"             }
   'hiding'       { TReserved _ "hiding"         }
@@ -89,6 +90,7 @@ import Control.Exception
   '{'            { TPunct    _ "{"              }
   '}'            { TPunct    _ "}"              }
   ':'            { TPunct    _ ":"              }
+  '::'           { TPunct    _ "::"             }
   ','            { TPunct    _ ","              }
   '.'            { TPunct    _ "."              }
   '\\'           { TPunct    _ "\\"             }
@@ -134,11 +136,12 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left (unpack $ tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
+ : string mbAs mbImportSpec             { buildImport False $1 $2 $3 }
+ | 'submodule' string mbAs mbImportSpec { buildImport True $2 $3 $4 }
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { (Maybe P.ModName, Pos) }
- : 'as' name                            { (Just (P.packModName [tokStr $2]), maxSpan [$1, $2]) }
+: 'as' QName                            { (Just (P.packModName (fst $2)), maxSpan' $1 (snd $2)) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
@@ -271,6 +274,9 @@ Context :: { Type }
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }
 
+QName :: { ([Text], Pos) }
+   : sepBy1(name, '::')			{ (map tokStr $1, maxSpan (map tokPos $1)) }
+
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }
 snd(p, q)  : p q   { $2 }
@@ -355,6 +361,22 @@ parseError :: [Token Pos] -> Either ParseError b
 parseError toks = case toks of
   []    -> Left UnexpectedEOF
   t : _ -> Left (UnexpectedToken t)
+
+-- | Cons up an import.
+buildImport ::
+    Bool ->
+    Token Pos ->
+    (Maybe P.ModName, Pos) ->
+    (Maybe P.ImportSpec, Pos) ->
+    Import
+buildImport issub modName (mbAsName, asPos) (mbSpec, specPos) =
+  Import {
+    iIsSubmodule = issub,
+    iModule = Left (unpack $ tokStr modName),
+    iAs = mbAsName,
+    iSpec = mbSpec,
+    iPos = maxSpan [tokPos modName, asPos, specPos]
+  }
 
 -- | As seen by the parser, a "function name" is an arbitrary pattern.
 --   This is because we use the same syntax for function and value bindings:

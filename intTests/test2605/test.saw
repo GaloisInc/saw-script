@@ -1,0 +1,3 @@
+import "Foo.cry" as Moo::Boo;
+
+let y = {{ Moo::Boo::x }};
