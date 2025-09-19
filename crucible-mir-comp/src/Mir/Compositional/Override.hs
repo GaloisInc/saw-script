@@ -287,7 +287,12 @@ runSpec myCS mh ms = ovrWithBackend $ \bak ->
     let postAllocDefs = filter (\(k,_v) -> not $ Map.member k preAllocMap) $
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
     postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, Some allocSpec) -> do
-        ref <- newMirRefSim (allocSpec ^. maType)
+        let vecRepr = MirVectorRepr (allocSpec ^. maType)
+        vecRef <- newMirRefSim vecRepr
+        writeMirRefSim vecRepr vecRef $
+            MirVector_PartialVector $ V.replicate (allocSpec ^. maLen) W4.Unassigned
+        zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
+        ref <- subindexMirRefSim (allocSpec ^. maType) vecRef zero
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
