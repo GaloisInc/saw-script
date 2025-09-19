@@ -30,7 +30,7 @@ module SAWCore.Typechecker
 
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (ReaderT(..), asks, lift)
+import Control.Monad.Reader (ReaderT(..), asks, lift, local)
 import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -60,7 +60,7 @@ import SAWCore.Term.CtxTerm
 import SAWCore.Term.Pretty (showTerm)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.SCTypeCheck (SCTypedTerm, typedVal, typedType, TCError(..))
+import SAWCore.SCTypeCheck (SCTypedTerm, typedVal, typedType, TCError(..), atPos, throwTCError)
 import qualified SAWCore.SCTypeCheck as TC
 
 import Debug.Trace
@@ -117,12 +117,6 @@ getModuleName =
        Just mnm -> return mnm
        Nothing ->
          panic "getModuleName" ["Current module name not set during typechecking"]
-
-atPos :: Pos -> CheckM a -> CheckM a
-atPos p m = ReaderT $ \env -> TC.atPos p (runReaderT m env)
-
-throwTCError :: TC.TCError -> CheckM a
-throwTCError e = lift $ TC.throwTCError e
 
 ----------------------------------------------------------------------
 
@@ -517,11 +511,9 @@ withVar x tp m = ReaderT $ \env -> TC.withVar x tp (runReaderT m env)
 
 withEC :: LocalName -> ExtCns Term -> CheckM a -> CheckM a
 withEC x ec m =
-  ReaderT $ \env ->
-  let env' = env { tcCtxEC = Map.insert x ec (tcCtxEC env) } in
   TC.rethrowTCError (ErrorCtx x (ecType ec)) $
   TC.withEmptyTCState $
-  runReaderT m env'
+  local (\env -> env { tcCtxEC = Map.insert x ec (tcCtxEC env) }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
