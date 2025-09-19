@@ -121,14 +121,6 @@ data NeutralTerm
   | NeutralPairRight NeutralTerm  -- right pair projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
-  | NeutralRecursor
-      NeutralTerm -- recursor value
-      [Term] -- indices for the inductive type
-      Term   -- argument being eliminated
-  | NeutralRecursorArg -- recursor application
-      Term   -- recursor value
-      [Term] -- indices for the inductive type
-      NeutralTerm -- argument being elminated
   | NeutralConstant -- A constant value with no definition
       Name
 
@@ -391,10 +383,6 @@ neutralToTerm = loop
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
     Unshared (App (loop nt) arg)
-  loop (NeutralRecursorArg r ixs x) =
-    Unshared (FTermF (RecursorApp r ixs (loop x)))
-  loop (NeutralRecursor r ixs x) =
-    Unshared (FTermF (RecursorApp (loop r) ixs x))
   loop (NeutralConstant nm) =
     Unshared (Constant nm)
 
@@ -412,12 +400,6 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
-  loop (NeutralRecursor nt ixs x) =
-    do tm <- loop nt
-       scFlatTermF sc (RecursorApp tm ixs x)
-  loop (NeutralRecursorArg r ixs nt) =
-    do tm <- loop nt
-       scFlatTermF sc (RecursorApp r ixs tm)
   loop (NeutralConstant nm) =
     do scConst sc nm
 

@@ -476,11 +476,10 @@ ppFlatTermF prec tf =
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#rec"))
              (params_pp ++ [motive_pp, tupled f_pps])
 
-    RecursorApp r ixs arg ->
+    RecursorApp r ixs ->
       do rec_pp <- ppTerm' PrecApp r
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
-         arg_pp <- ppTerm' PrecArg arg
-         return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
+         return $ ppAppList prec rec_pp ixs_pp
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist

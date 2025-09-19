@@ -481,7 +481,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asVariable -> Just ec), more))
+     (R.asRecursorApp -> Just (rec, crec, _ixs), (R.asVariable -> Just ec) : more))
       | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
       do -- ti is the type of the value being scrutinized
          ti <- scWhnf sc (ecType ec)
@@ -641,7 +641,8 @@ asRecordRedex t =
 --   > RecursorApp rec _ n
 asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
 asNatIotaRedex t =
-  do (rec, crec, _, arg) <- R.asRecursorApp t
+  do (f, arg) <- R.asApp t
+     (rec, crec, _) <- R.asRecursorApp f
      n <- R.asNat arg
      return (rec, crec, n)
 
@@ -695,7 +696,7 @@ reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc (asNatIotaRedex -> Just (rec, crec, n)) =
   Just <$> scReduceNatRecursor sc rec crec n
-reduceSharedTerm sc (R.asRecursorApp -> Just (rec, crec, _, arg)) =
+reduceSharedTerm sc (R.asApp -> Just (R.asRecursorApp -> Just (rec, crec, _), arg)) =
   do let (f, args) = R.asApplyAll arg
      mm <- scGetModuleMap sc
      case R.asConstant f of

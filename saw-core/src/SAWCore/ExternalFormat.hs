@@ -48,11 +48,6 @@ separateArgs args =
     Just i -> Just (take i args, drop (i+1) args)
     Nothing -> Nothing
 
--- | Split the last element from the rest of a list, for non-empty lists
-splitLast :: [a] -> Maybe ([a], a)
-splitLast [] = Nothing
-splitLast xs = Just (take (length xs - 1) xs, last xs)
-
 type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
 
 renderNames :: Map VarIndex (Either Text NameInfo) -> String
@@ -164,9 +159,8 @@ scWriteExternal t0 =
                        , show (Map.toList cs_fs)
                        , show (map nameIndex ctorOrder)
                        ])
-            RecursorApp r ixs e -> pure $
-              unwords (["RecursorApp", show r] ++
-                       map show ixs ++ [show e])
+            RecursorApp r ixs -> pure $
+              unwords (["RecursorApp", show r] ++ map show ixs)
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
@@ -320,11 +314,10 @@ scReadExternal sc input =
                         readElimsMap elims <*>
                         readCtorList ctorOrder
                pure (FTermF (Recursor rec))
-        ("RecursorApp" : r : (splitLast -> Just (ixs, arg))) ->
+        ("RecursorApp" : r : ixs) ->
             do app <- RecursorApp <$>
                         readIdx r <*>
-                        traverse readIdx ixs <*>
-                        readIdx arg
+                        traverse readIdx ixs
                pure (FTermF app)
 
         ["RecordType", elem_tps] ->
