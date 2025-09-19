@@ -440,6 +440,7 @@ checkNotParameterized m =
                    , "Either use a ` import, or make a module instantiation."
                    ]
 
+
 -- | loadCryptolModule - load a cryptol module and return a handle to
 -- the `CryptolModule`.  The contents of the module are not imported.
 --
@@ -463,6 +464,7 @@ loadCryptolModule sc env path =
   (mod', env') <- loadAndTranslateModule sc env (Left path)
   cryptolModule <- mkCryptolModule mod' env'
   return (cryptolModule, env')
+
 
 -- | mkCryptolModule - translate a T.Module to a CryptolModule
 --
@@ -532,12 +534,18 @@ updateFFITypes m eTermEnv' eFFITypes' =
             "Cannot find foreign function in term environment: " <> Text.pack (show nm)
         ]
 
--- | bindCryptolModule - ad hoc function called when `D <-cryptol_load` is seen
---     on the command line.
+-- | bindCryptolModule - ad hoc function/hook that allows for extending
+--   the Cryptol env with the names in a CryptolModule.
+--
+--   Three command line variants get us here:
+--      > D <- cryptol_load "PATH"
+--      > x <- return (cryptol_prims ())
+--      > let x = cryptol_prims ()
 --
 --   FIXME:
 --    - submodules are not handled correctly below.
---    - the code is duplicating functionality that we have with `importCryptolModule`
+--    - the code is somewhat duplicating functionality that we
+--      already have with `importCryptolModule`
 --   TODO:
 --    - new design in PR #2593 (addressing issue #2569) should replace
 --      this function so that the fundamental work is done via `importCryptolModule`.
