@@ -1963,7 +1963,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1944 </span>--
 <span class="lineno"> 1945 </span>assertSAWCoreTypeChecks :: Show i =&gt; SharedContext -&gt; i -&gt; Term -&gt; Maybe Term -&gt; IO ()
 <span class="lineno"> 1946 </span><span class="decl"><span class="istickedoff">assertSAWCoreTypeChecks sc ident term mType =</span>
-<span class="lineno"> 1947 </span><span class="spaces">  </span><span class="istickedoff">do result &lt;- SC.scTypeCheck sc <span class="nottickedoff">Nothing</span> term</span>
+<span class="lineno"> 1947 </span><span class="spaces">  </span><span class="istickedoff">do result &lt;- SC.scTypeCheck sc term</span>
 <span class="lineno"> 1948 </span><span class="spaces">     </span><span class="istickedoff">case result of</span>
 <span class="lineno"> 1949 </span><span class="spaces">       </span><span class="istickedoff">Right ty1 -&gt;</span>
 <span class="lineno"> 1950 </span><span class="spaces">           </span><span class="istickedoff">case mType of</span>
