@@ -36,6 +36,7 @@ module SAWCore.Module
   , Module
   , ModuleDecl(..)
   , ResolvedName(..)
+  , resolvedNameName
   , resolvedNameInfo
   , resolvedNameType
   , moduleName

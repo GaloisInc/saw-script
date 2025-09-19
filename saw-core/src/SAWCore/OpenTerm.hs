@@ -122,7 +122,7 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SCTypedTerm }
 completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedVal <$> termM) sc Nothing []
+  runTCM (typedVal <$> termM) sc []
 
 -- | \"Complete\" an 'OpenTerm' to a closed term and 'betaNormalize' the result
 completeNormOpenTerm :: SharedContext -> OpenTerm -> IO Term
@@ -133,7 +133,7 @@ completeNormOpenTerm sc m =
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedType <$> termM) sc Nothing []
+  runTCM (typedType <$> termM) sc []
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm

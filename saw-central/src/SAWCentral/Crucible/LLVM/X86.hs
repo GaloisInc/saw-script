@@ -901,7 +901,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
 
        -- check that the produced term is type-correct
-       res <- scTypeCheck sc Nothing inv
+       res <- scTypeCheck sc inv
        case res of
          Left _tcErr ->
            do tpType <- scTypeOf sc initial_tuple

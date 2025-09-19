@@ -1944,7 +1944,7 @@ importMatches sc env (C.Let decl : matches) =
 --
 assertSAWCoreTypeChecks :: Show i => SharedContext -> i -> Term -> Maybe Term -> IO ()
 assertSAWCoreTypeChecks sc ident term mType =
-  do result <- SC.scTypeCheck sc Nothing term
+  do result <- SC.scTypeCheck sc term
      case result of
        Right ty1 ->
            case mType of

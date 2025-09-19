@@ -46,7 +46,7 @@ main =
 
 checkTranslation :: SharedContext -> (N.Name, Term) -> IO ()
 checkTranslation sc (name, term) =
-  do result <- TC.scTypeCheck sc Nothing term
+  do result <- TC.scTypeCheck sc term
      case result of
        Right _ -> pure ()
        Left err ->
