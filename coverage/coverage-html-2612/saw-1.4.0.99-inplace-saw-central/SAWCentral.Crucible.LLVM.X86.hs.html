@@ -920,7 +920,7 @@ span.spaces    { background: white }
 <span class="lineno">  901 </span><span class="spaces">       </span><span class="nottickedoff">inv &lt;- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])</span>
 <span class="lineno">  902 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  903 </span><span class="spaces">       </span><span class="nottickedoff">-- check that the produced term is type-correct</span>
-<span class="lineno">  904 </span><span class="spaces">       </span><span class="nottickedoff">res &lt;- scTypeCheck sc Nothing inv</span>
+<span class="lineno">  904 </span><span class="spaces">       </span><span class="nottickedoff">res &lt;- scTypeCheck sc inv</span>
 <span class="lineno">  905 </span><span class="spaces">       </span><span class="nottickedoff">case res of</span>
 <span class="lineno">  906 </span><span class="spaces">         </span><span class="nottickedoff">Left _tcErr -&gt;</span>
 <span class="lineno">  907 </span><span class="spaces">           </span><span class="nottickedoff">do tpType &lt;- scTypeOf sc initial_tuple</span>
