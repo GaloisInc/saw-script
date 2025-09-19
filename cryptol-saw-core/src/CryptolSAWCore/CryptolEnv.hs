@@ -103,6 +103,9 @@ import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 
+
+---- Key Types -----------------------------------------------------------------
+
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
   { inpText :: Text   -- ^ Parse this
@@ -241,15 +244,16 @@ initCryptolEnv sc = do
   termEnv <- genTermEnv sc modEnv3 cryEnv0
 
   -- The module names in P.Import are now Located, so give them an empty position.
-  let preludeName' = P.Located P.emptyRange preludeName
-      preludeReferenceName' = P.Located P.emptyRange preludeReferenceName
-      arrayName' = P.Located P.emptyRange arrayName
+  let preludeName'          = locatedUnknown preludeName
+      preludeReferenceName' = locatedUnknown preludeReferenceName
+      arrayName'            = locatedUnknown arrayName
 
   return CryptolEnv
-    { eImports    = [ (OnlyPublic, P.Import preludeName' Nothing Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import preludeReferenceName' (Just preludeReferenceName) Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import arrayName' Nothing Nothing Nothing Nothing)
-                    ]
+    { eImports    =
+        [ mkImport OnlyPublic preludeName'          Nothing Nothing
+        , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
+        , mkImport OnlyPublic arrayName'            Nothing Nothing
+        ]
     , eModuleEnv  = modEnv3
     , eExtraNames = mempty
     , eExtraTypes = Map.empty
@@ -260,9 +264,10 @@ initCryptolEnv sc = do
     , eFFITypes   = Map.empty
     }
 
+
 -- | Translate all declarations in all loaded modules to SAWCore terms
 --   NOTE: used only for initialization code.
-
+--
 genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
 genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
@@ -304,8 +309,8 @@ ioParseResult res = case res of
 
 -- NamingEnv and Related -------------------------------------------------------
 
--- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all the 'eImports'
-
+-- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all
+-- the 'eImports'
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
@@ -370,6 +375,7 @@ runInferOutput out =
       do MM.typeCheckWarnings nm warns
          MM.typeCheckingFailed nm errs
 
+
 -- Translate -------------------------------------------------------------------
 
 mkCryEnv ::
@@ -422,8 +428,7 @@ translateDeclGroups sc env dgs =
            , eTermEnv    = C.envE cryEnv'
            }
 
---------------------------------------------------------------------------------
-
+---- Misc Exports --------------------------------------------------------------
 
 combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
 combineCryptolEnv chkEnv newEnv =
@@ -433,13 +438,7 @@ combineCryptolEnv chkEnv newEnv =
      return chkEnv{ eModuleEnv = menv' }
 
 
-checkNotParameterized :: T.Module -> IO ()
-checkNotParameterized m =
-  when (T.isParametrizedModule m) $
-    fail $ unlines [ "Cannot load parameterized modules directly."
-                   , "Either use a ` import, or make a module instantiation."
-                   ]
-
+---- CryptolModule/ExtCryptolModule functions: ---------------------------------
 
 -- | loadCryptolModule - load a cryptol module and return a handle to
 -- the `CryptolModule`.  The contents of the module are not imported.
@@ -512,28 +511,6 @@ mkCryptolModule m env =
            newTermEnv
       )
 
-updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
-updateFFITypes m eTermEnv' eFFITypes' =
-  foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
-                       eFFITypes'
-                       (T.findForeignDecls m)
-  where
-  getNameInfo nm =
-    case Map.lookup nm eTermEnv' of
-      Just tm ->
-        case asConstant tm of
-          Just n -> nameInfo n
-          Nothing ->
-            panic "updateFFITypes" [
-                "SAWCore term of Cryptol name is not Constant",
-                "Name: " <> Text.pack (show nm),
-                "Term: " <> Text.pack (showTerm tm)
-            ]
-      Nothing ->
-        panic "updateFFITypes" [
-            "Cannot find foreign function in term environment: " <> Text.pack (show nm)
-        ]
-
 -- | bindCryptolModule - ad hoc function/hook that allows for extending
 --   the Cryptol env with the names in a CryptolModule.
 --
@@ -585,7 +562,7 @@ extractDefFromCryptolModule (CryptolModule _ tm) name =
     -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
 
 
---------------------------------------------------------------------------------
+---- Core functions for loading and Translating Modules ------------------------
 
 loadAndTranslateModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -639,12 +616,44 @@ loadAndTranslateModule sc env src =
                  }
             )
 
+checkNotParameterized :: T.Module -> IO ()
+checkNotParameterized m =
+  when (T.isParametrizedModule m) $
+    fail $ unlines [ "Cannot load parameterized modules directly."
+                   , "Either use a ` import, or make a module instantiation."
+                   ]
+
+updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
+updateFFITypes m eTermEnv' eFFITypes' =
+  foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
+                       eFFITypes'
+                       (T.findForeignDecls m)
+  where
+  getNameInfo nm =
+    case Map.lookup nm eTermEnv' of
+      Just tm ->
+        case asConstant tm of
+          Just n -> nameInfo n
+          Nothing ->
+            panic "updateFFITypes" [
+                "SAWCore term of Cryptol name is not Constant",
+                "Name: " <> Text.pack (show nm),
+                "Term: " <> Text.pack (showTerm tm)
+            ]
+      Nothing ->
+        panic "updateFFITypes" [
+            "Cannot find foreign function in term environment: " <> Text.pack (show nm)
+        ]
+
+
+---- import --------------------------------------------------------------------
+
 -- | @'importCryptolModule' sc env src as vis imps@ - extend the Cryptol
 --   environment with a module.  Closely mirrors the sawscript command "import".
 --
 -- NOTE:
---  - the module can be qualified or not (per 'as' argument).  per
---  - 'vis' we can import public definitions or *all* (i.e., internal
+--  - the module can be qualified or not (per 'as' argument).
+--  - per 'vis' we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
 
 importCryptolModule ::
@@ -659,21 +668,25 @@ importCryptolModule ::
 importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
-  let newImport = (vis, P.Import { T.iModule= locatedUnknown (T.mName mod')
-                                 , T.iAs    = as
-                                 , T.iSpec  = imps
-                                 , T.iInst  = Nothing
-                                 , T.iDoc   = Nothing
-                                 }
-                  )
-  return $ env'{ eImports = newImport : eImports env }
+  return $ env'{ eImports = mkImport vis (locatedUnknown (T.mName mod')) as imps
+                            : eImports env
+               }
 
-  where
-  locatedUnknown :: a -> P.Located a
-  locatedUnknown x = P.Located P.emptyRange x
-    -- XXX: it would be better to have the real position, but it
-    -- seems to have been thrown away on the Cryptol side in the uses
-    -- of this function.
+mkImport :: ImportVisibility
+         -> P.Located C.ModName
+         -> Maybe C.ModName
+         -> Maybe T.ImportSpec
+         -> (ImportVisibility, T.Import)
+mkImport vis nm as imps = (vis, P.Import { T.iModule= nm
+                                         , T.iAs    = as
+                                         , T.iSpec  = imps
+                                         , T.iInst  = Nothing
+                                         , T.iDoc   = Nothing
+                                         }
+                          )
+
+
+---- Binding -------------------------------------------------------------------
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -725,6 +738,7 @@ bindInteger (ident, n) env =
     (name, env') = bindIdent ident env
     tysyn = T.TySyn name [] [] (T.tNum n) Nothing
 
+
 --------------------------------------------------------------------------------
 
 meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
@@ -761,7 +775,6 @@ resolveIdentifier env nm =
        case res of
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
-
 
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
@@ -829,7 +842,7 @@ parseDecls sc env input = do
     (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
 
     -- Create a Module to contain the declarations
-    let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
+    let rmodule = P.Module { P.mName = locatedUnknown interactiveName
                            , P.mDef  = P.NormalModule rdecls
                            , P.mInScope = mempty
                            , P.mDocTop = Nothing
@@ -919,7 +932,14 @@ typeNoUser t =
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 
-------------------------------------------------------------
+
+---- Local Utility Functions ---------------------------------------------------
+
+locatedUnknown :: a -> P.Located a
+locatedUnknown x = P.Located P.emptyRange x
+  -- XXX: it would be better to have the real position, but it
+  -- seems to have been thrown away on the Cryptol side in the uses
+  -- of this function.
 
 liftModuleM ::
   (?fileReader :: FilePath -> IO ByteString) =>
