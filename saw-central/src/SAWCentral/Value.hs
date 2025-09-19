@@ -1099,6 +1099,7 @@ data TopLevelRW =
   , rwLaxLoadsAndStores :: Bool
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
+  , rwAllocAllGlobals :: Bool -- ^ allocate all globals unconditionally
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool

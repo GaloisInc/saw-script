@@ -1695,6 +1695,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     allocAllGlobals <- gets rwAllocAllGlobals
      noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
      pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
@@ -1753,8 +1754,11 @@ setupLLVMCrucibleContext pathSat lm action =
                                  intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
+               let memoryInitializer = if allocAllGlobals
+                                  then Crucible.initializeAllMemory
+                                  else Crucible.initializeMemoryConstGlobals
                mem <- Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
-                        =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
+                        =<< memoryInitializer bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
