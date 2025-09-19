@@ -1079,6 +1079,7 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
+                   , rwAllocAllGlobals = False
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -1884,6 +1885,16 @@ disable_lax_loads_and_stores :: TopLevel ()
 disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+enable_alloc_all_globals :: TopLevel ()
+enable_alloc_all_globals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocAllGlobals = True }
+
+disable_alloc_all_globals :: TopLevel ()
+disable_alloc_all_globals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocAllGlobals = False }
 
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
@@ -2692,6 +2703,18 @@ primitives = Map.fromList
     (pureVal disable_lax_loads_and_stores)
     Current
     [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "enable_alloc_all_globals" "TopLevel ()"
+    (pureVal enable_alloc_all_globals)
+    Experimental
+    [ "Enable allocation of all globals automatically. This is necessary when"
+    , " constants depend on the addresses of globals."
+    ]
+
+  , prim "disable_alloc_all_globals" "TopLevel ()"
+    (pureVal disable_alloc_all_globals)
+    Experimental
+    [ "Disable allocation of all globals automatically." ]
 
   , prim "set_path_sat_solver" "String -> TopLevel ()"
     (pureVal set_path_sat_solver)
