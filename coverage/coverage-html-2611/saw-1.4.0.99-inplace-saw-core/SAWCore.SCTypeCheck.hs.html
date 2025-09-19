@@ -115,46 +115,46 @@ span.spaces    { background: white }
 <span class="lineno">   96 </span>--
 <span class="lineno">   97 </span>-- * Can throw 'TCError's
 <span class="lineno">   98 </span>newtype TCM a = TCM (ReaderT TCEnv (StateT TCState (ExceptT TCError IO)) a)
-<span class="lineno">   99 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">MonadFail</span></span>, <span class="decl"><span class="istickedoff">MonadIO</span></span>)
-<span class="lineno">  100 </span>
-<span class="lineno">  101 </span>-- | Run a type-checking computation in a given context, starting from the empty
-<span class="lineno">  102 </span>-- memoization table
-<span class="lineno">  103 </span>runTCM ::
-<span class="lineno">  104 </span>  TCM a -&gt; SharedContext -&gt; [(LocalName, Term)] -&gt; IO (Either TCError a)
-<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">runTCM (TCM m) sc ctx =</span>
-<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) Map.empty</span></span>
-<span class="lineno">  107 </span>
-<span class="lineno">  108 </span>-- | Read the current typing context
-<span class="lineno">  109 </span>askCtx :: TCM [(LocalName, Term)]
-<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">askCtx = TCM (asks tcCtx)</span></span>
-<span class="lineno">  111 </span>
-<span class="lineno">  112 </span>-- | Run a type-checking computation in a typing context extended with a new
-<span class="lineno">  113 </span>-- variable with the given type. This throws away the memoization table while
-<span class="lineno">  114 </span>-- running the sub-computation, as memoization tables are tied to specific sets
-<span class="lineno">  115 </span>-- of bindings.
-<span class="lineno">  116 </span>--
-<span class="lineno">  117 </span>-- NOTE: the type given for the variable should be in WHNF, so that we do not
-<span class="lineno">  118 </span>-- have to normalize the types of variables each time we see them.
-<span class="lineno">  119 </span>withVar :: LocalName -&gt; Term -&gt; TCM a -&gt; TCM a
-<span class="lineno">  120 </span><span class="decl"><span class="istickedoff">withVar x tp (TCM m) =</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">rethrowTCError <span class="nottickedoff">(ErrorCtx x tp)</span> $</span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">withEmptyTCState $</span>
-<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">TCM $ local (\env -&gt; env { tcCtx = (x,tp) : tcCtx env }) m</span></span>
-<span class="lineno">  124 </span>
-<span class="lineno">  125 </span>-- | Run a type-checking computation in a typing context extended by a list of
-<span class="lineno">  126 </span>-- variables and their types. See 'withVar'.
-<span class="lineno">  127 </span>withCtx :: [(LocalName, Term)] -&gt; TCM a -&gt; TCM a
-<span class="lineno">  128 </span><span class="decl"><span class="nottickedoff">withCtx = flip (foldr (\(x,tp) -&gt; withVar x tp))</span></span>
-<span class="lineno">  129 </span>
-<span class="lineno">  130 </span>-- | Augment and rethrow any 'TCError' thrown by the given computation.
-<span class="lineno">  131 </span>rethrowTCError :: (TCError -&gt; TCError) -&gt; TCM a -&gt; TCM a
-<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">rethrowTCError f (TCM m) = TCM $ catchError m <span class="nottickedoff">(throwError . f)</span></span></span>
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>-- | Clear the memoization table before running the sub-computation,
-<span class="lineno">  135 </span>-- and restore it afterward.
-<span class="lineno">  136 </span>withEmptyTCState :: TCM a -&gt; TCM a
-<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">withEmptyTCState (TCM m) =</span>
-<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">TCM $</span>
+<span class="lineno">   99 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">MonadFail</span></span>, <span class="decl"><span class="istickedoff">MonadIO</span></span>,
+<span class="lineno">  100 </span>            <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">MonadReader TCEnv</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">MonadState TCState</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">MonadError TCError</span></span></span></span>)
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>-- | Run a type-checking computation in a given context, starting from the empty
+<span class="lineno">  103 </span>-- memoization table
+<span class="lineno">  104 </span>runTCM ::
+<span class="lineno">  105 </span>  TCM a -&gt; SharedContext -&gt; [(LocalName, Term)] -&gt; IO (Either TCError a)
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">runTCM (TCM m) sc ctx =</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">runExceptT $ evalStateT (runReaderT m (TCEnv sc ctx)) Map.empty</span></span>
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>-- | Read the current typing context
+<span class="lineno">  110 </span>askCtx :: TCM [(LocalName, Term)]
+<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">askCtx = asks tcCtx</span></span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>-- | Run a type-checking computation in a typing context extended with a new
+<span class="lineno">  114 </span>-- variable with the given type. This throws away the memoization table while
+<span class="lineno">  115 </span>-- running the sub-computation, as memoization tables are tied to specific sets
+<span class="lineno">  116 </span>-- of bindings.
+<span class="lineno">  117 </span>--
+<span class="lineno">  118 </span>-- NOTE: the type given for the variable should be in WHNF, so that we do not
+<span class="lineno">  119 </span>-- have to normalize the types of variables each time we see them.
+<span class="lineno">  120 </span>withVar :: LocalName -&gt; Term -&gt; TCM a -&gt; TCM a
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">withVar x tp m =</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">rethrowTCError <span class="nottickedoff">(ErrorCtx x tp)</span> $</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">withEmptyTCState $</span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">local (\env -&gt; env { tcCtx = (x,tp) : tcCtx env }) m</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>-- | Run a type-checking computation in a typing context extended by a list of
+<span class="lineno">  127 </span>-- variables and their types. See 'withVar'.
+<span class="lineno">  128 </span>withCtx :: [(LocalName, Term)] -&gt; TCM a -&gt; TCM a
+<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">withCtx = flip (foldr (\(x,tp) -&gt; withVar x tp))</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>-- | Augment and rethrow any 'TCError' thrown by the given computation.
+<span class="lineno">  132 </span>rethrowTCError :: (MonadError TCError m) =&gt; (TCError -&gt; TCError) -&gt; m a -&gt; m a
+<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">rethrowTCError f m = catchError m <span class="nottickedoff">(throwError . f)</span></span></span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>-- | Clear the memoization table before running the sub-computation,
+<span class="lineno">  136 </span>-- and restore it afterward.
+<span class="lineno">  137 </span>withEmptyTCState :: (MonadState TCState m) =&gt; m a -&gt; m a
+<span class="lineno">  138 </span><span class="decl"><span class="istickedoff">withEmptyTCState m =</span>
 <span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">do saved_table &lt;- get</span>
 <span class="lineno">  140 </span><span class="spaces">     </span><span class="istickedoff">put Map.empty</span>
 <span class="lineno">  141 </span><span class="spaces">     </span><span class="istickedoff">a &lt;- m</span>
@@ -164,7 +164,7 @@ span.spaces    { background: white }
 <span class="lineno">  145 </span>-- | Run a type-checking computation @m@ and tag any error it throws with the
 <span class="lineno">  146 </span>-- 'ErrorTerm' constructor
 <span class="lineno">  147 </span>withErrorTerm :: Term -&gt; TCM a -&gt; TCM a
-<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">withErrorTerm tm (TCM m) = TCM $ catchError m <span class="nottickedoff">(throwError . ErrorTerm tm)</span></span></span>
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">withErrorTerm tm m = catchError m <span class="nottickedoff">(throwError . ErrorTerm tm)</span></span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>-- | Lift @withErrorTerm@ to `TermF Term`
 <span class="lineno">  151 </span>withErrorTermF :: TermF Term -&gt; TCM a -&gt; TCM a
@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span>-- | Run a type-checking computation @m@ and tag any error it throws with the
 <span class="lineno">  159 </span>-- given position, using the 'ErrorPos' constructor, unless that error is
 <span class="lineno">  160 </span>-- already tagged with a position
-<span class="lineno">  161 </span>atPos :: Pos -&gt; TCM a -&gt; TCM a
+<span class="lineno">  161 </span>atPos :: (MonadError TCError m) =&gt; Pos -&gt; m a -&gt; m a
 <span class="lineno">  162 </span><span class="decl"><span class="istickedoff">atPos p = rethrowTCError <span class="nottickedoff">(ErrorPos p)</span></span></span>
 <span class="lineno">  163 </span>
 <span class="lineno">  164 </span>-- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
@@ -189,7 +189,7 @@ span.spaces    { background: white }
 <span class="lineno">  170 </span>instance LiftTCM (IO a) where
 <span class="lineno">  171 </span>  type TCMLifted (IO a) = TCM a
 <span class="lineno">  172 </span>  <span class="decl"><span class="istickedoff">liftTCM f =</span>
-<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">do sc &lt;- TCM (asks tcSharedContext)</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">do sc &lt;- asks tcSharedContext</span>
 <span class="lineno">  174 </span><span class="spaces">       </span><span class="istickedoff">liftIO (f sc)</span></span>
 <span class="lineno">  175 </span>
 <span class="lineno">  176 </span>instance LiftTCM b =&gt; LiftTCM (a -&gt; b) where
@@ -224,8 +224,8 @@ span.spaces    { background: white }
 <span class="lineno">  205 </span>
 <span class="lineno">  206 </span>
 <span class="lineno">  207 </span>-- | Throw a type-checking error
-<span class="lineno">  208 </span>throwTCError :: TCError -&gt; TCM a
-<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">throwTCError e = TCM (throwError e)</span></span>
+<span class="lineno">  208 </span>throwTCError :: (MonadError TCError m) =&gt; TCError -&gt; m a
+<span class="lineno">  209 </span><span class="decl"><span class="nottickedoff">throwTCError e = throwError e</span></span>
 <span class="lineno">  210 </span>
 <span class="lineno">  211 </span>type PPErrM = Reader ([LocalName], Maybe Pos)
 <span class="lineno">  212 </span>
@@ -395,7 +395,7 @@ span.spaces    { background: white }
 <span class="lineno">  376 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  377 </span><span class="spaces">           </span><span class="istickedoff">do x  &lt;- withErrorTerm <span class="nottickedoff">t</span> $ typeInfer tf</span>
 <span class="lineno">  378 </span><span class="spaces">              </span><span class="istickedoff">x' &lt;- typeCheckWHNF x</span>
-<span class="lineno">  379 </span><span class="spaces">              </span><span class="istickedoff">TCM (modify (Map.insert i x'))</span>
+<span class="lineno">  379 </span><span class="spaces">              </span><span class="istickedoff">modify (Map.insert i x')</span>
 <span class="lineno">  380 </span><span class="spaces">              </span><span class="istickedoff">return x'</span></span>
 <span class="lineno">  381 </span>  <span class="decl"><span class="istickedoff">typeInferComplete trm = SCTypedTerm trm &lt;$&gt; withErrorTerm <span class="nottickedoff">trm</span> (typeInfer trm)</span></span>
 <span class="lineno">  382 </span>
