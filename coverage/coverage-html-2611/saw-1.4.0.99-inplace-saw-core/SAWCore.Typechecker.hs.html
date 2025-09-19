@@ -535,45 +535,44 @@ span.spaces    { background: white }
 <span class="lineno">  516 </span><span class="decl"><span class="istickedoff">withVar x tp m = ReaderT $ \env -&gt; TC.withVar x tp (runReaderT m env)</span></span>
 <span class="lineno">  517 </span>
 <span class="lineno">  518 </span>withEC :: LocalName -&gt; ExtCns Term -&gt; CheckM a -&gt; CheckM a
-<span class="lineno">  519 </span>--withEC x ec m = ReaderT $ \env -&gt; TC.withEC x ec (runReaderT m env)
-<span class="lineno">  520 </span><span class="decl"><span class="istickedoff">withEC x ec m =</span>
-<span class="lineno">  521 </span><span class="spaces">  </span><span class="istickedoff">ReaderT $ \env -&gt;</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { tcCtxEC = Map.insert x ec (tcCtxEC env) } in</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">TC.rethrowTCError <span class="nottickedoff">(ErrorCtx x (ecType ec))</span> $</span>
-<span class="lineno">  524 </span><span class="spaces">  </span><span class="istickedoff">TC.withEmptyTCState $</span>
-<span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">runReaderT m env'</span></span>
-<span class="lineno">  526 </span>
-<span class="lineno">  527 </span>-- | Run a type-checking computation in a typing context extended by a list of
-<span class="lineno">  528 </span>-- variables and their types. See 'withVar'.
-<span class="lineno">  529 </span>withCtx :: [(LocalName, Term)] -&gt; CheckM a -&gt; CheckM a
-<span class="lineno">  530 </span><span class="decl"><span class="istickedoff">withCtx = flip (foldr (\(x,tp) -&gt; withVar x tp))</span></span>
-<span class="lineno">  531 </span>
-<span class="lineno">  532 </span>-- | Run a type-checking computation in a typing context extended by a list of
-<span class="lineno">  533 </span>-- variables and their types. See 'withEC'.
-<span class="lineno">  534 </span>withCtxEC :: [(LocalName, ExtCns Term)] -&gt; CheckM a -&gt; CheckM a
-<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">withCtxEC = flip (foldr (\(x,ec) -&gt; withEC x ec))</span></span>
-<span class="lineno">  536 </span>
-<span class="lineno">  537 </span>-- | Perform type inference on a context, i.e., a list of variable names and
-<span class="lineno">  538 </span>-- their associated types. This will give us 'Term's for each type, as
-<span class="lineno">  539 </span>-- well as their 'Sort's, since the type of any type is a 'Sort'.
-<span class="lineno">  540 </span>typeInferCompleteCtxEC ::
-<span class="lineno">  541 </span>  [(LocalName, Un.UTerm)] -&gt; CheckM [(LocalName, ExtCns Term, Sort)]
-<span class="lineno">  542 </span><span class="decl"><span class="istickedoff">typeInferCompleteCtxEC [] = pure []</span>
-<span class="lineno">  543 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteCtxEC ((x, tp) : ctx) =</span>
-<span class="lineno">  544 </span><span class="spaces">  </span><span class="istickedoff">do typed_tp &lt;- typeInferCompleteUTerm tp</span>
-<span class="lineno">  545 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- lift $ TC.ensureSort (typedType typed_tp)</span>
-<span class="lineno">  546 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- lift $ TC.liftTCM scFreshEC x (typedVal typed_tp)</span>
-<span class="lineno">  547 </span><span class="spaces">     </span><span class="istickedoff">((x, ec, s) :) &lt;$&gt; withEC x ec (typeInferCompleteCtxEC ctx)</span></span>
-<span class="lineno">  548 </span>
-<span class="lineno">  549 </span>-- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
-<span class="lineno">  550 </span>-- run a computation in that context via 'withCtxEC', also passing in that context
-<span class="lineno">  551 </span>-- to the computation
-<span class="lineno">  552 </span>typeInferCompleteInCtxEC ::
-<span class="lineno">  553 </span>  [(LocalName, Un.UTerm)] -&gt;
-<span class="lineno">  554 </span>  ([(LocalName, ExtCns Term, Sort)] -&gt; CheckM a) -&gt; CheckM a
-<span class="lineno">  555 </span><span class="decl"><span class="istickedoff">typeInferCompleteInCtxEC ctx f =</span>
-<span class="lineno">  556 </span><span class="spaces">  </span><span class="istickedoff">do typed_ctx &lt;- typeInferCompleteCtxEC ctx</span>
-<span class="lineno">  557 </span><span class="spaces">     </span><span class="istickedoff">withCtxEC (map (\(x,ec,_) -&gt; (x,ec)) typed_ctx) (f typed_ctx)</span></span>
+<span class="lineno">  519 </span><span class="decl"><span class="istickedoff">withEC x ec m =</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="istickedoff">ReaderT $ \env -&gt;</span>
+<span class="lineno">  521 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { tcCtxEC = Map.insert x ec (tcCtxEC env) } in</span>
+<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">TC.rethrowTCError <span class="nottickedoff">(ErrorCtx x (ecType ec))</span> $</span>
+<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">TC.withEmptyTCState $</span>
+<span class="lineno">  524 </span><span class="spaces">  </span><span class="istickedoff">runReaderT m env'</span></span>
+<span class="lineno">  525 </span>
+<span class="lineno">  526 </span>-- | Run a type-checking computation in a typing context extended by a list of
+<span class="lineno">  527 </span>-- variables and their types. See 'withVar'.
+<span class="lineno">  528 </span>withCtx :: [(LocalName, Term)] -&gt; CheckM a -&gt; CheckM a
+<span class="lineno">  529 </span><span class="decl"><span class="istickedoff">withCtx = flip (foldr (\(x,tp) -&gt; withVar x tp))</span></span>
+<span class="lineno">  530 </span>
+<span class="lineno">  531 </span>-- | Run a type-checking computation in a typing context extended by a list of
+<span class="lineno">  532 </span>-- variables and their types. See 'withEC'.
+<span class="lineno">  533 </span>withCtxEC :: [(LocalName, ExtCns Term)] -&gt; CheckM a -&gt; CheckM a
+<span class="lineno">  534 </span><span class="decl"><span class="istickedoff">withCtxEC = flip (foldr (\(x,ec) -&gt; withEC x ec))</span></span>
+<span class="lineno">  535 </span>
+<span class="lineno">  536 </span>-- | Perform type inference on a context, i.e., a list of variable names and
+<span class="lineno">  537 </span>-- their associated types. This will give us 'Term's for each type, as
+<span class="lineno">  538 </span>-- well as their 'Sort's, since the type of any type is a 'Sort'.
+<span class="lineno">  539 </span>typeInferCompleteCtxEC ::
+<span class="lineno">  540 </span>  [(LocalName, Un.UTerm)] -&gt; CheckM [(LocalName, ExtCns Term, Sort)]
+<span class="lineno">  541 </span><span class="decl"><span class="istickedoff">typeInferCompleteCtxEC [] = pure []</span>
+<span class="lineno">  542 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteCtxEC ((x, tp) : ctx) =</span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="istickedoff">do typed_tp &lt;- typeInferCompleteUTerm tp</span>
+<span class="lineno">  544 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- lift $ TC.ensureSort (typedType typed_tp)</span>
+<span class="lineno">  545 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- lift $ TC.liftTCM scFreshEC x (typedVal typed_tp)</span>
+<span class="lineno">  546 </span><span class="spaces">     </span><span class="istickedoff">((x, ec, s) :) &lt;$&gt; withEC x ec (typeInferCompleteCtxEC ctx)</span></span>
+<span class="lineno">  547 </span>
+<span class="lineno">  548 </span>-- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
+<span class="lineno">  549 </span>-- run a computation in that context via 'withCtxEC', also passing in that context
+<span class="lineno">  550 </span>-- to the computation
+<span class="lineno">  551 </span>typeInferCompleteInCtxEC ::
+<span class="lineno">  552 </span>  [(LocalName, Un.UTerm)] -&gt;
+<span class="lineno">  553 </span>  ([(LocalName, ExtCns Term, Sort)] -&gt; CheckM a) -&gt; CheckM a
+<span class="lineno">  554 </span><span class="decl"><span class="istickedoff">typeInferCompleteInCtxEC ctx f =</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="istickedoff">do typed_ctx &lt;- typeInferCompleteCtxEC ctx</span>
+<span class="lineno">  556 </span><span class="spaces">     </span><span class="istickedoff">withCtxEC (map (\(x,ec,_) -&gt; (x,ec)) typed_ctx) (f typed_ctx)</span></span>
 
 </pre>
 </body>
