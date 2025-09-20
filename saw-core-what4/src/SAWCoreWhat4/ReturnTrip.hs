@@ -567,7 +567,7 @@ evaluateExpr sym st sc cache = f Map.empty
             BaseBVRepr wrepr -> do
               w <- SC.scNat sc $ natValue wrepr
               ty <- SC.scVecType sc w =<< SC.scBoolType sc
-              x <- SC.scFreshGlobal sc nm ty
+              x <- SC.scFreshVariable sc nm ty
               SAWExpr <$>
                 (SC.scBvForall sc w
                  =<< SC.scAbstractTerms sc [x] =<< f (Map.insert (B.bvarName bvar) x env) body)

@@ -1327,7 +1327,7 @@ proveByBVInduction script t =
             vars  <- io $ mapM (scVariable sc) pis
             innerVars <-
               io $ sequence $
-              [ scFreshGlobal sc ("i_" <> ecShortName ec) (ecType ec) | ec <- pis ]
+              [ scFreshVariable sc ("i_" <> ecShortName ec) (ecType ec) | ec <- pis ]
             t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
             tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
             tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
@@ -1361,7 +1361,7 @@ proveByBVInduction script t =
             --
             --      (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
             indMotive <- io $
-                do indVar <- scFreshGlobal sc "inductionVar" natty
+                do indVar <- scFreshVariable sc "inductionVar" natty
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    teq    <- scGlobalApply sc "Prelude.IsLeNat" [tsz', indVar]
                    t2     <- scFun sc teq tbody
@@ -1384,10 +1384,10 @@ proveByBVInduction script t =
             --                 y (IsLeNat_base (bvToNat w y)))
 
             indHypProof <- io $
-                do hVar    <- scFreshGlobal sc "H" thmHyp
-                   nVar    <- scFreshGlobal sc "n" natty
-                   hindVar <- scFreshGlobal sc "Hind" =<<
-                                do m <- scFreshGlobal sc "m" natty
+                do hVar    <- scFreshVariable sc "H" thmHyp
+                   nVar    <- scFreshVariable sc "n" natty
+                   hindVar <- scFreshVariable sc "Hind" =<<
+                                do m <- scFreshVariable sc "m" natty
                                    lt <- scGlobalApply sc "Prelude.IsLtNat" [m, nVar]
                                    scGeneralizeTerms sc [m] =<< scFun sc lt =<< scApplyBeta sc indMotive m
 
@@ -1399,9 +1399,9 @@ proveByBVInduction script t =
 
                    succinnersz <- scGlobalApply sc "Prelude.Succ" [natinnersz]
 
-                   bvltVar <- scFreshGlobal sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
+                   bvltVar <- scFreshVariable sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
 
-                   leVar   <- scFreshGlobal sc "Hle" =<<
+                   leVar   <- scFreshVariable sc "Hle" =<<
                                  scGlobalApply sc "Prelude.IsLeNat" [natoutersz, nVar]
 
                    refl_inner <- scGlobalApply sc "Prelude.IsLeNat_base" [natinnersz]
@@ -1421,7 +1421,7 @@ proveByBVInduction script t =
             -- \ (x : Vec x Bool) ->
             --    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))
             indApp <- io $
-                do varH   <- scFreshGlobal sc "Hind" thmHyp
+                do varH   <- scFreshVariable sc "Hind" thmHyp
                    tsz'   <- scApplyAll sc toNat [wt, tsz]
                    trefl  <- scGlobalApply sc "Prelude.IsLeNat_base" [tsz']
                    indHypArg <- scApplyBeta sc indHypProof varH
@@ -1679,7 +1679,7 @@ freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
-  tm <- io $ scFreshGlobal sc x cty
+  tm <- io $ scFreshVariable sc x cty
   return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."

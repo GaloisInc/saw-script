@@ -208,7 +208,7 @@ data LogicExpr =
 
 scJavaValue :: SharedContext -> Term -> Text -> IO Term
 scJavaValue sc ty name = do
-  scFreshGlobal sc name ty
+  scFreshVariable sc name ty
 
 -- | Return java expressions in logic expression.
 logicExprJavaExprs :: LogicExpr -> [JavaExpr]
