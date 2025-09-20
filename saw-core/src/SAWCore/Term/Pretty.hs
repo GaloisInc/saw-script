@@ -34,7 +34,7 @@ import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
 import Control.Monad (forM)
 import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
-import Control.Monad.State.Strict (MonadState(..), State, execState)
+import Control.Monad.State.Strict (MonadState(..), State, evalState, execState, get, modify)
 import qualified Data.Foldable as Fold
 import Data.Hashable (hash)
 import qualified Data.Text as Text
@@ -154,6 +154,40 @@ consVarNaming (VarNaming names renames used) name =
   let nm = freshName used name
   in (nm, VarNaming (nm : names) renames (Set.insert nm used))
 
+-- | Add a new variable with the given 'VarName' to the 'VarNaming',
+-- returning both the chosen fresh name and the new 'VarNaming'.
+-- As a special case, if the base name is "_", it is not modified.
+insertVarNaming :: VarNaming -> VarName -> (LocalName, VarNaming)
+insertVarNaming (VarNaming names renames used) (VarName i name) =
+  let nm = freshName used name
+  in (nm, VarNaming names (IntMap.insert i nm renames) (Set.insert nm used))
+
+-- | Compute the set of all free 'VarName's in a term.
+termVarNames :: Term -> Set VarName
+termVarNames t0 = evalState (go t0) IntMap.empty
+  where
+    go :: Term -> State (IntMap (Set VarName)) (Set VarName)
+    go tm =
+      case tm of
+        Unshared tf -> termf <$> traverse go tf
+        STApp { stAppIndex = i, stAppTermF = tf, stAppFreeVars = _vs } ->
+          do memo <- get
+             case IntMap.lookup i memo of
+               Just vars -> pure vars
+               Nothing ->
+                 do vars <- termf <$> traverse go tf
+                    modify (IntMap.insert i vars)
+                    pure vars
+    termf :: TermF (Set VarName) -> Set VarName
+    termf tf =
+      case tf of
+        FTermF ftf -> Fold.fold ftf
+        App e1 e2 -> Set.union e1 e2
+        Lambda _ e1 e2 -> Set.union e1 e2
+        Pi _ e1 e2 -> Set.union e1 e2
+        LocalVar _ -> Set.empty
+        Constant _ -> Set.empty
+        Variable ec -> Set.insert (ecName ec) (ecType ec)
 
 --------------------------------------------------------------------------------
 -- * Pretty-printing monad
@@ -261,6 +295,17 @@ withBoundVarM basename m =
      ret <- local (\_ -> st { ppNaming = naming,
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
+
+-- | Run a pretty-printing computation in a context with an additional
+-- declared 'VarName'.
+withVarName :: VarName -> PPM a -> PPM a
+withVarName vn =
+  local (\s -> s { ppNaming = snd (insertVarNaming (ppNaming s) vn) })
+
+-- | Run a pretty-printing computation in a context with multiple
+-- additional declared 'VarName's.
+withVarNames :: [VarName] -> PPM a -> PPM a
+withVarNames vs m = foldr withVarName m vs
 
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
@@ -654,6 +699,7 @@ ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 ppTermInCtx :: PPS.Opts -> [LocalName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
+  withVarNames (Set.toList (termVarNames trm)) $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm True trm
 
@@ -668,6 +714,7 @@ scPrettyTermInCtx :: PPS.Opts -> [LocalName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
   runPPM opts emptyDisplayNameEnv $
+  withVarNames (Set.toList (termVarNames trm)) $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm False trm
 
@@ -685,7 +732,9 @@ showTerm t = scPrettyTerm PPS.defaultOpts t
 -- more than once at the same binding level
 ppTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
 ppTermWithNames opts ne trm =
-  runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm
+  runPPM opts ne $
+  withVarNames (Set.toList (termVarNames trm)) $
+  ppTermWithMemoTable PrecTerm True trm
 
 showTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> String
 showTermWithNames opts ne trm =
