@@ -104,12 +104,12 @@ ppParensPrec p1 p2 d
 -- | Local variable namings, which map each deBruijn index in scope to a unique
 -- string to be used to print it. This mapping is given by position in a list.
 -- Renamings for named variables are in an 'IntMap' indexed by 'VarIndex'.
--- The third argument caches the set of all used names.
+-- The third argument caches the set of all used or reserved names.
 data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
 
 -- | The empty local variable context
-emptyVarNaming :: VarNaming
-emptyVarNaming = VarNaming [] IntMap.empty Set.empty
+emptyVarNaming :: Set LocalName -> VarNaming
+emptyVarNaming reserved = VarNaming [] IntMap.empty reserved
 
 -- | Look up a string to use for a 'DeBruijnIndex', if the first
 -- argument is 'True', or just print the variable number if the first
@@ -201,7 +201,7 @@ emptyPPState :: PPS.Opts -> DisplayNameEnv -> PPState
 emptyPPState opts ne =
   PPState { ppOpts = opts,
             ppDepth = 0,
-            ppNaming = emptyVarNaming,
+            ppNaming = emptyVarNaming (Map.keysSet (displayIndexes ne)),
             ppNamingEnv = ne,
             ppMemoFresh = 1,
             ppGlobalMemoTable = IntMap.empty,
