@@ -85,11 +85,11 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
           do tm <- scTermF sc tf
              reflectTerm sc cfg ty tm
       | Set.member ix unintSet =
-        let ec = EC nm ty
+        let ec = EC (VarName ix (toShortName (nameInfo nm))) ty
         in Just (replace sc cfg mapref ec)
       | otherwise = Nothing
 
-    extcns cfg mapref tf ec@(EC (nameIndex -> ix) ty)
+    extcns cfg mapref tf ec@(EC (vnIndex -> ix) ty)
       | Set.member ix unintSet = replace sc cfg mapref ec
       | otherwise =
           case Map.lookup ix ecVals of

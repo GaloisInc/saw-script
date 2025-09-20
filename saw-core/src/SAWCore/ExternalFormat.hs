@@ -53,25 +53,27 @@ splitLast :: [a] -> Maybe ([a], a)
 splitLast [] = Nothing
 splitLast xs = Just (take (length xs - 1) xs, last xs)
 
-type WriteM = State.State (Map TermIndex Int, Map VarIndex NameInfo, [String], Int)
+type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
 
-renderNames :: Map VarIndex NameInfo -> String
+renderNames :: Map VarIndex (Either Text NameInfo) -> String
 renderNames nms = show
   [ (idx, f nmi)
   | (idx,nmi) <- Map.toList nms
   ]
  where
-   f (ModuleIdentifier i)  = Left (show i)
-   f (ImportedName uri as) = Right (render uri, as)
+   f (Left s) = Left s
+   f (Right (ModuleIdentifier i))  = Right (Left (show i))
+   f (Right (ImportedName uri as)) = Right (Right (render uri, as))
 
-readNames :: String -> Maybe (Map VarIndex NameInfo)
+readNames :: String -> Maybe (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
  where
-   readName :: (VarIndex, Either Text (Text,[Text])) -> Maybe (VarIndex, NameInfo)
-   readName (idx, Left i) = pure (idx, ModuleIdentifier (parseIdent (Text.unpack i)))
-   readName (idx, Right (uri,as)) =
+   readName :: (VarIndex, Either Text (Either Text (Text,[Text]))) -> Maybe (VarIndex, Either Text NameInfo)
+   readName (idx, Left x) = pure (idx, Left x)
+   readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
+   readName (idx, Right (Right (uri,as))) =
        do uri' <- mkURI uri
-          pure (idx, ImportedName uri' as)
+          pure (idx, Right (ImportedName uri' as))
 
 -- | Render to external text format
 scWriteExternal :: Term -> String
@@ -99,11 +101,11 @@ scWriteExternal t0 =
     stashName :: Name -> WriteM ()
     stashName ec =
        do (m, nms, lns, x) <- State.get
-          State.put (m, Map.insert (nameIndex ec) (nameInfo ec) nms, lns, x)
+          State.put (m, Map.insert (nameIndex ec) (Right (nameInfo ec)) nms, lns, x)
     stashEC :: ExtCns Int -> WriteM ()
-    stashEC ec =
+    stashEC (EC vn _) =
        do (m, nms, lns, x) <- State.get
-          State.put (m, Map.insert (ecVarIndex ec) (ecNameInfo ec) nms, lns, x)
+          State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
     go :: Term -> WriteM Int
     go (Unshared tf) = do
@@ -185,7 +187,7 @@ scWriteExternal t0 =
 -- inside 'Constant' and 'Variable' constructors. We do not reuse any
 -- such numbers that appear in the external file, but generate fresh
 -- ones that are valid in the current 'SharedContext'.
-type ReadM = State.StateT (Map Int Term, Map VarIndex NameInfo, Map VarIndex VarIndex) IO
+type ReadM = State.StateT (Map Int Term, Map VarIndex (Either Text NameInfo), Map VarIndex VarIndex) IO
 
 scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
@@ -241,8 +243,8 @@ scReadExternal sc input =
     readName' vi =
       do (ts, nms, vs) <- State.get
          nmi <- case Map.lookup vi nms of
-                  Just nmi -> pure nmi
-                  Nothing -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
+                  Just (Right nmi) -> pure nmi
+                  _ -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
          case nmi of
            ModuleIdentifier ident ->
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
@@ -266,23 +268,15 @@ scReadExternal sc input =
     readEC' :: VarIndex -> Term -> ReadM (ExtCns Term)
     readEC' vi t' =
       do (ts, nms, vs) <- State.get
-         nmi <- case Map.lookup vi nms of
-                  Just nmi -> pure nmi
-                  Nothing -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
-         case nmi of
-           ModuleIdentifier ident ->
-             lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
-               Just vi' -> pure (EC (Name vi' nmi) t')
-               Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           ImportedName uri _aliases ->
-             lift (scResolveNameByURI sc uri) >>= \case
-               Just vi' -> pure (EC (Name vi' nmi) t')
-               Nothing -> case Map.lookup vi vs of
-                 Just vi' -> pure $ EC (Name vi' nmi) t'
-                 Nothing ->
-                   do nm <- lift $ scRegisterName sc nmi
-                      State.put (ts, nms, Map.insert vi (nameIndex nm) vs)
-                      pure $ EC nm t'
+         case Map.lookup vi nms of
+           Just (Left x) ->
+             case Map.lookup vi vs of
+               Just vi' -> pure (EC (VarName vi' x) t')
+               Nothing ->
+                 do vn <- lift $ scFreshVarName sc x
+                    State.put (ts, nms, Map.insert vi (vnIndex vn) vs)
+                    pure $ EC vn t'
+           _ -> lift $ fail $ "scReadExternal: ExtCns missing name: " ++ show vi
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =

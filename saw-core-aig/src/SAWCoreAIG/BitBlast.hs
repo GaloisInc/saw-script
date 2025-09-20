@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (Name(..), ecShortName)
+import SAWCore.Name (Name(..), VarName(..), ecShortName)
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -473,7 +473,7 @@ bitBlastBasic be m addlPrims ecMap t = do
 bitBlastExtCns ::
   Map VarIndex (BValue (l s)) -> ExtCns (TValue (BitBlast (l s))) ->
   IO (BValue (l s))
-bitBlastExtCns ecMap (EC (Name idx name) _v) =
+bitBlastExtCns ecMap (EC (VarName idx name) _v) =
   case Map.lookup idx ecMap of
     Just var -> return var
     Nothing -> fail $

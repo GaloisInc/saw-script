@@ -103,26 +103,36 @@ ppParensPrec p1 p2 d
 
 -- | Local variable namings, which map each deBruijn index in scope to a unique
 -- string to be used to print it. This mapping is given by position in a list.
-newtype VarNaming = VarNaming [LocalName]
+-- Renamings for named variables are in an 'IntMap' indexed by 'VarIndex'.
+-- The third argument caches the set of all used names.
+data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
 
 -- | The empty local variable context
 emptyVarNaming :: VarNaming
-emptyVarNaming = VarNaming []
+emptyVarNaming = VarNaming [] IntMap.empty Set.empty
 
--- | Look up a string to use for a variable, if the first argument is 'True', or
--- just print the variable number if the first argument is 'False'
-lookupVarName :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
-lookupVarName True (VarNaming names) i
+-- | Look up a string to use for a 'DeBruijnIndex', if the first
+-- argument is 'True', or just print the variable number if the first
+-- argument is 'False'.
+lookupDeBruijn :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
+lookupDeBruijn True (VarNaming names _ _) i
   | i >= length names = Text.pack ('!' : show (i - length names))
-lookupVarName True (VarNaming names) i = names!!i
-lookupVarName False _ i = Text.pack ('!' : show i)
+lookupDeBruijn True (VarNaming names _ _) i = names!!i
+lookupDeBruijn False _ i = Text.pack ('!' : show i)
+
+-- | Look up a string to use for a 'VarName'.
+lookupVarName :: VarNaming -> VarName -> LocalName
+lookupVarName (VarNaming _ renames _) vn =
+  case IntMap.lookup (vnIndex vn) renames of
+    Just alias -> alias
+    Nothing -> vnName vn
 
 -- | Generate a fresh name from a base name that does not clash with any names
 -- already in a given list, unless it is "_", in which case return it as is
-freshName :: [LocalName] -> LocalName -> LocalName
+freshName :: Set LocalName -> LocalName -> LocalName
 freshName used name
   | name == "_" = name
-  | elem name used = freshName used (nextName name)
+  | Set.member name used = freshName used (nextName name)
   | otherwise = name
 
 -- | Generate a variant of a name by incrementing the number at the
@@ -140,8 +150,9 @@ nextName = Text.pack . reverse . go . reverse . Text.unpack
 -- returning both the fresh name actually used and the new variable list. As a
 -- special case, if the base name is "_", it is not modified.
 consVarNaming :: VarNaming -> LocalName -> (LocalName, VarNaming)
-consVarNaming (VarNaming names) name =
-  let nm = freshName names name in (nm, VarNaming (nm : names))
+consVarNaming (VarNaming names renames used) name =
+  let nm = freshName used name
+  in (nm, VarNaming (nm : names) renames (Set.insert nm used))
 
 
 --------------------------------------------------------------------------------
@@ -215,7 +226,7 @@ instance MonadReader PPState PPM where
 -- | Look up the given local variable by deBruijn index to get its name
 varLookupM :: DeBruijnIndex -> PPM LocalName
 varLookupM idx =
-  lookupVarName <$> (PPS.ppShowLocalNames <$> ppOpts <$> ask)
+  lookupDeBruijn <$> (PPS.ppShowLocalNames <$> ppOpts <$> ask)
   <*> (ppNaming <$> ask) <*> return idx
 
 -- | Test if a given term index is memoized, returning its memoization variable
@@ -456,15 +467,15 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
-
--- | Pretty-print an 'ExtCns', using the best unambiguous alias from
--- the naming environment.
+-- | Pretty-print an 'ExtCns' according to the current 'VarNaming'.
 ppExtCns :: ExtCns e -> PPM PPS.Doc
-ppExtCns ec =
-  do ne <- asks ppNamingEnv
-     case bestDisplayName ne (ecVarIndex ec) of
-       Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppName (ecNameInfo ec)
+ppExtCns ec = ppVarName (ecName ec)
+
+-- | Pretty-print a 'VarName' according to the current 'VarNaming'.
+ppVarName :: VarName -> PPM PPS.Doc
+ppVarName vn =
+  do naming <- asks ppNaming
+     pure $ pretty (lookupVarName naming vn)
 
 -- | Pretty-print a 'Name', using the best unambiguous alias from the
 -- naming environment.
