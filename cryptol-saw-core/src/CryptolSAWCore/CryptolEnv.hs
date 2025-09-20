@@ -115,8 +115,16 @@ data InputText = InputText
   }
 
 
+-- | ExtCryptolModule - Extended CryptolModule; we keep track of
+--   whether this module came directly from a constructed
+--   `CryptolModule` or whether it came from parsing a Cryptol module
+--   in filesystem (in which case it is loaded).
+data ExtCryptolModule =
+    ECM_LoadedModule (P.Located C.ModName)  -- source is load
+  | ECM_CryptolModule CryptolModule         -- source in cryptol_prims
+  -- deriving (Show)
+    -- FIXME: TODO: more instances
 
---------------------------------------------------------------------------------
 
 -- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
 -- result in all symbols being visible (as they are for focused
@@ -440,18 +448,39 @@ combineCryptolEnv chkEnv newEnv =
 
 ---- CryptolModule/ExtCryptolModule functions: ---------------------------------
 
--- | loadCryptolModule - load a cryptol module and return a handle to
--- the `CryptolModule`.  The contents of the module are not imported.
---
--- NOTE: Bringing the module-handle into {{-}} scope is not handled
---       here; it is done rather in `bindCryptolModule`, ONLY if the
---       user binds the `cryptolModule` returned here at the SAW
---       command line.
+-- | loadCryptolModule - load a cryptol module and returns the
+-- `ExtCryptolModule`.  The contents of the module are not directly
+-- imported into the environment.
 --
 -- This is used to implement the "cryptol_load" primitive in which a
 -- handle to the module is returned and can be bound to a SAWScript
 -- variable.
 --
+-- NOTE: Bringing the module into {{-}} scope is not handled
+--       here; it is done rather in `bindExtCryptolModule`, ONLY if the
+--       user binds the `cryptolModule` returned here at the SAW
+--       command line.
+loadExtCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext ->
+  CryptolEnv ->
+  FilePath ->
+  IO (ExtCryptolModule, CryptolEnv)
+loadExtCryptolModule sc env path =
+  do
+  (mod', env') <- loadAndTranslateModule sc env (Left path)
+  return (ECM_LoadedModule (locatedUnknown (T.mName mod')), env')
+
+
+-- | loadCryptolModule
+--
+-- NOTE:
+--  - the path to this function from the command line is only via
+--    the experimental "write_coq_cryptol_module" command.
+--
+-- FIXME: This incorrectly (in MkCryptolModule) excludes both
+--        submodules and their contents from the NamingEnvs in
+--        `CryptolModule`
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
@@ -461,16 +490,10 @@ loadCryptolModule ::
 loadCryptolModule sc env path =
   do
   (mod', env') <- loadAndTranslateModule sc env (Left path)
-  cryptolModule <- mkCryptolModule mod' env'
-  return (cryptolModule, env')
-
+  cm <- mkCryptolModule mod' env'
+  return (cm, env')
 
 -- | mkCryptolModule - translate a T.Module to a CryptolModule
---
--- FIXME:
---   - This incorrectly excludes both submodules and their contents from
---     both of the NamingEnvs in `CryptolModule`
---
 mkCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   T.Module -> CryptolEnv -> IO CryptolModule
@@ -511,7 +534,7 @@ mkCryptolModule m env =
            newTermEnv
       )
 
--- | bindCryptolModule - ad hoc function/hook that allows for extending
+-- | bindExtCryptolModule - ad hoc function/hook that allows for extending
 --   the Cryptol env with the names in a CryptolModule.
 --
 --   Three command line variants get us here:
@@ -526,6 +549,21 @@ mkCryptolModule m env =
 --   TODO:
 --    - new design in PR #2593 (addressing issue #2569) should replace
 --      this function so that the fundamental work is done via `importCryptolModule`.
+--
+bindExtCryptolModule ::
+  (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
+bindExtCryptolModule (modName, ecm) =
+  case ecm of
+    ECM_CryptolModule cm -> bindCryptolModule (modName, cm)
+    ECM_LoadedModule  nm -> bindLoadedModule  (modName, nm)
+
+bindLoadedModule ::
+  (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
+bindLoadedModule (asName, origName) env =
+  env{eImports= mkImport PublicAndPrivate origName (Just asName) Nothing
+              : eImports env
+     }
+
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
