@@ -61,7 +61,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Name(..), ecShortName, toShortName)
+import SAWCore.Name (Name(..), VarName(..), ecShortName, toShortName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -627,9 +627,10 @@ sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO 
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
-  let extcns (EC (Name ix nm) ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
+  let extcns (EC (VarName ix nm) ty) = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
   let uninterpreted nm ty
-        | Set.member (nameIndex nm) unintSet = Just (extcns (EC nm ty))
+        | Set.member (nameIndex nm) unintSet =
+          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (extcns (EC vn ty))
         | otherwise                          = Nothing
   let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
   let primHandler = Sim.defaultPrimHandler
@@ -712,13 +713,16 @@ sbvSATQuery sc addlPrims query =
        do vars' <- sequence vars
           let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
 
-          let mkUninterp (Name ix nm) ty =
-                parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
+          let mkUninterp (VarName ix nm) ty =
+                parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
           let extcns ec
                 | Just v <- Map.lookup (ecVarIndex ec) varMap = pure v
-                | otherwise = mkUninterp (ecName ec) (ecType ec)
+                | otherwise =
+                  let vn = VarName (ecVarIndex ec) (ecShortName ec) in mkUninterp vn (ecType ec)
           let uninterpreted nm ty
-                | Set.member (nameIndex nm) unintSet = Just (mkUninterp nm ty)
+                | Set.member (nameIndex nm) unintSet =
+                  let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+                  in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
           let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
           let primHandler = Sim.defaultPrimHandler

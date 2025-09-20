@@ -39,9 +39,10 @@ module SAWCore.Name
     -- * Name
   , VarIndex
   , Name(..)
+    -- * VarName
+  , VarName(..)
     -- * ExtCns
   , ExtCns(..)
-  , ecNameInfo
   , ecVarIndex
   , ecShortName
   , scFreshNameURI
@@ -266,6 +267,32 @@ instance Hashable Name where
   hashWithSalt x nm = hashWithSalt x (nameInfo nm)
 
 
+-- Variable Names --------------------------------------------------------------
+
+-- | A variable name with a unique ID.
+-- We assume a global uniqueness invariant: The 'VarIndex' determines the name.
+data VarName =
+  VarName
+  { vnIndex :: !VarIndex
+  , vnName :: !Text
+  }
+  deriving (Show)
+
+-- | Because of the global uniqueness invariant, comparing the
+-- 'VarIndex' is sufficient to ensure equality of variable names.
+instance Eq VarName where
+  x == y = vnIndex x == vnIndex y
+
+instance Ord VarName where
+  compare x y = compare (vnIndex x) (vnIndex y)
+
+-- | For hashing, we consider only the base name and not the
+-- 'VarIndex'; this gives a stable hash value for a particular name,
+-- even if the unique IDs are assigned differently from run to run.
+instance Hashable VarName where
+ hashWithSalt x vn = hashWithSalt x (vnName vn)
+
+
 -- External Constants ----------------------------------------------------------
 
 -- | A global name paired with a type.
@@ -273,7 +300,7 @@ instance Hashable Name where
 -- determined by the name.
 data ExtCns e =
   EC
-  { ecName :: !Name
+  { ecName :: !VarName
   , ecType :: !e
   }
   deriving (Show, Functor, Foldable, Traversable)
@@ -289,14 +316,11 @@ instance Ord (ExtCns e) where
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecName ec)
 
-ecNameInfo :: ExtCns e -> NameInfo
-ecNameInfo ec = nameInfo (ecName ec)
-
 ecVarIndex :: ExtCns e -> VarIndex
-ecVarIndex ec = nameIndex (ecName ec)
+ecVarIndex ec = vnIndex (ecName ec)
 
 ecShortName :: ExtCns e -> Text
-ecShortName ec = toShortName (ecNameInfo ec)
+ecShortName ec = vnName (ecName ec)
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $

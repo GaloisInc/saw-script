@@ -90,7 +90,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-import SAWCore.Name (Name(..), ecShortName, toAbsoluteName, toShortName)
+import SAWCore.Name (Name(..), VarName(..), ecShortName, toAbsoluteName, toShortName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -879,11 +879,13 @@ w4SolveBasic ::
   IO (SValue sym)
 w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
   do m <- scGetModuleMap sc
-     let extcns (EC (Name ix nm) ty)
+     let extcns (EC (VarName ix x) ty)
             | Just v <- Map.lookup ix ecMap = return v
-            | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+            | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack x ++ "_" ++ show ix)) ty
      let uninterpreted nm ty
-           | Set.member (nameIndex nm) unintSet = Just (extcns (EC nm ty))
+           | Set.member (nameIndex nm) unintSet =
+             let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+             in Just (extcns (EC vn ty))
            | otherwise                          = Nothing
      let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
@@ -1550,14 +1552,16 @@ w4EvalBasic ::
   Term {- ^ term to simulate -} ->
   IO (SValue (B.ExprBuilder n st fs))
 w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
-  do let extcns tf (EC (Name ix nm) ty)
+  do let extcns tf (EC (VarName ix nm) ty)
            | Just v <- Map.lookup ix ecCons = pure v
            | otherwise =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
-                 (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+                 (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
      let uninterpreted tf nm ty
-           | Set.member (nameIndex nm) unintSet = Just (extcns tf (EC nm ty))
+           | Set.member (nameIndex nm) unintSet =
+             let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+             in Just (extcns tf (EC vn ty))
            | otherwise                          = Nothing
      let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
@@ -1583,9 +1587,9 @@ w4SimulatorEval ::
   Term {- ^ term to simulate -} ->
   IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
 w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
-  do let extcns tf (EC (Name ix nm) ty) =
+  do let extcns tf (EC (VarName ix nm) ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
-              parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+              parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
      let uninterpreted _tf nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
      let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)

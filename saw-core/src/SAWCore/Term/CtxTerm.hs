@@ -109,7 +109,7 @@ asPiCtorArg ::
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe (Name, CtorArg, Term))
+  IO (Maybe (VarName, CtorArg, Term))
 asPiCtorArg sc d params dt_ixs t =
   scAsPi sc t >>= \case
     Nothing -> pure Nothing
@@ -125,7 +125,7 @@ mkCtorArgsIxs ::
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe ([(Name, CtorArg)], [Term]))
+  IO (Maybe ([(VarName, CtorArg)], [Term]))
 mkCtorArgsIxs _sc d params dt_ixs (asCtorDTApp d params dt_ixs -> Just ixs) =
   pure $ Just ([], ixs)
 mkCtorArgsIxs sc d params dt_ixs ty =
