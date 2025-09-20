@@ -1101,7 +1101,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   case ttType typed_term of
     TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -> do
       let evaluated_type = Cryptol.evalValType mempty cryptol_type
-      fresh_array_const <- scFreshGlobal saw_context "arr"
+      fresh_array_const <- scFreshVariable saw_context "arr"
         =<< scArrayType saw_context offset_type_term byte_type_term
       execStateT
         (setBytes evaluated_type (ttTerm typed_term) 0)

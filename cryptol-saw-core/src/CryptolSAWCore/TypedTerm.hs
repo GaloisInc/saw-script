@@ -29,6 +29,7 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import SAWCore.FiniteValue
+import SAWCore.Name (ecShortName)
 import SAWCore.Recognizer (asVariable)
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck (scTypeCheckError)
@@ -74,7 +75,7 @@ ppTypedTermType (TypedTermOther tp) =
 
 ppTypedExtCns :: TypedExtCns -> PP.Doc ann
 ppTypedExtCns (TypedExtCns tp ec) =
-  PP.unAnnotate (ppName (ecNameInfo ec))
+  PP.unAnnotate (PP.pretty (ecShortName ec))
   PP.<+> PP.pretty ":" PP.<+>
   PP.viaShow (C.ppPrec 0 tp)
 

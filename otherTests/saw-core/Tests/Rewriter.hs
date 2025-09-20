@@ -37,11 +37,11 @@ prelude_bveq_sameL_test =
     ss <- scSimpset sc0 [] eqs []
     let sc = rewritingSharedContext sc0 ss
     natType <- scNatType sc0
-    n <- scFreshGlobal sc "n" natType
+    n <- scFreshVariable sc "n" natType
     boolType <- scBoolType sc0
     bvType <- scVecType sc0 n boolType
-    x <- scFreshGlobal sc "x" bvType
-    z <- scFreshGlobal sc "z" bvType
+    x <- scFreshVariable sc "x" bvType
+    z <- scFreshVariable sc "z" bvType
     let lhs =
           mkGlobalDef "Prelude.bvEq"
             `pureApp` n

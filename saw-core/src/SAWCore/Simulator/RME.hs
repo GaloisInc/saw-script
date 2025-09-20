@@ -58,15 +58,15 @@ evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (const Nothing) neutral primHandler
+           extcns (\_ _ -> Nothing) neutral primHandler
            (Prims.lazyMuxValue prims)
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
     neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
-    primHandler ec msg env _tv =
+    primHandler nm _ msg env _tv =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecNameInfo ec))
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -292,7 +292,7 @@ muxInt b x y =
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
 muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
-muxExtra (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
+muxExtra (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) b (AStream xs) (AStream ys) =
   AStream (muxRValue tp b <$> xs <*> ys)
 muxExtra tp _ _ _ = panic "muxExtra" ["Type mismatch: " <> Text.pack (show tp)]
 
@@ -402,9 +402,9 @@ bitBlastBasic :: ModuleMap
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
   let neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
-  let primHandler ec msg env _tv =
+  let primHandler nm _ msg env _tv =
          return $ Prim.userError $ unlines
-           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (ecNameInfo ec))
+           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]
@@ -412,8 +412,8 @@ bitBlastBasic m addlPrims ecMap t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
          (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
                    Just v -> pure v
-                   Nothing -> error ("RME: unknown ExtCns: " ++ show (ecNameInfo ec)))
-         (const Nothing)
+                   Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
+         (\_ _ -> Nothing)
          neutral
          primHandler
          (Prims.lazyMuxValue prims)

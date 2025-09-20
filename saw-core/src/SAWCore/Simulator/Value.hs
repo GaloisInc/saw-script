@@ -57,8 +57,8 @@ data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !(ExtCns (TValue l)) ![Thunk l] ![Thunk l]
-  | VCtorMux ![Thunk l] !(IntMap (VBool l, ExtCns (TValue l), [Thunk l]))
+  | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
+  | VCtorMux ![Thunk l] !(IntMap (VBool l, Name, TValue l, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
     -- The list of data type parameters is kept outside the mux.
     -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
@@ -76,7 +76,8 @@ data Value l
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
   | VRecursor
-     !(ExtCns (TValue l)) -- data type ident
+     !Name -- data type name
+     !(TValue l) -- data type kind
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
@@ -95,11 +96,12 @@ data TValue l
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !(ExtCns (TValue l)) ![Value l] ![Value l]
+  | VDataType !Name !(TValue l) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
-     !(ExtCns (TValue l)) -- data type name
+     !Name       -- data type name
+     !(TValue l) -- data type kind
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive function
@@ -186,7 +188,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s _ps _xv -> shows (toAbsoluteName (ecNameInfo s))
+      VCtorApp c _ty _ps _xv -> shows (toAbsoluteName (nameInfo c))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
@@ -201,7 +203,7 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor d _ _ _ _
+      VRecursor d _ _ _ _ _
                      -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
@@ -220,7 +222,7 @@ instance Show (Extra l) => Show (TValue l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s ps vs
+      VDataType s _ ps vs
         | null (ps++vs) -> shows s
         | otherwise  -> shows s . showList (ps++vs)
       VRecordType [] -> showString "{}"
