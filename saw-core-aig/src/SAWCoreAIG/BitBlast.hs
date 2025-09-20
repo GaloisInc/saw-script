@@ -308,7 +308,7 @@ muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, 
 
 muxBExtra :: AIG.IsAIG l g => g s ->
   TValue (BitBlast (l s)) -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra be (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
+muxBExtra be (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
   do let f i = do xi <- lookupBStream (VExtra x) i
                   yi <- lookupBStream (VExtra y) i
                   muxBVal be tp c xi yi
@@ -464,7 +464,7 @@ bitBlastBasic be m addlPrims ecMap t = do
   let primHandler = Sim.defaultPrimHandler
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastExtCns ecMap)
-         (const Nothing)
+         (\_ _ -> Nothing)
          neutral
          primHandler
          (Prims.lazyMuxValue (prims be))

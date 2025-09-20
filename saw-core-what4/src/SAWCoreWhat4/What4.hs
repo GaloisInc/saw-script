@@ -612,7 +612,7 @@ muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
   sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] [] ) c x y =
+muxWhat4Extra sym (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
                   muxBVal sym tp c xi yi
@@ -882,9 +882,9 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
      let extcns (EC (Name ix nm) ty)
             | Just v <- Map.lookup ix ecMap = return v
             | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
-     let uninterpreted ec
-           | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
-           | otherwise                           = Nothing
+     let uninterpreted nm ty
+           | Set.member (nameIndex nm) unintSet = Just (extcns (EC nm ty))
+           | otherwise                          = Nothing
      let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
@@ -1062,8 +1062,8 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (ecShortName i))) app0
+    VCtorApp i _ ps xv        -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (nameInfo i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1431,7 +1431,7 @@ rebuildTerm sym st sc tv sv =
         _ -> panic "rebuildTerm" [
                  "Pair wasn't a pair: found " <> Text.pack (show tv)
              ]
-    VCtorApp _ _ _ ->
+    VCtorApp {} ->
       chokeOn "constructors (VCtorApp)"
     VCtorMux {} ->
       chokeOn "constructors (VCtorMux)"
@@ -1469,7 +1469,7 @@ rebuildTerm sym st sc tv sv =
       scString sc s
     VRecordValue _ ->
       chokeOn "records (VRecordValue)"
-    VRecursor _ _ _ _ _ ->
+    VRecursor {} ->
       chokeOn "recursors (VRecursor)"
     VExtra _ ->
       chokeOn "VExtra"
@@ -1556,9 +1556,9 @@ w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm
                  (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
-     let uninterpreted tf ec
-           | Set.member (ecVarIndex ec) unintSet = Just (extcns tf ec)
-           | otherwise                           = Nothing
+     let uninterpreted tf nm ty
+           | Set.member (nameIndex nm) unintSet = Just (extcns tf (EC nm ty))
+           | otherwise                          = Nothing
      let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
@@ -1578,7 +1578,7 @@ w4SimulatorEval ::
   ModuleMap ->
   Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
-  (ExtCns (TValue (What4 (B.ExprBuilder n st fs))) -> Bool)
+  (Name -> TValue (What4 (B.ExprBuilder n st fs)) -> Bool)
     {- ^ Filter for constant values.  True means unfold, false means halt evaluation. -} ->
   Term {- ^ term to simulate -} ->
   IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
@@ -1586,8 +1586,8 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
   do let extcns tf (EC (Name ix nm) ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
-     let uninterpreted _tf ec =
-          if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecNameInfo ec)))
+     let uninterpreted _tf nm ty =
+          if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
      let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
@@ -1820,12 +1820,12 @@ mkArgTerm sc ty val =
          xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
          return (ArgTermRecord (zip tags xs))
 
-    (_, VCtorApp i ps vv) ->
+    (_, VCtorApp i _ ps vv) ->
       do mm <- scGetModuleMap sc
          ctor <-
-           case lookupVarIndexInMap (ecVarIndex i) mm of
+           case lookupVarIndexInMap (nameIndex i) mm of
              Just (ResolvedCtor ctor) -> pure ctor
-             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (ecNameInfo i)]
+             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (nameInfo i)]
          ps' <- traverse (termOfSValue sc <=< force) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
          x   <- scConstApply sc (ctorName ctor) (ps' ++ vv')

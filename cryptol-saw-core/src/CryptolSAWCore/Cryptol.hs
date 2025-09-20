@@ -94,7 +94,7 @@ import SAWCore.Prim (BitVector(..))
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
-import SAWCore.Name (preludeName)
+import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import SAWCore.Term.Pretty (showTerm)
 
@@ -1998,14 +1998,14 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (ecNameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") _ [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType _ _ _ -> Nothing
+      SC.VDataType _ _ _ _ -> Nothing
 
       SC.VUnitType -> return (Right (C.tTuple []))
       SC.VPairType v1 v2 -> do
