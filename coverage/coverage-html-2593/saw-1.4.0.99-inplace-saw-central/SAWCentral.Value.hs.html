@@ -577,7 +577,7 @@ span.spaces    { background: white }
 <span class="lineno">  558 </span>  | VJavaType JavaType
 <span class="lineno">  559 </span>  | VLLVMType LLVM.Type
 <span class="lineno">  560 </span>  | VMIRType MIR.Ty
-<span class="lineno">  561 </span>  | VCryptolModule CryptolModule
+<span class="lineno">  561 </span>  | VCryptolModule CEnv.ExtCryptolModule
 <span class="lineno">  562 </span>  | VJavaClass JSS.Class
 <span class="lineno">  563 </span>  | VLLVMModule (Some CMSLLVM.LLVMModule)
 <span class="lineno">  564 </span>  | VMIRModule RustModule
@@ -711,7 +711,7 @@ span.spaces    { background: white }
 <span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">VJavaType {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Java type&gt;&gt;&quot;</span></span>
 <span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">VLLVMType t -&gt; <span class="nottickedoff">showString (show (Crucible.LLVM.ppType t))</span></span>
 <span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff">VMIRType t -&gt; <span class="nottickedoff">showString (show (PP.pretty t))</span></span>
-<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">VCryptolModule m -&gt; <span class="nottickedoff">showString (showCryptolModule m)</span></span>
+<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">VCryptolModule m -&gt; <span class="nottickedoff">showString (CEnv.showExtCryptolModule m)</span></span>
 <span class="lineno">  696 </span><span class="spaces">    </span><span class="istickedoff">VLLVMModule (Some m) -&gt; <span class="nottickedoff">showString (CMSLLVM.showLLVMModule m)</span></span>
 <span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff">VMIRModule m -&gt; shows (PP.pretty (m^.rmCS^.collection))</span>
 <span class="lineno">  698 </span><span class="spaces">    </span><span class="istickedoff">VMIRAdt adt -&gt; <span class="nottickedoff">shows (PP.pretty adt)</span></span>
@@ -1167,7 +1167,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1148 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
 <span class="lineno"> 1149 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
 <span class="lineno"> 1150 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
-<span class="lineno"> 1151 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindCryptolModule (modname, m) ce</span>
+<span class="lineno"> 1151 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindExtCryptolModule (modname, m) ce</span>
 <span class="lineno"> 1152 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
 <span class="lineno"> 1153 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- typedTermOfString sc (Text.unpack s)</span>
 <span class="lineno"> 1154 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>

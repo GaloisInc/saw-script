@@ -1598,12 +1598,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1579 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VMIRType t) = t</span>
 <span class="lineno"> 1580 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue MIRType&quot;</span></span></span>
 <span class="lineno"> 1581 </span>
-<span class="lineno"> 1582 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue CryptolModule</span></span></span></span> where
+<span class="lineno"> 1582 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue CEnv.ExtCryptolModule</span></span></span></span> where
 <span class="lineno"> 1583 </span>    <span class="decl"><span class="istickedoff">toValue _name m = VCryptolModule m</span></span>
 <span class="lineno"> 1584 </span>
-<span class="lineno"> 1585 </span>instance FromValue CryptolModule where
-<span class="lineno"> 1586 </span>    <span class="decl"><span class="nottickedoff">fromValue _ (VCryptolModule m) = m</span>
-<span class="lineno"> 1587 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ _ = error &quot;fromValue CryptolModule&quot;</span></span>
+<span class="lineno"> 1585 </span>instance FromValue CEnv.ExtCryptolModule where
+<span class="lineno"> 1586 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VCryptolModule m) = m</span>
+<span class="lineno"> 1587 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue CryptolModule&quot;</span></span></span>
 <span class="lineno"> 1588 </span>
 <span class="lineno"> 1589 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue JSS.Class</span></span></span></span> where
 <span class="lineno"> 1590 </span>    <span class="decl"><span class="istickedoff">toValue _name c = VJavaClass c</span></span>
@@ -2085,12 +2085,12 @@ span.spaces    { background: white }
 <span class="lineno"> 2066 </span><span class="decl"><span class="istickedoff">print_value (VString s) = printOutLnTop Info (Text.unpack s)</span>
 <span class="lineno"> 2067 </span><span class="spaces"></span><span class="istickedoff">print_value (VTerm t) = do</span>
 <span class="lineno"> 2068 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 2069 </span><span class="spaces">  </span><span class="istickedoff">cenv &lt;- fmap <span class="nottickedoff">rwCryptol</span> getTopLevelRW</span>
-<span class="lineno"> 2070 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)</span></span>
+<span class="lineno"> 2069 </span><span class="spaces">  </span><span class="istickedoff">cenv &lt;- fmap rwCryptol getTopLevelRW</span>
+<span class="lineno"> 2070 </span><span class="spaces">  </span><span class="istickedoff">let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)</span>
 <span class="lineno"> 2071 </span><span class="spaces">  </span><span class="istickedoff">unless (null (getAllExts (ttTerm t))) $</span>
 <span class="lineno"> 2072 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;term contains symbolic variables&quot;</span></span>
 <span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">sawopts &lt;- getOptions</span>
-<span class="lineno"> 2074 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- io $ defaultTypedTerm <span class="nottickedoff">sawopts</span> <span class="nottickedoff">sc</span> <span class="nottickedoff">cfg</span> t</span>
+<span class="lineno"> 2074 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- io $ defaultTypedTerm sawopts sc cfg t</span>
 <span class="lineno"> 2075 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- fmap rwPPOpts getTopLevelRW</span>
 <span class="lineno"> 2076 </span><span class="spaces">  </span><span class="istickedoff">let opts' = V.defaultPPOpts { V.useAscii = PPS.ppUseAscii opts</span>
 <span class="lineno"> 2077 </span><span class="spaces">                              </span><span class="istickedoff">, V.useBase = PPS.ppBase opts</span>
@@ -2220,7 +2220,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2201 </span><span class="decl"><span class="nottickedoff">do_offline_w4_unint_yices unints path =</span>
 <span class="lineno"> 2202 </span><span class="spaces">  </span><span class="nottickedoff">offline_w4_unint_yices unints (Text.unpack path)</span></span>
 <span class="lineno"> 2203 </span>
-<span class="lineno"> 2204 </span>do_cryptol_load :: (FilePath -&gt; IO BS.ByteString) -&gt; Text -&gt; TopLevel CryptolModule
+<span class="lineno"> 2204 </span>do_cryptol_load :: (FilePath -&gt; IO BS.ByteString) -&gt; Text -&gt; TopLevel CEnv.ExtCryptolModule
 <span class="lineno"> 2205 </span><span class="decl"><span class="istickedoff">do_cryptol_load loader path =</span>
 <span class="lineno"> 2206 </span><span class="spaces">  </span><span class="istickedoff">cryptol_load loader (Text.unpack path)</span></span>
 <span class="lineno"> 2207 </span>
@@ -4154,15 +4154,15 @@ span.spaces    { background: white }
 <span class="lineno"> 4135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load the given file as a Cryptol module.&quot; ]</span></span>
 <span class="lineno"> 4136 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4137 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;cryptol_extract&quot;     &quot;CryptolModule -&gt; String -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 4138 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal CEnv.extractDefFromCryptolModule)</span></span>
-<span class="lineno"> 4139 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 4138 </span><span class="spaces">    </span><span class="istickedoff">(pureVal CEnv.extractDefFromExtCryptolModule)</span>
+<span class="lineno"> 4139 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a single definition from a Cryptol module and translate it into&quot;</span></span>
 <span class="lineno"> 4141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a 'Term'.&quot;</span></span>
 <span class="lineno"> 4142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 4143 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4144 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;cryptol_prims&quot;       &quot;() -&gt; CryptolModule&quot;</span>
-<span class="lineno"> 4145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 (\() -&gt; cryptol_prims))</span></span>
-<span class="lineno"> 4146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 4145 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 (\() -&gt; cryptol_prims))</span>
+<span class="lineno"> 4146 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a Cryptol module containing extra primitive operations,&quot;</span></span>
 <span class="lineno"> 4148 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;including array updates, truncate/extend, and signed comparisons.&quot;</span></span>
 <span class="lineno"> 4149 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
