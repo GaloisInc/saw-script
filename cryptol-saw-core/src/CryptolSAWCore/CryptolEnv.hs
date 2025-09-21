@@ -9,14 +9,20 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module CryptolSAWCore.CryptolEnv
   ( ImportVisibility(..)
   , CryptolEnv(..)
+
+  , ExtCryptolModule(..)
+  , showExtCryptolModule
   , initCryptolEnv
   , loadCryptolModule
-  , bindCryptolModule
-  , extractDefFromCryptolModule
+  , loadExtCryptolModule
+  , bindExtCryptolModule
+
+  , extractDefFromExtCryptolModule
   , combineCryptolEnv
   , importCryptolModule
   , bindTypedTerm
@@ -113,18 +119,6 @@ data InputText = InputText
   , inpLine :: Int    -- ^ On this line number
   , inpCol  :: Int    -- ^ On this column number
   }
-
-
--- | ExtCryptolModule - Extended CryptolModule; we keep track of
---   whether this module came directly from a constructed
---   `CryptolModule` or whether it came from parsing a Cryptol module
---   in filesystem (in which case it is loaded).
-data ExtCryptolModule =
-    ECM_LoadedModule (P.Located C.ModName)  -- source is load
-  | ECM_CryptolModule CryptolModule         -- source in cryptol_prims
-  -- deriving (Show)
-    -- FIXME: TODO: more instances
-
 
 -- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
 -- result in all symbols being visible (as they are for focused
@@ -446,7 +440,23 @@ combineCryptolEnv chkEnv newEnv =
      return chkEnv{ eModuleEnv = menv' }
 
 
----- CryptolModule/ExtCryptolModule functions: ---------------------------------
+---- CryptolModule/ExtCryptolModule types and functions: -----------------------
+
+
+-- | ExtCryptolModule - Extended CryptolModule; we keep track of
+--   whether this module came directly from a constructed
+--   `CryptolModule` or whether it came from parsing a Cryptol module
+--   from filesystem (in which case it is loaded).
+data ExtCryptolModule =
+    ECM_LoadedModule (P.Located C.ModName)  -- ^ source is parsed/loaded
+  | ECM_CryptolModule CryptolModule         -- ^ source, constructed
+                                            -- (e.g., via cryptol_prims)
+
+showExtCryptolModule :: ExtCryptolModule -> String
+showExtCryptolModule =
+  \case
+    ECM_LoadedModule name -> "loaded module '" ++ show(pp name) ++ "'"
+    ECM_CryptolModule cm  -> showCryptolModule cm
 
 -- | loadCryptolModule - load a cryptol module and returns the
 -- `ExtCryptolModule`.  The contents of the module are not directly
@@ -589,16 +599,22 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
 -- | NOTE: this is only used in the "cryptol_extract" primitive.
-extractDefFromCryptolModule :: CryptolModule -> Text -> IO TypedTerm
-extractDefFromCryptolModule (CryptolModule _ tm) name =
-  case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-    Just t  -> return t
-    Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
-               -- FIXME: unfortunate we have lost the name of the module.
+extractDefFromExtCryptolModule :: ExtCryptolModule -> Text -> IO TypedTerm
+extractDefFromExtCryptolModule ecm name =
+  case ecm of
+    ECM_LoadedModule _modname ->
+      -- do env' <- bindLoadedModule ...
+      panic "extractDefFromExtCryptolModule"
+              ["FIXME: not implemented yet: need plumbing!"]
+    ECM_CryptolModule (CryptolModule _ tm) ->
+      case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
+        Just t  -> return t
+        Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
-    -- FIXME: bug: we can't access definitions in submodules.
-    -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
-
+        -- FIXME: bug: we can't access definitions in submodules.
+        -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
+        -- FIXME: if one had a CryptolModule with qualified names (e.g., it
+        --     was generated from a module with submodules), would this work?
 
 ---- Core functions for loading and Translating Modules ------------------------
 
