@@ -2045,8 +2045,11 @@ get_env name = do
     Nothing -> fail $ "Environment variable not found: " ++ Text.unpack name
     Just v -> return $ Text.pack v
 
-cryptol_prims :: TopLevel CryptolModule
-cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
+cryptol_prims :: TopLevel CEnv.ExtCryptolModule
+cryptol_prims =
+    CEnv.ECM_CryptolModule
+    <$> CryptolModule Map.empty
+    <$> Map.fromList <$> traverse parsePrim prims
   where
     prims :: [(Text, Ident, Text)]
     prims =
@@ -2081,13 +2084,13 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm (TypedTermSchema s') t')
 
-cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
+cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CEnv.ExtCryptolModule
 cryptol_load fileReader path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
   let ce = rwCryptol rw
   let ?fileReader = fileReader
-  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
+  (m, ce') <- io $ CEnv.loadExtCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
