@@ -136,9 +136,12 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { buildImport False $1 $2 $3 }
- | 'submodule' string mbAs mbImportSpec { buildImport True $2 $3 $4 }
- -- TODO: allow imports by module name instead of path
+ : MName mbAs mbImportSpec              { buildImport False $1 $2 $3 }
+ | 'submodule' MName mbAs mbImportSpec  { buildImport True $2 $3 $4 }
+
+MName :: { (Either FilePath P.ModName, Pos) }
+: string                                { (Left $ unpack $ tokStr $1, tokPos $1) }
+| QName                                 { (Right $ P.packModName $ fst $1, snd $1) }
 
 mbAs :: { (Maybe P.ModName, Pos) }
 : 'as' QName                            { (Just (P.packModName (fst $2)), maxSpan' $1 (snd $2)) }
@@ -365,17 +368,17 @@ parseError toks = case toks of
 -- | Cons up an import.
 buildImport ::
     Bool ->
-    Token Pos ->
+    (Either FilePath P.ModName, Pos) ->
     (Maybe P.ModName, Pos) ->
     (Maybe P.ImportSpec, Pos) ->
     Import
-buildImport issub modName (mbAsName, asPos) (mbSpec, specPos) =
+buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =
   Import {
     iIsSubmodule = issub,
-    iModule = Left (unpack $ tokStr modName),
+    iModule = modName,
     iAs = mbAsName,
     iSpec = mbSpec,
-    iPos = maxSpan [tokPos modName, asPos, specPos]
+    iPos = maxSpan [namePos, asPos, specPos]
   }
 
 -- | As seen by the parser, a "function name" is an arbitrary pattern.
