@@ -98,7 +98,7 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span>import SAWCore.Recognizer
 <span class="lineno">   80 </span>import SAWCore.Prelude (scEq)
 <span class="lineno">   81 </span>import SAWCore.SharedTerm
-<span class="lineno">   82 </span>import SAWCore.Typechecker (tcInsertModule)
+<span class="lineno">   82 </span>import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
 <span class="lineno">   83 </span>import SAWCore.Term.Functor
 <span class="lineno">   84 </span>import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 <span class="lineno">   85 </span>import CryptolSAWCore.TypedTerm
@@ -1143,7 +1143,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1124 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1125 </span>
 <span class="lineno"> 1126 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1128 </span>
 <span class="lineno"> 1129 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1130 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1160,10 +1160,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1142 </span>
 <span class="lineno"> 1143 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1145 </span>
 <span class="lineno"> 1146 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1148 </span>
 <span class="lineno"> 1149 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1150 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1253,7 +1253,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1234 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1235 </span>
 <span class="lineno"> 1236 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1238 </span>
 <span class="lineno"> 1239 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1240 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -2029,10 +2029,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2010 </span><span class="spaces">     </span><span class="istickedoff">let mnm =</span>
 <span class="lineno"> 2011 </span><span class="spaces">           </span><span class="istickedoff">mkModuleName $ Text.splitOn &quot;.&quot; mnm_str</span>
 <span class="lineno"> 2012 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
-<span class="lineno"> 2013 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []</span>
+<span class="lineno"> 2013 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) [] uterm</span>
 <span class="lineno"> 2014 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
 <span class="lineno"> 2015 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (show err)</span></span>
-<span class="lineno"> 2016 </span><span class="spaces">       </span><span class="istickedoff">Right (SCTypedTerm x _) -&gt; return x</span></span>
+<span class="lineno"> 2016 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>
 <span class="lineno"> 2017 </span>
 <span class="lineno"> 2018 </span>parseCore :: Text -&gt; TopLevel Term
 <span class="lineno"> 2019 </span><span class="decl"><span class="istickedoff">parseCore input = parseCoreMod &quot;Cryptol&quot; input</span></span>

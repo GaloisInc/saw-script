@@ -188,8 +188,8 @@ span.spaces    { background: white }
 <span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpTrue   = RME.true</span>
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = RME.false</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 RME.compl</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = <span class="nottickedoff">pure2 RME.conj</span></span>
-<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 RME.disj</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 RME.conj</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 RME.disj</span>
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 RME.xor</span></span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 RME.iff</span></span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
@@ -199,7 +199,7 @@ span.spaces    { background: white }
 <span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = pure2 (V.zipWith RME.xor)</span>
 <span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">pure1 RMEV.neg</span></span>
-<span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = <span class="nottickedoff">pure2 RMEV.add</span></span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = pure2 RMEV.add</span>
 <span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">pure2 RMEV.sub</span></span>
 <span class="lineno">  185 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = <span class="nottickedoff">pure2 RMEV.mul</span></span>
 <span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = pure2 RMEV.udiv</span>
@@ -219,7 +219,7 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">pure2 (flip RMEV.ult)</span></span>
 <span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector shift/rotate</span>
 <span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = <span class="nottickedoff">pure2 Prims.vRotateL</span></span>
-<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">pure2 Prims.vRotateR</span></span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = pure2 Prims.vRotateR</span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = pure3 Prims.vShiftL</span>
 <span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">pure3 Prims.vShiftR</span></span>
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = <span class="nottickedoff">pure2 (genShift muxRMEV Prims.vRotateL)</span></span>

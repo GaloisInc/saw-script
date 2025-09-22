@@ -160,7 +160,7 @@ span.spaces    { background: white }
 <span class="lineno">  141 </span>
 <span class="lineno">  142 </span>-- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
 <span class="lineno">  143 </span>validateTerm :: MonadIO m =&gt; SC.SharedContext -&gt; Text -&gt; SC.Term -&gt; m SC.Term
-<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc <span class="nottickedoff">Nothing</span> t) &gt;&gt;= \case</span>
+<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc t) &gt;&gt;= \case</span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">Right _ -&gt; pure t</span>
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">Left err -&gt;</span>
 <span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">throw</span></span>
@@ -174,7 +174,7 @@ span.spaces    { background: white }
 <span class="lineno">  155 </span>                      SC.Term -&gt; SC.Term -&gt; m ()
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">validateTermAtType sc msg trm tp =</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm &gt;&gt;= \tp_trm -&gt;</span>
-<span class="lineno">  158 </span><span class="spaces">                         </span><span class="nottickedoff">SC.TC.checkSubtype tp_trm tp) sc Nothing []) &gt;&gt;= \case</span>
+<span class="lineno">  158 </span><span class="spaces">                         </span><span class="nottickedoff">SC.TC.checkSubtype tp_trm tp) sc []) &gt;&gt;= \case</span>
 <span class="lineno">  159 </span><span class="spaces">  </span><span class="nottickedoff">Right _ -&gt; return ()</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="nottickedoff">Left err -&gt;</span>
 <span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">throw</span>
