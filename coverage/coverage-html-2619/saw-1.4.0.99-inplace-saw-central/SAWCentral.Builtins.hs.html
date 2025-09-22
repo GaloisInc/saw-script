@@ -98,7 +98,7 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span>import SAWCore.Recognizer
 <span class="lineno">   80 </span>import SAWCore.Prelude (scEq)
 <span class="lineno">   81 </span>import SAWCore.SharedTerm
-<span class="lineno">   82 </span>import SAWCore.Typechecker (tcInsertModule)
+<span class="lineno">   82 </span>import SAWCore.Typechecker (tcInsertModule, inferCompleteTermCtx)
 <span class="lineno">   83 </span>import SAWCore.Term.Functor
 <span class="lineno">   84 </span>import SAWCore.Term.Pretty (ppTerm, scPrettyTerm)
 <span class="lineno">   85 </span>import CryptolSAWCore.TypedTerm
@@ -2029,10 +2029,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2010 </span><span class="spaces">     </span><span class="istickedoff">let mnm =</span>
 <span class="lineno"> 2011 </span><span class="spaces">           </span><span class="istickedoff">mkModuleName $ Text.splitOn &quot;.&quot; mnm_str</span>
 <span class="lineno"> 2012 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
-<span class="lineno"> 2013 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []</span>
+<span class="lineno"> 2013 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) [] uterm</span>
 <span class="lineno"> 2014 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
 <span class="lineno"> 2015 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (show err)</span></span>
-<span class="lineno"> 2016 </span><span class="spaces">       </span><span class="istickedoff">Right (SCTypedTerm x _) -&gt; return x</span></span>
+<span class="lineno"> 2016 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>
 <span class="lineno"> 2017 </span>
 <span class="lineno"> 2018 </span>parseCore :: Text -&gt; TopLevel Term
 <span class="lineno"> 2019 </span><span class="decl"><span class="istickedoff">parseCore input = parseCoreMod &quot;Cryptol&quot; input</span></span>
