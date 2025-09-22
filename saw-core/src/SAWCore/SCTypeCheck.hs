@@ -68,7 +68,6 @@ import Prelude hiding (mapM, maximum)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
-import SAWCore.Conversion (natConversions)
 import SAWCore.Module
   ( ctorName
   , dtName
@@ -81,7 +80,7 @@ import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Parser.Position
 import SAWCore.Recognizer
-import SAWCore.Rewriter
+import SAWCore.SCTypedTerm
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (scPrettyTermInCtx)
@@ -346,26 +345,6 @@ scCheckSubtype sc arg req_tp =
   either (fail . unlines . prettyTCError) return =<<
   runTCM (checkSubtype arg req_tp) sc IntMap.empty
 
--- | An abstract datatype pairing a 'Term' with its type.
-data SCTypedTerm =
-  SCTypedTerm
-  Term -- ^ value
-  Term -- ^ type
-  (IntMap Term) -- ^ typing context
-
--- | The raw 'Term' of an 'SCTypedTerm'.
-typedVal :: SCTypedTerm -> Term
-typedVal (SCTypedTerm trm _ _) = trm
-
--- | The type of an 'SCTypedTerm' as a 'Term'.
-typedType :: SCTypedTerm -> Term
-typedType (SCTypedTerm _ typ _) = typ
-
--- | The de Bruijn typing context of an 'SCTypedTerm', with de Bruijn
--- index 0 at the head of the list.
-typedCtx :: SCTypedTerm -> IntMap Term
-typedCtx (SCTypedTerm _ _ ctx) = ctx
-
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.
 class TypeInfer a where
@@ -395,7 +374,7 @@ instance TypeInfer Term where
               modify (Map.insert i x')
               return x'
   typeInferComplete trm =
-    SCTypedTerm trm <$> typeInfer trm <*> askCtx
+    unsafeSCTypedTerm trm <$> typeInfer trm <*> askCtx
 
 -- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
 -- calling inference on all the sub-components and extending the context inside
@@ -426,7 +405,7 @@ instance TypeInfer (TermF Term) where
   typeInfer (Constant nm) = typeInferConstant nm
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
-    SCTypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf) <*> askCtx
+    unsafeSCTypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf) <*> askCtx
 
 typeInferConstant :: Name -> TCM Term
 typeInferConstant nm =
@@ -441,7 +420,7 @@ typeInferConstant nm =
 instance TypeInfer (FlatTermF Term) where
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
-    SCTypedTerm
+    unsafeSCTypedTerm
     <$> liftTCM scFlatTermF ftf
     <*> typeInfer ftf
     <*> askCtx
@@ -469,7 +448,7 @@ instance TypeInfer (TermF SCTypedTerm) where
     typeCheckWHNF $ typedVal tp
 
   typeInferComplete tf =
-    SCTypedTerm
+    unsafeSCTypedTerm
     <$> liftTCM scTermF (fmap typedVal tf)
     <*> withErrorSCTypedTermF tf (typeInfer tf)
     <*> askCtx
@@ -518,7 +497,7 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (StringLit{}) = liftTCM scStringType
 
   typeInferComplete ftf =
-    SCTypedTerm
+    unsafeSCTypedTerm
     <$> liftTCM scFlatTermF (fmap typedVal ftf)
     <*> withErrorSCTypedTermF (FTermF ftf) (typeInfer ftf)
     <*> askCtx
@@ -566,12 +545,6 @@ ensurePiType err tp = ensureRecognizer asPi err tp
 -- operations on Nat literals that are useful in type-checking
 typeCheckWHNF :: Term -> TCM Term
 typeCheckWHNF = liftTCM scTypeCheckWHNF
-
--- | The 'IO' version of 'typeCheckWHNF'
-scTypeCheckWHNF :: SharedContext -> Term -> IO Term
-scTypeCheckWHNF sc t =
-  do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
-     scWhnf sc t'
 
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s, and that they are both
@@ -634,21 +607,3 @@ inferRecursor r =
      case lookupVarIndexInMap (nameIndex d) mm of
        Just (ResolvedDataType dt) -> liftTCM scRecursorType dt s
        _ -> throwTCError $ NoSuchDataType (nameInfo d)
-
--- | Compute the type of an 'SCTypedTerm'.
-scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypeOfTypedTerm sc (SCTypedTerm _tm tp ctx) =
-  do tp_tp <- scTypeOf' sc ctx tp
-     pure (SCTypedTerm tp tp_tp ctx)
-
--- | Reduce an 'SCTypedTerm' to WHNF (see also 'scTypeCheckWHNF').
-scTypedTermWHNF :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
-scTypedTermWHNF sc (SCTypedTerm tm tp ctx) =
-  do tm' <- scTypeCheckWHNF sc tm
-     pure (SCTypedTerm tm' tp ctx)
-
-scGlobalTypedTerm :: SharedContext -> Ident -> IO SCTypedTerm
-scGlobalTypedTerm sc ident =
-  do tm <- scGlobalDef sc ident
-     tp <- scTypeOfIdent sc ident
-     pure (SCTypedTerm tm tp IntMap.empty)
