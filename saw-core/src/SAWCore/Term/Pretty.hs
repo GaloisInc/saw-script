@@ -36,6 +36,7 @@ import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), State, evalState, execState, get, modify)
 import qualified Data.Foldable as Fold
 import Data.Hashable (hash)
+import qualified Data.IntSet as IntSet
 import qualified Data.Text as Text
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -111,15 +112,6 @@ data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
 emptyVarNaming :: Set LocalName -> VarNaming
 emptyVarNaming reserved = VarNaming [] IntMap.empty reserved
 
--- | Look up a string to use for a 'DeBruijnIndex', if the first
--- argument is 'True', or just print the variable number if the first
--- argument is 'False'.
-lookupDeBruijn :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
-lookupDeBruijn True (VarNaming names _ _) i
-  | i >= length names = Text.pack ('!' : show (i - length names))
-lookupDeBruijn True (VarNaming names _ _) i = names!!i
-lookupDeBruijn False _ i = Text.pack ('!' : show i)
-
 -- | Look up a string to use for a 'VarName'.
 lookupVarName :: VarNaming -> VarName -> LocalName
 lookupVarName (VarNaming _ renames _) vn =
@@ -145,14 +137,6 @@ nextName = Text.pack . reverse . go . reverse . Text.unpack
       | c == '9'  = '0' : go cs
       | isDigit c = succ c : cs
     go cs = '1' : cs
-
--- | Add a new variable with the given base name to the local variable list,
--- returning both the fresh name actually used and the new variable list. As a
--- special case, if the base name is "_", it is not modified.
-consVarNaming :: VarNaming -> LocalName -> (LocalName, VarNaming)
-consVarNaming (VarNaming names renames used) name =
-  let nm = freshName used name
-  in (nm, VarNaming (nm : names) renames (Set.insert nm used))
 
 -- | Add a new variable with the given 'VarName' to the 'VarNaming',
 -- returning both the chosen fresh name and the new 'VarNaming'.
@@ -183,11 +167,11 @@ termVarNames t0 = evalState (go t0) IntMap.empty
       case tf of
         FTermF ftf -> Fold.fold ftf
         App e1 e2 -> Set.union e1 e2
-        Lambda _ e1 e2 -> Set.union e1 e2
-        Pi _ e1 e2 -> Set.union e1 e2
+        Lambda x e1 e2 -> Set.union e1 (Set.delete x e2)
+        Pi x e1 e2 -> Set.union e1 (Set.delete x e2)
         LocalVar _ -> Set.empty
         Constant _ -> Set.empty
-        Variable ec -> Set.insert (ecName ec) (ecType ec)
+        Variable vn e1 -> Set.insert vn e1
 
 --------------------------------------------------------------------------------
 -- * Pretty-printing monad
@@ -257,12 +241,6 @@ instance MonadReader PPState PPM where
   ask = PPM ask
   local f (PPM m) = PPM $ local f m
 
--- | Look up the given local variable by deBruijn index to get its name
-varLookupM :: DeBruijnIndex -> PPM LocalName
-varLookupM idx =
-  lookupDeBruijn <$> (PPS.ppShowLocalNames <$> ppOpts <$> ask)
-  <*> (ppNaming <$> ask) <*> return idx
-
 -- | Test if a given term index is memoized, returning its memoization variable
 -- if so and otherwise returning 'Nothing'
 memoLookupM :: TermIndex -> PPM (Maybe MemoVar)
@@ -288,10 +266,10 @@ atNextDepthM dflt m =
 -- also erasing the local memoization table (which is no longer valid in an
 -- extended variable context) during that computation. Return the result of the
 -- computation and also the name that was actually used for the bound variable.
-withBoundVarM :: LocalName -> PPM a -> PPM (LocalName, a)
+withBoundVarM :: VarName -> PPM a -> PPM (LocalName, a)
 withBoundVarM basename m =
   do st <- ask
-     let (var, naming) = consVarNaming (ppNaming st) basename
+     let (var, naming) = insertVarNaming (ppNaming st) basename
      ret <- local (\_ -> st { ppNaming = naming,
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
@@ -494,10 +472,6 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
--- | Pretty-print an 'ExtCns' according to the current 'VarNaming'.
-ppExtCns :: ExtCns e -> PPM PPS.Doc
-ppExtCns ec = ppVarName (ecName ec)
-
 -- | Pretty-print a 'VarName' according to the current 'VarNaming'.
 ppVarName :: VarName -> PPM PPS.Doc
 ppVarName vn =
@@ -529,10 +503,9 @@ ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
-ppTermF _ (LocalVar x) = annotate PPS.LocalVarStyle <$> pretty <$> varLookupM x
+ppTermF _ (LocalVar x) = pure $ annotate PPS.LocalVarStyle $ pretty ("!" ++ show x)
 ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
-ppTermF _ (Variable ec) = annotate PPS.ExtCnsStyle <$> ppExtCns ec
-
+ppTermF _ (Variable vn _tp) = annotate PPS.ExtCnsStyle <$> ppVarName vn
 
 -- | Internal function to recursively pretty-print a term
 ppTerm' :: Prec -> Term -> PPM PPS.Doc
@@ -662,11 +635,11 @@ ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
 --
 -- Also, pretty-print let-bindings around the term for all subterms that occur
 -- more than once at the same binding level.
-ppTermInBinder :: Prec -> LocalName -> Term -> PPM (LocalName, PPS.Doc)
-ppTermInBinder prec basename trm =
-  let nm = if basename == "_" && inBitSet 0 (looseVars trm) then "_x"
+ppTermInBinder :: Prec -> VarName -> Term -> PPM (LocalName, PPS.Doc)
+ppTermInBinder prec (VarName i basename) trm =
+  let nm = if basename == "_" && IntSet.member i (freeVars trm) then "_x"
            else basename in
-  withBoundVarM nm $ ppTermWithMemoTable prec False trm
+  withBoundVarM (VarName i nm) $ ppTermWithMemoTable prec False trm
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
@@ -675,7 +648,7 @@ ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context
-ppTermInCtx :: PPS.Opts -> [LocalName] -> Term -> PPS.Doc
+ppTermInCtx :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
   withVarNames (Set.toList (termVarNames trm)) $
@@ -689,7 +662,7 @@ scPrettyTerm opts t =
 
 -- | Like 'scPrettyTerm', but also supply a context of bound names, where the
 -- most recently-bound variable is listed first in the context
-scPrettyTermInCtx :: PPS.Opts -> [LocalName] -> Term -> String
+scPrettyTermInCtx :: PPS.Opts -> [VarName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
   runPPM opts emptyDisplayNameEnv $
