@@ -986,7 +986,7 @@ span.spaces    { background: white }
 <span class="lineno">  967 </span>
 <span class="lineno">  968 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  969 </span>proveRME :: ProofScript ()
-<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
+<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
 <span class="lineno">  971 </span>
 <span class="lineno">  972 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  973 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1143,7 +1143,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1124 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1125 </span>
 <span class="lineno"> 1126 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
+<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1128 </span>
 <span class="lineno"> 1129 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1130 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1160,10 +1160,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1142 </span>
 <span class="lineno"> 1143 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1145 </span>
 <span class="lineno"> 1146 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
+<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
 <span class="lineno"> 1148 </span>
 <span class="lineno"> 1149 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1150 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1253,7 +1253,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1234 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1235 </span>
 <span class="lineno"> 1236 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1238 </span>
 <span class="lineno"> 1239 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1240 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
