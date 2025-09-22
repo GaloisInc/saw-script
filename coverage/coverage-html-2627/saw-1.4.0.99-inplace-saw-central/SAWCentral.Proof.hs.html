@@ -1566,11 +1566,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1547 </span><span class="spaces">    </span><span class="istickedoff">-- Check a theorem applied to a term. This explicitly instantiates</span>
 <span class="lineno"> 1548 </span><span class="spaces">    </span><span class="istickedoff">-- a Pi binder with the given term.</span>
 <span class="lineno"> 1549 </span><span class="spaces">    </span><span class="istickedoff">checkApply nenv mkSqt (Prop p) (Left tm:es) =</span>
-<span class="lineno"> 1550 </span><span class="spaces">      </span><span class="istickedoff">do propTerm &lt;- scSort sc propSort</span>
-<span class="lineno"> 1551 </span><span class="spaces">         </span><span class="istickedoff">let m = do tm' &lt;- TC.typeInferComplete tm</span>
-<span class="lineno"> 1552 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp (error &quot;TC.SCTypedTerm&quot; p propTerm) tm'</span> -- FIXME</span>
+<span class="lineno"> 1550 </span><span class="spaces">      </span><span class="istickedoff">do let m = do tm' &lt;- TC.typeInferComplete tm</span>
+<span class="lineno"> 1551 </span><span class="spaces">                    </span><span class="istickedoff">p_typed &lt;- TC.typeInferComplete p</span>
+<span class="lineno"> 1552 </span><span class="spaces">                    </span><span class="istickedoff">let <span class="nottickedoff">err = TC.NotFuncTypeInApp p_typed tm'</span></span>
 <span class="lineno"> 1553 </span><span class="spaces">                    </span><span class="istickedoff">TC.applyPiTyped <span class="nottickedoff">err</span> p tm'</span>
-<span class="lineno"> 1554 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc <span class="nottickedoff">[]</span></span>
+<span class="lineno"> 1554 </span><span class="spaces">         </span><span class="istickedoff">res &lt;- TC.runTCM m sc []</span>
 <span class="lineno"> 1555 </span><span class="spaces">         </span><span class="istickedoff">case res of</span>
 <span class="lineno"> 1556 </span><span class="spaces">           </span><span class="istickedoff">Left msg -&gt; <span class="nottickedoff">fail (unlines (TC.prettyTCError msg))</span></span>
 <span class="lineno"> 1557 </span><span class="spaces">           </span><span class="istickedoff">Right p' -&gt; checkApply <span class="nottickedoff">nenv</span> mkSqt (Prop p') es</span>
