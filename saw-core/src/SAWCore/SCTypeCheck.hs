@@ -58,6 +58,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -294,7 +295,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
+    (\(_ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts [] tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError
@@ -415,7 +416,7 @@ instance TypeInfer (TermF Term) where
        -- WHNF, so we don't have to normalize each time we look up a var type,
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_tptrm with the type of a_whnf but the value of a
-       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
+       rhs_tptrm <- {- withVar x (typedVal a_whnf) $ -} typeInferComplete rhs
        let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
        typeInfer (Lambda x a_tptrm rhs_tptrm)
   typeInfer (Pi x a rhs) =
@@ -424,7 +425,7 @@ instance TypeInfer (TermF Term) where
        -- WHNF, so we don't have to normalize each time we look up a var type,
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_typed with the type of a_whnf but the value of a
-       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
+       rhs_tptrm <- {- withVar x (typedVal a_whnf) $ -} typeInferComplete rhs
        let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
   typeInfer (Constant nm) = typeInferConstant nm
@@ -459,7 +460,7 @@ instance TypeInfer (TermF SCTypedTerm) where
   typeInfer (App x@(SCTypedTerm _ x_tp _) y) =
     applyPiTyped (NotFuncTypeInApp x y) x_tp y
   typeInfer (Lambda x (SCTypedTerm a a_tp _) (SCTypedTerm _ b _)) =
-    void (ensureSort a_tp) >> liftTCM scTermF (Pi x a b)
+    void (ensureSort a_tp) >> liftTCM scPi x a b
   typeInfer (Pi _ (SCTypedTerm _ a_tp _) (SCTypedTerm _ b_tp _)) =
     do s1 <- ensureSort a_tp
        s2 <- ensureSort b_tp
@@ -478,9 +479,9 @@ instance TypeInfer (TermF SCTypedTerm) where
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
   typeInfer (Constant nm) = typeInferConstant nm
-  typeInfer (Variable ec) =
+  typeInfer (Variable _nm tp) =
     -- FIXME: should we check that the type of ecType is a sort?
-    typeCheckWHNF $ typedVal $ ecType ec
+    typeCheckWHNF $ typedVal tp
 
   typeInferComplete tf =
     SCTypedTerm
@@ -543,9 +544,10 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
 -- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
 applyPiTyped :: TCError -> Term -> SCTypedTerm -> TCM Term
 applyPiTyped err fun_tp arg =
-  ensurePiType err fun_tp >>= \(_,arg_tp,ret_tp) ->
+  ensurePiType err fun_tp >>= \(nm, arg_tp, ret_tp) ->
   do checkSubtype arg arg_tp
-     liftTCM instantiateVar 0 (typedVal arg) ret_tp >>= typeCheckWHNF
+     let sub = IntMap.singleton (vnIndex nm) (typedVal arg)
+     liftTCM scInstantiateExt sub ret_tp >>= typeCheckWHNF
 
 -- | Ensure that a 'Term' matches a recognizer function, normalizing if
 -- necessary; otherwise throw the supplied 'TCError'
@@ -572,7 +574,7 @@ ensureRecordType err tp = ensureRecognizer asRecordType err tp
 
 -- | Ensure a 'Term' is a pi type, normalizing if necessary. Return the
 -- components of that pi type on success; otherwise throw the supplied error.
-ensurePiType :: TCError -> Term -> TCM (LocalName, Term, Term)
+ensurePiType :: TCError -> Term -> TCM (VarName, Term, Term)
 ensurePiType err tp = ensureRecognizer asPi err tp
 
 -- | Reduce a type to WHNF (using 'scWhnf'), also adding in some conversions for
@@ -598,8 +600,17 @@ checkSubtype arg req_tp =
 -- types, i.e., that both have type Sort s for some s, and that they are both
 -- already in WHNF
 isSubtype :: Term -> Term -> TCM Bool
-isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
-    (&&) <$> areConvertible a1 a2 <*> withVar x1 a1 (isSubtype b1 b2)
+isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi x2 a2 b2)
+  | x1 == x2 =
+    (&&) <$> areConvertible a1 a2 <*> {- withVar x1 a1 -} (isSubtype b1 b2)
+  | otherwise =
+    do conv1 <- areConvertible a1 a2
+       let ec1 = EC x1 a1
+       var1 <- liftTCM scVariable ec1
+       let sub = IntMap.singleton (vnIndex x2) var1
+       b2' <- liftTCM scInstantiateExt sub b2
+       conv2 <- {- withVar x1 a1 -} (isSubtype b1 b2')
+       pure (conv1 && conv2)
 isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
 isSubtype t1' t2' = areConvertible t1' t2'
 

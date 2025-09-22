@@ -66,6 +66,8 @@ module SAWCore.Term.Functor
 import Data.Bits
 import qualified Data.Foldable as Foldable (and, foldl')
 import Data.Hashable
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 import Data.Text (Text)
@@ -334,15 +336,15 @@ data TermF e
       -- ^ The atomic, or builtin, term constructs
     | App !e !e
       -- ^ Applications of functions
-    | Lambda !LocalName !e !e
+    | Lambda !VarName !e !e
       -- ^ Function abstractions
-    | Pi !LocalName !e !e
+    | Pi !VarName !e !e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
     | Constant !Name
       -- ^ A global constant identified by its name.
-    | Variable !(ExtCns e)
+    | Variable !VarName !e
       -- ^ A named variable with a type.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -445,36 +447,45 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
 -- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
 -- 'Unshared' expressions).
 alphaEquiv :: Term -> Term -> Bool
-alphaEquiv = term
+alphaEquiv = term IntMap.empty
   where
-    term :: Term -> Term -> Bool
-    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
-    term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{stAppIndex = i1, stAppTermF = tf1})
-         (STApp{stAppIndex = i2, stAppTermF = tf2}) =
-         i1 == i2 || termf tf1 tf2
+    term :: IntMap VarIndex -> Term -> Term -> Bool
+    term vm (Unshared tf1) (Unshared tf2) = termf vm tf1 tf2
+    term vm (Unshared tf1) (STApp{stAppTermF = tf2}) = termf vm tf1 tf2
+    term vm (STApp{stAppTermF = tf1}) (Unshared tf2) = termf vm tf1 tf2
+    term vm
+      (STApp{stAppIndex = i1, stAppTermF = tf1, stAppFreeVars = vs1})
+      (STApp{stAppIndex = i2, stAppTermF = tf2}) =
+      (IntSet.disjoint vs1 (IntMap.keysSet vm) && i1 == i2) || termf vm tf1 tf2
 
-    termf :: TermF Term -> TermF Term -> Bool
-    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
-    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
-    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
-    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
-    termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1) (Constant x2) = x1 == x2
-    termf (Variable x1) (Variable x2) = x1 == x2
-    termf FTermF{}   _ = False
-    termf App{}      _ = False
-    termf Lambda{}   _ = False
-    termf Pi{}       _ = False
-    termf LocalVar{} _ = False
-    termf Constant{} _ = False
-    termf Variable{} _ = False
+    termf :: IntMap VarIndex -> TermF Term -> TermF Term -> Bool
+    termf vm (FTermF ftf1) (FTermF ftf2) = ftermf vm ftf1 ftf2
+    termf vm (App t1 u1) (App t2 u2) = term vm t1 t2 && term vm u1 u2
+    termf vm (Lambda (vnIndex -> i1) t1 u1) (Lambda (vnIndex -> i2) t2 u2) =
+      let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+      in term vm t1 t2 && term vm' u1 u2
+    termf vm (Pi (vnIndex -> i1) t1 u1) (Pi (vnIndex -> i2) t2 u2) =
+      let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
+      in term vm t1 t2 && term vm' u1 u2
+    termf _vm (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf _vm (Constant x1) (Constant x2) = x1 == x2
+    termf vm (Variable x1 _t1) (Variable x2 _t2) =
+      case IntMap.lookup (vnIndex x1) vm of
+        Just i -> vnIndex x2 == i
+        Nothing -> x1 == x2
+    termf _ FTermF{}   _ = False
+    termf _ App{}      _ = False
+    termf _ Lambda{}   _ = False
+    termf _ Pi{}       _ = False
+    termf _ LocalVar{} _ = False
+    termf _ Constant{} _ = False
+    termf _ Variable{} _ = False
 
-    ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
-    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
-                         Nothing -> False
-                         Just ftf3 -> Foldable.and ftf3
+    ftermf :: IntMap Int -> FlatTermF Term -> FlatTermF Term -> Bool
+    ftermf vm ftf1 ftf2 =
+      case zipWithFlatTermF (term vm) ftf1 ftf2 of
+        Nothing -> False
+        Just ftf3 -> Foldable.and ftf3
 
 instance Ord Term where
   compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ
@@ -574,11 +585,11 @@ looseTermF tf =
     case tf of
       FTermF ftf -> Foldable.foldl' unionBitSets emptyBitSet ftf
       App l r -> unionBitSets l r
-      Lambda _name tp rhs -> unionBitSets tp (decrBitSet rhs)
-      Pi _name lhs rhs -> unionBitSets lhs (decrBitSet rhs)
+      Lambda _name tp rhs -> unionBitSets tp rhs
+      Pi _name lhs rhs -> unionBitSets lhs rhs
       LocalVar i -> singletonBitSet i
       Constant {} -> emptyBitSet -- assume type is a closed term
-      Variable ec -> ecType ec
+      Variable _name tp -> tp
 
 -- | Return a bitset containing indices of all loose de Bruijn indices.
 looseVars :: Term -> BitSet
@@ -603,11 +614,11 @@ freesTermF tf =
   case tf of
     FTermF ftf -> Foldable.foldl' IntSet.union IntSet.empty ftf
     App l r -> IntSet.union l r
-    Lambda _name tp rhs -> IntSet.union tp rhs
-    Pi _name lhs rhs -> IntSet.union lhs rhs
+    Lambda nm tp rhs -> IntSet.union tp (IntSet.delete (vnIndex nm) rhs)
+    Pi nm lhs rhs -> IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)
     LocalVar _ -> IntSet.empty
     Constant {} -> IntSet.empty
-    Variable ec -> IntSet.singleton (ecVarIndex ec)
+    Variable nm tp -> IntSet.insert (vnIndex nm) tp
 
 -- | Return an 'IntSet' containing the 'VarIndex' of all free
 -- variables in the 'Term'.

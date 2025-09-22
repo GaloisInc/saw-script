@@ -46,6 +46,8 @@ import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntMap as IMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable
@@ -114,10 +116,12 @@ data SimulatorConfig l =
 -- Evaluation of terms
 
 type Env l = [Thunk l]
+type Env' l = IntMap (Thunk l) -- indexed by VarIndex
 type EnvIn m l = Env (WithM m l)
+type EnvIn' m l = Env' (WithM m l)
 
 -- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue l = Env l -> MValue l
+type OpenValue l = Env l -> Env' l -> MValue l
 
 {-# SPECIALIZE
   evalTermF :: Show (Extra l) =>
@@ -141,22 +145,20 @@ evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
           -> (Term -> OpenValue l)      -- ^ Evaluator for subterms under binders
           -> (Term -> MValue l)         -- ^ Evaluator for subterms in the same bound variable context
           -> TermF Term -> OpenValue l
-evalTermF cfg lam recEval tf env =
+evalTermF cfg lam recEval tf env env' =
   case tf of
     App t1 t2               -> recEval t1 >>= \case
                                  VFun f ->
                                    do x <- recEvalDelay t2
                                       f x
                                  _ -> panic "evalTermF" ["Expected VFun"]
-    Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
-    Pi _nm t1 t2            -> do v <- evalType t1
+    Lambda nm _tp t         -> pure $ VFun (\x -> lam t env (IntMap.insert (vnIndex nm) x env'))
+    Pi nm t1 t2             -> do v <- evalType t1
                                   body <-
-                                    if inBitSet 0 (looseVars t2) then
-                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (x : env)))
+                                    if IntSet.member (vnIndex nm) (freeVars t2) then
+                                      pure (VDependentPi (\x -> toTValue <$> lam t2 env (IntMap.insert (vnIndex nm) x env')))
                                     else
-                                      do -- put dummy values in the environment; the term should never reference them
-                                         let val = ready VUnit
-                                         VNondependentPi . toTValue <$> lam t2 (val : env)
+                                      VNondependentPi . toTValue <$> lam t2 env env'
                                   return $ TValue $ VPiType v body
 
     LocalVar i              -> force (env !! i)
@@ -176,8 +178,10 @@ evalTermF cfg lam recEval tf env =
                                             Just t -> recEval t
                                             Nothing -> simPrimitive cfg nm
 
-    Variable ec             -> do ec' <- traverse evalType ec
-                                  simExtCns cfg tf ec'
+    Variable nm tp          -> do tp' <- evalType tp
+                                  case IntMap.lookup (vnIndex nm) env' of
+                                    Nothing -> simExtCns cfg tf (EC nm tp')
+                                    Just x -> force x
     FTermF ftf              ->
       case ftf of
         UnitValue           -> return VUnit
@@ -508,7 +512,7 @@ evalSharedTerm :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
                   SimulatorConfig l -> Term -> MValue l
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
-  evalOpen cfg memoClosed t []
+  evalOpen cfg memoClosed t [] IntMap.empty
 
 {-# SPECIALIZE mkMemoClosed ::
   Show (Extra l) =>
@@ -525,9 +529,9 @@ mkMemoClosed cfg t =
   where
     -- | Map of all closed subterms of t.
     subterms :: IntMap (TermF Term)
-    subterms = fmap fst $ IMap.filter ((== emptyBitSet) . snd) $ State.execState (go t) IMap.empty
+    subterms = fmap fst $ IMap.filter (IntSet.null . snd) $ State.execState (go t) IMap.empty
 
-    go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
+    go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     go (Unshared tf) = termf tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) =
       do memo <- State.get
@@ -538,7 +542,7 @@ mkMemoClosed cfg t =
                 State.modify (IMap.insert i (tf, b))
                 pure b
 
-    termf :: TermF Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
+    termf :: TermF Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     termf tf =
       do -- if tf is a defined constant, traverse the definition body and type
          case tf of
@@ -549,7 +553,7 @@ mkMemoClosed cfg t =
                   ResolvedDef (defBody -> Just body) -> void $ go body
                   _ -> pure ()
            _ -> pure ()
-         looseTermF <$> traverse go tf
+         freesTermF <$> traverse go tf
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
@@ -569,10 +573,10 @@ evalClosedTermF :: (VMonadLazy l, Show (Extra l)) =>
                    SimulatorConfig l
                 -> IntMap (Thunk l)
                 -> TermF Term -> MValue l
-evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
+evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf [] IntMap.empty
   where
     lam = evalOpen cfg memoClosed
-    recEval (Unshared tf') = evalTermF cfg lam recEval tf' []
+    recEval (Unshared tf') = evalTermF cfg lam recEval tf' [] IntMap.empty
     recEval (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -584,6 +588,7 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
   IntMap (ThunkIn Id l) ->
   Term ->
   EnvIn Id l ->
+  EnvIn' Id l ->
   Id (IntMap (ThunkIn Id l)) #-}
 {-# SPECIALIZE mkMemoLocal ::
   Show (Extra l) =>
@@ -591,24 +596,25 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
   IntMap (ThunkIn IO l) ->
   Term ->
   EnvIn IO l ->
+  EnvIn' IO l ->
   IO (IntMap (ThunkIn IO l)) #-}
 
 -- | Precomputing the memo table for open subterms in the current context.
 mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
                SimulatorConfig l -> IntMap (Thunk l) ->
-               Term -> Env l -> EvalM l (IntMap (Thunk l))
-mkMemoLocal cfg memoClosed t env = go mempty t
+               Term -> Env l -> Env' l -> EvalM l (IntMap (Thunk l))
+mkMemoLocal cfg memoClosed t env env' = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
     go memo (Unshared tf) = goTermF memo tf
     go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
-      | termIsClosed t' = pure memo
+      | closedTerm t' = pure memo
       | otherwise =
         case IMap.lookup i memo of
           Just _ -> pure memo
           Nothing ->
             do memo' <- goTermF memo tf
-               thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
+               thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env env')
                pure (IMap.insert i thunk memo')
     goTermF :: IntMap (Thunk l) -> TermF Term -> EvalM l (IntMap (Thunk l))
     goTermF memo tf =
@@ -620,7 +626,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
         Pi _ t1 _       -> go memo t1
         LocalVar _      -> pure memo
         Constant{}      -> pure memo
-        Variable ec     -> go memo (ecType ec)
+        Variable _nm tp -> go memo tp
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
@@ -641,15 +647,15 @@ evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =>
                    SimulatorConfig l
                 -> IntMap (Thunk l) -> IntMap (Thunk l)
                 -> TermF Term -> OpenValue l
-evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 env
+evalLocalTermF cfg memoClosed memoLocal tf0 env env' = evalTermF cfg lam recEval tf0 env env'
   where
     lam = evalOpen cfg memoClosed
-    recEval (Unshared tf) = evalTermF cfg lam recEval tf env
+    recEval (Unshared tf) = evalTermF cfg lam recEval tf env env'
     recEval (t@STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IMap.lookup i memo of
         Just x -> force x
-        Nothing -> evalTermF cfg lam recEval tf env
-      where memo = if termIsClosed t then memoClosed else memoLocal
+        Nothing -> evalTermF cfg lam recEval tf env env'
+      where memo = if closedTerm t then memoClosed else memoLocal
 
 {-# SPECIALIZE evalOpen ::
   Show (Extra l) =>
@@ -670,17 +676,17 @@ evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =>
             SimulatorConfig l
          -> IntMap (Thunk l)
          -> Term -> OpenValue l
-evalOpen cfg memoClosed t env = do
-  memoLocal <- mkMemoLocal cfg memoClosed t env
+evalOpen cfg memoClosed t env env' = do
+  memoLocal <- mkMemoLocal cfg memoClosed t env env'
   let eval :: Term -> MValue l
       eval (Unshared tf) = evalF tf
       eval (t'@STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf
-        where memo = if termIsClosed t' then memoClosed else memoLocal
+        where memo = if closedTerm t' then memoClosed else memoLocal
       evalF :: TermF Term -> MValue l
-      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
+      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env env'
   eval t
 
 

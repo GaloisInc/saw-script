@@ -96,6 +96,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
 
+import SAWCore.Name
 import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
@@ -160,14 +161,13 @@ bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
 bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
 bindPPOpenTerm (OpenTerm m) f =
   OpenTerm $
-  do ctx <- askCtx
-     t <- typedVal <$> m
+  do t <- typedVal <$> m
      -- XXX: this could use scPrettyTermInCtx (which builds in the call to
      -- PPS.render) except that it's slightly different under the covers
      -- (in its use of the "global" flag, and it isn't entirely clear what
      -- that actually does)
      unOpenTerm $ f $ PPS.render PPS.defaultOpts $
-       ppTermInCtx PPS.defaultOpts (map fst ctx) t
+       ppTermInCtx PPS.defaultOpts [] t
 
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
@@ -383,36 +383,17 @@ piArgOpenTerm (OpenTerm m) =
   OpenTerm $ m >>= \case
   (unwrapTermF . typedVal -> Pi _ tp _) -> typeInferComplete tp
   t ->
-    do ctx <- askCtx
-       fail ("piArgOpenTerm: not a pi type: " ++
-             scPrettyTermInCtx PPS.defaultOpts (map fst ctx) (typedVal t))
-
--- | Build an 'OpenTerm' for the top variable in the current context, by
--- building the 'TCM' computation which checks how much longer the context has
--- gotten since the variable was created and uses this to compute its deBruijn
--- index
-openTermTopVar :: TCM OpenTerm
-openTermTopVar =
-  do outer_ctx <- askCtx
-     return $ OpenTerm $ do
-       inner_ctx <- askCtx
-       typeInferComplete (LocalVar (length inner_ctx
-                                    - length outer_ctx) :: TermF Term)
-
--- | Build an open term inside a binder of a variable with the given name and
--- type, where the binder is represented as a Haskell function on 'OpenTerm's
-bindOpenTerm :: LocalName -> SCTypedTerm -> (OpenTerm -> OpenTerm) ->
-                TCM SCTypedTerm
-bindOpenTerm x tp body_f =
-  do tp_whnf <- typeCheckWHNF $ typedVal tp
-     withVar x tp_whnf (openTermTopVar >>= (unOpenTerm . body_f))
+    fail ("piArgOpenTerm: not a pi type: " ++
+          scPrettyTermInCtx PPS.defaultOpts [] (typedVal t))
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambdaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 lambdaOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
-     body <- bindOpenTerm x tp body_f
-     typeInferComplete $ Lambda x tp body
+     vn <- liftTCM scFreshVarName x
+     var <- typeInferComplete $ Variable vn tp
+     body <- unOpenTerm (body_f (OpenTerm (pure var)))
+     typeInferComplete $ Lambda vn tp body
 
 -- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
 lambdaOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
@@ -425,8 +406,10 @@ lambdaOpenTermMulti xs_tps body_f =
 piOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
-     body <- bindOpenTerm x tp body_f
-     typeInferComplete $ Pi x tp body
+     nm <- liftTCM scFreshVarName x
+     var <- typeInferComplete $ Variable nm tp
+     body <- unOpenTerm (body_f (OpenTerm (pure var)))
+     typeInferComplete $ Pi nm tp body
 
 -- | Build a non-dependent function type.
 arrowOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm
@@ -742,7 +725,7 @@ sawLetMinimize sc t_top =
   slMinTermF' tf@(LocalVar i) =
     tell (varOccs1 i) >> liftIO (scTermF sc tf)
   slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)
-  slMinTermF' tf@(Variable _) = liftIO (scTermF sc tf)
+  slMinTermF' tf@(Variable {}) = liftIO (scTermF sc tf)
 
   slMinFTermF :: FlatTermF Term -> SLMinM Term
   slMinFTermF ftf = traverse slMinTerm ftf >>= liftIO . scFlatTermF sc

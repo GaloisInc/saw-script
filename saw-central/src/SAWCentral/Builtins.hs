@@ -71,7 +71,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Name (ecShortName)
+import SAWCore.Name (VarName(..), ecShortName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -739,8 +739,8 @@ build_congruence sc tm =
  where
   loop ((nm,tp):pis) vars =
     if termIsClosed tp then
-      do l <- scFreshEC sc (nm <> "_1") tp
-         r <- scFreshEC sc (nm <> "_2") tp
+      do l <- scFreshEC sc (vnName nm <> "_1") tp
+         r <- scFreshEC sc (vnName nm <> "_2") tp
          loop pis ((l,r):vars)
      else
        fail "congruence_for: cannot build congruence for dependent functions"

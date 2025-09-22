@@ -82,8 +82,8 @@ scWriteExternal t0 =
     stashName ec =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (nameIndex ec) (Right (nameInfo ec)) nms, lns, x)
-    stashEC :: ExtCns Int -> WriteM ()
-    stashEC (EC vn _) =
+    stashVarName :: VarName -> WriteM ()
+    stashVarName vn =
        do (m, nms, lns, x) <- State.get
           State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)
 
@@ -110,15 +110,19 @@ scWriteExternal t0 =
     writeTermF tf =
       case tf of
         App e1 e2      -> pure $ unwords ["App", show e1, show e2]
-        Lambda s t e   -> pure $ unwords ["Lam", Text.unpack s, show t, show e]
-        Pi s t e       -> pure $ unwords ["Pi", Text.unpack s, show t, show e]
+        Lambda s t e   ->
+          do stashVarName s
+             pure $ unwords ["Lam", show (vnIndex s), show t, show e]
+        Pi s t e       ->
+          do stashVarName s
+             pure $ unwords ["Pi", show (vnIndex s), show t, show e]
         LocalVar i     -> pure $ unwords ["Var", show i]
         Constant nm    ->
             do stashName nm
                pure $ unwords ["Constant", show (nameIndex nm)]
-        Variable ec ->
-           do stashEC ec
-              pure $ unwords ["Variable", show (ecVarIndex ec), show (ecType ec)]
+        Variable nm tp ->
+           do stashVarName nm
+              pure $ unwords ["Variable", show (vnIndex nm), show tp]
         FTermF ftf     ->
           case ftf of
             UnitValue           -> pure $ unwords ["Unit"]
@@ -225,31 +229,30 @@ scReadExternal sc input =
       do vi <- readM i
          readName' vi
 
-    readEC' :: VarIndex -> Term -> ReadM (ExtCns Term)
-    readEC' vi t' =
+    readVarName' :: VarIndex -> ReadM VarName
+    readVarName' vi =
       do (ts, nms, vs) <- State.get
          case Map.lookup vi nms of
            Just (Left x) ->
              case Map.lookup vi vs of
-               Just vi' -> pure (EC (VarName vi' x) t')
+               Just vi' -> pure (VarName vi' x)
                Nothing ->
                  do vn <- lift $ scFreshVarName sc x
                     State.put (ts, nms, Map.insert vi (vnIndex vn) vs)
-                    pure $ EC vn t'
-           _ -> lift $ fail $ "scReadExternal: ExtCns missing name: " ++ show vi
+                    pure vn
+           _ -> lift $ fail $ "scReadExternal: VarName missing name: " ++ show vi
 
-    readEC :: String -> String -> ReadM (ExtCns Term)
-    readEC i t =
+    readVarName :: String -> ReadM VarName
+    readVarName i =
       do vi <- readM i
-         t' <- readIdx t
-         readEC' vi t'
+         readVarName' vi
 
     parse :: [String] -> ReadM (TermF Term)
     parse tokens =
       case tokens of
         ["App", e1, e2]     -> App <$> readIdx e1 <*> readIdx e2
-        ["Lam", x, t, e]    -> Lambda (Text.pack x) <$> readIdx t <*> readIdx e
-        ["Pi", s, t, e]     -> Pi (Text.pack s) <$> readIdx t <*> readIdx e
+        ["Lam", s, t, e]    -> Lambda <$> readVarName s <*> readIdx t <*> readIdx e
+        ["Pi", s, t, e]     -> Pi <$> readVarName s <*> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i]      -> Constant <$> readName i
         ["ConstantOpaque",i]  -> Constant <$> readName i
@@ -279,5 +282,5 @@ scReadExternal sc input =
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
-        ["Variable", i, t]  -> Variable <$> readEC i t
+        ["Variable", i, t]  -> Variable <$> readVarName i <*> readIdx t
         _ -> fail $ "Parse error: " ++ unwords tokens
