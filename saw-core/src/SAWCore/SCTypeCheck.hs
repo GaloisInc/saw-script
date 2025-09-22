@@ -406,22 +406,22 @@ instance TypeInfer (TermF Term) where
     -- special-case handling itself
     typeInfer ftf
   typeInfer (Lambda x a rhs) =
-    do a_whnf <- typeInferCompleteWHNF a
+    do a_tptrm <- typeInferComplete a
        -- NOTE: before adding a type to the context, we want to be sure it is in
        -- WHNF, so we don't have to normalize each time we look up a var type,
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_tptrm with the type of a_whnf but the value of a
+       a_whnf <- liftTCM scTypedTermWHNF a_tptrm
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
        typeInfer (Lambda x a_tptrm rhs_tptrm)
   typeInfer (Pi x a rhs) =
-    do a_whnf <- typeInferCompleteWHNF a
+    do a_tptrm <- typeInferComplete a
        -- NOTE: before adding a type to the context, we want to be sure it is in
        -- WHNF, so we don't have to normalize each time we look up a var type,
        -- but we want to leave the non-normalized value of a in the returned
        -- term, so we create a_typed with the type of a_whnf but the value of a
+       a_whnf <- liftTCM scTypedTermWHNF a_tptrm
        rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
-       let a_tptrm = SCTypedTerm a (typedType a_whnf) (typedCtx a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
   typeInfer (Constant nm) = typeInferConstant nm
   typeInfer t = typeInfer =<< mapM typeInferComplete t
