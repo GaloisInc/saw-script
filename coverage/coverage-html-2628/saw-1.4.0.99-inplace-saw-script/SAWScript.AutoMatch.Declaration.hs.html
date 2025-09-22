@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module SAWScript.AutoMatch.Declaration
+<span class="lineno">    2 </span>  ( Type(..), TCon(..), TC(..)
+<span class="lineno">    3 </span>  , Name
+<span class="lineno">    4 </span>  , Arg(..)
+<span class="lineno">    5 </span>  , Decl(..)
+<span class="lineno">    6 </span>  , Sig
+<span class="lineno">    7 </span>  , sigArgs
+<span class="lineno">    8 </span>  , sigOut
+<span class="lineno">    9 </span>  , declSig
+<span class="lineno">   10 </span>  ) where
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>import Data.Text (Text, unpack)
+<span class="lineno">   13 </span>import Data.List (intercalate)
+<span class="lineno">   14 </span>import Data.Map (Map)
+<span class="lineno">   15 </span>import qualified Data.Map as Map
+<span class="lineno">   16 </span>import Control.Arrow ( (&amp;&amp;&amp;) )
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Cryptol.TypeCheck.AST (Type(..), TCon(..), TC(..))
+<span class="lineno">   19 </span>import Cryptol.Utils.PP
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>-- | Names are strings (for which we'll use Text)
+<span class="lineno">   22 </span>type Name = Text
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>-- | Arguments are names with (Cryptol) types
+<span class="lineno">   25 </span>data Arg = Arg { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">argName</span></span></span> :: Name
+<span class="lineno">   26 </span>               , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">argType</span></span></span> :: Type }
+<span class="lineno">   27 </span>               deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Arg</span></span></span></span> where
+<span class="lineno">   30 </span>   <span class="decl"><span class="nottickedoff">showsPrec d (Arg n t) =</span>
+<span class="lineno">   31 </span><span class="spaces">      </span><span class="nottickedoff">showParen (d &gt; app_prec) $</span>
+<span class="lineno">   32 </span><span class="spaces">         </span><span class="nottickedoff">showString (unpack n)</span>
+<span class="lineno">   33 </span><span class="spaces">         </span><span class="nottickedoff">. showString &quot; : &quot;</span>
+<span class="lineno">   34 </span><span class="spaces">         </span><span class="nottickedoff">. showString (pretty t)</span>
+<span class="lineno">   35 </span><span class="spaces">      </span><span class="nottickedoff">where app_prec = 10</span></span>
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>-- | Declarations have a name, a return type, and a list of arguments
+<span class="lineno">   38 </span>data Decl = Decl { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">declName</span></span></span> :: Name
+<span class="lineno">   39 </span>                 , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">declType</span></span></span> :: Type
+<span class="lineno">   40 </span>                 , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">declArgs</span></span></span> :: [Arg] }
+<span class="lineno">   41 </span>                 deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Decl</span></span></span></span> where
+<span class="lineno">   44 </span>   <span class="decl"><span class="nottickedoff">showsPrec d (Decl n t as) =</span>
+<span class="lineno">   45 </span><span class="spaces">      </span><span class="nottickedoff">showParen (d &gt; app_prec) $</span>
+<span class="lineno">   46 </span><span class="spaces">         </span><span class="nottickedoff">showString (unpack n)</span>
+<span class="lineno">   47 </span><span class="spaces">         </span><span class="nottickedoff">. showString &quot; : &quot;</span>
+<span class="lineno">   48 </span><span class="spaces">         </span><span class="nottickedoff">. showString &quot;(&quot;</span>
+<span class="lineno">   49 </span><span class="spaces">         </span><span class="nottickedoff">. showString (intercalate &quot;, &quot; (map show as))</span>
+<span class="lineno">   50 </span><span class="spaces">         </span><span class="nottickedoff">. showString &quot;)&quot;</span>
+<span class="lineno">   51 </span><span class="spaces">         </span><span class="nottickedoff">. showString &quot; -&gt; &quot;</span>
+<span class="lineno">   52 </span><span class="spaces">         </span><span class="nottickedoff">. showString (pretty t)</span>
+<span class="lineno">   53 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno">   54 </span><span class="spaces">         </span><span class="nottickedoff">app_prec = 10</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>-- | The signature of a declaration is the multiset of its argument types crossed with its return type
+<span class="lineno">   57 </span>data Sig = Sig { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sigArgs_</span></span></span> :: Map Type Int
+<span class="lineno">   58 </span>               , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sigOut_</span></span></span>  :: Type }
+<span class="lineno">   59 </span>               deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>sigArgs :: Sig -&gt; Map Type Int
+<span class="lineno">   62 </span><span class="decl"><span class="nottickedoff">sigArgs = sigArgs_</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>sigOut :: Sig -&gt; Type
+<span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">sigOut  = sigOut_</span></span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- | Compute the signature of a declaration
+<span class="lineno">   68 </span>declSig :: Decl -&gt; Sig
+<span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">declSig (Decl _ t as) =</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">flip Sig t $</span>
+<span class="lineno">   71 </span><span class="spaces">    </span><span class="nottickedoff">foldr (uncurry (Map.insertWith (const succ))) Map.empty $</span>
+<span class="lineno">   72 </span><span class="spaces">      </span><span class="nottickedoff">map (argType &amp;&amp;&amp; const 1) as</span></span>
+
+</pre>
+</body>
+</html>
