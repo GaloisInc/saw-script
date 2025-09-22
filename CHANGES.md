@@ -83,6 +83,9 @@ This release supports [version
   configuring the solver result cache's timeout for database lookups and
   inserts.
 
+* Adds `w4_unint_rme` proof script for using RME extended with uninterpreted
+  functions to resolve goals.
+
 # Version 1.4 -- date still TBD
 
 This release supports [version

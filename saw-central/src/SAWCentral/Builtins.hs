@@ -1126,6 +1126,9 @@ w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
 w4_unint_bitwuzla :: [Text] -> ProofScript ()
 w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla
 
+w4_unint_rme :: [Text] -> ProofScript ()
+w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme
+
 w4_unint_boolector :: [Text] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
 
