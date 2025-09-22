@@ -70,10 +70,6 @@ module SAWCore.OpenTerm (
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
   piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
   bitvectorTypeOpenTerm, listOpenTerm, eitherTypeOpenTerm,
-  -- * Monadic operations for building terms including 'IO' actions
-  OpenTermM(..), completeOpenTermM,
-  dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
-  lambdaOpenTermAuxM, piOpenTermAuxM,
   -- * Types that provide similar operations to 'OpenTerm'
   OpenTermLike(..), lambdaTermLikeMulti, applyTermLikeMulti, failTermLike,
   globalTermLike, applyGlobalTermLike,
@@ -89,7 +85,6 @@ module SAWCore.OpenTerm (
   ) where
 
 import qualified Data.Vector as V
-import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -472,87 +467,6 @@ listOpenTerm tp elems =
 -- | Build the type @Either a b@ from types @a@ and @b@
 eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
 eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
-
---------------------------------------------------------------------------------
--- Monadic operations for building terms including 'IO' actions
-
--- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
--- is just the type-checking monad, but we give it a new name to keep this
--- module self-contained.
-newtype OpenTermM a = OpenTermM { unOpenTermM :: TCM a }
-                    deriving (Functor, Applicative, Monad)
-
-instance MonadIO OpenTermM where
-  liftIO = OpenTermM . liftIO
-
--- | \"Run\" an 'OpenTermM' computation to produce an 'OpenTerm'
-runOpenTermM :: OpenTermM OpenTerm -> OpenTerm
-runOpenTermM (OpenTermM m) =
-  OpenTerm $ join $ fmap unOpenTerm m
-
--- | \"Complete\" an 'OpenTerm' build in 'OpenTermM' to a closed term, or 'fail'
--- on a type-checking error
-completeOpenTermM :: SharedContext -> OpenTermM OpenTerm -> IO Term
-completeOpenTermM sc m = completeOpenTerm sc (runOpenTermM m)
-
--- | \"De-duplicate\" an open term, so that duplicating the returned 'OpenTerm'
--- does not lead to duplicated WHNF work
-dedupOpenTermM :: OpenTerm -> OpenTermM OpenTerm
-dedupOpenTermM (OpenTerm trmM) =
-  OpenTermM $ do trm <- trmM
-                 return $ OpenTerm $ return trm
-
--- | Build an open term inside a binder of a variable with the given name and
--- type, where the binder is represented as a monadic Haskell function on
--- 'OpenTerm's that also returns an auxiliary value. Returns the normalized type
--- and the body, along with the auxiliary result returned by the body-generating
--- function.
-bindOpenTermAuxM ::
-  LocalName -> OpenTerm ->
-  (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-  OpenTermM (SCTypedTerm, SCTypedTerm, a)
-bindOpenTermAuxM x (OpenTerm tpM) body_f =
-  OpenTermM $
-  do tp <- tpM
-     tp_whnf <- liftTCM scTypedTermWHNF tp
-     (OpenTerm bodyM, a) <-
-       withVar x (typedVal tp_whnf) (openTermTopVar >>= (unOpenTermM . body_f))
-     body <- bodyM
-     return (tp_whnf, body, a)
-
--- | Build a lambda abstraction in the 'OpenTermM' monad
-lambdaOpenTermM ::
-  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
-  OpenTermM OpenTerm
-lambdaOpenTermM x tp body_f =
-  fst <$> lambdaOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
-
--- | Build a pi abstraction in the 'OpenTermM' monad
-piOpenTermM ::
-  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
-  OpenTermM OpenTerm
-piOpenTermM x tp body_f =
-  fst <$> piOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
-
--- | Build a lambda abstraction with an auxiliary return value in the
--- 'OpenTermM' monad
-lambdaOpenTermAuxM ::
-  LocalName -> OpenTerm ->
-  (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-  OpenTermM (OpenTerm, a)
-lambdaOpenTermAuxM x tp body_f =
-  do (tp', body, a) <- bindOpenTermAuxM x tp body_f
-     return (OpenTerm (typeInferComplete $ Lambda x tp' body), a)
-
--- | Build a pi abstraction with an auxiliary return value in the 'OpenTermM'
--- monad
-piOpenTermAuxM ::
-  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-  OpenTermM (OpenTerm, a)
-piOpenTermAuxM x tp body_f =
-  do (tp', body, a) <- bindOpenTermAuxM x tp body_f
-     return (OpenTerm (typeInferComplete $ Pi x tp' body), a)
-
 
 --------------------------------------------------------------------------------
 -- Types that provide similar operations to 'OpenTerm'
