@@ -57,6 +57,7 @@ module SAWCore.Term.Functor
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
   , smallestBitSetElem
+  , bitSetBound
   , looseVars, smallestLooseVar, termIsClosed
   , freesTermF, freeVars
   ) where
@@ -593,6 +594,11 @@ bitSetElems = go 0 where
     Nothing -> []
     Just i ->
       shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)
+
+-- | Return the smallest non-negative integer greater than every
+-- element of the 'BitSet'.
+bitSetBound :: BitSet -> Int
+bitSetBound b = length $ takeWhile (/= emptyBitSet) $ iterate decrBitSet b
 
 -- | Compute the loose de Bruijn indices of a term given the loose
 -- indices for its immediate subterms.
