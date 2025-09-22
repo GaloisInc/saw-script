@@ -173,13 +173,15 @@ The following identifiers are reserved words:
   - `hiding`
   - `import`
   - `let`
-  - `then`
+  - `submodule`
+  - `typedef`
 * - `as`
   - `else`
   - `if`
   - `in`
   - `rec`
-  - `typedef`
+  - `then`
+  - ` `
 :::
 
 The following identifiers for built-in types are also currently
@@ -455,13 +457,15 @@ Import statements import Cryptol code.
 See [XXX](XXX).)
 
 An import statement begins with the keyword `import` followed by a
-string literal giving the file name.
-(This should be the file name in double quotes, typically including
-the `.cry` suffix, not the corresponding Cryptol module name.)
+module name.
+(This can be the file name in double quotes, typically including
+the `.cry` suffix.
+It can also be an unquoted Cryptol module name, with qualifiers
+as needed.)
 
-The file name may be followed with `as` and an identifier; this
+The module name may be followed with `as` and another module name; this
 performs a `qualified import` where the definitions in the module are
-accessible using the identifier given as a prefix.
+accessible using the given alternate name as a prefix.
 (Without this, they are imported directly into the current Cryptol
 namespace, much as in ordinary Cryptol code.)
 For example, if `Foo.cry` contains a definition `Bar`, after
@@ -472,7 +476,7 @@ Any qualifier name may then be followed by a comma-separated list of
 names, in parentheses; only these definitions are imported and all others
 are ignored.
 Alternatively, if the parenthesized list is preceded by the keyword
-`hiding`, the named definitions are not ignored and the rest are
+`hiding`, the named definitions are the ones ignored and the rest are
 imported.
 
 <!--
@@ -484,9 +488,9 @@ XXX: whatnot.
 An alternative way to import Cryptol modules is to use the
 `cryptol_load` built-in action, which returns a handle of type
 `CryptolModule`.
-This works much like a qualified import: after `Foo <- cryptol_load "Foo.cry";`
-one can refer to definitions in the module using `Foo` as a qualifier
-(e.g. `Foo::Bar`).
+This works the same as a qualified import: after
+`Foo <- cryptol_load "Foo.cry";` one can refer to definitions in the
+module using `Foo` as a qualifier (e.g. `Foo::Bar`).
 One can also look up definitions explicitly using the `cryptol_extract`
 builtin: `bar <- cryptol_extract Foo "Bar";`.
 

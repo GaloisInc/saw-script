@@ -229,7 +229,7 @@ eval_size: not a numeric type
 In addition to the use of brackets to write Cryptol expressions inline,
 several built-in functions can extract `Term` values from Cryptol files
 in other ways. The `import` command at the top level imports all
-top-level definitions from a Cryptol file and places them in scope
+top-level definitions from a Cryptol file or module and places them in scope
 within later bracketed expressions. This includes [Cryptol `foreign`
 declarations](https://galoisinc.github.io/cryptol/master/FFI.html). If a
 [Cryptol implementation of a foreign
