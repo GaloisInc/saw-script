@@ -244,11 +244,11 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotRecordType (SCTypedTerm trm tp _ctx)) =
+  helper (NotRecordType t) =
       ppWithPos [ return "Record field projection with non-record type"
-                , ishow tp
+                , ishow (typedType t)
                 , return "In term:"
-                , ishow trm ]
+                , ishow (typedVal t) ]
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
@@ -378,10 +378,8 @@ class TypeInfer a where
 -- resulting term to WHNF
 typeInferCompleteWHNF :: TypeInfer a => a -> TCM SCTypedTerm
 typeInferCompleteWHNF a =
-  do SCTypedTerm a_trm a_tp ctx <- typeInferComplete a
-     a_whnf <- typeCheckWHNF a_trm
-     return $ SCTypedTerm a_whnf a_tp ctx
-
+  do t <- typeInferComplete a
+     liftTCM scTypedTermWHNF t
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
@@ -454,13 +452,13 @@ instance TypeInfer (FlatTermF Term) where
 -- its (most general) type.
 instance TypeInfer (TermF SCTypedTerm) where
   typeInfer (FTermF ftf) = typeInfer ftf
-  typeInfer (App x@(SCTypedTerm _ x_tp _) y) =
-    applyPiTyped (NotFuncTypeInApp x y) x_tp y
-  typeInfer (Lambda x (SCTypedTerm a a_tp _) (SCTypedTerm _ b _)) =
-    void (ensureSort a_tp) >> liftTCM scPi x a b
-  typeInfer (Pi _ (SCTypedTerm _ a_tp _) (SCTypedTerm _ b_tp _)) =
-    do s1 <- ensureSort a_tp
-       s2 <- ensureSort b_tp
+  typeInfer (App x y) =
+    applyPiTyped (NotFuncTypeInApp x y) (typedType x) y
+  typeInfer (Lambda x a b) =
+    void (ensureSort (typedType a)) >> liftTCM scPi x (typedVal a) (typedType b)
+  typeInfer (Pi _ a b) =
+    do s1 <- ensureSort (typedType a)
+       s2 <- ensureSort (typedType b)
        -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
        -- when b is a Prop (this is a forall proposition), otherwise it is a
        -- (Type (max (sortOf a) (sortOf b)))
@@ -483,16 +481,16 @@ instance TypeInfer (TermF SCTypedTerm) where
 instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
-  typeInfer (PairValue (SCTypedTerm _ tx _) (SCTypedTerm _ ty _)) =
-    liftTCM scPairType tx ty
-  typeInfer (PairType (SCTypedTerm _ tx _) (SCTypedTerm _ ty _)) =
-    do sx <- ensureSort tx
-       sy <- ensureSort ty
+  typeInfer (PairValue x y) =
+    liftTCM scPairType (typedType x) (typedType y)
+  typeInfer (PairType x y) =
+    do sx <- ensureSort (typedType x)
+       sy <- ensureSort (typedType y)
        liftTCM scSort (max sx sy)
-  typeInfer (PairLeft (SCTypedTerm _ tp _)) =
-    ensurePairType tp >>= \(t1,_) -> return t1
-  typeInfer (PairRight (SCTypedTerm _ tp _)) =
-    ensurePairType tp >>= \(_,t2) -> return t2
+  typeInfer (PairLeft t) =
+    fst <$> ensurePairType (typedType t)
+  typeInfer (PairRight t) =
+    snd <$> ensurePairType (typedType t)
 
   typeInfer (Recursor crec) =
     inferRecursor crec
@@ -504,17 +502,17 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
        liftTCM scSort (maxSort $ mkSort 0 : sorts)
   typeInfer (RecordValue elems) =
     liftTCM scFlatTermF $ RecordType $
-    map (\(f,SCTypedTerm _ tp _) -> (f,tp)) elems
-  typeInfer (RecordProj t@(SCTypedTerm _ t_tp _) fld) =
-    ensureRecordType (NotRecordType t) t_tp >>= \case
+    map (fmap typedType) elems
+  typeInfer (RecordProj t fld) =
+    ensureRecordType (NotRecordType t) (typedType t) >>= \case
     (Map.lookup fld -> Just tp) -> return tp
-    _ -> throwTCError $ BadRecordField fld t_tp
+    _ -> throwTCError $ BadRecordField fld (typedType t)
   typeInfer (Sort s _) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
-  typeInfer (ArrayValue (SCTypedTerm tp tp_tp _) vs) =
+  typeInfer (ArrayValue tp vs) =
     do n <- liftTCM scNat (fromIntegral (V.length vs))
-       _ <- ensureSort tp_tp -- TODO: do we care about the level?
-       tp' <- typeCheckWHNF tp
+       _ <- ensureSort (typedType tp) -- TODO: do we care about the level?
+       tp' <- typeCheckWHNF (typedVal tp)
        forM_ vs $ \v_elem -> checkSubtype v_elem tp'
        liftTCM scVecType n tp'
   typeInfer (StringLit{}) = liftTCM scStringType
