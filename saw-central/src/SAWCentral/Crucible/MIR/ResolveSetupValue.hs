@@ -1599,6 +1599,7 @@ doAlloc cc globals (Some ma) =
 
      -- Create an uninitialized `MirVector_PartialVector` of the allocation's
      -- length and return a pointer to its first element.
+     -- See Note [Allocating multiple MIR values] for more details.
      let vecRepr = Mir.MirVectorRepr tpr
      ref <- Mir.newMirRefIO sym halloc vecRepr
 
@@ -1617,6 +1618,20 @@ doAlloc cc globals (Some ma) =
            }
 
      pure (mirPtr, globals')
+
+{-
+Note [Allocating multiple MIR values]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+MIR allocations have a type and a length. The length is the number of values of
+that type to allocate contiguously. The `newMirRef` family of functions in
+crucible-mir allocates and returns a reference to the space for a *single* value
+of the given type. So when we need to potentially allocate multiple values, we
+instead call `newMirRef` to allocate a single `MirVector`, which itself contains
+space for many elements. All elements of the vector start out as uninitialized
+because the memory is uninitialized. Then we get the reference to the first
+element, and return that. This is the same way that crucible's custom allocator
+works, in Mir.TransCustom.allocate.
+-}
 
 doPointsTo ::
      MS.CrucibleMethodSpecIR MIR
