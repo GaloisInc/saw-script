@@ -1,0 +1,27 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let simple_mir_verify fn spec = mir_verify m fn [] false spec z3;
+
+let id_spec = do {
+    x <- mir_fresh_var "x" mir_u16;
+    mir_execute_func [mir_term x];
+    mir_return (mir_term {{ x }});
+};
+
+print "Verifying `init_x_read_x`";
+simple_mir_verify "test::init_x_read_x" id_spec;
+
+print "Verifying `init_y_read_y`";
+simple_mir_verify "test::init_y_read_y" id_spec;
+
+// TODO: these verifications fail because Crucible, and thus SAW, lacks general
+// support for initializing unions with one type and reinterpreting them as
+// another - see https://github.com/GaloisInc/crucible/issues/1548.
+
+print "Verifying `init_x_read_y`";
+fails (simple_mir_verify "test::init_x_read_y" id_spec);
+
+print "Verifying `init_y_read_x`";
+fails (simple_mir_verify "test::init_y_read_x" id_spec);
