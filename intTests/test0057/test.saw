@@ -15,15 +15,17 @@ c_in <- read_core "c.out";
 let thm_c = {{ c_in == c }};
 prove_print z3 thm_c;
 
+// NB. reading/writing open terms will generate new fresh variables
 write_core "x.out" x;
 x_in <- read_core "x.out";
 let thm_x = {{ x_in == x }};
-prove_print z3 thm_x;
+fails (prove_print z3 thm_x);
 
+// NB. reading/writing open terms will generate new fresh variables
 write_core "t1.out" t1;
 t1_in<- read_core "t1.out";
 let thm_t1 = {{ t1_in == t1 }};
-prove_print z3 thm_t1;
+fails (prove_print z3 thm_t1);
 
 // N.B. This test currently crashes SAW due to bug #780
 // write_core "t2.out" t2;

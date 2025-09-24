@@ -76,7 +76,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (ExtCns(..), Ident, NameInfo(..), ecVarIndex, ecNameInfo)
+import SAWCore.Name (Ident, Name(..), NameInfo(..))
 import SAWCore.Panic (panic)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
@@ -118,8 +118,8 @@ boolFun = PrimFilterFun "expected Bool" r
 natFun :: VMonad l => (Natural -> Prim l) -> Prim l
 natFun = PrimFilterFun "expected Nat" r
   where r (VNat n) = pure n
-        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Zero") [] [])  = pure 0
-        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
+        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] [])  = pure 0
+        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
 
 -- | A primitive that requires an integer argument
@@ -549,8 +549,8 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Zero") [] []) = pure (Right 0)
-        r v@(VCtorApp (ecNameInfo -> ModuleIdentifier "Prelude.Succ") [] [x]) =
+        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] []) = pure (Right 0)
+        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) =
           lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
@@ -1351,19 +1351,19 @@ muxValue bp tp0 b = value tp0
                               _ -> panic "muxValue" ["Record field missing: " <> f]
          VRecordValue <$> traverse build fs
 
-    value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)
-      | i == j = VCtorApp i ps <$> ctorArgs (ecType i) ps xv yv
+    value (VDataType _nm _k _ps _ixs) (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
+      | i == j = VCtorApp i itv ps <$> ctorArgs itv ps xv yv
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux ps $ IntMap.fromList $
-             [(ecVarIndex i, (b, i, xv)), (ecVarIndex j, (b', j, yv))]
-    value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorMux _ ym) =
-      do let xm = IntMap.singleton (ecVarIndex i) (bpTrue bp, i, xv)
+             [(nameIndex i, (b, i, itv, xv)), (nameIndex j, (b', j, jtv, yv))]
+    value (VDataType _nm _k _ps _ixs) (VCtorApp i tv ps xv) (VCtorMux _ ym) =
+      do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, i, tv, xv)
          VCtorMux ps <$> branches ps xm ym
-    value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorApp j _ yv) =
-      do let ym = IntMap.singleton (ecVarIndex j) (bpTrue bp, j, yv)
+    value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorApp j tv _ yv) =
+      do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, j, tv, yv)
          VCtorMux ps <$> branches ps xm ym
-    value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =
+    value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =
       do VCtorMux ps <$> branches ps xm ym
 
     value (VVecType _ tp) (VVector xv) (VVector yv) =
@@ -1397,20 +1397,20 @@ muxValue bp tp0 b = value tp0
 
     branches ::
       [Thunk l] ->
-      IntMap (VBool l, ExtCns (TValue l), [Thunk l]) ->
-      IntMap (VBool l, ExtCns (TValue l), [Thunk l]) ->
-      EvalM l (IntMap (VBool l, ExtCns (TValue l), [Thunk l]))
+      IntMap (VBool l, Name, TValue l, [Thunk l]) ->
+      IntMap (VBool l, Name, TValue l, [Thunk l]) ->
+      EvalM l (IntMap (VBool l, Name, TValue l, [Thunk l]))
     branches ps xm ym =
       do b' <- bpNot bp b
-         let andPred p1 (p2, c, args) =
+         let andPred p1 (p2, c, ty, args) =
                do p <- bpAnd bp p1 p2
-                  pure (p, c, args)
+                  pure (p, c, ty, args)
          let merge x y =
-               do (xp, i, xv) <- x
-                  (yp, _, yv) <- y
+               do (xp, i, itp, xv) <- x
+                  (yp, _, _tp, yv) <- y
                   zp <- bpOr bp xp yp
-                  zv <- ctorArgs (ecType i) ps xv yv
-                  pure (zp, i, zv)
+                  zv <- ctorArgs itp ps xv yv
+                  pure (zp, i, itp, zv)
          let xm' = fmap (andPred b) xm
          let ym' = fmap (andPred b') ym
          sequenceA (IntMap.unionWith merge xm' ym')

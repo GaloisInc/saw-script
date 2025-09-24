@@ -26,7 +26,6 @@ module SAWCore.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
-  , ecNameInfo
   , ecVarIndex
   , NameInfo(..)
   , ppName
@@ -58,9 +57,10 @@ module SAWCore.SharedTerm
   , scFlatTermF
     -- ** Implicit versions of functions.
   , scDefTerm
-  , scFreshGlobal
+  , scFreshVariable
   , scFreshEC
   , scFreshName
+  , scFreshVarName
   , scVariable
   , scGlobalDef
   , scFreshenGlobalIdent
@@ -494,7 +494,7 @@ scShowTerm sc opts t =
   do env <- readIORef (scDisplayNameEnv sc)
      pure (showTermWithNames opts env t)
 
--- | Create a global variable with the given identifier (which may be "_").
+-- | Create a unique global name with the given base name.
 scFreshName :: SharedContext -> Text -> IO Name
 scFreshName sc x =
   do i <- scFreshVarIndex sc
@@ -503,15 +503,19 @@ scFreshName sc x =
      scRegisterNameWithIndex sc i nmi
      pure (Name i nmi)
 
+-- | Create a 'VarName' with the given identifier (which may be "_").
+scFreshVarName :: SharedContext -> Text -> IO VarName
+scFreshVarName sc x = VarName <$> scFreshVarIndex sc <*> pure x
+
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
 scFreshEC sc x tp =
-  do nm <- scFreshName sc x
+  do nm <- scFreshVarName sc x
      pure (EC nm tp)
 
--- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshGlobal :: SharedContext -> Text -> Term -> IO Term
-scFreshGlobal sc x tp = scVariable sc =<< scFreshEC sc x tp
+-- | Create a fresh variable with the given identifier (which may be "_") and type.
+scFreshVariable :: SharedContext -> Text -> Term -> IO Term
+scFreshVariable sc x tp = scVariable sc =<< scFreshEC sc x tp
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -796,7 +800,7 @@ ctxCtorArgType sc d_params (RecursiveArg zs_ctx ixs) =
 ctxCtorArgBindings ::
   SharedContext ->
   Term {- ^ data type applied to ExtCns params -} ->
-  [(Name, CtorArg)] ->
+  [(VarName, CtorArg)] ->
   IO [ExtCns Term]
 ctxCtorArgBindings _ _ [] = return []
 ctxCtorArgBindings sc d_params ((x, arg) : args) =
@@ -905,7 +909,7 @@ ctxCtorElimType ::
 ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
   do params <- traverse (scVariable sc) ctorParams
      d_params <- scConstApply sc d params
-     let helper :: [Term] -> [(Name, CtorArg)] -> IO Term
+     let helper :: [Term] -> [(VarName, CtorArg)] -> IO Term
          helper prevs ((nm, ConstArg tp) : args) =
            -- For a constant argument type, just abstract it and continue
            do arg <- scVariable sc (EC nm tp)
@@ -1021,7 +1025,7 @@ ctxReduceRecursor_ ::
   SharedContext ->
   Term     {- ^ recursor value eliminatiting data type d -}->
   Term     {- ^ eliminator function for the constructor -} ->
-  [(Term, (Name, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
+  [(Term, (VarName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
   IO Term
 ctxReduceRecursor_ sc rec fi args0_argCtx =
   do args <- mk_args IntMap.empty args0_argCtx
@@ -1029,7 +1033,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
 
  where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
-               [(Term, (Name, CtorArg))] ->
+               [(Term, (VarName, CtorArg))] ->
                  -- remaining actual arguments to process, with
                  -- telescope for typing the actual arguments
                IO [Term]
@@ -1038,7 +1042,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
 
     -- process an argument that is not a recursive call
     mk_args pre_xs ((x, (nm, ConstArg _)) : xs_args) =
-      do tl <- mk_args (IntMap.insert (nameIndex nm) x pre_xs) xs_args
+      do tl <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
          pure (x : tl)
 
     -- process an argument that is a recursive call
@@ -1046,7 +1050,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
       do zs'  <- traverse (traverse (scInstantiateExt sc pre_xs)) zs
          ixs' <- traverse (scInstantiateExt sc pre_xs) ixs
          recx <- mk_rec_arg zs' ixs' x
-         tl   <- mk_args (IntMap.insert (nameIndex nm) x pre_xs) xs_args
+         tl   <- mk_args (IntMap.insert (vnIndex nm) x pre_xs) xs_args
          pure (x : recx : tl)
 
     -- Build an individual recursive call, given the parameters, the bindings
@@ -1894,7 +1898,7 @@ scConstant sc name rhs ty =
        , "name: " ++ Text.unpack name
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecNameInfo) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
        ]
      nm <- scFreshName sc name
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -1923,7 +1927,7 @@ scConstant' sc nmi rhs ty =
        , "nmi: " ++ Text.unpack (toAbsoluteName nmi)
        , "ty: " ++ showTerm ty
        , "rhs: " ++ showTerm rhs
-       , "frees: " ++ unwords (map (Text.unpack . toAbsoluteName . ecNameInfo) (getAllExts rhs))
+       , "frees: " ++ unwords (map (Text.unpack . vnName . ecName) (getAllExts rhs))
        ]
      nm <- scRegisterName sc nmi
      scDeclareDef sc nm NoQualifier ty (Just rhs)
@@ -2880,7 +2884,7 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
 
 -- | Create a lambda term by abstracting over the list of arguments,
 -- which must all be named variables (e.g. terms generated by
--- 'scVariable' or 'scFreshGlobal').
+-- 'scVariable' or 'scFreshVariable').
 scAbstractTerms :: SharedContext -> [Term] -> Term -> IO Term
 scAbstractTerms sc args body =
   do vars <- mapM toEC args
@@ -2944,7 +2948,7 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
 
 -- | Create a pi term by abstracting over the list of arguments, which
 -- must all be named variables (e.g. terms generated by 'scVariable' or
--- 'scFreshGlobal').
+-- 'scFreshVariable').
 scGeneralizeTerms :: SharedContext -> [Term] -> Term -> IO Term
 scGeneralizeTerms sc args body =
   do vars <- mapM toEC args

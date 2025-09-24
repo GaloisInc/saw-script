@@ -45,8 +45,7 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( dtExtCns
-  , emptyModule
+  ( emptyModule
   , findDataTypeInMap
   , resolveNameInMap
   , resolvedNameName
@@ -223,7 +222,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
             typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec (dtExtCns dt)
+       _ -> throwTCError $ NotFullyAppliedRec (dtName dt)
 
 typeInferCompleteTerm (Un.Recursor _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"

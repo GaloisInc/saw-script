@@ -54,7 +54,7 @@ import qualified Data.Vector                                   as Vector (toList
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           SAWCore.Module (Def(..), ModuleMap, ResolvedName(..), requireNameInMap, resolvedNameType)
-import           SAWCore.Name (Name(..))
+import           SAWCore.Name (Name(..), VarName(..))
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
@@ -84,7 +84,7 @@ data TranslationReader = TranslationReader
     -- ^ The list of Coq identifiers associated with the current SAW core
     -- Bruijn-indexed local variables in scope, innermost (index 0) first
 
-  , _namedEnvironment  :: Map.Map Name Coq.Ident
+  , _namedEnvironment  :: Map.Map VarName Coq.Ident
     -- ^ The map of Coq identifiers associated with the SAW core named
     -- variables in scope
 
@@ -202,9 +202,9 @@ withSAWVar n m =
 -- | Run a translation in a context with one more SAW core variable with the
 -- given name. Pass the corresponding Coq identifier used for this SAW core
 -- variable to the computation in which it is bound.
-withSAWVarEC :: TermTranslationMonad m => Name -> (Coq.Ident -> m a) -> m a
+withSAWVarEC :: TermTranslationMonad m => VarName -> (Coq.Ident -> m a) -> m a
 withSAWVarEC n m =
-  withFreshIdent (toShortName (nameInfo n)) $ \n_coq ->
+  withFreshIdent (vnName n) $ \n_coq ->
   localTR (over namedEnvironment (Map.insert n n_coq)) $ m n_coq
 
 -- | Find a fresh name generated from 'nextSharedName' to use in place of the
@@ -617,7 +617,7 @@ translateBinderEC ec f =
          ty = ecType ec
          (args, pi_body) = asPiList ty
          nm = ecName ec
-         n = toShortName (nameInfo nm)
+         n = vnName nm
          helper ::
            Coq.Ident ->
            [(Bool, (LocalName, Coq.Ident))] ->
@@ -801,7 +801,10 @@ translateTermUnshared t = do
          let nm = ecName ec
          case Map.lookup nm nenv of
            Just ident -> pure (Coq.Var ident)
-           Nothing -> translateConstant nm
+           Nothing ->
+             do let nm_str = Text.unpack $ vnName nm
+                let ident = escapeIdent $ Coq.Ident $ nm_str
+                pure (Coq.Var ident)
 
   where
     badTerm          = Except.throwError $ BadTerm t

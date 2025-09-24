@@ -40,7 +40,7 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
-import SAWCore.Module (ModuleMap, dtExtCns)
+import SAWCore.Module (ModuleMap, DataType(..))
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
@@ -80,14 +80,16 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
      return (t', replMap)
 
  where
-    uninterpreted cfg mapref tf ec@(EC (nameIndex -> ix) ty)
+    uninterpreted cfg mapref tf nm@(nameIndex -> ix) ty
       | Set.member ix opaqueSet = Just $
           do tm <- scTermF sc tf
              reflectTerm sc cfg ty tm
-      | Set.member ix unintSet = Just (replace sc cfg mapref ec)
+      | Set.member ix unintSet =
+        let ec = EC (VarName ix (toShortName (nameInfo nm))) ty
+        in Just (replace sc cfg mapref ec)
       | otherwise = Nothing
 
-    extcns cfg mapref tf ec@(EC (nameIndex -> ix) ty)
+    extcns cfg mapref tf ec@(EC (vnIndex -> ix) ty)
       | Set.member ix unintSet = replace sc cfg mapref ec
       | otherwise =
           case Map.lookup ix ecVals of
@@ -102,9 +104,8 @@ extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
 
-    primHandler cfg ec _msg env tp =
-      do let nm = ecName ec
-         args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
+    primHandler cfg nm _tp0 _msg env tp =
+      do args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
          reflectTerm sc cfg tp f
@@ -164,11 +165,11 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
      readBackValue sc cfg tv v
 
   where
-    constants cfg tf ec
-      | Set.member (ecVarIndex ec) opaqueSet = Just $
+    constants cfg tf nm ty
+      | Set.member (nameIndex nm) opaqueSet = Just $
           do let ?recordEC = \_ec -> return ()
              tm <- scTermF sc tf
-             reflectTerm sc cfg (ecType ec) tm
+             reflectTerm sc cfg ty tm
 
       | otherwise = Nothing
 
@@ -187,9 +188,8 @@ normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
 
-    primHandler cfg ec _msg env tp =
+    primHandler cfg nm _t0 _msg env tp =
       do let ?recordEC = \_ec -> return ()
-         let nm = ecName ec
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          prim <- scConst sc nm
          f    <- foldM (scApply sc) prim args
@@ -266,19 +266,17 @@ readBackTValue sc cfg = loop
       VRecordType fs ->
         do fs' <- traverse (traverse loop) fs
            scRecordType sc fs'
-      VDataType ec ps vs ->
-        do let nm = ecName ec
-           args <- readBackDataTypeParams (ecType ec) (ps++vs)
+      VDataType nm ty ps vs ->
+        do args <- readBackDataTypeParams ty (ps++vs)
            scConstApply sc nm args
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
-      VRecursorType d ps m mty ->
-        do let d' = ecName d
-           ps'  <- readBackDataTypeParams (ecType d) ps
+      VRecursorType d dty ps m mty ->
+        do ps'  <- readBackDataTypeParams dty ps
            m'   <- readBackValue sc cfg mty m
            mty' <- loop mty
-           scFlatTermF sc (RecursorType d' ps' m' mty')
+           scFlatTermF sc (RecursorType d ps' m' mty')
       VTyTerm _s tm ->
         pure tm
 
@@ -427,9 +425,8 @@ readBackValue sc cfg = loop
          vs' <- traverse (loop tp <=< force) (V.toList vs)
          scVectorReduced sc tp' vs'
 
-    loop (VDataType _nm _ps _ixs) (VCtorApp cnm ps vs) =
-      do let nm = ecName cnm
-         args <- readBackCtorArgs cnm (ecType cnm) (ps++vs)
+    loop (VDataType _nm _ _ps _ixs) (VCtorApp nm ty ps vs) =
+      do args <- readBackCtorArgs nm ty (ps++vs)
          scConstApply sc nm args
 
     loop (VRecordType fs) (VRecordValue vs) =
@@ -472,7 +469,7 @@ readBackValue sc cfg = loop
          ty <- applyPiBody body (ready v')
          ts <- readBackCtorArgs cnm ty vs
          pure (t:ts)
-    readBackCtorArgs _ (VDataType _ _ _) [] = pure []
+    readBackCtorArgs _ (VDataType _ _ _ _) [] = pure []
     readBackCtorArgs cnm _ _ =
       panic "readBackValue / readBackCtorArgs" [
           "Constructor type mismatch: " <> Text.pack (show cnm)
@@ -1103,8 +1100,8 @@ bvShiftOp sc cfg szf tmOp bvOp =
            n0'  <- scNat sc n0
            w'   <- readBackValue sc cfg (VVecType n VBoolType) w
            dt   <- scRequireDataType sc preludeNatIdent
-           pn   <- traverse (evalType cfg) (dtExtCns dt)
-           amt' <- readBackValue sc cfg (VDataType pn [] []) amt
+           pn   <- evalType cfg (dtType dt)
+           amt' <- readBackValue sc cfg (VDataType (dtName dt) pn [] []) amt
            tm   <- tmOp sc n0' w' amt'
            pure (VWord (Left (n, tm)))
 
@@ -1211,9 +1208,10 @@ mkStreamOp sc cfg =
         do ref <- liftIO (newIORef mempty)
            stm <- liftIO $ delay $ do
                      natDT <- scRequireDataType sc preludeNatIdent
-                     natPN <- traverse (evalType cfg) (dtExtCns natDT)
+                     let d = dtName natDT
+                     natPN <- evalType cfg (dtType natDT)
                      ty' <- readBackTValue sc cfg ty
-                     ftm <- readBackValue sc cfg (VPiType nm (VDataType natPN [] []) (VNondependentPi ty)) f
+                     ftm <- readBackValue sc cfg (VPiType nm (VDataType d natPN [] []) (VNondependentPi ty)) f
                      scGlobalApply sc (mkIdent preludeModuleName "MkStream") [ty',ftm]
            return (VExtra (VExtraStream ty fn ref stm))
 
