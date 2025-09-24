@@ -754,5 +754,7 @@ ppTermContainerWithNames ppContainer opts ne trms =
                    flip execState mempty $
                    traverse (\t -> scTermCountAux global_p [t]) $
                    trms
-   in runPPM opts ne $ ppLets global_p occPairs []
+   in runPPM opts ne $
+      withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $
+      ppLets global_p occPairs []
         (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
