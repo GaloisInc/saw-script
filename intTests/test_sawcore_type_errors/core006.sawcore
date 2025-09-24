@@ -1,0 +1,7 @@
+-- DeclError "Universe level of parameters should be no greater than that of the datatype"
+
+module core006 where import Prelude;
+
+data Foo (a : sort 1) : sort 0 where {
+  MkFoo : a -> Foo;
+}
