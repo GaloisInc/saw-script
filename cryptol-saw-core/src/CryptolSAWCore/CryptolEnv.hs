@@ -486,7 +486,7 @@ loadExtCryptolModule sc env path =
 
 -- | loadCryptolModule
 --
--- NOTE RE CALLERS:
+-- NOTE RE CALLS TO:
 --  - the path to this function from the command line is only via
 --    the experimental "write_coq_cryptol_module" command.
 --
@@ -555,20 +555,12 @@ mkCryptolModule m env =
 
 -- | bindExtCryptolModule - ad hoc function/hook that allows for
 --   extending the Cryptol environment with the names in a Cryptol
---   module, `ExtCryptolModule`.
+--   module, represented here by a `ExtCryptolModule`.
 --
---   NOTE RE CALLERS: Three command line variants get us here:
+--   NOTE RE CALLS TO: Three command line variants get us here:
 --      > D <- cryptol_load "PATH"
 --      > x <- return (cryptol_prims ())
 --      > let x = cryptol_prims ()
---
---   FIXME:
---    - submodules are not handled correctly below.
---    - the code is somewhat duplicating functionality that we
---      already have with `importCryptolModule`
---   TODO:
---    - new design in PR #2593 (addressing issue #2569) should replace
---      this function so that the fundamental work is done via `importCryptolModule`.
 --
 bindExtCryptolModule ::
   (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
@@ -583,8 +575,16 @@ bindLoadedModule (asName, origName) env =
   env{eImports= mkImport PublicAndPrivate origName (Just asName) Nothing
               : eImports env
      }
+  -- FIXME:MT: PublicAndPrivate?!
 
-
+-- | bindCryptolModule - binding when we have the ECM_CryptolModule side.
+--
+-- NOTE:
+--  - this code is duplicating functionality that we already have with
+--    `importCryptolModule`.  We would like to have just one piece of
+--    code that computes the names (i.e., have just "one source of
+--    truth" here).
+--
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
@@ -601,9 +601,13 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
           f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
           f _                                 = Nothing
 
-    addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
+    addName name =
+      MN.shadowing
+       (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
 
-    addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
+    addTSyn name =
+      MN.shadowing
+        (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
 -- | NOTE: this is only used in the "cryptol_extract" primitive.
 extractDefFromExtCryptolModule :: ExtCryptolModule -> Text -> IO TypedTerm
@@ -618,10 +622,16 @@ extractDefFromExtCryptolModule ecm name =
         Just t  -> return t
         Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
-        -- FIXME: bug: we can't access definitions in submodules.
-        -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
-        -- FIXME: if one had a CryptolModule with qualified names (e.g., it
-        --     was generated from a module with submodules), would this work?
+        -- NOTE RE CALLS TO:
+        --   - currently we can only get to this branch when CryptolModule
+        --     is the one created with `cryptol_prims` (Haskell function and
+        --     SAWScript function).  E.g.,
+        --
+        --     > cryptol_extract (cryptol_prims ()) "trunc"
+        --
+        -- FIXME: this code is somewhat ad hoc, might we rather invoke
+        -- parse for name, or the like?  However, we expect this code
+        -- would likely go away after we address Issue #<TODO>.
 
 
 ---- Core functions for loading and Translating Modules ------------------------
