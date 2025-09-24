@@ -1,0 +1,5 @@
+-- DeclError "Dangling definition without a type"
+
+module core004 where import Prelude;
+
+foo x y = and x y;

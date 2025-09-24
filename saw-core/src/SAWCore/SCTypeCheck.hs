@@ -193,7 +193,6 @@ data TCError
   | NotFuncTypeInApp SCTypedTerm SCTypedTerm
   | NotTupleType Term
   | BadTupleIndex Int Term
-  | NotStringLit Term
   | NotRecordType SCTypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
@@ -203,9 +202,8 @@ data TCError
   | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
-  | NotFullyAppliedRec Name
+  | NotFullyAppliedRec NameInfo
   | BadRecursorApp Term [Term] Term
-  | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
   | ErrorPos Pos TCError
@@ -248,8 +246,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotStringLit trm) =
-      ppWithPos [ return "Record selector is not a string literal", ishow trm ]
   helper (NotRecordType (SCTypedTerm trm tp _ctx)) =
       ppWithPos [ return "Record field projection with non-record type"
                 , ishow tp
@@ -278,9 +274,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadConstType n rty ty) =
-    ppWithPos [ return ("Type of constant " ++ show n), ishow rty
-              , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
       ppWithPos [ return "Malformed recursor",
                   ishow trm, return reason ]
@@ -291,17 +284,21 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
   helper (ErrorTerm tm err) = do
-    info <- ppWithPos [ return ("While typechecking term: ")
+    info <- ppWithPos [ return ("While typechecking term:")
                       , ishow tm ]
     cont <- helper err
     return (info ++ cont)
   helper (ExpectedRecursor ttm) =
     ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
+  -- | Add prefix to every line, but remove final trailing newline
+  indent :: String -> String -> String
+  indent prefix s = init (unlines (map (prefix ++) (lines s)))
+
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> "  " ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
+    (\(ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError

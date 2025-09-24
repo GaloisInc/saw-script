@@ -1,0 +1,5 @@
+-- DeclError "Definition without defining equation"
+
+module core002 where import Prelude;
+
+foo : Bool -> Bool -> Bool;

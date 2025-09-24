@@ -52,6 +52,7 @@ import SAWCore.Module
   , DataType(..)
   , DefQualifier(..)
   )
+import SAWCore.Name (Name(..))
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
@@ -222,7 +223,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
             typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec (dtName dt)
+       _ -> throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
 
 typeInferCompleteTerm (Un.Recursor _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
@@ -354,7 +355,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
          Just x -> return x
          Nothing ->
              throwTCError $
-             DeclError nm ("More variables " ++ show vars ++
+             DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
                            " than length of function type:\n" ++
                            showTerm (typedVal typed_tp))
 

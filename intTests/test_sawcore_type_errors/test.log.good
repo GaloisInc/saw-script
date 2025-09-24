@@ -1,0 +1,343 @@
+ Loading file "test.saw"
+ Unbound name
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:7:1-7:14 (at top level)
+.:1:0:
+Unbound name: "false"
+
+ No such data type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:10:1-10:35 (at top level)
+.:1:0:
+No such data type: ModuleIdentifier Cryptol.String
+
+ Recursor not fully applied
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:13:1-13:73 (at top level)
+.:1:0:
+Recursor not fully applied: ModuleIdentifier Prelude.Either
+
+ Not a sort (lambda)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:16:1-16:26 (at top level)
+.:1:0:
+While typechecking term:
+  \(x : Prelude.True) -> x
+.:1:0:
+Not a sort
+  Prelude.Bool
+
+ Not a sort (pi)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:19:1-19:27 (at top level)
+.:1:11:
+While typechecking term:
+  (x : Prelude.True)
+  -> Prelude.Bool
+.:1:11:
+Not a sort
+  Prelude.Bool
+
+ Not a sort (pi)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:22:1-22:28 (at top level)
+.:1:11:
+While typechecking term:
+  (x : Prelude.Bool)
+  -> Prelude.False
+.:1:11:
+Not a sort
+  Prelude.Bool
+
+ Not a sort (pair type)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:25:1-25:21 (at top level)
+.:1:2:
+While typechecking term:
+  Prelude.True * Prelude.Nat
+.:1:2:
+Not a sort
+  Prelude.Bool
+
+ Not a sort (pair type)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:28:1-28:19 (at top level)
+.:1:2:
+While typechecking term:
+  Prelude.Bool * 5
+.:1:2:
+Not a sort
+  Prelude.Nat
+
+ Not a sort (record type)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:31:1-31:37 (at top level)
+.:1:0:
+While typechecking term:
+  #{foo : Prelude.Bool,bar : Prelude.False}
+.:1:0:
+Not a sort
+  Prelude.Bool
+
+ Motive function should return a sort
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:34:1-34:59 (at top level)
+.:1:15:
+Malformed recursor
+  Prelude.Void#rec (\(_ : Prelude.Void) -> Prelude.True) ()
+Motive function should return a sort
+
+ Function application with non-function type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:37:1-37:18 (at top level)
+.:1:0:
+While typechecking term:
+  Prelude.True Prelude.True
+.:1:0:
+Function application with non-function type
+For term:
+  Prelude.True
+With type:
+  Prelude.Bool
+To argument:
+  Prelude.True
+
+ Tuple field projection with non-tuple type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:40:1-40:15 (at top level)
+.:1:0:
+While typechecking term:
+  Prelude.True.1
+.:1:0:
+Tuple field projection with non-tuple type
+  Prelude.Bool
+
+ Record field projection with non-record type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:43:1-43:18 (at top level)
+.:1:0:
+While typechecking term:
+  Prelude.False.foo
+.:1:0:
+Record field projection with non-record type
+  Prelude.Bool
+In term:
+  Prelude.False
+
+ Bad record field for type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:46:1-46:34 (at top level)
+.:1:0:
+While typechecking term:
+  {a = Prelude.True,b = Prelude.False}.c
+.:1:0:
+Bad record field ("c") for type
+  #{a : Prelude.Bool,b : Prelude.Bool}
+
+ Inferred type not a subtype of expected type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:49:1-49:45 (at top level)
+.:1:1:
+While typechecking term:
+  (\(x : Prelude.Bool) -> Prelude.implies x Prelude.False) 5
+.:1:1:
+Inferred type
+  Prelude.Nat
+Not a subtype of expected type
+  Prelude.Bool
+For term
+  5
+
+ Empty vector literal
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:4:36-4:50 in (callback)
+   (builtin) in fails
+   test.saw:4:17-4:54 in parse
+   test.saw:52:1-52:38 (at top level)
+.:1:26:
+Empty vector literal
+
+ More variables than length of function type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:57:1-57:23 (at top level)
+core001.sawcore:5:0:
+Malformed declaration for "foo"
+More variables ["x","y","z"] than length of function type:
+Prelude.Bool
+-> Prelude.Bool
+-> Prelude.Bool
+
+
+ Definition without defining equation
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:60:1-60:23 (at top level)
+core002.sawcore:5:0:
+Malformed declaration for "foo"
+Definition without defining equation
+
+
+ Primitive or axiom with definition
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:63:1-63:23 (at top level)
+core003.sawcore:5:10:
+Malformed declaration for "foo"
+Primitive or axiom with definition
+
+
+ Dangling definition without a type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:66:1-66:23 (at top level)
+core004.sawcore:5:0:
+Malformed declaration for "foo"
+Dangling definition without a type
+
+
+ Wrong form for type of datatype
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:69:1-69:23 (at top level)
+core005.sawcore:5:5:
+Malformed declaration for "Foo"
+Wrong form for type of datatype
+
+
+ Universe level of parameters should be no greater than that of the datatype
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:72:1-72:23 (at top level)
+core006.sawcore:5:5:
+Malformed declaration for "Foo"
+Universe level of parameters should be no greater than that of the datatype
+
+
+ Universe level of indices should be strictly contained in that of the datatype
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:75:1-75:23 (at top level)
+core007.sawcore:5:5:
+Malformed declaration for "Foo"
+Universe level of indices should be strictly contained in that of the datatype
+
+
+ Universe level of constructors should be strictly contained in that of the datatype
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in load_sawcore_from_file
+   test.saw:3:28-3:59 in (callback)
+   (builtin) in fails
+   test.saw:3:21-3:59 in load
+   test.saw:78:1-78:23 (at top level)
+core008.sawcore:5:5:
+Malformed declaration for "Foo"
+Universe level of constructors should be strictly contained in that of the datatype
+
+

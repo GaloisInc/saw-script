@@ -1,0 +1,6 @@
+-- DeclError "More variables than length of function type"
+
+module core001 where import Prelude;
+
+foo : Bool -> Bool -> Bool;
+foo x y z = x;
