@@ -193,7 +193,6 @@ data TCError
   | NotFuncTypeInApp SCTypedTerm SCTypedTerm
   | NotTupleType Term
   | BadTupleIndex Int Term
-  | NotStringLit Term
   | NotRecordType SCTypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
@@ -205,7 +204,6 @@ data TCError
   | NoSuchConstant NameInfo
   | NotFullyAppliedRec NameInfo
   | BadRecursorApp Term [Term] Term
-  | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
   | ErrorPos Pos TCError
@@ -248,8 +246,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotStringLit trm) =
-      ppWithPos [ return "Record selector is not a string literal", ishow trm ]
   helper (NotRecordType (SCTypedTerm trm tp _ctx)) =
       ppWithPos [ return "Record field projection with non-record type"
                 , ishow tp
@@ -278,9 +274,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadConstType n rty ty) =
-    ppWithPos [ return ("Type of constant " ++ show n), ishow rty
-              , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
       ppWithPos [ return "Malformed recursor",
                   ishow trm, return reason ]
