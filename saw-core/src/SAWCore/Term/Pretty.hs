@@ -104,7 +104,8 @@ ppParensPrec p1 p2 d
 -- | Local variable namings, which map each deBruijn index in scope to a unique
 -- string to be used to print it. This mapping is given by position in a list.
 -- Renamings for named variables are in an 'IntMap' indexed by 'VarIndex'.
--- The third argument caches the set of all used or reserved names.
+-- The third argument caches the set of all used or reserved names;
+-- fresh 'LocalName's are chosen while avoiding names in this set.
 data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
 
 -- | The empty local variable context
