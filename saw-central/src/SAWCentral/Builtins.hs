@@ -2094,6 +2094,13 @@ cryptol_load fileReader path = do
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
+cryptol_extract :: CEnv.ExtCryptolModule -> Text -> TopLevel TypedTerm
+cryptol_extract ecm var = do
+  sc <- getSharedContext
+  rw <- getTopLevelRW
+  let ce = rwCryptol rw
+  io $ CEnv.extractDefFromExtCryptolModule sc ce ecm var
+
 cryptol_add_path :: FilePath -> TopLevel ()
 cryptol_add_path path =
   do rw <- getTopLevelRW

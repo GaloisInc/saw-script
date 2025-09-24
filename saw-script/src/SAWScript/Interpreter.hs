@@ -4123,7 +4123,7 @@ primitives = Map.fromList $
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
-    (pureVal CEnv.extractDefFromExtCryptolModule)
+    (pureVal cryptol_extract)
     Current
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."

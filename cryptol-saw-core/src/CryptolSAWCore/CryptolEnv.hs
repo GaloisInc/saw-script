@@ -609,18 +609,24 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
       MN.shadowing
         (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
--- | NOTE: this is only used in the "cryptol_extract" primitive.
-extractDefFromExtCryptolModule :: ExtCryptolModule -> Text -> IO TypedTerm
-extractDefFromExtCryptolModule ecm name =
+
+-- | extractDefFromExtCryptolModule sc en ecm name - interpret `name` as a definition in
+--   the module `ecm`, return the TypedTerm.
+--
+--  NOTE RE CALLS TO: this is (only) used for the "cryptol_extract" primitive.
+--
+extractDefFromExtCryptolModule ::
+  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
+extractDefFromExtCryptolModule sc env ecm name =
   case ecm of
     ECM_LoadedModule _modname ->
       -- do env' <- bindLoadedModule ...
       panic "extractDefFromExtCryptolModule"
               ["FIXME: not implemented yet: need plumbing!"]
     ECM_CryptolModule (CryptolModule _ tm) ->
-      case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-        Just t  -> return t
-        Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
+        case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
+          Just t  -> return t
+          Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
         -- NOTE RE CALLS TO:
         --   - currently we can only get to this branch when CryptolModule
