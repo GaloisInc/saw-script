@@ -58,7 +58,7 @@ Stack trace:
 .:1:11:
 While typechecking term:
   (x : Prelude.True)
--> Prelude.Bool
+  -> Prelude.Bool
 .:1:11:
 Not a sort
   Prelude.Bool
@@ -74,7 +74,7 @@ Stack trace:
 .:1:11:
 While typechecking term:
   (x : Prelude.Bool)
--> Prelude.False
+  -> Prelude.False
 .:1:11:
 Not a sort
   Prelude.Bool

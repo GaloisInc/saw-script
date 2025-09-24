@@ -298,10 +298,14 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (ExpectedRecursor ttm) =
     ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
+  -- | Add prefix to every line, but remove final trailing newline
+  indent :: String -> String -> String
+  indent prefix s = init (unlines (map (prefix ++) (lines s)))
+
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> "  " ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
+    (\(ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError
