@@ -244,7 +244,7 @@ Stack trace:
    test.saw:57:1-57:23 (at top level)
 core001.sawcore:5:0:
 Malformed declaration for "foo"
-More variables [TermVar (PosPair {_pos = Pos {posBase = ".", posPath = "core001.sawcore", posLine = 6, posCol = 4}, val = "x"}),TermVar (PosPair {_pos = Pos {posBase = ".", posPath = "core001.sawcore", posLine = 6, posCol = 6}, val = "y"}),TermVar (PosPair {_pos = Pos {posBase = ".", posPath = "core001.sawcore", posLine = 6, posCol = 8}, val = "z"})] than length of function type:
+More variables ["x","y","z"] than length of function type:
 Prelude.Bool
 -> Prelude.Bool
 -> Prelude.Bool

@@ -355,7 +355,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
          Just x -> return x
          Nothing ->
              throwTCError $
-             DeclError nm ("More variables " ++ show vars ++
+             DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
                            " than length of function type:\n" ++
                            showTerm (typedVal typed_tp))
 
