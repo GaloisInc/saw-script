@@ -203,7 +203,7 @@ data TCError
   | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
-  | NotFullyAppliedRec Name
+  | NotFullyAppliedRec NameInfo
   | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
