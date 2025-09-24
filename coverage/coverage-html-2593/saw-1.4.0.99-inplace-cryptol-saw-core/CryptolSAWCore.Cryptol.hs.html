@@ -113,7 +113,7 @@ span.spaces    { background: white }
 <span class="lineno">   94 </span>import SAWCore.SharedTerm
 <span class="lineno">   95 </span>import SAWCore.SCTypeCheck               as SC
 <span class="lineno">   96 </span>import SAWCore.Simulator.MonadLazy (force)
-<span class="lineno">   97 </span>import SAWCore.Name (preludeName)
+<span class="lineno">   97 </span>import SAWCore.Name (preludeName, Name(..))
 <span class="lineno">   98 </span>import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 <span class="lineno">   99 </span>import SAWCore.Term.Pretty (showTerm)
 <span class="lineno">  100 </span>
@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="decl"><span class="istickedoff">bindTParam' sc tp env =</span>
 <span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">do</span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">k &lt;- importKind sc (C.tpKind tp)</span>
-<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- scFreshGlobal sc (tparamToLocalName tp) k</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- scFreshVariable sc (tparamToLocalName tp) k</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">return ( env { envT = Map.insert (C.tpUnique tp) v (envT env)</span>
 <span class="lineno">  145 </span><span class="spaces">               </span><span class="istickedoff">}</span>
 <span class="lineno">  146 </span><span class="spaces">         </span><span class="istickedoff">, v</span>
@@ -183,7 +183,7 @@ span.spaces    { background: white }
 <span class="lineno">  164 </span>bindName :: SharedContext -&gt; C.Name -&gt; C.Schema -&gt; Env -&gt; IO (Env,Term,Term)
 <span class="lineno">  165 </span><span class="decl"><span class="istickedoff">bindName sc name schema env = do</span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- importSchema sc env schema</span>
-<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">v  &lt;- scFreshGlobal sc (nameToLocalName name) ty</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">v  &lt;- scFreshVariable sc (nameToLocalName name) ty</span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { envE = Map.insert name v      (envE env)</span>
 <span class="lineno">  169 </span><span class="spaces">                 </span><span class="istickedoff">, envC = Map.insert name schema (envC env)</span>
 <span class="lineno">  170 </span><span class="spaces">                 </span><span class="istickedoff">}</span>
@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="decl"><span class="istickedoff">bindProp sc prop nm env =</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">do</span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- importType sc env prop</span>
-<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- scFreshGlobal sc nm ty</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- scFreshVariable sc nm ty</span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">return ( env { envP = insertSupers prop [] v (envP env)}</span>
 <span class="lineno">  179 </span><span class="spaces">         </span><span class="istickedoff">, v</span>
 <span class="lineno">  180 </span><span class="spaces">         </span><span class="istickedoff">)</span></span>
@@ -340,7 +340,7 @@ span.spaces    { background: white }
 <span class="lineno">  321 </span><span class="spaces">            </span><span class="istickedoff">C.TCBit      -&gt; scBoolType sc</span>
 <span class="lineno">  322 </span><span class="spaces">            </span><span class="istickedoff">C.TCInteger  -&gt; scIntegerType sc</span>
 <span class="lineno">  323 </span><span class="spaces">            </span><span class="istickedoff">C.TCIntMod   -&gt; scGlobalApply sc &quot;Cryptol.IntModNum&quot; =&lt;&lt; traverse go tyargs</span>
-<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">C.TCFloat    -&gt; <span class="nottickedoff">scGlobalApply sc &quot;Cryptol.TCFloat&quot;   =&lt;&lt; traverse go tyargs</span></span>
+<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">C.TCFloat    -&gt; scGlobalApply sc &quot;Cryptol.TCFloat&quot;   =&lt;&lt; traverse go tyargs</span>
 <span class="lineno">  325 </span><span class="spaces">            </span><span class="istickedoff">C.TCArray    -&gt; do a &lt;- go (tyargs !! 0)</span>
 <span class="lineno">  326 </span><span class="spaces">                               </span><span class="istickedoff">b &lt;- go (tyargs !! 1)</span>
 <span class="lineno">  327 </span><span class="spaces">                               </span><span class="istickedoff">scArrayType sc a b</span>
@@ -498,9 +498,9 @@ span.spaces    { background: white }
 <span class="lineno">  479 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PZeroSeqBool&quot; [n']</span>
 <span class="lineno">  480 </span><span class="spaces">        </span><span class="istickedoff">-- instance ValidFloat e p =&gt; Zero (Float e p)</span>
 <span class="lineno">  481 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsZero -&gt; Just (C.tIsFloat -&gt; Just (e, p)))</span>
-<span class="lineno">  482 </span><span class="spaces">          </span><span class="istickedoff">-&gt; <span class="nottickedoff">do e' &lt;- importType sc env e</span></span>
-<span class="lineno">  483 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- importType sc env p</span></span>
-<span class="lineno">  484 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.PZeroFloat&quot; [e', p']</span></span>
+<span class="lineno">  482 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do e' &lt;- importType <span class="nottickedoff">sc</span> env e</span>
+<span class="lineno">  483 </span><span class="spaces">                </span><span class="istickedoff">p' &lt;- importType <span class="nottickedoff">sc</span> env p</span>
+<span class="lineno">  484 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PZeroFloat&quot; [e', p']</span>
 <span class="lineno">  485 </span><span class="spaces">        </span><span class="istickedoff">-- instance (Zero a) =&gt; Zero [n]a</span>
 <span class="lineno">  486 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsZero -&gt; Just (C.tIsSeq -&gt; Just (n, a)))</span>
 <span class="lineno">  487 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do n' &lt;- importType sc env n</span>
@@ -572,9 +572,9 @@ span.spaces    { background: white }
 <span class="lineno">  553 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PRingSeqBool&quot; [n']</span>
 <span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff">-- instance ValidFloat e p =&gt; Ring (Float e p)</span>
 <span class="lineno">  555 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsRing -&gt; Just (C.tIsFloat -&gt; Just (e, p)))</span>
-<span class="lineno">  556 </span><span class="spaces">          </span><span class="istickedoff">-&gt; <span class="nottickedoff">do e' &lt;- importType sc env e</span></span>
-<span class="lineno">  557 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- importType sc env p</span></span>
-<span class="lineno">  558 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.PRingFloat&quot; [e', p']</span></span>
+<span class="lineno">  556 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do e' &lt;- importType <span class="nottickedoff">sc</span> env e</span>
+<span class="lineno">  557 </span><span class="spaces">                </span><span class="istickedoff">p' &lt;- importType <span class="nottickedoff">sc</span> env p</span>
+<span class="lineno">  558 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PRingFloat&quot; [e', p']</span>
 <span class="lineno">  559 </span><span class="spaces">        </span><span class="istickedoff">-- instance (Ring a) =&gt; Ring [n]a</span>
 <span class="lineno">  560 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsRing -&gt; Just (C.tIsSeq -&gt; Just (n, a)))</span>
 <span class="lineno">  561 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do n' &lt;- importType sc env n</span>
@@ -813,7 +813,7 @@ span.spaces    { background: white }
 <span class="lineno">  794 </span><span class="spaces">      </span><span class="istickedoff">do t &lt;- importSchema sc env sch</span>
 <span class="lineno">  795 </span><span class="spaces">         </span><span class="istickedoff">e &lt;- importExpr sc env expr</span>
 <span class="lineno">  796 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  797 </span><span class="spaces">         </span><span class="istickedoff">scConstant' sc nmi e t</span>
+<span class="lineno">  797 </span><span class="spaces">         </span><span class="istickedoff">scConstant' sc nmi e <span class="nottickedoff">t</span></span>
 <span class="lineno">  798 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">-- lookup primitive in the extra primitive lookup table</span>
 <span class="lineno">  800 </span><span class="spaces">  </span><span class="istickedoff">| Just nm &lt;- <span class="nottickedoff">C.asPrim n</span>, Just t &lt;- <span class="nottickedoff">Map.lookup nm (envPrims env)</span> = <span class="nottickedoff">return t</span></span>
@@ -835,7 +835,7 @@ span.spaces    { background: white }
 <span class="lineno">  816 </span><span class="decl"><span class="istickedoff">importOpaque sc env n sch = do</span>
 <span class="lineno">  817 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- importSchema sc <span class="nottickedoff">env</span> sch</span>
 <span class="lineno">  818 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;- importName n</span>
-<span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi t</span></span>
+<span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">scOpaqueConstant sc nmi <span class="nottickedoff">t</span></span></span>
 <span class="lineno">  820 </span>
 <span class="lineno">  821 </span>importConstant :: SharedContext -&gt; Env -&gt; C.Name -&gt; C.Schema -&gt; Term -&gt; IO Term
 <span class="lineno">  822 </span><span class="decl"><span class="istickedoff">importConstant sc env n sch rhs = do</span>
@@ -1000,26 +1000,26 @@ span.spaces    { background: white }
 <span class="lineno">  981 </span><span class="decl"><span class="istickedoff">floatPrims =</span>
 <span class="lineno">  982 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList $</span>
 <span class="lineno">  983 </span><span class="spaces">  </span><span class="istickedoff">first C.floatPrim &lt;$&gt;</span>
-<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;fpNaN&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpNaN&quot;</span>)</span>
-<span class="lineno">  985 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpPosInf&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpPosInf&quot;</span>)</span>
-<span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromBits&quot;,     <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpFromBits&quot;</span>)</span>
-<span class="lineno">  987 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToBits&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpToBits&quot;</span>)</span>
-<span class="lineno">  988 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;=.=&quot;,            <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpEq&quot;</span>)</span>
-<span class="lineno">  989 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAdd&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpAdd&quot;</span>)</span>
-<span class="lineno">  990 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSub&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpSub&quot;</span>)</span>
-<span class="lineno">  991 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpMul&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpMul&quot;</span>)</span>
-<span class="lineno">  992 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpDiv&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpDiv&quot;</span>)</span>
-<span class="lineno">  993 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToRational&quot;,   <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpToRational&quot;</span>)</span>
-<span class="lineno">  994 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromRational&quot;, <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpFromRational&quot;</span>)</span>
-<span class="lineno">  995 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNaN&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNaN&quot;</span>)</span>
-<span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsInf&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsInf&quot;</span>)</span>
-<span class="lineno">  997 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsZero&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsZero&quot;</span>)</span>
-<span class="lineno">  998 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNeg&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNeg&quot;</span>)</span>
-<span class="lineno">  999 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNormal&quot;,     <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNormal&quot;</span>)</span>
-<span class="lineno"> 1000 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsSubnormal&quot;,  <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsSubnormal&quot;</span>)</span>
-<span class="lineno"> 1001 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFMA&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpFMA&quot;</span>)</span>
-<span class="lineno"> 1002 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAbs&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpAbs&quot;</span>)</span>
-<span class="lineno"> 1003 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSqrt&quot;,         <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpSqrt&quot;</span>)</span>
+<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;fpNaN&quot;,          flip scGlobalDef &quot;Cryptol.ecFpNaN&quot;)</span>
+<span class="lineno">  985 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpPosInf&quot;,       flip scGlobalDef &quot;Cryptol.ecFpPosInf&quot;)</span>
+<span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromBits&quot;,     flip scGlobalDef &quot;Cryptol.ecFpFromBits&quot;)</span>
+<span class="lineno">  987 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToBits&quot;,       flip scGlobalDef &quot;Cryptol.ecFpToBits&quot;)</span>
+<span class="lineno">  988 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;=.=&quot;,            flip scGlobalDef &quot;Cryptol.ecFpEq&quot;)</span>
+<span class="lineno">  989 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAdd&quot;,          flip scGlobalDef &quot;Cryptol.ecFpAdd&quot;)</span>
+<span class="lineno">  990 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSub&quot;,          flip scGlobalDef &quot;Cryptol.ecFpSub&quot;)</span>
+<span class="lineno">  991 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpMul&quot;,          flip scGlobalDef &quot;Cryptol.ecFpMul&quot;)</span>
+<span class="lineno">  992 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpDiv&quot;,          flip scGlobalDef &quot;Cryptol.ecFpDiv&quot;)</span>
+<span class="lineno">  993 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToRational&quot;,   flip scGlobalDef &quot;Cryptol.ecFpToRational&quot;)</span>
+<span class="lineno">  994 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromRational&quot;, flip scGlobalDef &quot;Cryptol.ecFpFromRational&quot;)</span>
+<span class="lineno">  995 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNaN&quot;,        flip scGlobalDef &quot;Cryptol.fpIsNaN&quot;)</span>
+<span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsInf&quot;,        flip scGlobalDef &quot;Cryptol.fpIsInf&quot;)</span>
+<span class="lineno">  997 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsZero&quot;,       flip scGlobalDef &quot;Cryptol.fpIsZero&quot;)</span>
+<span class="lineno">  998 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNeg&quot;,        flip scGlobalDef &quot;Cryptol.fpIsNeg&quot;)</span>
+<span class="lineno">  999 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNormal&quot;,     flip scGlobalDef &quot;Cryptol.fpIsNormal&quot;)</span>
+<span class="lineno"> 1000 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsSubnormal&quot;,  flip scGlobalDef &quot;Cryptol.fpIsSubnormal&quot;)</span>
+<span class="lineno"> 1001 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFMA&quot;,          flip scGlobalDef &quot;Cryptol.fpFMA&quot;)</span>
+<span class="lineno"> 1002 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAbs&quot;,          flip scGlobalDef &quot;Cryptol.fpAbs&quot;)</span>
+<span class="lineno"> 1003 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSqrt&quot;,         flip scGlobalDef &quot;Cryptol.fpSqrt&quot;)</span>
 <span class="lineno"> 1004 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno"> 1005 </span>
 <span class="lineno"> 1006 </span>suiteBPrims :: Map C.PrimIdent (SharedContext -&gt; IO Term)
@@ -1528,7 +1528,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1509 </span><span class="spaces">        </span><span class="istickedoff">rhs' &lt;- case declOpts of</span>
 <span class="lineno"> 1510 </span><span class="spaces">                  </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1511 </span><span class="spaces">                    </span><span class="istickedoff">do nmi &lt;- importName nm</span>
-<span class="lineno"> 1512 </span><span class="spaces">                       </span><span class="istickedoff">scConstant' sc nmi rhs t'</span>
+<span class="lineno"> 1512 </span><span class="spaces">                       </span><span class="istickedoff">scConstant' sc nmi rhs <span class="nottickedoff">t'</span></span>
 <span class="lineno"> 1513 </span><span class="spaces">                  </span><span class="istickedoff">NestedDeclGroup -&gt;</span>
 <span class="lineno"> 1514 </span><span class="spaces">                    </span><span class="istickedoff">return rhs</span>
 <span class="lineno"> 1515 </span><span class="spaces">        </span><span class="istickedoff">return env0 { envE = Map.insert nm rhs' (envE env0)</span>
@@ -1551,7 +1551,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1532 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1533 </span><span class="spaces">      </span><span class="istickedoff">-- grab a reference to the outermost variable; this will be the record</span>
 <span class="lineno"> 1534 </span><span class="spaces">      </span><span class="istickedoff">-- in the body of the lambda we build later</span>
-<span class="lineno"> 1535 </span><span class="spaces">      </span><span class="istickedoff">v0 &lt;- scFreshGlobal sc &quot;fixRecord&quot; rect</span>
+<span class="lineno"> 1535 </span><span class="spaces">      </span><span class="istickedoff">v0 &lt;- scFreshVariable sc &quot;fixRecord&quot; rect</span>
 <span class="lineno"> 1536 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1537 </span><span class="spaces">      </span><span class="istickedoff">-- build a list of projections from a record variable</span>
 <span class="lineno"> 1538 </span><span class="spaces">      </span><span class="istickedoff">vm &lt;- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm</span>
@@ -1604,7 +1604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1585 </span><span class="spaces">               </span><span class="istickedoff">case declOpts of</span>
 <span class="lineno"> 1586 </span><span class="spaces">                 </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff">do nmi &lt;- importName (C.dName d)</span>
-<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r t</span>
+<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r <span class="nottickedoff">t</span></span>
 <span class="lineno"> 1589 </span><span class="spaces">                 </span><span class="istickedoff">NestedDeclGroup -&gt; <span class="nottickedoff">return r</span></span>
 <span class="lineno"> 1590 </span><span class="spaces">      </span><span class="istickedoff">rhss &lt;- sequence (Map.intersectionWith mkRhs dm tm)</span>
 <span class="lineno"> 1591 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -2017,14 +2017,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 2000 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) _ [SC.TValue v1] [] -&gt;</span>
 <span class="lineno"> 2002 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
 <span class="lineno"> 2003 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
 <span class="lineno"> 2004 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ecNameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
+<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) _ [] [] -&gt;</span>
 <span class="lineno"> 2006 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
 <span class="lineno"> 2007 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType _ _ _ -&gt; Nothing</span>
+<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType _ _ _ _ -&gt; Nothing</span>
 <span class="lineno"> 2009 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">SC.VUnitType -&gt; return (Right (C.tTuple []))</span>
 <span class="lineno"> 2011 </span><span class="spaces">      </span><span class="istickedoff">SC.VPairType v1 v2 -&gt; do</span>
@@ -2067,7 +2067,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2048 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VBit (SC.toBool v))</span>
 <span class="lineno"> 2049 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2050 </span><span class="spaces">  </span><span class="istickedoff">TV.TVInteger -&gt;</span>
-<span class="lineno"> 2051 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; error &quot;exportValue: expected integer&quot;))</span></span>
+<span class="lineno"> 2051 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; <span class="nottickedoff">error &quot;exportValue: expected integer&quot;</span>))</span>
 <span class="lineno"> 2052 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">TV.TVIntMod _modulus -&gt;</span>
 <span class="lineno"> 2054 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VIntMod _ x -&gt; x; _ -&gt; error &quot;exportValue: expected intmod&quot;))</span></span>
@@ -2378,7 +2378,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2359 </span><span class="spaces">  </span><span class="istickedoff">let mkAltFuncTypes b = mapM (\ts-&gt;scFunAll sc ts b) argTypes_eachCtor</span>
 <span class="lineno"> 2360 </span><span class="spaces">  </span><span class="istickedoff">case_type &lt;-</span>
 <span class="lineno"> 2361 </span><span class="spaces">      </span><span class="istickedoff">do</span>
-<span class="lineno"> 2362 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshGlobal sc &quot;b&quot; sort0</span>
+<span class="lineno"> 2362 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
 <span class="lineno"> 2363 </span><span class="spaces">           </span><span class="istickedoff">-- all uses are direct under the 'Pi'</span>
 <span class="lineno"> 2364 </span><span class="spaces">      </span><span class="istickedoff">altFuncTypes &lt;- mkAltFuncTypes b</span>
 <span class="lineno"> 2365 </span><span class="spaces">      </span><span class="istickedoff">scGeneralizeTerms sc tyParamsVars</span>
@@ -2393,14 +2393,14 @@ span.spaces    { background: white }
 <span class="lineno"> 2374 </span><span class="spaces">      </span><span class="istickedoff">--    \tyvars..-&gt; \(b: sort)-&gt;(\f1 f2 ... -&gt;</span>
 <span class="lineno"> 2375 </span><span class="spaces">      </span><span class="istickedoff">--       eithersV b (FunsToCons b ... (\x-&gt; f1 ...) ...)</span>
 <span class="lineno"> 2376 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2377 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshGlobal sc &quot;b&quot; sort0</span>
+<span class="lineno"> 2377 </span><span class="spaces">      </span><span class="istickedoff">b &lt;- scFreshVariable sc &quot;b&quot; sort0</span>
 <span class="lineno"> 2378 </span><span class="spaces">      </span><span class="istickedoff">let funcNames = map (\n-&gt; Text.pack (&quot;f&quot; ++ show n)) [1..numCtors]</span>
 <span class="lineno"> 2379 </span><span class="spaces">      </span><span class="istickedoff">funcTypes &lt;- mkAltFuncTypes b</span>
-<span class="lineno"> 2380 </span><span class="spaces">      </span><span class="istickedoff">funcVars  &lt;- zipWithM (scFreshGlobal sc) funcNames funcTypes</span>
+<span class="lineno"> 2380 </span><span class="spaces">      </span><span class="istickedoff">funcVars  &lt;- zipWithM (scFreshVariable sc) funcNames funcTypes</span>
 <span class="lineno"> 2381 </span><span class="spaces">      </span><span class="istickedoff">funcDefs  &lt;- forM (zip3 funcVars represType_eachCtor ctors) $</span>
 <span class="lineno"> 2382 </span><span class="spaces">                     </span><span class="istickedoff">\(funcVar,ty,ctor) -&gt;</span>
 <span class="lineno"> 2383 </span><span class="spaces">                         </span><span class="istickedoff">do</span>
-<span class="lineno"> 2384 </span><span class="spaces">                         </span><span class="istickedoff">x &lt;- scFreshGlobal sc &quot;x&quot; ty</span>
+<span class="lineno"> 2384 </span><span class="spaces">                         </span><span class="istickedoff">x &lt;- scFreshVariable sc &quot;x&quot; ty</span>
 <span class="lineno"> 2385 </span><span class="spaces">                         </span><span class="istickedoff">let n = length (C.ecFields ctor)</span>
 <span class="lineno"> 2386 </span><span class="spaces">                         </span><span class="istickedoff">scAbstractTerms sc [x]</span>
 <span class="lineno"> 2387 </span><span class="spaces">                           </span><span class="istickedoff">=&lt;&lt; scApplyAll sc funcVar</span>
@@ -2499,7 +2499,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2480 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2481 </span><span class="spaces">        </span><span class="istickedoff">-- create the vars (&amp; names) for constructor arguments:</span>
 <span class="lineno"> 2482 </span><span class="spaces">        </span><span class="istickedoff">let argNames = map (\x-&gt; Text.pack (&quot;x&quot; ++ show x)) [0..numArgs-1]</span>
-<span class="lineno"> 2483 </span><span class="spaces">        </span><span class="istickedoff">argVars &lt;- zipWithM (scFreshGlobal sc) argNames argTypes</span>
+<span class="lineno"> 2483 </span><span class="spaces">        </span><span class="istickedoff">argVars &lt;- zipWithM (scFreshVariable sc) argNames argTypes</span>
 <span class="lineno"> 2484 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2485 </span><span class="spaces">        </span><span class="istickedoff">-- create the constructor:</span>
 <span class="lineno"> 2486 </span><span class="spaces">        </span><span class="istickedoff">ctorBody &lt;- addTypeAbstractions</span>

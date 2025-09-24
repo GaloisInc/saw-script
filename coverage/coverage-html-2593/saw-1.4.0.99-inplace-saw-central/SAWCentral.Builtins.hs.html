@@ -986,7 +986,7 @@ span.spaces    { background: white }
 <span class="lineno">  967 </span>
 <span class="lineno">  968 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  969 </span>proveRME :: ProofScript ()
-<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
+<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
 <span class="lineno">  971 </span>
 <span class="lineno">  972 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  973 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1143,7 +1143,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1124 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1125 </span>
 <span class="lineno"> 1126 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
+<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1128 </span>
 <span class="lineno"> 1129 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1130 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1160,10 +1160,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1142 </span>
 <span class="lineno"> 1143 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1145 </span>
 <span class="lineno"> 1146 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
+<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
 <span class="lineno"> 1148 </span>
 <span class="lineno"> 1149 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1150 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1253,7 +1253,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1234 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1235 </span>
 <span class="lineno"> 1236 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1238 </span>
 <span class="lineno"> 1239 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1240 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1346,7 +1346,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1327 </span><span class="spaces">            </span><span class="nottickedoff">vars  &lt;- io $ mapM (scVariable sc) pis</span>
 <span class="lineno"> 1328 </span><span class="spaces">            </span><span class="nottickedoff">innerVars &lt;-</span>
 <span class="lineno"> 1329 </span><span class="spaces">              </span><span class="nottickedoff">io $ sequence $</span>
-<span class="lineno"> 1330 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshGlobal sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
+<span class="lineno"> 1330 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshVariable sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
 <span class="lineno"> 1331 </span><span class="spaces">            </span><span class="nottickedoff">t1    &lt;- io $ scApplyAllBeta sc (ttTerm t) vars</span>
 <span class="lineno"> 1332 </span><span class="spaces">            </span><span class="nottickedoff">tsz   &lt;- io $ scTupleSelector sc t1 1 2 -- left element</span>
 <span class="lineno"> 1333 </span><span class="spaces">            </span><span class="nottickedoff">tbody &lt;- io $ scEqTrue sc =&lt;&lt; scTupleSelector sc t1 2 2 -- rightmost tuple element</span>
@@ -1380,7 +1380,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1361 </span><span class="spaces">            </span><span class="nottickedoff">--</span>
 <span class="lineno"> 1362 </span><span class="spaces">            </span><span class="nottickedoff">--      (\ (n:Nat) -&gt; (x:Vec w Bool) -&gt; IsLeNat (bvToNat w x) n -&gt; p x)</span>
 <span class="lineno"> 1363 </span><span class="spaces">            </span><span class="nottickedoff">indMotive &lt;- io $</span>
-<span class="lineno"> 1364 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshGlobal sc &quot;inductionVar&quot; natty</span>
+<span class="lineno"> 1364 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshVariable sc &quot;inductionVar&quot; natty</span>
 <span class="lineno"> 1365 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1366 </span><span class="spaces">                   </span><span class="nottickedoff">teq    &lt;- scGlobalApply sc &quot;Prelude.IsLeNat&quot; [tsz', indVar]</span>
 <span class="lineno"> 1367 </span><span class="spaces">                   </span><span class="nottickedoff">t2     &lt;- scFun sc teq tbody</span>
@@ -1403,10 +1403,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1384 </span><span class="spaces">            </span><span class="nottickedoff">--                 y (IsLeNat_base (bvToNat w y)))</span>
 <span class="lineno"> 1385 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1386 </span><span class="spaces">            </span><span class="nottickedoff">indHypProof &lt;- io $</span>
-<span class="lineno"> 1387 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshGlobal sc &quot;H&quot; thmHyp</span>
-<span class="lineno"> 1388 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshGlobal sc &quot;n&quot; natty</span>
-<span class="lineno"> 1389 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshGlobal sc &quot;Hind&quot; =&lt;&lt;</span>
-<span class="lineno"> 1390 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshGlobal sc &quot;m&quot; natty</span>
+<span class="lineno"> 1387 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshVariable sc &quot;H&quot; thmHyp</span>
+<span class="lineno"> 1388 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshVariable sc &quot;n&quot; natty</span>
+<span class="lineno"> 1389 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshVariable sc &quot;Hind&quot; =&lt;&lt;</span>
+<span class="lineno"> 1390 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshVariable sc &quot;m&quot; natty</span>
 <span class="lineno"> 1391 </span><span class="spaces">                                   </span><span class="nottickedoff">lt &lt;- scGlobalApply sc &quot;Prelude.IsLtNat&quot; [m, nVar]</span>
 <span class="lineno"> 1392 </span><span class="spaces">                                   </span><span class="nottickedoff">scGeneralizeTerms sc [m] =&lt;&lt; scFun sc lt =&lt;&lt; scApplyBeta sc indMotive m</span>
 <span class="lineno"> 1393 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -1418,9 +1418,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1399 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1400 </span><span class="spaces">                   </span><span class="nottickedoff">succinnersz &lt;- scGlobalApply sc &quot;Prelude.Succ&quot; [natinnersz]</span>
 <span class="lineno"> 1401 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1402 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshGlobal sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
+<span class="lineno"> 1402 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshVariable sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
 <span class="lineno"> 1403 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1404 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshGlobal sc &quot;Hle&quot; =&lt;&lt;</span>
+<span class="lineno"> 1404 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshVariable sc &quot;Hle&quot; =&lt;&lt;</span>
 <span class="lineno"> 1405 </span><span class="spaces">                                 </span><span class="nottickedoff">scGlobalApply sc &quot;Prelude.IsLeNat&quot; [natoutersz, nVar]</span>
 <span class="lineno"> 1406 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1407 </span><span class="spaces">                   </span><span class="nottickedoff">refl_inner &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [natinnersz]</span>
@@ -1440,7 +1440,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1421 </span><span class="spaces">            </span><span class="nottickedoff">-- \ (x : Vec x Bool) -&gt;</span>
 <span class="lineno"> 1422 </span><span class="spaces">            </span><span class="nottickedoff">--    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))</span>
 <span class="lineno"> 1423 </span><span class="spaces">            </span><span class="nottickedoff">indApp &lt;- io $</span>
-<span class="lineno"> 1424 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshGlobal sc &quot;Hind&quot; thmHyp</span>
+<span class="lineno"> 1424 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshVariable sc &quot;Hind&quot; thmHyp</span>
 <span class="lineno"> 1425 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1426 </span><span class="spaces">                   </span><span class="nottickedoff">trefl  &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [tsz']</span>
 <span class="lineno"> 1427 </span><span class="spaces">                   </span><span class="nottickedoff">indHypArg &lt;- scApplyBeta sc indHypProof varH</span>
@@ -1698,7 +1698,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1679 </span><span class="decl"><span class="istickedoff">freshSymbolicPrim x schema@(C.Forall [] [] ct) = do</span>
 <span class="lineno"> 1680 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno"> 1681 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ct</span>
-<span class="lineno"> 1682 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshGlobal sc x cty</span>
+<span class="lineno"> 1682 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshVariable sc x cty</span>
 <span class="lineno"> 1683 </span><span class="spaces">  </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) tm</span>
 <span class="lineno"> 1684 </span><span class="spaces"></span><span class="istickedoff">freshSymbolicPrim _ _ =</span>
 <span class="lineno"> 1685 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Can't create fresh symbolic variable of non-ground type.&quot;</span></span></span>
@@ -1927,14 +1927,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1908 </span><span class="spaces">            </span><span class="istickedoff">scApply sc t ty'</span>
 <span class="lineno"> 1909 </span><span class="spaces">      </span><span class="istickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span>
 <span class="lineno"> 1910 </span><span class="spaces">          </span><span class="istickedoff">dischargeProp t p</span>
-<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">Cryptol.isErasedProp p</span> = return <span class="nottickedoff">t</span></span>
-<span class="lineno"> 1912 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span></span>
+<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff">| Cryptol.isErasedProp p = return <span class="nottickedoff">t</span></span>
+<span class="lineno"> 1912 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span>
 <span class="lineno"> 1913 </span><span class="spaces">      </span><span class="istickedoff">trm' &lt;- foldM applyType trm tys</span>
 <span class="lineno"> 1914 </span><span class="spaces">      </span><span class="istickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span>
-<span class="lineno"> 1915 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst <span class="nottickedoff">su</span>) (C.sProps schema)</span>
-<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff">trm'' &lt;- foldM dischargeProp <span class="nottickedoff">trm'</span> props</span>
+<span class="lineno"> 1915 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst su) (C.sProps schema)</span>
+<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff">trm'' &lt;- foldM dischargeProp trm' props</span>
 <span class="lineno"> 1917 </span><span class="spaces">      </span><span class="istickedoff">let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))</span>
-<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema') <span class="nottickedoff">trm''</span>)</span>
+<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema') trm'')</span>
 <span class="lineno"> 1919 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 1920 </span><span class="spaces">    </span><span class="istickedoff">warnDefault ns (x,t) =</span>
 <span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Info $ show $ C.text &quot;Assuming&quot; C.&lt;+&gt; C.ppWithNames ns (x :: C.TParam) C.&lt;+&gt; C.text &quot;=&quot; C.&lt;+&gt; C.pp t</span>
@@ -1944,10 +1944,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1925 </span><span class="spaces">    </span><span class="istickedoff">plainSubst :: C.Subst -&gt; C.Type -&gt; C.Type</span>
 <span class="lineno"> 1926 </span><span class="spaces">    </span><span class="istickedoff">plainSubst s ty =</span>
 <span class="lineno"> 1927 </span><span class="spaces">      </span><span class="istickedoff">case ty of</span>
-<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff">C.TCon tc ts   -&gt; C.TCon tc (map <span class="nottickedoff">(plainSubst s)</span> ts)</span>
+<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff">C.TCon tc ts   -&gt; C.TCon tc (map (plainSubst s) ts)</span>
 <span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff">C.TUser f ts t -&gt; <span class="nottickedoff">C.TUser f (map (plainSubst s) ts) (plainSubst s t)</span></span>
 <span class="lineno"> 1930 </span><span class="spaces">        </span><span class="istickedoff">C.TRec fs      -&gt; <span class="nottickedoff">C.TRec (fmap (plainSubst s) fs)</span></span>
-<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff">C.TVar x       -&gt; <span class="nottickedoff">C.apSubst s (C.TVar x)</span></span>
+<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff">C.TVar x       -&gt; C.apSubst s (C.TVar x)</span>
 <span class="lineno"> 1932 </span><span class="spaces">        </span><span class="istickedoff">C.TNominal nt ts -&gt; <span class="nottickedoff">C.TNominal nt (fmap (plainSubst s) ts)</span></span>
 <span class="lineno"> 1933 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1934 </span><span class="spaces"></span><span class="istickedoff">defaultTypedTerm _opts _sc _cfg tt = <span class="nottickedoff">return tt</span></span></span>
@@ -2031,7 +2031,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2012 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
 <span class="lineno"> 2013 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) [] uterm</span>
 <span class="lineno"> 2014 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
-<span class="lineno"> 2015 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (show err)</span></span>
+<span class="lineno"> 2015 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail (show err)</span>
 <span class="lineno"> 2016 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>
 <span class="lineno"> 2017 </span>
 <span class="lineno"> 2018 </span>parseCore :: Text -&gt; TopLevel Term
@@ -2171,164 +2171,171 @@ span.spaces    { background: white }
 <span class="lineno"> 2152 </span><span class="spaces">  </span><span class="istickedoff">putTopLevelRW $ rw { rwCryptol = ce' }</span>
 <span class="lineno"> 2153 </span><span class="spaces">  </span><span class="istickedoff">return m</span></span>
 <span class="lineno"> 2154 </span>
-<span class="lineno"> 2155 </span>cryptol_add_path :: FilePath -&gt; TopLevel ()
-<span class="lineno"> 2156 </span><span class="decl"><span class="nottickedoff">cryptol_add_path path =</span>
-<span class="lineno"> 2157 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno"> 2158 </span><span class="spaces">     </span><span class="nottickedoff">let ce = rwCryptol rw</span>
-<span class="lineno"> 2159 </span><span class="spaces">     </span><span class="nottickedoff">let me = CEnv.eModuleEnv ce</span>
-<span class="lineno"> 2160 </span><span class="spaces">     </span><span class="nottickedoff">let me' = me { C.meSearchPath = path : C.meSearchPath me }</span>
-<span class="lineno"> 2161 </span><span class="spaces">     </span><span class="nottickedoff">let ce' = ce { CEnv.eModuleEnv = me' }</span>
-<span class="lineno"> 2162 </span><span class="spaces">     </span><span class="nottickedoff">let rw' = rw { rwCryptol = ce' }</span>
-<span class="lineno"> 2163 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW rw'</span></span>
-<span class="lineno"> 2164 </span>
-<span class="lineno"> 2165 </span>cryptol_add_prim :: Text -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
-<span class="lineno"> 2166 </span><span class="decl"><span class="nottickedoff">cryptol_add_prim mnm nm trm =</span>
-<span class="lineno"> 2167 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno"> 2168 </span><span class="spaces">     </span><span class="nottickedoff">let env = rwCryptol rw</span>
-<span class="lineno"> 2169 </span><span class="spaces">     </span><span class="nottickedoff">let prim_name =</span>
-<span class="lineno"> 2170 </span><span class="spaces">           </span><span class="nottickedoff">C.PrimIdent (C.textToModName mnm) nm</span>
-<span class="lineno"> 2171 </span><span class="spaces">     </span><span class="nottickedoff">let env' =</span>
-<span class="lineno"> 2172 </span><span class="spaces">           </span><span class="nottickedoff">env { CEnv.ePrims =</span>
-<span class="lineno"> 2173 </span><span class="spaces">                   </span><span class="nottickedoff">Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }</span>
-<span class="lineno"> 2174 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW (rw { rwCryptol = env' })</span></span>
-<span class="lineno"> 2175 </span>
-<span class="lineno"> 2176 </span>cryptol_add_prim_type :: Text -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
-<span class="lineno"> 2177 </span><span class="decl"><span class="nottickedoff">cryptol_add_prim_type mnm nm tp =</span>
-<span class="lineno"> 2178 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
-<span class="lineno"> 2179 </span><span class="spaces">     </span><span class="nottickedoff">let env = rwCryptol rw</span>
-<span class="lineno"> 2180 </span><span class="spaces">     </span><span class="nottickedoff">let prim_name =</span>
-<span class="lineno"> 2181 </span><span class="spaces">           </span><span class="nottickedoff">C.PrimIdent (C.textToModName mnm) nm</span>
-<span class="lineno"> 2182 </span><span class="spaces">     </span><span class="nottickedoff">let env' = env { CEnv.ePrimTypes =</span>
-<span class="lineno"> 2183 </span><span class="spaces">                        </span><span class="nottickedoff">Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }</span>
-<span class="lineno"> 2184 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW (rw { rwCryptol = env' })</span></span>
-<span class="lineno"> 2185 </span>
-<span class="lineno"> 2186 </span>-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
-<span class="lineno"> 2187 </span>importSchemaCEnv :: SharedContext -&gt; CEnv.CryptolEnv -&gt; Cryptol.Schema -&gt;
-<span class="lineno"> 2188 </span>                    IO Term
-<span class="lineno"> 2189 </span><span class="decl"><span class="istickedoff">importSchemaCEnv sc cenv schema =</span>
-<span class="lineno"> 2190 </span><span class="spaces">  </span><span class="istickedoff">do cry_env &lt;- let ?fileReader = <span class="nottickedoff">StrictBS.readFile</span> in CEnv.mkCryEnv cenv</span>
-<span class="lineno"> 2191 </span><span class="spaces">     </span><span class="istickedoff">Cryptol.importSchema sc cry_env schema</span></span>
+<span class="lineno"> 2155 </span>cryptol_extract :: CEnv.ExtCryptolModule -&gt; Text -&gt; TopLevel TypedTerm
+<span class="lineno"> 2156 </span><span class="decl"><span class="istickedoff">cryptol_extract ecm var = do</span>
+<span class="lineno"> 2157 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno"> 2158 </span><span class="spaces">  </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 2159 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">ce = rwCryptol rw</span></span>
+<span class="lineno"> 2160 </span><span class="spaces">  </span><span class="istickedoff">io $ CEnv.extractDefFromExtCryptolModule <span class="nottickedoff">sc</span> <span class="nottickedoff">ce</span> ecm var</span></span>
+<span class="lineno"> 2161 </span>
+<span class="lineno"> 2162 </span>cryptol_add_path :: FilePath -&gt; TopLevel ()
+<span class="lineno"> 2163 </span><span class="decl"><span class="nottickedoff">cryptol_add_path path =</span>
+<span class="lineno"> 2164 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 2165 </span><span class="spaces">     </span><span class="nottickedoff">let ce = rwCryptol rw</span>
+<span class="lineno"> 2166 </span><span class="spaces">     </span><span class="nottickedoff">let me = CEnv.eModuleEnv ce</span>
+<span class="lineno"> 2167 </span><span class="spaces">     </span><span class="nottickedoff">let me' = me { C.meSearchPath = path : C.meSearchPath me }</span>
+<span class="lineno"> 2168 </span><span class="spaces">     </span><span class="nottickedoff">let ce' = ce { CEnv.eModuleEnv = me' }</span>
+<span class="lineno"> 2169 </span><span class="spaces">     </span><span class="nottickedoff">let rw' = rw { rwCryptol = ce' }</span>
+<span class="lineno"> 2170 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW rw'</span></span>
+<span class="lineno"> 2171 </span>
+<span class="lineno"> 2172 </span>cryptol_add_prim :: Text -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
+<span class="lineno"> 2173 </span><span class="decl"><span class="nottickedoff">cryptol_add_prim mnm nm trm =</span>
+<span class="lineno"> 2174 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 2175 </span><span class="spaces">     </span><span class="nottickedoff">let env = rwCryptol rw</span>
+<span class="lineno"> 2176 </span><span class="spaces">     </span><span class="nottickedoff">let prim_name =</span>
+<span class="lineno"> 2177 </span><span class="spaces">           </span><span class="nottickedoff">C.PrimIdent (C.textToModName mnm) nm</span>
+<span class="lineno"> 2178 </span><span class="spaces">     </span><span class="nottickedoff">let env' =</span>
+<span class="lineno"> 2179 </span><span class="spaces">           </span><span class="nottickedoff">env { CEnv.ePrims =</span>
+<span class="lineno"> 2180 </span><span class="spaces">                   </span><span class="nottickedoff">Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }</span>
+<span class="lineno"> 2181 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW (rw { rwCryptol = env' })</span></span>
+<span class="lineno"> 2182 </span>
+<span class="lineno"> 2183 </span>cryptol_add_prim_type :: Text -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
+<span class="lineno"> 2184 </span><span class="decl"><span class="nottickedoff">cryptol_add_prim_type mnm nm tp =</span>
+<span class="lineno"> 2185 </span><span class="spaces">  </span><span class="nottickedoff">do rw &lt;- getTopLevelRW</span>
+<span class="lineno"> 2186 </span><span class="spaces">     </span><span class="nottickedoff">let env = rwCryptol rw</span>
+<span class="lineno"> 2187 </span><span class="spaces">     </span><span class="nottickedoff">let prim_name =</span>
+<span class="lineno"> 2188 </span><span class="spaces">           </span><span class="nottickedoff">C.PrimIdent (C.textToModName mnm) nm</span>
+<span class="lineno"> 2189 </span><span class="spaces">     </span><span class="nottickedoff">let env' = env { CEnv.ePrimTypes =</span>
+<span class="lineno"> 2190 </span><span class="spaces">                        </span><span class="nottickedoff">Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }</span>
+<span class="lineno"> 2191 </span><span class="spaces">     </span><span class="nottickedoff">putTopLevelRW (rw { rwCryptol = env' })</span></span>
 <span class="lineno"> 2192 </span>
-<span class="lineno"> 2193 </span>parseSharpSATResult :: String -&gt; Maybe Integer
-<span class="lineno"> 2194 </span><span class="decl"><span class="nottickedoff">parseSharpSATResult s = parse (lines s)</span>
-<span class="lineno"> 2195 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2196 </span><span class="spaces">    </span><span class="nottickedoff">parse (h : n : _) | &quot;# solutions&quot; `isPrefixOf` h = readMaybe n</span>
-<span class="lineno"> 2197 </span><span class="spaces">    </span><span class="nottickedoff">parse (_ : rest) = parse rest</span>
-<span class="lineno"> 2198 </span><span class="spaces">    </span><span class="nottickedoff">parse [] = Nothing</span></span>
+<span class="lineno"> 2193 </span>-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
+<span class="lineno"> 2194 </span>importSchemaCEnv :: SharedContext -&gt; CEnv.CryptolEnv -&gt; Cryptol.Schema -&gt;
+<span class="lineno"> 2195 </span>                    IO Term
+<span class="lineno"> 2196 </span><span class="decl"><span class="istickedoff">importSchemaCEnv sc cenv schema =</span>
+<span class="lineno"> 2197 </span><span class="spaces">  </span><span class="istickedoff">do cry_env &lt;- let ?fileReader = <span class="nottickedoff">StrictBS.readFile</span> in CEnv.mkCryEnv cenv</span>
+<span class="lineno"> 2198 </span><span class="spaces">     </span><span class="istickedoff">Cryptol.importSchema sc cry_env schema</span></span>
 <span class="lineno"> 2199 </span>
-<span class="lineno"> 2200 </span>sharpSAT :: TypedTerm -&gt; TopLevel Integer
-<span class="lineno"> 2201 </span><span class="decl"><span class="nottickedoff">sharpSAT t = do</span>
-<span class="lineno"> 2202 </span><span class="spaces">  </span><span class="nottickedoff">tmp &lt;- io $ emptySystemTempFile &quot;sharpSAT-input&quot;</span>
-<span class="lineno"> 2203 </span><span class="spaces">  </span><span class="nottickedoff">Prover.write_cnf tmp t</span>
-<span class="lineno"> 2204 </span><span class="spaces">  </span><span class="nottickedoff">(_ec, out, _err) &lt;- io $ readProcessWithExitCode &quot;sharpSAT&quot; [tmp] &quot;&quot;</span>
-<span class="lineno"> 2205 </span><span class="spaces">  </span><span class="nottickedoff">io $ removeFile tmp</span>
-<span class="lineno"> 2206 </span><span class="spaces">  </span><span class="nottickedoff">case parseSharpSATResult out of</span>
-<span class="lineno"> 2207 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;Garbled result from sharpSAT\n\n&quot; ++ out</span>
-<span class="lineno"> 2208 </span><span class="spaces">    </span><span class="nottickedoff">Just n -&gt; return n</span></span>
-<span class="lineno"> 2209 </span>
-<span class="lineno"> 2210 </span>approxmc :: TypedTerm -&gt; TopLevel ()
-<span class="lineno"> 2211 </span><span class="decl"><span class="nottickedoff">approxmc t = do</span>
-<span class="lineno"> 2212 </span><span class="spaces">  </span><span class="nottickedoff">tmp &lt;- io $ emptySystemTempFile &quot;approxmc-input&quot;</span>
-<span class="lineno"> 2213 </span><span class="spaces">  </span><span class="nottickedoff">Prover.write_cnf tmp t</span>
-<span class="lineno"> 2214 </span><span class="spaces">  </span><span class="nottickedoff">(_ec, out, _err) &lt;- io $ readProcessWithExitCode &quot;approxmc&quot; [tmp] &quot;&quot;</span>
-<span class="lineno"> 2215 </span><span class="spaces">  </span><span class="nottickedoff">io $ removeFile tmp</span>
-<span class="lineno"> 2216 </span><span class="spaces">  </span><span class="nottickedoff">let msg = filter (&quot;[appmc] Number of solutions is&quot; `isPrefixOf`) (lines out)</span>
-<span class="lineno"> 2217 </span><span class="spaces">  </span><span class="nottickedoff">case msg of</span>
-<span class="lineno"> 2218 </span><span class="spaces">    </span><span class="nottickedoff">[l] -&gt; io $ putStrLn l</span>
-<span class="lineno"> 2219 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;Garbled result from approxmc\n\n&quot; ++ out</span></span>
-<span class="lineno"> 2220 </span>
-<span class="lineno"> 2221 </span>set_path_sat_solver :: Text -&gt; TopLevel ()
-<span class="lineno"> 2222 </span><span class="decl"><span class="nottickedoff">set_path_sat_solver nm =</span>
-<span class="lineno"> 2223 </span><span class="spaces">  </span><span class="nottickedoff">case Text.toLower nm of</span>
-<span class="lineno"> 2224 </span><span class="spaces">    </span><span class="nottickedoff">&quot;z3&quot;    -&gt; modify (\rw -&gt; rw{ rwPathSatSolver = PathSat_Z3 })</span>
-<span class="lineno"> 2225 </span><span class="spaces">    </span><span class="nottickedoff">&quot;yices&quot; -&gt; modify (\rw -&gt; rw{ rwPathSatSolver = PathSat_Yices })</span>
-<span class="lineno"> 2226 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ Text.unpack $ &quot;Unknown path sat solver: &quot; &lt;&gt; nm</span></span>
+<span class="lineno"> 2200 </span>parseSharpSATResult :: String -&gt; Maybe Integer
+<span class="lineno"> 2201 </span><span class="decl"><span class="nottickedoff">parseSharpSATResult s = parse (lines s)</span>
+<span class="lineno"> 2202 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2203 </span><span class="spaces">    </span><span class="nottickedoff">parse (h : n : _) | &quot;# solutions&quot; `isPrefixOf` h = readMaybe n</span>
+<span class="lineno"> 2204 </span><span class="spaces">    </span><span class="nottickedoff">parse (_ : rest) = parse rest</span>
+<span class="lineno"> 2205 </span><span class="spaces">    </span><span class="nottickedoff">parse [] = Nothing</span></span>
+<span class="lineno"> 2206 </span>
+<span class="lineno"> 2207 </span>sharpSAT :: TypedTerm -&gt; TopLevel Integer
+<span class="lineno"> 2208 </span><span class="decl"><span class="nottickedoff">sharpSAT t = do</span>
+<span class="lineno"> 2209 </span><span class="spaces">  </span><span class="nottickedoff">tmp &lt;- io $ emptySystemTempFile &quot;sharpSAT-input&quot;</span>
+<span class="lineno"> 2210 </span><span class="spaces">  </span><span class="nottickedoff">Prover.write_cnf tmp t</span>
+<span class="lineno"> 2211 </span><span class="spaces">  </span><span class="nottickedoff">(_ec, out, _err) &lt;- io $ readProcessWithExitCode &quot;sharpSAT&quot; [tmp] &quot;&quot;</span>
+<span class="lineno"> 2212 </span><span class="spaces">  </span><span class="nottickedoff">io $ removeFile tmp</span>
+<span class="lineno"> 2213 </span><span class="spaces">  </span><span class="nottickedoff">case parseSharpSATResult out of</span>
+<span class="lineno"> 2214 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;Garbled result from sharpSAT\n\n&quot; ++ out</span>
+<span class="lineno"> 2215 </span><span class="spaces">    </span><span class="nottickedoff">Just n -&gt; return n</span></span>
+<span class="lineno"> 2216 </span>
+<span class="lineno"> 2217 </span>approxmc :: TypedTerm -&gt; TopLevel ()
+<span class="lineno"> 2218 </span><span class="decl"><span class="nottickedoff">approxmc t = do</span>
+<span class="lineno"> 2219 </span><span class="spaces">  </span><span class="nottickedoff">tmp &lt;- io $ emptySystemTempFile &quot;approxmc-input&quot;</span>
+<span class="lineno"> 2220 </span><span class="spaces">  </span><span class="nottickedoff">Prover.write_cnf tmp t</span>
+<span class="lineno"> 2221 </span><span class="spaces">  </span><span class="nottickedoff">(_ec, out, _err) &lt;- io $ readProcessWithExitCode &quot;approxmc&quot; [tmp] &quot;&quot;</span>
+<span class="lineno"> 2222 </span><span class="spaces">  </span><span class="nottickedoff">io $ removeFile tmp</span>
+<span class="lineno"> 2223 </span><span class="spaces">  </span><span class="nottickedoff">let msg = filter (&quot;[appmc] Number of solutions is&quot; `isPrefixOf`) (lines out)</span>
+<span class="lineno"> 2224 </span><span class="spaces">  </span><span class="nottickedoff">case msg of</span>
+<span class="lineno"> 2225 </span><span class="spaces">    </span><span class="nottickedoff">[l] -&gt; io $ putStrLn l</span>
+<span class="lineno"> 2226 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;Garbled result from approxmc\n\n&quot; ++ out</span></span>
 <span class="lineno"> 2227 </span>
-<span class="lineno"> 2228 </span>summarize_verification :: TopLevel ()
-<span class="lineno"> 2229 </span><span class="decl"><span class="istickedoff">summarize_verification =</span>
-<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 2231 </span><span class="spaces">     </span><span class="istickedoff">let jspecs  = [ <span class="nottickedoff">s</span> | SV.VJVMMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2232 </span><span class="spaces">         </span><span class="istickedoff">lspecs  = [ <span class="nottickedoff">s</span> | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2233 </span><span class="spaces">         </span><span class="istickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
-<span class="lineno"> 2234 </span><span class="spaces">     </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2235 </span><span class="spaces">     </span><span class="istickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
-<span class="lineno"> 2236 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getTopLevelPPOpts</span>
-<span class="lineno"> 2237 </span><span class="spaces">     </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
-<span class="lineno"> 2238 </span><span class="spaces">     </span><span class="istickedoff">io $ putStrLn $ prettyVerificationSummary opts nenv summary</span></span>
-<span class="lineno"> 2239 </span>
-<span class="lineno"> 2240 </span>summarize_verification_json :: FilePath -&gt; TopLevel ()
-<span class="lineno"> 2241 </span><span class="decl"><span class="nottickedoff">summarize_verification_json fpath =</span>
-<span class="lineno"> 2242 </span><span class="spaces">  </span><span class="nottickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 2243 </span><span class="spaces">     </span><span class="nottickedoff">let jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2244 </span><span class="spaces">         </span><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
-<span class="lineno"> 2245 </span><span class="spaces">         </span><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
-<span class="lineno"> 2246 </span><span class="spaces">     </span><span class="nottickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2247 </span><span class="spaces">     </span><span class="nottickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
-<span class="lineno"> 2248 </span><span class="spaces">     </span><span class="nottickedoff">io (writeFile fpath (jsonVerificationSummary summary))</span></span>
-<span class="lineno"> 2249 </span>
-<span class="lineno"> 2250 </span>writeVerificationSummary :: TopLevel ()
-<span class="lineno"> 2251 </span><span class="decl"><span class="istickedoff">writeVerificationSummary = do</span>
-<span class="lineno"> 2252 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno"> 2253 </span><span class="spaces">    </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2254 </span><span class="spaces">    </span><span class="istickedoff">values &lt;- <span class="nottickedoff">rwProofs</span> &lt;$&gt; getTopLevelRW</span>
-<span class="lineno"> 2255 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span></span>
-<span class="lineno"> 2256 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span></span>
-<span class="lineno"> 2257 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span></span>
-<span class="lineno"> 2258 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">summary = computeVerificationSummary db jspecs lspecs thms</span></span>
-<span class="lineno"> 2259 </span><span class="spaces">    </span><span class="istickedoff">opts &lt;- asks roOptions</span>
-<span class="lineno"> 2260 </span><span class="spaces">    </span><span class="istickedoff">dir &lt;- asks <span class="nottickedoff">roInitWorkDir</span></span>
-<span class="lineno"> 2261 </span><span class="spaces">    </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
-<span class="lineno"> 2262 </span><span class="spaces">    </span><span class="istickedoff">ppOpts &lt;- getTopLevelPPOpts</span>
-<span class="lineno"> 2263 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2264 </span><span class="spaces">    </span><span class="istickedoff">case summaryFile opts of</span>
-<span class="lineno"> 2265 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2266 </span><span class="spaces">      </span><span class="istickedoff">Just f -&gt; <span class="nottickedoff">let</span></span>
-<span class="lineno"> 2267 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">f' = if hasDrive f then f else dir &lt;/&gt; f</span></span>
-<span class="lineno"> 2268 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">formatSummary = case summaryFormat opts of</span></span>
-<span class="lineno"> 2269 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">JSON -&gt; jsonVerificationSummary</span></span>
-<span class="lineno"> 2270 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Pretty -&gt; prettyVerificationSummary ppOpts nenv</span></span>
-<span class="lineno"> 2271 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in io $ writeFile f' $ formatSummary summary</span></span></span>
-<span class="lineno"> 2272 </span>
-<span class="lineno"> 2273 </span>declare_ghost_state ::
-<span class="lineno"> 2274 </span>  Text -&gt;
-<span class="lineno"> 2275 </span>  TopLevel SV.Value
-<span class="lineno"> 2276 </span><span class="decl"><span class="istickedoff">declare_ghost_state name =</span>
-<span class="lineno"> 2277 </span><span class="spaces">  </span><span class="istickedoff">do allocator &lt;- getHandleAlloc</span>
-<span class="lineno"> 2278 </span><span class="spaces">     </span><span class="istickedoff">global &lt;- liftIO (freshGlobalVar <span class="nottickedoff">allocator</span> name knownRepr)</span>
-<span class="lineno"> 2279 </span><span class="spaces">     </span><span class="istickedoff">return (SV.VGhostVar global)</span></span>
-<span class="lineno"> 2280 </span>
-<span class="lineno"> 2281 </span>ghost_value ::
-<span class="lineno"> 2282 </span>  MS.GhostGlobal -&gt;
-<span class="lineno"> 2283 </span>  TypedTerm -&gt;
-<span class="lineno"> 2284 </span>  SV.CrucibleSetup ext ()
-<span class="lineno"> 2285 </span><span class="decl"><span class="istickedoff">ghost_value ghost val =</span>
-<span class="lineno"> 2286 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- SV.getW4Position &quot;ghost_value&quot;</span>
-<span class="lineno"> 2287 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view croTags</span>
-<span class="lineno"> 2288 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2289 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno"> 2290 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = tags</span>
-<span class="lineno"> 2291 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = &quot;ghost value&quot;</span>
-<span class="lineno"> 2292 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = &quot;&quot;</span>
-<span class="lineno"> 2293 </span><span class="spaces">              </span><span class="istickedoff">}</span>
-<span class="lineno"> 2294 </span><span class="spaces">     </span><span class="istickedoff">addCondition (MS.SetupCond_Ghost md ghost val)</span></span>
-<span class="lineno"> 2295 </span>
-<span class="lineno"> 2296 </span>-- | Based on the function of the same name in SAWCore.ParserUtils.
-<span class="lineno"> 2297 </span>-- Unlike that function, this calls 'fail' instead of 'error'.
-<span class="lineno"> 2298 </span>--
-<span class="lineno"> 2299 </span>-- XXX: we only need one; unify these once the error handling gets fixed.
-<span class="lineno"> 2300 </span>readModuleFromFile :: FilePath -&gt; TopLevel (Un.Module, ModuleName)
-<span class="lineno"> 2301 </span><span class="decl"><span class="istickedoff">readModuleFromFile path =</span>
-<span class="lineno"> 2302 </span><span class="spaces">  </span><span class="istickedoff">do base &lt;- liftIO getCurrentDirectory</span>
-<span class="lineno"> 2303 </span><span class="spaces">     </span><span class="istickedoff">txt &lt;- liftIO $ TLIO.readFile path</span>
-<span class="lineno"> 2304 </span><span class="spaces">     </span><span class="istickedoff">case parseSAW base path txt of</span>
-<span class="lineno"> 2305 </span><span class="spaces">       </span><span class="istickedoff">Right m@(Un.Module (Un.PosPair _ mnm) _ _) -&gt; pure (m, <span class="nottickedoff">mnm</span>)</span>
-<span class="lineno"> 2306 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail $ &quot;Module parsing failed:\n&quot; ++ show err</span></span>
-<span class="lineno"> 2307 </span>
-<span class="lineno"> 2308 </span>load_sawcore_from_file :: FilePath -&gt; TopLevel ()
-<span class="lineno"> 2309 </span><span class="decl"><span class="istickedoff">load_sawcore_from_file mod_filename =</span>
-<span class="lineno"> 2310 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno"> 2311 </span><span class="spaces">     </span><span class="istickedoff">(saw_mod, _) &lt;- readModuleFromFile mod_filename</span>
-<span class="lineno"> 2312 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ tcInsertModule sc saw_mod</span></span>
+<span class="lineno"> 2228 </span>set_path_sat_solver :: Text -&gt; TopLevel ()
+<span class="lineno"> 2229 </span><span class="decl"><span class="nottickedoff">set_path_sat_solver nm =</span>
+<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="nottickedoff">case Text.toLower nm of</span>
+<span class="lineno"> 2231 </span><span class="spaces">    </span><span class="nottickedoff">&quot;z3&quot;    -&gt; modify (\rw -&gt; rw{ rwPathSatSolver = PathSat_Z3 })</span>
+<span class="lineno"> 2232 </span><span class="spaces">    </span><span class="nottickedoff">&quot;yices&quot; -&gt; modify (\rw -&gt; rw{ rwPathSatSolver = PathSat_Yices })</span>
+<span class="lineno"> 2233 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ Text.unpack $ &quot;Unknown path sat solver: &quot; &lt;&gt; nm</span></span>
+<span class="lineno"> 2234 </span>
+<span class="lineno"> 2235 </span>summarize_verification :: TopLevel ()
+<span class="lineno"> 2236 </span><span class="decl"><span class="istickedoff">summarize_verification =</span>
+<span class="lineno"> 2237 </span><span class="spaces">  </span><span class="istickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
+<span class="lineno"> 2238 </span><span class="spaces">     </span><span class="istickedoff">let jspecs  = [ <span class="nottickedoff">s</span> | SV.VJVMMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2239 </span><span class="spaces">         </span><span class="istickedoff">lspecs  = [ <span class="nottickedoff">s</span> | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2240 </span><span class="spaces">         </span><span class="istickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
+<span class="lineno"> 2241 </span><span class="spaces">     </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
+<span class="lineno"> 2242 </span><span class="spaces">     </span><span class="istickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
+<span class="lineno"> 2243 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getTopLevelPPOpts</span>
+<span class="lineno"> 2244 </span><span class="spaces">     </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
+<span class="lineno"> 2245 </span><span class="spaces">     </span><span class="istickedoff">io $ putStrLn $ prettyVerificationSummary opts nenv summary</span></span>
+<span class="lineno"> 2246 </span>
+<span class="lineno"> 2247 </span>summarize_verification_json :: FilePath -&gt; TopLevel ()
+<span class="lineno"> 2248 </span><span class="decl"><span class="nottickedoff">summarize_verification_json fpath =</span>
+<span class="lineno"> 2249 </span><span class="spaces">  </span><span class="nottickedoff">do values &lt;- rwProofs &lt;$&gt; getTopLevelRW</span>
+<span class="lineno"> 2250 </span><span class="spaces">     </span><span class="nottickedoff">let jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2251 </span><span class="spaces">         </span><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span>
+<span class="lineno"> 2252 </span><span class="spaces">         </span><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span>
+<span class="lineno"> 2253 </span><span class="spaces">     </span><span class="nottickedoff">db &lt;- SV.getTheoremDB</span>
+<span class="lineno"> 2254 </span><span class="spaces">     </span><span class="nottickedoff">let summary = computeVerificationSummary db jspecs lspecs thms</span>
+<span class="lineno"> 2255 </span><span class="spaces">     </span><span class="nottickedoff">io (writeFile fpath (jsonVerificationSummary summary))</span></span>
+<span class="lineno"> 2256 </span>
+<span class="lineno"> 2257 </span>writeVerificationSummary :: TopLevel ()
+<span class="lineno"> 2258 </span><span class="decl"><span class="istickedoff">writeVerificationSummary = do</span>
+<span class="lineno"> 2259 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno"> 2260 </span><span class="spaces">    </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
+<span class="lineno"> 2261 </span><span class="spaces">    </span><span class="istickedoff">values &lt;- <span class="nottickedoff">rwProofs</span> &lt;$&gt; getTopLevelRW</span>
+<span class="lineno"> 2262 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">jspecs  = [ s | SV.VJVMMethodSpec s &lt;- values ]</span></span>
+<span class="lineno"> 2263 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s &lt;- values ]</span></span>
+<span class="lineno"> 2264 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">thms    = [ t | SV.VTheorem t &lt;- values ]</span></span>
+<span class="lineno"> 2265 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">summary = computeVerificationSummary db jspecs lspecs thms</span></span>
+<span class="lineno"> 2266 </span><span class="spaces">    </span><span class="istickedoff">opts &lt;- asks roOptions</span>
+<span class="lineno"> 2267 </span><span class="spaces">    </span><span class="istickedoff">dir &lt;- asks <span class="nottickedoff">roInitWorkDir</span></span>
+<span class="lineno"> 2268 </span><span class="spaces">    </span><span class="istickedoff">nenv &lt;- io . scGetNamingEnv =&lt;&lt; getSharedContext</span>
+<span class="lineno"> 2269 </span><span class="spaces">    </span><span class="istickedoff">ppOpts &lt;- getTopLevelPPOpts</span>
+<span class="lineno"> 2270 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2271 </span><span class="spaces">    </span><span class="istickedoff">case summaryFile opts of</span>
+<span class="lineno"> 2272 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2273 </span><span class="spaces">      </span><span class="istickedoff">Just f -&gt; <span class="nottickedoff">let</span></span>
+<span class="lineno"> 2274 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">f' = if hasDrive f then f else dir &lt;/&gt; f</span></span>
+<span class="lineno"> 2275 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">formatSummary = case summaryFormat opts of</span></span>
+<span class="lineno"> 2276 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">JSON -&gt; jsonVerificationSummary</span></span>
+<span class="lineno"> 2277 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Pretty -&gt; prettyVerificationSummary ppOpts nenv</span></span>
+<span class="lineno"> 2278 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in io $ writeFile f' $ formatSummary summary</span></span></span>
+<span class="lineno"> 2279 </span>
+<span class="lineno"> 2280 </span>declare_ghost_state ::
+<span class="lineno"> 2281 </span>  Text -&gt;
+<span class="lineno"> 2282 </span>  TopLevel SV.Value
+<span class="lineno"> 2283 </span><span class="decl"><span class="istickedoff">declare_ghost_state name =</span>
+<span class="lineno"> 2284 </span><span class="spaces">  </span><span class="istickedoff">do allocator &lt;- getHandleAlloc</span>
+<span class="lineno"> 2285 </span><span class="spaces">     </span><span class="istickedoff">global &lt;- liftIO (freshGlobalVar <span class="nottickedoff">allocator</span> name knownRepr)</span>
+<span class="lineno"> 2286 </span><span class="spaces">     </span><span class="istickedoff">return (SV.VGhostVar global)</span></span>
+<span class="lineno"> 2287 </span>
+<span class="lineno"> 2288 </span>ghost_value ::
+<span class="lineno"> 2289 </span>  MS.GhostGlobal -&gt;
+<span class="lineno"> 2290 </span>  TypedTerm -&gt;
+<span class="lineno"> 2291 </span>  SV.CrucibleSetup ext ()
+<span class="lineno"> 2292 </span><span class="decl"><span class="istickedoff">ghost_value ghost val =</span>
+<span class="lineno"> 2293 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- SV.getW4Position &quot;ghost_value&quot;</span>
+<span class="lineno"> 2294 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view croTags</span>
+<span class="lineno"> 2295 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2296 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno"> 2297 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = tags</span>
+<span class="lineno"> 2298 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = &quot;ghost value&quot;</span>
+<span class="lineno"> 2299 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = &quot;&quot;</span>
+<span class="lineno"> 2300 </span><span class="spaces">              </span><span class="istickedoff">}</span>
+<span class="lineno"> 2301 </span><span class="spaces">     </span><span class="istickedoff">addCondition (MS.SetupCond_Ghost md ghost val)</span></span>
+<span class="lineno"> 2302 </span>
+<span class="lineno"> 2303 </span>-- | Based on the function of the same name in SAWCore.ParserUtils.
+<span class="lineno"> 2304 </span>-- Unlike that function, this calls 'fail' instead of 'error'.
+<span class="lineno"> 2305 </span>--
+<span class="lineno"> 2306 </span>-- XXX: we only need one; unify these once the error handling gets fixed.
+<span class="lineno"> 2307 </span>readModuleFromFile :: FilePath -&gt; TopLevel (Un.Module, ModuleName)
+<span class="lineno"> 2308 </span><span class="decl"><span class="istickedoff">readModuleFromFile path =</span>
+<span class="lineno"> 2309 </span><span class="spaces">  </span><span class="istickedoff">do base &lt;- liftIO getCurrentDirectory</span>
+<span class="lineno"> 2310 </span><span class="spaces">     </span><span class="istickedoff">txt &lt;- liftIO $ TLIO.readFile path</span>
+<span class="lineno"> 2311 </span><span class="spaces">     </span><span class="istickedoff">case parseSAW base path txt of</span>
+<span class="lineno"> 2312 </span><span class="spaces">       </span><span class="istickedoff">Right m@(Un.Module (Un.PosPair _ mnm) _ _) -&gt; pure (m, <span class="nottickedoff">mnm</span>)</span>
+<span class="lineno"> 2313 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail $ &quot;Module parsing failed:\n&quot; ++ show err</span></span>
+<span class="lineno"> 2314 </span>
+<span class="lineno"> 2315 </span>load_sawcore_from_file :: FilePath -&gt; TopLevel ()
+<span class="lineno"> 2316 </span><span class="decl"><span class="istickedoff">load_sawcore_from_file mod_filename =</span>
+<span class="lineno"> 2317 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno"> 2318 </span><span class="spaces">     </span><span class="istickedoff">(saw_mod, _) &lt;- readModuleFromFile mod_filename</span>
+<span class="lineno"> 2319 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ tcInsertModule sc saw_mod</span></span>
 
 </pre>
 </body>

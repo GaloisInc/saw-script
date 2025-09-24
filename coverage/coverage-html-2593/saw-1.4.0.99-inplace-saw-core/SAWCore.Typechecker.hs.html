@@ -64,14 +64,14 @@ span.spaces    { background: white }
 <span class="lineno">   45 </span>import SAWCore.Panic (panic)
 <span class="lineno">   46 </span>
 <span class="lineno">   47 </span>import SAWCore.Module
-<span class="lineno">   48 </span>  ( dtExtCns
-<span class="lineno">   49 </span>  , emptyModule
-<span class="lineno">   50 </span>  , findDataTypeInMap
-<span class="lineno">   51 </span>  , resolveNameInMap
-<span class="lineno">   52 </span>  , resolvedNameName
-<span class="lineno">   53 </span>  , DataType(..)
-<span class="lineno">   54 </span>  , DefQualifier(..)
-<span class="lineno">   55 </span>  )
+<span class="lineno">   48 </span>  ( emptyModule
+<span class="lineno">   49 </span>  , findDataTypeInMap
+<span class="lineno">   50 </span>  , resolveNameInMap
+<span class="lineno">   51 </span>  , resolvedNameName
+<span class="lineno">   52 </span>  , DataType(..)
+<span class="lineno">   53 </span>  , DefQualifier(..)
+<span class="lineno">   54 </span>  )
+<span class="lineno">   55 </span>import SAWCore.Name (Name(..))
 <span class="lineno">   56 </span>import qualified SAWCore.Parser.AST as Un
 <span class="lineno">   57 </span>import SAWCore.Parser.Position
 <span class="lineno">   58 </span>import SAWCore.Term.Functor
@@ -99,7 +99,7 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">do res &lt;- runCheckM (typeInferCompleteUTerm t) sc mnm ctx</span>
 <span class="lineno">   81 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
 <span class="lineno">   82 </span><span class="spaces">       </span><span class="istickedoff">-- TODO: avoid intermediate 'String's from 'prettyTCError'</span>
-<span class="lineno">   83 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">return $ Left $ vsep $ map pretty $ TC.prettyTCError err</span></span>
+<span class="lineno">   83 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; return $ Left $ vsep $ map pretty $ TC.prettyTCError err</span>
 <span class="lineno">   84 </span><span class="spaces">       </span><span class="istickedoff">Right t' -&gt; return $ Right $ typedVal t'</span></span>
 <span class="lineno">   85 </span>
 <span class="lineno">   86 </span>
@@ -169,7 +169,7 @@ span.spaces    { background: white }
 <span class="lineno">  150 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- typeInferComplete (Constant c :: TermF SCTypedTerm)</span>
 <span class="lineno">  151 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll t args</span>
 <span class="lineno">  152 </span><span class="spaces">       </span><span class="istickedoff">(Nothing, Nothing, Nothing) -&gt;</span>
-<span class="lineno">  153 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ UnboundName n</span></span></span>
+<span class="lineno">  153 </span><span class="spaces">         </span><span class="istickedoff">throwTCError $ UnboundName n</span></span>
 <span class="lineno">  154 </span>
 <span class="lineno">  155 </span>-- | Match an untyped term as a name applied to 0 or more arguments
 <span class="lineno">  156 </span>matchAppliedName :: Un.UTerm -&gt; Maybe (Text, [Un.UTerm])
@@ -200,7 +200,7 @@ span.spaces    { background: white }
 <span class="lineno">  181 </span>typeInferCompleteUTerm :: Un.UTerm -&gt; CheckM SCTypedTerm
 <span class="lineno">  182 </span><span class="decl"><span class="istickedoff">typeInferCompleteUTerm t =</span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">do typeInferDebug <span class="nottickedoff">(&quot;typechecking term: &quot; ++ show t)</span></span>
-<span class="lineno">  184 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- atPos <span class="nottickedoff">(pos t)</span> $ typeInferCompleteTerm t</span>
+<span class="lineno">  184 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- atPos (pos t) $ typeInferCompleteTerm t</span>
 <span class="lineno">  185 </span><span class="spaces">     </span><span class="istickedoff">typeInferDebug <span class="nottickedoff">(&quot;completed typechecking term: &quot; ++ show t ++ &quot;\n&quot;</span></span>
 <span class="lineno">  186 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">++ &quot;type = &quot; ++ show (typedType res))</span></span>
 <span class="lineno">  187 </span><span class="spaces">     </span><span class="istickedoff">return res</span></span>
@@ -227,7 +227,7 @@ span.spaces    { background: white }
 <span class="lineno">  208 </span><span class="spaces">     </span><span class="istickedoff">let dt_ident = mkIdent mnm str</span>
 <span class="lineno">  209 </span><span class="spaces">     </span><span class="istickedoff">dt &lt;- case findDataTypeInMap dt_ident mm of</span>
 <span class="lineno">  210 </span><span class="spaces">       </span><span class="istickedoff">Just d -&gt; return d</span>
-<span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)</span></span>
+<span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)</span>
 <span class="lineno">  212 </span><span class="spaces">     </span><span class="istickedoff">typed_args &lt;- mapM typeInferCompleteUTerm args</span>
 <span class="lineno">  213 </span><span class="spaces">     </span><span class="istickedoff">case typed_args of</span>
 <span class="lineno">  214 </span><span class="spaces">       </span><span class="istickedoff">(splitAt (length $ dtParams dt) -&gt;</span>
@@ -242,7 +242,7 @@ span.spaces    { background: white }
 <span class="lineno">  223 </span><span class="spaces">            </span><span class="istickedoff">typed_r &lt;- typeInferComplete (RecursorApp r ixs arg)</span>
 <span class="lineno">  224 </span><span class="spaces">            </span><span class="istickedoff">inferApplyAll typed_r rem_args</span>
 <span class="lineno">  225 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  226 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwTCError $ NotFullyAppliedRec (dtExtCns dt)</span></span>
+<span class="lineno">  226 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))</span>
 <span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.Recursor _) =</span>
 <span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">error &quot;typeInferComplete: found a bare Recursor, which should never happen!&quot;</span></span>
@@ -317,7 +317,7 @@ span.spaces    { background: white }
 <span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (NatLit i :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  299 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.StringLit _ str) =</span>
 <span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">typeInferComplete (StringLit str :: FlatTermF SCTypedTerm)</span>
-<span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ []) = <span class="nottickedoff">throwTCError EmptyVectorLit</span></span>
+<span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit</span>
 <span class="lineno">  302 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.VecLit _ ts) =</span>
 <span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">do typed_ts &lt;- mapM typeInferCompleteUTerm ts</span>
 <span class="lineno">  304 </span><span class="spaces">     </span><span class="istickedoff">tp &lt;- case typed_ts of</span>
@@ -358,7 +358,7 @@ span.spaces    { background: white }
 <span class="lineno">  339 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :</span>
 <span class="lineno">  340 </span><span class="spaces">              </span><span class="istickedoff">Un.TermDef (PosPair _ ((== nm) -&gt; True)) vars body : rest) =</span>
 <span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">-- Type-checking for definitions</span>
-<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">(atPos <span class="nottickedoff">p</span> $</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">(atPos p $</span>
 <span class="lineno">  343 </span><span class="spaces">   </span><span class="istickedoff">do</span>
 <span class="lineno">  344 </span><span class="spaces">     </span><span class="istickedoff">-- Step 1: type-check the type annotation, and make sure it is a type</span>
 <span class="lineno">  345 </span><span class="spaces">     </span><span class="istickedoff">typed_tp &lt;- typeInferCompleteUTerm tp</span>
@@ -373,10 +373,10 @@ span.spaces    { background: white }
 <span class="lineno">  354 </span><span class="spaces">       </span><span class="istickedoff">case matchPiWithNames (map Un.termVarLocalName vars) def_tp_whnf of</span>
 <span class="lineno">  355 </span><span class="spaces">         </span><span class="istickedoff">Just x -&gt; return x</span>
 <span class="lineno">  356 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  357 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">throwTCError $</span></span>
-<span class="lineno">  358 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">DeclError nm (&quot;More variables &quot; ++ show vars ++</span></span>
-<span class="lineno">  359 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot; than length of function type:\n&quot; ++</span></span>
-<span class="lineno">  360 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">showTerm (typedVal typed_tp))</span></span>
+<span class="lineno">  357 </span><span class="spaces">             </span><span class="istickedoff">throwTCError $</span>
+<span class="lineno">  358 </span><span class="spaces">             </span><span class="istickedoff">DeclError nm (&quot;More variables &quot; ++ show (map Un.termVarLocalName vars) ++</span>
+<span class="lineno">  359 </span><span class="spaces">                           </span><span class="istickedoff">&quot; than length of function type:\n&quot; ++</span>
+<span class="lineno">  360 </span><span class="spaces">                           </span><span class="istickedoff">showTerm (typedVal typed_tp))</span>
 <span class="lineno">  361 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  362 </span><span class="spaces">     </span><span class="istickedoff">-- Step 3: type-check the body of the definition in the context of its</span>
 <span class="lineno">  363 </span><span class="spaces">     </span><span class="istickedoff">-- variables, and build a function that takes in those variables</span>
@@ -393,11 +393,11 @@ span.spaces    { background: white }
 <span class="lineno">  374 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
 <span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  376 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =</span>
-<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Definition without defining equation&quot;</span></span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">atPos p $ throwTCError $ DeclError nm &quot;Definition without defining equation&quot;</span>
 <span class="lineno">  378 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  379 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl _ (PosPair p nm) _ :</span>
 <span class="lineno">  380 </span><span class="spaces">              </span><span class="istickedoff">Un.TermDef (PosPair _ ((== nm) -&gt; True)) _ _ : _) =</span>
-<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Primitive or axiom with definition&quot;</span></span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">atPos p $ throwTCError $ DeclError nm &quot;Primitive or axiom with definition&quot;</span>
 <span class="lineno">  382 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  383 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =</span>
 <span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">(atPos <span class="nottickedoff">p</span> $</span>
@@ -410,45 +410,45 @@ span.spaces    { background: white }
 <span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">processDecls rest</span>
 <span class="lineno">  392 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  393 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.TermDef (PosPair p nm) _ _ : _) =</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">atPos p $ throwTCError $ DeclError nm &quot;Dangling definition without a type&quot;</span></span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">atPos p $ throwTCError $ DeclError nm &quot;Dangling definition without a type&quot;</span>
 <span class="lineno">  395 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  396 </span><span class="spaces"></span><span class="istickedoff">processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =</span>
 <span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">let param_ctx' = map (\(x, t) -&gt; (Un.termVarLocalName x, t)) param_ctx in</span>
 <span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">-- This top line makes sure that we process the rest of the decls after the</span>
 <span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">-- main body of the code below, which processes just the current data decl</span>
-<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">(&gt;&gt; processDecls rest) $ atPos <span class="nottickedoff">p</span> $</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">(&gt;&gt; processDecls rest) $ atPos p $</span>
 <span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">-- Step 1: type-check the parameters</span>
 <span class="lineno">  402 </span><span class="spaces">  </span><span class="istickedoff">typeInferCompleteInCtxEC param_ctx' $ \params -&gt; do</span>
 <span class="lineno">  403 </span><span class="spaces">  </span><span class="istickedoff">let dtParams = map (\(_,ec,_) -&gt; ec) params</span>
 <span class="lineno">  404 </span><span class="spaces">  </span><span class="istickedoff">let param_sort = maxSort (map (\(_,_,s) -&gt; s) params)</span>
 <span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">let err :: String -&gt; CheckM a</span>
-<span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">err msg = throwTCError $ DeclError nm msg</span></span>
+<span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">err msg = throwTCError $ DeclError nm msg</span>
 <span class="lineno">  407 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  408 </span><span class="spaces">  </span><span class="istickedoff">-- Step 2: type-check the type given for d, and make sure it is of the form</span>
 <span class="lineno">  409 </span><span class="spaces">  </span><span class="istickedoff">-- (i1:ix1) -&gt; ... -&gt; (in:ixn) -&gt; Type s for some sort s. Then form the full</span>
 <span class="lineno">  410 </span><span class="spaces">  </span><span class="istickedoff">-- type of d as (p1:param1) -&gt; ... -&gt; (i1:ix1) -&gt; ... -&gt; Type s</span>
 <span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">(dt_ixs, dtSort) &lt;-</span>
 <span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff">case Un.asPiList dt_tp of</span>
-<span class="lineno">  413 </span><span class="spaces">      </span><span class="istickedoff">(ixs, Un.Sort _ s h) | <span class="tickonlytrue">h == noFlags</span> -&gt;</span>
+<span class="lineno">  413 </span><span class="spaces">      </span><span class="istickedoff">(ixs, Un.Sort _ s h) | h == noFlags -&gt;</span>
 <span class="lineno">  414 </span><span class="spaces">        </span><span class="istickedoff">return (ixs, s) -- NB, don't allow `isort`, etc.</span>
-<span class="lineno">  415 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">err &quot;Wrong form for type of datatype&quot;</span></span>
+<span class="lineno">  415 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; err &quot;Wrong form for type of datatype&quot;</span>
 <span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">let dt_ixs' = map (\(x, t) -&gt; (Un.termVarLocalName x, t)) dt_ixs</span>
 <span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">dt_ixs_typed &lt;- typeInferCompleteCtxEC dt_ixs'</span>
 <span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">let dtIndices = map (\(_,ec,_) -&gt; ec) dt_ixs_typed</span>
-<span class="lineno">  419 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map <span class="nottickedoff">(\(_,_,s) -&gt; s)</span> dt_ixs_typed)</span>
+<span class="lineno">  419 </span><span class="spaces">      </span><span class="istickedoff">ixs_max_sort = maxSort (map (\(_,_,s) -&gt; s) dt_ixs_typed)</span>
 <span class="lineno">  420 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">-- Step 3: do the necessary universe inclusion checking for any predicative</span>
 <span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">-- (non-Prop) inductive type, which includes:</span>
 <span class="lineno">  423 </span><span class="spaces">  </span><span class="istickedoff">--</span>
 <span class="lineno">  424 </span><span class="spaces">  </span><span class="istickedoff">-- 1. All ix types must be of sort dtSort; AND</span>
 <span class="lineno">  425 </span><span class="spaces">  </span><span class="istickedoff">-- 2. All param types must be of sort dtSort+1</span>
-<span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; param_sort &gt; sortOf dtSort</span> then</span>
-<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of parameters should be no greater&quot; ++</span></span>
-<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; than that of the datatype&quot;)</span></span>
+<span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">if dtSort /= propSort &amp;&amp; param_sort &gt; sortOf dtSort then</span>
+<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff">err (&quot;Universe level of parameters should be no greater&quot; ++</span>
+<span class="lineno">  428 </span><span class="spaces">         </span><span class="istickedoff">&quot; than that of the datatype&quot;)</span>
 <span class="lineno">  429 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
-<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ixs_max_sort &gt; dtSort</span> then</span>
-<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of indices should be strictly contained&quot; ++</span></span>
-<span class="lineno">  432 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot; in that of the datatype&quot;)</span></span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">if dtSort /= propSort &amp;&amp; ixs_max_sort &gt; dtSort then</span>
+<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">err (&quot;Universe level of indices should be strictly contained&quot; ++</span>
+<span class="lineno">  432 </span><span class="spaces">         </span><span class="istickedoff">&quot; in that of the datatype&quot;)</span>
 <span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">else return <span class="nottickedoff">()</span></span>
 <span class="lineno">  434 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  435 </span><span class="spaces">  </span><span class="istickedoff">-- Step 4: Add d as an empty datatype, so we can typecheck the constructors</span>
@@ -465,9 +465,9 @@ span.spaces    { background: white }
 <span class="lineno">  446 </span><span class="spaces">    </span><span class="istickedoff">-- Check that the universe level of the type of each constructor</span>
 <span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">do case asSort (typedType typed_tp) of</span>
 <span class="lineno">  448 </span><span class="spaces">           </span><span class="istickedoff">Just ctor_sort</span>
-<span class="lineno">  449 </span><span class="spaces">             </span><span class="istickedoff">| <span class="tickonlyfalse">dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort</span> -&gt;</span>
-<span class="lineno">  450 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span></span>
-<span class="lineno">  451 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot; contained in that of the datatype&quot;)</span></span>
+<span class="lineno">  449 </span><span class="spaces">             </span><span class="istickedoff">| dtSort /= propSort &amp;&amp; ctor_sort &gt; dtSort -&gt;</span>
+<span class="lineno">  450 </span><span class="spaces">               </span><span class="istickedoff">err (&quot;Universe level of constructors should be strictly&quot; ++</span>
+<span class="lineno">  451 </span><span class="spaces">                    </span><span class="istickedoff">&quot; contained in that of the datatype&quot;)</span>
 <span class="lineno">  452 </span><span class="spaces">           </span><span class="istickedoff">Just _ -&gt;</span>
 <span class="lineno">  453 </span><span class="spaces">               </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
 <span class="lineno">  454 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
@@ -501,7 +501,7 @@ span.spaces    { background: white }
 <span class="lineno">  482 </span><span class="spaces">  </span><span class="istickedoff">-- Finally, process all the decls</span>
 <span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runCheckM (processDecls decls) sc (Just mnm) []</span>
 <span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
-<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail $ unlines $ TC.prettyTCError err</span></span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; fail $ unlines $ TC.prettyTCError err</span>
 <span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  487 </span>
 <span class="lineno">  488 </span>
@@ -516,7 +516,7 @@ span.spaces    { background: white }
 <span class="lineno">  497 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames (var:vars) (asPi -&gt; Just (_, arg_tp, body_tp)) =</span>
 <span class="lineno">  498 </span><span class="spaces">  </span><span class="istickedoff">do (ctx,body) &lt;- matchPiWithNames vars body_tp</span>
 <span class="lineno">  499 </span><span class="spaces">     </span><span class="istickedoff">return ((var,arg_tp):ctx,body)</span>
-<span class="lineno">  500 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  500 </span><span class="spaces"></span><span class="istickedoff">matchPiWithNames _ _ = Nothing</span></span>
 <span class="lineno">  501 </span>
 <span class="lineno">  502 </span>-- | Run a type-checking computation in a typing context extended with a new
 <span class="lineno">  503 </span>-- variable with the given type. This throws away the memoization table while
@@ -530,7 +530,7 @@ span.spaces    { background: white }
 <span class="lineno">  511 </span>
 <span class="lineno">  512 </span>withEC :: LocalName -&gt; ExtCns Term -&gt; CheckM a -&gt; CheckM a
 <span class="lineno">  513 </span><span class="decl"><span class="istickedoff">withEC x ec m =</span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">TC.rethrowTCError <span class="nottickedoff">(ErrorCtx x (ecType ec))</span> $</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">TC.rethrowTCError (ErrorCtx <span class="nottickedoff">x</span> <span class="nottickedoff">(ecType ec)</span>) $</span>
 <span class="lineno">  515 </span><span class="spaces">  </span><span class="istickedoff">TC.withEmptyTCState $</span>
 <span class="lineno">  516 </span><span class="spaces">  </span><span class="istickedoff">local (\env -&gt; env { tcCtxEC = Map.insert x ec (tcCtxEC env) }) m</span></span>
 <span class="lineno">  517 </span>

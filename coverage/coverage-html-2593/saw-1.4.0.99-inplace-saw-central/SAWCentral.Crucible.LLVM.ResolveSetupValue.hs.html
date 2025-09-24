@@ -1120,7 +1120,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1101 </span><span class="spaces">  </span><span class="nottickedoff">case ttType typed_term of</span>
 <span class="lineno"> 1102 </span><span class="spaces">    </span><span class="nottickedoff">TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -&gt; do</span>
 <span class="lineno"> 1103 </span><span class="spaces">      </span><span class="nottickedoff">let evaluated_type = Cryptol.evalValType mempty cryptol_type</span>
-<span class="lineno"> 1104 </span><span class="spaces">      </span><span class="nottickedoff">fresh_array_const &lt;- scFreshGlobal saw_context &quot;arr&quot;</span>
+<span class="lineno"> 1104 </span><span class="spaces">      </span><span class="nottickedoff">fresh_array_const &lt;- scFreshVariable saw_context &quot;arr&quot;</span>
 <span class="lineno"> 1105 </span><span class="spaces">        </span><span class="nottickedoff">=&lt;&lt; scArrayType saw_context offset_type_term byte_type_term</span>
 <span class="lineno"> 1106 </span><span class="spaces">      </span><span class="nottickedoff">execStateT</span>
 <span class="lineno"> 1107 </span><span class="spaces">        </span><span class="nottickedoff">(setBytes evaluated_type (ttTerm typed_term) 0)</span>

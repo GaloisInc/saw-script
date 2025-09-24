@@ -186,7 +186,7 @@ span.spaces    { background: white }
 <span class="lineno">  167 </span>
 <span class="lineno">  168 </span>-- | Import a Cryptol type and define a fresh variable of that type.
 <span class="lineno">  169 </span>importFresh :: SharedContext -&gt; Text.Text -&gt; C.Type -&gt; IO Term
-<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">importFresh sc name t = scFreshGlobal sc name =&lt;&lt; C.importType sc <span class="nottickedoff">C.emptyEnv</span> t</span></span>
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">importFresh sc name t = scFreshVariable sc name =&lt;&lt; C.importType sc <span class="nottickedoff">C.emptyEnv</span> t</span></span>
 <span class="lineno">  171 </span>
 <span class="lineno">  172 </span>-- | Build the COMPOSITION SIDE CONDITION for 'bc' and 'bt'.  See the
 <span class="lineno">  173 </span>-- documentation at the top of this file for information on the COMPOSITION SIDE
@@ -764,7 +764,7 @@ span.spaces    { background: white }
 <span class="lineno">  745 </span><span class="spaces">              </span><span class="istickedoff">-- with it.</span>
 <span class="lineno">  746 </span><span class="spaces">              </span><span class="istickedoff">tp &lt;- liftIO $ C.importType sc <span class="nottickedoff">C.emptyEnv</span> constantRetType</span>
 <span class="lineno">  747 </span><span class="spaces">              </span><span class="istickedoff">name &lt;- lift $ constantName $ unwrapTermF x</span>
-<span class="lineno">  748 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshGlobal sc name tp</span>
+<span class="lineno">  748 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshVariable sc name tp</span>
 <span class="lineno">  749 </span><span class="spaces">              </span><span class="istickedoff">State.modify $ \st -&gt; st { rsExtCns = Just v, rsApp = Just termF }</span>
 <span class="lineno">  750 </span><span class="spaces">              </span><span class="istickedoff">return $ unwrapTermF v</span>
 <span class="lineno">  751 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
