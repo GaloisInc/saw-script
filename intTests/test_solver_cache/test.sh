@@ -9,7 +9,11 @@ $SAW test_path_and_reuse.saw
 # Testing the `clean_mismatched_versions_solver_cache` command by manually
 # altering the version string of all SBV entries in the database, then running
 # `clean_mismatched_versions_solver_cache`
-pip install cbor2 lmdb
+VENV="./test-venv"
+mkdir $VENV
+python3 -m venv $VENV
+source $VENV/bin/activate
+python3 -m pip install cbor2 lmdb
 python3 -m lmdb -e test_solver_cache.cache shell << END
 import cbor2
 with ENV.begin(write=True) as txn:
@@ -23,6 +27,8 @@ with ENV.begin(write=True) as txn:
       print(f'Keeping {k.hex()} {v}')
 
 END
+deactivate  # a `venv`-specific function provided by sourcing `$VENV/bin/activate` above
+rm -rf $VENV
 $SAW test_clean.saw
 
 # Testing that the envionment variable only creates the cache file when needed
