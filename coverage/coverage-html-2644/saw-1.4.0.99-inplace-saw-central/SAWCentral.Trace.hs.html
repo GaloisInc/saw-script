@@ -1,0 +1,202 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Trace
+<span class="lineno">    3 </span>Description : Stack traces for SAW-Script interpreter.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>-- This module should be used as follows:
+<span class="lineno">   11 </span>--    import SAWCentral.Trace (Trace)
+<span class="lineno">   12 </span>--    import qualified SAWCentral.Trace as Trace
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>module SAWCentral.Trace (
+<span class="lineno">   15 </span>    Trace(),
+<span class="lineno">   16 </span>    empty,
+<span class="lineno">   17 </span>    push,
+<span class="lineno">   18 </span>    pop,
+<span class="lineno">   19 </span>    ppTrace
+<span class="lineno">   20 </span> ) where
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import Data.Text (Text)
+<span class="lineno">   23 </span>import qualified Data.Text as Text
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import SAWCentral.Panic (panic)
+<span class="lineno">   26 </span>import SAWCentral.Position (Pos)
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>-- A stack trace is a list of call sites: positions with the name of
+<span class="lineno">   29 </span>-- (and other information about) the function being called.
+<span class="lineno">   30 </span>--
+<span class="lineno">   31 </span>-- As it's being collected, the trace has that form. For printing, we
+<span class="lineno">   32 </span>-- shift the positions by one so we report each call site as a
+<span class="lineno">   33 </span>-- position in the function that called it. This produces stack traces
+<span class="lineno">   34 </span>-- consistent with user expectations. See `prepareTrace` below.
+<span class="lineno">   35 </span>--
+<span class="lineno">   36 </span>-- The plumbing in the interpreter necessary to collect this
+<span class="lineno">   37 </span>-- information is not entirely trivial, thanks to the need to handle
+<span class="lineno">   38 </span>-- monadic actions, and particularly monadic actions passed as
+<span class="lineno">   39 </span>-- callbacks to builtins, some of which may not actually involve any
+<span class="lineno">   40 </span>-- direct evaluation in the interpreter, and is described elsewhere.
+<span class="lineno">   41 </span>-- (See Value.hs.)
+<span class="lineno">   42 </span>--
+<span class="lineno">   43 </span>-- The interaction of Haskell lazy evaluation with the interpreter's
+<span class="lineno">   44 </span>-- execution semantics is also complicated and difficult to reason
+<span class="lineno">   45 </span>-- about, which does not help.
+<span class="lineno">   46 </span>--
+<span class="lineno">   47 </span>-- In order to avoid a cyclic dependency with Value.hs we handle only
+<span class="lineno">   48 </span>-- Text in the stack trace itself; the printing happens when trace
+<span class="lineno">   49 </span>-- frames are created. Lazy evaluation should make this not ruinously
+<span class="lineno">   50 </span>-- expensive.
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>-- | Call information for a stack trace.
+<span class="lineno">   53 </span>--
+<span class="lineno">   54 </span>--   This bundles a function name and arguments and whatever else we
+<span class="lineno">   55 </span>--   might want to record for examination (e.g. values of locals) in a
+<span class="lineno">   56 </span>--   single type so the rest of the trace logic doesn't have to think
+<span class="lineno">   57 </span>--   directly about what's in it.
+<span class="lineno">   58 </span>--
+<span class="lineno">   59 </span>--   Note that to avoid horrible cycles in the module dependency graph,
+<span class="lineno">   60 </span>--   we can't have Values here, so we need to print arguments, values
+<span class="lineno">   61 </span>--   of locals, etc. to text at the point we generate the frame. Lazy
+<span class="lineno">   62 </span>--   evaluation should prevent that from being ruinously expensive.
+<span class="lineno">   63 </span>--
+<span class="lineno">   64 </span>--   (FUTURE: it might make sense for each frame to be a prettyprinter
+<span class="lineno">   65 </span>--   document rather than Text.)
+<span class="lineno">   66 </span>newtype TraceFunc = TraceFunc Text
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>-- | Entry in a stack trace.
+<span class="lineno">   69 </span>--
+<span class="lineno">   70 </span>-- In order to have a correct and coherent (and useful) stack trace,
+<span class="lineno">   71 </span>-- we want the following information for each call that is currently
+<span class="lineno">   72 </span>-- in progress:
+<span class="lineno">   73 </span>--    - the call site as a source position
+<span class="lineno">   74 </span>--    - the name and all other info (a TraceFunc) describing the
+<span class="lineno">   75 </span>--      function/action/builtin/other object being called
+<span class="lineno">   76 </span>--
+<span class="lineno">   77 </span>-- This should take effect at the point when the call is actually
+<span class="lineno">   78 </span>-- executed, that is, we begin executing in the function, and should
+<span class="lineno">   79 </span>-- be cleared off again when that's done.
+<span class="lineno">   80 </span>--
+<span class="lineno">   81 </span>-- We don't need the source position of the called object, because the
+<span class="lineno">   82 </span>-- next position in the stack should be in that function. (Tail call
+<span class="lineno">   83 </span>-- optimization would break that expectation, but we don't do that.)
+<span class="lineno">   84 </span>data TraceFrame = TraceFrame Pos TraceFunc
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- A stack trace is a list of frames, with the most recent frame at
+<span class="lineno">   87 </span>-- the head of the list.
+<span class="lineno">   88 </span>data Trace = Trace [TraceFrame]
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>-- | The starting trace.
+<span class="lineno">   91 </span>empty :: Trace
+<span class="lineno">   92 </span><span class="decl"><span class="istickedoff">empty = Trace []</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- | Push a fresh frame on a trace.
+<span class="lineno">   96 </span>push :: Pos -&gt; Text -&gt; Trace -&gt; Trace
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">push callpos func (Trace frames) =</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">let func' = TraceFunc func</span>
+<span class="lineno">   99 </span><span class="spaces">      </span><span class="istickedoff">frame = TraceFrame callpos func'</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">Trace (frame : frames)</span></span>
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>-- | Pop a frame off a trace.
+<span class="lineno">  104 </span>pop :: Trace -&gt; Trace
+<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">pop (Trace frames) = case frames of</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">panic &quot;Trace.pop&quot; [&quot;Popping empty stack&quot;]</span></span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">_ : frames' -&gt; Trace frames'</span></span>
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>-- | Print a TraceFunc. Simple for now, but we're going to want more
+<span class="lineno">  111 </span>--   later.
+<span class="lineno">  112 </span>ppTraceFunc :: TraceFunc -&gt; Text
+<span class="lineno">  113 </span><span class="decl"><span class="istickedoff">ppTraceFunc (TraceFunc name) = name</span></span>
+<span class="lineno">  114 </span>
+<span class="lineno">  115 </span>-- | Prepare a trace for printing.
+<span class="lineno">  116 </span>--
+<span class="lineno">  117 </span>--   The trace is a list of call sites, and that's not the way we want
+<span class="lineno">  118 </span>--   to print it.
+<span class="lineno">  119 </span>--
+<span class="lineno">  120 </span>--   Suppose we had this code:
+<span class="lineno">  121 </span>--
+<span class="lineno">  122 </span>--      foo.saw:1: let f1 z = ...;
+<span class="lineno">  123 </span>--      foo.saw:2: let f2 y = f1 (y + 1);
+<span class="lineno">  124 </span>--      foo.saw:3: let f3 x = f2 (x + 1);
+<span class="lineno">  125 </span>--      foo.saw.4: return (f3 0);
+<span class="lineno">  126 </span>--
+<span class="lineno">  127 </span>--   and we crash and produce a trace inside f1. (Assume none of this
+<span class="lineno">  128 </span>--   is monadic because that just introduces additional complications
+<span class="lineno">  129 </span>--   that aren't relevant here.)
+<span class="lineno">  130 </span>--
+<span class="lineno">  131 </span>--   The current position will be foo.saw:1, and the trace will contain:
+<span class="lineno">  132 </span>--      foo.saw:2 called f1
+<span class="lineno">  133 </span>--      foo.saw:3 called f2
+<span class="lineno">  134 </span>--      foo.saw:4 called f3
+<span class="lineno">  135 </span>--
+<span class="lineno">  136 </span>--   but what we want to print is
+<span class="lineno">  137 </span>--      foo.saw:1 in f1 (z = 2)
+<span class="lineno">  138 </span>--      foo.saw:2 in f2 (y = 1)
+<span class="lineno">  139 </span>--      foo.saw:3 in f3 (x = 0)
+<span class="lineno">  140 </span>--      foo.saw:4 at top level
+<span class="lineno">  141 </span>--
+<span class="lineno">  142 </span>--   that is, we want to insert the current position and shift the
+<span class="lineno">  143 </span>--   rest of the positions up by one. (Failure to do this coherently
+<span class="lineno">  144 </span>--   was one of the root causes of #2108.)
+<span class="lineno">  145 </span>--
+<span class="lineno">  146 </span>-- Do this shift, and inject Nothing for &quot;at top level&quot;.
+<span class="lineno">  147 </span>prepareTrace :: Pos -&gt; [TraceFrame] -&gt; [(Pos, Maybe TraceFunc)]
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">prepareTrace curpos tfs = case tfs of</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; [(curpos, Nothing)]</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">(TraceFrame nextpos func) : tfs' -&gt;</span>
+<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">(curpos, Just func) : prepareTrace nextpos tfs'</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Pretty-print a trace. This also takes the current position
+<span class="lineno">  154 </span>--   to print at the bottom.
+<span class="lineno">  155 </span>--
+<span class="lineno">  156 </span>--   We don't reverse the frame, so the most recent call comes out at
+<span class="lineno">  157 </span>--   the top, like gdb and most debuggers. Shift the current position
+<span class="lineno">  158 </span>--   into the trace as described above before printing.
+<span class="lineno">  159 </span>--
+<span class="lineno">  160 </span>--   Takes the current position as well as the trace.  Note that the
+<span class="lineno">  161 </span>--   &quot;current position&quot; should be read as &quot;what's currently
+<span class="lineno">  162 </span>--   executing&quot;, which in most cases will be PosInsideBuiltin. Don't
+<span class="lineno">  163 </span>--   use the interpreter's last execution position; that will result
+<span class="lineno">  164 </span>--   in a confusingly messed-up trace.
+<span class="lineno">  165 </span>--
+<span class="lineno">  166 </span>ppTrace :: Trace -&gt; Pos -&gt; Text
+<span class="lineno">  167 </span><span class="decl"><span class="istickedoff">ppTrace (Trace frames) curpos =</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">let frames' =</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="istickedoff">let ppEntry (pos, mfunc) =</span>
+<span class="lineno">  170 </span><span class="spaces">              </span><span class="istickedoff">let pos' = Text.pack (show pos)</span>
+<span class="lineno">  171 </span><span class="spaces">                  </span><span class="istickedoff">mfunc' = case mfunc of</span>
+<span class="lineno">  172 </span><span class="spaces">                    </span><span class="istickedoff">Nothing -&gt; &quot; (at top level)&quot;</span>
+<span class="lineno">  173 </span><span class="spaces">                    </span><span class="istickedoff">Just func -&gt; &quot; in &quot; &lt;&gt; ppTraceFunc func</span>
+<span class="lineno">  174 </span><span class="spaces">              </span><span class="istickedoff">in</span>
+<span class="lineno">  175 </span><span class="spaces">              </span><span class="istickedoff">&quot;   &quot; &lt;&gt; pos' &lt;&gt; mfunc'</span>
+<span class="lineno">  176 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  177 </span><span class="spaces">        </span><span class="istickedoff">map ppEntry $ prepareTrace curpos frames</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">Text.unlines frames'</span></span>
+
+</pre>
+</body>
+</html>
