@@ -986,7 +986,7 @@ span.spaces    { background: white }
 <span class="lineno">  967 </span>
 <span class="lineno">  968 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  969 </span>proveRME :: ProofScript ()
-<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
+<span class="lineno">  970 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
 <span class="lineno">  971 </span>
 <span class="lineno">  972 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  973 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1143,7 +1143,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1124 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1125 </span>
 <span class="lineno"> 1126 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1128 </span>
 <span class="lineno"> 1129 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1130 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1160,10 +1160,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1142 </span>
 <span class="lineno"> 1143 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1144 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1145 </span>
 <span class="lineno"> 1146 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1147 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1148 </span>
 <span class="lineno"> 1149 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1150 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1253,7 +1253,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1234 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1235 </span>
 <span class="lineno"> 1236 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1238 </span>
 <span class="lineno"> 1239 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1240 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1346,7 +1346,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1327 </span><span class="spaces">            </span><span class="nottickedoff">vars  &lt;- io $ mapM (scVariable sc) pis</span>
 <span class="lineno"> 1328 </span><span class="spaces">            </span><span class="nottickedoff">innerVars &lt;-</span>
 <span class="lineno"> 1329 </span><span class="spaces">              </span><span class="nottickedoff">io $ sequence $</span>
-<span class="lineno"> 1330 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshGlobal sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
+<span class="lineno"> 1330 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshVariable sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
 <span class="lineno"> 1331 </span><span class="spaces">            </span><span class="nottickedoff">t1    &lt;- io $ scApplyAllBeta sc (ttTerm t) vars</span>
 <span class="lineno"> 1332 </span><span class="spaces">            </span><span class="nottickedoff">tsz   &lt;- io $ scTupleSelector sc t1 1 2 -- left element</span>
 <span class="lineno"> 1333 </span><span class="spaces">            </span><span class="nottickedoff">tbody &lt;- io $ scEqTrue sc =&lt;&lt; scTupleSelector sc t1 2 2 -- rightmost tuple element</span>
@@ -1380,7 +1380,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1361 </span><span class="spaces">            </span><span class="nottickedoff">--</span>
 <span class="lineno"> 1362 </span><span class="spaces">            </span><span class="nottickedoff">--      (\ (n:Nat) -&gt; (x:Vec w Bool) -&gt; IsLeNat (bvToNat w x) n -&gt; p x)</span>
 <span class="lineno"> 1363 </span><span class="spaces">            </span><span class="nottickedoff">indMotive &lt;- io $</span>
-<span class="lineno"> 1364 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshGlobal sc &quot;inductionVar&quot; natty</span>
+<span class="lineno"> 1364 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshVariable sc &quot;inductionVar&quot; natty</span>
 <span class="lineno"> 1365 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1366 </span><span class="spaces">                   </span><span class="nottickedoff">teq    &lt;- scGlobalApply sc &quot;Prelude.IsLeNat&quot; [tsz', indVar]</span>
 <span class="lineno"> 1367 </span><span class="spaces">                   </span><span class="nottickedoff">t2     &lt;- scFun sc teq tbody</span>
@@ -1403,10 +1403,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1384 </span><span class="spaces">            </span><span class="nottickedoff">--                 y (IsLeNat_base (bvToNat w y)))</span>
 <span class="lineno"> 1385 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1386 </span><span class="spaces">            </span><span class="nottickedoff">indHypProof &lt;- io $</span>
-<span class="lineno"> 1387 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshGlobal sc &quot;H&quot; thmHyp</span>
-<span class="lineno"> 1388 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshGlobal sc &quot;n&quot; natty</span>
-<span class="lineno"> 1389 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshGlobal sc &quot;Hind&quot; =&lt;&lt;</span>
-<span class="lineno"> 1390 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshGlobal sc &quot;m&quot; natty</span>
+<span class="lineno"> 1387 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshVariable sc &quot;H&quot; thmHyp</span>
+<span class="lineno"> 1388 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshVariable sc &quot;n&quot; natty</span>
+<span class="lineno"> 1389 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshVariable sc &quot;Hind&quot; =&lt;&lt;</span>
+<span class="lineno"> 1390 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshVariable sc &quot;m&quot; natty</span>
 <span class="lineno"> 1391 </span><span class="spaces">                                   </span><span class="nottickedoff">lt &lt;- scGlobalApply sc &quot;Prelude.IsLtNat&quot; [m, nVar]</span>
 <span class="lineno"> 1392 </span><span class="spaces">                                   </span><span class="nottickedoff">scGeneralizeTerms sc [m] =&lt;&lt; scFun sc lt =&lt;&lt; scApplyBeta sc indMotive m</span>
 <span class="lineno"> 1393 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -1418,9 +1418,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1399 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1400 </span><span class="spaces">                   </span><span class="nottickedoff">succinnersz &lt;- scGlobalApply sc &quot;Prelude.Succ&quot; [natinnersz]</span>
 <span class="lineno"> 1401 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1402 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshGlobal sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
+<span class="lineno"> 1402 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshVariable sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
 <span class="lineno"> 1403 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1404 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshGlobal sc &quot;Hle&quot; =&lt;&lt;</span>
+<span class="lineno"> 1404 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshVariable sc &quot;Hle&quot; =&lt;&lt;</span>
 <span class="lineno"> 1405 </span><span class="spaces">                                 </span><span class="nottickedoff">scGlobalApply sc &quot;Prelude.IsLeNat&quot; [natoutersz, nVar]</span>
 <span class="lineno"> 1406 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1407 </span><span class="spaces">                   </span><span class="nottickedoff">refl_inner &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [natinnersz]</span>
@@ -1440,7 +1440,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1421 </span><span class="spaces">            </span><span class="nottickedoff">-- \ (x : Vec x Bool) -&gt;</span>
 <span class="lineno"> 1422 </span><span class="spaces">            </span><span class="nottickedoff">--    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))</span>
 <span class="lineno"> 1423 </span><span class="spaces">            </span><span class="nottickedoff">indApp &lt;- io $</span>
-<span class="lineno"> 1424 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshGlobal sc &quot;Hind&quot; thmHyp</span>
+<span class="lineno"> 1424 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshVariable sc &quot;Hind&quot; thmHyp</span>
 <span class="lineno"> 1425 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1426 </span><span class="spaces">                   </span><span class="nottickedoff">trefl  &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [tsz']</span>
 <span class="lineno"> 1427 </span><span class="spaces">                   </span><span class="nottickedoff">indHypArg &lt;- scApplyBeta sc indHypProof varH</span>
@@ -1698,7 +1698,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1679 </span><span class="decl"><span class="istickedoff">freshSymbolicPrim x schema@(C.Forall [] [] ct) = do</span>
 <span class="lineno"> 1680 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno"> 1681 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ct</span>
-<span class="lineno"> 1682 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshGlobal sc x cty</span>
+<span class="lineno"> 1682 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshVariable sc x cty</span>
 <span class="lineno"> 1683 </span><span class="spaces">  </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) tm</span>
 <span class="lineno"> 1684 </span><span class="spaces"></span><span class="istickedoff">freshSymbolicPrim _ _ =</span>
 <span class="lineno"> 1685 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Can't create fresh symbolic variable of non-ground type.&quot;</span></span></span>

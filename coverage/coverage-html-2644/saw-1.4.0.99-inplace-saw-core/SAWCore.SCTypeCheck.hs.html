@@ -655,7 +655,7 @@ span.spaces    { background: white }
 <span class="lineno">  636 </span><span class="spaces">     </span><span class="istickedoff">let mk_err str =</span>
 <span class="lineno">  637 </span><span class="spaces">           </span><span class="istickedoff">MalformedRecursor</span>
 <span class="lineno">  638 </span><span class="spaces">           </span><span class="istickedoff">(Unshared $ fmap typedVal $ FTermF $</span>
-<span class="lineno">  639 </span><span class="spaces">             </span><span class="istickedoff">Recursor (CompiledRecursor d params motive <span class="nottickedoff">motiveTy</span> mempty []))</span>
+<span class="lineno">  639 </span><span class="spaces">             </span><span class="istickedoff">Recursor (CompiledRecursor d params motive motiveTy mempty []))</span>
 <span class="lineno">  640 </span><span class="spaces">            </span><span class="istickedoff">str</span>
 <span class="lineno">  641 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  642 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the params have the correct types by making sure</span>
@@ -710,7 +710,7 @@ span.spaces    { background: white }
 <span class="lineno">  691 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">throwTCError $ mk_err &quot;Extra constructors&quot;</span></span>
 <span class="lineno">  692 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  693 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the parameters and motive are correct for the given datatype</span>
-<span class="lineno">  694 </span><span class="spaces">     </span><span class="istickedoff">_s &lt;- inferRecursorType d params motive <span class="nottickedoff">motiveTy</span></span>
+<span class="lineno">  694 </span><span class="spaces">     </span><span class="istickedoff">_s &lt;- inferRecursorType d params motive motiveTy</span>
 <span class="lineno">  695 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  696 </span><span class="spaces">     </span><span class="istickedoff">-- Check that the elimination functions each have the right types, and</span>
 <span class="lineno">  697 </span><span class="spaces">     </span><span class="istickedoff">-- that we have exactly one for each constructor of dt</span>
