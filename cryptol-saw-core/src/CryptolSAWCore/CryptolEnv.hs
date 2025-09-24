@@ -589,7 +589,6 @@ bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm') $
                       flip (foldr addTSyn) (Map.keys sm) $
-                      flip (foldr addSubModule) (Map.keys tm') $
                       eExtraNames env
       , eExtraTSyns = Map.union sm (eExtraTSyns env)
       , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
@@ -603,8 +602,6 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
           f _                                 = Nothing
 
     addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-
-    addSubModule name = MN.shadowing (MN.singletonNS C.NSModule (P.mkQual modName (MN.nameIdent name)) name)
 
     addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
