@@ -131,7 +131,8 @@ data InputText = InputText
 --
 data ImportVisibility
   = OnlyPublic       -- ^ behaves like a normal Cryptol "import"
-  | PublicAndPrivate -- ^ allows viewing of both "private" sections and (arbitrarily nested) submodules.
+  | PublicAndPrivate -- ^ allows viewing of both "private" sections
+                     --   and (arbitrarily nested) submodules.
   deriving (Eq, Show)
 
 
@@ -188,6 +189,7 @@ nameMatcher xs =
                     in last cs == identText (C.ogName og) &&
                        init cs == C.modNameChunksText top ++ map identText ns
 
+
 -- Initialize ------------------------------------------------------------------
 
 -- | initCryptolEnv - Create initial CryptolEnv, this involves loading
@@ -227,7 +229,7 @@ initCryptolEnv sc = do
          _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
          return ()
 
-  -- Load Cryptol reference implementations
+  -- Load Cryptol reference implementation
   ((_,refTop), modEnv3) <-
     liftModuleM modEnv2 $
       MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
@@ -476,13 +478,13 @@ loadExtCryptolModule sc env path =
 
 -- | loadCryptolModule
 --
--- NOTE:
+-- NOTE RE CALLERS:
 --  - the path to this function from the command line is only via
 --    the experimental "write_coq_cryptol_module" command.
 --
--- FIXME: This incorrectly (in MkCryptolModule) excludes both
---        submodules and their contents from the NamingEnvs in
---        `CryptolModule`
+-- This function (note `mkCryptolModule`) returns the public types and values
+-- of the module in a `CryptolModule` structure.
+--
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
@@ -495,7 +497,11 @@ loadCryptolModule sc env path =
   cm <- mkCryptolModule mod' env'
   return (cm, env')
 
--- | mkCryptolModule - translate a T.Module to a CryptolModule
+
+-- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
+--
+-- This function returns the public types and values of the module `m`
+-- as a `CryptolModule` structure.
 mkCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   T.Module -> CryptolEnv -> IO CryptolModule
@@ -504,9 +510,9 @@ mkCryptolModule m env =
   let newTermEnv = eTermEnv env
       modEnv     = eModuleEnv env
       ifaceDecls = getAllIfaceDecls modEnv
-  (types, _modEnv) <- liftModuleM modEnv $ do
-    -- NOTE: _modEnv == modEnv
-    --   - as we elaborate below, the monadic actions are all 'readers'
+  (types, _modEnv) <- liftModuleM modEnv $
+    -- NOTE: _modEnv == modEnv, because, as we elaborate below,
+    --   the monadic actions are all 'readers'.
     do prims <- MB.getPrimMap
                   -- generate the primitive map; a monad reader
        TM.inpVars `fmap`
@@ -518,28 +524,32 @@ mkCryptolModule m env =
          --   - If we had inlined, it appears that this is functional code.
          --   - (Possibly because of information hiding?)
 
-  let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
   return $
-    CryptolModule
-      -- create type synonym Map, keep only the exports:
-      (Map.filterWithKey
-         (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
-         (T.mTySyns m)
-      )
-        -- FIXME: TODO: ensure type synonyms in submodule are included.
+    let
+      -- we're keeping only the exports of `m`:
+      vNameSet = MEx.exported C.NSValue (T.mExports m)
+      tNameSet = MEx.exported C.NSType  (T.mExports m)
+    in
+      CryptolModule
+        -- create Map of type synonyms
+        (Map.filterWithKey
+           (\k _ -> Set.member k tNameSet)
+           (T.mTySyns m)
+        )
 
-      -- create the map of symbols:
-      ( Map.filterWithKey (\k _ -> Set.member k names)
-      $ Map.intersectionWith
-           (\t x -> TypedTerm (TypedTermSchema t) x)
-           types
-           newTermEnv
-      )
+        -- create Map of the `TypedTerm` s:
+        ( Map.filterWithKey (\k _ -> Set.member k vNameSet)
+        $ Map.intersectionWith
+             (\t x -> TypedTerm (TypedTermSchema t) x)
+             types
+             newTermEnv
+        )
 
--- | bindExtCryptolModule - ad hoc function/hook that allows for extending
---   the Cryptol env with the names in a CryptolModule.
+-- | bindExtCryptolModule - ad hoc function/hook that allows for
+--   extending the Cryptol environment with the names in a Cryptol
+--   module, `ExtCryptolModule`.
 --
---   Three command line variants get us here:
+--   NOTE RE CALLERS: Three command line variants get us here:
 --      > D <- cryptol_load "PATH"
 --      > x <- return (cryptol_prims ())
 --      > let x = cryptol_prims ()
@@ -607,6 +617,7 @@ extractDefFromExtCryptolModule ecm name =
         -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
         -- FIXME: if one had a CryptolModule with qualified names (e.g., it
         --     was generated from a module with submodules), would this work?
+
 
 ---- Core functions for loading and Translating Modules ------------------------
 
@@ -969,10 +980,10 @@ declareName env mname input = do
 typeNoUser :: T.Type -> T.Type
 typeNoUser t =
   case t of
-    T.TCon tc ts   -> T.TCon tc (map typeNoUser ts)
-    T.TVar {}      -> t
-    T.TUser _ _ ty -> typeNoUser ty
-    T.TRec fields  -> T.TRec (fmap typeNoUser fields)
+    T.TCon tc ts     -> T.TCon tc (map typeNoUser ts)
+    T.TVar {}        -> t
+    T.TUser _ _ ty   -> typeNoUser ty
+    T.TRec fields    -> T.TRec (fmap typeNoUser fields)
     T.TNominal nt ts -> T.TNominal nt (fmap typeNoUser ts)
 
 schemaNoUser :: T.Schema -> T.Schema
@@ -988,7 +999,7 @@ locatedUnknown x = P.Located P.emptyRange x
   -- of this function.
 
 liftModuleM ::
-  (?fileReader :: FilePath -> IO ByteString) =>
+ (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp solver = MM.ModuleInput {
