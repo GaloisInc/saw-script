@@ -619,10 +619,19 @@ extractDefFromExtCryptolModule ::
   SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
 extractDefFromExtCryptolModule sc env ecm name =
   case ecm of
-    ECM_LoadedModule _modname ->
-      -- do env' <- bindLoadedModule ...
-      panic "extractDefFromExtCryptolModule"
-              ["FIXME: not implemented yet: need plumbing!"]
+    ECM_LoadedModule loadedModName ->
+        do let localMN = C.packModName
+                           [ "INTERNAL"
+                           , C.modNameToText (P.thing loadedModName)
+                           ]
+               env'    = bindLoadedModule (localMN, loadedModName) env
+                         -- FIXME: PublicAndPrivate now. ?
+               expr    = noLoc (C.modNameToText localMN <> "::" <> name)
+                        -- FIXME: be more robust? create an identifier?
+           let ?fileReader = panic "fileReader"
+                               ["extractDefFromExtCryptolModule"]
+           parseTypedTerm sc env' expr
+
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
           Just t  -> return t
@@ -1012,6 +1021,15 @@ schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 
 
 ---- Local Utility Functions ---------------------------------------------------
+
+noLoc :: Text -> InputText
+noLoc x = InputText
+            { inpText = x
+            , inpFile = "(internalUse)"
+            , inpLine = 1
+            , inpCol  = 1
+            }
+
 
 locatedUnknown :: a -> P.Located a
 locatedUnknown x = P.Located P.emptyRange x
