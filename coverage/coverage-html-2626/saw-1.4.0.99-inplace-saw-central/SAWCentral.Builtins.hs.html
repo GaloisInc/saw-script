@@ -1910,45 +1910,45 @@ span.spaces    { background: white }
 <span class="lineno"> 1891 </span>-- | Default the values of the type variables in a typed term.
 <span class="lineno"> 1892 </span>defaultTypedTerm :: Options -&gt; SharedContext -&gt; C.SolverConfig -&gt; TypedTerm -&gt; IO TypedTerm
 <span class="lineno"> 1893 </span><span class="decl"><span class="istickedoff">defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)</span>
-<span class="lineno"> 1894 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">null (C.sVars schema)</span> = return tt</span>
-<span class="lineno"> 1895 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1896 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">mdefault &lt;- C.withSolver (return ()) cfg (\s -&gt; C.defaultReplExpr s undefined schema)</span></span>
-<span class="lineno"> 1897 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">let inst = do (soln, _) &lt;- mdefault</span></span>
-<span class="lineno"> 1898 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">mapM (`lookup` soln) (C.sVars schema)</span></span>
-<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case inst of</span></span>
-<span class="lineno"> 1900 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; return (TypedTerm (TypedTermSchema schema) trm)</span></span>
-<span class="lineno"> 1901 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Just tys -&gt; do</span></span>
-<span class="lineno"> 1902 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let vars = C.sVars schema</span></span>
-<span class="lineno"> 1903 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let nms = C.addTNames CryptolPP.defaultPPCfg vars IntMap.empty</span></span>
-<span class="lineno"> 1904 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">mapM_ (warnDefault nms) (zip vars tys)</span></span>
-<span class="lineno"> 1905 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let applyType :: Term -&gt; C.Type -&gt; IO Term</span></span>
-<span class="lineno"> 1906 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">applyType t ty = do</span></span>
-<span class="lineno"> 1907 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- Cryptol.importType sc Cryptol.emptyEnv ty</span></span>
-<span class="lineno"> 1908 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scApply sc t ty'</span></span>
-<span class="lineno"> 1909 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span></span>
-<span class="lineno"> 1910 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">dischargeProp t p</span></span>
-<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">| Cryptol.isErasedProp p = return t</span></span>
-<span class="lineno"> 1912 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">| otherwise = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span></span>
-<span class="lineno"> 1913 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- foldM applyType trm tys</span></span>
-<span class="lineno"> 1914 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span></span>
-<span class="lineno"> 1915 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let props = map (plainSubst su) (C.sProps schema)</span></span>
-<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">trm'' &lt;- foldM dischargeProp trm' props</span></span>
-<span class="lineno"> 1917 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))</span></span>
-<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return (TypedTerm (TypedTermSchema schema') trm'')</span></span>
+<span class="lineno"> 1894 </span><span class="spaces">  </span><span class="istickedoff">| null (C.sVars schema) = return tt</span>
+<span class="lineno"> 1895 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = do</span>
+<span class="lineno"> 1896 </span><span class="spaces">  </span><span class="istickedoff">mdefault &lt;- C.withSolver (return <span class="nottickedoff">()</span>) cfg (\s -&gt; C.defaultReplExpr s <span class="nottickedoff">undefined</span> schema)</span>
+<span class="lineno"> 1897 </span><span class="spaces">  </span><span class="istickedoff">let inst = do (soln, _) &lt;- mdefault</span>
+<span class="lineno"> 1898 </span><span class="spaces">                </span><span class="istickedoff">mapM (`lookup` soln) (C.sVars schema)</span>
+<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff">case inst of</span>
+<span class="lineno"> 1900 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return (TypedTerm (TypedTermSchema schema) trm)</span></span>
+<span class="lineno"> 1901 </span><span class="spaces">    </span><span class="istickedoff">Just tys -&gt; do</span>
+<span class="lineno"> 1902 </span><span class="spaces">      </span><span class="istickedoff">let vars = C.sVars schema</span>
+<span class="lineno"> 1903 </span><span class="spaces">      </span><span class="istickedoff">let nms = C.addTNames <span class="nottickedoff">CryptolPP.defaultPPCfg</span> vars IntMap.empty</span>
+<span class="lineno"> 1904 </span><span class="spaces">      </span><span class="istickedoff">mapM_ (warnDefault nms) (zip vars tys)</span>
+<span class="lineno"> 1905 </span><span class="spaces">      </span><span class="istickedoff">let applyType :: Term -&gt; C.Type -&gt; IO Term</span>
+<span class="lineno"> 1906 </span><span class="spaces">          </span><span class="istickedoff">applyType t ty = do</span>
+<span class="lineno"> 1907 </span><span class="spaces">            </span><span class="istickedoff">ty' &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ty</span>
+<span class="lineno"> 1908 </span><span class="spaces">            </span><span class="istickedoff">scApply sc t ty'</span>
+<span class="lineno"> 1909 </span><span class="spaces">      </span><span class="istickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span>
+<span class="lineno"> 1910 </span><span class="spaces">          </span><span class="istickedoff">dischargeProp t p</span>
+<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlyfalse">Cryptol.isErasedProp p</span> = <span class="nottickedoff">return t</span></span>
+<span class="lineno"> 1912 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span>
+<span class="lineno"> 1913 </span><span class="spaces">      </span><span class="istickedoff">trm' &lt;- foldM applyType trm tys</span>
+<span class="lineno"> 1914 </span><span class="spaces">      </span><span class="istickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span>
+<span class="lineno"> 1915 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst su) (C.sProps schema)</span>
+<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff">trm'' &lt;- foldM dischargeProp trm' props</span>
+<span class="lineno"> 1917 </span><span class="spaces">      </span><span class="istickedoff">let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))</span>
+<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema') trm'')</span>
 <span class="lineno"> 1919 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1920 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">warnDefault ns (x,t) =</span></span>
-<span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Info $ show $ C.text &quot;Assuming&quot; C.&lt;+&gt; C.ppWithNames ns (x :: C.TParam) C.&lt;+&gt; C.text &quot;=&quot; C.&lt;+&gt; C.pp t</span></span>
+<span class="lineno"> 1920 </span><span class="spaces">    </span><span class="istickedoff">warnDefault ns (x,t) =</span>
+<span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Info $ show $ C.text &quot;Assuming&quot; C.&lt;+&gt; C.ppWithNames ns (x :: C.TParam) C.&lt;+&gt; C.text &quot;=&quot; C.&lt;+&gt; C.pp t</span>
 <span class="lineno"> 1922 </span><span class="spaces">    </span><span class="istickedoff">-- Apply a substitution to a type *without* simplifying</span>
 <span class="lineno"> 1923 </span><span class="spaces">    </span><span class="istickedoff">-- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to</span>
 <span class="lineno"> 1924 </span><span class="spaces">    </span><span class="istickedoff">-- 'apSubst', which performs simplifications wherever possible.)</span>
 <span class="lineno"> 1925 </span><span class="spaces">    </span><span class="istickedoff">plainSubst :: C.Subst -&gt; C.Type -&gt; C.Type</span>
-<span class="lineno"> 1926 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">plainSubst s ty =</span></span>
-<span class="lineno"> 1927 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ty of</span></span>
-<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TCon tc ts   -&gt; C.TCon tc (map (plainSubst s) ts)</span></span>
-<span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TUser f ts t -&gt; C.TUser f (map (plainSubst s) ts) (plainSubst s t)</span></span>
-<span class="lineno"> 1930 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TRec fs      -&gt; C.TRec (fmap (plainSubst s) fs)</span></span>
-<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TVar x       -&gt; C.apSubst s (C.TVar x)</span></span>
-<span class="lineno"> 1932 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TNominal nt ts -&gt; C.TNominal nt (fmap (plainSubst s) ts)</span></span>
+<span class="lineno"> 1926 </span><span class="spaces">    </span><span class="istickedoff">plainSubst s ty =</span>
+<span class="lineno"> 1927 </span><span class="spaces">      </span><span class="istickedoff">case ty of</span>
+<span class="lineno"> 1928 </span><span class="spaces">        </span><span class="istickedoff">C.TCon tc ts   -&gt; C.TCon tc (map (plainSubst s) ts)</span>
+<span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff">C.TUser f ts t -&gt; <span class="nottickedoff">C.TUser f (map (plainSubst s) ts) (plainSubst s t)</span></span>
+<span class="lineno"> 1930 </span><span class="spaces">        </span><span class="istickedoff">C.TRec fs      -&gt; <span class="nottickedoff">C.TRec (fmap (plainSubst s) fs)</span></span>
+<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff">C.TVar x       -&gt; C.apSubst s (C.TVar x)</span>
+<span class="lineno"> 1932 </span><span class="spaces">        </span><span class="istickedoff">C.TNominal nt ts -&gt; <span class="nottickedoff">C.TNominal nt (fmap (plainSubst s) ts)</span></span>
 <span class="lineno"> 1933 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1934 </span><span class="spaces"></span><span class="istickedoff">defaultTypedTerm _opts _sc _cfg tt = <span class="nottickedoff">return tt</span></span></span>
 <span class="lineno"> 1935 </span>

@@ -340,7 +340,7 @@ span.spaces    { background: white }
 <span class="lineno">  321 </span><span class="spaces">            </span><span class="istickedoff">C.TCBit      -&gt; scBoolType sc</span>
 <span class="lineno">  322 </span><span class="spaces">            </span><span class="istickedoff">C.TCInteger  -&gt; scIntegerType sc</span>
 <span class="lineno">  323 </span><span class="spaces">            </span><span class="istickedoff">C.TCIntMod   -&gt; scGlobalApply sc &quot;Cryptol.IntModNum&quot; =&lt;&lt; traverse go tyargs</span>
-<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">C.TCFloat    -&gt; <span class="nottickedoff">scGlobalApply sc &quot;Cryptol.TCFloat&quot;   =&lt;&lt; traverse go tyargs</span></span>
+<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">C.TCFloat    -&gt; scGlobalApply sc &quot;Cryptol.TCFloat&quot;   =&lt;&lt; traverse go tyargs</span>
 <span class="lineno">  325 </span><span class="spaces">            </span><span class="istickedoff">C.TCArray    -&gt; do a &lt;- go (tyargs !! 0)</span>
 <span class="lineno">  326 </span><span class="spaces">                               </span><span class="istickedoff">b &lt;- go (tyargs !! 1)</span>
 <span class="lineno">  327 </span><span class="spaces">                               </span><span class="istickedoff">scArrayType sc a b</span>
@@ -498,9 +498,9 @@ span.spaces    { background: white }
 <span class="lineno">  479 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PZeroSeqBool&quot; [n']</span>
 <span class="lineno">  480 </span><span class="spaces">        </span><span class="istickedoff">-- instance ValidFloat e p =&gt; Zero (Float e p)</span>
 <span class="lineno">  481 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsZero -&gt; Just (C.tIsFloat -&gt; Just (e, p)))</span>
-<span class="lineno">  482 </span><span class="spaces">          </span><span class="istickedoff">-&gt; <span class="nottickedoff">do e' &lt;- importType sc env e</span></span>
-<span class="lineno">  483 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- importType sc env p</span></span>
-<span class="lineno">  484 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.PZeroFloat&quot; [e', p']</span></span>
+<span class="lineno">  482 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do e' &lt;- importType <span class="nottickedoff">sc</span> env e</span>
+<span class="lineno">  483 </span><span class="spaces">                </span><span class="istickedoff">p' &lt;- importType <span class="nottickedoff">sc</span> env p</span>
+<span class="lineno">  484 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PZeroFloat&quot; [e', p']</span>
 <span class="lineno">  485 </span><span class="spaces">        </span><span class="istickedoff">-- instance (Zero a) =&gt; Zero [n]a</span>
 <span class="lineno">  486 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsZero -&gt; Just (C.tIsSeq -&gt; Just (n, a)))</span>
 <span class="lineno">  487 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do n' &lt;- importType sc env n</span>
@@ -572,9 +572,9 @@ span.spaces    { background: white }
 <span class="lineno">  553 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PRingSeqBool&quot; [n']</span>
 <span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff">-- instance ValidFloat e p =&gt; Ring (Float e p)</span>
 <span class="lineno">  555 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsRing -&gt; Just (C.tIsFloat -&gt; Just (e, p)))</span>
-<span class="lineno">  556 </span><span class="spaces">          </span><span class="istickedoff">-&gt; <span class="nottickedoff">do e' &lt;- importType sc env e</span></span>
-<span class="lineno">  557 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- importType sc env p</span></span>
-<span class="lineno">  558 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Cryptol.PRingFloat&quot; [e', p']</span></span>
+<span class="lineno">  556 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do e' &lt;- importType <span class="nottickedoff">sc</span> env e</span>
+<span class="lineno">  557 </span><span class="spaces">                </span><span class="istickedoff">p' &lt;- importType <span class="nottickedoff">sc</span> env p</span>
+<span class="lineno">  558 </span><span class="spaces">                </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.PRingFloat&quot; [e', p']</span>
 <span class="lineno">  559 </span><span class="spaces">        </span><span class="istickedoff">-- instance (Ring a) =&gt; Ring [n]a</span>
 <span class="lineno">  560 </span><span class="spaces">        </span><span class="istickedoff">(C.pIsRing -&gt; Just (C.tIsSeq -&gt; Just (n, a)))</span>
 <span class="lineno">  561 </span><span class="spaces">          </span><span class="istickedoff">-&gt; do n' &lt;- importType sc env n</span>
@@ -1000,26 +1000,26 @@ span.spaces    { background: white }
 <span class="lineno">  981 </span><span class="decl"><span class="istickedoff">floatPrims =</span>
 <span class="lineno">  982 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList $</span>
 <span class="lineno">  983 </span><span class="spaces">  </span><span class="istickedoff">first C.floatPrim &lt;$&gt;</span>
-<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;fpNaN&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpNaN&quot;</span>)</span>
-<span class="lineno">  985 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpPosInf&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpPosInf&quot;</span>)</span>
-<span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromBits&quot;,     <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpFromBits&quot;</span>)</span>
-<span class="lineno">  987 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToBits&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpToBits&quot;</span>)</span>
-<span class="lineno">  988 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;=.=&quot;,            <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpEq&quot;</span>)</span>
-<span class="lineno">  989 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAdd&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpAdd&quot;</span>)</span>
-<span class="lineno">  990 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSub&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpSub&quot;</span>)</span>
-<span class="lineno">  991 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpMul&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpMul&quot;</span>)</span>
-<span class="lineno">  992 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpDiv&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpDiv&quot;</span>)</span>
-<span class="lineno">  993 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToRational&quot;,   <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpToRational&quot;</span>)</span>
-<span class="lineno">  994 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromRational&quot;, <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.ecFpFromRational&quot;</span>)</span>
-<span class="lineno">  995 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNaN&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNaN&quot;</span>)</span>
-<span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsInf&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsInf&quot;</span>)</span>
-<span class="lineno">  997 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsZero&quot;,       <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsZero&quot;</span>)</span>
-<span class="lineno">  998 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNeg&quot;,        <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNeg&quot;</span>)</span>
-<span class="lineno">  999 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNormal&quot;,     <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsNormal&quot;</span>)</span>
-<span class="lineno"> 1000 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsSubnormal&quot;,  <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpIsSubnormal&quot;</span>)</span>
-<span class="lineno"> 1001 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFMA&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpFMA&quot;</span>)</span>
-<span class="lineno"> 1002 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAbs&quot;,          <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpAbs&quot;</span>)</span>
-<span class="lineno"> 1003 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSqrt&quot;,         <span class="nottickedoff">flip scGlobalDef &quot;Cryptol.fpSqrt&quot;</span>)</span>
+<span class="lineno">  984 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;fpNaN&quot;,          flip scGlobalDef &quot;Cryptol.ecFpNaN&quot;)</span>
+<span class="lineno">  985 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpPosInf&quot;,       flip scGlobalDef &quot;Cryptol.ecFpPosInf&quot;)</span>
+<span class="lineno">  986 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromBits&quot;,     flip scGlobalDef &quot;Cryptol.ecFpFromBits&quot;)</span>
+<span class="lineno">  987 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToBits&quot;,       flip scGlobalDef &quot;Cryptol.ecFpToBits&quot;)</span>
+<span class="lineno">  988 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;=.=&quot;,            flip scGlobalDef &quot;Cryptol.ecFpEq&quot;)</span>
+<span class="lineno">  989 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAdd&quot;,          flip scGlobalDef &quot;Cryptol.ecFpAdd&quot;)</span>
+<span class="lineno">  990 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSub&quot;,          flip scGlobalDef &quot;Cryptol.ecFpSub&quot;)</span>
+<span class="lineno">  991 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpMul&quot;,          flip scGlobalDef &quot;Cryptol.ecFpMul&quot;)</span>
+<span class="lineno">  992 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpDiv&quot;,          flip scGlobalDef &quot;Cryptol.ecFpDiv&quot;)</span>
+<span class="lineno">  993 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpToRational&quot;,   flip scGlobalDef &quot;Cryptol.ecFpToRational&quot;)</span>
+<span class="lineno">  994 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFromRational&quot;, flip scGlobalDef &quot;Cryptol.ecFpFromRational&quot;)</span>
+<span class="lineno">  995 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNaN&quot;,        flip scGlobalDef &quot;Cryptol.fpIsNaN&quot;)</span>
+<span class="lineno">  996 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsInf&quot;,        flip scGlobalDef &quot;Cryptol.fpIsInf&quot;)</span>
+<span class="lineno">  997 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsZero&quot;,       flip scGlobalDef &quot;Cryptol.fpIsZero&quot;)</span>
+<span class="lineno">  998 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNeg&quot;,        flip scGlobalDef &quot;Cryptol.fpIsNeg&quot;)</span>
+<span class="lineno">  999 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsNormal&quot;,     flip scGlobalDef &quot;Cryptol.fpIsNormal&quot;)</span>
+<span class="lineno"> 1000 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpIsSubnormal&quot;,  flip scGlobalDef &quot;Cryptol.fpIsSubnormal&quot;)</span>
+<span class="lineno"> 1001 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpFMA&quot;,          flip scGlobalDef &quot;Cryptol.fpFMA&quot;)</span>
+<span class="lineno"> 1002 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpAbs&quot;,          flip scGlobalDef &quot;Cryptol.fpAbs&quot;)</span>
+<span class="lineno"> 1003 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;fpSqrt&quot;,         flip scGlobalDef &quot;Cryptol.fpSqrt&quot;)</span>
 <span class="lineno"> 1004 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno"> 1005 </span>
 <span class="lineno"> 1006 </span>suiteBPrims :: Map C.PrimIdent (SharedContext -&gt; IO Term)
@@ -2067,7 +2067,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2048 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VBit (SC.toBool v))</span>
 <span class="lineno"> 2049 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2050 </span><span class="spaces">  </span><span class="istickedoff">TV.TVInteger -&gt;</span>
-<span class="lineno"> 2051 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; error &quot;exportValue: expected integer&quot;))</span></span>
+<span class="lineno"> 2051 </span><span class="spaces">    </span><span class="istickedoff">pure (V.VInteger (case v of SC.VInt x -&gt; x; _ -&gt; <span class="nottickedoff">error &quot;exportValue: expected integer&quot;</span>))</span>
 <span class="lineno"> 2052 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">TV.TVIntMod _modulus -&gt;</span>
 <span class="lineno"> 2054 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure (V.VInteger (case v of SC.VIntMod _ x -&gt; x; _ -&gt; error &quot;exportValue: expected intmod&quot;))</span></span>
