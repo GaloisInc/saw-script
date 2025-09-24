@@ -291,7 +291,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
   helper (ErrorTerm tm err) = do
-    info <- ppWithPos [ return ("While typechecking term: ")
+    info <- ppWithPos [ return ("While typechecking term:")
                       , ishow tm ]
     cont <- helper err
     return (info ++ cont)

@@ -41,7 +41,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:16:1-16:26 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   \(x : Prelude.True) -> x
 .:1:0:
 Not a sort
@@ -56,7 +56,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:19:1-19:27 (at top level)
 .:1:11:
-While typechecking term: 
+While typechecking term:
   (x : Prelude.True)
 -> Prelude.Bool
 .:1:11:
@@ -72,7 +72,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:22:1-22:28 (at top level)
 .:1:11:
-While typechecking term: 
+While typechecking term:
   (x : Prelude.Bool)
 -> Prelude.False
 .:1:11:
@@ -88,7 +88,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:25:1-25:21 (at top level)
 .:1:2:
-While typechecking term: 
+While typechecking term:
   Prelude.True * Prelude.Nat
 .:1:2:
 Not a sort
@@ -103,7 +103,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:28:1-28:19 (at top level)
 .:1:2:
-While typechecking term: 
+While typechecking term:
   Prelude.Bool * 5
 .:1:2:
 Not a sort
@@ -118,7 +118,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:31:1-31:37 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   #{foo : Prelude.Bool,bar : Prelude.False}
 .:1:0:
 Not a sort
@@ -146,7 +146,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:37:1-37:18 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   Prelude.True Prelude.True
 .:1:0:
 Function application with non-function type
@@ -166,7 +166,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:40:1-40:15 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   Prelude.True.1
 .:1:0:
 Tuple field projection with non-tuple type
@@ -181,7 +181,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:43:1-43:18 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   Prelude.False.foo
 .:1:0:
 Record field projection with non-record type
@@ -198,7 +198,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:46:1-46:34 (at top level)
 .:1:0:
-While typechecking term: 
+While typechecking term:
   {a = Prelude.True,b = Prelude.False}.c
 .:1:0:
 Bad record field ("c") for type
@@ -213,7 +213,7 @@ Stack trace:
    test.saw:4:17-4:54 in parse
    test.saw:49:1-49:45 (at top level)
 .:1:1:
-While typechecking term: 
+While typechecking term:
   (\(x : Prelude.Bool) -> Prelude.implies x Prelude.False) 5
 .:1:1:
 Inferred type
