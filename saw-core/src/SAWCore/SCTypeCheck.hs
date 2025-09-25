@@ -455,7 +455,7 @@ instance TypeInfer (FlatTermF Term) where
   typeInferComplete ftf =
     SCTypedTerm
     <$> liftTCM scFlatTermF ftf
-    <*> withErrorTermF (FTermF ftf) (typeInfer ftf)
+    <*> typeInfer ftf
     <*> askCtx'
 
 
