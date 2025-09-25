@@ -161,7 +161,7 @@ cryptolCommand cursor@(l,r)
 
   | l' == ":" =
       return (l, [ cmdComp l' c | c <- findCommand "" ])
-  | otherwise = completeSAWScript cursor
+  | otherwise = completeSAWScriptValue cursor
   where
   l' = sanitize (reverse l)
 
@@ -177,7 +177,8 @@ cmdComp prefix c = Completion
 -- command is expecting.
 cmdArgument :: CommandBody -> CompletionFunc REPL
 cmdArgument ct cursor@(l,_) = case ct of
-  ExprArg     _ -> completeSAWScript cursor
+  ExprArg _     -> completeSAWScriptValue cursor
+  TypeArg _     -> completeSAWScriptType cursor
   FilenameArg _ -> completeFilename cursor
   ShellArg _    -> completeFilename cursor
   NoArg       _ -> return (l,[])
@@ -208,10 +209,10 @@ lexerMode = normal
 isIdentChar :: Char -> Bool
 isIdentChar c = isAlphaNum c || c `elem` "_\'"
 
--- | Complete a name from the sawscript environment.
-completeSAWScript :: CompletionFunc REPL
-completeSAWScript cursor@(l, _) = do
-  ns1 <- getSAWScriptNames
+-- | Complete a name from the SAWScript value environment.
+completeSAWScriptValue :: CompletionFunc REPL
+completeSAWScriptValue cursor@(l, _) = do
+  ns1 <- getSAWScriptValueNames
   ns2 <- getExprNames
   ns3 <- getTypeNames
   let n = reverse (takeWhile isIdentChar l)
@@ -221,6 +222,14 @@ completeSAWScript cursor@(l, _) = do
     ModeCryptol -> return (l, nameComps n ns2)
     ModeCryType -> return (l, nameComps n ns3)
     ModeQuote   -> completeFilename cursor
+
+-- | Complete a name from the SAWScript type environment.
+completeSAWScriptType :: CompletionFunc REPL
+completeSAWScriptType (l, _) = do
+  ns <- getSAWScriptTypeNames
+  let prefix = reverse (takeWhile isIdentChar l)
+      nameComps = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
+  return (l, nameComps)
 
 -- | Generate a completion from a prefix and a name.
 nameComp :: String -> String -> Completion

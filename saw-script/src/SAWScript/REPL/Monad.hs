@@ -53,7 +53,8 @@ module SAWScript.REPL.Monad (
   , getEnvironment, modifyEnvironment, putEnvironment
   , getEnvironmentRef
   , getProofStateRef
-  , getSAWScriptNames
+  , getSAWScriptValueNames
+  , getSAWScriptTypeNames
   ) where
 
 import Cryptol.Eval (EvalError, EvalErrorEx(..))
@@ -490,11 +491,18 @@ modifyEnvironment :: (TopLevelRW -> TopLevelRW) -> REPL ()
 modifyEnvironment = modifyRef environment
 
 -- | Get visible variable names for Haskeline completion.
-getSAWScriptNames :: REPL [String]
-getSAWScriptNames = do
+getSAWScriptValueNames :: REPL [String]
+getSAWScriptValueNames = do
   env <- getEnvironment
   let rnames = Map.keys (rwValueInfo env)
   return (map (Text.unpack . getVal) rnames)
+
+-- | Get visible type names for Haskeline completion.
+getSAWScriptTypeNames :: REPL [String]
+getSAWScriptTypeNames = do
+  env <- getEnvironment
+  let rnames = Map.keys (rwTypeInfo env)
+  return (map Text.unpack rnames)
 
 -- User Environment Interaction ------------------------------------------------
 
