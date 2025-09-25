@@ -67,6 +67,7 @@ module SAWCore.SharedTerm
     -- ** Recursors and datatypes
   , scRecursorElimTypes
   , scRecursorRetTypeType
+  , scRecursorAppType
   , scReduceRecursor
   , scReduceNatRecursor
   , allowedElimSort
@@ -1113,6 +1114,26 @@ scRecursorRetTypeType sc dt params s =
      let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
      scInstantiateExt sc subst p_ret
 
+-- | Build the type of a recursor for datatype @d@ that has been
+-- applied to parameters, a motive function, and a full set of
+-- eliminator functions. This type has the form
+--
+-- > (i1:ix1) -> .. -> (im:ixm) ->
+-- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
+--
+-- where the @pi@ are the parameters of @d@, and the @ixj@ are the
+-- indices of @d@.
+scRecursorAppType :: SharedContext -> DataType -> [Term] -> Term -> IO Term
+scRecursorAppType sc dt params motive =
+  do param_vars <- traverse (scVariable sc) (dtParams dt)
+     ix_vars <- traverse (scVariable sc) (dtIndices dt)
+     d <- scConstApply sc (dtName dt) (param_vars ++ ix_vars)
+     arg_ec <- scFreshEC sc "arg" d
+     arg_var <- scVariable sc arg_ec
+     ret <- scApplyAll sc motive (ix_vars ++ [arg_var])
+     ty <- scGeneralizeExts sc (dtIndices dt ++ [arg_ec]) ret
+     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
+     scInstantiateExt sc subst ty
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call

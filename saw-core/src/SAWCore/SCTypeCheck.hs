@@ -58,7 +58,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
-import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -673,17 +672,9 @@ compileRecursor dt params motive cs_fs =
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
-     ixs_vars <- traverse (liftTCM scVariable) (dtIndices dt)
-     d_params <- liftTCM scConstApply d (map typedVal params)
-     d_params_ixs <- liftTCM scApplyAll d_params ixs_vars
-     x_ec <- liftTCM scFreshEC "x" d_params_ixs
-     x_var <- liftTCM scVariable x_ec
-     ty0 <- liftTCM scApplyAll (typedVal motive) (ixs_vars ++ [x_var])
-     ty1 <- liftTCM scGeneralizeExts (dtIndices dt ++ [x_ec]) ty0
-     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) (map typedVal params))
-     ty2 <- liftTCM scInstantiateExt subst ty1
-     ty <- typeInferComplete ty2
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
+     ty <- typeInferComplete =<<
+       liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
      let rec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
