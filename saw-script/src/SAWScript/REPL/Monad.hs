@@ -75,6 +75,7 @@ import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -494,14 +495,18 @@ modifyEnvironment = modifyRef environment
 getSAWScriptValueNames :: REPL [String]
 getSAWScriptValueNames = do
   env <- getEnvironment
-  let rnames = Map.keys (rwValueInfo env)
+  let avail = rwPrimsAvail env
+      visible (lc, _, _) = Set.member lc avail
+  let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
   return (map (Text.unpack . getVal) rnames)
 
 -- | Get visible type names for Haskeline completion.
 getSAWScriptTypeNames :: REPL [String]
 getSAWScriptTypeNames = do
   env <- getEnvironment
-  let rnames = Map.keys (rwTypeInfo env)
+  let avail = rwPrimsAvail env
+      visible (lc, _) = Set.member lc avail
+  let rnames = Map.keys $ Map.filter visible $ rwTypeInfo env
   return (map Text.unpack rnames)
 
 -- User Environment Interaction ------------------------------------------------
