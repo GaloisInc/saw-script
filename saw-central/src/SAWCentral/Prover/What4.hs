@@ -36,6 +36,7 @@ import           What4.ProblemFeatures
 import qualified SAWCoreWhat4.What4 as W
 import           SAWCoreWhat4.FirstOrder
 import qualified What4.Expr.Builder as B
+import           Data.RME.What4 (rmeAdapter)
 
 
 ----------------------------------------------------------------
@@ -128,13 +129,14 @@ proveWhat4_z3,
   proveWhat4_bitwuzla, proveWhat4_boolector,
   proveWhat4_cvc4, proveWhat4_cvc5,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
-  proveWhat4_abc ::
+  proveWhat4_abc, proveWhat4_rme ::
   Bool          {- ^ Hash-consing of What4 terms -}->
   SATQuery      {- ^ The query to be proved -} ->
   TopLevel (Maybe CEX, Text)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter
+proveWhat4_rme       = proveWhat4_sym rmeAdapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
 proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
 proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter
