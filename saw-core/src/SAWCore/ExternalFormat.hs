@@ -143,12 +143,8 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            RecursorType d ps motive motive_ty ty ->
-              do stashName d
-                 pure $ unwords
-                     (["RecursorType", show (nameIndex d)] ++
-                      map show ps ++
-                      [argsep, show motive, show motive_ty, show ty])
+            RecursorType ty ->
+              do pure $ unwords ["RecursorType", show ty]
             Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
@@ -295,16 +291,7 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ("RecursorType" : i :
-         (separateArgs ->
-          Just (ps, [motive, motive_ty, ty]))) ->
-            do tp <- RecursorType <$>
-                       readName i <*>
-                       traverse readIdx ps <*>
-                       readIdx motive <*>
-                       readIdx motive_ty <*>
-                       readIdx ty
-               pure (FTermF tp)
+        ["RecursorType", x] -> FTermF <$> (RecursorType <$> readIdx x)
         ("Recursor" : i :
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->

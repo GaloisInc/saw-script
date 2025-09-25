@@ -194,11 +194,8 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | The type of a recursor, which is specified by the datatype
-    --   name, the parameters to the data type, the motive function,
-    --   the type of the motive function, and finally the type of the
-    --   applied recursor itself.
-  | RecursorType !Name ![e] !e !e !e
+    -- | The type of a recursor.
+  | RecursorType !e
 
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
@@ -310,9 +307,8 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (RecursorType d1 ps1 m1 mty1 t1) (RecursorType d2 ps2 m2 mty2 t2) =
-      do d <- zipName d1 d2
-         Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2) (f t1 t2)
+    go (RecursorType t1) (RecursorType t2) =
+      Just $ RecursorType (f t1 t2)
 
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec f rec1 rec2

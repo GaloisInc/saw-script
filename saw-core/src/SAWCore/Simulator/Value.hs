@@ -101,11 +101,6 @@ data TValue l
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
-     !Name       -- data type name
-     !(TValue l) -- data type kind
-     ![Value l]  -- data type parameters
-     !(Value l)  -- motive function
-     !(TValue l) -- type of motive function
      !(TValue l) -- type of recursor function
   | VTyTerm !Sort !Term
 

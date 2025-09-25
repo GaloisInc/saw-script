@@ -418,7 +418,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
-    RecursorType _d _params _motive _motiveTy ty ->
+    RecursorType ty ->
       translateTerm ty
 
     -- TODO: support this next!

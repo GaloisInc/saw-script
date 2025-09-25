@@ -272,12 +272,9 @@ readBackTValue sc cfg = loop
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
-      VRecursorType d dty ps m mty ty ->
-        do ps'  <- readBackDataTypeParams dty ps
-           m'   <- readBackValue sc cfg mty m
-           mty' <- loop mty
-           ty'  <- loop ty
-           scFlatTermF sc (RecursorType d ps' m' mty' ty')
+      VRecursorType ty ->
+        do ty'  <- loop ty
+           scFlatTermF sc (RecursorType ty')
       VTyTerm _s tm ->
         pure tm
 

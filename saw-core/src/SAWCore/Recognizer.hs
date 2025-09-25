@@ -249,10 +249,10 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
-asRecursorType :: Recognizer Term (Name, [Term], Term, Term, Term)
+asRecursorType :: Recognizer Term Term
 asRecursorType t =
-  do RecursorType d ps motive motive_ty ty <- asFTermF t
-     return (d, ps, motive, motive_ty, ty)
+  do RecursorType ty <- asFTermF t
+     pure ty
 
 asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term, [Term])
 asRecursorApp t =
