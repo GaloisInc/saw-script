@@ -22,15 +22,26 @@ fi
 # run the test
 $SAW test.saw > test.rawlog 2>&1 || echo FAILED >> test.rawlog
 
-# Prune the timestamps and the current directory
+# Prune the timestamps and current directory. If we are running
+# on Windows, _insert_ carriage returns. See test-and-diff.sh
+# for further explanation.
 CURDIR=$(pwd -P || pwd)
-sed < test.rawlog > test.log '
+sed < test.rawlog '
     /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
         s/^..............//
     }
     s,'"$CURDIR"'/,,
     s,\(solverStatsGoalSize.=.\)[0-9N]*,\1N,g
-'
+' | (
+    case "$(uname -s)" in
+        MSYS_NT-*|[Ww]indows*|*[Cc]ygwin*|*[Ii]nterix*)
+            sed '/[^\r]$/s/$/\r/;/^$/s/$/\r/'
+            ;;
+        *)
+            cat
+            ;;
+    esac
+) > test.log
 
 # diff
 diff -u test.log.1.good test.log > test.log.1.diff 2>&1
