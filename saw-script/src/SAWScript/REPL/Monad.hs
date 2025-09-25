@@ -35,8 +35,8 @@ module SAWScript.REPL.Monad (
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
   , getTSyns, getNominalTypes, getVars
-  , getExprNames
-  , getTypeNames
+  , getCryptolExprNames
+  , getCryptolTypeNames
   , getPropertyNames
   , getPrompt
   , shouldContinue
@@ -401,15 +401,15 @@ getNominalTypes = do
   let decls = getAllIfaceDecls me
   return (M.ifNominalTypes decls)
 
--- | Get visible variable names.
-getExprNames :: REPL [String]
-getExprNames =
+-- | Get visible Cryptol variable names.
+getCryptolExprNames :: REPL [String]
+getCryptolExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
--- | Get visible type signature names.
-getTypeNames :: REPL [String]
-getTypeNames  =
+-- | Get visible Cryptol type names.
+getCryptolTypeNames :: REPL [String]
+getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 

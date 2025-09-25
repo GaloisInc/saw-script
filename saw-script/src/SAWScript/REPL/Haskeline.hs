@@ -97,7 +97,7 @@ setHistoryFile ss =
 -- | Haskeline settings for the REPL.
 replSettings :: Settings REPL
 replSettings  = Settings
-  { complete       = cryptolCommand
+  { complete       = replComp
   , historyFile    = Nothing
   , autoAddHistory = True
   }
@@ -144,9 +144,9 @@ instance E.MonadMask REPL where
 
 -- Completion ------------------------------------------------------------------
 
--- | Completion for cryptol commands.
-cryptolCommand :: CompletionFunc REPL
-cryptolCommand cursor@(l,r)
+-- | Top-level completion for the REPL.
+replComp :: CompletionFunc REPL
+replComp cursor@(l,r)
   | ":" `isPrefixOf` l'
   , Just (cmd,rest) <- splitCommand l' = case findCommand cmd of
 
@@ -213,8 +213,8 @@ isIdentChar c = isAlphaNum c || c `elem` "_\'"
 completeSAWScriptValue :: CompletionFunc REPL
 completeSAWScriptValue cursor@(l, _) = do
   ns1 <- getSAWScriptValueNames
-  ns2 <- getExprNames
-  ns3 <- getTypeNames
+  ns2 <- getCryptolExprNames
+  ns3 <- getCryptolTypeNames
   let n = reverse (takeWhile isIdentChar l)
       nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
   case lexerMode (reverse l) of
