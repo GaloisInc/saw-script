@@ -30,6 +30,7 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
+import qualified Data.BitVector.Sized as BV
 
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator.RegValue
@@ -52,6 +53,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 import Mir.Compositional.State
+import Lang.Crucible.Simulator
 
 
 -- | Run `f` on each `SymExpr` in `v`.
@@ -305,6 +307,86 @@ exprToTerm sym sc w4VarMapRef val = liftIO $ do
     modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
     term <- SAW.scVariable sc ec
     return term
+
+
+-- | Try to convert a Crucible register value into a SAW core `Term`, using
+-- a `CryTermAdaptor` to validate and convert references to slices.
+-- We check that references to slices match the expected lenght specified
+-- in the `CryTermAdaptor`, and if so we read out the value stored in
+-- in the slice.
+regToTermWithAdapt :: forall m p sym t fs tp0 rtp args ret.
+    ( IsSymInterface sym,
+      sym ~ MirSym t fs,
+      m ~ OverrideSim (p sym) sym MIR rtp args ret) =>
+    sym ->
+    SAW.SharedContext ->
+    String ->
+    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    CryTermAdaptor ->
+    TypeShape tp0 ->
+    RegValue sym tp0 ->
+    m SAW.Term
+regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
+  where
+    go :: forall tp.
+        CryTermAdaptor ->
+        TypeShape tp ->
+        RegValue sym tp ->
+        m SAW.Term
+    go ada shp rv = case (ada, shp, rv) of
+        (NoAdapt, UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
+        (NoAdapt, PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
+        (AdaptTuple as, TupleShape _ elems, ag) -> do
+            terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
+            liftIO $ SAW.scTuple sc terms
+        (AdaptArray a, ArrayShape _ _ shp', vec) -> do
+            terms <- goVector a shp' vec
+            tyTerm <- shapeToTerm' sc a shp'
+            liftIO $ SAW.scVector sc tyTerm terms
+        (AdaptDerefSlice n, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
+          case BV.asUnsigned <$> W4.asBV lenExpr of
+            Nothing ->
+              fail "Slice lenght is not of a statically know length"
+
+            Just n1
+              | AsBaseType baseT <- asBaseType tpr ->
+                do
+                  unless (n == n1) (
+                    fail (unlines [
+                      "Slice length mismatch:",
+                      "  Expected: " ++ show n,
+                      "  Actual  : " ++ show n1
+                    ]))
+                  vals <-
+                    forM [ 0 .. n - 1 ] $ \i ->
+                      do
+                        iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
+                        elemPtr <- mirRef_offsetWrapSim mirPtr iExpr
+                        r       <- readMirRefSim tpr elemPtr
+                        go NoAdapt (PrimShape elT baseT) r
+                  elTyTerm <- shapeToTerm' sc NoAdapt (PrimShape elT baseT)
+                  liftIO (SAW.scVector sc elTyTerm vals)
+
+              | otherwise -> fail "Unsupported reference to slice, we only support base types"
+
+            
+                
+        _ -> fail $
+            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
+
+    goVector :: forall tp.
+        CryTermAdaptor ->
+        TypeShape tp ->
+        MirVector sym tp ->
+        m [SAW.Term]
+    goVector ada shp (MirVector_Vector v) = mapM (go ada shp) $ toList v
+    goVector ada shp (MirVector_PartialVector pv) = do
+        forM (toList pv) $ \rv -> do
+            let rv' = readMaybeType sym "field" (shapeType shp) rv
+            go ada shp rv'
+    goVector _ada _shp (MirVector_Array _) = fail $
+        "regToTerm: MirVector_Array not supported"
+
 
 regToTerm :: forall sym t fs tp0 m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>

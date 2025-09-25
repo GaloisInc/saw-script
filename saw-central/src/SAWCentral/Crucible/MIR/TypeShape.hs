@@ -16,6 +16,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   , FieldShape(..)
   , VariantShape(..)
   , AgElemShape(..)
+  , CryTermAdaptor(..)
   , tyToShape
   , tyToShapeEq
   , shapeType
@@ -24,6 +25,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   , shapeMirTy
   , fieldShapeMirTy
   , shapeToTerm
+  , shapeToTerm'
   , IsBVShape(..)
   , testBVShape
   , IsRefShape(..)
@@ -41,7 +43,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   ) where
 
 import Control.Lens ((^.), (^..), each)
-import Control.Monad (when, forM)
+import Control.Monad (when, forM, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -376,28 +378,74 @@ fieldShapeMirTy :: FieldShape tp -> M.Ty
 fieldShapeMirTy (ReqField shp) = shapeMirTy shp
 fieldShapeMirTy (OptField shp) = shapeMirTy shp
 
+-- | This is to accomodate multiple Rust types mapping to the same Cryptol
+-- type.  For example, if a Cryptol function expects [3][8], we could map
+-- it to a Rust function that either expects `[u8;3]`, or `&[u8]` with a
+-- dynamic check that it has 3 elements.
+data CryTermAdaptor =
+    NoAdapt                      -- ^ Use default translation
+  | AdaptTuple [CryTermAdaptor]  -- ^ Adapt a tuple
+  | AdaptArray CryTermAdaptor    -- ^ Adapt an array
+  | AdaptDerefSlice Integer
+    -- ^ A reference to a slice.  At the moment we only support slices of
+    -- primitve types (i.e., no further references in the elements)
+    -- so we don't need further adaptors.
+
+
 shapeToTerm :: forall tp m.
     (MonadIO m, MonadFail m) =>
     SAW.SharedContext ->
     TypeShape tp ->
     m SAW.Term
-shapeToTerm sc = go
-  where
-    go :: forall tp'. TypeShape tp' -> m SAW.Term
-    go (UnitShape _) = liftIO $ SAW.scUnitType sc
-    go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
-    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
-    go (TupleShape _ elems) = do
-        tys <- mapM goAgElem elems
-        liftIO $ SAW.scTupleType sc tys
-    go (ArrayShape (M.TyArray _ n) _ shp) = do
-        ty <- go shp
-        n' <- liftIO $ SAW.scNat sc (fromIntegral n)
-        liftIO $ SAW.scVecType sc n' ty
-    go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
+shapeToTerm sc = shapeToTerm' sc NoAdapt
 
-    goAgElem :: AgElemShape -> m SAW.Term
-    goAgElem (AgElemShape _ _ shp) = go shp
+-- | Convert a type shape to a `Term` representing the type of values we'd
+-- get for the type shape.  References to slices are mapped to vectors (the values
+-- pointed to by the reference), and the `CryTermAnnot`, if any,
+-- contains the information about the length of the vector.
+shapeToTerm' :: forall tp m.
+    (MonadIO m, MonadFail m) =>
+    SAW.SharedContext ->
+    CryTermAdaptor ->
+    TypeShape tp ->
+    m SAW.Term
+shapeToTerm' sc = go
+  where
+    go :: forall tp'. CryTermAdaptor -> TypeShape tp' -> m SAW.Term
+    go NoAdapt (UnitShape _) = liftIO $ SAW.scUnitType sc
+    go NoAdapt (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
+    go NoAdapt (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
+    go ada (TupleShape _ elems) = do
+        subAda <- case ada of
+                    NoAdapt -> pure (repeat NoAdapt)
+                    AdaptTuple as -> pure as
+                    _ -> fail "Expected a tuple Cryptol adaptor"
+        tys <- zipWithM goAgElem subAda elems
+        liftIO $ SAW.scTupleType sc tys
+    go ada (ArrayShape (M.TyArray _ n) _ shp) = do
+        sub <- case ada of
+                 NoAdapt -> pure NoAdapt
+                 AdaptArray a -> pure a
+                 _ -> fail "Expected an array Cryptol adaptor"
+        ty <- go sub shp
+        liftIO (mkVec n ty)
+    go (AdaptDerefSlice n) (SliceShape _ elT M.Immut tpr) =
+      case asBaseType tpr of
+        AsBaseType bt ->
+          do et <- go NoAdapt (PrimShape elT bt)
+             liftIO (mkVec n et)
+        NotBaseType -> fail "We only support reference to slices with base type elements"
+    go _ada shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
+
+    mkVec :: Integral a => a -> SAW.Term -> IO SAW.Term
+    mkVec n ty =
+      do
+        n' <- SAW.scNat sc (fromIntegral n)
+        SAW.scVecType sc n' ty
+
+    goAgElem :: CryTermAdaptor -> AgElemShape -> m SAW.Term
+    goAgElem ada (AgElemShape _ _ shp) = go ada shp
+
 
 -- | A witness that a 'TypeShape' is equal to a 'PrimShape' that characterizes
 -- a bitvector.
