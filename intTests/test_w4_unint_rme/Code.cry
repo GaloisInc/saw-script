@@ -1,0 +1,61 @@
+module Code where
+
+type constraint ValidRnd rnd = rnd <= 16
+
+Ascon_p : {rnd} (ValidRnd rnd) => State -> State
+Ascon_p S = foldl round S (drop`{back=rnd} Const)
+
+round : State -> [64] -> State
+round S ci = pL (pS (pC S ci))
+
+type State = [5][64]
+
+pC : State -> [64] -> State
+pC [S0, S1, S2, S3, S4] ci = [S0, S1, S2 ^ ci, S3, S4]
+
+Const : [16][64]
+Const =
+    [ 0x000000000000003c
+    , 0x000000000000002d
+    , 0x000000000000001e
+    , 0x000000000000000f
+    , 0x00000000000000f0
+    , 0x00000000000000e1
+    , 0x00000000000000d2
+    , 0x00000000000000c3
+    , 0x00000000000000b4
+    , 0x00000000000000a5
+    , 0x0000000000000096
+    , 0x0000000000000087
+    , 0x0000000000000078
+    , 0x0000000000000069
+    , 0x000000000000005a
+    , 0x000000000000004b
+    ]
+
+pS : State -> State
+pS S = transpose (map SBox (transpose S))
+
+SBox : [5] -> [5]
+SBox i = SBoxTable@i
+
+SBoxTable : [32][5]
+SBoxTable =
+    map drop
+    [ 0x04, 0x0b, 0x1f, 0x14, 0x1a, 0x15, 0x09, 0x02
+    , 0x1b, 0x05, 0x08, 0x12, 0x1d, 0x03, 0x06, 0x1c
+    , 0x1e, 0x13, 0x07, 0x0e, 0x00, 0x0d, 0x11, 0x18
+    , 0x10, 0x0c, 0x01, 0x19, 0x16, 0x0a, 0x0f, 0x17
+    ]
+
+pL : State -> State
+pL [S0, S1, S2, S3, S4] =
+    [ sigma S0 19 28
+    , sigma S1 61 39
+    , sigma S2  1  6
+    , sigma S3 10 17
+    , sigma S4  7 41
+    ]
+    where
+        sigma : [64] -> [6] -> [6] -> [64]
+        sigma x i j = x ^ x>>>i ^ x>>>j
