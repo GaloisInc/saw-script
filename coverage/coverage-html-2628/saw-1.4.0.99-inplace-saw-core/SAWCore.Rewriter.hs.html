@@ -650,9 +650,9 @@ span.spaces    { background: white }
 <span class="lineno">  631 </span><span class="decl"><span class="istickedoff">asRecordRedex t =</span>
 <span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">do (x, i) &lt;- R.asRecordSelector t</span>
 <span class="lineno">  633 </span><span class="spaces">       </span><span class="istickedoff">ts &lt;- R.asRecordValue x</span>
-<span class="lineno">  634 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">case Map.lookup i ts of</span></span>
-<span class="lineno">  635 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Just t' -&gt; return t'</span></span>
-<span class="lineno">  636 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; fail &quot;Record field not found&quot;</span></span></span>
+<span class="lineno">  634 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup i ts of</span>
+<span class="lineno">  635 </span><span class="spaces">         </span><span class="istickedoff">Just t' -&gt; <span class="nottickedoff">return t'</span></span>
+<span class="lineno">  636 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; fail <span class="nottickedoff">&quot;Record field not found&quot;</span></span></span>
 <span class="lineno">  637 </span>
 <span class="lineno">  638 </span>-- | An iota redex whose argument is a concrete nautral number; specifically,
 <span class="lineno">  639 </span>--   this function recognizes

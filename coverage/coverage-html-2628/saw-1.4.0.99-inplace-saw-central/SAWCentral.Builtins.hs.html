@@ -1146,7 +1146,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1127 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1128 </span>
 <span class="lineno"> 1129 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1130 </span><span class="decl"><span class="nottickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
+<span class="lineno"> 1130 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
 <span class="lineno"> 1131 </span>
 <span class="lineno"> 1132 </span>w4_unint_boolector :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1133 </span><span class="decl"><span class="nottickedoff">w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector</span></span>
@@ -1349,7 +1349,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1330 </span><span class="spaces">            </span><span class="nottickedoff">vars  &lt;- io $ mapM (scVariable sc) pis</span>
 <span class="lineno"> 1331 </span><span class="spaces">            </span><span class="nottickedoff">innerVars &lt;-</span>
 <span class="lineno"> 1332 </span><span class="spaces">              </span><span class="nottickedoff">io $ sequence $</span>
-<span class="lineno"> 1333 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshGlobal sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
+<span class="lineno"> 1333 </span><span class="spaces">              </span><span class="nottickedoff">[ scFreshVariable sc (&quot;i_&quot; &lt;&gt; ecShortName ec) (ecType ec) | ec &lt;- pis ]</span>
 <span class="lineno"> 1334 </span><span class="spaces">            </span><span class="nottickedoff">t1    &lt;- io $ scApplyAllBeta sc (ttTerm t) vars</span>
 <span class="lineno"> 1335 </span><span class="spaces">            </span><span class="nottickedoff">tsz   &lt;- io $ scTupleSelector sc t1 1 2 -- left element</span>
 <span class="lineno"> 1336 </span><span class="spaces">            </span><span class="nottickedoff">tbody &lt;- io $ scEqTrue sc =&lt;&lt; scTupleSelector sc t1 2 2 -- rightmost tuple element</span>
@@ -1383,7 +1383,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1364 </span><span class="spaces">            </span><span class="nottickedoff">--</span>
 <span class="lineno"> 1365 </span><span class="spaces">            </span><span class="nottickedoff">--      (\ (n:Nat) -&gt; (x:Vec w Bool) -&gt; IsLeNat (bvToNat w x) n -&gt; p x)</span>
 <span class="lineno"> 1366 </span><span class="spaces">            </span><span class="nottickedoff">indMotive &lt;- io $</span>
-<span class="lineno"> 1367 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshGlobal sc &quot;inductionVar&quot; natty</span>
+<span class="lineno"> 1367 </span><span class="spaces">                </span><span class="nottickedoff">do indVar &lt;- scFreshVariable sc &quot;inductionVar&quot; natty</span>
 <span class="lineno"> 1368 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1369 </span><span class="spaces">                   </span><span class="nottickedoff">teq    &lt;- scGlobalApply sc &quot;Prelude.IsLeNat&quot; [tsz', indVar]</span>
 <span class="lineno"> 1370 </span><span class="spaces">                   </span><span class="nottickedoff">t2     &lt;- scFun sc teq tbody</span>
@@ -1406,10 +1406,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1387 </span><span class="spaces">            </span><span class="nottickedoff">--                 y (IsLeNat_base (bvToNat w y)))</span>
 <span class="lineno"> 1388 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1389 </span><span class="spaces">            </span><span class="nottickedoff">indHypProof &lt;- io $</span>
-<span class="lineno"> 1390 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshGlobal sc &quot;H&quot; thmHyp</span>
-<span class="lineno"> 1391 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshGlobal sc &quot;n&quot; natty</span>
-<span class="lineno"> 1392 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshGlobal sc &quot;Hind&quot; =&lt;&lt;</span>
-<span class="lineno"> 1393 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshGlobal sc &quot;m&quot; natty</span>
+<span class="lineno"> 1390 </span><span class="spaces">                </span><span class="nottickedoff">do hVar    &lt;- scFreshVariable sc &quot;H&quot; thmHyp</span>
+<span class="lineno"> 1391 </span><span class="spaces">                   </span><span class="nottickedoff">nVar    &lt;- scFreshVariable sc &quot;n&quot; natty</span>
+<span class="lineno"> 1392 </span><span class="spaces">                   </span><span class="nottickedoff">hindVar &lt;- scFreshVariable sc &quot;Hind&quot; =&lt;&lt;</span>
+<span class="lineno"> 1393 </span><span class="spaces">                                </span><span class="nottickedoff">do m &lt;- scFreshVariable sc &quot;m&quot; natty</span>
 <span class="lineno"> 1394 </span><span class="spaces">                                   </span><span class="nottickedoff">lt &lt;- scGlobalApply sc &quot;Prelude.IsLtNat&quot; [m, nVar]</span>
 <span class="lineno"> 1395 </span><span class="spaces">                                   </span><span class="nottickedoff">scGeneralizeTerms sc [m] =&lt;&lt; scFun sc lt =&lt;&lt; scApplyBeta sc indMotive m</span>
 <span class="lineno"> 1396 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -1421,9 +1421,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1402 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1403 </span><span class="spaces">                   </span><span class="nottickedoff">succinnersz &lt;- scGlobalApply sc &quot;Prelude.Succ&quot; [natinnersz]</span>
 <span class="lineno"> 1404 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1405 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshGlobal sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
+<span class="lineno"> 1405 </span><span class="spaces">                   </span><span class="nottickedoff">bvltVar &lt;- scFreshVariable sc &quot;Hult&quot; =&lt;&lt; scEqTrue sc =&lt;&lt; scBvULt sc wt innersz outersz</span>
 <span class="lineno"> 1406 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1407 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshGlobal sc &quot;Hle&quot; =&lt;&lt;</span>
+<span class="lineno"> 1407 </span><span class="spaces">                   </span><span class="nottickedoff">leVar   &lt;- scFreshVariable sc &quot;Hle&quot; =&lt;&lt;</span>
 <span class="lineno"> 1408 </span><span class="spaces">                                 </span><span class="nottickedoff">scGlobalApply sc &quot;Prelude.IsLeNat&quot; [natoutersz, nVar]</span>
 <span class="lineno"> 1409 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno"> 1410 </span><span class="spaces">                   </span><span class="nottickedoff">refl_inner &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [natinnersz]</span>
@@ -1443,7 +1443,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1424 </span><span class="spaces">            </span><span class="nottickedoff">-- \ (x : Vec x Bool) -&gt;</span>
 <span class="lineno"> 1425 </span><span class="spaces">            </span><span class="nottickedoff">--    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))</span>
 <span class="lineno"> 1426 </span><span class="spaces">            </span><span class="nottickedoff">indApp &lt;- io $</span>
-<span class="lineno"> 1427 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshGlobal sc &quot;Hind&quot; thmHyp</span>
+<span class="lineno"> 1427 </span><span class="spaces">                </span><span class="nottickedoff">do varH   &lt;- scFreshVariable sc &quot;Hind&quot; thmHyp</span>
 <span class="lineno"> 1428 </span><span class="spaces">                   </span><span class="nottickedoff">tsz'   &lt;- scApplyAll sc toNat [wt, tsz]</span>
 <span class="lineno"> 1429 </span><span class="spaces">                   </span><span class="nottickedoff">trefl  &lt;- scGlobalApply sc &quot;Prelude.IsLeNat_base&quot; [tsz']</span>
 <span class="lineno"> 1430 </span><span class="spaces">                   </span><span class="nottickedoff">indHypArg &lt;- scApplyBeta sc indHypProof varH</span>
@@ -1701,7 +1701,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1682 </span><span class="decl"><span class="istickedoff">freshSymbolicPrim x schema@(C.Forall [] [] ct) = do</span>
 <span class="lineno"> 1683 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno"> 1684 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ct</span>
-<span class="lineno"> 1685 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshGlobal sc x cty</span>
+<span class="lineno"> 1685 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scFreshVariable sc x cty</span>
 <span class="lineno"> 1686 </span><span class="spaces">  </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) tm</span>
 <span class="lineno"> 1687 </span><span class="spaces"></span><span class="istickedoff">freshSymbolicPrim _ _ =</span>
 <span class="lineno"> 1688 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Can't create fresh symbolic variable of non-ground type.&quot;</span></span></span>
@@ -1913,45 +1913,45 @@ span.spaces    { background: white }
 <span class="lineno"> 1894 </span>-- | Default the values of the type variables in a typed term.
 <span class="lineno"> 1895 </span>defaultTypedTerm :: Options -&gt; SharedContext -&gt; C.SolverConfig -&gt; TypedTerm -&gt; IO TypedTerm
 <span class="lineno"> 1896 </span><span class="decl"><span class="istickedoff">defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)</span>
-<span class="lineno"> 1897 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">null (C.sVars schema)</span> = return tt</span>
-<span class="lineno"> 1898 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">mdefault &lt;- C.withSolver (return ()) cfg (\s -&gt; C.defaultReplExpr s undefined schema)</span></span>
-<span class="lineno"> 1900 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">let inst = do (soln, _) &lt;- mdefault</span></span>
-<span class="lineno"> 1901 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">mapM (`lookup` soln) (C.sVars schema)</span></span>
-<span class="lineno"> 1902 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case inst of</span></span>
-<span class="lineno"> 1903 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; return (TypedTerm (TypedTermSchema schema) trm)</span></span>
-<span class="lineno"> 1904 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Just tys -&gt; do</span></span>
-<span class="lineno"> 1905 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let vars = C.sVars schema</span></span>
-<span class="lineno"> 1906 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let nms = C.addTNames CryptolPP.defaultPPCfg vars IntMap.empty</span></span>
-<span class="lineno"> 1907 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">mapM_ (warnDefault nms) (zip vars tys)</span></span>
-<span class="lineno"> 1908 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let applyType :: Term -&gt; C.Type -&gt; IO Term</span></span>
-<span class="lineno"> 1909 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">applyType t ty = do</span></span>
-<span class="lineno"> 1910 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- Cryptol.importType sc Cryptol.emptyEnv ty</span></span>
-<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scApply sc t ty'</span></span>
-<span class="lineno"> 1912 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span></span>
-<span class="lineno"> 1913 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">dischargeProp t p</span></span>
-<span class="lineno"> 1914 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">| Cryptol.isErasedProp p = return t</span></span>
-<span class="lineno"> 1915 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">| otherwise = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span></span>
-<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- foldM applyType trm tys</span></span>
-<span class="lineno"> 1917 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span></span>
-<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let props = map (plainSubst su) (C.sProps schema)</span></span>
-<span class="lineno"> 1919 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">trm'' &lt;- foldM dischargeProp trm' props</span></span>
-<span class="lineno"> 1920 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))</span></span>
-<span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return (TypedTerm (TypedTermSchema schema') trm'')</span></span>
+<span class="lineno"> 1897 </span><span class="spaces">  </span><span class="istickedoff">| null (C.sVars schema) = return tt</span>
+<span class="lineno"> 1898 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = do</span>
+<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff">mdefault &lt;- C.withSolver (return <span class="nottickedoff">()</span>) cfg (\s -&gt; C.defaultReplExpr s <span class="nottickedoff">undefined</span> schema)</span>
+<span class="lineno"> 1900 </span><span class="spaces">  </span><span class="istickedoff">let inst = do (soln, _) &lt;- mdefault</span>
+<span class="lineno"> 1901 </span><span class="spaces">                </span><span class="istickedoff">mapM (`lookup` soln) (C.sVars schema)</span>
+<span class="lineno"> 1902 </span><span class="spaces">  </span><span class="istickedoff">case inst of</span>
+<span class="lineno"> 1903 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return (TypedTerm (TypedTermSchema schema) trm)</span></span>
+<span class="lineno"> 1904 </span><span class="spaces">    </span><span class="istickedoff">Just tys -&gt; do</span>
+<span class="lineno"> 1905 </span><span class="spaces">      </span><span class="istickedoff">let vars = C.sVars schema</span>
+<span class="lineno"> 1906 </span><span class="spaces">      </span><span class="istickedoff">let nms = C.addTNames <span class="nottickedoff">CryptolPP.defaultPPCfg</span> vars IntMap.empty</span>
+<span class="lineno"> 1907 </span><span class="spaces">      </span><span class="istickedoff">mapM_ (warnDefault nms) (zip vars tys)</span>
+<span class="lineno"> 1908 </span><span class="spaces">      </span><span class="istickedoff">let applyType :: Term -&gt; C.Type -&gt; IO Term</span>
+<span class="lineno"> 1909 </span><span class="spaces">          </span><span class="istickedoff">applyType t ty = do</span>
+<span class="lineno"> 1910 </span><span class="spaces">            </span><span class="istickedoff">ty' &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ty</span>
+<span class="lineno"> 1911 </span><span class="spaces">            </span><span class="istickedoff">scApply sc t ty'</span>
+<span class="lineno"> 1912 </span><span class="spaces">      </span><span class="istickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span>
+<span class="lineno"> 1913 </span><span class="spaces">          </span><span class="istickedoff">dischargeProp t p</span>
+<span class="lineno"> 1914 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlyfalse">Cryptol.isErasedProp p</span> = <span class="nottickedoff">return t</span></span>
+<span class="lineno"> 1915 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span>
+<span class="lineno"> 1916 </span><span class="spaces">      </span><span class="istickedoff">trm' &lt;- foldM applyType trm tys</span>
+<span class="lineno"> 1917 </span><span class="spaces">      </span><span class="istickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span>
+<span class="lineno"> 1918 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst su) (C.sProps schema)</span>
+<span class="lineno"> 1919 </span><span class="spaces">      </span><span class="istickedoff">trm'' &lt;- foldM dischargeProp trm' props</span>
+<span class="lineno"> 1920 </span><span class="spaces">      </span><span class="istickedoff">let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))</span>
+<span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema') trm'')</span>
 <span class="lineno"> 1922 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1923 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">warnDefault ns (x,t) =</span></span>
-<span class="lineno"> 1924 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Info $ show $ C.text &quot;Assuming&quot; C.&lt;+&gt; C.ppWithNames ns (x :: C.TParam) C.&lt;+&gt; C.text &quot;=&quot; C.&lt;+&gt; C.pp t</span></span>
+<span class="lineno"> 1923 </span><span class="spaces">    </span><span class="istickedoff">warnDefault ns (x,t) =</span>
+<span class="lineno"> 1924 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Info $ show $ C.text &quot;Assuming&quot; C.&lt;+&gt; C.ppWithNames ns (x :: C.TParam) C.&lt;+&gt; C.text &quot;=&quot; C.&lt;+&gt; C.pp t</span>
 <span class="lineno"> 1925 </span><span class="spaces">    </span><span class="istickedoff">-- Apply a substitution to a type *without* simplifying</span>
 <span class="lineno"> 1926 </span><span class="spaces">    </span><span class="istickedoff">-- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to</span>
 <span class="lineno"> 1927 </span><span class="spaces">    </span><span class="istickedoff">-- 'apSubst', which performs simplifications wherever possible.)</span>
 <span class="lineno"> 1928 </span><span class="spaces">    </span><span class="istickedoff">plainSubst :: C.Subst -&gt; C.Type -&gt; C.Type</span>
-<span class="lineno"> 1929 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">plainSubst s ty =</span></span>
-<span class="lineno"> 1930 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case ty of</span></span>
-<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TCon tc ts   -&gt; C.TCon tc (map (plainSubst s) ts)</span></span>
-<span class="lineno"> 1932 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TUser f ts t -&gt; C.TUser f (map (plainSubst s) ts) (plainSubst s t)</span></span>
-<span class="lineno"> 1933 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TRec fs      -&gt; C.TRec (fmap (plainSubst s) fs)</span></span>
-<span class="lineno"> 1934 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TVar x       -&gt; C.apSubst s (C.TVar x)</span></span>
-<span class="lineno"> 1935 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">C.TNominal nt ts -&gt; C.TNominal nt (fmap (plainSubst s) ts)</span></span>
+<span class="lineno"> 1929 </span><span class="spaces">    </span><span class="istickedoff">plainSubst s ty =</span>
+<span class="lineno"> 1930 </span><span class="spaces">      </span><span class="istickedoff">case ty of</span>
+<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff">C.TCon tc ts   -&gt; C.TCon tc (map (plainSubst s) ts)</span>
+<span class="lineno"> 1932 </span><span class="spaces">        </span><span class="istickedoff">C.TUser f ts t -&gt; <span class="nottickedoff">C.TUser f (map (plainSubst s) ts) (plainSubst s t)</span></span>
+<span class="lineno"> 1933 </span><span class="spaces">        </span><span class="istickedoff">C.TRec fs      -&gt; <span class="nottickedoff">C.TRec (fmap (plainSubst s) fs)</span></span>
+<span class="lineno"> 1934 </span><span class="spaces">        </span><span class="istickedoff">C.TVar x       -&gt; C.apSubst s (C.TVar x)</span>
+<span class="lineno"> 1935 </span><span class="spaces">        </span><span class="istickedoff">C.TNominal nt ts -&gt; <span class="nottickedoff">C.TNominal nt (fmap (plainSubst s) ts)</span></span>
 <span class="lineno"> 1936 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1937 </span><span class="spaces"></span><span class="istickedoff">defaultTypedTerm _opts _sc _cfg tt = <span class="nottickedoff">return tt</span></span></span>
 <span class="lineno"> 1938 </span>
@@ -2034,7 +2034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2015 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
 <span class="lineno"> 2016 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTermCtx sc (Just mnm) [] uterm</span>
 <span class="lineno"> 2017 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
-<span class="lineno"> 2018 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (show err)</span></span>
+<span class="lineno"> 2018 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail (show err)</span>
 <span class="lineno"> 2019 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>
 <span class="lineno"> 2020 </span>
 <span class="lineno"> 2021 </span>parseCore :: Text -&gt; TopLevel Term

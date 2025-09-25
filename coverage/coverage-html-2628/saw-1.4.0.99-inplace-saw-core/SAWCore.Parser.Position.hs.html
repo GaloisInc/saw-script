@@ -42,8 +42,8 @@ span.spaces    { background: white }
 <span class="lineno">   23 </span>import System.FilePath (makeRelative)
 <span class="lineno">   24 </span>
 <span class="lineno">   25 </span>data Pos = Pos { -- | Base directory to use for pretty printing purposes
-<span class="lineno">   26 </span>                 <span class="nottickedoff"><span class="decl"><span class="nottickedoff">posBase</span></span></span> :: !FilePath
-<span class="lineno">   27 </span>               , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">posPath</span></span></span>  :: !FilePath
+<span class="lineno">   26 </span>                 <span class="istickedoff"><span class="decl"><span class="istickedoff">posBase</span></span></span> :: !FilePath
+<span class="lineno">   27 </span>               , <span class="istickedoff"><span class="decl"><span class="istickedoff">posPath</span></span></span>  :: !FilePath
 <span class="lineno">   28 </span>               , <span class="istickedoff"><span class="decl"><span class="istickedoff">posLine</span></span></span>  :: !Int
 <span class="lineno">   29 </span>               , <span class="istickedoff"><span class="decl"><span class="istickedoff">posCol</span></span></span>   :: !Int
 <span class="lineno">   30 </span>               }
@@ -61,8 +61,8 @@ span.spaces    { background: white }
 <span class="lineno">   42 </span>  <span class="decl"><span class="nottickedoff">compare x y = compare (posTuple x) (posTuple y)</span></span>
 <span class="lineno">   43 </span>
 <span class="lineno">   44 </span>ppPos :: Pos -&gt; String
-<span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">ppPos p = rp ++ ':' : show (posLine p) ++ ':' : show (posCol p) ++ &quot;:&quot;</span>
-<span class="lineno">   46 </span><span class="spaces">  </span><span class="nottickedoff">where rp = makeRelative (posBase p) (posPath p)</span></span>
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">ppPos p = rp ++ ':' : show (posLine p) ++ ':' : show (posCol p) ++ &quot;:&quot;</span>
+<span class="lineno">   46 </span><span class="spaces">  </span><span class="istickedoff">where rp = makeRelative (posBase p) (posPath p)</span></span>
 <span class="lineno">   47 </span>
 <span class="lineno">   48 </span>incLine :: Pos -&gt; Pos
 <span class="lineno">   49 </span><span class="decl"><span class="istickedoff">incLine p = p { posLine = 1 + posLine p, posCol = 0 }</span></span>

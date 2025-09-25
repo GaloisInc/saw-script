@@ -2085,12 +2085,12 @@ span.spaces    { background: white }
 <span class="lineno"> 2066 </span><span class="decl"><span class="istickedoff">print_value (VString s) = printOutLnTop Info (Text.unpack s)</span>
 <span class="lineno"> 2067 </span><span class="spaces"></span><span class="istickedoff">print_value (VTerm t) = do</span>
 <span class="lineno"> 2068 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 2069 </span><span class="spaces">  </span><span class="istickedoff">cenv &lt;- fmap <span class="nottickedoff">rwCryptol</span> getTopLevelRW</span>
-<span class="lineno"> 2070 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)</span></span>
+<span class="lineno"> 2069 </span><span class="spaces">  </span><span class="istickedoff">cenv &lt;- fmap rwCryptol getTopLevelRW</span>
+<span class="lineno"> 2070 </span><span class="spaces">  </span><span class="istickedoff">let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)</span>
 <span class="lineno"> 2071 </span><span class="spaces">  </span><span class="istickedoff">unless (null (getAllExts (ttTerm t))) $</span>
 <span class="lineno"> 2072 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail &quot;term contains symbolic variables&quot;</span></span>
 <span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">sawopts &lt;- getOptions</span>
-<span class="lineno"> 2074 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- io $ defaultTypedTerm <span class="nottickedoff">sawopts</span> <span class="nottickedoff">sc</span> <span class="nottickedoff">cfg</span> t</span>
+<span class="lineno"> 2074 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- io $ defaultTypedTerm sawopts sc cfg t</span>
 <span class="lineno"> 2075 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- fmap rwPPOpts getTopLevelRW</span>
 <span class="lineno"> 2076 </span><span class="spaces">  </span><span class="istickedoff">let opts' = V.defaultPPOpts { V.useAscii = PPS.ppUseAscii opts</span>
 <span class="lineno"> 2077 </span><span class="spaces">                              </span><span class="istickedoff">, V.useBase = PPS.ppBase opts</span>
@@ -3938,8 +3938,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3919 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 3920 </span><span class="spaces">  </span><span class="istickedoff"></span>
 <span class="lineno"> 3921 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;w4_unint_rme&quot; &quot;[String] -&gt; ProofScript ()&quot;</span>
-<span class="lineno"> 3922 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal w4_unint_rme)</span></span>
-<span class="lineno"> 3923 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">Current</span></span>
+<span class="lineno"> 3922 </span><span class="spaces">    </span><span class="istickedoff">(pureVal w4_unint_rme)</span>
+<span class="lineno"> 3923 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3924 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Prove the current goal using What4 (RME backend). Leave the&quot;</span></span>
 <span class="lineno"> 3925 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;given list of names as uninterpreted.&quot;</span></span>
 <span class="lineno"> 3926 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>

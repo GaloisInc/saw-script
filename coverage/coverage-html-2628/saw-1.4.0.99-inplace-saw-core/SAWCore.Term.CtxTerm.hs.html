@@ -128,7 +128,7 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span>  [ExtCns Term] -&gt;
 <span class="lineno">  110 </span>  [index] -&gt;
 <span class="lineno">  111 </span>  Term -&gt;
-<span class="lineno">  112 </span>  IO (Maybe (Name, CtorArg, Term))
+<span class="lineno">  112 </span>  IO (Maybe (VarName, CtorArg, Term))
 <span class="lineno">  113 </span><span class="decl"><span class="istickedoff">asPiCtorArg sc d params dt_ixs t =</span>
 <span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">scAsPi sc t &gt;&gt;= \case</span>
 <span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
@@ -144,7 +144,7 @@ span.spaces    { background: white }
 <span class="lineno">  125 </span>  [ExtCns Term] -&gt;
 <span class="lineno">  126 </span>  [index] -&gt;
 <span class="lineno">  127 </span>  Term -&gt;
-<span class="lineno">  128 </span>  IO (Maybe ([(Name, CtorArg)], [Term]))
+<span class="lineno">  128 </span>  IO (Maybe ([(VarName, CtorArg)], [Term]))
 <span class="lineno">  129 </span><span class="decl"><span class="istickedoff">mkCtorArgsIxs _sc d params dt_ixs (asCtorDTApp d params dt_ixs -&gt; Just ixs) =</span>
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">pure $ Just ([], ixs)</span>
 <span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff">mkCtorArgsIxs sc d params dt_ixs ty =</span>
