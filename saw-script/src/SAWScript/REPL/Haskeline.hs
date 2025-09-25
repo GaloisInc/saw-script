@@ -9,7 +9,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module SAWScript.REPL.Haskeline where
+module SAWScript.REPL.Haskeline (repl, replBody) where
 
 import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
