@@ -16,6 +16,9 @@ module SAWServer.SAWServer
 import Prelude hiding (mod)
 import Control.Lens ( Lens', view, lens, over )
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
+import Data.Bifoldable (Bifoldable(..))
+import Data.Bifunctor (Bifunctor(..))
+import Data.Bitraversable (Bitraversable(..), bifoldMapDefault, bimapDefault)
 import Data.ByteString (ByteString)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
@@ -132,6 +135,52 @@ data CrucibleSetupVal ty e
   | CryptolExpr e
   | FreshExpandedValue Text ty
   deriving stock (Foldable, Functor, Traversable)
+
+instance Bifoldable CrucibleSetupVal where
+  bifoldMap = bifoldMapDefault
+
+instance Bifunctor CrucibleSetupVal where
+  bimap = bimapDefault
+
+instance Bitraversable CrucibleSetupVal where
+  bitraverse f g = go
+    where
+      go NullValue =
+        pure NullValue
+      go (ArrayValue x0 x1) =
+        ArrayValue <$> traverse f x0 <*> traverse go x1
+      go (StructValue x0 x1) =
+        StructValue x0 <$> traverse go x1
+      go (EnumValue x0 x1 x2) =
+        EnumValue x0 x1 <$> traverse go x2
+      go (TupleValue x0) =
+        TupleValue <$> traverse go x0
+      go (SliceValue x0) =
+        SliceValue <$> go x0
+      go (SliceRangeValue x0 x1 x2) =
+        SliceRangeValue <$> go x0 <*> pure x1 <*> pure x2
+      go (StrSliceValue x0) =
+        StrSliceValue <$> go x0
+      go (StrSliceRangeValue x0 x1 x2) =
+        StrSliceRangeValue <$> go x0 <*> pure x1 <*> pure x2
+      go (FieldLValue x0 x1) =
+        FieldLValue <$> go x0 <*> pure x1
+      go (CastLValue x0 x1) =
+        CastLValue <$> go x0 <*> f x1
+      go (UnionLValue x0 x1) =
+        UnionLValue <$> go x0 <*> pure x1
+      go (ElementLValue x0 x1) =
+        ElementLValue <$> go x0 <*> pure x1
+      go (GlobalInitializer x0) =
+        pure $ GlobalInitializer x0
+      go (GlobalLValue x0) =
+        pure $ GlobalLValue x0
+      go (NamedValue x0) =
+        pure $ NamedValue x0
+      go (CryptolExpr x0) =
+        CryptolExpr <$> g x0
+      go (FreshExpandedValue x0 x1) =
+        FreshExpandedValue x0 <$> f x1
 
 data SetupStep ty
   = SetupReturn (CrucibleSetupVal ty CryptolAST) -- ^ The return value

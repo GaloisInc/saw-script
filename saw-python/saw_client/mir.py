@@ -71,6 +71,12 @@ def array_ty(size : int, ty : 'MIRType') -> 'MIRArrayType':
     """``[ty; size]``, i.e. a MIR array of ``size`` elements of type ``ty``."""
     return MIRArrayType(ty, size)
 
+def const_ty(constant_type : 'MIRType', constant_value : cryptoltypes.CryptolJSON) -> 'MIRConstType':
+    """A constant value used to instantiate a const generic parameter. This is
+    intended to be used in conjunction with `mir_find_adt` to look up
+    instantiations of const generic ADTs."""
+    return MIRConstType(constant_type, constant_value)
+
 def ref_ty(ty : 'MIRType') -> 'MIRRefType':
     """``&ty``, i.e., an immutable MIR reference type pointing to something of
     type ``ty``."""
