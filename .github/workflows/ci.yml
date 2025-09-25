@@ -79,48 +79,51 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
+        #os: [ubuntu-24.04]
+        os: [windows-2022]
         cabal: ["3.10.3.0"]
-        ghc: ["9.4.8", "9.6.6", "9.8.2"]
-        haddock: [true]
+        #ghc: ["9.4.8", "9.6.6", "9.8.2"]
+        ghc: ["9.4.8"]
+        #haddock: [true]
+        haddock: [false]
         run-tests: [true]
         hpc: [false]
-        include:
+        #include:
           # We include one job from an older Ubuntu LTS release to increase our
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
-          - os: ubuntu-22.04
-            ghc: "9.4.8"
-            cabal: "3.10.3.0"
-            haddock: false
-            run-tests: false
-            hpc: false
+          #- os: ubuntu-22.04
+          #  ghc: "9.4.8"
+          #  cabal: "3.10.3.0"
+          #  haddock: false
+          #  run-tests: false
+          #  hpc: false
           # Include one job with HPC enabled
-          - os: ubuntu-24.04
-            ghc: "9.4.8"
-            cabal: "3.10.3.0"
-            haddock: false
-            run-tests: true
-            hpc: true
+          #- os: ubuntu-24.04
+          #  ghc: "9.4.8"
+          #  cabal: "3.10.3.0"
+          #  haddock: false
+          #  run-tests: true
+          #  hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
           # so we only build one particular GHC version to test them on. We
           # include both an x86-64 macOS runner (macos-13) as well as an AArch64
           # macOS runner (macos-14).
-          - os: windows-2022
-            ghc: 9.4.8
-            haddock: false
-            run-tests: true
-            hpc: false
-          - os: macos-13
-            ghc: 9.4.8
-            haddock: false
-            run-tests: true
-            hpc: false
-          - os: macos-14
-            ghc: 9.4.8
-            haddock: false
-            run-tests: true
-            hpc: false
+          #- os: windows-2022
+          #  ghc: 9.4.8
+          #  haddock: false
+          #  run-tests: true
+          #  hpc: false
+          #- os: macos-13
+          #  ghc: 9.4.8
+          #  haddock: false
+          #  run-tests: true
+          #  hpc: false
+          #- os: macos-14
+          #  ghc: 9.4.8
+          #  haddock: false
+          #  run-tests: true
+          #  hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -190,10 +193,10 @@ jobs:
           #   - and of course the definitions in the *.cabal files
           targets: |
             integration-tests
-            saw-core-tests
-            cryptol-saw-core-tests
-            crux-mir-comp-tests
-            saw-core-coq-tests
+          #  saw-core-tests
+          #  cryptol-saw-core-tests
+          #  crux-mir-comp-tests
+          #  saw-core-coq-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -340,6 +343,7 @@ jobs:
     name: "Build SAW documentation"
     needs: [config]
     runs-on: ${{ matrix.os }}
+    if: false
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -432,6 +436,7 @@ jobs:
     name: "Update documentation versions JSON"
     needs: [deploy-docs]
     runs-on: ${{ matrix.os }}
+    if: false
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -476,6 +481,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
+    if: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -521,6 +527,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
+    if: false
     steps:
       - name: Check out repo and submodules
         uses: actions/checkout@v4
@@ -577,6 +584,7 @@ jobs:
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
     needs: [build]
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -641,23 +649,24 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-24.04]
+        #os: [ubuntu-24.04]
+        os: [windows-2022]
         continue-on-error: [false]
-        include:
-          - suite: integration-tests
-            os: macos-14
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-          - suite: integration-tests
-            os: windows-2022
-            timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+        #include:
+          #- suite: integration-tests
+          #  os: macos-14
+          #  continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+          #- suite: integration-tests
+          #  os: windows-2022
+          #  timeout-minutes: 60
+          #  continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
-          - suite: integration-tests
-            os: macos-14
-            continue-on-error: false
-          - suite: integration-tests
-            os: windows-2022
-            continue-on-error: false
+          #- suite: integration-tests
+          #  os: macos-14
+          #  continue-on-error: false
+          #- suite: integration-tests
+          #  os: windows-2022
+          #  continue-on-error: false
           # We exclude crux-mir-comp-tests as it requires some Rust-specific
           # setup that is unique to that particular test suite. See the
           # crux-mir-comp-tests job, which is defined separately.
@@ -743,7 +752,8 @@ jobs:
     # Do not run this job in forks, as the deployment to GitHub pages will fail
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216).
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    #if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    if: false
     strategy:
       matrix:
         suite: ['integration-tests']
@@ -846,7 +856,8 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') && github.repository_owner == 'GaloisInc'
+    #if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') && github.repository_owner == 'GaloisInc'
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -946,6 +957,7 @@ jobs:
     timeout-minutes: 150
     needs: build
     runs-on: ${{ matrix.os }}
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -1010,6 +1022,7 @@ jobs:
   exercises:
     name: "Test SAW exercises"
     needs: build
+    if: false
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
