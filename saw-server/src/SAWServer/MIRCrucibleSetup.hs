@@ -14,6 +14,7 @@ import Control.Lens ( (^.), view )
 import Control.Monad (unless)
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Control.Monad.State ( MonadState(..) )
+import Control.Monad.Trans ( MonadTrans(lift) )
 import Data.Aeson ( FromJSON(..), withObject, (.:) )
 import Data.ByteString (ByteString)
 import Data.Map (Map)
@@ -84,19 +85,19 @@ compileMIRContract ::
   Map ServerName MS.GhostGlobal ->
   CryptolEnv ->
   SAWEnv ->
-  Contract JSONMIRType (P.Expr P.PName) ->
+  Contract (JSONMIRType (P.Expr P.PName)) (P.Expr P.PName) ->
   MIRSetupM ()
 compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
   do unless (null (mutableGlobals c)) $
        MIRSetupM $ fail "Allocating mutable global variables not supported in the MIR API."
-     allocsPre <- mapM setupAlloc (preAllocated c)
+     allocsPre <- mapM (setupAlloc cenv0) (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= mir_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
      mapM_ setupPointsToBitfields (prePointsToBitfields c)
      mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= mir_execute_func
-     allocsPost <- mapM setupAlloc (postAllocated c)
+     allocsPost <- mapM (setupAlloc cenvPre) (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= mir_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
@@ -106,30 +107,36 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
        Just v -> getSetupVal (envPost, cenvPost) v >>= mir_return
        Nothing -> return ()
   where
-    setupFresh :: ContractVar JSONMIRType -> MIRSetupM (ServerName, TypedTerm)
-    setupFresh (ContractVar n dn ty) =
-      do t <- mir_fresh_var dn (mirType sawenv ty)
+    setupFresh ::
+      CryptolEnv ->
+      ContractVar (JSONMIRType (P.Expr P.PName)) ->
+      MIRSetupM (ServerName, TypedTerm)
+    setupFresh cenv (ContractVar n dn ty) =
+      do ty' <- getMirType cenv ty
+         t <- mir_fresh_var dn ty'
          return (n, t)
     setupState allocs (env, cenv) vars =
-      do freshTerms <- mapM setupFresh vars
+      do freshTerms <- mapM (setupFresh cenv) vars
          let cenv' = foldr (\(ServerName n, t) -> CEnv.bindTypedTerm (mkIdent n, t)) cenv freshTerms
          let env' = Map.union env $ Map.fromList $
                    [ (n, Val (MS.SetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]
          return (env', cenv')
 
-    setupAlloc :: Allocated JSONMIRType -> MIRSetupM (ServerName, MS.SetupValue MIR)
-    setupAlloc (Allocated _ _ _ (Just _)) =
+    setupAlloc ::
+      CryptolEnv ->
+      Allocated (JSONMIRType (P.Expr P.PName)) ->
+      MIRSetupM (ServerName, MS.SetupValue MIR)
+    setupAlloc _ (Allocated _ _ _ (Just _)) =
       MIRSetupM $ fail "Alignment not supported in the MIR API."
-    setupAlloc (Allocated n ty mut Nothing)
-      | mut       = (n,) <$> mir_alloc_mut ty'
-      | otherwise = (n,) <$> mir_alloc     ty'
-      where
-        ty' = mirType sawenv ty
+    setupAlloc cenv (Allocated n ty mut Nothing) = do
+      ty' <- getMirType cenv ty
+      alloc <- if mut then mir_alloc_mut ty' else mir_alloc ty'
+      pure (n, alloc)
 
     setupPointsTo ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      PointsTo JSONMIRType (P.Expr P.PName) ->
+      PointsTo (JSONMIRType (P.Expr P.PName)) (P.Expr P.PName) ->
       MIRSetupM ()
     setupPointsTo _ (PointsTo _ _ Nothing _) =
       MIRSetupM $ fail "Points-to without type checking not supported in the MIR API."
@@ -142,7 +149,7 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
          val <- getSetupVal env v
          mir_points_to ptr val
 
-    setupPointsToBitfields :: PointsToBitfield JSONMIRType (P.Expr P.PName) -> MIRSetupM ()
+    setupPointsToBitfields :: PointsToBitfield (JSONMIRType (P.Expr P.PName)) (P.Expr P.PName) -> MIRSetupM ()
     setupPointsToBitfields _ =
       MIRSetupM $ fail "Points-to-bitfield not supported in the MIR API."
 
@@ -171,9 +178,16 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
            Right (t, _) -> return t
            Left err -> throw $ CryptolModuleException err warnings
 
+    getMirType ::
+      CryptolEnv ->
+      JSONMIRType (P.Expr P.PName) ->
+      MIRSetupM Mir.Ty
+    getMirType cenv ty =
+      MIRSetupM $ lift $ lift $ mirType fileReader bic cenv sawenv ty
+
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal JSONMIRType (P.Expr P.PName) ->
+      CrucibleSetupVal (JSONMIRType (P.Expr P.PName)) (P.Expr P.PName) ->
       MIRSetupM (MS.SetupValue MIR)
     getSetupVal (env, _) (NamedValue n) =
       resolve env n >>= \case Val x -> return x
@@ -181,12 +195,13 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
       MS.SetupTerm <$> getTypedTerm cenv expr
     getSetupVal _ NullValue =
       MIRSetupM $ fail "Null setup values unsupported in the MIR API."
-    getSetupVal env (ArrayValue mbEltTy elts) =
+    getSetupVal env@(_, cenv) (ArrayValue mbEltTy elts) =
       case (mbEltTy, elts) of
         (Nothing, []) ->
           MIRSetupM $ fail "Empty MIR array with unknown element type."
-        (Just eltTy, []) ->
-          return $ MS.SetupArray (mirType sawenv eltTy) []
+        (Just eltTy, []) -> do
+          eltTy' <- getMirType cenv eltTy
+          return $ MS.SetupArray eltTy' []
         (_, elt:eltss) ->
           do st <- MIRSetupM get
              let cc = st ^. MS.csCrucibleContext
@@ -196,7 +211,7 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
              elt' <- getSetupVal env elt
              eltss' <- mapM (getSetupVal env) eltss
              ty' <- case mbEltTy of
-                      Just eltTy -> pure $ mirType sawenv eltTy
+                      Just eltTy -> getMirType cenv eltTy
                       Nothing -> MIRSetupM $ typeOfSetupValue cc allocEnv nameEnv elt'
              return $ MS.SetupArray ty' (elt':eltss')
     getSetupVal _ (StructValue Nothing _) =
@@ -216,8 +231,8 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
       pure $ MS.SetupGlobalInitializer () name
     getSetupVal _ (GlobalLValue name) =
       pure $ MS.SetupGlobal () name
-    getSetupVal _ (FreshExpandedValue pfx ty) =
-      let ty' = mirType sawenv ty in
+    getSetupVal (_, cenv) (FreshExpandedValue pfx ty) = do
+      ty' <- getMirType cenv ty
       mir_fresh_expanded_value pfx ty'
     getSetupVal env (SliceValue base) = do
       base' <- getSetupVal env base

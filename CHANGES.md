@@ -1,7 +1,7 @@
 # next -- TBA
 
 This release supports [version
-4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
+5](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#5) of
 `mir-json`'s schema.
 
 ## Changes
@@ -105,8 +105,7 @@ This release supports [version
   allows looking up MIR ADTs by their full, mangled names.
   `mir_find_mangled_adt`'s use is discouraged in favor of using `mir_find_adt`
   instead, but `mir_find_mangled_adt` can be useful in scenarios where
-  `mir_find_adt` isn't expressive enough to look up particular ADTs (e.g., ADTs
-  that use const generics).
+  `mir_find_adt` isn't expressive enough to look up particular ADTs.
 
 * Add a `set_solver_cache_timeout : Int -> TopLevel ()` command that allows
   configuring the solver result cache's timeout for database lookups and
@@ -118,6 +117,11 @@ This release supports [version
 * Add a `mir_extract : MIRModule -> String -> TopLevel Term` command, which
   allows extracting a MIR function to a term. See the SAW manual for details on
   what types of MIR functions are supported for extraction.
+
+* Add a `mir_const : MIRType -> Term -> MIRType` function, which can be used to
+  specify a constant used to instantiate a const generic parameter. `mir_const`
+  is intended to be used in conjunction with `mir_find_adt` to look up
+  instantiations of const generic ADTs.
 
 # Version 1.4 -- date still TBD
 

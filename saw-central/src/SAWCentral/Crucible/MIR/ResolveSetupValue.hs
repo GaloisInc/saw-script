@@ -1480,7 +1480,7 @@ data TyView
   | TyViewNever
   | TyViewForeign
   | TyViewLifetime
-  | TyViewConst
+  | TyViewConst !Mir.ConstVal
   | TyViewErased
   | TyViewInterned Mir.TyName
   deriving Eq
@@ -1543,7 +1543,7 @@ tyView (Mir.TyDowncast ty n) = TyViewDowncast (tyView ty) n
 tyView Mir.TyNever = TyViewNever
 tyView Mir.TyForeign = TyViewForeign
 tyView Mir.TyLifetime = TyViewLifetime
-tyView Mir.TyConst = TyViewConst
+tyView (Mir.TyConst c) = TyViewConst c
 tyView Mir.TyErased = TyViewErased
 tyView (Mir.TyInterned nm) = TyViewInterned nm
 
