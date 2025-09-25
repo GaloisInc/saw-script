@@ -575,7 +575,6 @@ bindLoadedModule (asName, origName) env =
   env{eImports= mkImport PublicAndPrivate origName (Just asName) Nothing
               : eImports env
      }
-  -- FIXME:MT: PublicAndPrivate?!
 
 -- | bindCryptolModule - binding when we have the ECM_CryptolModule side.
 --
@@ -625,9 +624,7 @@ extractDefFromExtCryptolModule sc env ecm name =
                            , C.modNameToText (P.thing loadedModName)
                            ]
                env'    = bindLoadedModule (localMN, loadedModName) env
-                         -- FIXME: PublicAndPrivate now. ?
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
-                        -- FIXME: be more robust? create an identifier?
            let ?fileReader = panic "fileReader"
                                ["extractDefFromExtCryptolModule"]
            parseTypedTerm sc env' expr
@@ -645,9 +642,9 @@ extractDefFromExtCryptolModule sc env ecm name =
         --     > cryptol_extract (cryptol_prims ()) "trunc"
         --
         -- FIXME: this code is somewhat ad hoc, might we rather invoke
-        -- parse for name, or the like?  However, we expect this code
-        -- would likely go away after we address Issue #<TODO>.
-
+        -- parse for name, or the like?  However, this code becomes
+        -- unnecessary after addressing Issue #2645 (turning
+        -- cryptol_prims into a built-in Cryptol module).
 
 ---- Core functions for loading and Translating Modules ------------------------
 
