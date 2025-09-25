@@ -1,0 +1,62 @@
+// test.saw
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+///// Things that should be expected to work
+
+let f_g_spec N = do {
+    y <- mir_fresh_var "y" (mir_array N mir_u32);
+
+    mir_execute_func [mir_term y];
+
+    let s_adt = mir_find_adt m "test::S" [mir_const mir_usize {{ `N : [64] }}];
+    mir_return (mir_struct_value s_adt [mir_term y]);
+};
+
+mir_verify m "test::f" [] false (f_g_spec 1) z3;
+mir_verify m "test::g" [] false (f_g_spec 2) z3;
+
+let t_adt = mir_find_adt m "test::T" [
+    mir_const mir_i8 {{ 0 : [8] }},
+    mir_const mir_i16 {{ 0 : [16] }},
+    mir_const mir_i32 {{ 0 : [32] }},
+    mir_const mir_i64 {{ 0 : [64] }},
+    mir_const mir_i128 {{ 0 : [128] }},
+    mir_const mir_isize {{ 0 : [64] }},
+    mir_const mir_u8 {{ 0 : [8] }},
+    mir_const mir_u16 {{ 0 : [16] }},
+    mir_const mir_u32 {{ 0 : [32] }},
+    mir_const mir_u64 {{ 0 : [64] }},
+    mir_const mir_u128 {{ 0 : [128] }},
+    mir_const mir_usize {{ 0 : [64] }},
+    mir_const mir_bool {{ True }},
+    mir_const mir_char {{ zext 'a' : [32] }}
+];
+
+let h_spec = do {
+    mir_execute_func [];
+    mir_return (mir_struct_value t_adt []);
+};
+
+mir_verify m "test::h" [] false h_spec z3;
+
+///// Things that should be expected to fail
+
+let mir_const_fails t v = fails (do { return (mir_const t v); });
+
+// Calling `mir_const` with unsupported types
+mir_const_fails (mir_tuple []) {{ () }};
+
+// Calling `mir_const` with malformed Terms
+for [ mir_bool, mir_char
+    , mir_i8, mir_i16, mir_i32, mir_i64, mir_i128, mir_isize
+    , mir_u8, mir_u16, mir_u32, mir_u64, mir_u128, mir_usize
+    ] (\t -> mir_const_fails t {{ 0 : [7] }});
+
+// Calling `mir_fresh_var` using `mir_const` as the type
+let f_bad_spec = do {
+    x <- mir_fresh_var "x" (mir_const mir_usize {{ 0 : [64] }});
+    mir_execute_func [mir_term x];
+};
+fails (mir_verify m "test::f" [] false f_bad_spec z3);
