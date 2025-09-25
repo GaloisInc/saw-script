@@ -254,11 +254,11 @@ asRecursorType t =
   do RecursorType ty <- asFTermF t
      pure ty
 
-asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term, [Term])
+asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term)
 asRecursorApp t =
-  do RecursorApp rc ixs <- asFTermF t
+  do RecursorApp rc <- asFTermF t
      Recursor crec <- asFTermF rc
-     return (rc, crec, ixs)
+     pure (rc, crec)
 
 asNat :: Recognizer Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = pure i

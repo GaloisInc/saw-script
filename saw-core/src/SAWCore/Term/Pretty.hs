@@ -456,7 +456,7 @@ ppFlatTermF prec tf =
 
     RecursorType ty -> ppTerm' prec ty
 
-    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder _ty) ->
+    Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
@@ -470,10 +470,8 @@ ppFlatTermF prec tf =
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#rec"))
              (params_pp ++ [motive_pp, tupled f_pps])
 
-    RecursorApp r ixs ->
-      do rec_pp <- ppTerm' PrecApp r
-         ixs_pp <- mapM (ppTerm' PrecArg) ixs
-         return $ ppAppList prec rec_pp ixs_pp
+    RecursorApp r ->
+      ppTerm' prec r
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist

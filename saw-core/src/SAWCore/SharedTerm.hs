@@ -770,8 +770,9 @@ getTerm cache termF =
 
 scRecursorApp :: SharedContext -> Term -> [Term] -> Term -> IO Term
 scRecursorApp sc rec ixs arg =
-  do r <- scFlatTermF sc (RecursorApp rec ixs)
-     scApply sc r arg
+  do r <- scFlatTermF sc (RecursorApp rec)
+     t <- scApplyAll sc r ixs
+     scApply sc t arg
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
@@ -1214,8 +1215,8 @@ scWhnf sc t0 =
                                                                       error "scWhnf: field missing in record"
     go (ElimRecursor rec crec _ : xs)
                               (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
-    go (ElimApp x : xs)       (asRecursorApp ->
-                                Just (r, crec, ixs))            = go (ElimRecursor r crec ixs : xs) x
+    go xs                     (asRecursorApp -> Just (r, crec)) | Just (ixs, x, xs') <- splitApps (recursorNumIxs crec) xs
+                                                                = go (ElimRecursor r crec ixs : xs') x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -1260,8 +1261,9 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor r _crec ixs) =
-      do f <- scFlatTermF sc (RecursorApp r ixs)
-         scApply sc f t
+      do f <- scFlatTermF sc (RecursorApp r)
+         f' <- scApplyAll sc f ixs
+         scApply sc f' t
 
     resolveConstant :: Name -> IO ResolvedName
     resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
@@ -1274,6 +1276,15 @@ scWhnf sc t0 =
         Just (rec, crec, args, xs') -> Just (rec, crec, x : args, xs')
         Nothing -> Nothing
     asArgsRec _ = Nothing
+
+    -- look for a prefix of n ElimApps, followed by one more ElimApp
+    splitApps :: Int -> [WHNFElim] -> Maybe ([Term], Term, [WHNFElim])
+    splitApps 0 (ElimApp t : xs) = Just ([], t, xs)
+    splitApps n (ElimApp i : xs) =
+       do (is, t, xs') <- splitApps (n-1) xs
+          Just (i : is, t, xs')
+    splitApps _ _ = Nothing
+
 
 -- | Test if two terms are convertible up to a given evaluation procedure. In
 -- practice, this procedure is usually 'scWhnf', possibly combined with some
@@ -1453,11 +1464,10 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         Recursor rec -> do
           lift $ scFlatTermF sc $
              RecursorType (recursorType rec)
-        RecursorApp r ixs ->
+        RecursorApp r ->
           do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
-               Just ty ->
-                 lift $ scWhnf sc =<< foldM (reducePi sc) ty ixs
+               Just ty -> pure ty
                _ -> fail "Expected recursor type in recursor application"
 
         RecordType elems ->

@@ -205,7 +205,6 @@ data TCError
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
   | NotFullyAppliedRec NameInfo
-  | BadRecursorApp Term [Term] Term
   | MalformedRecursor Term String
   | DeclError Text String
   | ErrorPos Pos TCError
@@ -256,12 +255,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (BadRecursorApp r ixs ty) =
-      ppWithPos [ return "Type mismatch in recursor application"
-                , ishow (Unshared $ FTermF $ RecursorApp r ixs)
-                , pure "recursor type:"
-                , ishow ty
-                ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
@@ -521,8 +514,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (Recursor rec) =
     inferRecursor rec
 
-  typeInfer (RecursorApp r ixs) =
-    inferRecursorApp r ixs
+  typeInfer (RecursorApp r) =
+    inferRecursorApp r
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -627,11 +620,12 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 inferRecursorType ::
   Name           {- ^ data type name -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
+  Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM Sort
-inferRecursorType d params motive motiveTy ty =
+inferRecursorType d params nixs motive motiveTy ty =
   do mm <- liftTCM scGetModuleMap
      dt <-
        case lookupVarIndexInMap (nameIndex d) mm of
@@ -641,7 +635,7 @@ inferRecursorType d params motive motiveTy ty =
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params motive motiveTy mempty [] ty))
+             Recursor (CompiledRecursor d params nixs motive motiveTy mempty [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -683,6 +677,7 @@ compileRecursor dt params motive cs_fs =
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
      let d = dtName dt
+     let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
      ixs_vars <- traverse (liftTCM scVariable) (dtIndices dt)
@@ -696,7 +691,7 @@ compileRecursor dt params motive cs_fs =
      ty2 <- liftTCM scInstantiateExt subst ty1
      ty <- typeInferComplete ty2
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
-     let rec = CompiledRecursor d params motive motiveTy elims ctorOrder ty
+     let rec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
             (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
@@ -706,7 +701,7 @@ compileRecursor dt params motive cs_fs =
        throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType d params motive motiveTy ty
+     _s <- inferRecursorType d params nixs motive motiveTy ty
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
@@ -735,15 +730,12 @@ inferRecursor rec =
 -- | Infer the type of a recursor application
 inferRecursorApp ::
   SCTypedTerm   {- ^ recursor term -} ->
-  [SCTypedTerm] {- ^ data type indices -} ->
   TCM Term
-inferRecursorApp r ixs =
+inferRecursorApp r =
   do recty <- typeCheckWHNF (typedType r)
      case asRecursorType recty of
        Nothing -> throwTCError (ExpectedRecursor r)
-       Just ty -> do
-         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) ty
-         foldM (applyPiTyped err) ty ixs
+       Just ty -> pure ty
 
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm

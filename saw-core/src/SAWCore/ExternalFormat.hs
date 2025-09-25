@@ -145,19 +145,18 @@ scWriteExternal t0 =
 
             RecursorType ty ->
               do pure $ unwords ["RecursorType", show ty]
-            Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder ty) ->
+            Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
-                      (["Recursor" , show (nameIndex d)] ++
+                      (["Recursor" , show (nameIndex d), show nixs] ++
                        map show ps ++
                        [ argsep, show motive, show motive_ty
                        , show (Map.toList cs_fs)
                        , show (map nameIndex ctorOrder)
                        , show ty
                        ])
-            RecursorApp r ixs -> pure $
-              unwords (["RecursorApp", show r] ++ map show ixs)
+            RecursorApp r -> pure $ unwords ["RecursorApp", show r]
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
@@ -292,23 +291,20 @@ scReadExternal sc input =
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
         ["RecursorType", x] -> FTermF <$> (RecursorType <$> readIdx x)
-        ("Recursor" : i :
+        ("Recursor" : i : nixs :
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
             do rec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
+                        pure (read nixs) <*>
                         readIdx motive <*>
                         readIdx motiveTy <*>
                         readElimsMap elims <*>
                         readCtorList ctorOrder <*>
                         readIdx ty
                pure (FTermF (Recursor rec))
-        ("RecursorApp" : r : ixs) ->
-            do app <- RecursorApp <$>
-                        readIdx r <*>
-                        traverse readIdx ixs
-               pure (FTermF app)
+        ["RecursorApp", r] -> FTermF <$> (RecursorApp <$> readIdx r)
 
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))

@@ -207,8 +207,7 @@ data FlatTermF e
     -- | An eliminator / pattern-matching function for an inductively-defined
     -- type, given by:
     -- * The recursor value;
-    -- * The indices for the inductive type
-  | RecursorApp e [e]
+  | RecursorApp e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -244,6 +243,7 @@ data CompiledRecursor e =
   CompiledRecursor
   { recursorDataType  :: Name
   , recursorParams    :: [e]
+  , recursorNumIxs    :: Int
   , recursorMotive    :: e
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
@@ -278,13 +278,14 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2 ty2)
-  | Map.keysSet es1 == Map.keysSet es2
+zipRec f (CompiledRecursor d1 ps1 n1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 mty2 es2 ord2 ty2)
+  | Map.keysSet es1 == Map.keysSet es2 && n1 == n2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
        pure $ CompiledRecursor
               d
               (zipWith f ps1 ps2)
+              n1
               (f m1 m2)
               (f mty1 mty2)
               (Map.intersectionWith (zipPair f) es1 es2)
@@ -313,10 +314,8 @@ zipWithFlatTermF f = go
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec f rec1 rec2
 
-    go (RecursorApp rec1 ixs1) (RecursorApp rec2 ixs2) =
-        Just $ RecursorApp
-          (f rec1 rec2)
-          (zipWith f ixs1 ixs2)
+    go (RecursorApp rec1) (RecursorApp rec2) =
+        Just $ RecursorApp (f rec1 rec2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =

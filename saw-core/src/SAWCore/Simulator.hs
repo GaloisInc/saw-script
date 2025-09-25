@@ -217,18 +217,20 @@ evalTermF cfg lam recEval tf env =
                                 ty <- evalType ety
                                 pure (v,ty)
              let dname = recursorDataType r
+             let nixs = recursorNumIxs r
              dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
              mty <- evalType (recursorMotiveTy r)
              es  <- traverse f (recursorElims r)
              ty  <- evalType (recursorType r)
-             pure (VRecursor dname dty ps m mty es ty)
+             pure (VRecursor dname dty ps nixs m mty es ty)
 
-        RecursorApp rectm ixs ->
+        RecursorApp rectm ->
           do r <- recEval rectm
              case r of
-               VRecursor d _k ps motive _motiveTy ps_fs ty ->
+               VRecursor d _k ps nixs motive _motiveTy ps_fs ty ->
+                 vFunList (replicate nixs "_") $ \ix_thunks ->
                  pure $ VFun "_" $ \arg_thunk ->
                  do argv <- force arg_thunk
                     case evalConstructor argv of
@@ -245,7 +247,7 @@ evalTermF cfg lam recEval tf env =
                           VCtorMux _ps branches ->
                             do alts <- traverse (evalCtorMuxBranch r) (IntMap.elems branches)
                                -- compute return type of recursor application
-                               ixvs <- traverse recEval ixs
+                               ixvs <- traverse force ix_thunks
                                retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
                                combineAlts retTy alts
                           _ -> panic "evalTermF / RecursorApp" ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
@@ -282,7 +284,7 @@ evalTermF cfg lam recEval tf env =
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (p, c, ct, args) =
       case r of
-        VRecursor _d _k ps _motive _motiveTy ps_fs ty ->
+        VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty ->
           do let i = nameIndex c
              let rTy = VRecursorType ty
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of

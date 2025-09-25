@@ -422,7 +422,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       translateTerm ty
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder _ty) ->
+    Recursor (CompiledRecursor d parameters _nixs motive _motiveTy eliminators elimOrder _ty) ->
       do maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
@@ -445,9 +445,8 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
 
          pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
 
-    RecursorApp r indices ->
-      do r' <- translateTerm r
-         Coq.App r' <$> mapM translateTerm indices
+    RecursorApp r ->
+      translateTerm r
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
