@@ -507,15 +507,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (PairRight (SCTypedTerm _ tp _)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
-  typeInfer (RecursorType ty) =
-    do s <- ensureSort (typedType ty)
-       liftTCM scSort s
-
   typeInfer (Recursor rec) =
     inferRecursor rec
-
-  typeInfer (RecursorApp r) =
-    inferRecursorApp r
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -720,22 +713,8 @@ compileRecursor dt params motive cs_fs =
 inferRecursor ::
   CompiledRecursor SCTypedTerm ->
   TCM Term
-inferRecursor rec =
-  do let ty     = recursorType rec
-
-     -- return the type of this recursor
-     liftTCM scFlatTermF $ fmap typedVal $
-       RecursorType ty
-
--- | Infer the type of a recursor application
-inferRecursorApp ::
-  SCTypedTerm   {- ^ recursor term -} ->
-  TCM Term
-inferRecursorApp r =
-  do recty <- typeCheckWHNF (typedType r)
-     case asRecursorType recty of
-       Nothing -> throwTCError (ExpectedRecursor r)
-       Just ty -> pure ty
+inferRecursor r =
+  pure (typedVal (recursorType r))
 
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm

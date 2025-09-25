@@ -38,7 +38,6 @@ module SAWCore.Recognizer
   , asRecordValue
   , asRecordSelector
   , asRecursorApp
-  , asRecursorType
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
@@ -249,16 +248,10 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
-asRecursorType :: Recognizer Term Term
-asRecursorType t =
-  do RecursorType ty <- asFTermF t
-     pure ty
-
 asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term)
 asRecursorApp t =
-  do RecursorApp rc <- asFTermF t
-     Recursor crec <- asFTermF rc
-     pure (rc, crec)
+  do Recursor crec <- asFTermF t
+     pure (t, crec)
 
 asNat :: Recognizer Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = pure i

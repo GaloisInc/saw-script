@@ -418,9 +418,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
-    RecursorType ty ->
-      translateTerm ty
-
     -- TODO: support this next!
     Recursor (CompiledRecursor d parameters _nixs motive _motiveTy eliminators elimOrder _ty) ->
       do maybe_d_trans <-
@@ -444,9 +441,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
          elimlist <- mapM fnd elimOrder
 
          pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
-
-    RecursorApp r ->
-      translateTerm r
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))

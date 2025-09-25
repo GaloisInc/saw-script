@@ -836,9 +836,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           -- NOTE: we don't rewrite arguments of constructors, datatypes, or
           -- recursors because of dependent types, as we could potentially cause
           -- a term to become ill-typed
-          RecursorType{}   -> return ftf
           Recursor{}       -> return ftf
-          RecursorApp{}    -> return ftf -- could treat same as CtorApp
 
           RecordType{}     -> traverse rewriteAll ftf
           RecordValue{}    -> traverse rewriteAll ftf

@@ -194,20 +194,12 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | The type of a recursor.
-  | RecursorType !e
-
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
     --   for each constructor. A recursor can be used with the special
     --   @RecursorApp@ term, which provides the datatype indices and
     --   actual argument to the eliminator.
   | Recursor (CompiledRecursor e)
-
-    -- | An eliminator / pattern-matching function for an inductively-defined
-    -- type, given by:
-    -- * The recursor value;
-  | RecursorApp e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -308,14 +300,8 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (RecursorType t1) (RecursorType t2) =
-      Just $ RecursorType (f t1 t2)
-
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec f rec1 rec2
-
-    go (RecursorApp rec1) (RecursorApp rec2) =
-        Just $ RecursorApp (f rec1 rec2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =
@@ -340,9 +326,7 @@ zipWithFlatTermF f = go
     go PairType{}     _ = Nothing
     go PairLeft{}     _ = Nothing
     go PairRight{}    _ = Nothing
-    go RecursorType{} _ = Nothing
     go Recursor{}     _ = Nothing
-    go RecursorApp{}  _ = Nothing
     go RecordType{}   _ = Nothing
     go RecordValue{}  _ = Nothing
     go RecordProj{}   _ = Nothing

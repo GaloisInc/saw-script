@@ -75,7 +75,11 @@ data Value l
   | VArray (VArray l)
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
-  | VRecursor
+  | VExtra (Extra l)
+  | TValue (TValue l)
+
+data VRecursor l
+  = VRecursor
      !Name -- data type name
      !(TValue l) -- data type kind
      ![Value l]  -- data type parameters
@@ -84,8 +88,6 @@ data Value l
      !(TValue l) -- type of motive
      !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
      !(TValue l) -- type of recursor function
-  | VExtra (Extra l)
-  | TValue (TValue l)
 
 -- | The subset of values that represent types.
 data TValue l
@@ -101,8 +103,6 @@ data TValue l
   | VDataType !Name !(TValue l) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
-  | VRecursorType
-     !(TValue l) -- type of recursor function
   | VTyTerm !Sort !Term
 
 data PiBody l
@@ -193,8 +193,6 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor d _ _ _ _ _ _ _
-                     -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -221,7 +219,6 @@ instance Show (Extra l) => Show (TValue l) where
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
-      VRecursorType{} -> showString "RecursorType"
 
       VTyTerm _ tm   -> showString "TyTerm (" . (\x -> showTerm tm ++ x) . showString ")"
 
@@ -335,7 +332,6 @@ asFirstOrderTypeTValue v =
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
-    VRecursorType{} -> Nothing
     VTyTerm{}   -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
@@ -365,7 +361,6 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
-    VRecursorType{} -> Nothing
     VTyTerm{} -> Nothing
 
 

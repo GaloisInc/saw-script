@@ -454,8 +454,6 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    RecursorType ty -> ppTerm' prec ty
-
     Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
@@ -469,9 +467,6 @@ ppFlatTermF prec tf =
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#rec"))
              (params_pp ++ [motive_pp, tupled f_pps])
-
-    RecursorApp r ->
-      ppTerm' prec r
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist

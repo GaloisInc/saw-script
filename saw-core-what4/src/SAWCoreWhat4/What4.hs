@@ -1471,8 +1471,6 @@ rebuildTerm sym st sc tv sv =
       scString sc s
     VRecordValue _ ->
       chokeOn "records (VRecordValue)"
-    VRecursor {} ->
-      chokeOn "recursors (VRecursor)"
     VExtra _ ->
       chokeOn "VExtra"
     TValue _tval ->

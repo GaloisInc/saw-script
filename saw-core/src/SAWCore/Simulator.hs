@@ -210,8 +210,6 @@ evalTermF cfg lam recEval tf env =
                                  VPair _l r -> force r
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
 
-        RecursorType tp     -> TValue <$> evalType tp
-
         Recursor r ->
           do let f (e,ety) = do v  <- recEvalDelay e
                                 ty <- evalType ety
@@ -224,34 +222,8 @@ evalTermF cfg lam recEval tf env =
              mty <- evalType (recursorMotiveTy r)
              es  <- traverse f (recursorElims r)
              ty  <- evalType (recursorType r)
-             pure (VRecursor dname dty ps nixs m mty es ty)
-
-        RecursorApp rectm ->
-          do r <- recEval rectm
-             case r of
-               VRecursor d _k ps nixs motive _motiveTy ps_fs ty ->
-                 vFunList (replicate nixs "_") $ \ix_thunks ->
-                 pure $ VFun "_" $ \arg_thunk ->
-                 do argv <- force arg_thunk
-                    case evalConstructor argv of
-                      Just (ctor, args)
-                        | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-                        -> do let rTy = VRecursorType ty
-                              ctorTy <- toTValue <$> lam (ctorType ctor) []
-                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready r,rTy)]
-                              lam (ctorIotaTemplate ctor) allArgs
-
-                        | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
-                      Nothing ->
-                        case argv of
-                          VCtorMux _ps branches ->
-                            do alts <- traverse (evalCtorMuxBranch r) (IntMap.elems branches)
-                               -- compute return type of recursor application
-                               ixvs <- traverse force ix_thunks
-                               retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
-                               combineAlts retTy alts
-                          _ -> panic "evalTermF / RecursorApp" ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
-               _ -> panic "evalTermF / RecursorApp" ["Expected recursor value"]
+             let vrec = VRecursor dname dty ps nixs m mty es ty
+             evalRecursor vrec
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps
@@ -278,22 +250,47 @@ evalTermF cfg lam recEval tf env =
     toTValue (TValue x) = x
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
+    evalRecursor :: VRecursor l -> MValue l
+    evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =
+      vFunList (replicate nixs "_") $ \ix_thunks ->
+      pure $ VFun "_" $ \arg_thunk ->
+      do argv <- force arg_thunk
+         r_thunk <- delay (evalRecursor vrec)
+         case evalConstructor argv of
+           Just (ctor, args)
+             | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
+             -> do let rTy = ty
+                   ctorTy <- toTValue <$> lam (ctorType ctor) []
+                   allArgs <- processRecArgs ps args ctorTy [(elim, elimTy), (r_thunk, rTy)]
+                   lam (ctorIotaTemplate ctor) allArgs
+
+             | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
+           Nothing ->
+             case argv of
+               VCtorMux _ps branches ->
+                 do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
+                    -- compute return type of recursor application
+                    ixvs <- traverse force ix_thunks
+                    retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
+                    combineAlts retTy alts
+               _ -> panic "evalTermF / RecursorApp" ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
+
     evalCtorMuxBranch ::
-      Value l ->
+      VRecursor l ->
       (VBool l, Name, TValue l, [Thunk l]) ->
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (p, c, ct, args) =
       case r of
         VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty ->
           do let i = nameIndex c
-             let rTy = VRecursorType ty
+             let rTy = ty
+             r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
                (Just (ResolvedCtor ctor), Just (elim, elimTy)) ->
-                 do allArgs <- processRecArgs ps args ct [(elim, elimTy), (ready r, rTy)]
+                 do allArgs <- processRecArgs ps args ct [(elim, elimTy), (r_thunk, rTy)]
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
-        _ -> panic "evalTermF / evalCtorMuxBranch" ["expected VRecursor"]
 
     combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
     combineAlts _ [] = panic "evalTermF / combineAlts" ["no alternatives"]

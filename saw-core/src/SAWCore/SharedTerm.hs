@@ -769,9 +769,8 @@ getTerm cache termF =
 -- Recursors
 
 scRecursorApp :: SharedContext -> Term -> [Term] -> Term -> IO Term
-scRecursorApp sc rec ixs arg =
-  do r <- scFlatTermF sc (RecursorApp rec)
-     t <- scApplyAll sc r ixs
+scRecursorApp sc r ixs arg =
+  do t <- scApplyAll sc r ixs
      scApply sc t arg
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
@@ -1261,9 +1260,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor r _crec ixs) =
-      do f <- scFlatTermF sc (RecursorApp r)
-         f' <- scApplyAll sc f ixs
-         scApply sc f' t
+      do f <- scApplyAll sc r ixs
+         scApply sc f t
 
     resolveConstant :: Name -> IO ResolvedName
     resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
@@ -1458,17 +1456,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           case asPairType tp of
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
-        RecursorType ty -> do
-          s <- sort ty
-          lift $ scSort sc s
         Recursor rec -> do
-          lift $ scFlatTermF sc $
-             RecursorType (recursorType rec)
-        RecursorApp r ->
-          do tp <- (liftIO . scWhnf sc) =<< memo r
-             case asRecursorType tp of
-               Just ty -> pure ty
-               _ -> fail "Expected recursor type in recursor application"
+          pure $ recursorType rec
 
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems

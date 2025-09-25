@@ -143,8 +143,6 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            RecursorType ty ->
-              do pure $ unwords ["RecursorType", show ty]
             Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
@@ -156,7 +154,6 @@ scWriteExternal t0 =
                        , show (map nameIndex ctorOrder)
                        , show ty
                        ])
-            RecursorApp r -> pure $ unwords ["RecursorApp", show r]
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
@@ -290,7 +287,6 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ["RecursorType", x] -> FTermF <$> (RecursorType <$> readIdx x)
         ("Recursor" : i : nixs :
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
@@ -304,7 +300,6 @@ scReadExternal sc input =
                         readCtorList ctorOrder <*>
                         readIdx ty
                pure (FTermF (Recursor rec))
-        ["RecursorApp", r] -> FTermF <$> (RecursorApp <$> readIdx r)
 
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
