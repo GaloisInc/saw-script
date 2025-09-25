@@ -9,7 +9,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module SAWScript.REPL.Haskeline where
+module SAWScript.REPL.Haskeline (repl, replBody) where
 
 import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
@@ -19,8 +19,7 @@ import Control.Monad (when)
 import qualified Control.Monad.Catch as E
 #endif
 import Data.Char (isAlphaNum, isSpace)
-import Data.Function (on)
-import Data.List (isPrefixOf,sortBy)
+import Data.List (isPrefixOf)
 import Data.Maybe (isJust)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
@@ -98,7 +97,7 @@ setHistoryFile ss =
 -- | Haskeline settings for the REPL.
 replSettings :: Settings REPL
 replSettings  = Settings
-  { complete       = cryptolCommand
+  { complete       = replComp
   , historyFile    = Nothing
   , autoAddHistory = True
   }
@@ -145,9 +144,9 @@ instance E.MonadMask REPL where
 
 -- Completion ------------------------------------------------------------------
 
--- | Completion for cryptol commands.
-cryptolCommand :: CompletionFunc REPL
-cryptolCommand cursor@(l,r)
+-- | Top-level completion for the REPL.
+replComp :: CompletionFunc REPL
+replComp cursor@(l,r)
   | ":" `isPrefixOf` l'
   , Just (cmd,rest) <- splitCommand l' = case findCommand cmd of
 
@@ -160,7 +159,9 @@ cryptolCommand cursor@(l,r)
       cmds ->
         return (l, [ cmdComp l' c | c <- cmds ])
 
-  | otherwise = completeSAWScript cursor
+  | l' == ":" =
+      return (l, [ cmdComp l' c | c <- findCommand "" ])
+  | otherwise = completeSAWScriptValue cursor
   where
   l' = sanitize (reverse l)
 
@@ -176,26 +177,11 @@ cmdComp prefix c = Completion
 -- command is expecting.
 cmdArgument :: CommandBody -> CompletionFunc REPL
 cmdArgument ct cursor@(l,_) = case ct of
-  ExprArg     _ -> completeSAWScript cursor
+  ExprArg _     -> completeSAWScriptValue cursor
+  TypeArg _     -> completeSAWScriptType cursor
   FilenameArg _ -> completeFilename cursor
   ShellArg _    -> completeFilename cursor
   NoArg       _ -> return (l,[])
-
--- | Complete a name from the expression environment.
-completeExpr :: CompletionFunc REPL
-completeExpr (l,_) = do
-  ns <- getExprNames
-  let n    = reverse l
-      vars = filter (n `isPrefixOf`) ns
-  return (l,map (nameComp n) vars)
-
--- | Complete a name from the type synonym environment.
-completeType :: CompletionFunc REPL
-completeType (l,_) = do
-  ns <- getTypeNames
-  let n    = reverse l
-      vars = filter (n `isPrefixOf`) ns
-  return (l,map (nameComp n) vars)
 
 data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
 
@@ -223,12 +209,12 @@ lexerMode = normal
 isIdentChar :: Char -> Bool
 isIdentChar c = isAlphaNum c || c `elem` "_\'"
 
--- | Complete a name from the sawscript environment.
-completeSAWScript :: CompletionFunc REPL
-completeSAWScript cursor@(l, _) = do
-  ns1 <- getSAWScriptNames
-  ns2 <- getExprNames
-  ns3 <- getTypeNames
+-- | Complete a name from the SAWScript value environment.
+completeSAWScriptValue :: CompletionFunc REPL
+completeSAWScriptValue cursor@(l, _) = do
+  ns1 <- getSAWScriptValueNames
+  ns2 <- getCryptolExprNames
+  ns3 <- getCryptolTypeNames
   let n = reverse (takeWhile isIdentChar l)
       nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
   case lexerMode (reverse l) of
@@ -237,6 +223,14 @@ completeSAWScript cursor@(l, _) = do
     ModeCryType -> return (l, nameComps n ns3)
     ModeQuote   -> completeFilename cursor
 
+-- | Complete a name from the SAWScript type environment.
+completeSAWScriptType :: CompletionFunc REPL
+completeSAWScriptType (l, _) = do
+  ns <- getSAWScriptTypeNames
+  let prefix = reverse (takeWhile isIdentChar l)
+      nameComps = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
+  return (l, nameComps)
+
 -- | Generate a completion from a prefix and a name.
 nameComp :: String -> String -> Completion
 nameComp prefix c = Completion
@@ -244,11 +238,3 @@ nameComp prefix c = Completion
   , display     = c
   , isFinished  = True
   }
-
-
--- | Join two completion functions together, merging and sorting their results.
-(+++) :: CompletionFunc REPL -> CompletionFunc REPL -> CompletionFunc REPL
-(as +++ bs) cursor = do
-  (_,acs) <- as cursor
-  (_,bcs) <- bs cursor
-  return (fst cursor, sortBy (compare `on` replacement) (acs ++ bcs))

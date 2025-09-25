@@ -35,8 +35,8 @@ module SAWScript.REPL.Monad (
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
   , getTSyns, getNominalTypes, getVars
-  , getExprNames
-  , getTypeNames
+  , getCryptolExprNames
+  , getCryptolTypeNames
   , getPropertyNames
   , getPrompt
   , shouldContinue
@@ -53,7 +53,8 @@ module SAWScript.REPL.Monad (
   , getEnvironment, modifyEnvironment, putEnvironment
   , getEnvironmentRef
   , getProofStateRef
-  , getSAWScriptNames
+  , getSAWScriptValueNames
+  , getSAWScriptTypeNames
   ) where
 
 import Cryptol.Eval (EvalError, EvalErrorEx(..))
@@ -74,6 +75,7 @@ import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -400,15 +402,15 @@ getNominalTypes = do
   let decls = getAllIfaceDecls me
   return (M.ifNominalTypes decls)
 
--- | Get visible variable names.
-getExprNames :: REPL [String]
-getExprNames =
+-- | Get visible Cryptol variable names.
+getCryptolExprNames :: REPL [String]
+getCryptolExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
--- | Get visible type signature names.
-getTypeNames :: REPL [String]
-getTypeNames  =
+-- | Get visible Cryptol type names.
+getCryptolTypeNames :: REPL [String]
+getCryptolTypeNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
      return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
@@ -490,11 +492,22 @@ modifyEnvironment :: (TopLevelRW -> TopLevelRW) -> REPL ()
 modifyEnvironment = modifyRef environment
 
 -- | Get visible variable names for Haskeline completion.
-getSAWScriptNames :: REPL [String]
-getSAWScriptNames = do
+getSAWScriptValueNames :: REPL [String]
+getSAWScriptValueNames = do
   env <- getEnvironment
-  let rnames = Map.keys (rwValueInfo env)
+  let avail = rwPrimsAvail env
+      visible (lc, _, _) = Set.member lc avail
+  let rnames = Map.keys $ Map.filter visible $ rwValueInfo env
   return (map (Text.unpack . getVal) rnames)
+
+-- | Get visible type names for Haskeline completion.
+getSAWScriptTypeNames :: REPL [String]
+getSAWScriptTypeNames = do
+  env <- getEnvironment
+  let avail = rwPrimsAvail env
+      visible (lc, _) = Set.member lc avail
+  let rnames = Map.keys $ Map.filter visible $ rwTypeInfo env
+  return (map Text.unpack rnames)
 
 -- User Environment Interaction ------------------------------------------------
 
