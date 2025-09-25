@@ -292,15 +292,15 @@ cryptolRun name argAdapt argShps retShp funcTerm = do
           [CryTermAdaptor] ->
           Assignment TypeShape ctx ->
           Assignment (RegEntry sym) ctx ->
+          [SAW.Term] ->
           OverrideSim (p sym) sym MIR rtp args r [SAW.Term]
-        doArgs ada shpA valA =
+        doArgs ada shpA valA args =
           case (ada, Ctx.viewAssign shpA, Ctx.viewAssign valA) of
-          (a : as, Ctx.AssignExtend moreShps shp, Ctx.AssignExtend moreVals (RegEntry _ val)) ->
-              do t <- regToTermWithAdapt sym sc name w4VarMapRef a shp val
-                 ts <- doArgs as moreShps moreVals
-                 pure (t : ts)
-          _ -> pure []
-    argTerms <- doArgs argAdapt argShps argsCtx
+            (a : as, Ctx.AssignExtend moreShps shp, Ctx.AssignExtend moreVals (RegEntry _ val)) ->
+                do t <- regToTermWithAdapt sym sc name w4VarMapRef a shp val
+                   doArgs as moreShps moreVals (t : args)
+            _ -> pure args
+    argTerms <- doArgs argAdapt argShps argsCtx []
     appTerm  <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     liftIO $ termToReg sym w4VarMap appTerm retShp
