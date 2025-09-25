@@ -964,7 +964,7 @@ mkCtorElimTypeFun sc d c argStruct =
   do -- Use de Bruijn variable for p_ret so we can instantiate it later
      -- NOTE: This is kind of gross, because the p_ret in the callback
      -- argument below does not always have the same type (it is as
-     -- computed by ctxPRetTp, but the return sort may vary)
+     -- computed by scRecursorRetTypeType, but the return sort may vary)
      p_ret_var <- scLocalVar sc 0
      ctxElimType <- ctxCtorElimType sc d c p_ret_var argStruct
      let vs = map ecVarIndex (ctorParams argStruct)
