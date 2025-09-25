@@ -160,6 +160,8 @@ cryptolCommand cursor@(l,r)
       cmds ->
         return (l, [ cmdComp l' c | c <- cmds ])
 
+  | l' == ":" =
+      return (l, [ cmdComp l' c | c <- findCommand "" ])
   | otherwise = completeSAWScript cursor
   where
   l' = sanitize (reverse l)
