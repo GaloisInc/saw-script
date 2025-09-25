@@ -454,15 +454,9 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    RecursorType d params motive _motiveTy ->
-      do params_pp <- mapM (ppTerm' PrecArg) params
-         motive_pp <- ppTerm' PrecArg motive
-         nm <- ppBestName d
-         return $
-           ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
-             (params_pp ++ [motive_pp])
+    RecursorType _d _params _motive _motiveTy ty -> ppTerm' prec ty
 
-    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder) ->
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
@@ -606,7 +600,7 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (RecursorType _ ps m _) -> ps ++ [m]
+            FTermF (RecursorType _ ps m _ _) -> ps ++ [m]
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
                                               map fst (Map.elems (recursorElims crec))

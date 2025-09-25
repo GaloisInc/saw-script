@@ -1447,8 +1447,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           case asPairType tp of
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
-        RecursorType _d _ps _motive motive_ty -> do
-          s <- sort motive_ty
+        RecursorType _d _ps _motive _motive_ty ty -> do
+          s <- sort ty
           lift $ scSort sc s
         Recursor rec -> do
           lift $ scFlatTermF sc $
@@ -1456,22 +1456,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                           (recursorParams rec)
                           (recursorMotive rec)
                           (recursorMotiveTy rec)
+                          (recursorType rec)
         RecursorApp r ixs ->
           do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
-               Just (_d, _ps, motive, _motivety) ->
-                 do p <- lift $ scApplyAll sc motive ixs
-                    -- convert p to a Pi type
-                    case asLambda p of
-                      Just (x, ty, body) -> lift $ scPi sc x ty body
-                      Nothing ->
-                        do p_tp <- (liftIO . scWhnf sc) =<< memo p
-                           case asPi p_tp of
-                             Nothing -> panic "scTypeOf" ["Bad recursor type"]
-                             Just (x, ty, _s) ->
-                               do p' <- lift $ incVars sc 0 1 p
-                                  x0 <- lift $ scLocalVar sc 0
-                                  lift $ scLambda sc x ty =<< scApply sc p' x0
+               Just (_d, _ps, _motive, _motivety, ty) ->
+                 lift $ scWhnf sc =<< foldM (reducePi sc) ty ixs
                _ -> fail "Expected recursor type in recursor application"
 
         RecordType elems ->

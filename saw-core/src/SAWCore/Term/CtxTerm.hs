@@ -47,7 +47,7 @@ usesDataType d t =
   case unwrapTermF t of
     Constant d'
       | d' == d -> True
-    FTermF (RecursorType d' _ _ _)
+    FTermF (RecursorType d' _ _ _ _)
       | d' == d -> True
     FTermF (Recursor (recursorDataType -> d'))
       | d' == d -> True

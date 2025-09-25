@@ -210,12 +210,13 @@ evalTermF cfg lam recEval tf env =
                                  VPair _l r -> force r
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
 
-        RecursorType d ps m mtp ->
+        RecursorType d ps m mtp tp ->
           do dty <- evalType (resolvedNameType (requireNameInMap d (simModMap cfg)))
              TValue <$> (VRecursorType d dty <$>
                mapM recEval ps <*>
                recEval m <*>
-               (evalType mtp))
+               (evalType mtp) <*>
+               (evalType tp))
 
         Recursor r ->
           do let f (e,ety) = do v  <- recEvalDelay e
@@ -227,18 +228,19 @@ evalTermF cfg lam recEval tf env =
              m   <- recEval (recursorMotive r)
              mty <- evalType (recursorMotiveTy r)
              es  <- traverse f (recursorElims r)
-             pure (VRecursor dname dty ps m mty es)
+             ty  <- evalType (recursorType r)
+             pure (VRecursor dname dty ps m mty es ty)
 
         RecursorApp rectm ixs ->
           do r <- recEval rectm
              case r of
-               VRecursor d k ps motive motiveTy ps_fs ->
+               VRecursor d k ps motive motiveTy ps_fs ty ->
                  pure $ VFun "_" $ \arg_thunk ->
                  do argv <- force arg_thunk
                     case evalConstructor argv of
                       Just (ctor, args)
                         | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-                        -> do let rTy = VRecursorType d k ps motive motiveTy
+                        -> do let rTy = VRecursorType d k ps motive motiveTy ty
                               ctorTy <- toTValue <$> lam (ctorType ctor) []
                               allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready r,rTy)]
                               lam (ctorIotaTemplate ctor) allArgs
@@ -286,9 +288,9 @@ evalTermF cfg lam recEval tf env =
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (p, c, ct, args) =
       case r of
-        VRecursor d k ps motive motiveTy ps_fs ->
+        VRecursor d k ps motive motiveTy ps_fs ty ->
           do let i = nameIndex c
-             let rTy = VRecursorType d k ps motive motiveTy
+             let rTy = VRecursorType d k ps motive motiveTy ty
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
                (Just (ResolvedCtor ctor), Just (elim, elimTy)) ->
                  do allArgs <- processRecArgs ps args ct [(elim, elimTy), (ready r, rTy)]

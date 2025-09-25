@@ -143,13 +143,13 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            RecursorType d ps motive motive_ty ->
+            RecursorType d ps motive motive_ty ty ->
               do stashName d
                  pure $ unwords
                      (["RecursorType", show (nameIndex d)] ++
                       map show ps ++
-                      [argsep, show motive, show motive_ty])
-            Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder) ->
+                      [argsep, show motive, show motive_ty, show ty])
+            Recursor (CompiledRecursor d ps motive motive_ty cs_fs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
@@ -158,6 +158,7 @@ scWriteExternal t0 =
                        [ argsep, show motive, show motive_ty
                        , show (Map.toList cs_fs)
                        , show (map nameIndex ctorOrder)
+                       , show ty
                        ])
             RecursorApp r ixs -> pure $
               unwords (["RecursorApp", show r] ++ map show ixs)
@@ -296,23 +297,25 @@ scReadExternal sc input =
 
         ("RecursorType" : i :
          (separateArgs ->
-          Just (ps, [motive,motive_ty]))) ->
+          Just (ps, [motive, motive_ty, ty]))) ->
             do tp <- RecursorType <$>
                        readName i <*>
                        traverse readIdx ps <*>
                        readIdx motive <*>
-                       readIdx motive_ty
+                       readIdx motive_ty <*>
+                       readIdx ty
                pure (FTermF tp)
         ("Recursor" : i :
          (separateArgs ->
-          Just (ps, [motive, motiveTy, elims, ctorOrder]))) ->
+          Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
             do rec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
                         readIdx motive <*>
                         readIdx motiveTy <*>
                         readElimsMap elims <*>
-                        readCtorList ctorOrder
+                        readCtorList ctorOrder <*>
+                        readIdx ty
                pure (FTermF (Recursor rec))
         ("RecursorApp" : r : ixs) ->
             do app <- RecursorApp <$>

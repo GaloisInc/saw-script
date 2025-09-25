@@ -82,6 +82,7 @@ data Value l
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
      !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
+     !(TValue l) -- type of recursor function
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -105,6 +106,7 @@ data TValue l
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive function
+     !(TValue l) -- type of recursor function
   | VTyTerm !Sort !Term
 
 data PiBody l
@@ -195,7 +197,7 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor d _ _ _ _ _
+      VRecursor d _ _ _ _ _ _
                      -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x

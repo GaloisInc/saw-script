@@ -418,21 +418,11 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
-    RecursorType _d _params motive motiveTy ->
-      -- type of the motive looks like
-      --      (ix1 : _) -> ... -> (ixn : _) -> d ps ixs -> sort
-      -- to get the type of the recursor, we compute
-      --      (ix1 : _) -> ... -> (ixn : _) -> (x:d ps ixs) -> motive ixs x
-      let (bs, _srt) = asPiList motiveTy in
-      translateBinders bs $ \bndrs ->
-      do let varsT = map (Coq.Var . bindTransIdent) bndrs
-         let bindersT = concat $ map bindTransToPiBinder bndrs
-         motiveT <- translateTerm motive
-         let bodyT = Coq.App motiveT varsT
-         return $ Coq.Pi bindersT bodyT
+    RecursorType _d _params _motive _motiveTy ty ->
+      translateTerm ty
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
+    Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder _ty) ->
       do maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident

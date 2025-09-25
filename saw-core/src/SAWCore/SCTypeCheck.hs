@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -57,6 +58,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -510,8 +512,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (PairRight (SCTypedTerm _ tp _)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
-  typeInfer (RecursorType d ps motive mty) =
-    do s <- inferRecursorType d ps motive mty
+  typeInfer (RecursorType d ps motive mty ty) =
+    do s <- inferRecursorType d ps motive mty ty
        liftTCM scSort s
 
   typeInfer (Recursor rec) =
@@ -625,8 +627,9 @@ inferRecursorType ::
   [SCTypedTerm] {- ^ data type parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
+  SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM Sort
-inferRecursorType d params motive motiveTy =
+inferRecursorType d params motive motiveTy ty =
   do mm <- liftTCM scGetModuleMap
      dt <-
        case lookupVarIndexInMap (nameIndex d) mm of
@@ -636,7 +639,7 @@ inferRecursorType d params motive motiveTy =
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params motive motiveTy mempty []))
+             Recursor (CompiledRecursor d params motive motiveTy mempty [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -680,8 +683,18 @@ compileRecursor dt params motive cs_fs =
      let d = dtName dt
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
+     ixs_vars <- traverse (liftTCM scVariable) (dtIndices dt)
+     d_params <- liftTCM scConstApply d (map typedVal params)
+     d_params_ixs <- liftTCM scApplyAll d_params ixs_vars
+     x_ec <- liftTCM scFreshEC "x" d_params_ixs
+     x_var <- liftTCM scVariable x_ec
+     ty0 <- liftTCM scApplyAll (typedVal motive) (ixs_vars ++ [x_var])
+     ty1 <- liftTCM scGeneralizeExts (dtIndices dt ++ [x_ec]) ty0
+     let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) (map typedVal params))
+     ty2 <- liftTCM scInstantiateExt subst ty1
+     ty <- typeInferComplete ty2
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
-     let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
+     let rec = CompiledRecursor d params motive motiveTy elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
             (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
@@ -691,7 +704,7 @@ compileRecursor dt params motive cs_fs =
        throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType d params motive motiveTy
+     _s <- inferRecursorType d params motive motiveTy ty
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
@@ -715,10 +728,11 @@ inferRecursor rec =
      let params = recursorParams rec
      let motive = recursorMotive rec
      let motiveTy = recursorMotiveTy rec
+     let ty     = recursorType rec
 
      -- return the type of this recursor
      liftTCM scFlatTermF $ fmap typedVal $
-       RecursorType d params motive motiveTy
+       RecursorType d params motive motiveTy ty
 
 -- | Infer the type of a recursor application
 inferRecursorApp ::
@@ -729,7 +743,7 @@ inferRecursorApp r ixs =
   do recty <- typeCheckWHNF (typedType r)
      case asRecursorType recty of
        Nothing -> throwTCError (ExpectedRecursor r)
-       Just (_d, _ps, motive, motiveTy) -> do
+       Just (_d, _ps, motive, motiveTy, _ty) -> do
 
          -- Apply the indices to the type of the motive
          -- to check the types of the `ixs`, and

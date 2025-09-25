@@ -194,10 +194,11 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | The type of a recursor, which is specified by the datatype name,
-    --   the parameters to the data type, the motive function, and the
-    --   type of the motive function.
-  | RecursorType !Name ![e] !e !e
+    -- | The type of a recursor, which is specified by the datatype
+    --   name, the parameters to the data type, the motive function,
+    --   the type of the motive function, and finally the type of the
+    --   applied recursor itself.
+  | RecursorType !Name ![e] !e !e !e
 
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
@@ -250,6 +251,7 @@ data CompiledRecursor e =
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
   , recursorCtorOrder :: [Name]
+  , recursorType      :: e
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -279,7 +281,7 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
+zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2 ty2)
   | Map.keysSet es1 == Map.keysSet es2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
@@ -290,6 +292,7 @@ zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 
               (f mty1 mty2)
               (Map.intersectionWith (zipPair f) es1 es2)
               ord
+              (f ty1 ty2)
 
   | otherwise = Nothing
 
@@ -307,9 +310,9 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
+    go (RecursorType d1 ps1 m1 mty1 t1) (RecursorType d2 ps2 m2 mty2 t2) =
       do d <- zipName d1 d2
-         Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
+         Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2) (f t1 t2)
 
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec f rec1 rec2
