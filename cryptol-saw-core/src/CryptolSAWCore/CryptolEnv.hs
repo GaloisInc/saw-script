@@ -615,6 +615,7 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 --  NOTE RE CALLS TO: this is (only) used for the "cryptol_extract" primitive.
 --
 extractDefFromExtCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
 extractDefFromExtCryptolModule sc env ecm name =
   case ecm of
@@ -625,8 +626,6 @@ extractDefFromExtCryptolModule sc env ecm name =
                            ]
                env'    = bindLoadedModule (localMN, loadedModName) env
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
-           let ?fileReader = panic "fileReader"
-                               ["extractDefFromExtCryptolModule"]
            parseTypedTerm sc env' expr
 
     ECM_CryptolModule (CryptolModule _ tm) ->

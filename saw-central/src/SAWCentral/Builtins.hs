@@ -2099,6 +2099,7 @@ cryptol_extract ecm var = do
   sc <- getSharedContext
   rw <- getTopLevelRW
   let ce = rwCryptol rw
+  let ?fileReader = StrictBS.readFile
   io $ CEnv.extractDefFromExtCryptolModule sc ce ecm var
 
 cryptol_add_path :: FilePath -> TopLevel ()
