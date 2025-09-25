@@ -19,8 +19,7 @@ import Control.Monad (when)
 import qualified Control.Monad.Catch as E
 #endif
 import Data.Char (isAlphaNum, isSpace)
-import Data.Function (on)
-import Data.List (isPrefixOf,sortBy)
+import Data.List (isPrefixOf)
 import Data.Maybe (isJust)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
@@ -183,22 +182,6 @@ cmdArgument ct cursor@(l,_) = case ct of
   ShellArg _    -> completeFilename cursor
   NoArg       _ -> return (l,[])
 
--- | Complete a name from the expression environment.
-completeExpr :: CompletionFunc REPL
-completeExpr (l,_) = do
-  ns <- getExprNames
-  let n    = reverse l
-      vars = filter (n `isPrefixOf`) ns
-  return (l,map (nameComp n) vars)
-
--- | Complete a name from the type synonym environment.
-completeType :: CompletionFunc REPL
-completeType (l,_) = do
-  ns <- getTypeNames
-  let n    = reverse l
-      vars = filter (n `isPrefixOf`) ns
-  return (l,map (nameComp n) vars)
-
 data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
 
 lexerMode :: String -> LexerMode
@@ -246,11 +229,3 @@ nameComp prefix c = Completion
   , display     = c
   , isFinished  = True
   }
-
-
--- | Join two completion functions together, merging and sorting their results.
-(+++) :: CompletionFunc REPL -> CompletionFunc REPL -> CompletionFunc REPL
-(as +++ bs) cursor = do
-  (_,acs) <- as cursor
-  (_,bcs) <- bs cursor
-  return (fst cursor, sortBy (compare `on` replacement) (acs ++ bcs))
