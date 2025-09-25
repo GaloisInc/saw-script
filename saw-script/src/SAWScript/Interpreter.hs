@@ -6085,6 +6085,11 @@ primitives = Map.fromList
     Experimental
     [ "The type of MIR characters." ]
 
+  , prim "mir_const" "MIRType -> Term -> MIRType"
+    (funVal2 mir_const)
+    Experimental
+    [ "TODO RGS" ]
+
   , prim "mir_i8" "MIRType"
     (pureVal mir_i8)
     Experimental

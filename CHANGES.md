@@ -1,7 +1,7 @@
 # next -- TBA
 
 This release supports [version
-4](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#4) of
+5](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#5) of
 `mir-json`'s schema.
 
 ## Changes
@@ -97,6 +97,8 @@ This release supports [version
 * Add a `set_solver_cache_timeout : Int -> TopLevel ()` command that allows
   configuring the solver result cache's timeout for database lookups and
   inserts.
+
+* TODO: Say something about `mir_const`
 
 # Version 1.4 -- date still TBD
 

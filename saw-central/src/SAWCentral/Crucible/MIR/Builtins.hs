@@ -55,6 +55,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_array
   , mir_bool
   , mir_char
+  , mir_const
   , mir_i8
   , mir_i16
   , mir_i32
@@ -88,6 +89,7 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Char (chr)
 import Data.Foldable (for_)
 import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.IntMap as IntMap
@@ -147,7 +149,7 @@ import SAWCoreWhat4.ReturnTrip
 import qualified CryptolSAWCore.CryptolEnv as CryEnv
 import CryptolSAWCore.TypedTerm
 
-import SAWCentral.Builtins (ghost_value)
+import SAWCentral.Builtins (eval_bool, eval_int, ghost_value)
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Override
@@ -1123,6 +1125,55 @@ mir_bool = Mir.TyBool
 mir_char :: Mir.Ty
 mir_char = Mir.TyChar
 
+-- | TODO RGS: Docs
+mir_const :: Mir.Ty -> TypedTerm -> TopLevel Mir.Ty
+mir_const ty term = do
+  constVal <-
+    case ty of
+      Mir.TyBool -> extractConstBool term
+      Mir.TyChar -> extractConstChar term
+      Mir.TyInt bs -> extractConstInt bs term
+      Mir.TyUint bs -> extractConstUint bs term
+      _ -> error "TODO RGS"
+  pure $ Mir.TyConst constVal
+  where
+    extractConstBool :: TypedTerm -> TopLevel Mir.ConstVal
+    extractConstBool t = do
+      b <- eval_bool t
+      pure $ Mir.ConstBool b
+
+    extractConstChar :: TypedTerm -> TopLevel Mir.ConstVal
+    extractConstChar t = do
+      -- TODO RGS: Check that the bitvector is of the expected size
+      i <- eval_int t
+      pure $ Mir.ConstChar $ chr $ fromInteger @Int i
+
+    extractConstInt :: Mir.BaseSize -> TypedTerm -> TopLevel Mir.ConstVal
+    extractConstInt bs t = do
+      i <- eval_int t
+      let intLit =
+            case bs of
+              Mir.USize -> Mir.Isize i
+              Mir.B8 -> Mir.I8 i
+              Mir.B16 -> Mir.I16 i
+              Mir.B32 -> Mir.I32 i
+              Mir.B64 -> Mir.I64 i
+              Mir.B128 -> Mir.I128 i
+      pure $ Mir.ConstInt intLit
+
+    extractConstUint :: Mir.BaseSize -> TypedTerm -> TopLevel Mir.ConstVal
+    extractConstUint bs t = do
+      i <- eval_int t
+      let uintLit =
+            case bs of
+              Mir.USize -> Mir.Usize i
+              Mir.B8 -> Mir.U8 i
+              Mir.B16 -> Mir.U16 i
+              Mir.B32 -> Mir.U32 i
+              Mir.B64 -> Mir.U64 i
+              Mir.B128 -> Mir.U128 i
+      pure $ Mir.ConstInt uintLit
+
 mir_i8 :: Mir.Ty
 mir_i8 = Mir.TyInt Mir.B8
 
@@ -1631,7 +1682,7 @@ cryptolTypeOfActual mty =
     Mir.TyNever        -> Nothing
     Mir.TyForeign      -> Nothing
     Mir.TyLifetime     -> Nothing
-    Mir.TyConst        -> Nothing
+    Mir.TyConst _      -> Nothing
     Mir.TyErased       -> Nothing
     Mir.TyInterned _   -> Nothing
     Mir.TyDynamic _    -> Nothing
