@@ -311,7 +311,7 @@ exprToTerm sym sc w4VarMapRef val = liftIO $ do
 
 -- | Try to convert a Crucible register value into a SAW core `Term`, using
 -- a `CryTermAdaptor` to validate and convert references to slices.
--- We check that references to slices match the expected lenght specified
+-- We check that references to slices match the expected length specified
 -- in the `CryTermAdaptor`, and if so we read out the value stored in
 -- in the slice.
 regToTermWithAdapt :: forall m p sym t fs tp0 rtp args ret.
