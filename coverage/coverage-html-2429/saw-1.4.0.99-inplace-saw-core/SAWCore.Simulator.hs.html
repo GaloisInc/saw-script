@@ -271,8 +271,8 @@ span.spaces    { background: white }
 <span class="lineno">  252 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">evalRecursor :: VRecursor l -&gt; MValue l</span>
 <span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =</span>
-<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">vFunList (replicate nixs <span class="nottickedoff">&quot;_&quot;</span>) $ \ix_thunks -&gt;</span>
-<span class="lineno">  256 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun &quot;_&quot; $ \arg_thunk -&gt;</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">vFunList [ <span class="nottickedoff">&quot;i&quot; &lt;&gt; Text.pack (show n)</span> | n &lt;- [1 .. nixs] ] $ \ix_thunks -&gt;</span>
+<span class="lineno">  256 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun &quot;arg&quot; $ \arg_thunk -&gt;</span>
 <span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">do argv &lt;- force arg_thunk</span>
 <span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">r_thunk &lt;- delay (evalRecursor vrec)</span>
 <span class="lineno">  259 </span><span class="spaces">         </span><span class="istickedoff">case evalConstructor argv of</span>
