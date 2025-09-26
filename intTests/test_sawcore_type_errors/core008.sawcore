@@ -1,0 +1,7 @@
+-- DeclError "Universe level of constructors should be strictly contained in that of the datatype"
+
+module core008 where import Prelude;
+
+data Foo (t : sort 0) : sort 0 where {
+  MkFoo : (a : sort 0) -> t -> a -> Foo t;
+}

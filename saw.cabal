@@ -484,6 +484,7 @@ library saw-central
     macaw-x86-symbolic,
     parameterized-utils,
     rme,
+    rme-what4,
     what4 >= 0.4,
     what4-transition-system,
     -- apparently no longer used:

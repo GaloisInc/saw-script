@@ -1,0 +1,78 @@
+enable_experimental;
+
+let load filename = fails (load_sawcore_from_file filename);
+let parse str = fails do { return (parse_core str); };
+
+print "Unbound name";
+parse "false";
+
+print "No such data type";
+parse "String#rec Bool True False";
+
+print "Recursor not fully applied";
+parse "Either#rec Bool Nat (\\ (_ : Either Bool Nat) -> Bool) (id Bool)";
+
+print "Not a sort (lambda)";
+parse "\\(x : True) -> x";
+
+print "Not a sort (pi)";
+parse "(x : True) -> Bool";
+
+print "Not a sort (pi)";
+parse "(x : Bool) -> False";
+
+print "Not a sort (pair type)";
+parse "#(True, Nat)";
+
+print "Not a sort (pair type)";
+parse "#(Bool, 5)";
+
+print "Not a sort (record type)";
+parse "#{ foo : Bool, bar : False }";
+
+print "Not a sort (recursor)";
+parse "\\(v : Void) -> Void#rec (\\ (_ : Void) -> True) v";
+
+print "Function application with non-function type";
+parse "True True";
+
+print "Tuple field projection with non-tuple type";
+parse "True.1";
+
+print "Record field projection with non-record type";
+parse "False.foo";
+
+print "Bad record field for type";
+parse "{ a = True, b = False }.c";
+
+print "Inferred type not a subtype of expected type";
+parse "(\\ (x : Bool) -> implies x False) 5";
+
+print "Empty vector literal";
+parse "(\\ (x : Vec 0 Bool) -> x) []";
+
+////////////////////////////////////////////////////////////
+
+print "More variables than length of function type";
+load "core001.sawcore";
+
+print "Definition without defining equation";
+load "core002.sawcore";
+
+print "Primitive or axiom with definition";
+load "core003.sawcore";
+
+print "Dangling definition without a type";
+load "core004.sawcore";
+
+print "Wrong form for type of datatype";
+load "core005.sawcore";
+
+print "Universe level of parameters should be no greater than that of the datatype";
+load "core006.sawcore";
+
+print "Universe level of indices should be strictly contained in that of the datatype";
+load "core007.sawcore";
+
+print "Universe level of constructors should be strictly contained in that of the datatype";
+load "core008.sawcore";

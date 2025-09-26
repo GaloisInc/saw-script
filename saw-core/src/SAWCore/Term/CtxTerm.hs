@@ -47,8 +47,6 @@ usesDataType d t =
   case unwrapTermF t of
     Constant d'
       | d' == d -> True
-    FTermF (RecursorType d' _ _ _)
-      | d' == d -> True
     FTermF (Recursor (recursorDataType -> d'))
       | d' == d -> True
     tf -> any (usesDataType d) tf
@@ -109,7 +107,7 @@ asPiCtorArg ::
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe (Name, CtorArg, Term))
+  IO (Maybe (VarName, CtorArg, Term))
 asPiCtorArg sc d params dt_ixs t =
   scAsPi sc t >>= \case
     Nothing -> pure Nothing
@@ -125,7 +123,7 @@ mkCtorArgsIxs ::
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe ([(Name, CtorArg)], [Term]))
+  IO (Maybe ([(VarName, CtorArg)], [Term]))
 mkCtorArgsIxs _sc d params dt_ixs (asCtorDTApp d params dt_ixs -> Just ixs) =
   pure $ Just ([], ixs)
 mkCtorArgsIxs sc d params dt_ixs ty =

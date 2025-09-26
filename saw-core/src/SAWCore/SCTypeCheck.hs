@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -73,7 +74,6 @@ import SAWCore.Module
   , resolvedNameType
   , Ctor(..)
   , DataType(..)
-  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.Parser.Position
@@ -193,7 +193,6 @@ data TCError
   | NotFuncTypeInApp SCTypedTerm SCTypedTerm
   | NotTupleType Term
   | BadTupleIndex Int Term
-  | NotStringLit Term
   | NotRecordType SCTypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
@@ -203,9 +202,7 @@ data TCError
   | NoSuchDataType NameInfo
   | NoSuchCtor NameInfo
   | NoSuchConstant NameInfo
-  | NotFullyAppliedRec (ExtCns Term)
-  | BadRecursorApp Term [Term] Term
-  | BadConstType NameInfo Term Term
+  | NotFullyAppliedRec NameInfo
   | MalformedRecursor Term String
   | DeclError Text String
   | ErrorPos Pos TCError
@@ -248,8 +245,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotStringLit trm) =
-      ppWithPos [ return "Record selector is not a string literal", ishow trm ]
   helper (NotRecordType (SCTypedTerm trm tp _ctx)) =
       ppWithPos [ return "Record field projection with non-record type"
                 , ishow tp
@@ -258,10 +253,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (BadRecursorApp r ixs arg) =
-      ppWithPos [ return "Type mismatch in recursor application"
-                , ishow (Unshared $ FTermF $ RecursorApp r ixs arg)
-                ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
@@ -278,9 +269,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such constant: " ++ show c) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
-  helper (BadConstType n rty ty) =
-    ppWithPos [ return ("Type of constant " ++ show n), ishow rty
-              , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
       ppWithPos [ return "Malformed recursor",
                   ishow trm, return reason ]
@@ -291,17 +279,21 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
   helper (ErrorTerm tm err) = do
-    info <- ppWithPos [ return ("While typechecking term: ")
+    info <- ppWithPos [ return ("While typechecking term:")
                       , ishow tm ]
     cont <- helper err
     return (info ++ cont)
   helper (ExpectedRecursor ttm) =
     ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
+  -- | Add prefix to every line, but remove final trailing newline
+  indent :: String -> String -> String
+  indent prefix s = init (unlines (map (prefix ++) (lines s)))
+
   ishow :: Term -> PPErrM String
   ishow tm =
     -- return $ show tm
-    (\(ctx,_) -> "  " ++ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
+    (\(ctx,_) -> indent "  " $ scPrettyTermInCtx PPS.defaultOpts ctx tm) <$> ask
 
 instance Show TCError where
   show = unlines . prettyTCError
@@ -406,7 +398,7 @@ instance TypeInfer Term where
               modify (Map.insert i x')
               return x'
   typeInferComplete trm =
-    SCTypedTerm trm <$> withErrorTerm trm (typeInfer trm) <*> askCtx'
+    SCTypedTerm trm <$> typeInfer trm <*> askCtx'
 
 -- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
 -- calling inference on all the sub-components and extending the context inside
@@ -454,7 +446,7 @@ instance TypeInfer (FlatTermF Term) where
   typeInferComplete ftf =
     SCTypedTerm
     <$> liftTCM scFlatTermF ftf
-    <*> withErrorTermF (FTermF ftf) (typeInfer ftf)
+    <*> typeInfer ftf
     <*> askCtx'
 
 
@@ -513,15 +505,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (PairRight (SCTypedTerm _ tp _)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
-  typeInfer (RecursorType d ps motive mty) =
-    do s <- inferRecursorType d ps motive mty
-       liftTCM scSort s
-
-  typeInfer (Recursor rec) =
-    inferRecursor rec
-
-  typeInfer (RecursorApp r ixs arg) =
-    inferRecursorApp r ixs arg
+  typeInfer (Recursor crec) =
+    inferRecursor crec
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -624,22 +609,19 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  Name           {- ^ data type name -} ->
+  DataType      {- ^ data type -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
+  Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
+  SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM Sort
-inferRecursorType d params motive motiveTy =
-  do mm <- liftTCM scGetModuleMap
-     dt <-
-       case lookupVarIndexInMap (nameIndex d) mm of
-         Just (ResolvedDataType dt) -> pure dt
-         _ -> throwTCError $ NoSuchDataType (nameInfo d)
-
+inferRecursorType dt params nixs motive motiveTy ty =
+  do let d = dtName dt
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params motive motiveTy mempty []))
+             Recursor (CompiledRecursor d params nixs motive motiveTy mempty [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -681,20 +663,23 @@ compileRecursor dt params motive cs_fs =
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
      let d = dtName dt
+     let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
-     let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
+     ty <- typeInferComplete =<<
+       liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
+     let crec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
-            (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
+            (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
             str
 
      unless (length cs_fs == length (dtCtors dt)) $
        throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType d params motive motiveTy
+     _s <- inferRecursorType dt params nixs motive motiveTy ty
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
@@ -707,44 +692,14 @@ compileRecursor dt params motive cs_fs =
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp
 
-     return rec
+     return crec
 
 
 inferRecursor ::
   CompiledRecursor SCTypedTerm ->
   TCM Term
-inferRecursor rec =
-  do let d      = recursorDataType rec
-     let params = recursorParams rec
-     let motive = recursorMotive rec
-     let motiveTy = recursorMotiveTy rec
-
-     -- return the type of this recursor
-     liftTCM scFlatTermF $ fmap typedVal $
-       RecursorType d params motive motiveTy
-
--- | Infer the type of a recursor application
-inferRecursorApp ::
-  SCTypedTerm   {- ^ recursor term -} ->
-  [SCTypedTerm] {- ^ data type indices -} ->
-  SCTypedTerm   {- ^ recursor argument -} ->
-  TCM Term
-inferRecursorApp r ixs arg =
-  do recty <- typeCheckWHNF (typedType r)
-     case asRecursorType recty of
-       Nothing -> throwTCError (ExpectedRecursor r)
-       Just (_d, _ps, motive, motiveTy) -> do
-
-         -- Apply the indices to the type of the motive
-         -- to check the types of the `ixs` and `arg`, and
-         -- ensure that the result is fully applied
-
-         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) (typedVal arg)
-         _s <- ensureSort =<< foldM (applyPiTyped err) motiveTy (ixs ++ [arg])
-
-         -- return the type (p_ret ixs arg)
-         liftTCM scTypeCheckWHNF =<<
-           liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
+inferRecursor r =
+  pure (typedVal (recursorType r))
 
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm

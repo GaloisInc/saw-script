@@ -1,0 +1,7 @@
+-- DeclError "Universe level of indices should be strictly contained in that of the datatype"
+
+module core007 where import Prelude;
+
+data Foo : (t : sort 0) -> sort 0 where {
+  MkFoo : (t : sort 0) -> Foo t;
+}

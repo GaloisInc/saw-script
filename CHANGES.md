@@ -72,6 +72,21 @@ This release supports [version
 
 ## New Features
 
+* The Cryptol import syntax has been extended.
+  - You can now import Cryptol module names, including qualified module
+    names (which are resolved via the Cryptol load path) as well as
+    quoted strings (which are treated as file system pathnames).
+    For example, `import Array` imports the Array module from the
+    Cryptol standard library.
+  - You can now use qualified names in `import as`, like you can in
+    Cryptol.
+  - The SAWScript parser now recognizes `import submodule`, although as
+    of this writing ignores the `submodule` keyword and treats it as an
+    ordinary import. See issue #2618.
+
+* As a result of the previous change, `submodule` is now a reserved
+  word in the SAWScript parser.
+
 * Add a `mir_find_mangled_adt : MIRModule -> String -> MIRAdt` command, which
   allows looking up MIR ADTs by their full, mangled names.
   `mir_find_mangled_adt`'s use is discouraged in favor of using `mir_find_adt`
@@ -82,6 +97,9 @@ This release supports [version
 * Add a `set_solver_cache_timeout : Int -> TopLevel ()` command that allows
   configuring the solver result cache's timeout for database lookups and
   inserts.
+
+* Adds `w4_unint_rme` proof script for using RME extended with uninterpreted
+  functions to resolve goals.
 
 # Version 1.4 -- date still TBD
 

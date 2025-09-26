@@ -1,0 +1,6 @@
+import Array;
+import Float;
+import Cryptol::Reference;
+
+let {{ f a b = a + b }};
+print {{ Cryptol::Reference::foldl f 0 [1,2,3] }};

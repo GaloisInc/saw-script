@@ -1,0 +1,7 @@
+-- DeclError "Wrong form for type of datatype"
+
+module core005 where import Prelude;
+
+data Foo : isort 1 where {
+  MkFoo : Foo;
+}

@@ -29,7 +29,6 @@ module SAWCore.Module
   , ctorNumParams
   , ctorNumArgs
   , DataType(..)
-  , dtExtCns
   , dtNumParams
   , dtNumIndices
     -- * Modules
@@ -144,7 +143,7 @@ data CtorArgStruct =
   CtorArgStruct
   { ctorParams :: [ExtCns Term],
     -- ^ earlier ctorParams are in scope
-    ctorArgs :: [(Name, CtorArg)],
+    ctorArgs :: [(VarName, CtorArg)],
     -- ^ ctorParams and earlier ctorArgs are in scope
     ctorIndices :: [Term]
     -- ^ ctorParams and ctorArgs are in scope
@@ -253,10 +252,6 @@ dtNumParams dt = length $ dtParams dt
 -- | Return the number of indices of a datatype
 dtNumIndices :: DataType -> Int
 dtNumIndices dt = length $ dtIndices dt
-
--- | Compute the ExtCns that uniquely references a datatype
-dtExtCns :: DataType -> ExtCns Term
-dtExtCns dt = EC (dtName dt) (dtType dt)
 
 instance Eq DataType where
   (==) = lift2 dtName (==)

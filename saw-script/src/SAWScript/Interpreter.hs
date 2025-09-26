@@ -3917,6 +3917,13 @@ primitives = Map.fromList
     [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
     , "given list of names as uninterpreted."
     ]
+  
+  , prim "w4_unint_rme" "[String] -> ProofScript ()"
+    (pureVal w4_unint_rme)
+    Current
+    [ "Prove the current goal using What4 (RME backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
 
   , prim "w4_unint_z3"         "[String] -> ProofScript ()"
     (pureVal w4_unint_z3)

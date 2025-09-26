@@ -194,24 +194,12 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | The type of a recursor, which is specified by the datatype name,
-    --   the parameters to the data type, the motive function, and the
-    --   type of the motive function.
-  | RecursorType !Name ![e] !e !e
-
     -- | A recursor, which is specified by giving the datatype name,
     --   the parameters to the datatype, a motive and elimination functions
     --   for each constructor. A recursor can be used with the special
     --   @RecursorApp@ term, which provides the datatype indices and
     --   actual argument to the eliminator.
   | Recursor (CompiledRecursor e)
-
-    -- | An eliminator / pattern-matching function for an inductively-defined
-    -- type, given by:
-    -- * The recursor value;
-    -- * The indices for the inductive type; AND
-    -- * The argument that is being eliminated / pattern-matched
-  | RecursorApp e [e] e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -247,10 +235,12 @@ data CompiledRecursor e =
   CompiledRecursor
   { recursorDataType  :: Name
   , recursorParams    :: [e]
+  , recursorNumIxs    :: Int
   , recursorMotive    :: e
   , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
   , recursorCtorOrder :: [Name]
+  , recursorType      :: e
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -280,17 +270,19 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
-  | Map.keysSet es1 == Map.keysSet es2
+zipRec f (CompiledRecursor d1 ps1 n1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 mty2 es2 ord2 ty2)
+  | Map.keysSet es1 == Map.keysSet es2 && n1 == n2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
        pure $ CompiledRecursor
               d
               (zipWith f ps1 ps2)
+              n1
               (f m1 m2)
               (f mty1 mty2)
               (Map.intersectionWith (zipPair f) es1 es2)
               ord
+              (f ty1 ty2)
 
   | otherwise = Nothing
 
@@ -308,18 +300,8 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
-      do d <- zipName d1 d2
-         Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
-
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec f rec1 rec2
-
-    go (RecursorApp rec1 ixs1 x1) (RecursorApp rec2 ixs2 x2) =
-        Just $ RecursorApp
-          (f rec1 rec2)
-          (zipWith f ixs1 ixs2)
-          (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =
@@ -344,9 +326,7 @@ zipWithFlatTermF f = go
     go PairType{}     _ = Nothing
     go PairLeft{}     _ = Nothing
     go PairRight{}    _ = Nothing
-    go RecursorType{} _ = Nothing
     go Recursor{}     _ = Nothing
-    go RecursorApp{}  _ = Nothing
     go RecordType{}   _ = Nothing
     go RecordValue{}  _ = Nothing
     go RecordProj{}   _ = Nothing

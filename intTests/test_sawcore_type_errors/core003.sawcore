@@ -1,0 +1,6 @@
+-- DeclError "Primitive or axiom with definition"
+
+module core003 where import Prelude;
+
+primitive foo : Bool -> Bool -> Bool;
+foo x y = and x y;

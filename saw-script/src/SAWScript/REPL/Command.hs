@@ -104,6 +104,7 @@ instance Ord CommandDescr where
 
 data CommandBody
   = ExprArg     (String   -> REPL ())
+  | TypeArg     (String   -> REPL ())
   | FilenameArg (FilePath -> REPL ())
   | ShellArg    (String   -> REPL ())
   | NoArg       (REPL ())
@@ -130,7 +131,7 @@ nbCommandList :: [CommandDescr]
 nbCommandList  =
   [ CommandDescr ":env"  []      (NoArg envCmd)
     "display the current sawscript environment"
-  , CommandDescr ":search" []    (ExprArg searchCmd)
+  , CommandDescr ":search" []    (TypeArg searchCmd)
     "search the environment by type"
   , CommandDescr ":tenv" []      (NoArg tenvCmd)
     "display the current sawscript type environment"
@@ -485,6 +486,7 @@ parseCommand findCmd line = do
     -- matched exactly one command; run it
     [c] -> case cBody c of
       ExprArg     body -> Just (Command (body args'))
+      TypeArg     body -> Just (Command (body args'))
       FilenameArg body -> Just (Command (body =<< expandHome args'))
       ShellArg    body -> Just (Command (body args'))
       NoArg       body -> Just (Command  body)

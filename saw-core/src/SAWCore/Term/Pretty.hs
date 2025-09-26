@@ -34,7 +34,7 @@ import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
 import Control.Monad (forM)
 import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
-import Control.Monad.State.Strict (MonadState(..), State, execState)
+import Control.Monad.State.Strict (MonadState(..), State, evalState, execState, get, modify)
 import qualified Data.Foldable as Fold
 import Data.Hashable (hash)
 import qualified Data.Text as Text
@@ -103,26 +103,37 @@ ppParensPrec p1 p2 d
 
 -- | Local variable namings, which map each deBruijn index in scope to a unique
 -- string to be used to print it. This mapping is given by position in a list.
-newtype VarNaming = VarNaming [LocalName]
+-- Renamings for named variables are in an 'IntMap' indexed by 'VarIndex'.
+-- The third argument caches the set of all used or reserved names;
+-- fresh 'LocalName's are chosen while avoiding names in this set.
+data VarNaming = VarNaming [LocalName] (IntMap LocalName) (Set LocalName)
 
 -- | The empty local variable context
-emptyVarNaming :: VarNaming
-emptyVarNaming = VarNaming []
+emptyVarNaming :: Set LocalName -> VarNaming
+emptyVarNaming reserved = VarNaming [] IntMap.empty reserved
 
--- | Look up a string to use for a variable, if the first argument is 'True', or
--- just print the variable number if the first argument is 'False'
-lookupVarName :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
-lookupVarName True (VarNaming names) i
+-- | Look up a string to use for a 'DeBruijnIndex', if the first
+-- argument is 'True', or just print the variable number if the first
+-- argument is 'False'.
+lookupDeBruijn :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
+lookupDeBruijn True (VarNaming names _ _) i
   | i >= length names = Text.pack ('!' : show (i - length names))
-lookupVarName True (VarNaming names) i = names!!i
-lookupVarName False _ i = Text.pack ('!' : show i)
+lookupDeBruijn True (VarNaming names _ _) i = names!!i
+lookupDeBruijn False _ i = Text.pack ('!' : show i)
+
+-- | Look up a string to use for a 'VarName'.
+lookupVarName :: VarNaming -> VarName -> LocalName
+lookupVarName (VarNaming _ renames _) vn =
+  case IntMap.lookup (vnIndex vn) renames of
+    Just alias -> alias
+    Nothing -> vnName vn
 
 -- | Generate a fresh name from a base name that does not clash with any names
 -- already in a given list, unless it is "_", in which case return it as is
-freshName :: [LocalName] -> LocalName -> LocalName
+freshName :: Set LocalName -> LocalName -> LocalName
 freshName used name
   | name == "_" = name
-  | elem name used = freshName used (nextName name)
+  | Set.member name used = freshName used (nextName name)
   | otherwise = name
 
 -- | Generate a variant of a name by incrementing the number at the
@@ -140,9 +151,44 @@ nextName = Text.pack . reverse . go . reverse . Text.unpack
 -- returning both the fresh name actually used and the new variable list. As a
 -- special case, if the base name is "_", it is not modified.
 consVarNaming :: VarNaming -> LocalName -> (LocalName, VarNaming)
-consVarNaming (VarNaming names) name =
-  let nm = freshName names name in (nm, VarNaming (nm : names))
+consVarNaming (VarNaming names renames used) name =
+  let nm = freshName used name
+  in (nm, VarNaming (nm : names) renames (Set.insert nm used))
 
+-- | Add a new variable with the given 'VarName' to the 'VarNaming',
+-- returning both the chosen fresh name and the new 'VarNaming'.
+-- As a special case, if the base name is "_", it is not modified.
+insertVarNaming :: VarNaming -> VarName -> (LocalName, VarNaming)
+insertVarNaming (VarNaming names renames used) (VarName i name) =
+  let nm = freshName used name
+  in (nm, VarNaming names (IntMap.insert i nm renames) (Set.insert nm used))
+
+-- | Compute the set of all free 'VarName's in a term.
+termVarNames :: Term -> Set VarName
+termVarNames t0 = evalState (go t0) IntMap.empty
+  where
+    go :: Term -> State (IntMap (Set VarName)) (Set VarName)
+    go tm =
+      case tm of
+        Unshared tf -> termf <$> traverse go tf
+        STApp { stAppIndex = i, stAppTermF = tf, stAppFreeVars = _vs } ->
+          do memo <- get
+             case IntMap.lookup i memo of
+               Just vars -> pure vars
+               Nothing ->
+                 do vars <- termf <$> traverse go tf
+                    modify (IntMap.insert i vars)
+                    pure vars
+    termf :: TermF (Set VarName) -> Set VarName
+    termf tf =
+      case tf of
+        FTermF ftf -> Fold.fold ftf
+        App e1 e2 -> Set.union e1 e2
+        Lambda _ e1 e2 -> Set.union e1 e2
+        Pi _ e1 e2 -> Set.union e1 e2
+        LocalVar _ -> Set.empty
+        Constant _ -> Set.empty
+        Variable ec -> Set.insert (ecName ec) (ecType ec)
 
 --------------------------------------------------------------------------------
 -- * Pretty-printing monad
@@ -190,7 +236,7 @@ emptyPPState :: PPS.Opts -> DisplayNameEnv -> PPState
 emptyPPState opts ne =
   PPState { ppOpts = opts,
             ppDepth = 0,
-            ppNaming = emptyVarNaming,
+            ppNaming = emptyVarNaming (Map.keysSet (displayIndexes ne)),
             ppNamingEnv = ne,
             ppMemoFresh = 1,
             ppGlobalMemoTable = IntMap.empty,
@@ -215,7 +261,7 @@ instance MonadReader PPState PPM where
 -- | Look up the given local variable by deBruijn index to get its name
 varLookupM :: DeBruijnIndex -> PPM LocalName
 varLookupM idx =
-  lookupVarName <$> (PPS.ppShowLocalNames <$> ppOpts <$> ask)
+  lookupDeBruijn <$> (PPS.ppShowLocalNames <$> ppOpts <$> ask)
   <*> (ppNaming <$> ask) <*> return idx
 
 -- | Test if a given term index is memoized, returning its memoization variable
@@ -250,6 +296,17 @@ withBoundVarM basename m =
      ret <- local (\_ -> st { ppNaming = naming,
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
+
+-- | Run a pretty-printing computation in a context with an additional
+-- declared 'VarName'.
+withVarName :: VarName -> PPM a -> PPM a
+withVarName vn =
+  local (\s -> s { ppNaming = snd (insertVarNaming (ppNaming s) vn) })
+
+-- | Run a pretty-printing computation in a context with multiple
+-- additional declared 'VarName's.
+withVarNames :: [VarName] -> PPM a -> PPM a
+withVarNames vs m = foldr withVarName m vs
 
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
@@ -397,15 +454,7 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    RecursorType d params motive _motiveTy ->
-      do params_pp <- mapM (ppTerm' PrecArg) params
-         motive_pp <- ppTerm' PrecArg motive
-         nm <- ppBestName d
-         return $
-           ppAppList prec (annotate PPS.RecursorStyle (nm <> "#recType"))
-             (params_pp ++ [motive_pp])
-
-    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder) ->
+    Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
@@ -418,12 +467,6 @@ ppFlatTermF prec tf =
          return $
            ppAppList prec (annotate PPS.RecursorStyle (nm <> "#rec"))
              (params_pp ++ [motive_pp, tupled f_pps])
-
-    RecursorApp r ixs arg ->
-      do rec_pp <- ppTerm' PrecApp r
-         ixs_pp <- mapM (ppTerm' PrecArg) ixs
-         arg_pp <- ppTerm' PrecArg arg
-         return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
@@ -456,15 +499,15 @@ ppBitsToHex bits =
   ]
   where bits' = Text.pack (show bits)
 
-
--- | Pretty-print an 'ExtCns', using the best unambiguous alias from
--- the naming environment.
+-- | Pretty-print an 'ExtCns' according to the current 'VarNaming'.
 ppExtCns :: ExtCns e -> PPM PPS.Doc
-ppExtCns ec =
-  do ne <- asks ppNamingEnv
-     case bestDisplayName ne (ecVarIndex ec) of
-       Just alias -> pure $ pretty alias
-       Nothing -> pure $ ppName (ecNameInfo ec)
+ppExtCns ec = ppVarName (ecName ec)
+
+-- | Pretty-print a 'VarName' according to the current 'VarNaming'.
+ppVarName :: VarName -> PPM PPS.Doc
+ppVarName vn =
+  do naming <- asks ppNaming
+     pure $ pretty (lookupVarName naming vn)
 
 -- | Pretty-print a 'Name', using the best unambiguous alias from the
 -- naming environment.
@@ -550,7 +593,6 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (RecursorType _ ps m _) -> ps ++ [m]
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
                                               map fst (Map.elems (recursorElims crec))
@@ -643,6 +685,7 @@ ppTerm opts = ppTermWithNames opts emptyDisplayNameEnv
 ppTermInCtx :: PPS.Opts -> [LocalName] -> Term -> PPS.Doc
 ppTermInCtx opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
+  withVarNames (Set.toList (termVarNames trm)) $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm True trm
 
@@ -657,6 +700,7 @@ scPrettyTermInCtx :: PPS.Opts -> [LocalName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   PPS.render opts $
   runPPM opts emptyDisplayNameEnv $
+  withVarNames (Set.toList (termVarNames trm)) $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecTerm False trm
 
@@ -674,7 +718,9 @@ showTerm t = scPrettyTerm PPS.defaultOpts t
 -- more than once at the same binding level
 ppTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
 ppTermWithNames opts ne trm =
-  runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm
+  runPPM opts ne $
+  withVarNames (Set.toList (termVarNames trm)) $
+  ppTermWithMemoTable PrecTerm True trm
 
 showTermWithNames :: PPS.Opts -> DisplayNameEnv -> Term -> String
 showTermWithNames opts ne trm =
@@ -693,5 +739,7 @@ ppTermContainerWithNames ppContainer opts ne trms =
                    flip execState mempty $
                    traverse (\t -> scTermCountAux global_p [t]) $
                    trms
-   in runPPM opts ne $ ppLets global_p occPairs []
+   in runPPM opts ne $
+      withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $
+      ppLets global_p occPairs []
         (ppContainer <$> traverse (ppTerm' PrecTerm) trms)

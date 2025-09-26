@@ -45,14 +45,14 @@ import qualified SAWSupport.Pretty as PPS (Doc)
 import SAWCore.Panic (panic)
 
 import SAWCore.Module
-  ( dtExtCns
-  , emptyModule
+  ( emptyModule
   , findDataTypeInMap
   , resolveNameInMap
   , resolvedNameName
   , DataType(..)
   , DefQualifier(..)
   )
+import SAWCore.Name (Name(..))
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
@@ -211,19 +211,14 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferCompleteUTerm args
      case typed_args of
-       (splitAt (length $ dtParams dt) ->
-        (params,
-         motive :
-         (splitAt (length $ dtCtors dt) ->
-          (elims,
-           (splitAt (length $ dtIndices dt) ->
-            (ixs, arg : rem_args)))))) ->
-         do crec    <- lift $ TC.compileRecursor dt params motive elims
+       (splitAt (length $ dtParams dt) -> (params, motive : args'))
+         | length args' >= length (dtCtors dt) ->
+         do let (elims, rem_args) = splitAt (length (dtCtors dt)) args'
+            crec    <- lift $ TC.compileRecursor dt params motive elims
             r       <- typeInferComplete (Recursor crec)
-            typed_r <- typeInferComplete (RecursorApp r ixs arg)
-            inferApplyAll typed_r rem_args
+            inferApplyAll r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec (dtExtCns dt)
+       _ -> throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
 
 typeInferCompleteTerm (Un.Recursor _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
@@ -355,7 +350,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
          Just x -> return x
          Nothing ->
              throwTCError $
-             DeclError nm ("More variables " ++ show vars ++
+             DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
                            " than length of function type:\n" ++
                            showTerm (typedVal typed_tp))
 

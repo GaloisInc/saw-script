@@ -94,7 +94,7 @@ import SAWCore.Prim (BitVector(..))
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck               as SC
 import SAWCore.Simulator.MonadLazy (force)
-import SAWCore.Name (preludeName)
+import SAWCore.Name (preludeName, Name(..))
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import SAWCore.Term.Pretty (showTerm)
 
@@ -140,7 +140,7 @@ bindTParam' :: SharedContext -> C.TParam -> Env -> IO (Env, Term, Term)
 bindTParam' sc tp env =
   do
   k <- importKind sc (C.tpKind tp)
-  v <- scFreshGlobal sc (tparamToLocalName tp) k
+  v <- scFreshVariable sc (tparamToLocalName tp) k
   return ( env { envT = Map.insert (C.tpUnique tp) v (envT env)
                }
          , v
@@ -164,7 +164,7 @@ bindTParam sc tp env =
 bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO (Env,Term,Term)
 bindName sc name schema env = do
   ty <- importSchema sc env schema
-  v  <- scFreshGlobal sc (nameToLocalName name) ty
+  v  <- scFreshVariable sc (nameToLocalName name) ty
   let env' = env { envE = Map.insert name v      (envE env)
                  , envC = Map.insert name schema (envC env)
                  }
@@ -174,7 +174,7 @@ bindProp :: SharedContext -> C.Prop -> Text -> Env -> IO (Env, Term)
 bindProp sc prop nm env =
   do
   ty <- importType sc env prop
-  v <- scFreshGlobal sc nm ty
+  v <- scFreshVariable sc nm ty
   return ( env { envP = insertSupers prop [] v (envP env)}
          , v
          )
@@ -1532,7 +1532,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
 
       -- grab a reference to the outermost variable; this will be the record
       -- in the body of the lambda we build later
-      v0 <- scFreshGlobal sc "fixRecord" rect
+      v0 <- scFreshVariable sc "fixRecord" rect
 
       -- build a list of projections from a record variable
       vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
@@ -1998,14 +1998,14 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (ecNameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") _ [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType _ _ _ -> Nothing
+      SC.VDataType _ _ _ _ -> Nothing
 
       SC.VUnitType -> return (Right (C.tTuple []))
       SC.VPairType v1 v2 -> do
@@ -2028,7 +2028,6 @@ scCryptolType sc t =
       SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
       SC.VStringType -> Nothing
       SC.VRecordType{} -> Nothing
-      SC.VRecursorType{} -> Nothing
       SC.VTyTerm{} -> Nothing
 
 --------------------------------------------------------------------------------
@@ -2359,7 +2358,7 @@ genCodeForEnum sc env nt ctors =
   let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
   case_type <-
       do
-      b <- scFreshGlobal sc "b" sort0
+      b <- scFreshVariable sc "b" sort0
            -- all uses are direct under the 'Pi'
       altFuncTypes <- mkAltFuncTypes b
       scGeneralizeTerms sc tyParamsVars
@@ -2374,14 +2373,14 @@ genCodeForEnum sc env nt ctors =
       --    \tyvars..-> \(b: sort)->(\f1 f2 ... ->
       --       eithersV b (FunsToCons b ... (\x-> f1 ...) ...)
 
-      b <- scFreshGlobal sc "b" sort0
+      b <- scFreshVariable sc "b" sort0
       let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
       funcTypes <- mkAltFuncTypes b
-      funcVars  <- zipWithM (scFreshGlobal sc) funcNames funcTypes
+      funcVars  <- zipWithM (scFreshVariable sc) funcNames funcTypes
       funcDefs  <- forM (zip3 funcVars represType_eachCtor ctors) $
                      \(funcVar,ty,ctor) ->
                          do
-                         x <- scFreshGlobal sc "x" ty
+                         x <- scFreshVariable sc "x" ty
                          let n = length (C.ecFields ctor)
                          scAbstractTerms sc [x]
                            =<< scApplyAll sc funcVar
@@ -2480,7 +2479,7 @@ genCodeForEnum sc env nt ctors =
 
         -- create the vars (& names) for constructor arguments:
         let argNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
-        argVars <- zipWithM (scFreshGlobal sc) argNames argTypes
+        argVars <- zipWithM (scFreshVariable sc) argNames argTypes
 
         -- create the constructor:
         ctorBody <- addTypeAbstractions

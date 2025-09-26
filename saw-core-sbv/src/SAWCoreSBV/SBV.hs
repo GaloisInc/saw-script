@@ -61,7 +61,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Name(..), ecShortName, toShortName)
+import SAWCore.Name (Name(..), VarName(..), ecShortName, toShortName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -279,8 +279,8 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
-                                        return (concat xss, "_" ++ (Text.unpack (ecShortName i)) ++ concat ss)
+        VCtorApp i _ ps ts        -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
+                                        return (concat xss, "_" ++ (Text.unpack (toShortName (nameInfo i))) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -610,7 +610,7 @@ muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
 muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (ecNameInfo -> ModuleIdentifier "Prelude.Stream") [TValue tp] []) c x y =
+muxSbvExtra (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
                   muxBVal tp c xi yi
@@ -627,10 +627,11 @@ sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO 
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
-  let extcns (EC (Name ix nm) ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
-  let uninterpreted ec
-        | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
-        | otherwise                           = Nothing
+  let extcns (EC (VarName ix nm) ty) = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
+  let uninterpreted nm ty
+        | Set.member (nameIndex nm) unintSet =
+          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (extcns (EC vn ty))
+        | otherwise                          = Nothing
   let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
@@ -712,14 +713,17 @@ sbvSATQuery sc addlPrims query =
        do vars' <- sequence vars
           let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
 
-          let mkUninterp (EC (Name ix nm) ty) =
-                parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
+          let mkUninterp (VarName ix nm) ty =
+                parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
           let extcns ec
                 | Just v <- Map.lookup (ecVarIndex ec) varMap = pure v
-                | otherwise = mkUninterp ec
-          let uninterpreted ec
-                | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
-                | otherwise                           = Nothing
+                | otherwise =
+                  let vn = VarName (ecVarIndex ec) (ecShortName ec) in mkUninterp vn (ecType ec)
+          let uninterpreted nm ty
+                | Set.member (nameIndex nm) unintSet =
+                  let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+                  in Just (mkUninterp vn ty)
+                | otherwise                          = Nothing
           let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
           let primHandler = Sim.defaultPrimHandler
           let mux = Prims.lazyMuxValue prims
