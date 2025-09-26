@@ -947,8 +947,8 @@ parseUninterpreted ::
   TValue (What4 sym) -> IO (SValue sym)
 parseUninterpreted sym ref app ty =
   case ty of
-    VPiType nm _ body
-      -> pure $ VFun nm $ \x ->
+    VPiType _nm _ body
+      -> pure $ VFun $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
               t2 <- applyPiBody body (ready x')
@@ -1070,7 +1070,7 @@ applyUnintApp sym app0 v =
                                    where app' = suffixUnintApp ("_" ++ show w) app0
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
-    VFun _ _ ->
+    VFun {} ->
       fail $
       "Cannot create uninterpreted higher-order function " ++
       show (stringOfUnintApp app0)
@@ -1417,7 +1417,7 @@ rebuildTerm sym st sc tv sv =
               show sv)
   in
   case sv of
-    VFun _ _ ->
+    VFun {} ->
       chokeOn "lambdas (VFun)"
     VUnit ->
       scUnitValue sc
@@ -1617,8 +1617,8 @@ parseUninterpretedSAW ::
   IO (SValue (B.ExprBuilder n st fs))
 parseUninterpretedSAW sym st sc ref trm app ty =
   case ty of
-    VPiType nm t1 body
-      -> pure $ VFun nm $ \x ->
+    VPiType _nm t1 body
+      -> pure $ VFun $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
               arg <- mkArgTerm sc t1 x'

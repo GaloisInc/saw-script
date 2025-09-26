@@ -142,11 +142,11 @@ evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalTermF cfg lam recEval tf env =
   case tf of
     App t1 t2               -> recEval t1 >>= \case
-                                 VFun _ f ->
+                                 VFun f ->
                                    do x <- recEvalDelay t2
                                       f x
                                  _ -> panic "evalTermF" ["Expected VFun"]
-    Lambda nm _tp t         -> pure $ VFun nm (\x -> lam t (x : env))
+    Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
     Pi nm t1 t2             -> do v <- evalType t1
                                   body <-
                                     if inBitSet 0 (looseVars t2) then
@@ -235,7 +235,7 @@ evalTermF cfg lam recEval tf env =
     evalRecursor :: VRecursor l -> MValue l
     evalRecursor vrec@(VRecursor d ps nixs motive ps_fs) =
       vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
-      pure $ VFun "arg" $ \arg_thunk ->
+      pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
          r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
@@ -316,7 +316,7 @@ vFunList names k = go [] names
   where
     go :: [Thunk l] -> [LocalName] -> MValue l
     go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> go (x : args) ns)
+    go args (_n : ns) = pure $ VFun (\x -> go (x : args) ns)
 
 -- | Create a 'Value' for a strict multi-argument function.
 vStrictFunList :: forall l. VMonad l => [LocalName] -> ([Value l] -> MValue l) -> MValue l
@@ -324,7 +324,7 @@ vStrictFunList names k = go [] names
   where
     go :: [Value l] -> [LocalName] -> MValue l
     go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> force x >>= \v -> go (v : args) ns)
+    go args (_n : ns) = pure $ VFun (\x -> force x >>= \v -> go (v : args) ns)
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
@@ -696,19 +696,19 @@ evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalPrim fallback p tv = loop [] tv
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
-    loop env (VPiType nm _t body) (Prims.PrimFun f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType _nm _t body) (Prims.PrimFun f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            loop (x : env) tp' (f x)
 
-    loop env (VPiType nm _t body) (Prims.PrimStrict f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType _nm _t body) (Prims.PrimStrict f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            loop (ready x' : env) tp' (f x')
 
-    loop env (VPiType nm _t body) (Prims.PrimFilterFun msg r f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType _nm _t body) (Prims.PrimFilterFun msg r f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            runMaybeT (r x') >>= \case

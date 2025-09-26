@@ -415,7 +415,7 @@ toWord _ x = panic "toWord" ["Not word or vector: " <> Text.pack (show x)]
 
 toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
            => Value l -> VWord l -> MBool l
-toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
+toWordPred (VFun f) = fmap toBool . f . ready . VWord
 toWordPred x = panic "toWordPred" ["Not function: " <> Text.pack (show x)]
 
 toBits :: (HasCallStack, VMonad l, Show (Extra l))
@@ -1330,8 +1330,8 @@ muxValue bp tp0 b = value tp0
     value _ (VNat m)  (VNat n)      | m == n = return $ VNat m
     value _ (VString x) (VString y) | x == y = return $ VString x
 
-    value (VPiType _ _tp body) (VFun nm f) (VFun _ g) =
-        return $ VFun nm $ \a ->
+    value (VPiType _ _tp body) (VFun f) (VFun g) =
+        return $ VFun $ \a ->
            do tp' <- applyPiBody body a
               x <- f a
               y <- g a
