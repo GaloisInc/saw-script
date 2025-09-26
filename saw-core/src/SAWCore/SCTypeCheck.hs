@@ -74,7 +74,6 @@ import SAWCore.Module
   , resolvedNameType
   , Ctor(..)
   , DataType(..)
-  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.Parser.Position
@@ -610,20 +609,15 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  Name           {- ^ data type name -} ->
+  DataType      {- ^ data type -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the elimination motive -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM Sort
-inferRecursorType d params nixs motive motiveTy ty =
-  do mm <- liftTCM scGetModuleMap
-     dt <-
-       case lookupVarIndexInMap (nameIndex d) mm of
-         Just (ResolvedDataType dt) -> pure dt
-         _ -> throwTCError $ NoSuchDataType (nameInfo d)
-
+inferRecursorType dt params nixs motive motiveTy ty =
+  do let d = dtName dt
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
@@ -685,7 +679,7 @@ compileRecursor dt params motive cs_fs =
        throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType d params nixs motive motiveTy ty
+     _s <- inferRecursorType dt params nixs motive motiveTy ty
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
