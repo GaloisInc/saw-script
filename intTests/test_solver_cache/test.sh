@@ -9,6 +9,10 @@ $SAW test_path_and_reuse.saw
 # Testing the `clean_mismatched_versions_solver_cache` command by manually
 # altering the version string of all SBV entries in the database, then running
 # `clean_mismatched_versions_solver_cache`
+#
+# We engage in this `venv` business because (modern) `pip` complains if you
+# attempt to `install` a package system-wide, and tells you to instead do what
+# we've done here.
 VENV="./test-venv"
 mkdir $VENV
 python3 -m venv $VENV
