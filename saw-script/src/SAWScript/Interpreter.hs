@@ -1079,7 +1079,7 @@ buildTopLevelEnv proxy opts scriptArgv =
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
-                   , rwAllocAllGlobals = False
+                   , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -1886,15 +1886,10 @@ disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
-enable_alloc_all_globals :: TopLevel ()
-enable_alloc_all_globals = do
+llvm_set_global_alloc_mode :: LLVMGlobalAllocMode -> TopLevel ()
+llvm_set_global_alloc_mode mode = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwAllocAllGlobals = True }
-
-disable_alloc_all_globals :: TopLevel ()
-disable_alloc_all_globals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwAllocAllGlobals = False }
+  putTopLevelRW rw { rwLLVMGlobalAllocMode = mode }
 
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
@@ -2703,18 +2698,6 @@ primitives = Map.fromList
     (pureVal disable_lax_loads_and_stores)
     Current
     [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
-
-  , prim "enable_alloc_all_globals" "TopLevel ()"
-    (pureVal enable_alloc_all_globals)
-    Experimental
-    [ "Enable allocation of all globals automatically. This is necessary when"
-    , " constants depend on the addresses of globals."
-    ]
-
-  , prim "disable_alloc_all_globals" "TopLevel ()"
-    (pureVal disable_alloc_all_globals)
-    Experimental
-    [ "Disable allocation of all globals automatically." ]
 
   , prim "set_path_sat_solver" "String -> TopLevel ()"
     (pureVal set_path_sat_solver)
@@ -5363,6 +5346,22 @@ primitives = Map.fromList
     (pureVal CIR.anySetupNull)
     Current
     [ "Legacy alternative name for `llvm_null`." ]
+
+  , prim "llvm_alloc_all_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocAllGlobals))
+    Experimental
+    [ "Enable allocation of all constant and mutable globals automatically."
+    ]
+
+  , prim "llvm_alloc_constant_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocConstantGlobals))
+    Experimental
+    [ "Enable allocation of constant globals automatically. (default)" ]
+  
+  , prim "llvm_alloc_no_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocNoGlobals))
+    Experimental
+    [ "Disable allocation of all globals automatically." ]
 
   , prim "llvm_global"
     "String -> SetupValue"

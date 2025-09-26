@@ -68,6 +68,7 @@ module SAWCentral.Crucible.LLVM.CrucibleLLVM
   , GlobalInitializerMap
   , initializeMemoryConstGlobals
   , initializeAllMemory
+  , initializeMemory
   , makeGlobalMap
   , populateConstGlobals
     -- * Re-exports from "Lang.Crucible.LLVM.Translation"
@@ -166,7 +167,8 @@ import qualified Lang.Crucible.LLVM.TypeContext as TyCtx
 
 import Lang.Crucible.LLVM.Globals
   (GlobalInitializerMap, makeGlobalMap, populateConstGlobals,
-   initializeAllMemory, initializeMemoryConstGlobals)
+   initializeAllMemory, initializeMemoryConstGlobals,
+   initializeMemory)
 
 import Lang.Crucible.LLVM.Translation
   (llvmMemVar, transContext, llvmPtrWidth, llvmTypeCtx,
