@@ -264,7 +264,9 @@ evalTermF cfg lam recEval tf env =
                    allArgs <- processRecArgs ps args ctorTy [(elim, elimTy), (r_thunk, rTy)]
                    lam (ctorIotaTemplate ctor) allArgs
 
-             | otherwise -> panic "evalTermF / RecursorApp" ["could not find info for constructor: " <> Text.pack (show ctor)]
+             | otherwise ->
+                 panic "evalTermF / evalRecursor"
+                 ["Could not find info for constructor: " <> Text.pack (show ctor)]
            Nothing ->
              case argv of
                VCtorMux _ps branches ->
@@ -273,7 +275,9 @@ evalTermF cfg lam recEval tf env =
                     ixvs <- traverse force ix_thunks
                     retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
                     combineAlts retTy alts
-               _ -> panic "evalTermF / RecursorApp" ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
+               _ ->
+                 panic "evalTermF / evalRecursor"
+                 ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
 
     evalCtorMuxBranch ::
       VRecursor l ->
