@@ -1501,10 +1501,9 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
 
               _ ->
                 do sub <- OM (use termSub)
-                   modmap <- liftIO $ scGetModuleMap sc
                    instantiated_expected_sz_tm <- liftIO $ scInstantiateExt sc sub $ ttTerm expected_sz_tm
                    normalized_expected_sz_tm <- liftIO $
-                     normalizeSharedTerm sc modmap mempty mempty mempty instantiated_expected_sz_tm
+                     normalizeSharedTerm sc mempty mempty mempty instantiated_expected_sz_tm
                    case asUnsignedConcreteBv normalized_expected_sz_tm of
                      Just sz_nat ->
                        do sz_bv <- liftIO $

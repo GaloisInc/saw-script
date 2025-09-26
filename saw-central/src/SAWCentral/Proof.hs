@@ -156,7 +156,6 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Module (ModuleMap)
 import SAWCore.Name (DisplayNameEnv, ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -507,9 +506,9 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
                 , showTerm p
                 ]
 
-normalizeProp :: SharedContext -> ModuleMap -> Set VarIndex -> Prop -> IO Prop
-normalizeProp sc modmap opaqueSet (Prop tm) =
-  do tm' <- TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet tm
+normalizeProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
+normalizeProp sc opaqueSet (Prop tm) =
+  do tm' <- TM.normalizeSharedTerm sc mempty mempty opaqueSet tm
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.
@@ -1662,8 +1661,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            check nenv e' sqt'
 
       NormalizePropEvidence opqueSet e' ->
-        do modmap <- scGetModuleMap sc
-           sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
+        do sqt' <- traverseSequentWithFocus (normalizeProp sc opqueSet) sqt
            check nenv e' sqt'
 
       RewriteEvidence hs ss e' ->

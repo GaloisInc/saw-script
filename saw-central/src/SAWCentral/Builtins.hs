@@ -573,10 +573,9 @@ normalize_term tt = normalize_term_opaque [] tt
 normalize_term_opaque :: [Text] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
-     modmap <- io (scGetModuleMap sc)
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
-     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
+     tm' <- io (TM.normalizeSharedTerm sc mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
@@ -584,9 +583,8 @@ goal_normalize opaque =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
-       modmap <- io (scGetModuleMap sc)
        let opaqueSet = Set.fromList idxs
-       sqt' <- io $ traverseSequentWithFocus (normalizeProp sc modmap opaqueSet) (goalSequent goal)
+       sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
 
 unfocus :: ProofScript ()
@@ -726,13 +724,12 @@ extract_uninterp unints opaques tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) unints
      let unintSet = Set.fromList idxs
-     mmap <- io (scGetModuleMap sc)
 
      opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
-     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet opaqueSet (ttTerm tt))
+     (tm, repls) <- io (TM.extractUninterp sc mempty mempty unintSet opaqueSet (ttTerm tt))
      boundECSet <- io (readIORef boundECRef)
      let tt' = tt{ ttTerm = tm }
 

@@ -40,7 +40,7 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
-import SAWCore.Module (ModuleMap, DataType(..))
+import SAWCore.Module (DataType(..))
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
@@ -60,15 +60,15 @@ type ReplaceUninterpMap = Map VarIndex [(ExtCns Term, [Term])]
 extractUninterp ::
   (?recordEC :: BoundECRecorder) =>
   SharedContext ->
-  ModuleMap ->
   Map Ident TmPrim {- ^ additional primitives -} ->
   Map VarIndex TmValue {- ^ ExtCns values -} ->
   Set VarIndex {- ^ 'unints' Constants in this set are kept uninterpreted -} ->
   Set VarIndex {- ^ 'opaque' Constants in this set are not evaluated -} ->
   Term ->
   IO (Term, ReplaceUninterpMap)
-extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
+extractUninterp sc addlPrims ecVals unintSet opaqueSet t =
   do mapref <- newIORef mempty
+     m <- scGetModuleMap sc
      cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union addlPrims (constMap sc cfg))
                              (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg)
                              (primHandler cfg) (lazymux cfg))
@@ -136,26 +136,25 @@ replace sc cfg mapref ec = loop [] (ecType ec)
 
 normalizeSharedTerm ::
   SharedContext ->
-  ModuleMap ->
   Map Ident TmPrim {- ^ additional primitives -} ->
   Map VarIndex TmValue {- ^ ExtCns values -} ->
   Set VarIndex {- ^ opaque constants -} ->
   Term ->
   IO Term
-normalizeSharedTerm sc m addlPrims =
-  normalizeSharedTerm' sc m (const $ Map.union addlPrims)
+normalizeSharedTerm sc addlPrims =
+  normalizeSharedTerm' sc (const $ Map.union addlPrims)
 
 normalizeSharedTerm' ::
   SharedContext ->
-  ModuleMap ->
   (Sim.SimulatorConfig TermModel -> Map Ident TmPrim -> Map Ident TmPrim)
     {- ^ function which adds additional primitives -} ->
   Map VarIndex TmValue {- ^ ExtCns values -} ->
   Set VarIndex {- ^ opaque constants -} ->
   Term ->
   IO Term
-normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
+normalizeSharedTerm' sc primsFn ecVals opaqueSet t =
   do let ?recordEC = \_ec -> return ()
+     m <- scGetModuleMap sc
      cfg <- mfix (\cfg -> Sim.evalGlobal' m (primsFn cfg (constMap sc cfg))
                               (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg)
                               (Prims.lazyMuxValue (prims sc cfg)))

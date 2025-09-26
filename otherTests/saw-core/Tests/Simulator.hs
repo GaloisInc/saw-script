@@ -56,7 +56,7 @@ normalizeSharedTermTests = [
   ("Succ_nat",
    \sc -> scGlobalApply sc "Prelude.Succ" . (:[]) =<< scNat sc 2,
    \sc -> scNat sc 3),
-  -- Succ (bvToNat 8 2) ~> bvToNat 9 (bvNat 9 3) 
+  -- Succ (bvToNat 8 2) ~> bvToNat 9 (bvNat 9 3)
   ("Succ_bvToNat",
    \sc -> scGlobalApply sc "Prelude.Succ" . (:[]) =<<
             scBvToNat sc 8 =<< scBvLit sc 8 2,
@@ -161,7 +161,7 @@ normalizeSharedTermTests = [
                  (bvPad sc 10 8 =<< bindM3 (scBvMul sc) (scNat sc 8)
                                            (scLocalVar sc 0)
                                            (scBvConst sc 8 3))),
-    
+
   -- ltNat 4 9 ~> True
   ("ltNat_nats",
    \sc -> bindM2 (scLtNat sc) (scNat sc 4) (scNat sc 9),
@@ -181,7 +181,7 @@ instance Show PrettyTerm where
 
 type NormalizeSharedTermTest = (String, (SharedContext -> IO Term),
                                         (SharedContext -> IO Term))
-  
+
 testNormalizeSharedTerm :: NormalizeSharedTermTest -> TestTree
 testNormalizeSharedTerm (nm, m1, m2) =
   testCase nm $ do
@@ -189,6 +189,5 @@ testNormalizeSharedTerm (nm, m1, m2) =
     scLoadPreludeModule sc
     t1 <- m1 sc
     t2 <- m2 sc
-    modmap <- scGetModuleMap sc
-    t1' <- normalizeSharedTerm sc modmap Map.empty Map.empty Set.empty t1
+    t1' <- normalizeSharedTerm sc Map.empty Map.empty Set.empty t1
     assertEqual "Incorrect normalization" (PrettyTerm t2) (PrettyTerm t1')
