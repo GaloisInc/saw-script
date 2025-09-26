@@ -54,7 +54,7 @@ evalSharedTerm m addlPrims ecVals t =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
-    primHandler nm _ msg env _tv =
+    primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
         , "On argument " ++ show (length env)

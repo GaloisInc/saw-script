@@ -63,7 +63,7 @@ evalSharedTerm m addlPrims t =
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
-    primHandler nm _ msg env _tv =
+    primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
         , "On argument " ++ show (length env)
@@ -399,7 +399,7 @@ bitBlastBasic :: ModuleMap
               -> Term
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
-  let primHandler nm _ msg env _tv =
+  let primHandler nm msg env =
          return $ Prim.userError $ unlines
            [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
            , "On argument " ++ show (length env)
