@@ -211,12 +211,10 @@ evalTermF cfg lam recEval tf env =
         Recursor r ->
           do let dname = recursorDataType r
              let nixs = recursorNumIxs r
-             dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
              es  <- traverse recEvalDelay (recursorElims r)
-             ty  <- evalType (recursorType r)
-             let vrec = VRecursor dname dty ps nixs m es ty
+             let vrec = VRecursor dname ps nixs m es
              evalRecursor vrec
 
         RecordType elem_tps ->
@@ -245,7 +243,7 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d _k ps nixs motive ps_fs _ty) =
+    evalRecursor vrec@(VRecursor d ps nixs motive ps_fs) =
       vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
       pure $ VFun "arg" $ \arg_thunk ->
       do argv <- force arg_thunk
@@ -278,7 +276,7 @@ evalTermF cfg lam recEval tf env =
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (p, c, ct, args) =
       case r of
-        VRecursor _d _k ps _nixs _motive ps_fs _ty ->
+        VRecursor _d ps _nixs _motive ps_fs ->
           do let i = nameIndex c
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
