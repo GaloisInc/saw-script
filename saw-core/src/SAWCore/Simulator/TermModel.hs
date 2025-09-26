@@ -50,7 +50,6 @@ import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.SharedTerm
-import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (showTerm)
 
 ------------------------------------------------------------
@@ -272,11 +271,6 @@ readBackTValue sc cfg = loop
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
-      VRecursorType d dty ps m mty ->
-        do ps'  <- readBackDataTypeParams dty ps
-           m'   <- readBackValue sc cfg mty m
-           mty' <- loop mty
-           scFlatTermF sc (RecursorType d ps' m' mty')
       VTyTerm _s tm ->
         pure tm
 
@@ -361,7 +355,6 @@ reflectTerm sc cfg = loop
     VRecordType{}   -> return (VExtra (VExtraTerm tv tm))
     VPairType{}     -> return (VExtra (VExtraTerm tv tm))
     VDataType{}     -> return (VExtra (VExtraTerm tv tm))
-    VRecursorType{} -> return (VExtra (VExtraTerm tv tm))
     VTyTerm{}       -> return (VExtra (VExtraTerm tv tm))
 
 -- | Given a value, which must have the given type,

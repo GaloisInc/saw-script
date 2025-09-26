@@ -75,15 +75,19 @@ data Value l
   | VArray (VArray l)
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
-  | VRecursor
+  | VExtra (Extra l)
+  | TValue (TValue l)
+
+data VRecursor l
+  = VRecursor
      !Name -- data type name
      !(TValue l) -- data type kind
      ![Value l]  -- data type parameters
+     !Int        -- number of index parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
      !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
-  | VExtra (Extra l)
-  | TValue (TValue l)
+     !(TValue l) -- type of recursor function
 
 -- | The subset of values that represent types.
 data TValue l
@@ -99,12 +103,6 @@ data TValue l
   | VDataType !Name !(TValue l) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
-  | VRecursorType
-     !Name       -- data type name
-     !(TValue l) -- data type kind
-     ![Value l]  -- data type parameters
-     !(Value l)  -- motive function
-     !(TValue l) -- type of motive function
   | VTyTerm !Sort !Term
 
 data PiBody l
@@ -121,14 +119,6 @@ data NeutralTerm
   | NeutralPairRight NeutralTerm  -- right pair projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
-  | NeutralRecursor
-      NeutralTerm -- recursor value
-      [Term] -- indices for the inductive type
-      Term   -- argument being eliminated
-  | NeutralRecursorArg -- recursor application
-      Term   -- recursor value
-      [Term] -- indices for the inductive type
-      NeutralTerm -- argument being elminated
   | NeutralConstant -- A constant value with no definition
       Name
 
@@ -203,8 +193,6 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor d _ _ _ _ _
-                     -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -231,7 +219,6 @@ instance Show (Extra l) => Show (TValue l) where
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
-      VRecursorType{} -> showString "RecursorType"
 
       VTyTerm _ tm   -> showString "TyTerm (" . (\x -> showTerm tm ++ x) . showString ")"
 
@@ -345,7 +332,6 @@ asFirstOrderTypeTValue v =
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
-    VRecursorType{} -> Nothing
     VTyTerm{}   -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
@@ -375,7 +361,6 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
-    VRecursorType{} -> Nothing
     VTyTerm{} -> Nothing
 
 
@@ -391,10 +376,6 @@ neutralToTerm = loop
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
     Unshared (App (loop nt) arg)
-  loop (NeutralRecursorArg r ixs x) =
-    Unshared (FTermF (RecursorApp r ixs (loop x)))
-  loop (NeutralRecursor r ixs x) =
-    Unshared (FTermF (RecursorApp (loop r) ixs x))
   loop (NeutralConstant nm) =
     Unshared (Constant nm)
 
@@ -412,12 +393,6 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
-  loop (NeutralRecursor nt ixs x) =
-    do tm <- loop nt
-       scFlatTermF sc (RecursorApp tm ixs x)
-  loop (NeutralRecursorArg r ixs nt) =
-    do tm <- loop nt
-       scFlatTermF sc (RecursorApp r ixs tm)
   loop (NeutralConstant nm) =
     do scConst sc nm
 

@@ -481,7 +481,8 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asVariable -> Just ec), more))
+     (R.asRecursorApp -> Just (r, crec),
+      splitAt (recursorNumIxs crec) -> (_ixs, (R.asVariable -> Just ec) : more)))
       | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
       do -- ti is the type of the value being scrutinized
          ti <- scWhnf sc (ecType ec)
@@ -505,11 +506,11 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   -- new lhs and rhs in context @ctxt'@.
                   lhs' <- adjust lhs
 
-                  rec'  <- adjust rec
+                  r'  <- adjust r
                   crec' <- traverse adjust crec
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc rec' crec' (ctorName ctor) args
+                  rhs1 <- scReduceRecursor sc r' crec' (ctorName ctor) args
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
@@ -641,9 +642,10 @@ asRecordRedex t =
 --   > RecursorApp rec _ n
 asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
 asNatIotaRedex t =
-  do (rec, crec, _, arg) <- R.asRecursorApp t
+  do (f, arg) <- R.asApp t
+     (r, crec) <- R.asRecursorApp f
      n <- R.asNat arg
-     return (rec, crec, n)
+     return (r, crec, n)
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
@@ -693,9 +695,10 @@ reduceSharedTerm :: SharedContext -> Term -> IO (Maybe Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just <$> instantiateVar sc 0 arg body
 reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
-reduceSharedTerm sc (asNatIotaRedex -> Just (rec, crec, n)) =
-  Just <$> scReduceNatRecursor sc rec crec n
-reduceSharedTerm sc (R.asRecursorApp -> Just (rec, crec, _, arg)) =
+reduceSharedTerm sc (asNatIotaRedex -> Just (r, crec, n)) =
+  Just <$> scReduceNatRecursor sc r crec n
+reduceSharedTerm sc (R.asApp -> Just (R.asApplyAll -> (R.asRecursorApp -> Just (r, crec), ixs), arg))
+  | recursorNumIxs crec == length ixs =
   do let (f, args) = R.asApplyAll arg
      mm <- scGetModuleMap sc
      case R.asConstant f of
@@ -703,7 +706,7 @@ reduceSharedTerm sc (R.asRecursorApp -> Just (rec, crec, _, arg)) =
        Just c ->
          case lookupVarIndexInMap (nameIndex c) mm of
            Just (ResolvedCtor ctor) ->
-             Just <$> scReduceRecursor sc rec crec c (drop (ctorNumParams ctor) args)
+             Just <$> scReduceRecursor sc r crec c (drop (ctorNumParams ctor) args)
            _ -> pure Nothing
 reduceSharedTerm _ _ = pure Nothing
 
@@ -833,9 +836,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           -- NOTE: we don't rewrite arguments of constructors, datatypes, or
           -- recursors because of dependent types, as we could potentially cause
           -- a term to become ill-typed
-          RecursorType{}   -> return ftf
           Recursor{}       -> return ftf
-          RecursorApp{}    -> return ftf -- could treat same as CtorApp
 
           RecordType{}     -> traverse rewriteAll ftf
           RecordValue{}    -> traverse rewriteAll ftf

@@ -211,17 +211,12 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferCompleteUTerm args
      case typed_args of
-       (splitAt (length $ dtParams dt) ->
-        (params,
-         motive :
-         (splitAt (length $ dtCtors dt) ->
-          (elims,
-           (splitAt (length $ dtIndices dt) ->
-            (ixs, arg : rem_args)))))) ->
-         do crec    <- lift $ TC.compileRecursor dt params motive elims
+       (splitAt (length $ dtParams dt) -> (params, motive : args'))
+         | length args' >= length (dtCtors dt) ->
+         do let (elims, rem_args) = splitAt (length (dtCtors dt)) args'
+            crec    <- lift $ TC.compileRecursor dt params motive elims
             r       <- typeInferComplete (Recursor crec)
-            typed_r <- typeInferComplete (RecursorApp r ixs arg)
-            inferApplyAll typed_r rem_args
+            inferApplyAll r rem_args
 
        _ -> throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
 

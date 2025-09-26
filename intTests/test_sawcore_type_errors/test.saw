@@ -30,7 +30,7 @@ parse "#(Bool, 5)";
 print "Not a sort (record type)";
 parse "#{ foo : Bool, bar : False }";
 
-print "Motive function should return a sort";
+print "Not a sort (recursor)";
 parse "\\(v : Void) -> Void#rec (\\ (_ : Void) -> True) v";
 
 print "Function application with non-function type";
