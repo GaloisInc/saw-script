@@ -346,7 +346,7 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         (AdaptDerefSlice n, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
           case BV.asUnsigned <$> W4.asBV lenExpr of
             Nothing ->
-              fail "Slice lenght is not of a statically know length"
+              fail "Slice length is not statically known"
 
             Just n1
               | AsBaseType baseT <- asBaseType tpr ->
