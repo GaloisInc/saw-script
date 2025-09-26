@@ -528,8 +528,8 @@ span.spaces    { background: white }
 <span class="lineno">  509 </span>
 <span class="lineno">  510 </span>-- | Conversion for selector on a record
 <span class="lineno">  511 </span>recordConversion :: Conversion
-<span class="lineno">  512 </span><span class="decl"><span class="istickedoff">recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) <span class="nottickedoff">action</span></span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">where <span class="nottickedoff">action (m, i) = fmap return (Map.lookup i m)</span></span></span>
+<span class="lineno">  512 </span><span class="decl"><span class="istickedoff">recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) action</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">where action (m, i) = fmap <span class="nottickedoff">return</span> (Map.lookup i m)</span></span>
 <span class="lineno">  514 </span>
 <span class="lineno">  515 </span>-- | Conversion for equality on tuple types
 <span class="lineno">  516 </span>eq_Tuple :: Conversion

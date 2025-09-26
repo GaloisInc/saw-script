@@ -95,7 +95,7 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span>import qualified Data.Vector as V
 <span class="lineno">   77 </span>import Numeric.Natural (Natural)
 <span class="lineno">   78 </span>
-<span class="lineno">   79 </span>import SAWCore.Name (ExtCns(..), Ident, NameInfo(..), ecVarIndex, ecNameInfo)
+<span class="lineno">   79 </span>import SAWCore.Name (Ident, Name(..), NameInfo(..))
 <span class="lineno">   80 </span>import SAWCore.Panic (panic)
 <span class="lineno">   81 </span>import SAWCore.Simulator.Value
 <span class="lineno">   82 </span>import SAWCore.Prim
@@ -137,8 +137,8 @@ span.spaces    { background: white }
 <span class="lineno">  118 </span>natFun :: VMonad l =&gt; (Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  119 </span><span class="decl"><span class="istickedoff">natFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat&quot;</span> r</span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure n</span>
-<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] [])  = pure 0</span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
+<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) _ [] [])  = pure 0</span>
+<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) _ [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
 <span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>-- | A primitive that requires an integer argument
@@ -568,8 +568,8 @@ span.spaces    { background: white }
 <span class="lineno">  549 </span>              (Either (Natural, Value l) Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  550 </span><span class="decl"><span class="istickedoff">natSizeFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat with a known size&quot;</span> r</span>
 <span class="lineno">  551 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure (Right n)</span>
-<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
-<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (ecNameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) [] [x]) =</span>
+<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Zero&quot;) _ [] []) = <span class="nottickedoff">pure (Right 0)</span></span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff">r v@(VCtorApp (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Succ&quot;) _ [] [x]) =</span>
 <span class="lineno">  554 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">lift (force x) &gt;&gt;= r &gt;&gt;= bimapM (const (szPr v)) (pure . succ)</span></span>
 <span class="lineno">  555 </span><span class="spaces">        </span><span class="istickedoff">r v = <span class="nottickedoff">Left &lt;$&gt; szPr v</span></span>
 <span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)</span></span></span>
@@ -1370,19 +1370,19 @@ span.spaces    { background: white }
 <span class="lineno"> 1351 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;muxValue&quot; [&quot;Record field missing: &quot; &lt;&gt; f]</span></span>
 <span class="lineno"> 1352 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VRecordValue &lt;$&gt; traverse build fs</span></span>
 <span class="lineno"> 1353 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1354 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)</span>
-<span class="lineno"> 1355 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlyfalse">i == j</span> = <span class="nottickedoff">VCtorApp i ps &lt;$&gt; ctorArgs (ecType i) ps xv yv</span></span>
+<span class="lineno"> 1354 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _k _ps _ixs) (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)</span>
+<span class="lineno"> 1355 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlyfalse">i == j</span> = <span class="nottickedoff">VCtorApp i itv ps &lt;$&gt; ctorArgs itv ps xv yv</span></span>
 <span class="lineno"> 1356 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno"> 1357 </span><span class="spaces">        </span><span class="istickedoff">do b' &lt;- bpNot bp <span class="nottickedoff">b</span></span>
 <span class="lineno"> 1358 </span><span class="spaces">           </span><span class="istickedoff">pure $ VCtorMux ps $ IntMap.fromList $</span>
-<span class="lineno"> 1359 </span><span class="spaces">             </span><span class="istickedoff">[(ecVarIndex i, (b, i, xv)), (ecVarIndex j, (<span class="nottickedoff">b'</span>, j, yv))]</span>
-<span class="lineno"> 1360 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorMux _ ym) =</span>
-<span class="lineno"> 1361 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let xm = IntMap.singleton (ecVarIndex i) (bpTrue bp, i, xv)</span></span>
+<span class="lineno"> 1359 </span><span class="spaces">             </span><span class="istickedoff">[(nameIndex i, (b, i, itv, xv)), (nameIndex j, (<span class="nottickedoff">b'</span>, j, jtv, yv))]</span>
+<span class="lineno"> 1360 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _k _ps _ixs) (VCtorApp i tv ps xv) (VCtorMux _ ym) =</span>
+<span class="lineno"> 1361 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, i, tv, xv)</span></span>
 <span class="lineno"> 1362 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VCtorMux ps &lt;$&gt; branches ps xm ym</span></span>
-<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorApp j _ yv) =</span>
-<span class="lineno"> 1364 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let ym = IntMap.singleton (ecVarIndex j) (bpTrue bp, j, yv)</span></span>
+<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorApp j tv _ yv) =</span>
+<span class="lineno"> 1364 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, j, tv, yv)</span></span>
 <span class="lineno"> 1365 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">VCtorMux ps &lt;$&gt; branches ps xm ym</span></span>
-<span class="lineno"> 1366 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =</span>
+<span class="lineno"> 1366 </span><span class="spaces">    </span><span class="istickedoff">value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =</span>
 <span class="lineno"> 1367 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do VCtorMux ps &lt;$&gt; branches ps xm ym</span></span>
 <span class="lineno"> 1368 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1369 </span><span class="spaces">    </span><span class="istickedoff">value (VVecType _ tp) (VVector xv) (VVector yv) =</span>
@@ -1416,20 +1416,20 @@ span.spaces    { background: white }
 <span class="lineno"> 1397 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1398 </span><span class="spaces">    </span><span class="istickedoff">branches ::</span>
 <span class="lineno"> 1399 </span><span class="spaces">      </span><span class="istickedoff">[Thunk l] -&gt;</span>
-<span class="lineno"> 1400 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, ExtCns (TValue l), [Thunk l]) -&gt;</span>
-<span class="lineno"> 1401 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, ExtCns (TValue l), [Thunk l]) -&gt;</span>
-<span class="lineno"> 1402 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (IntMap (VBool l, ExtCns (TValue l), [Thunk l]))</span>
+<span class="lineno"> 1400 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Name, TValue l, [Thunk l]) -&gt;</span>
+<span class="lineno"> 1401 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Name, TValue l, [Thunk l]) -&gt;</span>
+<span class="lineno"> 1402 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (IntMap (VBool l, Name, TValue l, [Thunk l]))</span>
 <span class="lineno"> 1403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">branches ps xm ym =</span></span>
 <span class="lineno"> 1404 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do b' &lt;- bpNot bp b</span></span>
-<span class="lineno"> 1405 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let andPred p1 (p2, c, args) =</span></span>
+<span class="lineno"> 1405 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let andPred p1 (p2, c, ty, args) =</span></span>
 <span class="lineno"> 1406 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do p &lt;- bpAnd bp p1 p2</span></span>
-<span class="lineno"> 1407 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (p, c, args)</span></span>
+<span class="lineno"> 1407 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (p, c, ty, args)</span></span>
 <span class="lineno"> 1408 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let merge x y =</span></span>
-<span class="lineno"> 1409 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do (xp, i, xv) &lt;- x</span></span>
-<span class="lineno"> 1410 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(yp, _, yv) &lt;- y</span></span>
+<span class="lineno"> 1409 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do (xp, i, itp, xv) &lt;- x</span></span>
+<span class="lineno"> 1410 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(yp, _, _tp, yv) &lt;- y</span></span>
 <span class="lineno"> 1411 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">zp &lt;- bpOr bp xp yp</span></span>
-<span class="lineno"> 1412 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">zv &lt;- ctorArgs (ecType i) ps xv yv</span></span>
-<span class="lineno"> 1413 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (zp, i, zv)</span></span>
+<span class="lineno"> 1412 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">zv &lt;- ctorArgs itp ps xv yv</span></span>
+<span class="lineno"> 1413 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (zp, i, itp, zv)</span></span>
 <span class="lineno"> 1414 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let xm' = fmap (andPred b) xm</span></span>
 <span class="lineno"> 1415 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let ym' = fmap (andPred b') ym</span></span>
 <span class="lineno"> 1416 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">sequenceA (IntMap.unionWith merge xm' ym')</span></span>

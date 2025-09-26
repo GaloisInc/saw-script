@@ -666,7 +666,7 @@ span.spaces    { background: white }
 <span class="lineno">  647 </span><span class="spaces">  </span><span class="istickedoff">(mtop, modEnv') &lt;- liftModuleM modEnv $</span>
 <span class="lineno">  648 </span><span class="spaces">    </span><span class="istickedoff">case src of</span>
 <span class="lineno">  649 </span><span class="spaces">      </span><span class="istickedoff">Left path -&gt; MB.loadModuleByPath True path</span>
-<span class="lineno">  650 </span><span class="spaces">      </span><span class="istickedoff">Right mn  -&gt; <span class="nottickedoff">snd &lt;$&gt; MB.loadModuleFrom True (MM.FromModule mn)</span></span>
+<span class="lineno">  650 </span><span class="spaces">      </span><span class="istickedoff">Right mn  -&gt; snd &lt;$&gt; MB.loadModuleFrom True (MM.FromModule mn)</span>
 <span class="lineno">  651 </span><span class="spaces">  </span><span class="istickedoff">m &lt;- case mtop of</span>
 <span class="lineno">  652 </span><span class="spaces">         </span><span class="istickedoff">T.TCTopModule mod'  -&gt; pure mod'</span>
 <span class="lineno">  653 </span><span class="spaces">         </span><span class="istickedoff">T.TCTopSignature {} -&gt;</span>

@@ -227,7 +227,7 @@ span.spaces    { background: white }
 <span class="lineno">  208 </span>
 <span class="lineno">  209 </span>scJavaValue :: SharedContext -&gt; Term -&gt; Text -&gt; IO Term
 <span class="lineno">  210 </span><span class="decl"><span class="nottickedoff">scJavaValue sc ty name = do</span>
-<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">scFreshGlobal sc name ty</span></span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">scFreshVariable sc name ty</span></span>
 <span class="lineno">  212 </span>
 <span class="lineno">  213 </span>-- | Return java expressions in logic expression.
 <span class="lineno">  214 </span>logicExprJavaExprs :: LogicExpr -&gt; [JavaExpr]

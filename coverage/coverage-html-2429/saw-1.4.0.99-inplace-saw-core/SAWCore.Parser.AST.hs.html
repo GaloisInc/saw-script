@@ -127,29 +127,29 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span>type UTermCtx = [(UTermVar, UTerm)]
 <span class="lineno">  109 </span>
 <span class="lineno">  110 </span>instance Positioned UTerm where
-<span class="lineno">  111 </span>  <span class="decl"><span class="nottickedoff">pos t =</span>
-<span class="lineno">  112 </span><span class="spaces">    </span><span class="nottickedoff">case t of</span>
-<span class="lineno">  113 </span><span class="spaces">      </span><span class="nottickedoff">Name i               -&gt; pos i</span>
-<span class="lineno">  114 </span><span class="spaces">      </span><span class="nottickedoff">Sort p _ _           -&gt; p</span>
-<span class="lineno">  115 </span><span class="spaces">      </span><span class="nottickedoff">Lambda p _ _         -&gt; p</span>
-<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">App x _              -&gt; pos x</span>
-<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">Pi p _ _             -&gt; p</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">Recursor i           -&gt; pos i</span>
-<span class="lineno">  119 </span><span class="spaces">      </span><span class="nottickedoff">UnitValue p          -&gt; p</span>
-<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">UnitType p           -&gt; p</span>
-<span class="lineno">  121 </span><span class="spaces">      </span><span class="nottickedoff">RecordValue p _      -&gt; p</span>
-<span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">RecordType p _       -&gt; p</span>
-<span class="lineno">  123 </span><span class="spaces">      </span><span class="nottickedoff">RecordProj x _       -&gt; pos x</span>
-<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">PairValue p _ _      -&gt; p</span>
-<span class="lineno">  125 </span><span class="spaces">      </span><span class="nottickedoff">PairType p _ _       -&gt; p</span>
-<span class="lineno">  126 </span><span class="spaces">      </span><span class="nottickedoff">PairLeft x           -&gt; pos x</span>
-<span class="lineno">  127 </span><span class="spaces">      </span><span class="nottickedoff">PairRight x          -&gt; pos x</span>
-<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">TypeConstraint _ p _ -&gt; p</span>
-<span class="lineno">  129 </span><span class="spaces">      </span><span class="nottickedoff">NatLit p _           -&gt; p</span>
-<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">StringLit p _        -&gt; p</span>
-<span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">VecLit p _           -&gt; p</span>
-<span class="lineno">  132 </span><span class="spaces">      </span><span class="nottickedoff">BVLit p _            -&gt; p</span>
-<span class="lineno">  133 </span><span class="spaces">      </span><span class="nottickedoff">BadTerm p            -&gt; p</span></span>
+<span class="lineno">  111 </span>  <span class="decl"><span class="istickedoff">pos t =</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">case t of</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">Name i               -&gt; pos i</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">Sort p _ _           -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">Lambda p _ _         -&gt; p</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">App x _              -&gt; pos x</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">Pi p _ _             -&gt; p</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">Recursor i           -&gt; pos i</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">UnitValue p          -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">UnitType p           -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff">RecordValue p _      -&gt; p</span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="istickedoff">RecordType p _       -&gt; p</span>
+<span class="lineno">  123 </span><span class="spaces">      </span><span class="istickedoff">RecordProj x _       -&gt; pos x</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="istickedoff">PairValue p _ _      -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  125 </span><span class="spaces">      </span><span class="istickedoff">PairType p _ _       -&gt; p</span>
+<span class="lineno">  126 </span><span class="spaces">      </span><span class="istickedoff">PairLeft x           -&gt; pos x</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff">PairRight x          -&gt; <span class="nottickedoff">pos x</span></span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="istickedoff">TypeConstraint _ p _ -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  129 </span><span class="spaces">      </span><span class="istickedoff">NatLit p _           -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff">StringLit p _        -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">VecLit p _           -&gt; p</span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff">BVLit p _            -&gt; <span class="nottickedoff">p</span></span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff">BadTerm p            -&gt; <span class="nottickedoff">p</span></span></span>
 <span class="lineno">  134 </span>
 <span class="lineno">  135 </span>instance Positioned UTermVar where
 <span class="lineno">  136 </span>  <span class="decl"><span class="nottickedoff">pos (TermVar i) = pos i</span>
@@ -264,18 +264,18 @@ span.spaces    { background: white }
 <span class="lineno">  245 </span>
 <span class="lineno">  246 </span>-- | Build a tuple type @#(x1, .., xn)@.
 <span class="lineno">  247 </span>mkTupleType :: Pos -&gt; [UTerm] -&gt; UTerm
-<span class="lineno">  248 </span><span class="decl"><span class="nottickedoff">mkTupleType p [] = UnitType p</span>
-<span class="lineno">  249 </span><span class="spaces"></span><span class="nottickedoff">mkTupleType _ [x] = x</span>
-<span class="lineno">  250 </span><span class="spaces"></span><span class="nottickedoff">mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)</span></span>
+<span class="lineno">  248 </span><span class="decl"><span class="istickedoff">mkTupleType p [] = <span class="nottickedoff">UnitType p</span></span>
+<span class="lineno">  249 </span><span class="spaces"></span><span class="istickedoff">mkTupleType _ [x] = x</span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="istickedoff">mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType <span class="nottickedoff">p</span> xs)</span></span>
 <span class="lineno">  251 </span>
 <span class="lineno">  252 </span>-- | Build a projection @t.i@ of a tuple. NOTE: This function does not
 <span class="lineno">  253 </span>-- work to access the last component in a tuple, since it always
 <span class="lineno">  254 </span>-- generates a @PairLeft@.
 <span class="lineno">  255 </span>mkTupleSelector :: UTerm -&gt; Natural -&gt; UTerm
-<span class="lineno">  256 </span><span class="decl"><span class="nottickedoff">mkTupleSelector t i</span>
-<span class="lineno">  257 </span><span class="spaces">  </span><span class="nottickedoff">| i == 1    = PairLeft t</span>
-<span class="lineno">  258 </span><span class="spaces">  </span><span class="nottickedoff">| i &gt; 1     = mkTupleSelector (PairRight t) (i - 1)</span>
-<span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = error &quot;mkTupleSelector: non-positive index&quot;</span></span>
+<span class="lineno">  256 </span><span class="decl"><span class="istickedoff">mkTupleSelector t i</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">i == 1</span>    = PairLeft t</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">i &gt; 1</span>     = <span class="nottickedoff">mkTupleSelector (PairRight t) (i - 1)</span></span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">error &quot;mkTupleSelector: non-positive index&quot;</span></span></span>
 
 </pre>
 </body>
