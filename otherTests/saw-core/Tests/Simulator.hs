@@ -13,7 +13,6 @@ module Tests.Simulator
 where
 
 import Control.Monad
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import GHC.Natural
 
@@ -22,10 +21,18 @@ import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import SAWCore.Term.Pretty (ppTerm)
 import SAWCore.Prelude
 import SAWCore.SharedTerm
-import SAWCore.Simulator.TermModel
+import SAWCore.SCTypeCheck (scTypeCheckWHNF)
 
 import Test.Tasty
 import Test.Tasty.HUnit
+
+normalizeSharedTerm ::
+  SharedContext ->
+  Set.Set VarIndex {- ^ opaque constants -} ->
+  Term ->
+  IO Term
+normalizeSharedTerm sc opaque t =
+  scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaque t
 
 bindM2 :: Monad m => (a -> b -> m c) -> m a -> m b -> m c
 bindM2 k m1 m2 = join $ k <$> m1 <*> m2
@@ -189,5 +196,5 @@ testNormalizeSharedTerm (nm, m1, m2) =
     scLoadPreludeModule sc
     t1 <- m1 sc
     t2 <- m2 sc
-    t1' <- normalizeSharedTerm sc Map.empty Map.empty Set.empty t1
+    t1' <- normalizeSharedTerm sc Set.empty t1
     assertEqual "Incorrect normalization" (PrettyTerm t2) (PrettyTerm t1')

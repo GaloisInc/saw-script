@@ -162,7 +162,6 @@ library saw-core
     SAWCore.SCTypeCheck
     SAWCore.Simulator
     SAWCore.Simulator.Concrete
-    SAWCore.Simulator.TermModel
     SAWCore.Simulator.MonadLazy
     SAWCore.Simulator.Prims
     SAWCore.Simulator.RME

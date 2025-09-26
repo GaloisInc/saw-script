@@ -173,7 +173,6 @@ import What4.ProgramLoc (ProgramLoc)
 import SAWCentral.Position
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Crucible.Common as Common
-import qualified SAWCore.Simulator.TermModel as TM
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
 import SAWCentral.Panic (panic)
@@ -508,7 +507,7 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
 
 normalizeProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 normalizeProp sc opaqueSet (Prop tm) =
-  do tm' <- TM.normalizeSharedTerm sc mempty mempty opaqueSet tm
+  do tm' <- TC.scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaqueSet tm
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.

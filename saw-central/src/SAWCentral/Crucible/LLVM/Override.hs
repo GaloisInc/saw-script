@@ -121,11 +121,11 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
+import           SAWCore.SCTypeCheck (scTypeCheckWHNF)
 import           SAWCore.SharedTerm
 import           SAWCore.Recognizer
 import           SAWCore.Term.Pretty (showTerm)
 import           CryptolSAWCore.TypedTerm
-import           SAWCore.Simulator.TermModel
 import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
 import           SAWCentral.Crucible.Common
@@ -1503,7 +1503,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                 do sub <- OM (use termSub)
                    instantiated_expected_sz_tm <- liftIO $ scInstantiateExt sc sub $ ttTerm expected_sz_tm
                    normalized_expected_sz_tm <- liftIO $
-                     normalizeSharedTerm sc mempty mempty mempty instantiated_expected_sz_tm
+                     scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False mempty instantiated_expected_sz_tm
                    case asUnsignedConcreteBv normalized_expected_sz_tm of
                      Just sz_nat ->
                        do sz_bv <- liftIO $
