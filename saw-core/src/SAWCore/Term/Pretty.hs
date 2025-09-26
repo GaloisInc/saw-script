@@ -457,7 +457,7 @@ ppFlatTermF prec tf =
     Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
+         fs_pp <- traverse (ppTerm' PrecTerm) cs_fs
          nm <- ppBestName d
          f_pps <- forM ctorOrder $ \c ->
                     do cnm <- ppBestName c
@@ -595,7 +595,7 @@ scTermCountAux doBinders = go
             Constant{}                     -> []
             FTermF (Recursor crec)         -> recursorParams crec ++
                                               [recursorMotive crec] ++
-                                              map fst (Map.elems (recursorElims crec))
+                                              Map.elems (recursorElims crec)
             tf                             -> Fold.toList tf
 
 

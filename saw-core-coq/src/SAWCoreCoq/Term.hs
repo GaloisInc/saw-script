@@ -432,7 +432,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          "is mapped to an arbitrary Coq term")
 
          let fnd c = case Map.lookup (nameIndex c) eliminators of
-                       Just (e,_ety) -> translateTerm e
+                       Just e -> translateTerm e
                        Nothing -> errorTermM
                           ("Recursor eliminator missing eliminator for constructor " ++ show c)
 
