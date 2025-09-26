@@ -858,14 +858,14 @@ scBuildCtor sc d c arg_struct =
 
     -- Step 4: build the API function that shuffles the terms around in the
     -- correct way.
-    let iota_fun rec cs_fs args =
+    let iota_fun r cs_fs args =
           do let elim = case Map.lookup (nameIndex cname) cs_fs of
                    Just e -> e
                    Nothing ->
                      panic "ctorIotaReduction" [
                          "no eliminator for constructor " <> Text.pack (show c)
                      ]
-             instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red
+             instantiateVarList sc 0 (reverse ([r, elim] ++ args)) iota_red
 
     -- Finally, return the required Ctor record
     return $ Ctor
@@ -1013,10 +1013,10 @@ ctxReduceRecursor ::
   [Term] {- ^ constructor arguments -} ->
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
   IO Term
-ctxReduceRecursor sc rec elimf c_args CtorArgStruct{..} =
+ctxReduceRecursor sc r elimf c_args CtorArgStruct{..} =
   case zipSameLength c_args ctorArgs of
      Just argsCtx_ctorArgs ->
-       ctxReduceRecursor_ sc rec elimf argsCtx_ctorArgs
+       ctxReduceRecursor_ sc r elimf argsCtx_ctorArgs
      Nothing ->
        error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
 
@@ -1029,7 +1029,7 @@ ctxReduceRecursor_ ::
   Term     {- ^ eliminator function for the constructor -} ->
   [(Term, (VarName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
   IO Term
-ctxReduceRecursor_ sc rec fi args0_argCtx =
+ctxReduceRecursor_ sc r fi args0_argCtx =
   do args <- mk_args IntMap.empty args0_argCtx
      scWhnf sc =<< scApplyAll sc fi args
 
@@ -1066,7 +1066,7 @@ ctxReduceRecursor_ sc rec fi args0_argCtx =
       -- eta expand over the zs and apply the RecursorApp form
       do zs <- traverse (scVariable sc) zs_ctx
          x_zs <- scApplyAll sc x zs
-         body <- scRecursorApp sc rec ixs x_zs
+         body <- scRecursorApp sc r ixs x_zs
          scAbstractExts sc zs_ctx body
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
@@ -1176,14 +1176,14 @@ scReduceNatRecursor ::
   CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
   Natural {- ^ Concrete natural value to eliminate -} ->
   IO Term
-scReduceNatRecursor sc rec crec n
+scReduceNatRecursor sc r crec n
   | n == 0 =
      do ctor <- scRequireCtor sc preludeZeroIdent
-        ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) []
+        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) []
 
   | otherwise =
      do ctor <- scRequireCtor sc preludeSuccIdent
-        ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
+        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -1233,8 +1233,8 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor rec crec _ : xs)
-                              (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
+    go (ElimRecursor r crec _ : xs)
+                              (asNat -> Just n)                 = scReduceNatRecursor sc r crec n >>= go xs
     go xs                     (asRecursorApp -> Just (r, crec)) | Just (ixs, x, xs') <- splitApps (recursorNumIxs crec) xs
                                                                 = go (ElimRecursor r crec ixs : xs') x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
@@ -1261,9 +1261,9 @@ scWhnf sc t0 =
                                                                        ResolvedCtor ctor ->
                                                                          case asArgsRec xs of
                                                                            Nothing -> foldM reapply t xs
-                                                                           Just (rec, crec, args, xs') ->
+                                                                           Just (rt, crec, args, xs') ->
                                                                              do let args' = drop (ctorNumParams ctor) args
-                                                                                scReduceRecursor sc rec crec nm args' >>= go xs'
+                                                                                scReduceRecursor sc rt crec nm args' >>= go xs'
                                                                        ResolvedDataType _ ->
                                                                          foldM reapply t xs
 
@@ -1289,10 +1289,10 @@ scWhnf sc t0 =
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
     asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], [WHNFElim])
-    asArgsRec (ElimRecursor rec crec _ : xs) = Just (rec, crec, [], xs)
+    asArgsRec (ElimRecursor r crec _ : xs) = Just (r, crec, [], xs)
     asArgsRec (ElimApp x : xs) =
       case asArgsRec xs of
-        Just (rec, crec, args, xs') -> Just (rec, crec, x : args, xs')
+        Just (r, crec, args, xs') -> Just (r, crec, x : args, xs')
         Nothing -> Nothing
     asArgsRec _ = Nothing
 
@@ -1477,8 +1477,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           case asPairType tp of
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
-        Recursor rec -> do
-          pure $ recursorType rec
+        Recursor crec ->
+          pure $ recursorType crec
 
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
@@ -2864,12 +2864,12 @@ scExtsToLocals _ [] x = return x
 scExtsToLocals sc exts x = instantiateVars sc fn 0 x
   where
     m = Map.fromList [ (ecVarIndex ec, k) | (ec, k) <- zip (reverse exts) [0 ..] ]
-    fn rec l e =
+    fn r l e =
       case e of
         Left ec ->
           case Map.lookup (ecVarIndex ec) m of
             Just k  -> scLocalVar sc (l + k)
-            Nothing -> scVariable sc =<< traverse rec ec
+            Nothing -> scVariable sc =<< traverse r ec
         Right i ->
           scLocalVar sc (i + length exts)
 

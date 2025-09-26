@@ -505,8 +505,8 @@ instance TypeInfer (FlatTermF SCTypedTerm) where
   typeInfer (PairRight (SCTypedTerm _ tp _)) =
     ensurePairType tp >>= \(_,t2) -> return t2
 
-  typeInfer (Recursor rec) =
-    inferRecursor rec
+  typeInfer (Recursor crec) =
+    inferRecursor crec
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -669,10 +669,10 @@ compileRecursor dt params motive cs_fs =
      let elims = Map.fromList (zip ctorVarIxs cs_fs')
      ty <- typeInferComplete =<<
        liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
-     let rec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
+     let crec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
-            (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
+            (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
             str
 
      unless (length cs_fs == length (dtCtors dt)) $
@@ -692,7 +692,7 @@ compileRecursor dt params motive cs_fs =
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp
 
-     return rec
+     return crec
 
 
 inferRecursor ::

@@ -290,7 +290,7 @@ scReadExternal sc input =
         ("Recursor" : i : nixs :
          (separateArgs ->
           Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
-            do rec <- CompiledRecursor <$>
+            do crec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
                         pure (read nixs) <*>
@@ -299,7 +299,7 @@ scReadExternal sc input =
                         readElimsMap elims <*>
                         readCtorList ctorOrder <*>
                         readIdx ty
-               pure (FTermF (Recursor rec))
+               pure (FTermF (Recursor crec))
 
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
