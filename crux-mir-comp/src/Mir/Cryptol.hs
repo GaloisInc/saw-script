@@ -445,7 +445,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
     typeErr :: forall tp. String -> TypeShape tp -> Cry.Type -> String -> Either String CryTermAdaptor
     typeErr desc shp ty extra = Left $
             "type mismatch in " ++ desc ++ ": Cryptol type " ++ show (Cry.pp ty) ++
-            " does not match Rust type " ++ show (shp) ++ -- M.fmt (shapeMirTy shp) ++
+            " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
 
 typecheckFnSig _ _ _ (SAW.TypedTermSchema sch) = Left $
