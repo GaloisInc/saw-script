@@ -158,6 +158,25 @@ run-tests() {
             else
                 cat
             fi
+        ) | (
+
+            # If we are on Windows, insert carriage returns into the
+            # output file. The reference files grow carriage returns
+            # when checked out because git thinks they're text files;
+            # however, ghc binaries apparently do not create output
+            # with carriage returns so if we want the output to match
+            # we need to insert them.
+            #
+            # MSYS_NT is what the GH Windows runners produce. The
+            # other patterns are precautionary.
+            case "$(uname -s)" in
+                MSYS_NT-*|[Ww]indows*|*[Cc]ygwin*|*[Ii]nterix*)
+                    sed '/[^\r]$/s/$/\r/;/^$/s/$/\r/'
+                    ;;
+                *)
+                    cat
+                    ;;
+            esac
         ) > $TEST.log 
 
         # Check the output against the expected version.
