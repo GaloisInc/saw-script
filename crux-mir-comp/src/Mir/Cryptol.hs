@@ -287,6 +287,8 @@ cryptolRun name argAdapt argShps retShp funcTerm = do
     RegMap argsCtx <- getOverrideArgs
     let sc = mirSharedContext (sym ^. W4.userState)
         
+        -- The length of the adaptors is assumes to match the lenghts of the
+        -- other arguments.
         doArgs ::
           forall ctx.
           [CryTermAdaptor] ->
