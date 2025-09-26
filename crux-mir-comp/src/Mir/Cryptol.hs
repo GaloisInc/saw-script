@@ -432,7 +432,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
           | otherwise -> typeErr desc shp' ty $
             "array length " ++ show n' ++ " does not match " ++ show n
         (SliceShape _refTy elTy M.Immut elTyRepr, _)
-           | not isArg -> typeErr desc shp ty "Reference slices may appear only in parameters"
+           | not isArg -> typeErr desc shp ty "Slice references may appear only in parameters"
            | Just (len,cryEl) <- Cry.tIsSeq ty
            , Just n <- Cry.tIsNum len ->
             case asBaseType elTyRepr of
