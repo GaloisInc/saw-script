@@ -147,7 +147,7 @@ evalTermF cfg lam recEval tf env =
                                       f x
                                  _ -> panic "evalTermF" ["Expected VFun"]
     Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
-    Pi nm t1 t2             -> do v <- evalType t1
+    Pi _nm t1 t2            -> do v <- evalType t1
                                   body <-
                                     if inBitSet 0 (looseVars t2) then
                                       pure (VDependentPi (\x -> toTValue <$> lam t2 (x : env)))
@@ -155,7 +155,7 @@ evalTermF cfg lam recEval tf env =
                                       do -- put dummy values in the environment; the term should never reference them
                                          let val = ready VUnit
                                          VNondependentPi . toTValue <$> lam t2 (val :env)
-                                  return $ TValue $ VPiType nm v body
+                                  return $ TValue $ VPiType v body
 
     LocalVar i              -> force (env !! i)
 
@@ -333,10 +333,10 @@ processRecArgs ::
   TValue l ->
   Env l ->
   EvalM l (Env l)
-processRecArgs (p:ps) args (VPiType _ _ body) env =
+processRecArgs (p:ps) args (VPiType _ body) env =
   do tp' <- applyPiBody body (ready p)
      processRecArgs ps args tp' env
-processRecArgs [] (x:xs) (VPiType _ _tp body) env =
+processRecArgs [] (x:xs) (VPiType _tp body) env =
   do tp' <- applyPiBody body x
      processRecArgs [] xs tp' (x : env)
 processRecArgs [] [] _ env = pure env
@@ -696,18 +696,18 @@ evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalPrim fallback p tv = loop [] tv
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
-    loop env (VPiType _nm _t body) (Prims.PrimFun f) =
+    loop env (VPiType _t body) (Prims.PrimFun f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            loop (x : env) tp' (f x)
 
-    loop env (VPiType _nm _t body) (Prims.PrimStrict f) =
+    loop env (VPiType _t body) (Prims.PrimStrict f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            loop (ready x' : env) tp' (f x')
 
-    loop env (VPiType _nm _t body) (Prims.PrimFilterFun msg r f) =
+    loop env (VPiType _t body) (Prims.PrimFilterFun msg r f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x

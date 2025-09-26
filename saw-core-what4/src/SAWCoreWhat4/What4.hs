@@ -947,7 +947,7 @@ parseUninterpreted ::
   TValue (What4 sym) -> IO (SValue sym)
 parseUninterpreted sym ref app ty =
   case ty of
-    VPiType _nm _ body
+    VPiType _ body
       -> pure $ VFun $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
@@ -1210,7 +1210,7 @@ argTypes v =
      _ -> panic "argTypes" ["Expected type value: " <> Text.pack (show v)]
 
   where
-    loop (VPiType _nm v1 body) =
+    loop (VPiType v1 body) =
       do x  <- delay (fail "argTypes: unsupported dependent SAW-Core type")
          v2 <- applyPiBody body x
          vs <- loop v2
@@ -1617,7 +1617,7 @@ parseUninterpretedSAW ::
   IO (SValue (B.ExprBuilder n st fs))
 parseUninterpretedSAW sym st sc ref trm app ty =
   case ty of
-    VPiType _nm t1 body
+    VPiType t1 body
       -> pure $ VFun $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'

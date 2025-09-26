@@ -640,7 +640,7 @@ sbvSolveBasic sc addlPrims unintSet t = do
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType _fnm _ body)
+    (VPiType _ body)
       -> return $
          VFun $ \x ->
            do x' <- force x

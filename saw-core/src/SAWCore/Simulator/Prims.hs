@@ -1330,7 +1330,7 @@ muxValue bp tp0 b = value tp0
     value _ (VNat m)  (VNat n)      | m == n = return $ VNat m
     value _ (VString x) (VString y) | x == y = return $ VString x
 
-    value (VPiType _ _tp body) (VFun f) (VFun g) =
+    value (VPiType _tp body) (VFun f) (VFun g) =
         return $ VFun $ \a ->
            do tp' <- applyPiBody body a
               x <- f a
@@ -1418,19 +1418,19 @@ muxValue bp tp0 b = value tp0
     ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
 
     -- consume the data type parameters and compute the type of the constructor
-    ctorArgs (VPiType _nm _t1 body) (p:ps) xs ys =
+    ctorArgs (VPiType _t1 body) (p:ps) xs ys =
       do t' <- applyPiBody body p
          ctorArgs t' ps xs ys
 
     -- mux the arguments one at a time, as long as the constructor type is not
     -- a dependent function
-    ctorArgs (VPiType _nm t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
+    ctorArgs (VPiType t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
       do z  <- thunk t1 x y
          zs <- ctorArgs t2 [] xs ys
          pure (z:zs)
     ctorArgs _ [] [] [] = pure []
 
-    ctorArgs (VPiType _nm _t1 (VDependentPi _)) [] _ _ =
+    ctorArgs (VPiType _t1 (VDependentPi _)) [] _ _ =
       unsupportedPrimitive "muxValue" "cannot mux constructors with dependent types"
 
     ctorArgs ty ps xs ys =
