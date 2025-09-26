@@ -117,7 +117,7 @@ data SimulatorConfig l =
 ------------------------------------------------------------
 -- Evaluation of terms
 
-type Env l = [(Thunk l, TValue l)]
+type Env l = [Thunk l]
 type EnvIn m l = Env (WithM m l)
 
 -- | Meaning of an open term, parameterized by environment of bound variables
@@ -152,20 +152,18 @@ evalTermF cfg lam recEval tf env =
                                    do x <- recEvalDelay t2
                                       f x
                                  _ -> simNeutral cfg env (NeutralApp (NeutralBox t1) t2)
-    Lambda _nm tp t         -> do v <- evalType tp
-                                  return $ VFun (\x -> lam t ((x,v) : env))
+    Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
     Pi _nm t1 t2            -> do v <- evalType t1
                                   body <-
                                     if inBitSet 0 (looseVars t2) then
-                                      pure (VDependentPi (\x -> toTValue <$> lam t2 ((x,v) : env)))
+                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (x : env)))
                                     else
                                       do -- put dummy values in the environment; the term should never reference them
                                          let val = ready VUnit
-                                         let tp  = VUnitType
-                                         VNondependentPi . toTValue <$> lam t2 ((val,tp):env)
+                                         VNondependentPi . toTValue <$> lam t2 (val : env)
                                   return $ TValue $ VPiType v body
 
-    LocalVar i              -> force (fst (env !! i))
+    LocalVar i              -> force (env !! i)
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
@@ -211,16 +209,13 @@ evalTermF cfg lam recEval tf env =
                                  _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
 
         Recursor r ->
-          do let f (e,ety) = do v  <- recEvalDelay e
-                                ty <- evalType ety
-                                pure (v,ty)
-             let dname = recursorDataType r
+          do let dname = recursorDataType r
              let nixs = recursorNumIxs r
              dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
              mty <- evalType (recursorMotiveTy r)
-             es  <- traverse f (recursorElims r)
+             es  <- traverse (recEvalDelay . fst) (recursorElims r)
              ty  <- evalType (recursorType r)
              let vrec = VRecursor dname dty ps nixs m mty es ty
              evalRecursor vrec
@@ -251,17 +246,16 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =
+    evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs _ty) =
       vFunList nixs $ \ix_thunks ->
       pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
          r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
            Just (ctor, args)
-             | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-             -> do let rTy = ty
-                   ctorTy <- toTValue <$> lam (ctorType ctor) []
-                   allArgs <- processRecArgs ps args ctorTy [(elim, elimTy), (r_thunk, rTy)]
+             | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
+             -> do ctorTy <- toTValue <$> lam (ctorType ctor) []
+                   allArgs <- processRecArgs ps args ctorTy [elim, r_thunk]
                    lam (ctorIotaTemplate ctor) allArgs
 
              | otherwise ->
@@ -285,13 +279,12 @@ evalTermF cfg lam recEval tf env =
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (p, c, ct, args) =
       case r of
-        VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty ->
+        VRecursor _d _k ps _nixs _motive _motiveTy ps_fs _ty ->
           do let i = nameIndex c
-             let rTy = ty
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
-               (Just (ResolvedCtor ctor), Just (elim, elimTy)) ->
-                 do allArgs <- processRecArgs ps args ct [(elim, elimTy), (r_thunk, rTy)]
+               (Just (ResolvedCtor ctor), Just elim) ->
+                 do allArgs <- processRecArgs ps args ct [elim, r_thunk]
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
@@ -356,9 +349,9 @@ processRecArgs ::
 processRecArgs (p:ps) args (VPiType _ body) env =
   do tp' <- applyPiBody body (ready p)
      processRecArgs ps args tp' env
-processRecArgs [] (x:xs) (VPiType tp body) env =
+processRecArgs [] (x:xs) (VPiType _tp body) env =
   do tp' <- applyPiBody body x
-     processRecArgs [] xs tp' ((x,tp):env)
+     processRecArgs [] xs tp' (x : env)
 processRecArgs [] [] _ env = pure env
 processRecArgs _ _ ty _ =
   panic "processRegArgs" [
@@ -723,24 +716,24 @@ evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalPrim fallback p tv = loop [] tv
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
-    loop env (VPiType t body) (Prims.PrimFun f) =
+    loop env (VPiType _t body) (Prims.PrimFun f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
-           loop ((x,t):env) tp' (f x)
+           loop (x : env) tp' (f x)
 
-    loop env (VPiType t body) (Prims.PrimStrict f) =
+    loop env (VPiType _t body) (Prims.PrimStrict f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
-           loop ((ready x',t):env) tp' (f x')
+           loop (ready x' : env) tp' (f x')
 
-    loop env (VPiType t body) (Prims.PrimFilterFun msg r f) =
+    loop env (VPiType _t body) (Prims.PrimFilterFun msg r f) =
       pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            runMaybeT (r x') >>= \case
-             Just v -> loop ((ready x',t):env) tp' (f v)
-             _ -> fallback msg ((ready x',t):env) tp'
+             Just v -> loop (ready x' : env) tp' (f v)
+             _ -> fallback msg (ready x' : env) tp'
 
     loop env tp (Prims.PrimExcept m) =
       runExceptT m >>= \case

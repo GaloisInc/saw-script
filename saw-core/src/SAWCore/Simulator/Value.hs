@@ -86,7 +86,7 @@ data VRecursor l
      !Int        -- number of index parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
-     !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
+     !(Map VarIndex (Thunk l)) -- constructor eliminators and their types
      !(TValue l) -- type of recursor function
 
 -- | The subset of values that represent types.
