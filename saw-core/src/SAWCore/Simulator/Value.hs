@@ -54,7 +54,7 @@ instantiation.
 The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
-  = VFun !LocalName !(Thunk l -> MValue l)
+  = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
@@ -96,7 +96,7 @@ data TValue l
   | VIntType
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
-  | VPiType LocalName !(TValue l) !(PiBody l)
+  | VPiType !(TValue l) !(PiBody l)
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
@@ -206,7 +206,7 @@ instance Show (Extra l) => Show (TValue l) where
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
-      VPiType _ t _    -> showParen True
+      VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
@@ -264,8 +264,8 @@ valRecordProj v _ =
   panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
-apply (VFun _ f) x = f x
-apply (TValue (VPiType _ _ body)) x = TValue <$> applyPiBody body x
+apply (VFun f) x = f x
+apply (TValue (VPiType _ body)) x = TValue <$> applyPiBody body x
 
 apply v _x = panic "apply" ["Not a function value: " <> Text.pack (show v)]
 
@@ -350,7 +350,7 @@ suffixTValue tv =
       do a' <- suffixTValue a
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
-    VPiType _ _ _ -> Nothing
+    VPiType _ _ -> Nothing
     VUnitType -> Just "_Unit"
     VPairType a b ->
       do a' <- suffixTValue a

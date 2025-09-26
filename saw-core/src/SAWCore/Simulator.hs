@@ -148,13 +148,13 @@ evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalTermF cfg lam recEval tf env =
   case tf of
     App t1 t2               -> recEval t1 >>= \case
-                                 VFun _ f ->
+                                 VFun f ->
                                    do x <- recEvalDelay t2
                                       f x
                                  _ -> simNeutral cfg env (NeutralApp (NeutralBox t1) t2)
-    Lambda nm tp t          -> do v <- evalType tp
-                                  return $ VFun nm (\x -> lam t ((x,v) : env))
-    Pi nm t1 t2             -> do v <- evalType t1
+    Lambda _nm tp t         -> do v <- evalType tp
+                                  return $ VFun (\x -> lam t ((x,v) : env))
+    Pi _nm t1 t2            -> do v <- evalType t1
                                   body <-
                                     if inBitSet 0 (looseVars t2) then
                                       pure (VDependentPi (\x -> toTValue <$> lam t2 ((x,v) : env)))
@@ -163,7 +163,7 @@ evalTermF cfg lam recEval tf env =
                                          let val = ready VUnit
                                          let tp  = VUnitType
                                          VNondependentPi . toTValue <$> lam t2 ((val,tp):env)
-                                  return $ TValue $ VPiType nm v body
+                                  return $ TValue $ VPiType v body
 
     LocalVar i              -> force (fst (env !! i))
 
@@ -252,8 +252,8 @@ evalTermF cfg lam recEval tf env =
 
     evalRecursor :: VRecursor l -> MValue l
     evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =
-      vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
-      pure $ VFun "arg" $ \arg_thunk ->
+      vFunList nixs $ \ix_thunks ->
+      pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
          r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
@@ -320,31 +320,31 @@ evalTermF cfg lam recEval tf env =
 
     ctorValue :: Name -> TValue l -> Int -> Int -> MValue l
     ctorValue nm tv i j =
-      vFunList (replicate i "_") $ \params ->
-      vFunList (replicate j "_") $ \args ->
+      vFunList i $ \params ->
+      vFunList j $ \args ->
       pure $ VCtorApp nm tv params args
 
     dtValue :: Name -> TValue l -> Int -> Int -> MValue l
     dtValue nm tv i j =
-      vStrictFunList (replicate i "_") $ \params ->
-      vStrictFunList (replicate j "_") $ \idxs ->
+      vStrictFunList i $ \params ->
+      vStrictFunList j $ \idxs ->
       pure $ TValue $ VDataType nm tv params idxs
 
 -- | Create a 'Value' for a lazy multi-argument function.
-vFunList :: forall l. VMonad l => [LocalName] -> ([Thunk l] -> MValue l) -> MValue l
-vFunList names k = go [] names
+vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
+vFunList n0 k = go n0 []
   where
-    go :: [Thunk l] -> [LocalName] -> MValue l
-    go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> go (x : args) ns)
+    go :: Int -> [Thunk l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ VFun (\x -> go (n - 1) (x : args))
 
 -- | Create a 'Value' for a strict multi-argument function.
-vStrictFunList :: forall l. VMonad l => [LocalName] -> ([Value l] -> MValue l) -> MValue l
-vStrictFunList names k = go [] names
+vStrictFunList :: forall l. VMonad l => Int -> ([Value l] -> MValue l) -> MValue l
+vStrictFunList n0 k = go n0 []
   where
-    go :: [Value l] -> [LocalName] -> MValue l
-    go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> force x >>= \v -> go (v : args) ns)
+    go :: Int -> [Value l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ VFun (\x -> force x >>= \v -> go (n - 1) (v : args))
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
@@ -353,10 +353,10 @@ processRecArgs ::
   TValue l ->
   Env l ->
   EvalM l (Env l)
-processRecArgs (p:ps) args (VPiType _ _ body) env =
+processRecArgs (p:ps) args (VPiType _ body) env =
   do tp' <- applyPiBody body (ready p)
      processRecArgs ps args tp' env
-processRecArgs [] (x:xs) (VPiType _ tp body) env =
+processRecArgs [] (x:xs) (VPiType tp body) env =
   do tp' <- applyPiBody body x
      processRecArgs [] xs tp' ((x,tp):env)
 processRecArgs [] [] _ env = pure env
@@ -723,19 +723,19 @@ evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalPrim fallback p tv = loop [] tv
   where
     loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
-    loop env (VPiType nm t body) (Prims.PrimFun f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType t body) (Prims.PrimFun f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            loop ((x,t):env) tp' (f x)
 
-    loop env (VPiType nm t body) (Prims.PrimStrict f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType t body) (Prims.PrimStrict f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            loop ((ready x',t):env) tp' (f x')
 
-    loop env (VPiType nm t body) (Prims.PrimFilterFun msg r f) =
-      pure $ VFun nm $ \x ->
+    loop env (VPiType t body) (Prims.PrimFilterFun msg r f) =
+      pure $ VFun $ \x ->
         do tp' <- applyPiBody body x
            x'  <- force x
            runMaybeT (r x') >>= \case

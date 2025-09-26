@@ -284,7 +284,7 @@ flattenSValue nm v = do
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        VFun _ _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
+        VFun {} -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
         _ -> fail $ "Cannot create uninterpreted function " ++ show nm ++ " with argument " ++ show v
 
 vWord :: SWord -> SValue
@@ -640,9 +640,9 @@ sbvSolveBasic sc addlPrims unintSet t = do
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType fnm _ body)
+    (VPiType _ body)
       -> return $
-         VFun fnm $ \x ->
+         VFun $ \x ->
            do x' <- force x
               (cws', suffix) <- flattenSValue nm x'
               t2 <- applyPiBody body (ready x')
