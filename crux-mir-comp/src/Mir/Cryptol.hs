@@ -382,7 +382,7 @@ munge sym shp0 rv0 = do
 
 
 -- | Check if the Rust type macthes the Cryptol override.
--- If successful, returns a list of "adaapters" which contain
+-- If successful, returns a list of "adaptors" which contain
 -- information about dynamic checking we might need to do on the
 -- arguments to match them up with the Cryptol.
 typecheckFnSig ::
