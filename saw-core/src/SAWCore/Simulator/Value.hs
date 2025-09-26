@@ -35,8 +35,6 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
-
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
@@ -103,19 +101,6 @@ data TValue l
 data PiBody l
   = VDependentPi !(Thunk l -> EvalM l (TValue l))
   | VNondependentPi !(TValue l)
-
--- | Neutral terms represent computations that are blocked
---   because some internal term cannot be evaluated
---   (e.g., because it is a variable, because it's definition
---   is being hidden, etc.)
-data NeutralTerm
-  = NeutralBox Term -- the thing blocking evaluation
-  | NeutralPairLeft NeutralTerm   -- left pair projection
-  | NeutralPairRight NeutralTerm  -- right pair projection
-  | NeutralRecordProj NeutralTerm FieldName -- record projection
-  | NeutralApp NeutralTerm Term -- function application
-  | NeutralConstant -- A constant value with no definition
-      Name
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -357,43 +342,3 @@ suffixTValue tv =
     VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing
-
-
-neutralToTerm :: NeutralTerm -> Term
-neutralToTerm = loop
-  where
-  loop (NeutralBox tm) = tm
-  loop (NeutralPairLeft nt) =
-    Unshared (FTermF (PairLeft (loop nt)))
-  loop (NeutralPairRight nt) =
-    Unshared (FTermF (PairRight (loop nt)))
-  loop (NeutralRecordProj nt f) =
-    Unshared (FTermF (RecordProj (loop nt) f))
-  loop (NeutralApp nt arg) =
-    Unshared (App (loop nt) arg)
-  loop (NeutralConstant nm) =
-    Unshared (Constant nm)
-
-neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
-neutralToSharedTerm sc = loop
-  where
-  loop (NeutralBox tm) = pure tm
-  loop (NeutralPairLeft nt) =
-    scFlatTermF sc . PairLeft =<< loop nt
-  loop (NeutralPairRight nt) =
-    scFlatTermF sc . PairRight =<< loop nt
-  loop (NeutralRecordProj nt f) =
-    do tm <- loop nt
-       scFlatTermF sc (RecordProj tm f)
-  loop (NeutralApp nt arg) =
-    do tm <- loop nt
-       scApply sc tm arg
-  loop (NeutralConstant nm) =
-    do scConst sc nm
-
-ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
-ppNeutral opts = ppTerm opts . neutralToTerm
-
--- XXX this shouldn't be a Show instance
-instance Show NeutralTerm where
-  show = PPS.render PPS.defaultOpts . ppNeutral PPS.defaultOpts

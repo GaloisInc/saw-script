@@ -885,10 +885,9 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (extcns (EC vn ty))
            | otherwise                          = Nothing
-     let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler mux
+     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
      Sim.evalSharedTerm cfg t
 
 
@@ -1559,10 +1558,9 @@ w4EvalBasic sym st sc m addlPrims ecCons ref unintSet t =
              let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
              in Just (extcns tf (EC vn ty))
            | otherwise                          = Nothing
-     let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
-     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler mux
+     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
      Sim.evalSharedTerm cfg t
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
@@ -1588,11 +1586,10 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
      let uninterpreted _tf nm ty =
           if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
-     let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
      let primHandler = Sim.defaultPrimHandler
      let mux = Prims.lazyMuxValue (prims sym)
      res <- X.try $ do
-              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler mux
+              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted primHandler mux
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)
