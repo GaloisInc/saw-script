@@ -203,8 +203,7 @@ evalTermF cfg lam recEval tf env =
              let nixs = recursorNumIxs r
              ps  <- traverse recEval (recursorParams r)
              m   <- recEval (recursorMotive r)
-             es  <- traverse recEvalDelay (recursorElims r)
-             let vrec = VRecursor dname ps nixs m es
+             let vrec = VRecursor dname ps nixs (recursorCtorOrder r) m
              evalRecursor vrec
 
         RecordType elem_tps ->
@@ -233,11 +232,13 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d ps nixs motive ps_fs) =
+    evalRecursor vrec@(VRecursor d ps nixs cnames motive) =
+      vFunList (replicate (length cnames) "_") $ \elim_thunks ->
       vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
       pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
-         r_thunk <- delay (evalRecursor vrec)
+         r_thunk <- delay (evalRecursor vrec >>= flip applyAll elim_thunks)
+         let ps_fs = Map.fromList (zip (map nameIndex cnames) elim_thunks)
          case evalConstructor argv of
            Just (ctor, args)
              | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
@@ -251,7 +252,7 @@ evalTermF cfg lam recEval tf env =
            Nothing ->
              case argv of
                VCtorMux _ps branches ->
-                 do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
+                 do alts <- traverse (evalCtorMuxBranch vrec ps_fs) (IntMap.elems branches)
                     -- compute return type of recursor application
                     ixvs <- traverse force ix_thunks
                     retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
@@ -262,11 +263,12 @@ evalTermF cfg lam recEval tf env =
 
     evalCtorMuxBranch ::
       VRecursor l ->
+      Map VarIndex (Thunk l) ->
       (VBool l, Name, TValue l, [Thunk l]) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (p, c, ct, args) =
+    evalCtorMuxBranch r ps_fs (p, c, ct, args) =
       case r of
-        VRecursor _d ps _nixs _motive ps_fs ->
+        VRecursor _d ps _nixs _cnames _motive ->
           do let i = nameIndex c
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of

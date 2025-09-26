@@ -81,8 +81,8 @@ data VRecursor l
      !Name -- data type name
      ![Value l]  -- data type parameters
      !Int        -- number of index parameters
+     ![Name]     -- constructor order
      !(Value l)  -- motive function
-     !(Map VarIndex (Thunk l)) -- constructor eliminators and their types
 
 -- | The subset of values that represent types.
 data TValue l

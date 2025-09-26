@@ -67,8 +67,6 @@ import qualified Data.Foldable as Foldable (and, foldl')
 import Data.Hashable
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Typeable (Typeable)
@@ -237,7 +235,6 @@ data CompiledRecursor e =
   , recursorParams    :: [e]
   , recursorNumIxs    :: Int
   , recursorMotive    :: e
-  , recursorElims     :: Map VarIndex e -- eliminator functions
   , recursorCtorOrder :: [Name]
   , recursorType      :: e
   }
@@ -266,8 +263,8 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 n1 m1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 es2 ord2 ty2)
-  | Map.keysSet es1 == Map.keysSet es2 && n1 == n2
+zipRec f (CompiledRecursor d1 ps1 n1 m1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 ord2 ty2)
+  | n1 == n2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
        pure $ CompiledRecursor
@@ -275,7 +272,6 @@ zipRec f (CompiledRecursor d1 ps1 n1 m1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n
               (zipWith f ps1 ps2)
               n1
               (f m1 m2)
-              (Map.intersectionWith f es1 es2)
               ord
               (f ty1 ty2)
 
