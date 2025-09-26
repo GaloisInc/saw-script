@@ -143,13 +143,13 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) ->
+            Recursor (CompiledRecursor d ps nixs motive cs_fs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
                       (["Recursor" , show (nameIndex d), show nixs] ++
                        map show ps ++
-                       [ argsep, show motive, show motive_ty
+                       [ argsep, show motive
                        , show (Map.toList cs_fs)
                        , show (map nameIndex ctorOrder)
                        , show ty
@@ -288,13 +288,12 @@ scReadExternal sc input =
 
         ("Recursor" : i : nixs :
          (separateArgs ->
-          Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
+          Just (ps, [motive, elims, ctorOrder, ty]))) ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
                         pure (read nixs) <*>
                         readIdx motive <*>
-                        readIdx motiveTy <*>
                         readElimsMap elims <*>
                         readCtorList ctorOrder <*>
                         readIdx ty
