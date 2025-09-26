@@ -399,7 +399,7 @@ instance TypeInfer Term where
               modify (Map.insert i x')
               return x'
   typeInferComplete trm =
-    SCTypedTerm trm <$> withErrorTerm trm (typeInfer trm) <*> askCtx'
+    SCTypedTerm trm <$> typeInfer trm <*> askCtx'
 
 -- Type inference for TermF Term dispatches to that for TermF SCTypedTerm by
 -- calling inference on all the sub-components and extending the context inside
