@@ -419,7 +419,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d parameters _nixs motive eliminators elimOrder _ty) ->
+    Recursor (CompiledRecursor d parameters _nixs motive _elimOrder _ty) ->
       do maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
@@ -431,16 +431,10 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
 
-         let fnd c = case Map.lookup (nameIndex c) eliminators of
-                       Just e -> translateTerm e
-                       Nothing -> errorTermM
-                          ("Recursor eliminator missing eliminator for constructor " ++ show c)
-
          ps <- mapM translateTerm parameters
          m  <- translateTerm motive
-         elimlist <- mapM fnd elimOrder
 
-         pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
+         pure (Coq.App rect_var (ps ++ [m]))
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))

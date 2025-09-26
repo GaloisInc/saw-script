@@ -620,7 +620,7 @@ inferRecursorType dt params nixs motive ty =
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params nixs motive mempty [] ty))
+             Recursor (CompiledRecursor d params nixs motive [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -655,38 +655,23 @@ compileRecursor ::
   DataType ->
   [SCTypedTerm] {- ^ datatype parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
-  [SCTypedTerm] {- ^ constructor eliminators -} ->
   TCM (CompiledRecursor SCTypedTerm)
-compileRecursor dt params motive cs_fs =
+compileRecursor dt params motive =
   do let d = dtName dt
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
-     let ctorVarIxs = map nameIndex ctorOrder
-     let elims = Map.fromList (zip ctorVarIxs cs_fs)
-     ty <- typeInferComplete =<<
-       liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
-     let crec = CompiledRecursor d params nixs motive elims ctorOrder ty
-     let mk_err str =
-           MalformedRecursor
-            (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
-            str
 
-     unless (length cs_fs == length (dtCtors dt)) $
-       throwTCError $ mk_err "Extra constructors"
-
-     -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType dt params nixs motive ty
-
-     -- Check that the elimination functions each have the right types, and
-     -- that we have exactly one for each constructor of dt
+     -- Compute the types of the elimination functions [(Name, Term)]
      elims_tps <-
        liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
 
-     forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup (nameIndex c) elims of
-         Nothing ->
-           throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just f -> checkSubtype f req_tp
+     ty1 <- liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
+     ty2 <- liftTCM scFunAll (map snd elims_tps) ty1
+     ty <- typeInferComplete ty2
+     let crec = CompiledRecursor d params nixs motive ctorOrder ty
+
+     -- Check that the parameters and motive are correct for the given datatype
+     _s <- inferRecursorType dt params nixs motive ty
 
      return crec
 

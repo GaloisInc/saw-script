@@ -16,7 +16,6 @@ module SAWCore.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Control.Monad (forM)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
@@ -143,14 +142,13 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d ps nixs motive cs_fs ctorOrder ty) ->
+            Recursor (CompiledRecursor d ps nixs motive ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
                       (["Recursor" , show (nameIndex d), show nixs] ++
                        map show ps ++
                        [ argsep, show motive
-                       , show (Map.toList cs_fs)
                        , show (map nameIndex ctorOrder)
                        , show ty
                        ])
@@ -211,14 +209,6 @@ scReadExternal sc input =
 
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
-
-    readElimsMap :: String -> ReadM (Map VarIndex Term)
-    readElimsMap str =
-      do (ls :: [(VarIndex, Int)]) <- readM str
-         elims  <- forM ls (\(c, e) ->
-                    do e'  <- getTerm e
-                       pure (c, e'))
-         pure (Map.fromList elims)
 
     readCtorList :: String -> ReadM [Name]
     readCtorList str =
@@ -288,13 +278,12 @@ scReadExternal sc input =
 
         ("Recursor" : i : nixs :
          (separateArgs ->
-          Just (ps, [motive, elims, ctorOrder, ty]))) ->
+          Just (ps, [motive, ctorOrder, ty]))) ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
                         pure (read nixs) <*>
                         readIdx motive <*>
-                        readElimsMap elims <*>
                         readCtorList ctorOrder <*>
                         readIdx ty
                pure (FTermF (Recursor crec))
