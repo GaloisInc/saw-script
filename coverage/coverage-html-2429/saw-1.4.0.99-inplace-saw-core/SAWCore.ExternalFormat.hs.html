@@ -309,7 +309,7 @@ span.spaces    { background: white }
 <span class="lineno">  290 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Recursor&quot; : i : nixs :</span>
 <span class="lineno">  291 </span><span class="spaces">         </span><span class="istickedoff">(separateArgs -&gt;</span>
 <span class="lineno">  292 </span><span class="spaces">          </span><span class="istickedoff">Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) -&gt;</span>
-<span class="lineno">  293 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do rec &lt;- CompiledRecursor &lt;$&gt;</span></span>
+<span class="lineno">  293 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do crec &lt;- CompiledRecursor &lt;$&gt;</span></span>
 <span class="lineno">  294 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readName i &lt;*&gt;</span></span>
 <span class="lineno">  295 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">traverse readIdx ps &lt;*&gt;</span></span>
 <span class="lineno">  296 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">pure (read nixs) &lt;*&gt;</span></span>
@@ -318,7 +318,7 @@ span.spaces    { background: white }
 <span class="lineno">  299 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readElimsMap elims &lt;*&gt;</span></span>
 <span class="lineno">  300 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readCtorList ctorOrder &lt;*&gt;</span></span>
 <span class="lineno">  301 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx ty</span></span>
-<span class="lineno">  302 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (FTermF (Recursor rec))</span></span>
+<span class="lineno">  302 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (FTermF (Recursor crec))</span></span>
 <span class="lineno">  303 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  304 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordType&quot;, elem_tps] -&gt;</span>
 <span class="lineno">  305 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">FTermF &lt;$&gt; (RecordType &lt;$&gt; (traverse (traverse getTerm) =&lt;&lt; readM elem_tps))</span></span>

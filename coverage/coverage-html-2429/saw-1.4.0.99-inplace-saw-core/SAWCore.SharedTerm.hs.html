@@ -877,14 +877,14 @@ span.spaces    { background: white }
 <span class="lineno">  858 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  859 </span><span class="spaces">    </span><span class="istickedoff">-- Step 4: build the API function that shuffles the terms around in the</span>
 <span class="lineno">  860 </span><span class="spaces">    </span><span class="istickedoff">-- correct way.</span>
-<span class="lineno">  861 </span><span class="spaces">    </span><span class="istickedoff">let iota_fun rec cs_fs args =</span>
+<span class="lineno">  861 </span><span class="spaces">    </span><span class="istickedoff">let iota_fun r cs_fs args =</span>
 <span class="lineno">  862 </span><span class="spaces">          </span><span class="istickedoff">do let elim = case Map.lookup (nameIndex cname) cs_fs of</span>
 <span class="lineno">  863 </span><span class="spaces">                   </span><span class="istickedoff">Just e -&gt; e</span>
 <span class="lineno">  864 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  865 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">panic &quot;ctorIotaReduction&quot; [</span></span>
 <span class="lineno">  866 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;no eliminator for constructor &quot; &lt;&gt; Text.pack (show c)</span></span>
 <span class="lineno">  867 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  868 </span><span class="spaces">             </span><span class="istickedoff">instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red</span>
+<span class="lineno">  868 </span><span class="spaces">             </span><span class="istickedoff">instantiateVarList sc 0 (reverse ([r, elim] ++ args)) iota_red</span>
 <span class="lineno">  869 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  870 </span><span class="spaces">    </span><span class="istickedoff">-- Finally, return the required Ctor record</span>
 <span class="lineno">  871 </span><span class="spaces">    </span><span class="istickedoff">return $ Ctor</span>
@@ -1032,10 +1032,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1013 </span>  [Term] {- ^ constructor arguments -} -&gt;
 <span class="lineno"> 1014 </span>  CtorArgStruct {- ^ constructor formal argument descriptor -} -&gt;
 <span class="lineno"> 1015 </span>  IO Term
-<span class="lineno"> 1016 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor sc rec elimf c_args CtorArgStruct{..} =</span>
+<span class="lineno"> 1016 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor sc r elimf c_args CtorArgStruct{..} =</span>
 <span class="lineno"> 1017 </span><span class="spaces">  </span><span class="istickedoff">case zipSameLength c_args ctorArgs of</span>
 <span class="lineno"> 1018 </span><span class="spaces">     </span><span class="istickedoff">Just argsCtx_ctorArgs -&gt;</span>
-<span class="lineno"> 1019 </span><span class="spaces">       </span><span class="istickedoff">ctxReduceRecursor_ sc rec elimf argsCtx_ctorArgs</span>
+<span class="lineno"> 1019 </span><span class="spaces">       </span><span class="istickedoff">ctxReduceRecursor_ sc r elimf argsCtx_ctorArgs</span>
 <span class="lineno"> 1020 </span><span class="spaces">     </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1021 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">error &quot;ctxReduceRecursorRaw: wrong number of constructor arguments!&quot;</span></span></span>
 <span class="lineno"> 1022 </span>
@@ -1048,7 +1048,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1029 </span>  Term     {- ^ eliminator function for the constructor -} -&gt;
 <span class="lineno"> 1030 </span>  [(Term, (VarName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} -&gt;
 <span class="lineno"> 1031 </span>  IO Term
-<span class="lineno"> 1032 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor_ sc rec fi args0_argCtx =</span>
+<span class="lineno"> 1032 </span><span class="decl"><span class="istickedoff">ctxReduceRecursor_ sc r fi args0_argCtx =</span>
 <span class="lineno"> 1033 </span><span class="spaces">  </span><span class="istickedoff">do args &lt;- mk_args IntMap.empty args0_argCtx</span>
 <span class="lineno"> 1034 </span><span class="spaces">     </span><span class="istickedoff">scWhnf sc =&lt;&lt; scApplyAll sc fi args</span>
 <span class="lineno"> 1035 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1085,7 +1085,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1066 </span><span class="spaces">      </span><span class="istickedoff">-- eta expand over the zs and apply the RecursorApp form</span>
 <span class="lineno"> 1067 </span><span class="spaces">      </span><span class="istickedoff">do zs &lt;- traverse <span class="nottickedoff">(scVariable sc)</span> zs_ctx</span>
 <span class="lineno"> 1068 </span><span class="spaces">         </span><span class="istickedoff">x_zs &lt;- scApplyAll <span class="nottickedoff">sc</span> x zs</span>
-<span class="lineno"> 1069 </span><span class="spaces">         </span><span class="istickedoff">body &lt;- scRecursorApp sc rec ixs x_zs</span>
+<span class="lineno"> 1069 </span><span class="spaces">         </span><span class="istickedoff">body &lt;- scRecursorApp sc r ixs x_zs</span>
 <span class="lineno"> 1070 </span><span class="spaces">         </span><span class="istickedoff">scAbstractExts <span class="nottickedoff">sc</span> zs_ctx body</span></span>
 <span class="lineno"> 1071 </span>
 <span class="lineno"> 1072 </span>-- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a &quot;motive&quot;
@@ -1195,14 +1195,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1176 </span>  CompiledRecursor Term {- ^ concrete data included in the recursor term -} -&gt;
 <span class="lineno"> 1177 </span>  Natural {- ^ Concrete natural value to eliminate -} -&gt;
 <span class="lineno"> 1178 </span>  IO Term
-<span class="lineno"> 1179 </span><span class="decl"><span class="istickedoff">scReduceNatRecursor sc rec crec n</span>
+<span class="lineno"> 1179 </span><span class="decl"><span class="istickedoff">scReduceNatRecursor sc r crec n</span>
 <span class="lineno"> 1180 </span><span class="spaces">  </span><span class="istickedoff">| n == 0 =</span>
 <span class="lineno"> 1181 </span><span class="spaces">     </span><span class="istickedoff">do ctor &lt;- scRequireCtor sc preludeZeroIdent</span>
-<span class="lineno"> 1182 </span><span class="spaces">        </span><span class="istickedoff">ctorIotaReduction ctor <span class="nottickedoff">rec</span> (fmap fst $ recursorElims crec) []</span>
+<span class="lineno"> 1182 </span><span class="spaces">        </span><span class="istickedoff">ctorIotaReduction ctor <span class="nottickedoff">r</span> (fmap fst $ recursorElims crec) []</span>
 <span class="lineno"> 1183 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1184 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
 <span class="lineno"> 1185 </span><span class="spaces">     </span><span class="istickedoff">do ctor &lt;- scRequireCtor sc preludeSuccIdent</span>
-<span class="lineno"> 1186 </span><span class="spaces">        </span><span class="istickedoff">ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]</span></span>
+<span class="lineno"> 1186 </span><span class="spaces">        </span><span class="istickedoff">ctorIotaReduction ctor r (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]</span></span>
 <span class="lineno"> 1187 </span>
 <span class="lineno"> 1188 </span>--------------------------------------------------------------------------------
 <span class="lineno"> 1189 </span>-- Reduction to head-normal form
@@ -1252,8 +1252,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1233 </span><span class="spaces">                                                                    </span><span class="istickedoff"><span class="nottickedoff">Just t -&gt; go xs t</span></span>
 <span class="lineno"> 1234 </span><span class="spaces">                                                                    </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
 <span class="lineno"> 1235 </span><span class="spaces">                                                                      </span><span class="istickedoff"><span class="nottickedoff">error &quot;scWhnf: field missing in record&quot;</span></span>
-<span class="lineno"> 1236 </span><span class="spaces">    </span><span class="istickedoff">go (ElimRecursor rec crec _ : xs)</span>
-<span class="lineno"> 1237 </span><span class="spaces">                              </span><span class="istickedoff">(asNat -&gt; Just n)                 = scReduceNatRecursor sc rec crec n &gt;&gt;= go xs</span>
+<span class="lineno"> 1236 </span><span class="spaces">    </span><span class="istickedoff">go (ElimRecursor r crec _ : xs)</span>
+<span class="lineno"> 1237 </span><span class="spaces">                              </span><span class="istickedoff">(asNat -&gt; Just n)                 = scReduceNatRecursor sc r crec n &gt;&gt;= go xs</span>
 <span class="lineno"> 1238 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecursorApp -&gt; Just (r, crec)) | Just (ixs, x, xs') &lt;- splitApps (recursorNumIxs crec) xs</span>
 <span class="lineno"> 1239 </span><span class="spaces">                                                                </span><span class="istickedoff">= go (ElimRecursor r crec ixs : xs') x</span>
 <span class="lineno"> 1240 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairValue -&gt; Just (a, b))      = <span class="nottickedoff">do b' &lt;- memo b</span></span>
@@ -1280,9 +1280,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1261 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedCtor ctor -&gt;</span>
 <span class="lineno"> 1262 </span><span class="spaces">                                                                         </span><span class="istickedoff">case asArgsRec xs of</span>
 <span class="lineno"> 1263 </span><span class="spaces">                                                                           </span><span class="istickedoff">Nothing -&gt; foldM reapply t xs</span>
-<span class="lineno"> 1264 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just (rec, crec, args, xs') -&gt;</span>
+<span class="lineno"> 1264 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just (rt, crec, args, xs') -&gt;</span>
 <span class="lineno"> 1265 </span><span class="spaces">                                                                             </span><span class="istickedoff">do let args' = drop (ctorNumParams ctor) args</span>
-<span class="lineno"> 1266 </span><span class="spaces">                                                                                </span><span class="istickedoff">scReduceRecursor sc rec crec nm args' &gt;&gt;= go xs'</span>
+<span class="lineno"> 1266 </span><span class="spaces">                                                                                </span><span class="istickedoff">scReduceRecursor sc rt crec nm args' &gt;&gt;= go xs'</span>
 <span class="lineno"> 1267 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedDataType _ -&gt;</span>
 <span class="lineno"> 1268 </span><span class="spaces">                                                                         </span><span class="istickedoff">foldM reapply t xs</span>
 <span class="lineno"> 1269 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1308,10 +1308,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1289 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1290 </span><span class="spaces">    </span><span class="istickedoff">-- look for a prefix of ElimApps followed by an ElimRecursor</span>
 <span class="lineno"> 1291 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec :: [WHNFElim] -&gt; Maybe (Term, CompiledRecursor Term, [Term], [WHNFElim])</span>
-<span class="lineno"> 1292 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimRecursor rec crec _ : xs) = Just (rec, crec, [], xs)</span>
+<span class="lineno"> 1292 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimRecursor r crec _ : xs) = Just (r, crec, [], xs)</span>
 <span class="lineno"> 1293 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimApp x : xs) =</span>
 <span class="lineno"> 1294 </span><span class="spaces">      </span><span class="istickedoff">case asArgsRec xs of</span>
-<span class="lineno"> 1295 </span><span class="spaces">        </span><span class="istickedoff">Just (rec, crec, args, xs') -&gt; Just (rec, crec, x : args, xs')</span>
+<span class="lineno"> 1295 </span><span class="spaces">        </span><span class="istickedoff">Just (r, crec, args, xs') -&gt; Just (r, crec, x : args, xs')</span>
 <span class="lineno"> 1296 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; Nothing</span>
 <span class="lineno"> 1297 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec _ = Nothing</span>
 <span class="lineno"> 1298 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1496,8 +1496,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1477 </span><span class="spaces">          </span><span class="istickedoff">case asPairType tp of</span>
 <span class="lineno"> 1478 </span><span class="spaces">            </span><span class="istickedoff">Just (_, t2) -&gt; return t2</span>
 <span class="lineno"> 1479 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scTypeOf: type error: expected pair type&quot;</span></span>
-<span class="lineno"> 1480 </span><span class="spaces">        </span><span class="istickedoff">Recursor rec -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">pure $ recursorType rec</span></span>
+<span class="lineno"> 1480 </span><span class="spaces">        </span><span class="istickedoff">Recursor crec -&gt;</span>
+<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">pure $ recursorType crec</span></span>
 <span class="lineno"> 1482 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1483 </span><span class="spaces">        </span><span class="istickedoff">RecordType elems -&gt;</span>
 <span class="lineno"> 1484 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do max_s &lt;- maximum &lt;$&gt; mapM (sort . snd) elems</span></span>
@@ -1981,7 +1981,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1962 </span>  IO Term
 <span class="lineno"> 1963 </span><span class="decl"><span class="istickedoff">scOpaqueConstant sc nmi ty =</span>
 <span class="lineno"> 1964 </span><span class="spaces">  </span><span class="istickedoff">do nm &lt;- scRegisterName sc nmi</span>
-<span class="lineno"> 1965 </span><span class="spaces">     </span><span class="istickedoff">scDeclareDef sc nm <span class="nottickedoff">NoQualifier</span> ty Nothing</span></span>
+<span class="lineno"> 1965 </span><span class="spaces">     </span><span class="istickedoff">scDeclareDef sc nm <span class="nottickedoff">NoQualifier</span> <span class="nottickedoff">ty</span> <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno"> 1966 </span>
 <span class="lineno"> 1967 </span>-- | Create a function application term from a global identifier and a list of
 <span class="lineno"> 1968 </span>-- arguments (as 'Term's).
@@ -2883,12 +2883,12 @@ span.spaces    { background: white }
 <span class="lineno"> 2864 </span><span class="spaces"></span><span class="istickedoff">scExtsToLocals sc exts x = instantiateVars sc fn 0 x</span>
 <span class="lineno"> 2865 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 2866 </span><span class="spaces">    </span><span class="istickedoff">m = Map.fromList [ (ecVarIndex ec, k) | (ec, k) &lt;- zip (reverse exts) [0 ..] ]</span>
-<span class="lineno"> 2867 </span><span class="spaces">    </span><span class="istickedoff">fn rec l e =</span>
+<span class="lineno"> 2867 </span><span class="spaces">    </span><span class="istickedoff">fn r l e =</span>
 <span class="lineno"> 2868 </span><span class="spaces">      </span><span class="istickedoff">case e of</span>
 <span class="lineno"> 2869 </span><span class="spaces">        </span><span class="istickedoff">Left ec -&gt;</span>
 <span class="lineno"> 2870 </span><span class="spaces">          </span><span class="istickedoff">case Map.lookup (ecVarIndex ec) m of</span>
 <span class="lineno"> 2871 </span><span class="spaces">            </span><span class="istickedoff">Just k  -&gt; scLocalVar sc (l + k)</span>
-<span class="lineno"> 2872 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; scVariable sc =&lt;&lt; traverse rec ec</span>
+<span class="lineno"> 2872 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; scVariable sc =&lt;&lt; traverse r ec</span>
 <span class="lineno"> 2873 </span><span class="spaces">        </span><span class="istickedoff">Right i -&gt;</span>
 <span class="lineno"> 2874 </span><span class="spaces">          </span><span class="istickedoff">scLocalVar sc (i + length exts)</span></span>
 <span class="lineno"> 2875 </span>

@@ -500,7 +500,7 @@ span.spaces    { background: white }
 <span class="lineno">  481 </span><span class="spaces">                  </span><span class="istickedoff">return (mkRewriteRule ctxt l x shallow ann)</span>
 <span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff">Just &lt;$&gt; traverse mkRule (Map.assocs m)</span>
 <span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">(R.asApplyAll -&gt;</span>
-<span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">(R.asRecursorApp -&gt; Just (rec, crec),</span>
+<span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">(R.asRecursorApp -&gt; Just (r, crec),</span>
 <span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">splitAt (recursorNumIxs crec) -&gt; (_ixs, (R.asVariable -&gt; Just ec) : more)))</span>
 <span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">| (ctxt1, _ : ctxt2) &lt;- break (== ec) ctxt -&gt;</span>
 <span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">do -- ti is the type of the value being scrutinized</span>
@@ -525,11 +525,11 @@ span.spaces    { background: white }
 <span class="lineno">  506 </span><span class="spaces">                  </span><span class="istickedoff">-- new lhs and rhs in context @ctxt'@.</span>
 <span class="lineno">  507 </span><span class="spaces">                  </span><span class="istickedoff">lhs' &lt;- adjust lhs</span>
 <span class="lineno">  508 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  509 </span><span class="spaces">                  </span><span class="istickedoff">rec'  &lt;- adjust rec</span>
+<span class="lineno">  509 </span><span class="spaces">                  </span><span class="istickedoff">r'  &lt;- adjust r</span>
 <span class="lineno">  510 </span><span class="spaces">                  </span><span class="istickedoff">crec' &lt;- traverse adjust crec</span>
 <span class="lineno">  511 </span><span class="spaces">                  </span><span class="istickedoff">more' &lt;- traverse <span class="nottickedoff">adjust</span> more</span>
 <span class="lineno">  512 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  513 </span><span class="spaces">                  </span><span class="istickedoff">rhs1 &lt;- scReduceRecursor sc <span class="nottickedoff">rec'</span> crec' (ctorName ctor) args</span>
+<span class="lineno">  513 </span><span class="spaces">                  </span><span class="istickedoff">rhs1 &lt;- scReduceRecursor sc <span class="nottickedoff">r'</span> crec' (ctorName ctor) args</span>
 <span class="lineno">  514 </span><span class="spaces">                  </span><span class="istickedoff">rhs2 &lt;- scApplyAll <span class="nottickedoff">sc</span> rhs1 more'</span>
 <span class="lineno">  515 </span><span class="spaces">                  </span><span class="istickedoff">rhs3 &lt;- betaReduce rhs2</span>
 <span class="lineno">  516 </span><span class="spaces">                  </span><span class="istickedoff">-- re-fold recursive occurrences of the original rhs</span>
@@ -662,9 +662,9 @@ span.spaces    { background: white }
 <span class="lineno">  643 </span>asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
 <span class="lineno">  644 </span><span class="decl"><span class="istickedoff">asNatIotaRedex t =</span>
 <span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">do (f, arg) &lt;- R.asApp t</span>
-<span class="lineno">  646 </span><span class="spaces">     </span><span class="istickedoff">(rec, crec) &lt;- R.asRecursorApp f</span>
+<span class="lineno">  646 </span><span class="spaces">     </span><span class="istickedoff">(r, crec) &lt;- R.asRecursorApp f</span>
 <span class="lineno">  647 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- R.asNat arg</span>
-<span class="lineno">  648 </span><span class="spaces">     </span><span class="istickedoff">return (rec, crec, n)</span></span>
+<span class="lineno">  648 </span><span class="spaces">     </span><span class="istickedoff">return (r, crec, n)</span></span>
 <span class="lineno">  649 </span>
 <span class="lineno">  650 </span>----------------------------------------------------------------------
 <span class="lineno">  651 </span>-- Bottom-up rewriting
@@ -714,9 +714,9 @@ span.spaces    { background: white }
 <span class="lineno">  695 </span><span class="decl"><span class="istickedoff">reduceSharedTerm sc (asBetaRedex -&gt; Just (_, _, body, arg)) = Just &lt;$&gt; instantiateVar sc 0 arg body</span>
 <span class="lineno">  696 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ (asPairRedex -&gt; Just t) = <span class="nottickedoff">pure (Just t)</span></span>
 <span class="lineno">  697 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ (asRecordRedex -&gt; Just t) = <span class="nottickedoff">pure (Just t)</span></span>
-<span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (asNatIotaRedex -&gt; Just (rec, crec, n)) =</span>
-<span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">Just &lt;$&gt; scReduceNatRecursor sc rec crec n</span>
-<span class="lineno">  700 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (R.asApp -&gt; Just (R.asApplyAll -&gt; (R.asRecursorApp -&gt; Just (rec, crec), ixs), arg))</span>
+<span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (asNatIotaRedex -&gt; Just (r, crec, n)) =</span>
+<span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">Just &lt;$&gt; scReduceNatRecursor sc r crec n</span>
+<span class="lineno">  700 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (R.asApp -&gt; Just (R.asApplyAll -&gt; (R.asRecursorApp -&gt; Just (r, crec), ixs), arg))</span>
 <span class="lineno">  701 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">recursorNumIxs crec == length ixs</span> =</span>
 <span class="lineno">  702 </span><span class="spaces">  </span><span class="istickedoff">do let (f, args) = R.asApplyAll arg</span>
 <span class="lineno">  703 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
@@ -725,7 +725,7 @@ span.spaces    { background: white }
 <span class="lineno">  706 </span><span class="spaces">       </span><span class="istickedoff">Just c -&gt;</span>
 <span class="lineno">  707 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex c) mm of</span>
 <span class="lineno">  708 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt;</span>
-<span class="lineno">  709 </span><span class="spaces">             </span><span class="istickedoff">Just &lt;$&gt; scReduceRecursor sc rec crec c (drop (ctorNumParams ctor) args)</span>
+<span class="lineno">  709 </span><span class="spaces">             </span><span class="istickedoff">Just &lt;$&gt; scReduceRecursor sc r crec c (drop (ctorNumParams ctor) args)</span>
 <span class="lineno">  710 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; pure Nothing</span>
 <span class="lineno">  711 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ _ = pure Nothing</span></span>
 <span class="lineno">  712 </span>
