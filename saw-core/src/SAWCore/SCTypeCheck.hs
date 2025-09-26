@@ -613,15 +613,14 @@ inferRecursorType ::
   [SCTypedTerm] {- ^ data type parameters -} ->
   Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
-  SCTypedTerm   {- ^ type of the elimination motive -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM Sort
-inferRecursorType dt params nixs motive motiveTy ty =
+inferRecursorType dt params nixs motive ty =
   do let d = dtName dt
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params nixs motive motiveTy mempty [] ty))
+             Recursor (CompiledRecursor d params nixs motive mempty [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -659,15 +658,14 @@ compileRecursor ::
   [SCTypedTerm] {- ^ constructor eliminators -} ->
   TCM (CompiledRecursor SCTypedTerm)
 compileRecursor dt params motive cs_fs =
-  do motiveTy <- typeInferComplete (typedType motive)
-     let d = dtName dt
+  do let d = dtName dt
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
      let elims = Map.fromList (zip ctorVarIxs cs_fs)
      ty <- typeInferComplete =<<
        liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
-     let crec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
+     let crec = CompiledRecursor d params nixs motive elims ctorOrder ty
      let mk_err str =
            MalformedRecursor
             (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
@@ -677,7 +675,7 @@ compileRecursor dt params motive cs_fs =
        throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType dt params nixs motive motiveTy ty
+     _s <- inferRecursorType dt params nixs motive ty
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt

@@ -237,7 +237,6 @@ data CompiledRecursor e =
   , recursorParams    :: [e]
   , recursorNumIxs    :: Int
   , recursorMotive    :: e
-  , recursorMotiveTy  :: e
   , recursorElims     :: Map VarIndex e -- eliminator functions
   , recursorCtorOrder :: [Name]
   , recursorType      :: e
@@ -267,7 +266,7 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 n1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 mty2 es2 ord2 ty2)
+zipRec f (CompiledRecursor d1 ps1 n1 m1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 es2 ord2 ty2)
   | Map.keysSet es1 == Map.keysSet es2 && n1 == n2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
@@ -276,7 +275,6 @@ zipRec f (CompiledRecursor d1 ps1 n1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 
               (zipWith f ps1 ps2)
               n1
               (f m1 m2)
-              (f mty1 mty2)
               (Map.intersectionWith f es1 es2)
               ord
               (f ty1 ty2)

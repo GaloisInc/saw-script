@@ -454,7 +454,7 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
+    Recursor (CompiledRecursor d params _nixs motive cs_fs ctorOrder _ty) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm) cs_fs
