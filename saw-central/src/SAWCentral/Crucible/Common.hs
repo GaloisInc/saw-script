@@ -7,6 +7,8 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
 module SAWCentral.Crucible.Common
@@ -26,8 +28,18 @@ module SAWCentral.Crucible.Common
   , newSAWCoreBackendWithTimeout
   , defaultSAWCoreBackendTimeout
   , sawCoreState
+  , baseCryptolType
+  , getGlobalPair
+  , runCFG
+  , typeReprToSAWTypes
+  , termToRegValue
   ) where
 
+import qualified Cryptol.TypeCheck.Type as Cryptol
+import qualified Lang.Crucible.CFG.Core as Crucible
+import qualified Lang.Crucible.CFG.Extension as Crucible (IsSyntaxExtension)
+import qualified Lang.Crucible.FunctionHandle as Crucible
+import qualified Lang.Crucible.Simulator as Crucible
 import           Lang.Crucible.Simulator (GenericExecutionFeature)
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
@@ -36,6 +48,8 @@ import           Lang.Crucible.Backend
                    (AbortExecReason(..), ppAbortExecReason, IsSymInterface, IsSymBackend(..),
                     HasSymInterface(..), SomeBackend(..))
 import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
+import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.NatRepr (natValue)
 import qualified Data.Parameterized.Nonce as Nonce
 import           What4.Protocol.Online (OnlineSolver(..))
 import qualified What4.Solver.CVC5 as CVC5
@@ -56,7 +70,10 @@ import qualified Prettyprinter as PP
 
 
 import SAWCore.SharedTerm as SC
-import SAWCoreWhat4.ReturnTrip (SAWCoreState, newSAWCoreState)
+import SAWCoreWhat4.ReturnTrip
+         (SAWCoreState, baseSCType, bindSAWTerm, newSAWCoreState)
+
+import SAWCentral.Options (Options, Verbosity(..), printOutLn)
 
 data PathSatSolver
   = PathSat_Z3
@@ -114,7 +131,7 @@ ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> P
                 -> AbortedResult Sym ext
                 -> PP.Doc ann
 ppAbortedResult _ (AbortedExec InfeasibleBranch{} _) =
-  PP.pretty "Infeasible branch"
+  "Infeasible branch"
 ppAbortedResult ppGP (AbortedExec abt gp) = do
   PP.vcat
     [ ppAbortExecReason abt
@@ -122,16 +139,16 @@ ppAbortedResult ppGP (AbortedExec abt gp) = do
     ]
 ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =
   PP.vcat
-    [ PP.pretty "Both branches aborted after a symbolic branch."
-    , PP.pretty "Location of control-flow branching:"
+    [ "Both branches aborted after a symbolic branch."
+    , "Location of control-flow branching:"
     , PP.indent 2 (PP.pretty (W4.plSourceLoc loc))
-    , PP.pretty "Message from the true branch:"
+    , "Message from the true branch:"
     , PP.indent 2 (ppAbortedResult ppGP trueBranch)
-    , PP.pretty "Message from the false branch:"
+    , "Message from the false branch:"
     , PP.indent 2 (ppAbortedResult ppGP falseBranch)
     ]
 ppAbortedResult _ (AbortedExit ec _gp) =
-  PP.pretty "Branch exited:" PP.<+> PP.viaShow ec
+  "Branch exited:" PP.<+> PP.viaShow ec
 
 setupProfiling ::
   IsSymInterface sym =>
@@ -154,3 +171,104 @@ setupProfiling sym profSource (Just dir) =
 
      pfs <- profilingFeature tbl profilingEventFilter (Just profOpts)
      return (saveProf tbl, [pfs])
+
+-- | Given a base Crucible type, compute the corresponding Cryptol type. This
+-- should return reasonable results for most language backends, but it may not
+-- cover everything. (For instance, MIR arrays use a custom intrinsic type,
+-- not 'Crucible.BaseArrayRepr', so those would need to be handled separately.)
+baseCryptolType :: Crucible.BaseTypeRepr tp -> Maybe Cryptol.Type
+baseCryptolType bt =
+  case bt of
+    Crucible.BaseBoolRepr -> pure $ Cryptol.tBit
+    Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
+    Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
+    Crucible.BaseArrayRepr {} -> Nothing
+    Crucible.BaseFloatRepr _ -> Nothing
+    Crucible.BaseStringRepr _ -> Nothing
+    Crucible.BaseComplexRepr  -> Nothing
+    Crucible.BaseRealRepr     -> Nothing
+    Crucible.BaseStructRepr ts ->
+      Cryptol.tTuple <$> baseCryptolTypes ts
+  where
+    baseCryptolTypes :: Ctx.Assignment Crucible.BaseTypeRepr args -> Maybe [Cryptol.Type]
+    baseCryptolTypes Ctx.Empty = pure []
+    baseCryptolTypes (xs Ctx.:> x) =
+      do ts <- baseCryptolTypes xs
+         t <- baseCryptolType x
+         pure (ts ++ [t])
+
+getGlobalPair ::
+  Options ->
+  Crucible.PartialResult sym ext v ->
+  IO (Crucible.GlobalPair sym v)
+getGlobalPair opts pr =
+  case pr of
+    Crucible.TotalRes gp -> return gp
+    Crucible.PartialRes _ _ gp _ -> do
+      printOutLn opts Info "Symbolic simulation completed with side conditions."
+      return gp
+
+runCFG ::
+  (Crucible.IsSyntaxExtension ext, IsSymInterface sym) =>
+  Crucible.SimContext p sym ext ->
+  Crucible.SymGlobalState sym ->
+  Crucible.FnHandle args a ->
+  Crucible.CFG ext blocks init a ->
+  Crucible.RegMap sym init ->
+  IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
+runCFG simCtx globals h cfg args =
+  do let initExecState =
+           Crucible.InitialState simCtx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h) $
+           Crucible.runOverrideSim (Crucible.handleReturnType h)
+                    (Crucible.regValue <$> (Crucible.callCFG cfg args))
+     Crucible.executeCrucible [] initExecState
+
+-- | Given a 'Crucible.TypeRepr', compute the corresponding Cryptol type
+-- ('Cryptol.Type') and SAWCore type ('Term'). If the 'Crucible.TypeRepr' is
+-- unsupported for extraction, throw an error message.
+--
+-- This is a language backend-agnostic implementation that only supports
+-- Crucible base types. Individual language backends will want to add
+-- additional cases on top of this function in order to support intrinsic
+-- types.
+typeReprToSAWTypes ::
+  Sym ->
+  SharedContext ->
+  Crucible.TypeRepr tp ->
+  IO (Cryptol.Type, Term)
+typeReprToSAWTypes sym sc tp =
+  case Crucible.asBaseType tp of
+    Crucible.AsBaseType btp -> do
+      cty <-
+        case baseCryptolType btp of
+          Just cty -> pure cty
+          Nothing ->
+            fail $ unwords ["Unsupported type for Crucible extraction:", show btp]
+      scTp <- baseSCType sym sc btp
+      pure (cty, scTp)
+
+    Crucible.NotBaseType ->
+      fail $ unwords ["Unsupported type for Crucible extraction:", show tp]
+
+-- | Convert a fresh SAWCore 'Term' to a 'Crucible.RegValue', also binding a
+-- fresh What4 constant and associating it to the 'Term'.
+--
+-- This is a language backend-agnostic implementation that only supports
+-- Crucible base types. Individual language backends will want to add
+-- additional cases on top of this function in order to support intrinsic
+-- types.
+termToRegValue ::
+  Sym ->
+  -- | The Crucible type of the SAWCore term.
+  Crucible.TypeRepr tp ->
+  -- | The SAWCore term.
+  Term ->
+  IO (Crucible.RegValue Sym tp)
+termToRegValue sym tp t =
+  case Crucible.asBaseType tp of
+    Crucible.AsBaseType btp -> do
+      st <- sawCoreState sym
+      bindSAWTerm sym st btp t
+
+    Crucible.NotBaseType ->
+      fail $ unwords ["Unsupported type for Crucible extraction:", show tp]

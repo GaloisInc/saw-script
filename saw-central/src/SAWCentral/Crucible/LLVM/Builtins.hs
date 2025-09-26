@@ -67,14 +67,6 @@ module SAWCentral.Crucible.LLVM.Builtins
     , llvm_sizeof
     , llvm_cast_pointer
 
-    --
-    -- These function are common to LLVM & JVM implementation (not for external use)
-    , setupArg
-    , setupArgs
-    , getGlobalPair
-    , runCFG
-    , baseCryptolType
-
     , displayVerifExceptionOpts
     , findDecl
     , findDefMaybeStatic
@@ -135,6 +127,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.TraversableFC as FC
 
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -154,8 +147,6 @@ import qualified What4.Expr.Builder as W4
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
-import qualified Lang.Crucible.CFG.Extension as Crucible
-  (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
@@ -175,9 +166,6 @@ import           Lang.Crucible.LLVM.QQ( llvmOvr )
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
-
--- parameterized-utils
-import qualified Data.Parameterized.TraversableFC as Ctx
 
 -- saw-core
 import SAWCore.FiniteValue (ppFirstOrderValue)
@@ -1434,7 +1422,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      case res of
        Crucible.FinishedResult _ partialResult ->
          do Crucible.GlobalPair retval globals1 <-
-              getGlobalPair opts partialResult
+              Common.getGlobalPair opts partialResult
             let ret_ty = mspec ^. MS.csRet
             retval' <-
               case ret_ty of
@@ -1526,7 +1514,7 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
          case res of
            Crucible.FinishedResult _ partialResult ->
              do Crucible.GlobalPair retval globals1 <-
-                  getGlobalPair opts partialResult
+                  Common.getGlobalPair opts partialResult
                 let ret_ty = mspec ^. MS.csRet
                 retval' <-
                   case ret_ty of
@@ -1830,66 +1818,39 @@ saw_assert_override =
              Crucible.addAssumption bak (Crucible.GenericAssumption loc "crucible_assume" cond)
   )
 
-baseCryptolType :: Crucible.BaseTypeRepr tp -> Maybe Cryptol.Type
-baseCryptolType bt =
-  case bt of
-    Crucible.BaseBoolRepr -> pure $ Cryptol.tBit
-    Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
-    Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
-    Crucible.BaseArrayRepr {} -> Nothing
-    Crucible.BaseFloatRepr _ -> Nothing
-    Crucible.BaseStringRepr _ -> Nothing
-    Crucible.BaseComplexRepr  -> Nothing
-    Crucible.BaseRealRepr     -> Nothing
-    Crucible.BaseStructRepr ts ->
-      Cryptol.tTuple <$> baseCryptolTypes ts
-  where
-    baseCryptolTypes :: Ctx.Assignment Crucible.BaseTypeRepr args -> Maybe [Cryptol.Type]
-    baseCryptolTypes Ctx.Empty = pure []
-    baseCryptolTypes (xs Ctx.:> x) =
-      do ts <- baseCryptolTypes xs
-         t <- baseCryptolType x
-         pure (ts ++ [t])
-
+-- | Create a fresh argument variable of the appropriate type, suitable for use
+-- in an extracted function derived from @llvm_extract@.
 setupArg ::
-  forall tp.
   SharedContext ->
   Sym ->
   IORef (Seq TypedExtCns) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp = do
-  st <- Common.sawCoreState sym
-  case (Crucible.asBaseType tp, tp) of
-    (Crucible.AsBaseType btp, _) ->
-      do cty <-
-           case baseCryptolType btp of
-             Just cty -> pure cty
-             Nothing ->
-               fail $ unwords ["Unsupported type for Crucible extraction:", show btp]
-         sc_tp <- baseSCType sym sc btp
-         t     <- freshGlobal cty sc_tp
-         elt   <- bindSAWTerm sym st btp t
-         return (Crucible.RegEntry tp elt)
+  (cty, scTp) <-
+    case tp of
+      Crucible.LLVMPointerRepr w -> do
+        let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+        scTp <- scBitvector sc (natValue w)
+        pure (cty, scTp)
+      _ -> Common.typeReprToSAWTypes sym sc tp
 
-    (Crucible.NotBaseType, Crucible.LLVMPointerRepr w) ->
-      do let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-         sc_tp <- scBitvector sc (natValue w)
-         t     <- freshGlobal cty sc_tp
-         elt   <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
-         elt'  <- Crucible.llvmPointer_bv sym elt
-         return (Crucible.RegEntry tp elt')
+  ecs <- readIORef ecRef
+  ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
+  writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
 
-    (Crucible.NotBaseType, _) ->
-      fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
-  where
-    freshGlobal cty sc_tp =
-      do ecs <- readIORef ecRef
-         let len = Seq.length ecs
-         ec <- scFreshEC sc ("arg_" <> Text.pack (show len)) sc_tp
-         writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
-         scVariable sc ec
+  t <- scVariable sc ec
+  elt <-
+    case tp of
+      Crucible.LLVMPointerRepr w -> do
+        st <- Common.sawCoreState sym
+        elt <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
+        Crucible.llvmPointer_bv sym elt
+      _ -> Common.termToRegValue sym tp t
+  pure $ Crucible.RegEntry tp elt
 
+-- | Create fresh argument variables of the appropriate types, suitable for use
+-- in an extracted function derived from @llvm_extract@.
 setupArgs ::
   SharedContext ->
   Sym ->
@@ -1897,37 +1858,11 @@ setupArgs ::
   IO (Seq TypedExtCns, Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
-     regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
+     regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
      ecs    <- readIORef ecRef
      return (ecs, regmap)
 
 --------------------------------------------------------------------------------
-
-getGlobalPair ::
-  Options ->
-  Crucible.PartialResult sym ext v ->
-  IO (Crucible.GlobalPair sym v)
-getGlobalPair opts pr =
-  case pr of
-    Crucible.TotalRes gp -> return gp
-    Crucible.PartialRes _ _ gp _ -> do
-      printOutLn opts Info "Symbolic simulation completed with side conditions."
-      return gp
-
-runCFG ::
-  (Crucible.IsSyntaxExtension ext, Crucible.IsSymInterface sym) =>
-  Crucible.SimContext p sym ext ->
-  Crucible.SymGlobalState sym ->
-  Crucible.FnHandle args a ->
-  Crucible.CFG ext blocks init a ->
-  Crucible.RegMap sym init ->
-  IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
-runCFG simCtx globals h cfg args =
-  do let initExecState =
-           Crucible.InitialState simCtx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h) $
-           Crucible.runOverrideSim (Crucible.handleReturnType h)
-                    (Crucible.regValue <$> (Crucible.callCFG cfg args))
-     Crucible.executeCrucible [] initExecState
 
 extractFromLLVMCFG ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -1940,10 +1875,10 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
      (ecs, args) <- setupArgs sc sym h
      let simCtx  = cc^.ccLLVMSimContext
      let globals = cc^.ccLLVMGlobals
-     res <- runCFG simCtx globals h cfg args
+     res <- Common.runCFG simCtx globals h cfg args
      case res of
        Crucible.FinishedResult _ pr ->
-         do gp <- getGlobalPair opts pr
+         do gp <- Common.getGlobalPair opts pr
             let regv = gp^.Crucible.gpValue
                 rt = Crucible.regType regv
                 rv = Crucible.regValue regv
