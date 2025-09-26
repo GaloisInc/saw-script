@@ -419,7 +419,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
             "bitvector width " ++ show n ++ " does not match " ++ show (intValue w)
         (TupleShape _ elems, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
           | length elems == n ->
-            AdaptTuple <$>
+            adaptTuple <$>
               forM (zip elems tys)
                 (\(AgElemShape _off _sz shp', ty') -> goOne isArg desc shp' ty')
           | otherwise -> typeErr desc shp ty $
@@ -428,7 +428,7 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
             Cry.TCon (Cry.TC Cry.TCSeq) [
                 Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
                 ty'])
-          | fromIntegral n == n' -> AdaptArray <$> goOne isArg desc shp' ty'
+          | fromIntegral n == n' -> adaptArray <$> goOne isArg desc shp' ty'
           | otherwise -> typeErr desc shp' ty $
             "array length " ++ show n' ++ " does not match " ++ show n
         (SliceShape _refTy elTy M.Immut elTyRepr, _)

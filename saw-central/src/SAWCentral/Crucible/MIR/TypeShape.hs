@@ -17,6 +17,9 @@ module SAWCentral.Crucible.MIR.TypeShape
   , VariantShape(..)
   , AgElemShape(..)
   , CryTermAdaptor(..)
+  , isCryNoAdapt
+  , adaptTuple
+  , adaptArray
   , tyToShape
   , tyToShapeEq
   , shapeType
@@ -391,6 +394,21 @@ data CryTermAdaptor =
     -- primitve types (i.e., no further references in the elements)
     -- so we don't need further adaptors.
 
+isCryNoAdapt :: CryTermAdaptor -> Bool
+isCryNoAdapt ada =
+  case ada of
+    NoAdapt -> True
+    _       -> False
+
+adaptTuple :: [CryTermAdaptor] -> CryTermAdaptor
+adaptTuple as
+  | all isCryNoAdapt as = NoAdapt
+  | otherwise = AdaptTuple as
+
+adaptArray :: CryTermAdaptor -> CryTermAdaptor
+adaptArray a
+  | isCryNoAdapt a = NoAdapt
+  | otherwise = AdaptArray a
 
 shapeToTerm :: forall tp m.
     (MonadIO m, MonadFail m) =>

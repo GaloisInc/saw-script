@@ -333,9 +333,9 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         TypeShape tp ->
         RegValue sym tp ->
         m SAW.Term
-    go ada shp rv = case (ada, shp, rv) of
-        (NoAdapt, UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
-        (NoAdapt, PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
+    go ada shp rv =
+      case (ada, shp, rv) of
+        (NoAdapt, _, _) -> regToTerm sym sc name w4VarMapRef shp rv
         (AdaptTuple as, TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
             liftIO $ SAW.scTuple sc terms
