@@ -252,8 +252,8 @@ evalTermF cfg lam recEval tf env =
 
     evalRecursor :: VRecursor l -> MValue l
     evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =
-      vFunList (replicate nixs "_") $ \ix_thunks ->
-      pure $ VFun "_" $ \arg_thunk ->
+      vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
+      pure $ VFun "arg" $ \arg_thunk ->
       do argv <- force arg_thunk
          r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
