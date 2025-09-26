@@ -81,13 +81,8 @@ data Value l
 data VRecursor l
   = VRecursor
      !Name -- data type name
-     !(TValue l) -- data type kind
-     ![Value l]  -- data type parameters
      !Int        -- number of index parameters
-     !(Value l)  -- motive function
-     !(TValue l) -- type of motive
-     !(Map VarIndex (Thunk l)) -- constructor eliminators and their types
-     !(TValue l) -- type of recursor function
+     !(Map VarIndex (Thunk l)) -- constructor eliminators
 
 -- | The subset of values that represent types.
 data TValue l
