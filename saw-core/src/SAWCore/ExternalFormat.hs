@@ -16,7 +16,6 @@ module SAWCore.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Control.Monad (forM)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
@@ -143,14 +142,13 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) ->
+            Recursor (CompiledRecursor d ps nixs motive ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  pure $ unwords
                       (["Recursor" , show (nameIndex d), show nixs] ++
                        map show ps ++
-                       [ argsep, show motive, show motive_ty
-                       , show (Map.toList cs_fs)
+                       [ argsep, show motive
                        , show (map nameIndex ctorOrder)
                        , show ty
                        ])
@@ -211,15 +209,6 @@ scReadExternal sc input =
 
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
-
-    readElimsMap :: String -> ReadM (Map VarIndex (Term,Term))
-    readElimsMap str =
-      do (ls :: [(VarIndex,(Int,Int))]) <- readM str
-         elims  <- forM ls (\(c,(e,ty)) ->
-                    do e'  <- getTerm e
-                       ty' <- getTerm ty
-                       pure (c, (e',ty')))
-         pure (Map.fromList elims)
 
     readCtorList :: String -> ReadM [Name]
     readCtorList str =
@@ -289,14 +278,12 @@ scReadExternal sc input =
 
         ("Recursor" : i : nixs :
          (separateArgs ->
-          Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
+          Just (ps, [motive, ctorOrder, ty]))) ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
                         traverse readIdx ps <*>
                         pure (read nixs) <*>
                         readIdx motive <*>
-                        readIdx motiveTy <*>
-                        readElimsMap elims <*>
                         readCtorList ctorOrder <*>
                         readIdx ty
                pure (FTermF (Recursor crec))

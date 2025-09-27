@@ -156,7 +156,6 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Module (ModuleMap)
 import SAWCore.Name (DisplayNameEnv, ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -174,7 +173,6 @@ import What4.ProgramLoc (ProgramLoc)
 import SAWCentral.Position
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Crucible.Common as Common
-import qualified SAWCore.Simulator.TermModel as TM
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
 import SAWCentral.Panic (panic)
@@ -507,9 +505,9 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
                 , showTerm p
                 ]
 
-normalizeProp :: SharedContext -> ModuleMap -> Set VarIndex -> Prop -> IO Prop
-normalizeProp sc modmap opaqueSet (Prop tm) =
-  do tm' <- TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet tm
+normalizeProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
+normalizeProp sc opaqueSet (Prop tm) =
+  do tm' <- TC.scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaqueSet tm
      termToProp sc tm'
 
 -- | Pretty print the given proposition as a string.
@@ -1662,8 +1660,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            check nenv e' sqt'
 
       NormalizePropEvidence opqueSet e' ->
-        do modmap <- scGetModuleMap sc
-           sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
+        do sqt' <- traverseSequentWithFocus (normalizeProp sc opqueSet) sqt
            check nenv e' sqt'
 
       RewriteEvidence hs ss e' ->
