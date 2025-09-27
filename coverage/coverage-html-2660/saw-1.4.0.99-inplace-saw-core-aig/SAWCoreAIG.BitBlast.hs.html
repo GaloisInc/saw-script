@@ -1,0 +1,587 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    3 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    5 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">    6 </span>{-# LANGUAGE EmptyDataDecls #-}
+<span class="lineno">    7 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{- |
+<span class="lineno">   10 </span>Module      : SAWCoreAIG.BitBlast
+<span class="lineno">   11 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">   12 </span>License     : BSD3
+<span class="lineno">   13 </span>Maintainer  : jhendrix@galois.com
+<span class="lineno">   14 </span>Stability   : experimental
+<span class="lineno">   15 </span>Portability : non-portable (language extensions)
+<span class="lineno">   16 </span>-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCoreAIG.BitBlast
+<span class="lineno">   19 </span>  ( BValue
+<span class="lineno">   20 </span>  , withBitBlastedTerm
+<span class="lineno">   21 </span>  , withBitBlastedSATQuery
+<span class="lineno">   22 </span>  ) where
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import Control.Monad ((&lt;=&lt;),unless)
+<span class="lineno">   25 </span>import Data.IORef
+<span class="lineno">   26 </span>import Data.Map (Map)
+<span class="lineno">   27 </span>import qualified Data.Map as Map
+<span class="lineno">   28 </span>import qualified Data.Set as Set
+<span class="lineno">   29 </span>import qualified Data.Text as Text
+<span class="lineno">   30 </span>import qualified Data.Vector as V
+<span class="lineno">   31 </span>import Numeric.Natural (Natural)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import qualified SAWSupport.Pretty as PPS (defaultOpts)
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
+<span class="lineno">   36 </span>import SAWCore.Name (Name(..), VarName(..), ecShortName)
+<span class="lineno">   37 </span>import SAWCore.Module (ModuleMap)
+<span class="lineno">   38 </span>import qualified SAWCore.Simulator as Sim
+<span class="lineno">   39 </span>import SAWCore.Simulator.Value
+<span class="lineno">   40 </span>import qualified SAWCore.Simulator.Prims as Prims
+<span class="lineno">   41 </span>import SAWCore.SATQuery
+<span class="lineno">   42 </span>import SAWCore.SharedTerm
+<span class="lineno">   43 </span>import qualified SAWCore.Simulator.Concrete as Concrete
+<span class="lineno">   44 </span>import qualified SAWCore.Prim as Prim
+<span class="lineno">   45 </span>import qualified SAWCore.Recognizer as R
+<span class="lineno">   46 </span>import SAWCore.Term.Pretty (scPrettyTerm)
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>import SAWCoreAIG.Panic
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>import qualified Data.AIG as AIG
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>type LitVector l = AIG.BV l
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>------------------------------------------------------------
+<span class="lineno">   55 </span>-- Vector operations
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>lvFromV :: V.Vector l -&gt; LitVector l
+<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">lvFromV v = AIG.generate_msb0 (V.length v) ((V.!) v)</span></span>
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>vFromLV :: LitVector l -&gt; V.Vector l
+<span class="lineno">   61 </span><span class="decl"><span class="istickedoff">vFromLV lv = V.generate (AIG.length lv) (AIG.at lv)</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>lvRotateL :: LitVector l -&gt; Integer -&gt; LitVector l
+<span class="lineno">   64 </span><span class="decl"><span class="istickedoff">lvRotateL xs i</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">AIG.length xs == 0</span> = <span class="nottickedoff">xs</span></span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = (AIG.++) (AIG.drop j xs) (AIG.take j xs)</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">where j = fromInteger (i `mod` toInteger (AIG.length xs))</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>lvRotateR :: LitVector l -&gt; Integer -&gt; LitVector l
+<span class="lineno">   70 </span><span class="decl"><span class="nottickedoff">lvRotateR xs i = lvRotateL xs (- i)</span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>lvShiftL :: l -&gt; LitVector l -&gt; Integer -&gt; LitVector l
+<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">lvShiftL x xs i = (AIG.++) (AIG.drop j xs) (AIG.replicate j x)</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (min i (toInteger (AIG.length xs)))</span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>lvShl :: l -&gt; LitVector l -&gt; Natural -&gt; LitVector l
+<span class="lineno">   77 </span><span class="decl"><span class="nottickedoff">lvShl l v i = AIG.slice v j (n-j) AIG.++ AIG.replicate j l</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="nottickedoff">where n = AIG.length v</span>
+<span class="lineno">   79 </span><span class="spaces">        </span><span class="nottickedoff">j = fromIntegral i `min` n</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>lvShiftR :: l -&gt; LitVector l -&gt; Integer -&gt; LitVector l
+<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="nottickedoff">where j = fromInteger (min i (toInteger (AIG.length xs)))</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>lvShr :: l -&gt; LitVector l -&gt; Natural -&gt; LitVector l
+<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="istickedoff">where n = AIG.length v</span>
+<span class="lineno">   88 </span><span class="spaces">        </span><span class="istickedoff">j = fromIntegral i `min` n</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>------------------------------------------------------------
+<span class="lineno">   91 </span>-- Values
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>data BitBlast l
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>type instance EvalM (BitBlast l) = IO
+<span class="lineno">   96 </span>type instance VBool (BitBlast l) = l
+<span class="lineno">   97 </span>type instance VWord (BitBlast l) = LitVector l
+<span class="lineno">   98 </span>type instance VInt  (BitBlast l) = Integer
+<span class="lineno">   99 </span>type instance Extra (BitBlast l) = BExtra l
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>type BValue l = Value (BitBlast l)
+<span class="lineno">  102 </span>type BPrim  l = Prims.Prim (BitBlast l)
+<span class="lineno">  103 </span>type BThunk l = Thunk (BitBlast l)
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>data BExtra l
+<span class="lineno">  106 </span>  = BStream (Natural -&gt; IO (BValue l)) (IORef (Map Natural (BValue l)))
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (BExtra l)</span></span></span></span> where
+<span class="lineno">  109 </span>  <span class="decl"><span class="nottickedoff">show (BStream _ _) = &quot;BStream&quot;</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>vBool :: l -&gt; BValue l
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">vBool l = VBool l</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>toBool :: BValue l -&gt; l
+<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">toBool (VBool l) = l</span>
+<span class="lineno">  116 </span><span class="spaces"></span><span class="nottickedoff">toBool x = error $ unwords [&quot;SAWCoreAIG.BitBlast.toBool&quot;, show x]</span></span>
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>vWord :: LitVector l -&gt; BValue l
+<span class="lineno">  119 </span><span class="decl"><span class="istickedoff">vWord lv = VWord lv</span></span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>toWord :: BValue l -&gt; IO (LitVector l)
+<span class="lineno">  122 </span><span class="decl"><span class="nottickedoff">toWord (VWord lv) = return lv</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="nottickedoff">toWord (VVector vv) = lvFromV &lt;$&gt; traverse (fmap toBool . force) vv</span>
+<span class="lineno">  124 </span><span class="spaces"></span><span class="nottickedoff">toWord x = fail $ unwords [&quot;SAWCoreAIG.BitBlast.toWord&quot;, show x]</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>flattenBValue :: BValue l -&gt; IO (LitVector l)
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">flattenBValue (VBool l) = return (AIG.replicate 1 l)</span>
+<span class="lineno">  128 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VWord lv) = return lv</span>
+<span class="lineno">  129 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VExtra (BStream _ _)) = <span class="nottickedoff">error &quot;SAWCoreAIG.BitBlast.flattenBValue: BStream&quot;</span></span>
+<span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VVector vv) =</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">AIG.concat &lt;$&gt; traverse (flattenBValue &lt;=&lt; force) (V.toList vv)</span>
+<span class="lineno">  132 </span><span class="spaces"></span><span class="istickedoff">flattenBValue VUnit = <span class="nottickedoff">return $ AIG.concat []</span></span>
+<span class="lineno">  133 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VPair x y) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">vx &lt;- flattenBValue =&lt;&lt; force x</span></span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">vy &lt;- flattenBValue =&lt;&lt; force y</span></span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return $ AIG.concat [vx, vy]</span></span>
+<span class="lineno">  137 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VRecordValue elems) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">AIG.concat &lt;$&gt; mapM (flattenBValue &lt;=&lt; force . snd) elems</span></span>
+<span class="lineno">  139 </span><span class="spaces"></span><span class="istickedoff">flattenBValue _ = <span class="nottickedoff">error $ unwords [&quot;SAWCoreAIG.BitBlast.flattenBValue: unsupported value&quot;]</span></span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>------------------------------------------------------------
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>-- | op : (n : Nat) -&gt; Vec n Bool -&gt; Nat -&gt; Vec n Bool
+<span class="lineno">  144 </span>bvShiftOp :: (LitVector l -&gt; LitVector l -&gt; IO (LitVector l))
+<span class="lineno">  145 </span>          -&gt; (LitVector l -&gt; Natural -&gt; LitVector l)
+<span class="lineno">  146 </span>          -&gt; BPrim l
+<span class="lineno">  147 </span><span class="decl"><span class="istickedoff">bvShiftOp bvOp natOp =</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">Prims.constFun $</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">Prims.wordFun (pure1 lvFromV) $ \x -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \y -&gt; Prims.Prim $</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">VNat n   -&gt; return (vWord (natOp x n))</span>
+<span class="lineno">  153 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; <span class="nottickedoff">fmap vWord (bvOp x =&lt;&lt; toWord v)</span></span>
+<span class="lineno">  154 </span><span class="spaces">      </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">error $ unwords [&quot;SAWCoreAIG.BitBlast.shiftOp&quot;, show y]</span></span></span>
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>lvSShr :: LitVector l -&gt; Natural -&gt; LitVector l
+<span class="lineno">  157 </span><span class="decl"><span class="istickedoff">lvSShr v i = lvShr (AIG.msb v) v i</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>------------------------------------------------------------
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>pure1 :: Applicative f =&gt; (a -&gt; b) -&gt; a -&gt; f b
+<span class="lineno">  162 </span><span class="decl"><span class="istickedoff">pure1 f x = pure (f x)</span></span>
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>pure2 :: Applicative f =&gt; (a -&gt; b -&gt; c) -&gt; a -&gt; b -&gt; f c
+<span class="lineno">  165 </span><span class="decl"><span class="istickedoff">pure2 f x y = pure (f x y)</span></span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>pure3 :: Applicative f =&gt; (a -&gt; b -&gt; c -&gt; d) -&gt; a -&gt; b -&gt; c -&gt; f d
+<span class="lineno">  168 </span><span class="decl"><span class="istickedoff">pure3 f x y z = pure (f x y z)</span></span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>prims :: AIG.IsAIG l g =&gt; g s -&gt; Prims.BasePrims (BitBlast (l s))
+<span class="lineno">  171 </span><span class="decl"><span class="istickedoff">prims be =</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">Prims.BasePrims</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">{ Prims.bpIsSymbolicEvaluator = True</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAsBool  = AIG.asConstant <span class="nottickedoff">be</span></span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvectors</span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = pure1 vFromLV</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = pure1 lvFromV</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = pure2 AIG.at</span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 (AIG.bvFromInteger <span class="nottickedoff">be</span>)</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = AIG.length</span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = pure2 (AIG.++)</span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = pure3 (\i n v -&gt; AIG.slice v i n)</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
+<span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = \b x y -&gt; AIG.lazyMux be b (pure x) (pure y)</span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = \b x y -&gt; AIG.iteM be b (pure x) (pure y)</span>
+<span class="lineno">  186 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxInt   = <span class="nottickedoff">muxInt</span></span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxArray = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpMuxArray&quot;</span></span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxExtra = <span class="nottickedoff">muxBExtra be</span></span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff">-- Booleans</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpTrue   = AIG.trueLit <span class="nottickedoff">be</span></span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = <span class="nottickedoff">AIG.falseLit be</span></span>
+<span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 AIG.not</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = AIG.and be</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = AIG.or be</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">AIG.xor be</span></span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">AIG.eq be</span></span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
+<span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = pure1 (fmap AIG.not)</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAnd  = AIG.zipWithM (AIG.and be)</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvOr   = AIG.zipWithM (AIG.or be)</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = AIG.zipWithM (AIG.xor be)</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">AIG.neg be</span></span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = AIG.add be</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">AIG.sub be</span></span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = AIG.mul be</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = AIG.uquot be</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = <span class="nottickedoff">AIG.urem be</span></span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = <span class="nottickedoff">AIG.squot be</span></span>
+<span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = <span class="nottickedoff">AIG.srem be</span></span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = <span class="nottickedoff">bitblastLogBase2 be</span></span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector comparisons</span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = AIG.bvEq be</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = <span class="nottickedoff">AIG.sle be</span></span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = <span class="nottickedoff">AIG.slt be</span></span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = <span class="nottickedoff">AIG.ule be</span></span>
+<span class="lineno">  217 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = <span class="nottickedoff">AIG.ult be</span></span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">flip (AIG.sle be)</span></span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsgt  = <span class="nottickedoff">flip (AIG.slt be)</span></span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvuge  = <span class="nottickedoff">flip (AIG.ule be)</span></span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">flip (AIG.ult be)</span></span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector shift/rotate</span>
+<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = <span class="nottickedoff">pure2 lvRotateL</span></span>
+<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">pure2 lvRotateR</span></span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">pure3 lvShiftL</span></span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">pure3 lvShiftR</span></span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = genShift be lvRotateL</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">genShift be lvRotateR</span></span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = <span class="nottickedoff">genShift be . lvShiftL</span></span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = <span class="nottickedoff">genShift be . lvShiftR</span></span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvPopcount = <span class="nottickedoff">AIG.popCount be</span></span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvCountLeadingZeros = <span class="nottickedoff">AIG.countLeadingZeros be</span></span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvCountTrailingZeros = <span class="nottickedoff">AIG.countTrailingZeros be</span></span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvForall = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bvForall&quot;</span></span>
+<span class="lineno">  236 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">-- Integer operations</span>
+<span class="lineno">  238 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAdd = pure2 (+)</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntSub = <span class="nottickedoff">pure2 (-)</span></span>
+<span class="lineno">  240 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMul = pure2 (*)</span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntDiv = <span class="nottickedoff">pure2 div</span></span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMod = pure2 mod</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = <span class="nottickedoff">pure1 negate</span></span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 abs</span></span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = <span class="nottickedoff">pure2 (\x y -&gt; AIG.constant be (x == y))</span></span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = pure2 (\x y -&gt; AIG.constant <span class="nottickedoff">be</span> (x &lt;= y))</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 (\x y -&gt; AIG.constant be (x &lt; y))</span></span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">pure2 min</span></span>
+<span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">pure2 max</span></span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayConstant&quot;</span></span>
+<span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayLookup&quot;</span></span>
+<span class="lineno">  254 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayUpdate = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayUpdate&quot;</span></span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayEq&quot;</span></span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayCopy = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayCopy&quot;</span></span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArraySet = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArraySet&quot;</span></span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayRangeEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayRangeEq&quot;</span></span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>unsupportedAIGPrimitive :: String -&gt; a
+<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">unsupportedAIGPrimitive = Prim.unsupportedPrimitive &quot;AIG&quot;</span></span>
+<span class="lineno">  263 </span>
+<span class="lineno">  264 </span>beConstMap :: AIG.IsAIG l g =&gt; g s -&gt; Map Ident (BPrim (l s))
+<span class="lineno">  265 </span><span class="decl"><span class="istickedoff">beConstMap be =</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">Map.union (Prims.constMap (prims be)) $</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">-- Shifts</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , <span class="nottickedoff">bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be))</span>)</span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp <span class="nottickedoff">(AIG.ushr be)</span> (lvShr (AIG.falseLit <span class="nottickedoff">be</span>)))</span>
+<span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp <span class="nottickedoff">(AIG.sshr be)</span> lvSShr)</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natToInt&quot;, Prims.natToIntOp)</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToBv&quot; , <span class="nottickedoff">intToBvOp be</span>)</span>
+<span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvToInt&quot; , <span class="nottickedoff">bvToIntOp be</span>)</span>
+<span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.sbvToInt&quot;, <span class="nottickedoff">sbvToIntOp be</span>)</span>
+<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">-- Integers mod n</span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.toIntMod&quot;  , <span class="nottickedoff">toIntModOp</span>)</span>
+<span class="lineno">  280 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.fromIntMod&quot;, <span class="nottickedoff">fromIntModOp</span>)</span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModEq&quot;  , <span class="nottickedoff">intModEqOp be</span>)</span>
+<span class="lineno">  282 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModAdd&quot; , <span class="nottickedoff">intModBinOp (+)</span>)</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModSub&quot; , <span class="nottickedoff">intModBinOp (-)</span>)</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModMul&quot; , <span class="nottickedoff">intModBinOp (*)</span>)</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModNeg&quot; , <span class="nottickedoff">intModUnOp negate</span>)</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">-- Streams</span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.MkStream&quot;, <span class="nottickedoff">mkStreamOp</span>)</span>
+<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, <span class="nottickedoff">streamGetOp be</span>)</span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff">-- Misc</span>
+<span class="lineno">  290 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expByNat&quot;, <span class="nottickedoff">Prims.expByNatOp (prims be)</span>)</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>-- | Lifts a strict mux operation to a lazy mux
+<span class="lineno">  294 </span>lazyMux :: AIG.IsAIG l g =&gt; g s -&gt; (l s -&gt; a -&gt; a -&gt; IO a) -&gt; l s -&gt; IO a -&gt; IO a -&gt; IO a
+<span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">lazyMux be muxFn c tm fm</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">| (AIG.===) c (AIG.trueLit be) = tm</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="nottickedoff">| (AIG.===) c (AIG.falseLit be) = fm</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = do</span>
+<span class="lineno">  299 </span><span class="spaces">      </span><span class="nottickedoff">t &lt;- tm</span>
+<span class="lineno">  300 </span><span class="spaces">      </span><span class="nottickedoff">f &lt;- fm</span>
+<span class="lineno">  301 </span><span class="spaces">      </span><span class="nottickedoff">muxFn c t f</span></span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>muxBVal :: AIG.IsAIG l g =&gt; g s -&gt; TValue (BitBlast (l s)) -&gt; l s -&gt; BValue (l s) -&gt; BValue (l s) -&gt; IO (BValue (l s))
+<span class="lineno">  304 </span><span class="decl"><span class="nottickedoff">muxBVal be = Prims.muxValue (prims be)</span></span>
+<span class="lineno">  305 </span>
+<span class="lineno">  306 </span>muxInt :: a -&gt; Integer -&gt; Integer -&gt; IO Integer
+<span class="lineno">  307 </span><span class="decl"><span class="nottickedoff">muxInt _ x y = if x == y then return x else fail $ &quot;muxBVal: VInt &quot; ++ show (x, y)</span></span>
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>muxBExtra :: AIG.IsAIG l g =&gt; g s -&gt;
+<span class="lineno">  310 </span>  TValue (BitBlast (l s)) -&gt; l s -&gt; BExtra (l s) -&gt; BExtra (l s) -&gt; IO (BExtra (l s))
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">muxBExtra be (VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) _ [TValue tp] []) c x y =</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">do let f i = do xi &lt;- lookupBStream (VExtra x) i</span>
+<span class="lineno">  313 </span><span class="spaces">                  </span><span class="nottickedoff">yi &lt;- lookupBStream (VExtra y) i</span>
+<span class="lineno">  314 </span><span class="spaces">                  </span><span class="nottickedoff">muxBVal be tp c xi yi</span>
+<span class="lineno">  315 </span><span class="spaces">     </span><span class="nottickedoff">r &lt;- newIORef Map.empty</span>
+<span class="lineno">  316 </span><span class="spaces">     </span><span class="nottickedoff">return (BStream f r)</span>
+<span class="lineno">  317 </span><span class="spaces"></span><span class="nottickedoff">muxBExtra _ tp _ _ _ = panic &quot;muxBExtra&quot; [&quot;Type mismatch: &quot; &lt;&gt; Text.pack (show tp)]</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+<span class="lineno">  320 </span>genShift ::
+<span class="lineno">  321 </span>  AIG.IsAIG l g =&gt; g s -&gt; (LitVector (l s) -&gt; Integer -&gt; LitVector (l s)) -&gt;
+<span class="lineno">  322 </span>  LitVector (l s) -&gt; LitVector (l s) -&gt; IO (LitVector (l s))
+<span class="lineno">  323 </span><span class="decl"><span class="istickedoff">genShift be op x y = Prims.shifter (AIG.ite be) (pure2 op) x (AIG.bvToList y)</span></span>
+<span class="lineno">  324 </span>
+<span class="lineno">  325 </span>-- | rounded-up log base 2, where we complete the function by setting:
+<span class="lineno">  326 </span>--   lg2 0 = 0
+<span class="lineno">  327 </span>bitblastLogBase2 :: AIG.IsAIG l g =&gt; g s -&gt; LitVector (l s) -&gt; IO (LitVector (l s))
+<span class="lineno">  328 </span><span class="decl"><span class="nottickedoff">bitblastLogBase2 g x = do</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="nottickedoff">z &lt;- AIG.isZero g x</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">AIG.iteM g z (return x) (AIG.logBase2_up g x)</span></span>
+<span class="lineno">  331 </span>
+<span class="lineno">  332 </span>-----------------------------------------
+<span class="lineno">  333 </span>-- Integer/bitvector conversions
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
+<span class="lineno">  336 </span>bvToIntOp :: AIG.IsAIG l g =&gt; g s -&gt; BPrim (l s)
+<span class="lineno">  337 </span><span class="decl"><span class="nottickedoff">bvToIntOp g =</span>
+<span class="lineno">  338 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="nottickedoff">Prims.wordFun (pure1 lvFromV) $ \v -&gt;</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  341 </span><span class="spaces">   </span><span class="nottickedoff">case AIG.asUnsigned g v of</span>
+<span class="lineno">  342 </span><span class="spaces">      </span><span class="nottickedoff">Just i -&gt; return $ VInt i</span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail &quot;Cannot convert symbolic bitvector to integer&quot;</span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>-- primitive sbvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
+<span class="lineno">  346 </span>sbvToIntOp :: AIG.IsAIG l g =&gt; g s -&gt; BPrim (l s)
+<span class="lineno">  347 </span><span class="decl"><span class="nottickedoff">sbvToIntOp g =</span>
+<span class="lineno">  348 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="nottickedoff">Prims.wordFun (pure1 lvFromV) $ \v -&gt;</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  351 </span><span class="spaces">   </span><span class="nottickedoff">case AIG.asSigned g v of</span>
+<span class="lineno">  352 </span><span class="spaces">      </span><span class="nottickedoff">Just i -&gt; return $ VInt i</span>
+<span class="lineno">  353 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; fail &quot;Cannot convert symbolic bitvector to integer&quot;</span></span>
+<span class="lineno">  354 </span>
+<span class="lineno">  355 </span>-- primitive intToBv : (n : Nat) -&gt; Integer -&gt; Vec n Bool;
+<span class="lineno">  356 </span>intToBvOp :: AIG.IsAIG l g =&gt; g s -&gt; BPrim (l s)
+<span class="lineno">  357 </span><span class="decl"><span class="nottickedoff">intToBvOp g =</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt; Prims.Prim </span>
+<span class="lineno">  360 </span><span class="spaces">    </span><span class="nottickedoff">(VWord &lt;$&gt;</span>
+<span class="lineno">  361 </span><span class="spaces">     </span><span class="nottickedoff">if n &gt;= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)</span>
+<span class="lineno">  362 </span><span class="spaces">               </span><span class="nottickedoff">else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x)))</span></span>
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>------------------------------------------------------------
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>toIntModOp :: BPrim l
+<span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">toIntModOp =</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  369 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt;</span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (x `mod` toInteger n))</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>fromIntModOp :: BPrim l
+<span class="lineno">  373 </span><span class="decl"><span class="nottickedoff">fromIntModOp =</span>
+<span class="lineno">  374 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  376 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VInt x)</span></span>
+<span class="lineno">  377 </span>
+<span class="lineno">  378 </span>intModEqOp :: AIG.IsAIG l g =&gt; g s -&gt; BPrim (l s)
+<span class="lineno">  379 </span><span class="decl"><span class="nottickedoff">intModEqOp be =</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  382 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
+<span class="lineno">  383 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VBool (AIG.constant be (x == y)))</span></span>
+<span class="lineno">  384 </span>
+<span class="lineno">  385 </span>intModBinOp :: (Integer -&gt; Integer -&gt; Integer) -&gt; BPrim l
+<span class="lineno">  386 </span><span class="decl"><span class="nottickedoff">intModBinOp f =</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  389 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
+<span class="lineno">  390 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x y `mod` toInteger n))</span></span>
+<span class="lineno">  391 </span>
+<span class="lineno">  392 </span>intModUnOp :: (Integer -&gt; Integer) -&gt; BPrim l
+<span class="lineno">  393 </span><span class="decl"><span class="nottickedoff">intModUnOp f =</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (VIntMod n (f x `mod` toInteger n))</span></span>
+<span class="lineno">  397 </span>
+<span class="lineno">  398 </span>----------------------------------------
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>-- MkStream :: (a :: sort 0) -&gt; (Nat -&gt; a) -&gt; Stream a;
+<span class="lineno">  401 </span>mkStreamOp :: BPrim l
+<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff">mkStreamOp =</span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \f -&gt;</span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  406 </span><span class="spaces">    </span><span class="nottickedoff">do r &lt;- newIORef Map.empty</span>
+<span class="lineno">  407 </span><span class="spaces">       </span><span class="nottickedoff">return $ VExtra (BStream (\n -&gt; apply f (ready (VNat n))) r)</span></span>
+<span class="lineno">  408 </span>
+<span class="lineno">  409 </span>-- streamGet :: (a :: sort 0) -&gt; Stream a -&gt; Nat -&gt; a;
+<span class="lineno">  410 </span>streamGetOp :: AIG.IsAIG l g =&gt; g s -&gt; BPrim (l s)
+<span class="lineno">  411 </span><span class="decl"><span class="nottickedoff">streamGetOp be =</span>
+<span class="lineno">  412 </span><span class="spaces">  </span><span class="nottickedoff">Prims.tvalFun   $ \tp -&gt;</span>
+<span class="lineno">  413 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \xs -&gt;</span>
+<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \ix -&gt;</span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $ case ix of</span>
+<span class="lineno">  416 </span><span class="spaces">    </span><span class="nottickedoff">VNat n -&gt; lookupBStream xs n</span>
+<span class="lineno">  417 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _ w -&gt;</span>
+<span class="lineno">  418 </span><span class="spaces">       </span><span class="nottickedoff">do bs &lt;- toWord w</span>
+<span class="lineno">  419 </span><span class="spaces">          </span><span class="nottickedoff">AIG.muxInteger (lazyMux be (muxBVal be tp)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)</span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="nottickedoff">v -&gt; fail (unlines [&quot;SAWCoreAIG.BitBlast.streamGetOp&quot;, &quot;Expected Nat value&quot;, show v])</span></span>
+<span class="lineno">  421 </span>
+<span class="lineno">  422 </span>
+<span class="lineno">  423 </span>lookupBStream :: BValue l -&gt; Natural -&gt; IO (BValue l)
+<span class="lineno">  424 </span><span class="decl"><span class="nottickedoff">lookupBStream (VExtra (BStream f r)) n = do</span>
+<span class="lineno">  425 </span><span class="spaces">   </span><span class="nottickedoff">m &lt;- readIORef r</span>
+<span class="lineno">  426 </span><span class="spaces">   </span><span class="nottickedoff">case Map.lookup n m of</span>
+<span class="lineno">  427 </span><span class="spaces">     </span><span class="nottickedoff">Just v  -&gt; return v</span>
+<span class="lineno">  428 </span><span class="spaces">     </span><span class="nottickedoff">Nothing -&gt; do v &lt;- f n</span>
+<span class="lineno">  429 </span><span class="spaces">                   </span><span class="nottickedoff">writeIORef r (Map.insert n v m)</span>
+<span class="lineno">  430 </span><span class="spaces">                   </span><span class="nottickedoff">return v</span>
+<span class="lineno">  431 </span><span class="spaces"></span><span class="nottickedoff">lookupBStream _ _ = fail &quot;SAWCoreAIG.BitBlast.lookupBStream: expected Stream&quot;</span></span>
+<span class="lineno">  432 </span>
+<span class="lineno">  433 </span>------------------------------------------------------------
+<span class="lineno">  434 </span>-- Generating variables for arguments
+<span class="lineno">  435 </span>
+<span class="lineno">  436 </span>newVars :: AIG.IsAIG l g =&gt; g s -&gt; FiniteType -&gt; IO (BValue (l s))
+<span class="lineno">  437 </span><span class="decl"><span class="istickedoff">newVars be FTBit = vBool &lt;$&gt; AIG.newInput be</span>
+<span class="lineno">  438 </span><span class="spaces"></span><span class="istickedoff">newVars be (FTVec n tp) = VVector &lt;$&gt; V.replicateM (fromIntegral n) (newVars' be tp)</span>
+<span class="lineno">  439 </span><span class="spaces"></span><span class="istickedoff">newVars be (FTTuple ts) = <span class="nottickedoff">vTuple &lt;$&gt; traverse (newVars' be) ts</span></span>
+<span class="lineno">  440 </span><span class="spaces"></span><span class="istickedoff">newVars be (FTRec tm) = <span class="nottickedoff">vRecord &lt;$&gt; traverse (newVars' be) tm</span></span></span>
+<span class="lineno">  441 </span>
+<span class="lineno">  442 </span>newVars' :: AIG.IsAIG l g =&gt; g s -&gt; FiniteType -&gt; IO (BThunk (l s))
+<span class="lineno">  443 </span><span class="decl"><span class="istickedoff">newVars' be shape = ready &lt;$&gt; newVars be shape</span></span>
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>------------------------------------------------------------
+<span class="lineno">  446 </span>-- Bit-blasting primitives.
+<span class="lineno">  447 </span>--
+<span class="lineno">  448 </span>-- NB: It doesn't make sense to bit blast more than one term using the
+<span class="lineno">  449 </span>-- same bit engine, so the primitives 'withBitBlasted*' create their
+<span class="lineno">  450 </span>-- own bit engine internally, instead of receiving it from the caller,
+<span class="lineno">  451 </span>-- and pass it to the caller-provided continuation.
+<span class="lineno">  452 </span>
+<span class="lineno">  453 </span>type PrimMap l g = forall s. g s -&gt; Map Ident (BPrim (l s))
+<span class="lineno">  454 </span>
+<span class="lineno">  455 </span>bitBlastBasic :: AIG.IsAIG l g
+<span class="lineno">  456 </span>              =&gt; g s
+<span class="lineno">  457 </span>              -&gt; ModuleMap
+<span class="lineno">  458 </span>              -&gt; PrimMap l g
+<span class="lineno">  459 </span>              -&gt; Map VarIndex (BValue (l s))
+<span class="lineno">  460 </span>              -&gt; Term
+<span class="lineno">  461 </span>              -&gt; IO (BValue (l s))
+<span class="lineno">  462 </span><span class="decl"><span class="istickedoff">bitBlastBasic be m addlPrims ecMap t = do</span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">primHandler = Sim.defaultPrimHandler</span></span>
+<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">cfg &lt;- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims <span class="nottickedoff">be</span>))</span>
+<span class="lineno">  465 </span><span class="spaces">         </span><span class="istickedoff">(bitBlastExtCns ecMap)</span>
+<span class="lineno">  466 </span><span class="spaces">         </span><span class="istickedoff">(\_ _ -&gt; Nothing)</span>
+<span class="lineno">  467 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">primHandler</span></span>
+<span class="lineno">  468 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(Prims.lazyMuxValue (prims be))</span></span>
+<span class="lineno">  469 </span><span class="spaces">  </span><span class="istickedoff">Sim.evalSharedTerm cfg t</span></span>
+<span class="lineno">  470 </span>
+<span class="lineno">  471 </span>bitBlastExtCns ::
+<span class="lineno">  472 </span>  Map VarIndex (BValue (l s)) -&gt; ExtCns (TValue (BitBlast (l s))) -&gt;
+<span class="lineno">  473 </span>  IO (BValue (l s))
+<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">bitBlastExtCns ecMap (EC (VarName idx name) _v) =</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup idx ecMap of</span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">Just var -&gt; return var</span>
+<span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $</span></span>
+<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;SAWCoreAIG.BitBlast: can't translate variable &quot; ++</span></span>
+<span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">show name ++ &quot;(index: &quot; ++ show idx ++ &quot;)&quot;</span></span></span>
+<span class="lineno">  480 </span>
+<span class="lineno">  481 </span>asAIGType :: SharedContext -&gt; Term -&gt; IO [(String, Term)]
+<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">asAIGType sc t = do</span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- scWhnf sc t</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">case t' of</span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">(R.asPi -&gt; Just (n, t1, t2)) -&gt; ((<span class="nottickedoff">Text.unpack n</span>, t1) :) &lt;$&gt; asAIGType sc t2</span>
+<span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">(R.asBoolType -&gt; Just ())    -&gt; return []</span>
+<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">(R.asVecType -&gt; Just _)      -&gt; return []</span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">(R.asTupleType -&gt; Just _)    -&gt; <span class="nottickedoff">return []</span></span>
+<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordType -&gt; Just _)   -&gt; <span class="nottickedoff">return []</span></span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">_                            -&gt; <span class="nottickedoff">fail $ &quot;SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: &quot;</span></span>
+<span class="lineno">  491 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">++ scPrettyTerm PPS.defaultOpts t'</span></span></span>
+<span class="lineno">  492 </span>
+<span class="lineno">  493 </span>bitBlastTerm ::
+<span class="lineno">  494 </span>  AIG.IsAIG l g =&gt;
+<span class="lineno">  495 </span>  g s -&gt;
+<span class="lineno">  496 </span>  SharedContext -&gt;
+<span class="lineno">  497 </span>  PrimMap l g -&gt;
+<span class="lineno">  498 </span>  Term -&gt;
+<span class="lineno">  499 </span>  IO (BValue (l s), [(String, FiniteType)])
+<span class="lineno">  500 </span><span class="decl"><span class="istickedoff">bitBlastTerm be sc addlPrims t = do</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- scTypeOf sc t</span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- asAIGType sc ty</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">let ecs = getAllExts t</span>
+<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">argShapes &lt;- traverse (asFiniteType sc) (map snd args)</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">ecShapes &lt;- traverse <span class="nottickedoff">(asFiniteType sc)</span> (map <span class="nottickedoff">ecType</span> ecs)</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="istickedoff">argVars &lt;- traverse (newVars' be) argShapes</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">ecVars &lt;- traverse <span class="nottickedoff">(newVars be)</span> ecShapes</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars</span></span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">bval &lt;- bitBlastBasic be modmap addlPrims <span class="nottickedoff">ecMap</span> t</span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">bval' &lt;- applyAll bval argVars</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">names =  map fst args ++ map (Text.unpack . ecShortName) ecs</span></span>
+<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">shapes = argShapes ++ ecShapes</span></span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">return (bval', <span class="nottickedoff">zip names shapes</span>)</span></span>
+<span class="lineno">  515 </span>
+<span class="lineno">  516 </span>-- | Bitblast a term and apply a function to the result.
+<span class="lineno">  517 </span>withBitBlastedTerm :: AIG.IsAIG l g =&gt; AIG.Proxy l g -&gt;
+<span class="lineno">  518 </span>  SharedContext -&gt;
+<span class="lineno">  519 </span>  PrimMap l g -&gt;
+<span class="lineno">  520 </span>  Term -&gt;
+<span class="lineno">  521 </span>  (forall s. g s -&gt; LitVector (l s) -&gt; IO a) -&gt; IO a
+<span class="lineno">  522 </span><span class="decl"><span class="istickedoff">withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt; do</span>
+<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">(bval, _) &lt;- bitBlastTerm be sc addlPrims t</span>
+<span class="lineno">  524 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- flattenBValue bval</span>
+<span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">c be v</span></span>
+<span class="lineno">  526 </span>
+<span class="lineno">  527 </span>asFiniteType :: SharedContext -&gt; Term -&gt; IO FiniteType
+<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">asFiniteType sc t =</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="istickedoff">scGetModuleMap sc &gt;&gt;= \modmap -&gt;</span>
+<span class="lineno">  530 </span><span class="spaces">  </span><span class="istickedoff">case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty <span class="nottickedoff">Map.empty</span> t) of</span>
+<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; return ft</span>
+<span class="lineno">  532 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  533 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;asFiniteType: unsupported type &quot; ++ scPrettyTerm PPS.defaultOpts t</span></span></span>
+<span class="lineno">  534 </span>
+<span class="lineno">  535 </span>processVar ::
+<span class="lineno">  536 </span>  (ExtCns Term, FirstOrderType) -&gt;
+<span class="lineno">  537 </span>  IO (ExtCns Term, FiniteType)
+<span class="lineno">  538 </span><span class="decl"><span class="istickedoff">processVar (ec, fot) =</span>
+<span class="lineno">  539 </span><span class="spaces">  </span><span class="istickedoff">case toFiniteType fot of</span>
+<span class="lineno">  540 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail (&quot;ABC solver does not support variables of type &quot; ++ show fot)</span></span>
+<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; pure (ec, ft)</span></span>
+<span class="lineno">  542 </span>
+<span class="lineno">  543 </span>
+<span class="lineno">  544 </span>withBitBlastedSATQuery ::
+<span class="lineno">  545 </span>  AIG.IsAIG l g =&gt;
+<span class="lineno">  546 </span>  AIG.Proxy l g -&gt;
+<span class="lineno">  547 </span>  SharedContext -&gt;
+<span class="lineno">  548 </span>  PrimMap l g -&gt;
+<span class="lineno">  549 </span>  SATQuery -&gt;
+<span class="lineno">  550 </span>  (forall s. g s -&gt; l s -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
+<span class="lineno">  551 </span>  IO a
+<span class="lineno">  552 </span><span class="decl"><span class="istickedoff">withBitBlastedSATQuery proxy sc addlPrims satq cont =</span>
+<span class="lineno">  553 </span><span class="spaces">  </span><span class="istickedoff">do unless (Set.null (satUninterp satq)) $ <span class="nottickedoff">fail</span></span>
+<span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;RME prover does not support uninterpreted symbols&quot;</span></span>
+<span class="lineno">  555 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
+<span class="lineno">  556 </span><span class="spaces">     </span><span class="istickedoff">varShapes &lt;- mapM processVar (Map.toList (satVariables satq))</span>
+<span class="lineno">  557 </span><span class="spaces">     </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  558 </span><span class="spaces">     </span><span class="istickedoff">AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt;</span>
+<span class="lineno">  559 </span><span class="spaces">       </span><span class="istickedoff">do vars &lt;- traverse (traverse (newVars be)) varShapes</span>
+<span class="lineno">  560 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
+<span class="lineno">  561 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
+<span class="lineno">  562 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
+<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l varShapes</span>
+<span class="lineno">  564 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
+
+</pre>
+</body>
+</html>
