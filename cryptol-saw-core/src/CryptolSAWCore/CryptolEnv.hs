@@ -426,8 +426,7 @@ translateDeclGroups sc env dgs =
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     return env
-           { eExtraNames = foldr addName (eExtraNames env) names
+     return env{ eExtraNames = foldr addName (eExtraNames env) names
            , eExtraTypes = Map.union (eExtraTypes env) newTypes
            , eTermEnv    = C.envE cryEnv'
            }
@@ -502,38 +501,18 @@ loadCryptolModule ::
 loadCryptolModule sc env path =
   do
   (mod', env') <- loadAndTranslateModule sc env (Left path)
-  cm <- mkCryptolModule mod' env'
-  return (cm, env')
+  return (mkCryptolModule mod' env', env')
 
 
 -- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
 --
 -- This function returns the public types and values of the module `m`
 -- as a `CryptolModule` structure.
-mkCryptolModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  T.Module -> CryptolEnv -> IO CryptolModule
+mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
 mkCryptolModule m env =
-  do
-  let newTermEnv = eTermEnv env
-      modEnv     = eModuleEnv env
-      ifaceDecls = getAllIfaceDecls modEnv
-  (types, _modEnv) <- liftModuleM modEnv $
-    -- NOTE: _modEnv == modEnv, because, as we elaborate below,
-    --   the monadic actions are all 'readers'.
-    do prims <- MB.getPrimMap
-                  -- generate the primitive map; a monad reader
-       TM.inpVars `fmap`
-         MB.genInferInput P.emptyRange prims NoParams ifaceDecls
-         -- NOTE: inpVars are the variables that are in scope.
-         -- FIXME:
-         --   - Why are we calling mB.genInferInput then projecting out
-         --     `inpVars`?
-         --   - If we had inlined, it appears that this is functional code.
-         --   - (Possibly because of information hiding?)
-
-  return $
-    let
+  let
+      ifaceDecls = getAllIfaceDecls (eModuleEnv env)
+      types = Map.map MI.ifDeclSig (MI.ifDecls ifaceDecls)
       -- we're keeping only the exports of `m`:
       vNameSet = MEx.exported C.NSValue (T.mExports m)
       tNameSet = MEx.exported C.NSType  (T.mExports m)
@@ -550,7 +529,7 @@ mkCryptolModule m env =
         $ Map.intersectionWith
              (\t x -> TypedTerm (TypedTermSchema t) x)
              types
-             newTermEnv
+             (eTermEnv env)
         )
 
 -- | bindExtCryptolModule - ad hoc function/hook that allows for
