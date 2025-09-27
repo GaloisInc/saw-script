@@ -21,17 +21,6 @@ Stack trace:
 .:1:0:
 No such data type: ModuleIdentifier Cryptol.String
 
- Recursor not fully applied
-== Anticipated failure message ==
-Stack trace:
-   (builtin) in parse_core
-   test.saw:4:36-4:50 in (callback)
-   (builtin) in fails
-   test.saw:4:17-4:54 in parse
-   test.saw:13:1-13:73 (at top level)
-.:1:0:
-Recursor not fully applied: ModuleIdentifier Prelude.Either
-
  Not a sort (lambda)
 == Anticipated failure message ==
 Stack trace:
