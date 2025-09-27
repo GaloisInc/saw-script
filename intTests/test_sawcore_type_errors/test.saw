@@ -9,8 +9,8 @@ parse "false";
 print "No such data type";
 parse "String#rec Bool True False";
 
-print "Recursor not fully applied";
-parse "Either#rec Bool Nat (\\ (_ : Either Bool Nat) -> Bool) (id Bool)";
+// Partially-applied recursors are permitted
+// print (parse_core "Either#rec Bool Nat (\\ (_ : Either Bool Nat) -> Bool) (id Bool)");
 
 print "Not a sort (lambda)";
 parse "\\(x : True) -> x";
