@@ -427,9 +427,9 @@ translateDeclGroups sc env dgs =
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
      return env{ eExtraNames = foldr addName (eExtraNames env) names
-           , eExtraTypes = Map.union (eExtraTypes env) newTypes
-           , eTermEnv    = C.envE cryEnv'
-           }
+               , eExtraTypes = Map.union (eExtraTypes env) newTypes
+               , eTermEnv    = C.envE cryEnv'
+               }
 
 ---- Misc Exports --------------------------------------------------------------
 
@@ -456,7 +456,7 @@ data ExtCryptolModule =
 showExtCryptolModule :: ExtCryptolModule -> String
 showExtCryptolModule =
   \case
-    ECM_LoadedModule name -> "loaded module '" ++ show(pp name) ++ "'"
+    ECM_LoadedModule name -> "loaded module '" ++ show(pp (P.thing name)) ++ "'"
     ECM_CryptolModule cm  -> showCryptolModule cm
 
 -- | loadCryptolModule - load a cryptol module and returns the
@@ -516,7 +516,7 @@ mkCryptolModule m env =
       -- we're keeping only the exports of `m`:
       vNameSet = MEx.exported C.NSValue (T.mExports m)
       tNameSet = MEx.exported C.NSType  (T.mExports m)
-    in
+  in
       CryptolModule
         -- create Map of type synonyms
         (Map.filterWithKey
@@ -600,12 +600,13 @@ extractDefFromExtCryptolModule sc env ecm name =
   case ecm of
     ECM_LoadedModule loadedModName ->
         do let localMN = C.packModName
-                           [ "INTERNAL"
+                           [ "INTERNAL_EXTRACT_MODNAME"
                            , C.modNameToText (P.thing loadedModName)
                            ]
                env'    = bindLoadedModule (localMN, loadedModName) env
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
            parseTypedTerm sc env' expr
+        -- FIXME: error message for bad `name` exposes the `localMN` to user.
 
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
