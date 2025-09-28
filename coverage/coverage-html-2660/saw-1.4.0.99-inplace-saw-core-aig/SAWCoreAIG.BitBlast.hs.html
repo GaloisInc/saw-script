@@ -223,7 +223,7 @@ span.spaces    { background: white }
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = AIG.add be</span>
 <span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">AIG.sub be</span></span>
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = AIG.mul be</span>
-<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = AIG.uquot be</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = <span class="nottickedoff">AIG.uquot be</span></span>
 <span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = <span class="nottickedoff">AIG.urem be</span></span>
 <span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = <span class="nottickedoff">AIG.squot be</span></span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = <span class="nottickedoff">AIG.srem be</span></span>
@@ -579,7 +579,7 @@ span.spaces    { background: white }
 <span class="lineno">  560 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
 <span class="lineno">  561 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
 <span class="lineno">  562 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
-<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l varShapes</span>
+<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>
 <span class="lineno">  564 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
 
 </pre>
