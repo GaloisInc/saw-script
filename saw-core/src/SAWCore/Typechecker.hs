@@ -161,11 +161,11 @@ matchAppliedName (Un.App f arg) =
 matchAppliedName _ = Nothing
 
 -- | Match an untyped term as a recursor applied to 0 or more arguments
-matchAppliedRecursor :: Un.UTerm -> Maybe (Text, [Un.UTerm])
-matchAppliedRecursor (Un.Recursor (PosPair _ n)) = Just (n, [])
+matchAppliedRecursor :: Un.UTerm -> Maybe (Text, Sort, [Un.UTerm])
+matchAppliedRecursor (Un.Recursor (PosPair _ n) s) = Just (n, s, [])
 matchAppliedRecursor (Un.App f arg) =
-  do (n, args) <- matchAppliedRecursor f
-     return (n, args++[arg])
+  do (n, s, args) <- matchAppliedRecursor f
+     return (n, s, args++[arg])
 matchAppliedRecursor _ = Nothing
 
 -- | The debugging level
@@ -202,7 +202,7 @@ typeInferCompleteTerm (Un.Sort _ srt h) =
   typeInferComplete (Sort srt h :: FlatTermF SCTypedTerm)
 
 -- Recursors (must come before applications)
-typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
+typeInferCompleteTerm (matchAppliedRecursor -> Just (str, s, args)) =
   do mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let dt_ident = mkIdent mnm str
@@ -212,13 +212,13 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, args)) =
      typed_args <- mapM typeInferCompleteUTerm args
      case typed_args of
        (splitAt (length $ dtParams dt) -> (params, motive : rem_args)) ->
-         do crec    <- lift $ TC.compileRecursor dt params motive
+         do crec    <- lift $ TC.compileRecursor dt s params motive
             r       <- typeInferComplete (Recursor crec)
             inferApplyAll r rem_args
 
        _ -> throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
 
-typeInferCompleteTerm (Un.Recursor _) =
+typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
 
 -- Applications, lambdas, and pis

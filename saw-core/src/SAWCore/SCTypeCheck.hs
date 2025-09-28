@@ -610,12 +610,13 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 inferRecursorType ::
   DataType      {- ^ data type -} ->
+  Sort          {- ^ elimination sort -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
-  TCM Sort
-inferRecursorType dt params nixs motive ty =
+  TCM ()
+inferRecursorType dt motive_srt params nixs motive ty =
   do let d = dtName dt
      let mk_err str =
            MalformedRecursor
@@ -634,11 +635,7 @@ inferRecursorType dt params nixs motive ty =
      --
      -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
      --
-     -- for some allowed sort s, where the Ix are the indices of of dt
-     motive_srt <-
-       case asPiList (typedType motive) of
-         (_, (asSort -> Just s)) -> return s
-         _ -> throwTCError $ mk_err "Motive function should return a sort"
+     -- for the given sort s, where the Ix are the indices of of dt
      motive_req <-
        liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt
      -- Technically this is an equality test, not a subtype test, but we
@@ -648,15 +645,14 @@ inferRecursorType dt params nixs motive ty =
      unless (allowedElimSort dt motive_srt)  $
        throwTCError $ mk_err "Disallowed propositional elimination"
 
-     return motive_srt
-
 
 compileRecursor ::
   DataType ->
+  Sort          {- ^ elimination sort -} ->
   [SCTypedTerm] {- ^ datatype parameters -} ->
   SCTypedTerm   {- ^ elimination motive -} ->
   TCM (CompiledRecursor SCTypedTerm)
-compileRecursor dt params motive =
+compileRecursor dt s params motive =
   do let d = dtName dt
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
@@ -671,7 +667,7 @@ compileRecursor dt params motive =
      let crec = CompiledRecursor d params nixs motive ctorOrder ty
 
      -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType dt params nixs motive ty
+     inferRecursorType dt s params nixs motive ty
 
      return crec
 
