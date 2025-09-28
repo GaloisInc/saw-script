@@ -441,7 +441,7 @@ combineCryptolEnv chkEnv newEnv =
      return chkEnv{ eModuleEnv = menv' }
 
 
----- CryptolModule/ExtCryptolModule types and functions: -----------------------
+---- Types and functions for CryptolModule & ExtCryptolModule ------------------
 
 
 -- | ExtCryptolModule - Extended CryptolModule; we keep track of
@@ -449,15 +449,28 @@ combineCryptolEnv chkEnv newEnv =
 --   `CryptolModule` or whether it came from parsing a Cryptol module
 --   from filesystem (in which case it is loaded).
 data ExtCryptolModule =
-    ECM_LoadedModule (P.Located C.ModName)  -- ^ source is parsed/loaded
-  | ECM_CryptolModule CryptolModule         -- ^ source, constructed
-                                            -- (e.g., via cryptol_prims)
+    -- | source is parsed/loaded
+    ECM_LoadedModule
+        { ecm_name :: P.Located C.ModName
+        , ecm_show :: String -- ^ how we show this on SAWScript CLI,
+                             --   We can't look at state to compute show,
+                             --   thus this (albeit adhoc).
+        }
+
+    -- | source is internal/constructed (e.g., via cryptol_prims)
+  | ECM_CryptolModule {ecm_cm :: CryptolModule}
 
 showExtCryptolModule :: ExtCryptolModule -> String
 showExtCryptolModule =
   \case
-    ECM_LoadedModule name -> "loaded module '" ++ show(pp (P.thing name)) ++ "'"
-    ECM_CryptolModule cm  -> showCryptolModule cm
+    ECM_LoadedModule name s ->
+      unlines ["Loaded module '" ++ show(pp (P.thing name)) ++ "':"
+              , s
+              ]
+    ECM_CryptolModule cm  ->
+      unlines  [ "Internal module:"
+               , showCryptolModule cm
+               ]
 
 -- | loadCryptolModule - load a cryptol module and returns the
 -- `ExtCryptolModule`.  The contents of the module are not directly
@@ -480,7 +493,10 @@ loadExtCryptolModule ::
 loadExtCryptolModule sc env path =
   do
   (m, env') <- loadAndTranslateModule sc env (Left path)
-  return (ECM_LoadedModule (locatedUnknown (T.mName m)), env')
+  let s = showCryptolModule (mkCryptolModule m env')
+          -- how to show, need to compute this here.
+          -- FIXME: this only shows public names, not internal.
+  return (ECM_LoadedModule (locatedUnknown (T.mName m)) s, env')
 
 
 -- | loadCryptolModule
@@ -545,8 +561,8 @@ bindExtCryptolModule ::
   (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
 bindExtCryptolModule (modName, ecm) =
   case ecm of
-    ECM_CryptolModule cm -> bindCryptolModule (modName, cm)
-    ECM_LoadedModule  nm -> bindLoadedModule  (modName, nm)
+    ECM_CryptolModule cm   -> bindCryptolModule (modName, cm)
+    ECM_LoadedModule  nm _ -> bindLoadedModule  (modName, nm)
 
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
@@ -598,7 +614,7 @@ extractDefFromExtCryptolModule ::
   SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
 extractDefFromExtCryptolModule sc env ecm name =
   case ecm of
-    ECM_LoadedModule loadedModName ->
+    ECM_LoadedModule loadedModName _ ->
         do let localMN = C.packModName
                            [ "INTERNAL_EXTRACT_MODNAME"
                            , C.modNameToText (P.thing loadedModName)
