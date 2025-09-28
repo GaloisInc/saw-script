@@ -1,0 +1,4 @@
+module A2 where
+
+a : [32]
+a = 3
