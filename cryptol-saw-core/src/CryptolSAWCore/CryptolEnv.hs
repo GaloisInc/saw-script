@@ -48,7 +48,6 @@ module CryptolSAWCore.CryptolEnv
   )
   where
 
---import qualified Control.Exception as X
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import Data.Map (Map)
@@ -622,8 +621,10 @@ extractDefFromExtCryptolModule sc env ecm name =
                env'    = bindLoadedModule (localMN, loadedModName) env
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
            parseTypedTerm sc env' expr
-        -- FIXME: error message for bad `name` exposes the `localMN` to user.
 
+           -- FIXME: error message for bad `name` exposes the
+           --   `localMN` to user.  Fixing locally is challenging, as
+           --   the error is not an exception we can handle here.
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
           Just t  -> return t
