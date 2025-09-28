@@ -613,15 +613,14 @@ inferRecursorType ::
   Sort          {- ^ elimination sort -} ->
   [SCTypedTerm] {- ^ data type parameters -} ->
   Int           {- ^ number of indexes -} ->
-  SCTypedTerm   {- ^ elimination motive -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM ()
-inferRecursorType dt motive_srt params nixs motive ty =
+inferRecursorType dt motive_srt params nixs ty =
   do let d = dtName dt
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d motive_srt params nixs motive [] ty))
+             Recursor (CompiledRecursor d motive_srt params nixs [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -631,17 +630,6 @@ inferRecursorType dt motive_srt params nixs motive ty =
      _ <- foldM (applyPiTyped (mk_err "Incorrect data type signature"))
                 (dtType dt) params
 
-     -- Get the type of p_ret and make sure that it is of the form
-     --
-     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
-     --
-     -- for the given sort s, where the Ix are the indices of of dt
-     motive_req <-
-       liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt
-     -- Technically this is an equality test, not a subtype test, but we
-     -- use the precise sort used in the motive, so they are the same, and
-     -- checkSubtype is handy...
-     checkSubtype motive motive_req
      unless (allowedElimSort dt motive_srt)  $
        throwTCError $ mk_err "Disallowed propositional elimination"
 
@@ -650,24 +638,34 @@ compileRecursor ::
   DataType ->
   Sort          {- ^ elimination sort -} ->
   [SCTypedTerm] {- ^ datatype parameters -} ->
-  SCTypedTerm   {- ^ elimination motive -} ->
   TCM (CompiledRecursor SCTypedTerm)
-compileRecursor dt s params motive =
+compileRecursor dt s params =
   do let d = dtName dt
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
 
+     -- Compute the type of the motive function, which has the form
+     --
+     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
+     --
+     -- for the given sort s, where the Ix are the indices of of dt
+     motive_ty <-
+       liftTCM scRecursorRetTypeType dt (map typedVal params) s
+     motive_ec <- liftTCM scFreshEC "p" motive_ty
+     motive_var <- liftTCM scVariable motive_ec
+
      -- Compute the types of the elimination functions [(Name, Term)]
      elims_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
+       liftTCM scRecursorElimTypes d (map typedVal params) motive_var
 
-     ty1 <- liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
+     ty1 <- liftTCM scRecursorAppType dt (map typedVal params) motive_var
      ty2 <- liftTCM scFunAll (map snd elims_tps) ty1
-     ty <- typeInferComplete ty2
-     let crec = CompiledRecursor d s params nixs motive ctorOrder ty
+     ty3 <- liftTCM scGeneralizeExts [motive_ec] ty2
+     ty <- typeInferComplete ty3
+     let crec = CompiledRecursor d s params nixs ctorOrder ty
 
-     -- Check that the parameters and motive are correct for the given datatype
-     inferRecursorType dt s params nixs motive ty
+     -- Check that the parameters are correct for the given datatype
+     inferRecursorType dt s params nixs ty
 
      return crec
 

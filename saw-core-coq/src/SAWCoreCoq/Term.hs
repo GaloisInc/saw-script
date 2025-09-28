@@ -419,7 +419,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d _s parameters _nixs motive _elimOrder _ty) ->
+    Recursor (CompiledRecursor d _s parameters _nixs _elimOrder _ty) ->
       do maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
@@ -432,9 +432,8 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          "is mapped to an arbitrary Coq term")
 
          ps <- mapM translateTerm parameters
-         m  <- translateTerm motive
 
-         pure (Coq.App rect_var (ps ++ [m]))
+         pure (Coq.App rect_var ps)
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))

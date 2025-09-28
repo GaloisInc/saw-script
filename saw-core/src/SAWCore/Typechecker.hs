@@ -210,13 +210,12 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, s, args)) =
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferCompleteUTerm args
-     case typed_args of
-       (splitAt (length $ dtParams dt) -> (params, motive : rem_args)) ->
-         do crec    <- lift $ TC.compileRecursor dt s params motive
-            r       <- typeInferComplete (Recursor crec)
-            inferApplyAll r rem_args
-
-       _ -> throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
+     unless (length typed_args >= length (dtParams dt)) $
+       throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
+     let (params, rem_args) = splitAt (length (dtParams dt)) typed_args
+     crec <- lift $ TC.compileRecursor dt s params
+     r <- typeInferComplete (Recursor crec)
+     inferApplyAll r rem_args
 
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"

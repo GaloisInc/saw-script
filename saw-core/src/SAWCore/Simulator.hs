@@ -202,7 +202,8 @@ evalTermF cfg lam recEval tf env =
           do let dname = recursorDataType r
              let nixs = recursorNumIxs r
              let cnames = recursorCtorOrder r
-             vFunList (length cnames) $ \elim_thunks ->
+             pure $ VFun $ \_motive ->
+               vFunList (length cnames) $ \elim_thunks ->
                do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
                   let vrec = VRecursor dname nixs es
                   evalRecursor vrec

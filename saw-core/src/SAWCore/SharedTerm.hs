@@ -1152,19 +1152,20 @@ scReduceRecursor ::
   SharedContext ->
   Term {- ^ recursor term -} ->
   CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
+  Term {- ^ motive function -} ->
   [Term] {- ^ eliminator functions -} ->
   Name {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
-scReduceRecursor sc r crec elims c args =
+scReduceRecursor sc r crec motive elims c args =
   do mres <- lookupVarIndexInMap (nameIndex c) <$> scGetModuleMap sc
      let cs_fs = Map.fromList (zip (map nameIndex (recursorCtorOrder crec)) elims)
-     r_elims <- scApplyAll sc r elims
+     r_applied <- scApplyAll sc r (motive : elims)
      case mres of
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
-         ctorIotaReduction ctor r_elims cs_fs args
+         ctorIotaReduction ctor r_applied cs_fs args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
@@ -1194,8 +1195,8 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor Term (CompiledRecursor Term) [Term] [Term]
-    -- ^ recursor, compiled recursor, eliminators, indices
+  | ElimRecursor Term (CompiledRecursor Term) Term [Term] [Term]
+    -- ^ recursor, compiled recursor, motive, eliminators, indices
 
 -- | Test if a term is a constructor application that should be converted to a
 -- natural number literal. Specifically, test if a term is not already a natural
@@ -1235,11 +1236,11 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor _r _crec [f1, f2] [] : xs)
+    go (ElimRecursor _r _crec _motive [f1, f2] [] : xs)
                               (asNat -> Just n)                 = scReduceNatRecursor sc f1 f2 n >>= go xs
-    go xs                     (asRecursorApp -> Just (r, crec)) | Just (elims, xs1) <- splitApps (length (recursorCtorOrder crec)) xs
+    go (ElimApp motive : xs)  (asRecursorApp -> Just (r, crec)) | Just (elims, xs1) <- splitApps (length (recursorCtorOrder crec)) xs
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs1
-                                                                = go (ElimRecursor r crec elims ixs : xs') x
+                                                                = go (ElimRecursor r crec motive elims ixs : xs') x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -1264,9 +1265,9 @@ scWhnf sc t0 =
                                                                        ResolvedCtor ctor ->
                                                                          case asArgsRec xs of
                                                                            Nothing -> foldM reapply t xs
-                                                                           Just (rt, crec, elims, args, xs') ->
+                                                                           Just (rt, crec, motive, elims, args, xs') ->
                                                                              do let args' = drop (ctorNumParams ctor) args
-                                                                                scReduceRecursor sc rt crec elims nm args' >>= go xs'
+                                                                                scReduceRecursor sc rt crec motive elims nm args' >>= go xs'
                                                                        ResolvedDataType _ ->
                                                                          foldM reapply t xs
 
@@ -1283,19 +1284,19 @@ scWhnf sc t0 =
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor r _crec elims ixs) =
-      do f <- scApplyAll sc r (elims ++ ixs)
+    reapply t (ElimRecursor r _crec motive elims ixs) =
+      do f <- scApplyAll sc r (motive : elims ++ ixs)
          scApply sc f t
 
     resolveConstant :: Name -> IO ResolvedName
     resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
-    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], [Term], [WHNFElim])
-    asArgsRec (ElimRecursor r crec elims _ixs : xs) = Just (r, crec, elims, [], xs)
+    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, Term, [Term], [Term], [WHNFElim])
+    asArgsRec (ElimRecursor r crec motive elims _ixs : xs) = Just (r, crec, motive, elims, [], xs)
     asArgsRec (ElimApp x : xs) =
       case asArgsRec xs of
-        Just (r, crec, elims, args, xs') -> Just (r, crec, elims, x : args, xs')
+        Just (r, crec, motive, elims, args, xs') -> Just (r, crec, motive, elims, x : args, xs')
         Nothing -> Nothing
     asArgsRec _ = Nothing
 

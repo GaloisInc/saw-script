@@ -482,8 +482,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (r, crec),
-      splitAt (length (recursorCtorOrder crec)) -> (elims,
-       splitAt (recursorNumIxs crec) -> (_ixs, (R.asVariable -> Just ec) : more))))
+      motive :
+      (splitAt (length (recursorCtorOrder crec)) -> (elims,
+       splitAt (recursorNumIxs crec) -> (_ixs, (R.asVariable -> Just ec) : more)))))
       | (ctxt1, _ : ctxt2) <- break (== ec) ctxt ->
       do -- ti is the type of the value being scrutinized
          ti <- scWhnf sc (ecType ec)
@@ -511,7 +512,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   crec' <- traverse adjust crec
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc r' crec' elims (ctorName ctor) args
+                  rhs1 <- scReduceRecursor sc r' crec' motive elims (ctorName ctor) args
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
@@ -643,9 +644,10 @@ asRecordRedex t =
 --   > RecursorApp rec _ n
 asNatIotaRedex :: R.Recognizer Term (Term, Term, Natural)
 asNatIotaRedex t =
-  do (r_f1_f2, arg) <- R.asApp t
-     (r_f1, f2) <- R.asApp r_f1_f2
-     (r, f1) <- R.asApp r_f1
+  do (r_m_f1_f2, arg) <- R.asApp t
+     (r_m_f1, f2) <- R.asApp r_m_f1_f2
+     (r_m, f1) <- R.asApp r_m_f1
+     (r, _m) <- R.asApp r_m
      _ <- R.asRecursorApp r
      n <- R.asNat arg
      Just (f1, f2, n)
@@ -700,7 +702,7 @@ reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc (asNatIotaRedex -> Just (f1, f2, n)) =
   Just <$> scReduceNatRecursor sc f1 f2 n
-reduceSharedTerm sc (R.asApp -> Just (R.asApplyAll -> (R.asRecursorApp -> Just (r, crec), elims_ixs), arg))
+reduceSharedTerm sc (R.asApp -> Just (R.asApplyAll -> (R.asRecursorApp -> Just (r, crec), motive : elims_ixs), arg))
   | length (recursorCtorOrder crec) + recursorNumIxs crec == length elims_ixs =
   do let (f, args) = R.asApplyAll arg
      let elims = take (length (recursorCtorOrder crec)) elims_ixs
@@ -710,7 +712,7 @@ reduceSharedTerm sc (R.asApp -> Just (R.asApplyAll -> (R.asRecursorApp -> Just (
        Just c ->
          case lookupVarIndexInMap (nameIndex c) mm of
            Just (ResolvedCtor ctor) ->
-             Just <$> scReduceRecursor sc r crec elims c (drop (ctorNumParams ctor) args)
+             Just <$> scReduceRecursor sc r crec motive elims c (drop (ctorNumParams ctor) args)
            _ -> pure Nothing
 reduceSharedTerm _ _ = pure Nothing
 
