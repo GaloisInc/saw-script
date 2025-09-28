@@ -479,8 +479,8 @@ loadExtCryptolModule ::
   IO (ExtCryptolModule, CryptolEnv)
 loadExtCryptolModule sc env path =
   do
-  (mod', env') <- loadAndTranslateModule sc env (Left path)
-  return (ECM_LoadedModule (locatedUnknown (T.mName mod')), env')
+  (m, env') <- loadAndTranslateModule sc env (Left path)
+  return (ECM_LoadedModule (locatedUnknown (T.mName m)), env')
 
 
 -- | loadCryptolModule
