@@ -142,11 +142,12 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d ps nixs motive ctorOrder ty) ->
+            Recursor (CompiledRecursor d s ps nixs motive ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
+                 let show_s = if s == propSort then "Prop" else drop 5 (show s)
                  pure $ unwords
-                      (["Recursor" , show (nameIndex d), show nixs] ++
+                      (["Recursor" , show (nameIndex d), show_s, show nixs] ++
                        map show ps ++
                        [ argsep, show motive
                        , show (map nameIndex ctorOrder)
@@ -276,11 +277,12 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ("Recursor" : i : nixs :
+        ("Recursor" : i : s : nixs :
          (separateArgs ->
           Just (ps, [motive, ctorOrder, ty]))) ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
+                        (if s == "Prop" then pure propSort else mkSort <$> readM s) <*>
                         traverse readIdx ps <*>
                         pure (read nixs) <*>
                         readIdx motive <*>

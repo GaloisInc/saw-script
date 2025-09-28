@@ -621,7 +621,7 @@ inferRecursorType dt motive_srt params nixs motive ty =
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params nixs motive [] ty))
+             Recursor (CompiledRecursor d motive_srt params nixs motive [] ty))
             str
 
      -- Check that the params have the correct types by making sure
@@ -664,7 +664,7 @@ compileRecursor dt s params motive =
      ty1 <- liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
      ty2 <- liftTCM scFunAll (map snd elims_tps) ty1
      ty <- typeInferComplete ty2
-     let crec = CompiledRecursor d params nixs motive ctorOrder ty
+     let crec = CompiledRecursor d s params nixs motive ctorOrder ty
 
      -- Check that the parameters and motive are correct for the given datatype
      inferRecursorType dt s params nixs motive ty
