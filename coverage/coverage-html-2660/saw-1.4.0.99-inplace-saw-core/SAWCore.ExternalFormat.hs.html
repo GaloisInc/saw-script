@@ -35,290 +35,303 @@ span.spaces    { background: white }
 <span class="lineno">   16 </span>  scWriteExternal, scReadExternal
 <span class="lineno">   17 </span>  ) where
 <span class="lineno">   18 </span>
-<span class="lineno">   19 </span>import qualified Control.Monad.State.Strict as State
-<span class="lineno">   20 </span>import Control.Monad.Trans.Class (MonadTrans(..))
-<span class="lineno">   21 </span>import Data.Map (Map)
-<span class="lineno">   22 </span>import qualified Data.Map as Map
-<span class="lineno">   23 </span>import qualified Data.Text as Text
-<span class="lineno">   24 </span>import Data.Text (Text)
-<span class="lineno">   25 </span>import Data.List (elemIndex)
-<span class="lineno">   26 </span>import qualified Data.Vector as V
-<span class="lineno">   27 </span>import Text.Read (readMaybe)
-<span class="lineno">   28 </span>import Text.URI
-<span class="lineno">   29 </span>
-<span class="lineno">   30 </span>import SAWCore.Name
-<span class="lineno">   31 </span>import SAWCore.SharedTerm
-<span class="lineno">   32 </span>import SAWCore.Term.Functor
-<span class="lineno">   33 </span>
-<span class="lineno">   34 </span>--------------------------------------------------------------------------------
-<span class="lineno">   35 </span>-- External text format
-<span class="lineno">   36 </span>
-<span class="lineno">   37 </span>-- | A string to use to separate parameters from normal arguments of datatypes
-<span class="lineno">   38 </span>-- and constructors
-<span class="lineno">   39 </span>argsep :: String
-<span class="lineno">   40 </span><span class="decl"><span class="istickedoff">argsep = &quot;|&quot;</span></span>
-<span class="lineno">   41 </span>
-<span class="lineno">   42 </span>-- | Separate a list of arguments into parameters and normal arguments by
-<span class="lineno">   43 </span>-- finding the occurrence of 'argSep' in the list
-<span class="lineno">   44 </span>separateArgs :: [String] -&gt; Maybe ([String], [String])
-<span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">separateArgs args =</span>
-<span class="lineno">   46 </span><span class="spaces">  </span><span class="nottickedoff">case elemIndex argsep args of</span>
-<span class="lineno">   47 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt; Just (take i args, drop (i+1) args)</span>
-<span class="lineno">   48 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
-<span class="lineno">   49 </span>
-<span class="lineno">   50 </span>type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
-<span class="lineno">   51 </span>
-<span class="lineno">   52 </span>renderNames :: Map VarIndex (Either Text NameInfo) -&gt; String
-<span class="lineno">   53 </span><span class="decl"><span class="istickedoff">renderNames nms = show</span>
-<span class="lineno">   54 </span><span class="spaces">  </span><span class="istickedoff">[ (idx, f nmi)</span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">| (idx,nmi) &lt;- Map.toList nms</span>
-<span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">]</span>
-<span class="lineno">   57 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno">   58 </span><span class="spaces">   </span><span class="istickedoff">f (Left s) = Left s</span>
-<span class="lineno">   59 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ModuleIdentifier i))  = Right (Left (show i))</span>
-<span class="lineno">   60 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ImportedName uri as)) = Right (Right (render uri, as))</span></span>
-<span class="lineno">   61 </span>
-<span class="lineno">   62 </span>readNames :: String -&gt; Maybe (Map VarIndex (Either Text NameInfo))
-<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">readNames xs = Map.fromList &lt;$&gt; (mapM readName =&lt;&lt; readMaybe xs)</span>
-<span class="lineno">   64 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno">   65 </span><span class="spaces">   </span><span class="istickedoff">readName :: (VarIndex, Either Text (Either Text (Text,[Text]))) -&gt; Maybe (VarIndex, Either Text NameInfo)</span>
-<span class="lineno">   66 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Left x) = pure (idx, Left x)</span>
-<span class="lineno">   67 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))</span>
-<span class="lineno">   68 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Right (uri,as))) =</span>
-<span class="lineno">   69 </span><span class="spaces">       </span><span class="istickedoff">do uri' &lt;- mkURI uri</span>
-<span class="lineno">   70 </span><span class="spaces">          </span><span class="istickedoff">pure (idx, Right (ImportedName uri' as))</span></span>
-<span class="lineno">   71 </span>
-<span class="lineno">   72 </span>-- | Render to external text format
-<span class="lineno">   73 </span>scWriteExternal :: Term -&gt; String
-<span class="lineno">   74 </span><span class="decl"><span class="istickedoff">scWriteExternal t0 =</span>
-<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">let (x, (_, nms, lns, _)) = State.runState (go t0) (Map.empty, Map.empty, [], 1)</span>
-<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">in unlines $</span>
-<span class="lineno">   77 </span><span class="spaces">        </span><span class="istickedoff">[ unwords [&quot;SAWCoreTerm&quot;, show x]</span>
-<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">, renderNames nms</span>
-<span class="lineno">   79 </span><span class="spaces">        </span><span class="istickedoff">] ++ reverse lns</span>
-<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">   81 </span><span class="spaces">    </span><span class="istickedoff">nextId :: WriteM Int</span>
-<span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nextId =</span></span>
-<span class="lineno">   83 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do (m, nms, lns, x) &lt;- State.get</span></span>
-<span class="lineno">   84 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">State.put (m, nms, lns, x+1)</span></span>
-<span class="lineno">   85 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return x</span></span>
-<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">output :: String -&gt; WriteM ()</span>
-<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">output l =</span>
-<span class="lineno">   88 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
-<span class="lineno">   89 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, nms, l:lns, x)</span>
-<span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">memoize :: TermIndex -&gt; WriteM Int</span>
-<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">memoize i =</span>
-<span class="lineno">   92 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
-<span class="lineno">   93 </span><span class="spaces">          </span><span class="istickedoff">State.put (Map.insert i x m, nms, lns, x+1)</span>
-<span class="lineno">   94 </span><span class="spaces">          </span><span class="istickedoff">return x</span>
-<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">stashName :: Name -&gt; WriteM ()</span>
-<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">stashName ec =</span>
-<span class="lineno">   97 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
-<span class="lineno">   98 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (nameIndex ec) (Right (nameInfo ec)) nms, lns, x)</span>
-<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">stashEC :: ExtCns Int -&gt; WriteM ()</span>
-<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">stashEC (EC vn _) =</span>
-<span class="lineno">  101 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
-<span class="lineno">  102 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)</span>
-<span class="lineno">  103 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; WriteM Int</span>
-<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">go (Unshared tf) = <span class="nottickedoff">do</span></span>
-<span class="lineno">  106 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tf' &lt;- traverse go tf</span></span>
-<span class="lineno">  107 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">body &lt;- writeTermF tf'</span></span>
-<span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">x &lt;- nextId</span></span>
-<span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">output (unwords [show x, body])</span></span>
-<span class="lineno">  110 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return x</span></span>
-<span class="lineno">  111 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">go STApp{ stAppIndex = i, stAppTermF = tf } = do</span>
-<span class="lineno">  113 </span><span class="spaces">      </span><span class="istickedoff">(memo, _, _, _) &lt;- State.get</span>
-<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i memo of</span>
-<span class="lineno">  115 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; return x</span>
-<span class="lineno">  116 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  117 </span><span class="spaces">          </span><span class="istickedoff">tf' &lt;- traverse go tf</span>
-<span class="lineno">  118 </span><span class="spaces">          </span><span class="istickedoff">body &lt;- writeTermF tf'</span>
-<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- memoize i</span>
-<span class="lineno">  120 </span><span class="spaces">          </span><span class="istickedoff">output (unwords [show x, body])</span>
-<span class="lineno">  121 </span><span class="spaces">          </span><span class="istickedoff">return x</span>
-<span class="lineno">  122 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">writeTermF :: TermF Int -&gt; WriteM String</span>
-<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">writeTermF tf =</span>
-<span class="lineno">  125 </span><span class="spaces">      </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  126 </span><span class="spaces">        </span><span class="istickedoff">App e1 e2      -&gt; pure $ unwords [&quot;App&quot;, show e1, show e2]</span>
-<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">Lambda s t e   -&gt; pure $ unwords [&quot;Lam&quot;, Text.unpack s, show t, show e]</span>
-<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">Pi s t e       -&gt; pure $ unwords [&quot;Pi&quot;, Text.unpack s, show t, show e]</span>
-<span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">LocalVar i     -&gt; pure $ unwords [&quot;Var&quot;, show i]</span>
-<span class="lineno">  130 </span><span class="spaces">        </span><span class="istickedoff">Constant nm    -&gt;</span>
-<span class="lineno">  131 </span><span class="spaces">            </span><span class="istickedoff">do stashName nm</span>
-<span class="lineno">  132 </span><span class="spaces">               </span><span class="istickedoff">pure $ unwords [&quot;Constant&quot;, show (nameIndex nm)]</span>
-<span class="lineno">  133 </span><span class="spaces">        </span><span class="istickedoff">Variable ec -&gt;</span>
-<span class="lineno">  134 </span><span class="spaces">           </span><span class="istickedoff">do stashEC ec</span>
-<span class="lineno">  135 </span><span class="spaces">              </span><span class="istickedoff">pure $ unwords [&quot;Variable&quot;, show (ecVarIndex ec), show (ecType ec)]</span>
-<span class="lineno">  136 </span><span class="spaces">        </span><span class="istickedoff">FTermF ftf     -&gt;</span>
-<span class="lineno">  137 </span><span class="spaces">          </span><span class="istickedoff">case ftf of</span>
-<span class="lineno">  138 </span><span class="spaces">            </span><span class="istickedoff">UnitValue           -&gt; pure $ unwords [&quot;Unit&quot;]</span>
-<span class="lineno">  139 </span><span class="spaces">            </span><span class="istickedoff">UnitType            -&gt; pure $ unwords [&quot;UnitT&quot;]</span>
-<span class="lineno">  140 </span><span class="spaces">            </span><span class="istickedoff">PairValue x y       -&gt; pure $ unwords [&quot;Pair&quot;, show x, show y]</span>
-<span class="lineno">  141 </span><span class="spaces">            </span><span class="istickedoff">PairType x y        -&gt; pure $ unwords [&quot;PairT&quot;, show x, show y]</span>
-<span class="lineno">  142 </span><span class="spaces">            </span><span class="istickedoff">PairLeft e          -&gt; pure $ unwords [&quot;ProjL&quot;, show e]</span>
-<span class="lineno">  143 </span><span class="spaces">            </span><span class="istickedoff">PairRight e         -&gt; pure $ unwords [&quot;ProjR&quot;, show e]</span>
-<span class="lineno">  144 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  145 </span><span class="spaces">            </span><span class="istickedoff">Recursor (CompiledRecursor d ps nixs motive ctorOrder ty) -&gt;</span>
-<span class="lineno">  146 </span><span class="spaces">              </span><span class="istickedoff">do stashName d</span>
-<span class="lineno">  147 </span><span class="spaces">                 </span><span class="istickedoff">mapM_ stashName ctorOrder</span>
-<span class="lineno">  148 </span><span class="spaces">                 </span><span class="istickedoff">pure $ unwords</span>
-<span class="lineno">  149 </span><span class="spaces">                      </span><span class="istickedoff">([&quot;Recursor&quot; , show (nameIndex d), show nixs] ++</span>
-<span class="lineno">  150 </span><span class="spaces">                       </span><span class="istickedoff">map <span class="nottickedoff">show</span> ps ++</span>
-<span class="lineno">  151 </span><span class="spaces">                       </span><span class="istickedoff">[ argsep, show motive</span>
-<span class="lineno">  152 </span><span class="spaces">                       </span><span class="istickedoff">, show (map nameIndex ctorOrder)</span>
-<span class="lineno">  153 </span><span class="spaces">                       </span><span class="istickedoff">, show ty</span>
-<span class="lineno">  154 </span><span class="spaces">                       </span><span class="istickedoff">])</span>
-<span class="lineno">  155 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  156 </span><span class="spaces">            </span><span class="istickedoff">RecordType elem_tps -&gt; <span class="nottickedoff">pure $ unwords [&quot;RecordType&quot;, show elem_tps]</span></span>
-<span class="lineno">  157 </span><span class="spaces">            </span><span class="istickedoff">RecordValue elems   -&gt; <span class="nottickedoff">pure $ unwords [&quot;Record&quot;, show elems]</span></span>
-<span class="lineno">  158 </span><span class="spaces">            </span><span class="istickedoff">RecordProj e prj    -&gt; pure $ unwords [&quot;RecordProj&quot;, show e, Text.unpack prj]</span>
-<span class="lineno">  159 </span><span class="spaces">            </span><span class="istickedoff">Sort s h</span>
-<span class="lineno">  160 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlyfalse">s == propSort</span> -&gt; <span class="nottickedoff">pure $ unwords (&quot;Prop&quot; : map show (sortFlagsToList h))</span></span>
-<span class="lineno">  161 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; pure $ unwords (&quot;Sort&quot; : drop 5 (show s) : map show (sortFlagsToList h))</span>
-<span class="lineno">  162 </span><span class="spaces">                                                        </span><span class="istickedoff">-- /\ Ugly hack to drop &quot;sort &quot;</span>
-<span class="lineno">  163 </span><span class="spaces">            </span><span class="istickedoff">NatLit n            -&gt; pure $ unwords [&quot;Nat&quot;, show n]</span>
-<span class="lineno">  164 </span><span class="spaces">            </span><span class="istickedoff">ArrayValue e v      -&gt; pure $ unwords (&quot;Array&quot; : show e :</span>
-<span class="lineno">  165 </span><span class="spaces">                                            </span><span class="istickedoff">map show (V.toList v))</span>
-<span class="lineno">  166 </span><span class="spaces">            </span><span class="istickedoff">StringLit s         -&gt; pure $ unwords [&quot;String&quot;, show s]</span></span>
-<span class="lineno">  167 </span>
-<span class="lineno">  168 </span>
-<span class="lineno">  169 </span>-- | During parsing, we maintain two maps used for renumbering: The
-<span class="lineno">  170 </span>-- first is for the 'Int' values that appear in the external core
-<span class="lineno">  171 </span>-- file, and the second is for the 'VarIndex' values that appear
-<span class="lineno">  172 </span>-- inside 'Constant' and 'Variable' constructors. We do not reuse any
-<span class="lineno">  173 </span>-- such numbers that appear in the external file, but generate fresh
-<span class="lineno">  174 </span>-- ones that are valid in the current 'SharedContext'.
-<span class="lineno">  175 </span>type ReadM = State.StateT (Map Int Term, Map VarIndex (Either Text NameInfo), Map VarIndex VarIndex) IO
-<span class="lineno">  176 </span>
-<span class="lineno">  177 </span>scReadExternal :: SharedContext -&gt; String -&gt; IO Term
-<span class="lineno">  178 </span><span class="decl"><span class="istickedoff">scReadExternal sc input =</span>
-<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">case lines input of</span>
-<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">( (words -&gt; [&quot;SAWCoreTerm&quot;, final]) : nmlist : rows ) -&gt;</span>
-<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff">case readNames nmlist of</span>
-<span class="lineno">  182 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scReadExternal: failed to parse name table&quot;</span></span>
-<span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff">Just nms -&gt;</span>
-<span class="lineno">  184 </span><span class="spaces">          </span><span class="istickedoff">State.evalStateT (mapM_ (go . words) rows &gt;&gt; readIdx final) (Map.empty, nms, Map.empty)</span>
-<span class="lineno">  185 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  186 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;scReadExternal: failed to parse input file&quot;</span></span>
-<span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">go :: [String] -&gt; ReadM ()</span>
-<span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff">go (tok : tokens) =</span>
-<span class="lineno">  190 </span><span class="spaces">      </span><span class="istickedoff">do i &lt;- readM tok</span>
-<span class="lineno">  191 </span><span class="spaces">         </span><span class="istickedoff">tf &lt;- parse tokens</span>
-<span class="lineno">  192 </span><span class="spaces">         </span><span class="istickedoff">t &lt;- lift $ scTermF sc tf</span>
-<span class="lineno">  193 </span><span class="spaces">         </span><span class="istickedoff">(ts, nms, vs) &lt;- State.get</span>
-<span class="lineno">  194 </span><span class="spaces">         </span><span class="istickedoff">State.put (Map.insert i t ts, nms, vs)</span>
-<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">go [] = <span class="nottickedoff">pure ()</span> -- empty lines are ignored</span>
-<span class="lineno">  196 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">readM :: forall a. Read a =&gt; String -&gt; ReadM a</span>
-<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">readM tok =</span>
-<span class="lineno">  199 </span><span class="spaces">      </span><span class="istickedoff">case readMaybe tok of</span>
-<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;scReadExternal: parse error: &quot; ++ show tok</span></span>
-<span class="lineno">  201 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; pure x</span>
-<span class="lineno">  202 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">getTerm :: Int -&gt; ReadM Term</span>
-<span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">getTerm i =</span>
-<span class="lineno">  205 </span><span class="spaces">      </span><span class="istickedoff">do (ts,_,_) &lt;- State.get</span>
-<span class="lineno">  206 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup i ts of</span>
-<span class="lineno">  207 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;scReadExternal: invalid term index: &quot; ++ show i</span></span>
-<span class="lineno">  208 </span><span class="spaces">           </span><span class="istickedoff">Just t -&gt; pure t</span>
-<span class="lineno">  209 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">readIdx :: String -&gt; ReadM Term</span>
-<span class="lineno">  211 </span><span class="spaces">    </span><span class="istickedoff">readIdx tok = getTerm =&lt;&lt; readM tok</span>
-<span class="lineno">  212 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">readCtorList :: String -&gt; ReadM [Name]</span>
-<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">readCtorList str =</span></span>
-<span class="lineno">  215 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do (ls :: [VarIndex]) &lt;- readM str</span></span>
-<span class="lineno">  216 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">mapM readName' ls</span></span>
-<span class="lineno">  217 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  218 </span><span class="spaces">    </span><span class="istickedoff">readName' :: VarIndex -&gt; ReadM Name</span>
-<span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">readName' vi =</span>
-<span class="lineno">  220 </span><span class="spaces">      </span><span class="istickedoff">do (ts, nms, vs) &lt;- State.get</span>
-<span class="lineno">  221 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- case Map.lookup vi nms of</span>
-<span class="lineno">  222 </span><span class="spaces">                  </span><span class="istickedoff">Just (Right nmi) -&gt; pure nmi</span>
-<span class="lineno">  223 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: ExtCns missing name info: &quot; ++ show vi</span></span>
-<span class="lineno">  224 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
-<span class="lineno">  225 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
-<span class="lineno">  226 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc (moduleIdentToURI ident)) &gt;&gt;= \case</span>
-<span class="lineno">  227 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
-<span class="lineno">  228 </span><span class="spaces">               </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: missing module identifier: &quot; ++ show ident</span></span>
-<span class="lineno">  229 </span><span class="spaces">           </span><span class="istickedoff">ImportedName uri _aliases -&gt;</span>
-<span class="lineno">  230 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc uri) &gt;&gt;= \case</span>
-<span class="lineno">  231 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
-<span class="lineno">  232 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
-<span class="lineno">  233 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ Name vi' nmi</span></span>
-<span class="lineno">  234 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
-<span class="lineno">  235 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do nm &lt;- lift $ scRegisterName sc nmi</span></span>
-<span class="lineno">  236 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi (nameIndex nm) vs)</span></span>
-<span class="lineno">  237 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure nm</span></span>
-<span class="lineno">  238 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">readName :: String -&gt; ReadM Name</span>
-<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">readName i =</span>
-<span class="lineno">  241 </span><span class="spaces">      </span><span class="istickedoff">do vi &lt;- readM i</span>
-<span class="lineno">  242 </span><span class="spaces">         </span><span class="istickedoff">readName' vi</span>
-<span class="lineno">  243 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">readEC' :: VarIndex -&gt; Term -&gt; ReadM (ExtCns Term)</span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">readEC' vi t' =</span>
-<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff">do (ts, nms, vs) &lt;- State.get</span>
-<span class="lineno">  247 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup vi nms of</span>
-<span class="lineno">  248 </span><span class="spaces">           </span><span class="istickedoff">Just (Left x) -&gt;</span>
-<span class="lineno">  249 </span><span class="spaces">             </span><span class="istickedoff">case Map.lookup vi vs of</span>
-<span class="lineno">  250 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; <span class="nottickedoff">pure (EC (VarName vi' x) t')</span></span>
-<span class="lineno">  251 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  252 </span><span class="spaces">                 </span><span class="istickedoff">do vn &lt;- lift $ scFreshVarName sc x</span>
-<span class="lineno">  253 </span><span class="spaces">                    </span><span class="istickedoff">State.put (ts, nms, Map.insert vi <span class="nottickedoff">(vnIndex vn)</span> vs)</span>
-<span class="lineno">  254 </span><span class="spaces">                    </span><span class="istickedoff">pure $ EC vn t'</span>
-<span class="lineno">  255 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: ExtCns missing name: &quot; ++ show vi</span></span>
-<span class="lineno">  256 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">readEC :: String -&gt; String -&gt; ReadM (ExtCns Term)</span>
-<span class="lineno">  258 </span><span class="spaces">    </span><span class="istickedoff">readEC i t =</span>
-<span class="lineno">  259 </span><span class="spaces">      </span><span class="istickedoff">do vi &lt;- readM i</span>
-<span class="lineno">  260 </span><span class="spaces">         </span><span class="istickedoff">t' &lt;- readIdx t</span>
-<span class="lineno">  261 </span><span class="spaces">         </span><span class="istickedoff">readEC' vi t'</span>
-<span class="lineno">  262 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  263 </span><span class="spaces">    </span><span class="istickedoff">parse :: [String] -&gt; ReadM (TermF Term)</span>
-<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">parse tokens =</span>
-<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">case tokens of</span>
-<span class="lineno">  266 </span><span class="spaces">        </span><span class="istickedoff">[&quot;App&quot;, e1, e2]     -&gt; App &lt;$&gt; readIdx e1 &lt;*&gt; readIdx e2</span>
-<span class="lineno">  267 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Lam&quot;, x, t, e]    -&gt; Lambda (Text.pack x) &lt;$&gt; readIdx t &lt;*&gt; readIdx e</span>
-<span class="lineno">  268 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Pi&quot;, s, t, e]     -&gt; <span class="nottickedoff">Pi (Text.pack s) &lt;$&gt; readIdx t &lt;*&gt; readIdx e</span></span>
-<span class="lineno">  269 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Var&quot;, i]          -&gt; pure $ LocalVar (read i)</span>
-<span class="lineno">  270 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Constant&quot;,i]      -&gt; Constant &lt;$&gt; readName i</span>
-<span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ConstantOpaque&quot;,i]  -&gt; <span class="nottickedoff">Constant &lt;$&gt; readName i</span></span>
-<span class="lineno">  272 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Unit&quot;]            -&gt; <span class="nottickedoff">pure $ FTermF UnitValue</span></span>
-<span class="lineno">  273 </span><span class="spaces">        </span><span class="istickedoff">[&quot;UnitT&quot;]           -&gt; <span class="nottickedoff">pure $ FTermF UnitType</span></span>
-<span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Pair&quot;, x, y]      -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairValue &lt;$&gt; readIdx x &lt;*&gt; readIdx y)</span></span>
-<span class="lineno">  275 </span><span class="spaces">        </span><span class="istickedoff">[&quot;PairT&quot;, x, y]     -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairType &lt;$&gt; readIdx x &lt;*&gt; readIdx y)</span></span>
-<span class="lineno">  276 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ProjL&quot;, x]        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairLeft &lt;$&gt; readIdx x)</span></span>
-<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ProjR&quot;, x]        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairRight &lt;$&gt; readIdx x)</span></span>
-<span class="lineno">  278 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Recursor&quot; : i : nixs :</span>
-<span class="lineno">  280 </span><span class="spaces">         </span><span class="istickedoff">(separateArgs -&gt;</span>
-<span class="lineno">  281 </span><span class="spaces">          </span><span class="istickedoff">Just (ps, [motive, ctorOrder, ty]))) -&gt;</span>
-<span class="lineno">  282 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do crec &lt;- CompiledRecursor &lt;$&gt;</span></span>
-<span class="lineno">  283 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readName i &lt;*&gt;</span></span>
-<span class="lineno">  284 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">traverse readIdx ps &lt;*&gt;</span></span>
-<span class="lineno">  285 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">pure (read nixs) &lt;*&gt;</span></span>
-<span class="lineno">  286 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx motive &lt;*&gt;</span></span>
-<span class="lineno">  287 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readCtorList ctorOrder &lt;*&gt;</span></span>
-<span class="lineno">  288 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx ty</span></span>
-<span class="lineno">  289 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (FTermF (Recursor crec))</span></span>
-<span class="lineno">  290 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  291 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordType&quot;, elem_tps] -&gt;</span>
-<span class="lineno">  292 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">FTermF &lt;$&gt; (RecordType &lt;$&gt; (traverse (traverse getTerm) =&lt;&lt; readM elem_tps))</span></span>
-<span class="lineno">  293 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Record&quot;, elems] -&gt;</span>
-<span class="lineno">  294 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">FTermF &lt;$&gt; (RecordValue &lt;$&gt; (traverse (traverse getTerm) =&lt;&lt; readM elems))</span></span>
-<span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordProj&quot;, e, prj] -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (RecordProj &lt;$&gt; readIdx e &lt;*&gt; pure (Text.pack prj))</span></span>
-<span class="lineno">  296 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Prop&quot; : h)        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (Sort propSort . sortFlagsFromList &lt;$&gt; (mapM readM h))</span></span>
-<span class="lineno">  297 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Sort&quot; : s : h)    -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (Sort &lt;$&gt; (mkSort &lt;$&gt; readM s) &lt;*&gt; (sortFlagsFromList &lt;$&gt; mapM readM h))</span></span>
-<span class="lineno">  298 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Nat&quot;, n]          -&gt; FTermF &lt;$&gt; (NatLit &lt;$&gt; readM n)</span>
-<span class="lineno">  299 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Array&quot; : e : es)  -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (ArrayValue &lt;$&gt; readIdx e &lt;*&gt; (V.fromList &lt;$&gt; traverse readIdx es))</span></span>
-<span class="lineno">  300 </span><span class="spaces">        </span><span class="istickedoff">(&quot;String&quot; : ts)     -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (StringLit &lt;$&gt; (readM (unwords ts)))</span></span>
-<span class="lineno">  301 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Variable&quot;, i, t]  -&gt; Variable &lt;$&gt; readEC i t</span>
-<span class="lineno">  302 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;Parse error: &quot; ++ unwords tokens</span></span></span>
+<span class="lineno">   19 </span>import Control.Monad (forM)
+<span class="lineno">   20 </span>import qualified Control.Monad.State.Strict as State
+<span class="lineno">   21 </span>import Control.Monad.Trans.Class (MonadTrans(..))
+<span class="lineno">   22 </span>import Data.Map (Map)
+<span class="lineno">   23 </span>import qualified Data.Map as Map
+<span class="lineno">   24 </span>import qualified Data.Text as Text
+<span class="lineno">   25 </span>import Data.Text (Text)
+<span class="lineno">   26 </span>import Data.List (elemIndex)
+<span class="lineno">   27 </span>import qualified Data.Vector as V
+<span class="lineno">   28 </span>import Text.Read (readMaybe)
+<span class="lineno">   29 </span>import Text.URI
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import SAWCore.Name
+<span class="lineno">   32 </span>import SAWCore.SharedTerm
+<span class="lineno">   33 </span>import SAWCore.Term.Functor
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>--------------------------------------------------------------------------------
+<span class="lineno">   36 </span>-- External text format
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>-- | A string to use to separate parameters from normal arguments of datatypes
+<span class="lineno">   39 </span>-- and constructors
+<span class="lineno">   40 </span>argsep :: String
+<span class="lineno">   41 </span><span class="decl"><span class="istickedoff">argsep = &quot;|&quot;</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>-- | Separate a list of arguments into parameters and normal arguments by
+<span class="lineno">   44 </span>-- finding the occurrence of 'argSep' in the list
+<span class="lineno">   45 </span>separateArgs :: [String] -&gt; Maybe ([String], [String])
+<span class="lineno">   46 </span><span class="decl"><span class="nottickedoff">separateArgs args =</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="nottickedoff">case elemIndex argsep args of</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt; Just (take i args, drop (i+1) args)</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>renderNames :: Map VarIndex (Either Text NameInfo) -&gt; String
+<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">renderNames nms = show</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">[ (idx, f nmi)</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">| (idx,nmi) &lt;- Map.toList nms</span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno">   58 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">   59 </span><span class="spaces">   </span><span class="istickedoff">f (Left s) = Left s</span>
+<span class="lineno">   60 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ModuleIdentifier i))  = Right (Left (show i))</span>
+<span class="lineno">   61 </span><span class="spaces">   </span><span class="istickedoff">f (Right (ImportedName uri as)) = Right (Right (render uri, as))</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>readNames :: String -&gt; Maybe (Map VarIndex (Either Text NameInfo))
+<span class="lineno">   64 </span><span class="decl"><span class="istickedoff">readNames xs = Map.fromList &lt;$&gt; (mapM readName =&lt;&lt; readMaybe xs)</span>
+<span class="lineno">   65 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">   66 </span><span class="spaces">   </span><span class="istickedoff">readName :: (VarIndex, Either Text (Either Text (Text,[Text]))) -&gt; Maybe (VarIndex, Either Text NameInfo)</span>
+<span class="lineno">   67 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Left x) = pure (idx, Left x)</span>
+<span class="lineno">   68 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))</span>
+<span class="lineno">   69 </span><span class="spaces">   </span><span class="istickedoff">readName (idx, Right (Right (uri,as))) =</span>
+<span class="lineno">   70 </span><span class="spaces">       </span><span class="istickedoff">do uri' &lt;- mkURI uri</span>
+<span class="lineno">   71 </span><span class="spaces">          </span><span class="istickedoff">pure (idx, Right (ImportedName uri' as))</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>-- | Render to external text format
+<span class="lineno">   74 </span>scWriteExternal :: Term -&gt; String
+<span class="lineno">   75 </span><span class="decl"><span class="istickedoff">scWriteExternal t0 =</span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">let (x, (_, nms, lns, _)) = State.runState (go t0) (Map.empty, Map.empty, [], 1)</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">in unlines $</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">[ unwords [&quot;SAWCoreTerm&quot;, show x]</span>
+<span class="lineno">   79 </span><span class="spaces">        </span><span class="istickedoff">, renderNames nms</span>
+<span class="lineno">   80 </span><span class="spaces">        </span><span class="istickedoff">] ++ reverse lns</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff">nextId :: WriteM Int</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">nextId =</span></span>
+<span class="lineno">   84 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">do (m, nms, lns, x) &lt;- State.get</span></span>
+<span class="lineno">   85 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">State.put (m, nms, lns, x+1)</span></span>
+<span class="lineno">   86 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return x</span></span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">output :: String -&gt; WriteM ()</span>
+<span class="lineno">   88 </span><span class="spaces">    </span><span class="istickedoff">output l =</span>
+<span class="lineno">   89 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
+<span class="lineno">   90 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, nms, l:lns, x)</span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">memoize :: TermIndex -&gt; WriteM Int</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="istickedoff">memoize i =</span>
+<span class="lineno">   93 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
+<span class="lineno">   94 </span><span class="spaces">          </span><span class="istickedoff">State.put (Map.insert i x m, nms, lns, x+1)</span>
+<span class="lineno">   95 </span><span class="spaces">          </span><span class="istickedoff">return x</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">stashName :: Name -&gt; WriteM ()</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">stashName ec =</span>
+<span class="lineno">   98 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
+<span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (nameIndex ec) (Right (nameInfo ec)) nms, lns, x)</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">stashEC :: ExtCns Int -&gt; WriteM ()</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">stashEC (EC vn _) =</span>
+<span class="lineno">  102 </span><span class="spaces">       </span><span class="istickedoff">do (m, nms, lns, x) &lt;- State.get</span>
+<span class="lineno">  103 </span><span class="spaces">          </span><span class="istickedoff">State.put (m, Map.insert (vnIndex vn) (Left (vnName vn)) nms, lns, x)</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; WriteM Int</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="istickedoff">go (Unshared tf) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  107 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">tf' &lt;- traverse go tf</span></span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">body &lt;- writeTermF tf'</span></span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">x &lt;- nextId</span></span>
+<span class="lineno">  110 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">output (unwords [show x, body])</span></span>
+<span class="lineno">  111 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return x</span></span>
+<span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">go STApp{ stAppIndex = i, stAppTermF = tf } = do</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">(memo, _, _, _) &lt;- State.get</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i memo of</span>
+<span class="lineno">  116 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; return x</span>
+<span class="lineno">  117 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  118 </span><span class="spaces">          </span><span class="istickedoff">tf' &lt;- traverse go tf</span>
+<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">body &lt;- writeTermF tf'</span>
+<span class="lineno">  120 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- memoize i</span>
+<span class="lineno">  121 </span><span class="spaces">          </span><span class="istickedoff">output (unwords [show x, body])</span>
+<span class="lineno">  122 </span><span class="spaces">          </span><span class="istickedoff">return x</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">writeTermF :: TermF Int -&gt; WriteM String</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">writeTermF tf =</span>
+<span class="lineno">  126 </span><span class="spaces">      </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">App e1 e2      -&gt; pure $ unwords [&quot;App&quot;, show e1, show e2]</span>
+<span class="lineno">  128 </span><span class="spaces">        </span><span class="istickedoff">Lambda s t e   -&gt; pure $ unwords [&quot;Lam&quot;, Text.unpack s, show t, show e]</span>
+<span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">Pi s t e       -&gt; pure $ unwords [&quot;Pi&quot;, Text.unpack s, show t, show e]</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="istickedoff">LocalVar i     -&gt; pure $ unwords [&quot;Var&quot;, show i]</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff">Constant nm    -&gt;</span>
+<span class="lineno">  132 </span><span class="spaces">            </span><span class="istickedoff">do stashName nm</span>
+<span class="lineno">  133 </span><span class="spaces">               </span><span class="istickedoff">pure $ unwords [&quot;Constant&quot;, show (nameIndex nm)]</span>
+<span class="lineno">  134 </span><span class="spaces">        </span><span class="istickedoff">Variable ec -&gt;</span>
+<span class="lineno">  135 </span><span class="spaces">           </span><span class="istickedoff">do stashEC ec</span>
+<span class="lineno">  136 </span><span class="spaces">              </span><span class="istickedoff">pure $ unwords [&quot;Variable&quot;, show (ecVarIndex ec), show (ecType ec)]</span>
+<span class="lineno">  137 </span><span class="spaces">        </span><span class="istickedoff">FTermF ftf     -&gt;</span>
+<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff">case ftf of</span>
+<span class="lineno">  139 </span><span class="spaces">            </span><span class="istickedoff">UnitValue           -&gt; pure $ unwords [&quot;Unit&quot;]</span>
+<span class="lineno">  140 </span><span class="spaces">            </span><span class="istickedoff">UnitType            -&gt; pure $ unwords [&quot;UnitT&quot;]</span>
+<span class="lineno">  141 </span><span class="spaces">            </span><span class="istickedoff">PairValue x y       -&gt; pure $ unwords [&quot;Pair&quot;, show x, show y]</span>
+<span class="lineno">  142 </span><span class="spaces">            </span><span class="istickedoff">PairType x y        -&gt; pure $ unwords [&quot;PairT&quot;, show x, show y]</span>
+<span class="lineno">  143 </span><span class="spaces">            </span><span class="istickedoff">PairLeft e          -&gt; pure $ unwords [&quot;ProjL&quot;, show e]</span>
+<span class="lineno">  144 </span><span class="spaces">            </span><span class="istickedoff">PairRight e         -&gt; pure $ unwords [&quot;ProjR&quot;, show e]</span>
+<span class="lineno">  145 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  146 </span><span class="spaces">            </span><span class="istickedoff">Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">              </span><span class="istickedoff">do stashName d</span>
+<span class="lineno">  148 </span><span class="spaces">                 </span><span class="istickedoff">mapM_ stashName ctorOrder</span>
+<span class="lineno">  149 </span><span class="spaces">                 </span><span class="istickedoff">pure $ unwords</span>
+<span class="lineno">  150 </span><span class="spaces">                      </span><span class="istickedoff">([&quot;Recursor&quot; , show (nameIndex d), show nixs] ++</span>
+<span class="lineno">  151 </span><span class="spaces">                       </span><span class="istickedoff">map <span class="nottickedoff">show</span> ps ++</span>
+<span class="lineno">  152 </span><span class="spaces">                       </span><span class="istickedoff">[ argsep, show motive, show motive_ty</span>
+<span class="lineno">  153 </span><span class="spaces">                       </span><span class="istickedoff">, show (Map.toList cs_fs)</span>
+<span class="lineno">  154 </span><span class="spaces">                       </span><span class="istickedoff">, show (map nameIndex ctorOrder)</span>
+<span class="lineno">  155 </span><span class="spaces">                       </span><span class="istickedoff">, show ty</span>
+<span class="lineno">  156 </span><span class="spaces">                       </span><span class="istickedoff">])</span>
+<span class="lineno">  157 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  158 </span><span class="spaces">            </span><span class="istickedoff">RecordType elem_tps -&gt; <span class="nottickedoff">pure $ unwords [&quot;RecordType&quot;, show elem_tps]</span></span>
+<span class="lineno">  159 </span><span class="spaces">            </span><span class="istickedoff">RecordValue elems   -&gt; <span class="nottickedoff">pure $ unwords [&quot;Record&quot;, show elems]</span></span>
+<span class="lineno">  160 </span><span class="spaces">            </span><span class="istickedoff">RecordProj e prj    -&gt; pure $ unwords [&quot;RecordProj&quot;, show e, Text.unpack prj]</span>
+<span class="lineno">  161 </span><span class="spaces">            </span><span class="istickedoff">Sort s h</span>
+<span class="lineno">  162 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlyfalse">s == propSort</span> -&gt; <span class="nottickedoff">pure $ unwords (&quot;Prop&quot; : map show (sortFlagsToList h))</span></span>
+<span class="lineno">  163 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; pure $ unwords (&quot;Sort&quot; : drop 5 (show s) : map show (sortFlagsToList h))</span>
+<span class="lineno">  164 </span><span class="spaces">                                                        </span><span class="istickedoff">-- /\ Ugly hack to drop &quot;sort &quot;</span>
+<span class="lineno">  165 </span><span class="spaces">            </span><span class="istickedoff">NatLit n            -&gt; pure $ unwords [&quot;Nat&quot;, show n]</span>
+<span class="lineno">  166 </span><span class="spaces">            </span><span class="istickedoff">ArrayValue e v      -&gt; pure $ unwords (&quot;Array&quot; : show e :</span>
+<span class="lineno">  167 </span><span class="spaces">                                            </span><span class="istickedoff">map show (V.toList v))</span>
+<span class="lineno">  168 </span><span class="spaces">            </span><span class="istickedoff">StringLit s         -&gt; pure $ unwords [&quot;String&quot;, show s]</span></span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- | During parsing, we maintain two maps used for renumbering: The
+<span class="lineno">  172 </span>-- first is for the 'Int' values that appear in the external core
+<span class="lineno">  173 </span>-- file, and the second is for the 'VarIndex' values that appear
+<span class="lineno">  174 </span>-- inside 'Constant' and 'Variable' constructors. We do not reuse any
+<span class="lineno">  175 </span>-- such numbers that appear in the external file, but generate fresh
+<span class="lineno">  176 </span>-- ones that are valid in the current 'SharedContext'.
+<span class="lineno">  177 </span>type ReadM = State.StateT (Map Int Term, Map VarIndex (Either Text NameInfo), Map VarIndex VarIndex) IO
+<span class="lineno">  178 </span>
+<span class="lineno">  179 </span>scReadExternal :: SharedContext -&gt; String -&gt; IO Term
+<span class="lineno">  180 </span><span class="decl"><span class="istickedoff">scReadExternal sc input =</span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">case lines input of</span>
+<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">( (words -&gt; [&quot;SAWCoreTerm&quot;, final]) : nmlist : rows ) -&gt;</span>
+<span class="lineno">  183 </span><span class="spaces">      </span><span class="istickedoff">case readNames nmlist of</span>
+<span class="lineno">  184 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;scReadExternal: failed to parse name table&quot;</span></span>
+<span class="lineno">  185 </span><span class="spaces">        </span><span class="istickedoff">Just nms -&gt;</span>
+<span class="lineno">  186 </span><span class="spaces">          </span><span class="istickedoff">State.evalStateT (mapM_ (go . words) rows &gt;&gt; readIdx final) (Map.empty, nms, Map.empty)</span>
+<span class="lineno">  187 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;scReadExternal: failed to parse input file&quot;</span></span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">go :: [String] -&gt; ReadM ()</span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">go (tok : tokens) =</span>
+<span class="lineno">  192 </span><span class="spaces">      </span><span class="istickedoff">do i &lt;- readM tok</span>
+<span class="lineno">  193 </span><span class="spaces">         </span><span class="istickedoff">tf &lt;- parse tokens</span>
+<span class="lineno">  194 </span><span class="spaces">         </span><span class="istickedoff">t &lt;- lift $ scTermF sc tf</span>
+<span class="lineno">  195 </span><span class="spaces">         </span><span class="istickedoff">(ts, nms, vs) &lt;- State.get</span>
+<span class="lineno">  196 </span><span class="spaces">         </span><span class="istickedoff">State.put (Map.insert i t ts, nms, vs)</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">go [] = <span class="nottickedoff">pure ()</span> -- empty lines are ignored</span>
+<span class="lineno">  198 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  199 </span><span class="spaces">    </span><span class="istickedoff">readM :: forall a. Read a =&gt; String -&gt; ReadM a</span>
+<span class="lineno">  200 </span><span class="spaces">    </span><span class="istickedoff">readM tok =</span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff">case readMaybe tok of</span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;scReadExternal: parse error: &quot; ++ show tok</span></span>
+<span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; pure x</span>
+<span class="lineno">  204 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">getTerm :: Int -&gt; ReadM Term</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="istickedoff">getTerm i =</span>
+<span class="lineno">  207 </span><span class="spaces">      </span><span class="istickedoff">do (ts,_,_) &lt;- State.get</span>
+<span class="lineno">  208 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup i ts of</span>
+<span class="lineno">  209 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;scReadExternal: invalid term index: &quot; ++ show i</span></span>
+<span class="lineno">  210 </span><span class="spaces">           </span><span class="istickedoff">Just t -&gt; pure t</span>
+<span class="lineno">  211 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  212 </span><span class="spaces">    </span><span class="istickedoff">readIdx :: String -&gt; ReadM Term</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="istickedoff">readIdx tok = getTerm =&lt;&lt; readM tok</span>
+<span class="lineno">  214 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">readElimsMap :: String -&gt; ReadM (Map VarIndex (Term,Term))</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">readElimsMap str =</span></span>
+<span class="lineno">  217 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do (ls :: [(VarIndex,(Int,Int))]) &lt;- readM str</span></span>
+<span class="lineno">  218 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">elims  &lt;- forM ls (\(c,(e,ty)) -&gt;</span></span>
+<span class="lineno">  219 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">do e'  &lt;- getTerm e</span></span>
+<span class="lineno">  220 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- getTerm ty</span></span>
+<span class="lineno">  221 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">pure (c, (e',ty')))</span></span>
+<span class="lineno">  222 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (Map.fromList elims)</span></span>
+<span class="lineno">  223 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">readCtorList :: String -&gt; ReadM [Name]</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">readCtorList str =</span></span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do (ls :: [VarIndex]) &lt;- readM str</span></span>
+<span class="lineno">  227 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">mapM readName' ls</span></span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">readName' :: VarIndex -&gt; ReadM Name</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">readName' vi =</span>
+<span class="lineno">  231 </span><span class="spaces">      </span><span class="istickedoff">do (ts, nms, vs) &lt;- State.get</span>
+<span class="lineno">  232 </span><span class="spaces">         </span><span class="istickedoff">nmi &lt;- case Map.lookup vi nms of</span>
+<span class="lineno">  233 </span><span class="spaces">                  </span><span class="istickedoff">Just (Right nmi) -&gt; pure nmi</span>
+<span class="lineno">  234 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: ExtCns missing name info: &quot; ++ show vi</span></span>
+<span class="lineno">  235 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
+<span class="lineno">  236 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
+<span class="lineno">  237 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc (moduleIdentToURI ident)) &gt;&gt;= \case</span>
+<span class="lineno">  238 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
+<span class="lineno">  239 </span><span class="spaces">               </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: missing module identifier: &quot; ++ show ident</span></span>
+<span class="lineno">  240 </span><span class="spaces">           </span><span class="istickedoff">ImportedName uri _aliases -&gt;</span>
+<span class="lineno">  241 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveNameByURI sc uri) &gt;&gt;= \case</span>
+<span class="lineno">  242 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
+<span class="lineno">  243 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
+<span class="lineno">  244 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ Name vi' nmi</span></span>
+<span class="lineno">  245 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
+<span class="lineno">  246 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">do nm &lt;- lift $ scRegisterName sc nmi</span></span>
+<span class="lineno">  247 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">State.put (ts, nms, Map.insert vi (nameIndex nm) vs)</span></span>
+<span class="lineno">  248 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pure nm</span></span>
+<span class="lineno">  249 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">readName :: String -&gt; ReadM Name</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">readName i =</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="istickedoff">do vi &lt;- readM i</span>
+<span class="lineno">  253 </span><span class="spaces">         </span><span class="istickedoff">readName' vi</span>
+<span class="lineno">  254 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">readEC' :: VarIndex -&gt; Term -&gt; ReadM (ExtCns Term)</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">readEC' vi t' =</span>
+<span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">do (ts, nms, vs) &lt;- State.get</span>
+<span class="lineno">  258 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup vi nms of</span>
+<span class="lineno">  259 </span><span class="spaces">           </span><span class="istickedoff">Just (Left x) -&gt;</span>
+<span class="lineno">  260 </span><span class="spaces">             </span><span class="istickedoff">case Map.lookup vi vs of</span>
+<span class="lineno">  261 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; <span class="nottickedoff">pure (EC (VarName vi' x) t')</span></span>
+<span class="lineno">  262 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  263 </span><span class="spaces">                 </span><span class="istickedoff">do vn &lt;- lift $ scFreshVarName sc x</span>
+<span class="lineno">  264 </span><span class="spaces">                    </span><span class="istickedoff">State.put (ts, nms, Map.insert vi <span class="nottickedoff">(vnIndex vn)</span> vs)</span>
+<span class="lineno">  265 </span><span class="spaces">                    </span><span class="istickedoff">pure $ EC vn t'</span>
+<span class="lineno">  266 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: ExtCns missing name: &quot; ++ show vi</span></span>
+<span class="lineno">  267 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">readEC :: String -&gt; String -&gt; ReadM (ExtCns Term)</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">readEC i t =</span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="istickedoff">do vi &lt;- readM i</span>
+<span class="lineno">  271 </span><span class="spaces">         </span><span class="istickedoff">t' &lt;- readIdx t</span>
+<span class="lineno">  272 </span><span class="spaces">         </span><span class="istickedoff">readEC' vi t'</span>
+<span class="lineno">  273 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">parse :: [String] -&gt; ReadM (TermF Term)</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">parse tokens =</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">case tokens of</span>
+<span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">[&quot;App&quot;, e1, e2]     -&gt; App &lt;$&gt; readIdx e1 &lt;*&gt; readIdx e2</span>
+<span class="lineno">  278 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Lam&quot;, x, t, e]    -&gt; Lambda (Text.pack x) &lt;$&gt; readIdx t &lt;*&gt; readIdx e</span>
+<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Pi&quot;, s, t, e]     -&gt; <span class="nottickedoff">Pi (Text.pack s) &lt;$&gt; readIdx t &lt;*&gt; readIdx e</span></span>
+<span class="lineno">  280 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Var&quot;, i]          -&gt; pure $ LocalVar (read i)</span>
+<span class="lineno">  281 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Constant&quot;,i]      -&gt; Constant &lt;$&gt; readName i</span>
+<span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ConstantOpaque&quot;,i]  -&gt; <span class="nottickedoff">Constant &lt;$&gt; readName i</span></span>
+<span class="lineno">  283 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Unit&quot;]            -&gt; <span class="nottickedoff">pure $ FTermF UnitValue</span></span>
+<span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff">[&quot;UnitT&quot;]           -&gt; <span class="nottickedoff">pure $ FTermF UnitType</span></span>
+<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Pair&quot;, x, y]      -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairValue &lt;$&gt; readIdx x &lt;*&gt; readIdx y)</span></span>
+<span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff">[&quot;PairT&quot;, x, y]     -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairType &lt;$&gt; readIdx x &lt;*&gt; readIdx y)</span></span>
+<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ProjL&quot;, x]        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairLeft &lt;$&gt; readIdx x)</span></span>
+<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">[&quot;ProjR&quot;, x]        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (PairRight &lt;$&gt; readIdx x)</span></span>
+<span class="lineno">  289 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  290 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Recursor&quot; : i : nixs :</span>
+<span class="lineno">  291 </span><span class="spaces">         </span><span class="istickedoff">(separateArgs -&gt;</span>
+<span class="lineno">  292 </span><span class="spaces">          </span><span class="istickedoff">Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) -&gt;</span>
+<span class="lineno">  293 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do crec &lt;- CompiledRecursor &lt;$&gt;</span></span>
+<span class="lineno">  294 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readName i &lt;*&gt;</span></span>
+<span class="lineno">  295 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">traverse readIdx ps &lt;*&gt;</span></span>
+<span class="lineno">  296 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">pure (read nixs) &lt;*&gt;</span></span>
+<span class="lineno">  297 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx motive &lt;*&gt;</span></span>
+<span class="lineno">  298 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx motiveTy &lt;*&gt;</span></span>
+<span class="lineno">  299 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readElimsMap elims &lt;*&gt;</span></span>
+<span class="lineno">  300 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readCtorList ctorOrder &lt;*&gt;</span></span>
+<span class="lineno">  301 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">readIdx ty</span></span>
+<span class="lineno">  302 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">pure (FTermF (Recursor crec))</span></span>
+<span class="lineno">  303 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  304 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordType&quot;, elem_tps] -&gt;</span>
+<span class="lineno">  305 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">FTermF &lt;$&gt; (RecordType &lt;$&gt; (traverse (traverse getTerm) =&lt;&lt; readM elem_tps))</span></span>
+<span class="lineno">  306 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Record&quot;, elems] -&gt;</span>
+<span class="lineno">  307 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">FTermF &lt;$&gt; (RecordValue &lt;$&gt; (traverse (traverse getTerm) =&lt;&lt; readM elems))</span></span>
+<span class="lineno">  308 </span><span class="spaces">        </span><span class="istickedoff">[&quot;RecordProj&quot;, e, prj] -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (RecordProj &lt;$&gt; readIdx e &lt;*&gt; pure (Text.pack prj))</span></span>
+<span class="lineno">  309 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Prop&quot; : h)        -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (Sort propSort . sortFlagsFromList &lt;$&gt; (mapM readM h))</span></span>
+<span class="lineno">  310 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Sort&quot; : s : h)    -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (Sort &lt;$&gt; (mkSort &lt;$&gt; readM s) &lt;*&gt; (sortFlagsFromList &lt;$&gt; mapM readM h))</span></span>
+<span class="lineno">  311 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Nat&quot;, n]          -&gt; FTermF &lt;$&gt; (NatLit &lt;$&gt; readM n)</span>
+<span class="lineno">  312 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Array&quot; : e : es)  -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (ArrayValue &lt;$&gt; readIdx e &lt;*&gt; (V.fromList &lt;$&gt; traverse readIdx es))</span></span>
+<span class="lineno">  313 </span><span class="spaces">        </span><span class="istickedoff">(&quot;String&quot; : ts)     -&gt; <span class="nottickedoff">FTermF &lt;$&gt; (StringLit &lt;$&gt; (readM (unwords ts)))</span></span>
+<span class="lineno">  314 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Variable&quot;, i, t]  -&gt; Variable &lt;$&gt; readEC i t</span>
+<span class="lineno">  315 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;Parse error: &quot; ++ unwords tokens</span></span></span>
 
 </pre>
 </body>

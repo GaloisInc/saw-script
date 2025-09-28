@@ -479,108 +479,110 @@ span.spaces    { background: white }
 <span class="lineno">  460 </span>              -&gt; Term
 <span class="lineno">  461 </span>              -&gt; IO (BValue (l s))
 <span class="lineno">  462 </span><span class="decl"><span class="istickedoff">bitBlastBasic be m addlPrims ecMap t = do</span>
-<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">primHandler = Sim.defaultPrimHandler</span></span>
-<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">cfg &lt;- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims <span class="nottickedoff">be</span>))</span>
-<span class="lineno">  465 </span><span class="spaces">         </span><span class="istickedoff">(bitBlastExtCns ecMap)</span>
-<span class="lineno">  466 </span><span class="spaces">         </span><span class="istickedoff">(\_ _ -&gt; Nothing)</span>
-<span class="lineno">  467 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">primHandler</span></span>
-<span class="lineno">  468 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(Prims.lazyMuxValue (prims be))</span></span>
-<span class="lineno">  469 </span><span class="spaces">  </span><span class="istickedoff">Sim.evalSharedTerm cfg t</span></span>
-<span class="lineno">  470 </span>
-<span class="lineno">  471 </span>bitBlastExtCns ::
-<span class="lineno">  472 </span>  Map VarIndex (BValue (l s)) -&gt; ExtCns (TValue (BitBlast (l s))) -&gt;
-<span class="lineno">  473 </span>  IO (BValue (l s))
-<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">bitBlastExtCns ecMap (EC (VarName idx name) _v) =</span>
-<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup idx ecMap of</span>
-<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">Just var -&gt; return var</span>
-<span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $</span></span>
-<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;SAWCoreAIG.BitBlast: can't translate variable &quot; ++</span></span>
-<span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">show name ++ &quot;(index: &quot; ++ show idx ++ &quot;)&quot;</span></span></span>
-<span class="lineno">  480 </span>
-<span class="lineno">  481 </span>asAIGType :: SharedContext -&gt; Term -&gt; IO [(String, Term)]
-<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">asAIGType sc t = do</span>
-<span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- scWhnf sc t</span>
-<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">case t' of</span>
-<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">(R.asPi -&gt; Just (n, t1, t2)) -&gt; ((<span class="nottickedoff">Text.unpack n</span>, t1) :) &lt;$&gt; asAIGType sc t2</span>
-<span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">(R.asBoolType -&gt; Just ())    -&gt; return []</span>
-<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">(R.asVecType -&gt; Just _)      -&gt; return []</span>
-<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">(R.asTupleType -&gt; Just _)    -&gt; <span class="nottickedoff">return []</span></span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordType -&gt; Just _)   -&gt; <span class="nottickedoff">return []</span></span>
-<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">_                            -&gt; <span class="nottickedoff">fail $ &quot;SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: &quot;</span></span>
-<span class="lineno">  491 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">++ scPrettyTerm PPS.defaultOpts t'</span></span></span>
-<span class="lineno">  492 </span>
-<span class="lineno">  493 </span>bitBlastTerm ::
-<span class="lineno">  494 </span>  AIG.IsAIG l g =&gt;
-<span class="lineno">  495 </span>  g s -&gt;
-<span class="lineno">  496 </span>  SharedContext -&gt;
-<span class="lineno">  497 </span>  PrimMap l g -&gt;
-<span class="lineno">  498 </span>  Term -&gt;
-<span class="lineno">  499 </span>  IO (BValue (l s), [(String, FiniteType)])
-<span class="lineno">  500 </span><span class="decl"><span class="istickedoff">bitBlastTerm be sc addlPrims t = do</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- scTypeOf sc t</span>
-<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- asAIGType sc ty</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">let ecs = getAllExts t</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">argShapes &lt;- traverse (asFiniteType sc) (map snd args)</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">ecShapes &lt;- traverse <span class="nottickedoff">(asFiniteType sc)</span> (map <span class="nottickedoff">ecType</span> ecs)</span>
-<span class="lineno">  506 </span><span class="spaces">  </span><span class="istickedoff">argVars &lt;- traverse (newVars' be) argShapes</span>
-<span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">ecVars &lt;- traverse <span class="nottickedoff">(newVars be)</span> ecShapes</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars</span></span>
-<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
-<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">bval &lt;- bitBlastBasic be modmap addlPrims <span class="nottickedoff">ecMap</span> t</span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">bval' &lt;- applyAll bval argVars</span>
-<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">names =  map fst args ++ map (Text.unpack . ecShortName) ecs</span></span>
-<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">shapes = argShapes ++ ecShapes</span></span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">return (bval', <span class="nottickedoff">zip names shapes</span>)</span></span>
-<span class="lineno">  515 </span>
-<span class="lineno">  516 </span>-- | Bitblast a term and apply a function to the result.
-<span class="lineno">  517 </span>withBitBlastedTerm :: AIG.IsAIG l g =&gt; AIG.Proxy l g -&gt;
-<span class="lineno">  518 </span>  SharedContext -&gt;
-<span class="lineno">  519 </span>  PrimMap l g -&gt;
-<span class="lineno">  520 </span>  Term -&gt;
-<span class="lineno">  521 </span>  (forall s. g s -&gt; LitVector (l s) -&gt; IO a) -&gt; IO a
-<span class="lineno">  522 </span><span class="decl"><span class="istickedoff">withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt; do</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">(bval, _) &lt;- bitBlastTerm be sc addlPrims t</span>
-<span class="lineno">  524 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- flattenBValue bval</span>
-<span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">c be v</span></span>
-<span class="lineno">  526 </span>
-<span class="lineno">  527 </span>asFiniteType :: SharedContext -&gt; Term -&gt; IO FiniteType
-<span class="lineno">  528 </span><span class="decl"><span class="istickedoff">asFiniteType sc t =</span>
-<span class="lineno">  529 </span><span class="spaces">  </span><span class="istickedoff">scGetModuleMap sc &gt;&gt;= \modmap -&gt;</span>
-<span class="lineno">  530 </span><span class="spaces">  </span><span class="istickedoff">case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty <span class="nottickedoff">Map.empty</span> t) of</span>
-<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; return ft</span>
-<span class="lineno">  532 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  533 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;asFiniteType: unsupported type &quot; ++ scPrettyTerm PPS.defaultOpts t</span></span></span>
-<span class="lineno">  534 </span>
-<span class="lineno">  535 </span>processVar ::
-<span class="lineno">  536 </span>  (ExtCns Term, FirstOrderType) -&gt;
-<span class="lineno">  537 </span>  IO (ExtCns Term, FiniteType)
-<span class="lineno">  538 </span><span class="decl"><span class="istickedoff">processVar (ec, fot) =</span>
-<span class="lineno">  539 </span><span class="spaces">  </span><span class="istickedoff">case toFiniteType fot of</span>
-<span class="lineno">  540 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail (&quot;ABC solver does not support variables of type &quot; ++ show fot)</span></span>
-<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; pure (ec, ft)</span></span>
-<span class="lineno">  542 </span>
-<span class="lineno">  543 </span>
-<span class="lineno">  544 </span>withBitBlastedSATQuery ::
-<span class="lineno">  545 </span>  AIG.IsAIG l g =&gt;
-<span class="lineno">  546 </span>  AIG.Proxy l g -&gt;
-<span class="lineno">  547 </span>  SharedContext -&gt;
-<span class="lineno">  548 </span>  PrimMap l g -&gt;
-<span class="lineno">  549 </span>  SATQuery -&gt;
-<span class="lineno">  550 </span>  (forall s. g s -&gt; l s -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
-<span class="lineno">  551 </span>  IO a
-<span class="lineno">  552 </span><span class="decl"><span class="istickedoff">withBitBlastedSATQuery proxy sc addlPrims satq cont =</span>
-<span class="lineno">  553 </span><span class="spaces">  </span><span class="istickedoff">do unless (Set.null (satUninterp satq)) $ <span class="nottickedoff">fail</span></span>
-<span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;RME prover does not support uninterpreted symbols&quot;</span></span>
-<span class="lineno">  555 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
-<span class="lineno">  556 </span><span class="spaces">     </span><span class="istickedoff">varShapes &lt;- mapM processVar (Map.toList (satVariables satq))</span>
-<span class="lineno">  557 </span><span class="spaces">     </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
-<span class="lineno">  558 </span><span class="spaces">     </span><span class="istickedoff">AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt;</span>
-<span class="lineno">  559 </span><span class="spaces">       </span><span class="istickedoff">do vars &lt;- traverse (traverse (newVars be)) varShapes</span>
-<span class="lineno">  560 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
-<span class="lineno">  561 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
-<span class="lineno">  562 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
-<span class="lineno">  563 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>
-<span class="lineno">  564 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
+<span class="lineno">  463 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">neutral _env nt = fail (&quot;bitBlastBasic: could not evaluate neutral term: &quot; ++ show nt)</span></span>
+<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">primHandler = Sim.defaultPrimHandler</span></span>
+<span class="lineno">  465 </span><span class="spaces">  </span><span class="istickedoff">cfg &lt;- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims <span class="nottickedoff">be</span>))</span>
+<span class="lineno">  466 </span><span class="spaces">         </span><span class="istickedoff">(bitBlastExtCns ecMap)</span>
+<span class="lineno">  467 </span><span class="spaces">         </span><span class="istickedoff">(\_ _ -&gt; Nothing)</span>
+<span class="lineno">  468 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">neutral</span></span>
+<span class="lineno">  469 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">primHandler</span></span>
+<span class="lineno">  470 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(Prims.lazyMuxValue (prims be))</span></span>
+<span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">Sim.evalSharedTerm cfg t</span></span>
+<span class="lineno">  472 </span>
+<span class="lineno">  473 </span>bitBlastExtCns ::
+<span class="lineno">  474 </span>  Map VarIndex (BValue (l s)) -&gt; ExtCns (TValue (BitBlast (l s))) -&gt;
+<span class="lineno">  475 </span>  IO (BValue (l s))
+<span class="lineno">  476 </span><span class="decl"><span class="istickedoff">bitBlastExtCns ecMap (EC (VarName idx name) _v) =</span>
+<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup idx ecMap of</span>
+<span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">Just var -&gt; return var</span>
+<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $</span></span>
+<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;SAWCoreAIG.BitBlast: can't translate variable &quot; ++</span></span>
+<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">show name ++ &quot;(index: &quot; ++ show idx ++ &quot;)&quot;</span></span></span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>asAIGType :: SharedContext -&gt; Term -&gt; IO [(String, Term)]
+<span class="lineno">  484 </span><span class="decl"><span class="istickedoff">asAIGType sc t = do</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- scWhnf sc t</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">case t' of</span>
+<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">(R.asPi -&gt; Just (n, t1, t2)) -&gt; ((<span class="nottickedoff">Text.unpack n</span>, t1) :) &lt;$&gt; asAIGType sc t2</span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">(R.asBoolType -&gt; Just ())    -&gt; return []</span>
+<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">(R.asVecType -&gt; Just _)      -&gt; return []</span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">(R.asTupleType -&gt; Just _)    -&gt; <span class="nottickedoff">return []</span></span>
+<span class="lineno">  491 </span><span class="spaces">    </span><span class="istickedoff">(R.asRecordType -&gt; Just _)   -&gt; <span class="nottickedoff">return []</span></span>
+<span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">_                            -&gt; <span class="nottickedoff">fail $ &quot;SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: &quot;</span></span>
+<span class="lineno">  493 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">++ scPrettyTerm PPS.defaultOpts t'</span></span></span>
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>bitBlastTerm ::
+<span class="lineno">  496 </span>  AIG.IsAIG l g =&gt;
+<span class="lineno">  497 </span>  g s -&gt;
+<span class="lineno">  498 </span>  SharedContext -&gt;
+<span class="lineno">  499 </span>  PrimMap l g -&gt;
+<span class="lineno">  500 </span>  Term -&gt;
+<span class="lineno">  501 </span>  IO (BValue (l s), [(String, FiniteType)])
+<span class="lineno">  502 </span><span class="decl"><span class="istickedoff">bitBlastTerm be sc addlPrims t = do</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- scTypeOf sc t</span>
+<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- asAIGType sc ty</span>
+<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">let ecs = getAllExts t</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="istickedoff">argShapes &lt;- traverse (asFiniteType sc) (map snd args)</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">ecShapes &lt;- traverse <span class="nottickedoff">(asFiniteType sc)</span> (map <span class="nottickedoff">ecType</span> ecs)</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">argVars &lt;- traverse (newVars' be) argShapes</span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">ecVars &lt;- traverse <span class="nottickedoff">(newVars be)</span> ecShapes</span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars</span></span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">bval &lt;- bitBlastBasic be modmap addlPrims <span class="nottickedoff">ecMap</span> t</span>
+<span class="lineno">  513 </span><span class="spaces">  </span><span class="istickedoff">bval' &lt;- applyAll bval argVars</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">names =  map fst args ++ map (Text.unpack . ecShortName) ecs</span></span>
+<span class="lineno">  515 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">shapes = argShapes ++ ecShapes</span></span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="istickedoff">return (bval', <span class="nottickedoff">zip names shapes</span>)</span></span>
+<span class="lineno">  517 </span>
+<span class="lineno">  518 </span>-- | Bitblast a term and apply a function to the result.
+<span class="lineno">  519 </span>withBitBlastedTerm :: AIG.IsAIG l g =&gt; AIG.Proxy l g -&gt;
+<span class="lineno">  520 </span>  SharedContext -&gt;
+<span class="lineno">  521 </span>  PrimMap l g -&gt;
+<span class="lineno">  522 </span>  Term -&gt;
+<span class="lineno">  523 </span>  (forall s. g s -&gt; LitVector (l s) -&gt; IO a) -&gt; IO a
+<span class="lineno">  524 </span><span class="decl"><span class="istickedoff">withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt; do</span>
+<span class="lineno">  525 </span><span class="spaces">  </span><span class="istickedoff">(bval, _) &lt;- bitBlastTerm be sc addlPrims t</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">v &lt;- flattenBValue bval</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="istickedoff">c be v</span></span>
+<span class="lineno">  528 </span>
+<span class="lineno">  529 </span>asFiniteType :: SharedContext -&gt; Term -&gt; IO FiniteType
+<span class="lineno">  530 </span><span class="decl"><span class="istickedoff">asFiniteType sc t =</span>
+<span class="lineno">  531 </span><span class="spaces">  </span><span class="istickedoff">scGetModuleMap sc &gt;&gt;= \modmap -&gt;</span>
+<span class="lineno">  532 </span><span class="spaces">  </span><span class="istickedoff">case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty <span class="nottickedoff">Map.empty</span> t) of</span>
+<span class="lineno">  533 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; return ft</span>
+<span class="lineno">  534 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  535 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;asFiniteType: unsupported type &quot; ++ scPrettyTerm PPS.defaultOpts t</span></span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>processVar ::
+<span class="lineno">  538 </span>  (ExtCns Term, FirstOrderType) -&gt;
+<span class="lineno">  539 </span>  IO (ExtCns Term, FiniteType)
+<span class="lineno">  540 </span><span class="decl"><span class="istickedoff">processVar (ec, fot) =</span>
+<span class="lineno">  541 </span><span class="spaces">  </span><span class="istickedoff">case toFiniteType fot of</span>
+<span class="lineno">  542 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail (&quot;ABC solver does not support variables of type &quot; ++ show fot)</span></span>
+<span class="lineno">  543 </span><span class="spaces">    </span><span class="istickedoff">Just ft -&gt; pure (ec, ft)</span></span>
+<span class="lineno">  544 </span>
+<span class="lineno">  545 </span>
+<span class="lineno">  546 </span>withBitBlastedSATQuery ::
+<span class="lineno">  547 </span>  AIG.IsAIG l g =&gt;
+<span class="lineno">  548 </span>  AIG.Proxy l g -&gt;
+<span class="lineno">  549 </span>  SharedContext -&gt;
+<span class="lineno">  550 </span>  PrimMap l g -&gt;
+<span class="lineno">  551 </span>  SATQuery -&gt;
+<span class="lineno">  552 </span>  (forall s. g s -&gt; l s -&gt; [(ExtCns Term, FiniteType)] -&gt; IO a) -&gt;
+<span class="lineno">  553 </span>  IO a
+<span class="lineno">  554 </span><span class="decl"><span class="istickedoff">withBitBlastedSATQuery proxy sc addlPrims satq cont =</span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="istickedoff">do unless (Set.null (satUninterp satq)) $ <span class="nottickedoff">fail</span></span>
+<span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;RME prover does not support uninterpreted symbols&quot;</span></span>
+<span class="lineno">  557 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
+<span class="lineno">  558 </span><span class="spaces">     </span><span class="istickedoff">varShapes &lt;- mapM processVar (Map.toList (satVariables satq))</span>
+<span class="lineno">  559 </span><span class="spaces">     </span><span class="istickedoff">modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  560 </span><span class="spaces">     </span><span class="istickedoff">AIG.withNewGraph <span class="nottickedoff">proxy</span> $ \be -&gt;</span>
+<span class="lineno">  561 </span><span class="spaces">       </span><span class="istickedoff">do vars &lt;- traverse (traverse (newVars be)) varShapes</span>
+<span class="lineno">  562 </span><span class="spaces">          </span><span class="istickedoff">let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) &lt;- vars ]</span>
+<span class="lineno">  563 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- bitBlastBasic be modmap addlPrims varMap t</span>
+<span class="lineno">  564 </span><span class="spaces">          </span><span class="istickedoff">case x of</span>
+<span class="lineno">  565 </span><span class="spaces">            </span><span class="istickedoff">VBool l -&gt; cont be l <span class="nottickedoff">varShapes</span></span>
+<span class="lineno">  566 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type.&quot;</span></span></span>
 
 </pre>
 </body>

@@ -2034,7 +2034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2015 </span><span class="spaces">          </span><span class="istickedoff">Just ts -&gt; return (Right <span class="nottickedoff">(C.tTuple (t1 : ts))</span>)</span>
 <span class="lineno"> 2016 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return (Right (C.tTuple [t1, t2]))</span>
 <span class="lineno"> 2017 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
+<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm v1 (SC.VNondependentPi v2) -&gt;</span>
 <span class="lineno"> 2019 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
 <span class="lineno"> 2020 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 2021 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
@@ -2044,7 +2044,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2025 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
 <span class="lineno"> 2026 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2027 </span><span class="spaces">      </span><span class="istickedoff">-- TODO?</span>
-<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _v1 (SC.VDependentPi _) -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm _v1 (SC.VDependentPi _) -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2029 </span><span class="spaces">      </span><span class="istickedoff">SC.VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2030 </span><span class="spaces">      </span><span class="istickedoff">SC.VRecordType{} -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2031 </span><span class="spaces">      </span><span class="istickedoff">SC.VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
