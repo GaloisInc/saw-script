@@ -233,9 +233,8 @@ evalTermF cfg lam recEval tf env =
     evalRecursor :: VRecursor l -> MValue l
     evalRecursor vrec@(VRecursor d nixs ps_fs) =
       vFunList nixs $ \_ix_thunks ->
-      pure $ VFun $ \arg_thunk ->
-      do argv <- force arg_thunk
-         r_thunk <- delay (evalRecursor vrec)
+      pure $ vStrictFun $ \argv ->
+      do r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
            Just (ctor, args)
              | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
@@ -304,6 +303,10 @@ evalTermF cfg lam recEval tf env =
       vStrictFunList j $ \idxs ->
       pure $ TValue $ VDataType nm params idxs
 
+-- | Create a 'Value' for a strict function.
+vStrictFun :: VMonad l => (Value l -> MValue l) -> Value l
+vStrictFun k = VFun $ \x -> force x >>= k
+
 -- | Create a 'Value' for a lazy multi-argument function.
 vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
 vFunList n0 k = go n0 []
@@ -318,7 +321,7 @@ vStrictFunList n0 k = go n0 []
   where
     go :: Int -> [Value l] -> MValue l
     go 0 args = k (reverse args)
-    go n args = pure $ VFun (\x -> force x >>= \v -> go (n - 1) (v : args))
+    go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
@@ -678,16 +681,14 @@ evalPrim fallback = loop []
         do loop (x : env) (f x)
 
     loop env (Prims.PrimStrict f) =
-      pure $ VFun $ \x ->
-        do x'  <- force x
-           loop (ready x' : env) (f x')
+      pure $ vStrictFun $ \x ->
+        do loop (ready x : env) (f x)
 
     loop env (Prims.PrimFilterFun msg r f) =
-      pure $ VFun $ \x ->
-        do x'  <- force x
-           runMaybeT (r x') >>= \case
-             Just v -> loop (ready x' : env) (f v)
-             _ -> fallback msg (ready x' : env)
+      pure $ vStrictFun $ \x ->
+        runMaybeT (r x) >>= \case
+          Just v -> loop (ready x : env) (f v)
+          _ -> fallback msg (ready x : env)
 
     loop env (Prims.PrimExcept m) =
       runExceptT m >>= \case
