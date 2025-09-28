@@ -453,17 +453,15 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    Recursor (CompiledRecursor d s params _nixs _ctorOrder _ty) ->
-      do params_pp <- mapM (ppTerm' PrecArg) params
-         nm <- ppBestName d
+    Recursor (CompiledRecursor d s _params _nixs _ctorOrder _ty) ->
+      do nm <- ppBestName d
          let suffix =
                case s of
                  TypeSort 0 -> "#rec"
                  TypeSort n -> "#rec" <> pretty n
                  PropSort -> "#ind"
          return $
-           ppAppList prec (annotate PPS.RecursorStyle (nm <> suffix))
-             params_pp
+           annotate PPS.RecursorStyle (nm <> suffix)
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
@@ -590,7 +588,7 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (Recursor crec)         -> recursorParams crec
+            FTermF (Recursor _)            -> []
             tf                             -> Fold.toList tf
 
 

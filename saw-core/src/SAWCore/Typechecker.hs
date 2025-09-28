@@ -49,10 +49,8 @@ import SAWCore.Module
   , findDataTypeInMap
   , resolveNameInMap
   , resolvedNameName
-  , DataType(..)
   , DefQualifier(..)
   )
-import SAWCore.Name (Name(..))
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
@@ -210,12 +208,9 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, s, args)) =
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferCompleteUTerm args
-     unless (length typed_args >= length (dtParams dt)) $
-       throwTCError $ NotFullyAppliedRec (nameInfo (dtName dt))
-     let (params, rem_args) = splitAt (length (dtParams dt)) typed_args
-     crec <- lift $ TC.compileRecursor dt s params
+     crec <- lift $ TC.compileRecursor dt s
      r <- typeInferComplete (Recursor crec)
-     inferApplyAll r rem_args
+     inferApplyAll r typed_args
 
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"

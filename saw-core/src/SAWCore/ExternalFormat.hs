@@ -22,7 +22,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Data.List (elemIndex)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
 import Text.URI
@@ -33,19 +32,6 @@ import SAWCore.Term.Functor
 
 --------------------------------------------------------------------------------
 -- External text format
-
--- | A string to use to separate parameters from normal arguments of datatypes
--- and constructors
-argsep :: String
-argsep = "|"
-
--- | Separate a list of arguments into parameters and normal arguments by
--- finding the occurrence of 'argSep' in the list
-separateArgs :: [String] -> Maybe ([String], [String])
-separateArgs args =
-  case elemIndex argsep args of
-    Just i -> Just (take i args, drop (i+1) args)
-    Nothing -> Nothing
 
 type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
 
@@ -142,14 +128,12 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d s ps nixs ctorOrder ty) ->
+            Recursor (CompiledRecursor d s nps nixs ctorOrder ty) ->
               do stashName d
                  mapM_ stashName ctorOrder
                  let show_s = if s == propSort then "Prop" else drop 5 (show s)
                  pure $ unwords
-                      (["Recursor" , show (nameIndex d), show_s, show nixs] ++
-                       map show ps ++
-                       [ argsep
+                      (["Recursor", show (nameIndex d), show_s, show nps, show nixs
                        , show (map nameIndex ctorOrder)
                        , show ty
                        ])
@@ -277,13 +261,11 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ("Recursor" : i : s : nixs :
-         (separateArgs ->
-          Just (ps, [ctorOrder, ty]))) ->
+        ["Recursor", i, s, nps, nixs, ctorOrder, ty] ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
                         (if s == "Prop" then pure propSort else mkSort <$> readM s) <*>
-                        traverse readIdx ps <*>
+                        pure (read nps) <*>
                         pure (read nixs) <*>
                         readCtorList ctorOrder <*>
                         readIdx ty

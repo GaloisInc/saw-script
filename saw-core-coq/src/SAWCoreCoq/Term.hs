@@ -419,21 +419,17 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d _s parameters _nixs _elimOrder _ty) ->
+    Recursor (CompiledRecursor d _s _nparams _nixs _elimOrder _ty) ->
       do maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing
-         rect_var <- case maybe_d_trans of
+         case maybe_d_trans of
            Just (Coq.Ident i) -> return $ Coq.ExplVar (Coq.Ident (i ++ "_rect"))
            Nothing ->
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
-
-         ps <- mapM translateTerm parameters
-
-         pure (Coq.App rect_var ps)
 
     Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))

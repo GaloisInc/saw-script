@@ -233,7 +233,7 @@ data CompiledRecursor e =
   CompiledRecursor
   { recursorDataType  :: Name
   , recursorSort      :: Sort
-  , recursorParams    :: [e]
+  , recursorNumParams :: Int
   , recursorNumIxs    :: Int
   , recursorCtorOrder :: [Name]
   , recursorType      :: e
@@ -263,14 +263,14 @@ zipName x y
   | otherwise = Nothing
 
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 s1 ps1 n1 ord1 ty1) (CompiledRecursor d2 s2 ps2 n2 ord2 ty2)
+zipRec f (CompiledRecursor d1 s1 ps1 n1 ord1 ty1) (CompiledRecursor d2 s2 _ n2 ord2 ty2)
   | n1 == n2 && s1 == s2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
        pure $ CompiledRecursor
               d
               s1
-              (zipWith f ps1 ps2)
+              ps1
               n1
               ord
               (f ty1 ty2)

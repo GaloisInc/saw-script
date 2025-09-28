@@ -52,7 +52,7 @@ module SAWCore.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad (foldM, forM_, mapM, unless, void)
+import Control.Monad (forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
@@ -611,24 +611,17 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 inferRecursorType ::
   DataType      {- ^ data type -} ->
   Sort          {- ^ elimination sort -} ->
-  [SCTypedTerm] {- ^ data type parameters -} ->
   Int           {- ^ number of indexes -} ->
   SCTypedTerm   {- ^ type of the recursor as a function -} ->
   TCM ()
-inferRecursorType dt motive_srt params nixs ty =
+inferRecursorType dt motive_srt nixs ty =
   do let d = dtName dt
+     let nparams = length (dtParams dt)
      let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d motive_srt params nixs [] ty))
+             Recursor (CompiledRecursor d motive_srt nparams nixs [] ty))
             str
-
-     -- Check that the params have the correct types by making sure
-     -- they correspond to the input types of dt
-     unless (length params == length (dtParams dt)) $
-       throwTCError $ mk_err "Incorrect number of parameters"
-     _ <- foldM (applyPiTyped (mk_err "Incorrect data type signature"))
-                (dtType dt) params
 
      unless (allowedElimSort dt motive_srt)  $
        throwTCError $ mk_err "Disallowed propositional elimination"
@@ -637,35 +630,36 @@ inferRecursorType dt motive_srt params nixs ty =
 compileRecursor ::
   DataType ->
   Sort          {- ^ elimination sort -} ->
-  [SCTypedTerm] {- ^ datatype parameters -} ->
   TCM (CompiledRecursor SCTypedTerm)
-compileRecursor dt s params =
+compileRecursor dt s =
   do let d = dtName dt
+     let nparams = length (dtParams dt)
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
+
+     param_vars <- traverse (liftTCM scVariable) (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      --
      -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
      --
      -- for the given sort s, where the Ix are the indices of of dt
-     motive_ty <-
-       liftTCM scRecursorRetTypeType dt (map typedVal params) s
+     motive_ty <- liftTCM scRecursorRetTypeType dt param_vars s
      motive_ec <- liftTCM scFreshEC "p" motive_ty
      motive_var <- liftTCM scVariable motive_ec
 
      -- Compute the types of the elimination functions [(Name, Term)]
-     elims_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) motive_var
+     elims_tps <- liftTCM scRecursorElimTypes d param_vars motive_var
 
-     ty1 <- liftTCM scRecursorAppType dt (map typedVal params) motive_var
+     ty1 <- liftTCM scRecursorAppType dt param_vars motive_var
      ty2 <- liftTCM scFunAll (map snd elims_tps) ty1
      ty3 <- liftTCM scGeneralizeExts [motive_ec] ty2
-     ty <- typeInferComplete ty3
-     let crec = CompiledRecursor d s params nixs ctorOrder ty
+     ty4 <- liftTCM scGeneralizeExts (dtParams dt) ty3
+     ty <- typeInferComplete ty4
+     let crec = CompiledRecursor d s nparams nixs ctorOrder ty
 
      -- Check that the parameters are correct for the given datatype
-     inferRecursorType dt s params nixs ty
+     inferRecursorType dt s nixs ty
 
      return crec
 
