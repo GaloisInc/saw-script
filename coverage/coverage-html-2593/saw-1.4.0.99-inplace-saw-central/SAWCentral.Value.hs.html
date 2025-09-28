@@ -711,7 +711,7 @@ span.spaces    { background: white }
 <span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">VJavaType {} -&gt; <span class="nottickedoff">showString &quot;&lt;&lt;Java type&gt;&gt;&quot;</span></span>
 <span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">VLLVMType t -&gt; <span class="nottickedoff">showString (show (Crucible.LLVM.ppType t))</span></span>
 <span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff">VMIRType t -&gt; <span class="nottickedoff">showString (show (PP.pretty t))</span></span>
-<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">VCryptolModule m -&gt; <span class="nottickedoff">showString (CEnv.showExtCryptolModule m)</span></span>
+<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">VCryptolModule m -&gt; showString (CEnv.showExtCryptolModule m)</span>
 <span class="lineno">  696 </span><span class="spaces">    </span><span class="istickedoff">VLLVMModule (Some m) -&gt; <span class="nottickedoff">showString (CMSLLVM.showLLVMModule m)</span></span>
 <span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff">VMIRModule m -&gt; shows (PP.pretty (m^.rmCS^.collection))</span>
 <span class="lineno">  698 </span><span class="spaces">    </span><span class="istickedoff">VMIRAdt adt -&gt; <span class="nottickedoff">shows (PP.pretty adt)</span></span>
