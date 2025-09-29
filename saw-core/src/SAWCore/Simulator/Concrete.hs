@@ -46,16 +46,15 @@ import SAWCore.SharedTerm
 evalSharedTerm :: ModuleMap -> Map Ident CPrim -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims ecVals t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (\_ _ -> Nothing) neutral primHandler lazymux
+    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (\_ _ -> Nothing) primHandler lazymux
     Sim.evalSharedTerm cfg t
   where
-    neutral _env nt = return $ Prim.userError $ "Cannot evaluate neutral term\n" ++ show nt
     lazymux = Prims.lazyMuxValue prims
     extcns ec =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
-    primHandler nm _ msg env _tv =
+    primHandler nm msg env =
       return $ Prim.userError $ unlines
         [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
         , "On argument " ++ show (length env)

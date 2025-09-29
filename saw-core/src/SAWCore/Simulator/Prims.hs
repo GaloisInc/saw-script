@@ -415,7 +415,7 @@ toWord _ x = panic "toWord" ["Not word or vector: " <> Text.pack (show x)]
 
 toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
            => Value l -> VWord l -> MBool l
-toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
+toWordPred (VFun f) = fmap toBool . f . ready . VWord
 toWordPred x = panic "toWordPred" ["Not function: " <> Text.pack (show x)]
 
 toBits :: (HasCallStack, VMonad l, Show (Extra l))
@@ -1328,8 +1328,8 @@ muxValue bp b = value
     value (VNat m)  (VNat n)      | m == n = return $ VNat m
     value (VString x) (VString y) | x == y = return $ VString x
 
-    value (VFun nm f) (VFun _ g) =
-        return $ VFun nm $ \a ->
+    value (VFun f) (VFun g) =
+        return $ VFun $ \a ->
            do x <- f a
               y <- g a
               value x y
@@ -1413,19 +1413,19 @@ muxValue bp b = value
     ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
 
     -- consume the data type parameters and compute the type of the constructor
-    ctorArgs (VPiType _nm _t1 body) (p:ps) xs ys =
+    ctorArgs (VPiType _t1 body) (p:ps) xs ys =
       do t' <- applyPiBody body p
          ctorArgs t' ps xs ys
 
     -- mux the arguments one at a time, as long as the constructor type is not
     -- a dependent function
-    ctorArgs (VPiType _nm _t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
+    ctorArgs (VPiType _t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
       do z  <- thunk x y
          zs <- ctorArgs t2 [] xs ys
          pure (z:zs)
     ctorArgs _ [] [] [] = pure []
 
-    ctorArgs (VPiType _nm _t1 (VDependentPi _)) [] _ _ =
+    ctorArgs (VPiType _t1 (VDependentPi _)) [] _ _ =
       unsupportedPrimitive "muxValue" "cannot mux constructors with dependent types"
 
     ctorArgs ty ps xs ys =

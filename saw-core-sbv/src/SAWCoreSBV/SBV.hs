@@ -284,7 +284,7 @@ flattenSValue nm v = do
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        VFun _ _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
+        VFun {} -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
         _ -> fail $ "Cannot create uninterpreted function " ++ show nm ++ " with argument " ++ show v
 
 vWord :: SWord -> SValue
@@ -631,18 +631,17 @@ sbvSolveBasic sc addlPrims unintSet t = do
         | Set.member (nameIndex nm) unintSet =
           let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (extcns (EC vn ty))
         | otherwise                          = Nothing
-  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler mux
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType fnm _ body)
+    (VPiType _ body)
       -> return $
-         VFun fnm $ \x ->
+         VFun $ \x ->
            do x' <- force x
               (cws', suffix) <- flattenSValue nm x'
               t2 <- applyPiBody body (ready x')
@@ -723,11 +722,10 @@ sbvSATQuery sc addlPrims query =
                   let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
                   in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
-          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
           let primHandler = Sim.defaultPrimHandler
           let mux = Prims.lazyMuxValue prims
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler mux)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

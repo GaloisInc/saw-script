@@ -1998,14 +1998,14 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [SC.TValue v1] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") _ [] [] ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType _ _ _ _ -> Nothing
+      SC.VDataType {} -> Nothing
 
       SC.VUnitType -> return (Right (C.tTuple []))
       SC.VPairType v1 v2 -> do
@@ -2015,7 +2015,7 @@ scCryptolType sc t =
           Just ts -> return (Right (C.tTuple (t1 : ts)))
           Nothing -> return (Right (C.tTuple [t1, t2]))
 
-      SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
+      SC.VPiType v1 (SC.VNondependentPi v2) ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
            return (Right (C.tFun t1 t2))
@@ -2025,7 +2025,7 @@ scCryptolType sc t =
         | otherwise     -> Nothing
 
       -- TODO?
-      SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+      SC.VPiType _v1 (SC.VDependentPi _) -> Nothing
       SC.VStringType -> Nothing
       SC.VRecordType{} -> Nothing
       SC.VTyTerm{} -> Nothing
