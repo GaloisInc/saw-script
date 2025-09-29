@@ -385,7 +385,7 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
             let rv' = readMaybeType sym "field" (shapeType shp) rv
             go ada shp rv'
     goVector _ada _shp (MirVector_Array _) = fail $
-        "regToTerm: MirVector_Array not supported"
+        "regToTermWithAdapt: MirVector_Array not supported"
 
 
 regToTerm :: forall sym t fs tp0 m.
