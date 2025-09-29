@@ -130,7 +130,7 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span>  --   this is just an error condition; for others, sensible action can
 <span class="lineno">  112 </span>  --   be taken.
 <span class="lineno">  113 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
-<span class="lineno">  114 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simLazyMux</span></span></span> :: TValue l -&gt; VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
+<span class="lineno">  114 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simLazyMux</span></span></span> :: TValue l -&gt; VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
 <span class="lineno">  115 </span>  }
 <span class="lineno">  116 </span>
 <span class="lineno">  117 </span>------------------------------------------------------------
@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="spaces">             </span><span class="istickedoff">evalRecursor vrec</span>
 <span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  228 </span><span class="spaces">        </span><span class="istickedoff">RecordType elem_tps -&gt;</span>
-<span class="lineno">  229 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">TValue . VRecordType</span> &lt;$&gt; traverse (traverse evalType) elem_tps</span>
+<span class="lineno">  229 </span><span class="spaces">          </span><span class="istickedoff">TValue . VRecordType &lt;$&gt; traverse (traverse evalType) elem_tps</span>
 <span class="lineno">  230 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  231 </span><span class="spaces">        </span><span class="istickedoff">RecordValue elems   -&gt;</span>
 <span class="lineno">  232 </span><span class="spaces">          </span><span class="istickedoff">VRecordValue &lt;$&gt; mapM (\(fld,t) -&gt; (fld,) &lt;$&gt; recEvalDelay t) elems</span>
@@ -287,14 +287,14 @@ span.spaces    { background: white }
 <span class="lineno">  268 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
 <span class="lineno">  269 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">[&quot;Could not find info for constructor: &quot; &lt;&gt; Text.pack (show ctor)]</span></span>
 <span class="lineno">  270 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  271 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case argv of</span></span>
-<span class="lineno">  272 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">VCtorMux _ps branches -&gt;</span></span>
-<span class="lineno">  273 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">do alts &lt;- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)</span></span>
-<span class="lineno">  274 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">-- compute return type of recursor application</span></span>
-<span class="lineno">  275 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">ixvs &lt;- traverse force ix_thunks</span></span>
-<span class="lineno">  276 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">retTy &lt;- toTValue &lt;$&gt; applyAll motive (map ready (ixvs ++ [argv]))</span></span>
-<span class="lineno">  277 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">combineAlts retTy alts</span></span>
-<span class="lineno">  278 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">_ -&gt;</span></span>
+<span class="lineno">  271 </span><span class="spaces">             </span><span class="istickedoff">case argv of</span>
+<span class="lineno">  272 </span><span class="spaces">               </span><span class="istickedoff">VCtorMux _ps branches -&gt;</span>
+<span class="lineno">  273 </span><span class="spaces">                 </span><span class="istickedoff">do alts &lt;- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)</span>
+<span class="lineno">  274 </span><span class="spaces">                    </span><span class="istickedoff">-- compute return type of recursor application</span>
+<span class="lineno">  275 </span><span class="spaces">                    </span><span class="istickedoff">ixvs &lt;- traverse <span class="nottickedoff">force</span> ix_thunks</span>
+<span class="lineno">  276 </span><span class="spaces">                    </span><span class="istickedoff">retTy &lt;- toTValue &lt;$&gt; applyAll motive (map <span class="nottickedoff">ready</span> (ixvs ++ [<span class="nottickedoff">argv</span>]))</span>
+<span class="lineno">  277 </span><span class="spaces">                    </span><span class="istickedoff">combineAlts retTy alts</span>
+<span class="lineno">  278 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  279 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
 <span class="lineno">  280 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">[&quot;Expected constructor for datatype: &quot; &lt;&gt; toAbsoluteName (nameInfo d)]</span></span>
 <span class="lineno">  281 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -302,23 +302,23 @@ span.spaces    { background: white }
 <span class="lineno">  283 </span><span class="spaces">      </span><span class="istickedoff">VRecursor l -&gt;</span>
 <span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">(VBool l, Name, TValue l, [Thunk l]) -&gt;</span>
 <span class="lineno">  285 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (VBool l, EvalM l (Value l))</span>
-<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">evalCtorMuxBranch r (p, c, ct, args) =</span></span>
-<span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case r of</span></span>
-<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty -&gt;</span></span>
-<span class="lineno">  289 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do let i = nameIndex c</span></span>
-<span class="lineno">  290 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let rTy = ty</span></span>
-<span class="lineno">  291 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">r_thunk &lt;- delay (evalRecursor r)</span></span>
-<span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of</span></span>
-<span class="lineno">  293 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">(Just (ResolvedCtor ctor), Just (elim, elimTy)) -&gt;</span></span>
-<span class="lineno">  294 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">do allArgs &lt;- processRecArgs ps args ct [(elim, elimTy), (r_thunk, rTy)]</span></span>
-<span class="lineno">  295 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">pure (p, lam (ctorIotaTemplate ctor) allArgs)</span></span>
-<span class="lineno">  296 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;evalTermF / evalCtorMuxBranch&quot;</span></span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">evalCtorMuxBranch r (p, c, ct, args) =</span>
+<span class="lineno">  287 </span><span class="spaces">      </span><span class="istickedoff">case r of</span>
+<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty -&gt;</span>
+<span class="lineno">  289 </span><span class="spaces">          </span><span class="istickedoff">do let i = nameIndex c</span>
+<span class="lineno">  290 </span><span class="spaces">             </span><span class="istickedoff">let <span class="nottickedoff">rTy = ty</span></span>
+<span class="lineno">  291 </span><span class="spaces">             </span><span class="istickedoff">r_thunk &lt;- delay <span class="nottickedoff">(evalRecursor r)</span></span>
+<span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff">case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of</span>
+<span class="lineno">  293 </span><span class="spaces">               </span><span class="istickedoff">(Just (ResolvedCtor ctor), Just (elim, elimTy)) -&gt;</span>
+<span class="lineno">  294 </span><span class="spaces">                 </span><span class="istickedoff">do allArgs &lt;- processRecArgs ps args ct [(elim, <span class="nottickedoff">elimTy</span>), <span class="nottickedoff">(r_thunk, rTy)</span>]</span>
+<span class="lineno">  295 </span><span class="spaces">                    </span><span class="istickedoff">pure (p, lam (ctorIotaTemplate ctor) allArgs)</span>
+<span class="lineno">  296 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;evalTermF / evalCtorMuxBranch&quot;</span></span>
 <span class="lineno">  297 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">[&quot;could not find info for constructor: &quot; &lt;&gt; toAbsoluteName (nameInfo c)]</span></span>
 <span class="lineno">  298 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">combineAlts :: TValue l -&gt; [(VBool l, EvalM l (Value l))] -&gt; EvalM l (Value l)</span>
-<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts _ [] = panic &quot;evalTermF / combineAlts&quot; [&quot;no alternatives&quot;]</span></span>
-<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts _ [(_, x)] = x</span></span>
-<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts tp ((p, x) : alts) = simLazyMux cfg tp p x (combineAlts tp alts)</span></span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">combineAlts _ [] = <span class="nottickedoff">panic &quot;evalTermF / combineAlts&quot; [&quot;no alternatives&quot;]</span></span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">combineAlts _ [(_, x)] = x</span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">combineAlts tp ((p, x) : alts) = simLazyMux cfg tp p x (combineAlts <span class="nottickedoff">tp</span> alts)</span>
 <span class="lineno">  303 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  304 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor :: Value l -&gt; Maybe (Ctor, [Thunk l])</span>
 <span class="lineno">  305 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor (VCtorApp c _tv _ps args) =</span>
@@ -332,7 +332,7 @@ span.spaces    { background: white }
 <span class="lineno">  313 </span><span class="spaces">       </span><span class="istickedoff">do ctor &lt;- findCtorInMap preludeSuccIdent (simModMap cfg)</span>
 <span class="lineno">  314 </span><span class="spaces">          </span><span class="istickedoff">Just (ctor, [ ready (VNat (pred n)) ])</span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">evalConstructor _ =</span>
-<span class="lineno">  316 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  316 </span><span class="spaces">       </span><span class="istickedoff">Nothing</span>
 <span class="lineno">  317 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay :: Term -&gt; EvalM l (Thunk l)</span>
 <span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">recEvalDelay = delay . recEval</span>
@@ -416,7 +416,7 @@ span.spaces    { background: white }
 <span class="lineno">  397 </span>              (TValue l -&gt; VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l) -&gt;
 <span class="lineno">  398 </span>              EvalM l (SimulatorConfig l)
 <span class="lineno">  399 </span><span class="decl"><span class="istickedoff">evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =</span>
-<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">evalGlobal' modmap prims (const extcns) (const uninterpreted) <span class="nottickedoff">neutral</span> <span class="nottickedoff">primHandler</span> <span class="nottickedoff">lazymux</span></span></span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">evalGlobal' modmap prims (const extcns) (const uninterpreted) <span class="nottickedoff">neutral</span> <span class="nottickedoff">primHandler</span> lazymux</span></span>
 <span class="lineno">  401 </span>
 <span class="lineno">  402 </span>{-# SPECIALIZE evalGlobal' ::
 <span class="lineno">  403 </span>  Show (Extra l) =&gt;
@@ -458,7 +458,7 @@ span.spaces    { background: white }
 <span class="lineno">  439 </span>  EvalM l (SimulatorConfig l)
 <span class="lineno">  440 </span><span class="decl"><span class="istickedoff">evalGlobal' modmap prims extcns constant neutral primHandler lazymux =</span>
 <span class="lineno">  441 </span><span class="spaces">  </span><span class="istickedoff">do checkPrimitives <span class="nottickedoff">modmap</span> <span class="nottickedoff">prims</span></span>
-<span class="lineno">  442 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> extcns constant' <span class="nottickedoff">ctors</span> neutral modmap <span class="nottickedoff">lazymux</span>)</span>
+<span class="lineno">  442 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> extcns constant' <span class="nottickedoff">ctors</span> neutral modmap lazymux)</span>
 <span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  444 </span><span class="spaces">    </span><span class="istickedoff">constant' :: TermF Term -&gt; Name -&gt; TValue l -&gt; Maybe (MValue l)</span>
 <span class="lineno">  445 </span><span class="spaces">    </span><span class="istickedoff">constant' tf nm tv =</span>
