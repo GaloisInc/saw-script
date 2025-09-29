@@ -21,7 +21,6 @@ import Tests.CacheTests
 import Tests.Parser
 import Tests.SharedTerm
 import Tests.Rewriter
-import Tests.Simulator
 import Tests.Functor
 
 main :: IO ()
@@ -44,6 +43,5 @@ tests =
    , testGroup "Parser" parserTests
    , testGroup "Rewriter" rewriter_tests
    , testGroup "Cache" cacheTests
-   , testGroup "Simulator" simulatorTests
    , testGroup "Functor" functorTests
    ]

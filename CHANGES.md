@@ -6,6 +6,14 @@ This release supports [version
 
 ## Changes
 
+* The experimental command `extract_uninterp` has been removed.
+
+* The `normalize_term_opaque` and `goal_normalize` commands have been
+  reimplemented using a different normalization strategy which is more
+  conservative about type safety.
+  They may produce different outputs than before; in particular, fewer
+  applications of primitive functions are reduced.
+
 * The deprecated Heapster, MRSolver, and Monadify features have been
   removed.
   The following SAW commands and types are no longer available:
