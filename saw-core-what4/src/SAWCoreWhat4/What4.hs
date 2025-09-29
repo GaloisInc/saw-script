@@ -584,7 +584,7 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: forall sym. Sym sym => sym -> SPrim sym
 streamGetOp sym =
-  Prims.tvalFun   $ \tp ->
+  Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
   Prims.Prim $
@@ -592,7 +592,7 @@ streamGetOp sym =
       VNat n -> lookupSStream xs n
       VBVToNat _ w ->
         do ilv <- toWord sym w
-           selectV sym (lazyMux @sym (muxBVal sym tp)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
+           selectV sym (lazyMux @sym (muxBVal sym)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
       v -> panic "streamGetOp" ["Expected Nat value, found: " <> Text.pack (show v)]
 
 lookupSStream :: SValue sym -> Natural -> IO (SValue sym)
@@ -607,19 +607,17 @@ lookupSStream _ _ = fail "SAWCoreWhat4.What4.lookupSStream: expected Stream"
 
 
 muxBVal :: forall sym. Sym sym =>
-  sym -> TValue (What4 sym) -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
+  sym -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
 muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
-  sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
+  sym -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
+muxWhat4Extra sym c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
-                  muxBVal sym tp c xi yi
+                  muxBVal sym c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
-muxWhat4Extra _ tp _ _ _ =
-     panic "muxWhat4Extra" ["Type mismatch: " <> Text.pack (show tp)]
 
 
 -- | Lifts a strict mux operation to a lazy mux

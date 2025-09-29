@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import qualified SAWSupport.Pretty as PPS (defaultOpts)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (Name(..), VarName(..), ecShortName)
+import SAWCore.Name (VarName(..), ecShortName)
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -44,8 +44,6 @@ import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import SAWCore.Term.Pretty (scPrettyTerm)
-
-import SAWCoreAIG.Panic
 
 import qualified Data.AIG as AIG
 
@@ -300,21 +298,20 @@ lazyMux be muxFn c tm fm
       f <- fm
       muxFn c t f
 
-muxBVal :: AIG.IsAIG l g => g s -> TValue (BitBlast (l s)) -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
+muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
 muxBVal be = Prims.muxValue (prims be)
 
 muxInt :: a -> Integer -> Integer -> IO Integer
 muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
 muxBExtra :: AIG.IsAIG l g => g s ->
-  TValue (BitBlast (l s)) -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra be (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
+  l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
+muxBExtra be c x y =
   do let f i = do xi <- lookupBStream (VExtra x) i
                   yi <- lookupBStream (VExtra y) i
-                  muxBVal be tp c xi yi
+                  muxBVal be c xi yi
      r <- newIORef Map.empty
      return (BStream f r)
-muxBExtra _ tp _ _ _ = panic "muxBExtra" ["Type mismatch: " <> Text.pack (show tp)]
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
 genShift ::
@@ -409,14 +406,14 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 streamGetOp be =
-  Prims.tvalFun   $ \tp ->
+  Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
   Prims.Prim $ case ix of
     VNat n -> lookupBStream xs n
     VBVToNat _ w ->
        do bs <- toWord w
-          AIG.muxInteger (lazyMux be (muxBVal be tp)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
+          AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
     v -> fail (unlines ["SAWCoreAIG.BitBlast.streamGetOp", "Expected Nat value", show v])
 
 
