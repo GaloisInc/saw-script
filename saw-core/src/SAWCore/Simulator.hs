@@ -668,11 +668,11 @@ evalPrim fallback = loop []
     loop :: Env l -> Prims.Prim l -> MValue l
     loop env (Prims.PrimFun f) =
       pure $ VFun $ \x ->
-        do loop (x : env) (f x)
+        loop (x : env) (f x)
 
     loop env (Prims.PrimStrict f) =
       pure $ vStrictFun $ \x ->
-        do loop (ready x : env) (f x)
+        loop (ready x : env) (f x)
 
     loop env (Prims.PrimFilterFun msg r f) =
       pure $ vStrictFun $ \x ->
