@@ -237,9 +237,8 @@ evalTermF cfg lam recEval tf env =
       do r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
            Just (ctor, args)
-             | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-             -> do allArgs <- processRecArgs args [elim, r_thunk]
-                   lam (ctorIotaTemplate ctor) allArgs
+             | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
+                 lam (ctorIotaTemplate ctor) (reverse (r_thunk : elim : args))
 
              | otherwise ->
                  panic "evalTermF / evalRecursor"
@@ -264,7 +263,7 @@ evalTermF cfg lam recEval tf env =
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
                (Just (ResolvedCtor ctor), Just elim) ->
-                 do allArgs <- processRecArgs args [elim, r_thunk]
+                 do let allArgs = reverse (r_thunk : elim : args)
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
@@ -322,15 +321,6 @@ vStrictFunList n0 k = go n0 []
     go :: Int -> [Value l] -> MValue l
     go 0 args = k (reverse args)
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
-
-processRecArgs ::
-  (VMonadLazy l, Show (Extra l)) =>
-  [Thunk l] ->
-  Env l ->
-  EvalM l (Env l)
-processRecArgs (x : xs) env =
-  processRecArgs xs (x : env)
-processRecArgs [] env = pure env
 
 
 {-# SPECIALIZE evalGlobal ::
