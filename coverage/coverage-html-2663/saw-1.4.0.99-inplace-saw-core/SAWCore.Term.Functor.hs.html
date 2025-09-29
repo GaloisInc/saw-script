@@ -1,0 +1,652 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# OPTIONS_GHC -fno-warn-orphans #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">    3 </span>{-# LANGUAGE DeriveLift #-}
+<span class="lineno">    4 </span>{-# LANGUAGE DeriveTraversable #-}
+<span class="lineno">    5 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    6 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    7 </span>{-# LANGUAGE PatternGuards #-}
+<span class="lineno">    8 </span>{-# LANGUAGE BangPatterns #-}
+<span class="lineno">    9 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>{- |
+<span class="lineno">   12 </span>Module      : SAWCore.Term.Functor
+<span class="lineno">   13 </span>Copyright   : Galois, Inc. 2012-2025
+<span class="lineno">   14 </span>License     : BSD3
+<span class="lineno">   15 </span>Maintainer  : huffman@galois.com
+<span class="lineno">   16 </span>Stability   : experimental
+<span class="lineno">   17 </span>Portability : non-portable (language extensions)
+<span class="lineno">   18 </span>-}
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>module SAWCore.Term.Functor
+<span class="lineno">   21 </span>  ( -- * Module Names
+<span class="lineno">   22 </span>    ModuleName, mkModuleName
+<span class="lineno">   23 </span>  , preludeName
+<span class="lineno">   24 </span>  , moduleNameText
+<span class="lineno">   25 </span>  , moduleNamePieces
+<span class="lineno">   26 </span>    -- * Identifiers
+<span class="lineno">   27 </span>  , Ident(identModule, identBaseName), identName, mkIdent
+<span class="lineno">   28 </span>  , parseIdent
+<span class="lineno">   29 </span>  , isIdent
+<span class="lineno">   30 </span>  , identText
+<span class="lineno">   31 </span>  , identPieces
+<span class="lineno">   32 </span>    -- * Data types and definitions
+<span class="lineno">   33 </span>  , DeBruijnIndex
+<span class="lineno">   34 </span>  , FieldName
+<span class="lineno">   35 </span>  , LocalName
+<span class="lineno">   36 </span>  , ExtCns(..)
+<span class="lineno">   37 </span>  , VarIndex
+<span class="lineno">   38 </span>  , NameInfo(..)
+<span class="lineno">   39 </span>  , toShortName
+<span class="lineno">   40 </span>  , toAbsoluteName
+<span class="lineno">   41 </span>  , CompiledRecursor(..)
+<span class="lineno">   42 </span>    -- * Terms and associated operations
+<span class="lineno">   43 </span>  , TermIndex
+<span class="lineno">   44 </span>  , Term(..)
+<span class="lineno">   45 </span>  , TermF(..)
+<span class="lineno">   46 </span>  , FlatTermF(..)
+<span class="lineno">   47 </span>  , zipWithFlatTermF
+<span class="lineno">   48 </span>  , looseTermF
+<span class="lineno">   49 </span>  , unwrapTermF
+<span class="lineno">   50 </span>  , termToPat
+<span class="lineno">   51 </span>  , alphaEquiv
+<span class="lineno">   52 </span>  , alistAllFields
+<span class="lineno">   53 </span>    -- * Sorts
+<span class="lineno">   54 </span>  , Sort, mkSort, propSort, sortOf, maxSort
+<span class="lineno">   55 </span>  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
+<span class="lineno">   56 </span>    -- * Sets of free variables
+<span class="lineno">   57 </span>  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
+<span class="lineno">   58 </span>  , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
+<span class="lineno">   59 </span>  , smallestBitSetElem
+<span class="lineno">   60 </span>  , bitSetBound
+<span class="lineno">   61 </span>  , looseVars, smallestLooseVar, termIsClosed
+<span class="lineno">   62 </span>  , freesTermF, freeVars
+<span class="lineno">   63 </span>  ) where
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>import Data.Bits
+<span class="lineno">   66 </span>import qualified Data.Foldable as Foldable (and, foldl')
+<span class="lineno">   67 </span>import Data.Hashable
+<span class="lineno">   68 </span>import Data.IntSet (IntSet)
+<span class="lineno">   69 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   70 </span>import Data.Map (Map)
+<span class="lineno">   71 </span>import qualified Data.Map as Map
+<span class="lineno">   72 </span>import Data.Text (Text)
+<span class="lineno">   73 </span>import qualified Data.Text as Text
+<span class="lineno">   74 </span>import Data.Typeable (Typeable)
+<span class="lineno">   75 </span>import Data.Vector (Vector)
+<span class="lineno">   76 </span>import qualified Data.Vector as V
+<span class="lineno">   77 </span>import Data.Word
+<span class="lineno">   78 </span>import GHC.Generics (Generic)
+<span class="lineno">   79 </span>import Numeric.Natural
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>import qualified Language.Haskell.TH.Syntax as TH
+<span class="lineno">   82 </span>import Instances.TH.Lift () -- for instance TH.Lift Text
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>import SAWCore.Name
+<span class="lineno">   85 </span>import qualified SAWCore.TermNet as Net
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>type DeBruijnIndex = Int
+<span class="lineno">   88 </span>type FieldName = Text
+<span class="lineno">   89 </span>type LocalName = Text
+<span class="lineno">   90 </span>  -- ^ 'LocalName' is used for pretty printing purposes, but does not affect the semantics of SAWCore terms,
+<span class="lineno">   91 </span>  -- rather, the 'DeBruijnIndex'-s are what is used to reference variables.
+<span class="lineno">   92 </span>  -- FIXME: Verify the above statement
+<span class="lineno">   93 </span>  -- FIXME: Possibly, change to a name that suggests this use.
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>instance <span class="decl"><span class="nottickedoff">Hashable a =&gt; Hashable (Vector a)</span></span> where
+<span class="lineno">   96 </span>    <span class="decl"><span class="istickedoff">hashWithSalt x v = hashWithSalt x (V.toList v)</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>-- Sorts -----------------------------------------------------------------------
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>-- | The sorts, also known as universes, which can either be a predicative
+<span class="lineno">  102 </span>-- universe with level i or the impredicative universe Prop.
+<span class="lineno">  103 </span>data Sort
+<span class="lineno">  104 </span>  = TypeSort Natural
+<span class="lineno">  105 </span>  | PropSort
+<span class="lineno">  106 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>-- Prop is the lowest sort
+<span class="lineno">  109 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Ord Sort</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  110 </span>  <span class="decl"><span class="istickedoff">PropSort &lt;= _ = True</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort _) &lt;= PropSort = <span class="nottickedoff">False</span></span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">(TypeSort i) &lt;= (TypeSort j) = i &lt;= j</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable Sort</span></span></span></span> -- automatically derived
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Sort</span></span></span></span> where
+<span class="lineno">  117 </span>  <span class="decl"><span class="istickedoff">showsPrec p (TypeSort i) = showParen (p &gt;= 10) (showString &quot;sort &quot; . shows i)</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = showString &quot;Prop&quot;</span></span>
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>-- | Create sort @Type i@ for the given natural number @i@.
+<span class="lineno">  121 </span>mkSort :: Natural -&gt; Sort
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">mkSort i = TypeSort i</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>-- | Wrapper around 'PropSort', for export
+<span class="lineno">  125 </span>propSort :: Sort
+<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">propSort = PropSort</span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>-- | Returns sort of the given sort.
+<span class="lineno">  129 </span>sortOf :: Sort -&gt; Sort
+<span class="lineno">  130 </span><span class="decl"><span class="istickedoff">sortOf (TypeSort i) = TypeSort (i + 1)</span>
+<span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff">sortOf PropSort = TypeSort 0</span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>-- | Get the maximum sort in a list, returning Prop for the empty list
+<span class="lineno">  134 </span>maxSort :: [Sort] -&gt; Sort
+<span class="lineno">  135 </span><span class="decl"><span class="istickedoff">maxSort [] = propSort</span>
+<span class="lineno">  136 </span><span class="spaces"></span><span class="istickedoff">maxSort ss = maximum ss</span></span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>-- | This type represents a set of advisory flags for 'Sort's that are mostly
+<span class="lineno">  139 </span>-- ignored, but are used in the Coq export process to indicate where various
+<span class="lineno">  140 </span>-- typeclass instances are necessary in function definitions. In the concrete
+<span class="lineno">  141 </span>-- syntax &quot;isort&quot;, &quot;qsort&quot;, etc. is used to indicate cases where these flags
+<span class="lineno">  142 </span>-- are set. Note in particular that these flags do not affect typechecking,
+<span class="lineno">  143 </span>-- so missing or overeager &quot;isort&quot;/&quot;qsort&quot; annotations will only be detected
+<span class="lineno">  144 </span>-- via the Coq export.
+<span class="lineno">  145 </span>--
+<span class="lineno">  146 </span>-- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
+<span class="lineno">  147 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;i&quot; is
+<span class="lineno">  148 </span>--   prepended to the sort (e.g. &quot;isort&quot;).
+<span class="lineno">  149 </span>-- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
+<span class="lineno">  150 </span>--   will be added during Coq translation. In the concrete syntax, an &quot;q&quot; is
+<span class="lineno">  151 </span>--   prepended to the sort (e.g. &quot;qsort&quot;, &quot;qisort&quot;).
+<span class="lineno">  152 </span>data SortFlags = SortFlags { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagInhabited</span></span></span> :: Bool
+<span class="lineno">  153 </span>                           , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">flagQuantType</span></span></span> :: Bool }
+<span class="lineno">  154 </span>    deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable SortFlags</span></span></span></span> -- automatically derived
+<span class="lineno">  157 </span>
+<span class="lineno">  158 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show SortFlags</span></span></span></span> where
+<span class="lineno">  159 </span>  <span class="decl"><span class="istickedoff">showsPrec _ (SortFlags i q) = showString $</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">concatMap (\(b,s) -&gt; if b then s else &quot;&quot;)</span>
+<span class="lineno">  161 </span><span class="spaces">              </span><span class="istickedoff">[(q,<span class="nottickedoff">&quot;q&quot;</span>), (i,&quot;i&quot;)]</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>-- | The 'SortFlags' object with no flags set
+<span class="lineno">  164 </span>noFlags :: SortFlags
+<span class="lineno">  165 </span><span class="decl"><span class="istickedoff">noFlags = SortFlags False False</span></span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>-- | Apply a binary operation to corresponding flags of two 'SortFlags'
+<span class="lineno">  168 </span>sortFlagsLift2 :: (Bool -&gt; Bool -&gt; Bool) -&gt; SortFlags -&gt; SortFlags -&gt; SortFlags
+<span class="lineno">  169 </span><span class="decl"><span class="nottickedoff">sortFlagsLift2 f (SortFlags i1 q1) (SortFlags i2 q2) = SortFlags (f i1 i2) (f q1 q2)</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- | Convert a 'SortFlags' to a list of 'Bool's, indicating which flags are set
+<span class="lineno">  172 </span>sortFlagsToList :: SortFlags -&gt; [Bool]
+<span class="lineno">  173 </span><span class="decl"><span class="istickedoff">sortFlagsToList (SortFlags i q) = [i, q]</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>-- | Build a 'SortFlags' from a list of 'Bool's indicating which flags are set
+<span class="lineno">  176 </span>sortFlagsFromList :: [Bool] -&gt; SortFlags
+<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="nottickedoff">where isSet i = i &lt; length bs &amp;&amp; bs !! i</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>-- Flat Terms ------------------------------------------------------------------
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>-- | The &quot;flat terms&quot;, which are the built-in atomic constructs of SAW core.
+<span class="lineno">  184 </span>--
+<span class="lineno">  185 </span>-- NB: If you add constructors to FlatTermF, make sure you update
+<span class="lineno">  186 </span>--     zipWithFlatTermF!
+<span class="lineno">  187 </span>data FlatTermF e
+<span class="lineno">  188 </span>    -- Tuples are represented as nested pairs, grouped to the right,
+<span class="lineno">  189 </span>    -- terminated with unit at the end.
+<span class="lineno">  190 </span>  = UnitValue
+<span class="lineno">  191 </span>  | UnitType
+<span class="lineno">  192 </span>  | PairValue e e
+<span class="lineno">  193 </span>  | PairType e e
+<span class="lineno">  194 </span>  | PairLeft e
+<span class="lineno">  195 </span>  | PairRight e
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>    -- | A recursor, which is specified by giving the datatype name,
+<span class="lineno">  198 </span>    --   the parameters to the datatype, a motive and elimination functions
+<span class="lineno">  199 </span>    --   for each constructor. A recursor can be used with the special
+<span class="lineno">  200 </span>    --   @RecursorApp@ term, which provides the datatype indices and
+<span class="lineno">  201 </span>    --   actual argument to the eliminator.
+<span class="lineno">  202 </span>  | Recursor (CompiledRecursor e)
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>    -- | Non-dependent record types, i.e., N-ary tuple types with named
+<span class="lineno">  205 </span>    -- fields. These are considered equal up to reordering of fields. Actual
+<span class="lineno">  206 </span>    -- tuple types are represented with field names @&quot;1&quot;@, @&quot;2&quot;@, etc.
+<span class="lineno">  207 </span>  | RecordType ![(FieldName, e)]
+<span class="lineno">  208 </span>    -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
+<span class="lineno">  209 </span>    -- considered equal up to reordering of fields. Actual tuples are
+<span class="lineno">  210 </span>    -- represented with field names @&quot;1&quot;@, @&quot;2&quot;@, etc.
+<span class="lineno">  211 </span>  | RecordValue ![(FieldName, e)]
+<span class="lineno">  212 </span>    -- | Non-dependent record projection
+<span class="lineno">  213 </span>  | RecordProj e !FieldName
+<span class="lineno">  214 </span>
+<span class="lineno">  215 </span>    -- | Sorts, aka universes, are the types of types; i.e., an object is a
+<span class="lineno">  216 </span>    -- &quot;type&quot; iff it has type @Sort s@ for some s. See 'SortFlags' for an
+<span class="lineno">  217 </span>    -- explanation of the extra argument.
+<span class="lineno">  218 </span>  | Sort !Sort !SortFlags
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>    -- Primitive builtin values
+<span class="lineno">  221 </span>    -- | Natural number with given value.
+<span class="lineno">  222 </span>  | NatLit !Natural
+<span class="lineno">  223 </span>    -- | Array value includes type of elements followed by elements.
+<span class="lineno">  224 </span>  | ArrayValue e (Vector e)
+<span class="lineno">  225 </span>    -- | String literal
+<span class="lineno">  226 </span>  | StringLit !Text
+<span class="lineno">  227 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  228 </span>
+<span class="lineno">  229 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable e =&gt; Hashable (FlatTermF e)</span></span></span></span> -- automatically derived
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>-- Capture more type information here so we can
+<span class="lineno">  232 </span>--  use it during evaluation time to remember the
+<span class="lineno">  233 </span>--  types of the parameters, motive and eliminator functions.
+<span class="lineno">  234 </span>data CompiledRecursor e =
+<span class="lineno">  235 </span>  CompiledRecursor
+<span class="lineno">  236 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorDataType</span></span></span>  :: Name
+<span class="lineno">  237 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorParams</span></span></span>    :: [e]
+<span class="lineno">  238 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumIxs</span></span></span>    :: Int
+<span class="lineno">  239 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorMotive</span></span></span>    :: e
+<span class="lineno">  240 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">recursorMotiveTy</span></span></span>  :: e
+<span class="lineno">  241 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorElims</span></span></span>     :: Map VarIndex (e, e) -- eliminator functions and their types
+<span class="lineno">  242 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">recursorCtorOrder</span></span></span> :: [Name]
+<span class="lineno">  243 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorType</span></span></span>      :: e
+<span class="lineno">  244 </span>  }
+<span class="lineno">  245 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Hashable e =&gt; Hashable (CompiledRecursor e)</span></span></span></span> -- automatically derived
+<span class="lineno">  248 </span>
+<span class="lineno">  249 </span>-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+<span class="lineno">  250 </span>-- precisely the given field names and no more. If so, return the values
+<span class="lineno">  251 </span>-- associated with those field names, in the order given in the input, and
+<span class="lineno">  252 </span>-- otherwise return 'Nothing'
+<span class="lineno">  253 </span>alistAllFields :: Eq k =&gt; [k] -&gt; [(k, a)] -&gt; Maybe [a]
+<span class="lineno">  254 </span><span class="decl"><span class="istickedoff">alistAllFields [] [] = Just <span class="nottickedoff">[]</span></span>
+<span class="lineno">  255 </span><span class="spaces"></span><span class="istickedoff">alistAllFields (fld:flds) alist</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">| Just val &lt;- lookup fld alist =</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">(val :) &lt;$&gt; alistAllFields flds (deleteField fld alist)</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="istickedoff">deleteField _ [] = <span class="nottickedoff">error &quot;deleteField&quot;</span></span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="istickedoff">deleteField f ((f',_):rest) | <span class="tickonlytrue">f == f'</span> = rest</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="istickedoff">deleteField f (x:rest) = <span class="nottickedoff">x : deleteField f rest</span></span>
+<span class="lineno">  262 </span><span class="spaces"></span><span class="istickedoff">alistAllFields _ _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  263 </span>
+<span class="lineno">  264 </span>zipPair :: (x -&gt; y -&gt; z) -&gt; (x,x) -&gt; (y,y) -&gt; (z,z)
+<span class="lineno">  265 </span><span class="decl"><span class="istickedoff">zipPair f (x1,x2) (y1,y2) = (f x1 y1, f x2 y2)</span></span>
+<span class="lineno">  266 </span>
+<span class="lineno">  267 </span>zipName :: Name -&gt; Name -&gt; Maybe Name
+<span class="lineno">  268 </span><span class="decl"><span class="istickedoff">zipName x y</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">x == y</span> = Just <span class="nottickedoff">x</span></span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  271 </span>
+<span class="lineno">  272 </span>zipRec :: (x -&gt; y -&gt; z) -&gt; CompiledRecursor x -&gt; CompiledRecursor y -&gt; Maybe (CompiledRecursor z)
+<span class="lineno">  273 </span><span class="decl"><span class="istickedoff">zipRec f (CompiledRecursor d1 ps1 n1 m1 mty1 es1 ord1 ty1) (CompiledRecursor d2 ps2 n2 m2 mty2 es2 ord2 ty2)</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">| Map.keysSet es1 == Map.keysSet es2 &amp;&amp; n1 == n2</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="istickedoff">= do d &lt;- zipName d1 d2</span>
+<span class="lineno">  276 </span><span class="spaces">       </span><span class="istickedoff">ord &lt;- sequence (zipWith zipName ord1 ord2)</span>
+<span class="lineno">  277 </span><span class="spaces">       </span><span class="istickedoff">pure $ CompiledRecursor</span>
+<span class="lineno">  278 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
+<span class="lineno">  279 </span><span class="spaces">              </span><span class="istickedoff">(zipWith <span class="nottickedoff">f</span> ps1 <span class="nottickedoff">ps2</span>)</span>
+<span class="lineno">  280 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
+<span class="lineno">  281 </span><span class="spaces">              </span><span class="istickedoff">(f m1 m2)</span>
+<span class="lineno">  282 </span><span class="spaces">              </span><span class="istickedoff">(f mty1 mty2)</span>
+<span class="lineno">  283 </span><span class="spaces">              </span><span class="istickedoff">(Map.intersectionWith (zipPair f) es1 es2)</span>
+<span class="lineno">  284 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
+<span class="lineno">  285 </span><span class="spaces">              </span><span class="istickedoff">(f ty1 ty2)</span>
+<span class="lineno">  286 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  288 </span>
+<span class="lineno">  289 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
+<span class="lineno">  290 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
+<span class="lineno">  291 </span>-- constructor; otherwise, return 'Nothing' if they use different constructors
+<span class="lineno">  292 </span>zipWithFlatTermF :: (x -&gt; y -&gt; z) -&gt; FlatTermF x -&gt; FlatTermF y -&gt;
+<span class="lineno">  293 </span>                    Maybe (FlatTermF z)
+<span class="lineno">  294 </span><span class="decl"><span class="istickedoff">zipWithFlatTermF f = go</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue UnitValue = <span class="nottickedoff">Just UnitValue</span></span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">go UnitType UnitType = Just UnitType</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">go (PairLeft x) (PairLeft y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">go (PairRight x) (PairRight y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
+<span class="lineno">  302 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">go (Recursor rec1) (Recursor rec2) =</span>
+<span class="lineno">  304 </span><span class="spaces">      </span><span class="istickedoff">Recursor &lt;$&gt; zipRec f rec1 rec2</span>
+<span class="lineno">  305 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">go (RecordType elems1) (RecordType elems2)</span>
+<span class="lineno">  307 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- alistAllFields (map fst elems1) elems2 =</span>
+<span class="lineno">  308 </span><span class="spaces">        </span><span class="istickedoff">Just $ RecordType $ zipWith (\(fld,x) y -&gt; (<span class="nottickedoff">fld</span>, f x y)) elems1 vals2</span>
+<span class="lineno">  309 </span><span class="spaces">    </span><span class="istickedoff">go (RecordValue elems1) (RecordValue elems2)</span>
+<span class="lineno">  310 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- <span class="nottickedoff">alistAllFields (map fst elems1) elems2</span> =</span>
+<span class="lineno">  311 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just $ RecordValue $ zipWith (\(fld,x) y -&gt; (fld, f x y)) elems1 vals2</span></span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">go (RecordProj e1 fld1) (RecordProj e2 fld2)</span>
+<span class="lineno">  313 </span><span class="spaces">      </span><span class="istickedoff">| fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1</span>
+<span class="lineno">  314 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">go (Sort sx hx) (Sort sy hy) | <span class="nottickedoff">sx == sy</span> = <span class="nottickedoff">Just (Sort sx (sortFlagsLift2 (&amp;&amp;) hx hy))</span></span>
+<span class="lineno">  316 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">go (NatLit i) (NatLit j) | i == j = Just (NatLit i)</span>
+<span class="lineno">  318 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
+<span class="lineno">  320 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
+<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith <span class="nottickedoff">f</span> vx vy)</span>
+<span class="lineno">  322 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">go UnitValue      _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">go UnitType       _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  325 </span><span class="spaces">    </span><span class="istickedoff">go PairValue{}    _ = Nothing</span>
+<span class="lineno">  326 </span><span class="spaces">    </span><span class="istickedoff">go PairType{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  327 </span><span class="spaces">    </span><span class="istickedoff">go PairLeft{}     _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">go PairRight{}    _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = Nothing</span>
+<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">go RecordType{}   _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">go RecordValue{}  _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  332 </span><span class="spaces">    </span><span class="istickedoff">go RecordProj{}   _ = Nothing</span>
+<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">go NatLit{}       _ = Nothing</span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
+<span class="lineno">  336 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  337 </span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>-- Term Functor ----------------------------------------------------------------
+<span class="lineno">  340 </span>
+<span class="lineno">  341 </span>-- | A \&quot;knot-tying\&quot; structure for representing terms and term-like things.
+<span class="lineno">  342 </span>-- Often, this appears in context as the type \&quot;'TermF' 'Term'\&quot;, in which case
+<span class="lineno">  343 </span>-- it represents a full 'Term' AST. The \&quot;F\&quot; stands for 'Functor', or
+<span class="lineno">  344 </span>-- occasionally for \&quot;Former\&quot;.
+<span class="lineno">  345 </span>data TermF e
+<span class="lineno">  346 </span>    = FTermF !(FlatTermF e)
+<span class="lineno">  347 </span>      -- ^ The atomic, or builtin, term constructs
+<span class="lineno">  348 </span>    | App !e !e
+<span class="lineno">  349 </span>      -- ^ Applications of functions
+<span class="lineno">  350 </span>    | Lambda !LocalName !e !e
+<span class="lineno">  351 </span>      -- ^ Function abstractions
+<span class="lineno">  352 </span>    | Pi !LocalName !e !e
+<span class="lineno">  353 </span>      -- ^ The type of a (possibly) dependent function
+<span class="lineno">  354 </span>    | LocalVar !DeBruijnIndex
+<span class="lineno">  355 </span>      -- ^ Local variables are referenced by deBruijn index.
+<span class="lineno">  356 </span>    | Constant !Name
+<span class="lineno">  357 </span>      -- ^ A global constant identified by its name.
+<span class="lineno">  358 </span>    | Variable !(ExtCns e)
+<span class="lineno">  359 </span>      -- ^ A named variable with a type.
+<span class="lineno">  360 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  361 </span>
+<span class="lineno">  362 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>
+<span class="lineno">  365 </span>-- Term Datatype ---------------------------------------------------------------
+<span class="lineno">  366 </span>
+<span class="lineno">  367 </span>type TermIndex = Int -- Word64
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>-- | For more information on the semantics of 'Term's, see the
+<span class="lineno">  370 </span>-- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
+<span class="lineno">  371 </span>-- into two structures to facilitate mutual structural recursion (sometimes
+<span class="lineno">  372 </span>-- referred to as the [&quot;knot-tying&quot;](https://wiki.haskell.org/Tying_the_Knot)
+<span class="lineno">  373 </span>-- pattern, sometimes referred to in terms of [&quot;recursion
+<span class="lineno">  374 </span>-- schemes&quot;](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
+<span class="lineno">  375 </span>-- and term object reuse via hash-consing.
+<span class="lineno">  376 </span>data Term
+<span class="lineno">  377 </span>  = STApp
+<span class="lineno">  378 </span>    -- ^ This constructor \&quot;wraps\&quot; a 'TermF' 'Term', assigning it a
+<span class="lineno">  379 </span>    -- guaranteed-unique integer identifier and caching its likely-unique hash.
+<span class="lineno">  380 </span>    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+<span class="lineno">  381 </span>    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
+<span class="lineno">  382 </span>    -- we can see if we've already created a 'Term' wrapper for an identical
+<span class="lineno">  383 </span>    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
+<span class="lineno">  384 </span>    -- construction exists in 'SAWCore.SharedTerm', in particular in the
+<span class="lineno">  385 </span>    -- 'SAWCore.SharedTerm.scTermF' field of the
+<span class="lineno">  386 </span>    -- t'SAWCore.SharedTerm.SharedContext' object.
+<span class="lineno">  387 </span>     { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppIndex</span></span></span>    :: {-# UNPACK #-} !TermIndex
+<span class="lineno">  388 </span>       -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
+<span class="lineno">  389 </span>       -- universe of properly-constructed 'Term's within a single SAW
+<span class="lineno">  390 </span>       -- invocation.
+<span class="lineno">  391 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppHash</span></span></span>     :: {-# UNPACK #-} !Int
+<span class="lineno">  392 </span>       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
+<span class="lineno">  393 </span>       -- with this 'Term'. This should be as unique as a hash can be, but is
+<span class="lineno">  394 </span>       -- not guaranteed unique as 'stAppIndex' is.
+<span class="lineno">  395 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppLooseVars</span></span></span> :: !BitSet
+<span class="lineno">  396 </span>       -- ^ A set containing the 'DeBruijnIndex' of each of the loose
+<span class="lineno">  397 </span>       -- de Bruijn indices from 'LocalVar' constructors in the term.
+<span class="lineno">  398 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppFreeVars</span></span></span> :: !IntSet
+<span class="lineno">  399 </span>       -- ^ A set containing the 'VarIndex' of each of the free named
+<span class="lineno">  400 </span>       -- variables from 'Variable' constructors in the term.
+<span class="lineno">  401 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppTermF</span></span></span>    :: !(TermF Term)
+<span class="lineno">  402 </span>       -- ^ The underlying 'TermF' that this 'Term' wraps. This field &quot;ties the
+<span class="lineno">  403 </span>       -- knot&quot; of the 'Term'/'TermF' recursion scheme.
+<span class="lineno">  404 </span>     }
+<span class="lineno">  405 </span>  | Unshared !(TermF Term)
+<span class="lineno">  406 </span>    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
+<span class="lineno">  407 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, Typeable)
+<span class="lineno">  408 </span>
+<span class="lineno">  409 </span>instance Hashable Term where
+<span class="lineno">  410 </span>  -- The hash of an 'STApp' depends on its not-necessarily-unique
+<span class="lineno">  411 </span>  -- 'stAppHash' instead of its necessarily-unique 'stAppIndex'.
+<span class="lineno">  412 </span>  -- The reason is that per #1830 (PR) and #1831 (issue), we want to
+<span class="lineno">  413 </span>  -- to derive references to terms based solely on their shape.
+<span class="lineno">  414 </span>  -- Indices have nothing to do with a term's shape - they're assigned
+<span class="lineno">  415 </span>  -- sequentially when building terms, according to the (arbitrary)
+<span class="lineno">  416 </span>  -- order in which a term is built.
+<span class="lineno">  417 </span>  -- As for uniqueness, though hashing a term based on its subterms'
+<span class="lineno">  418 </span>  -- hashes introduces less randomness/freshness, it maintains plenty,
+<span class="lineno">  419 </span>  -- and provides benefits as described above.
+<span class="lineno">  420 </span>  -- No code should ever rely on total uniqueness of hashes, and terms
+<span class="lineno">  421 </span>  -- are no exception.
+<span class="lineno">  422 </span>  --
+<span class="lineno">  423 </span>  -- Note: Nevertheless, we do take some minor liberties with the
+<span class="lineno">  424 </span>  -- contract of 'hashWithSalt'. The contract states that if two
+<span class="lineno">  425 </span>  -- values are equal according to '(==)', then they must have the
+<span class="lineno">  426 </span>  -- same hash.
+<span class="lineno">  427 </span>  -- For terms constructed by/within SAW, this will hold, because
+<span class="lineno">  428 </span>  -- SAW's handling of index generation and assignment ensures that
+<span class="lineno">  429 </span>  -- equality of indices implies equality of terms and term hashes
+<span class="lineno">  430 </span>  -- (see 'SAWCore.SharedTerm.getTerm').
+<span class="lineno">  431 </span>  -- However, if terms are constructed outside this standard procedure
+<span class="lineno">  432 </span>  -- or in a way that does not respect index uniqueness rules,
+<span class="lineno">  433 </span>  -- 'hashWithSalt''s contract could be violated.
+<span class="lineno">  434 </span>  <span class="decl"><span class="istickedoff">hash STApp{ stAppHash = h } = h</span>
+<span class="lineno">  435 </span><span class="spaces">  </span><span class="istickedoff">hash (Unshared t) = hash t</span></span>
+<span class="lineno">  436 </span>  <span class="decl"><span class="istickedoff">hashWithSalt salt = hashWithSalt salt . hash</span></span>
+<span class="lineno">  437 </span>
+<span class="lineno">  438 </span>instance <span class="decl"><span class="istickedoff">Eq Term</span></span> where
+<span class="lineno">  439 </span>  <span class="decl"><span class="istickedoff">(==) = equalTerm</span></span>
+<span class="lineno">  440 </span>
+<span class="lineno">  441 </span>equalTerm :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">equalTerm (Unshared tf1) (Unshared tf2) = tf1 == tf2</span>
+<span class="lineno">  443 </span><span class="spaces"></span><span class="istickedoff">equalTerm Unshared{} STApp{} = <span class="nottickedoff">False</span></span>
+<span class="lineno">  444 </span><span class="spaces"></span><span class="istickedoff">equalTerm STApp{} Unshared{} = <span class="nottickedoff">False</span></span>
+<span class="lineno">  445 </span><span class="spaces"></span><span class="istickedoff">equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})</span>
+<span class="lineno">  446 </span><span class="spaces">          </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">i1 == i2 || (h1 == h2 &amp;&amp; tf1 == tf2)</span></span>
+<span class="lineno">  448 </span>  -- The hash check (^) is merely an optimization that enables us to
+<span class="lineno">  449 </span>  -- quickly return 'False' in most cases. Since we're assuming the
+<span class="lineno">  450 </span>  -- contract of 'hashWithSalt' holds, then we know @tf1 == tf2@
+<span class="lineno">  451 </span>  -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
+<span class="lineno">  452 </span>  -- changing the behavior of this function, but keeping it in enables
+<span class="lineno">  453 </span>  -- us to utilize the fact that we save 'STApp' hashes to get away
+<span class="lineno">  454 </span>  -- with not traversing the 'stAppTermF' fields in most cases of
+<span class="lineno">  455 </span>  -- inequality.
+<span class="lineno">  456 </span>
+<span class="lineno">  457 </span>-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
+<span class="lineno">  458 </span>-- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
+<span class="lineno">  459 </span>-- 'Unshared' expressions).
+<span class="lineno">  460 </span>alphaEquiv :: Term -&gt; Term -&gt; Bool
+<span class="lineno">  461 </span><span class="decl"><span class="istickedoff">alphaEquiv = term</span>
+<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  463 </span><span class="spaces">    </span><span class="istickedoff">term :: Term -&gt; Term -&gt; Bool</span>
+<span class="lineno">  464 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff">term (Unshared tf1) (STApp{stAppTermF = tf2}) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  466 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppTermF = tf1}) (Unshared tf2) = <span class="nottickedoff">termf tf1 tf2</span></span>
+<span class="lineno">  467 </span><span class="spaces">    </span><span class="istickedoff">term (STApp{stAppIndex = i1, stAppTermF = tf1})</span>
+<span class="lineno">  468 </span><span class="spaces">         </span><span class="istickedoff">(STApp{stAppIndex = i2, stAppTermF = tf2}) =</span>
+<span class="lineno">  469 </span><span class="spaces">         </span><span class="istickedoff">i1 == i2 || termf tf1 tf2</span>
+<span class="lineno">  470 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  471 </span><span class="spaces">    </span><span class="istickedoff">termf :: TermF Term -&gt; TermF Term -&gt; Bool</span>
+<span class="lineno">  472 </span><span class="spaces">    </span><span class="istickedoff">termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2</span>
+<span class="lineno">  473 </span><span class="spaces">    </span><span class="istickedoff">termf (App t1 u1) (App t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
+<span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">termf (Lambda _ t1 u1) (Lambda _ t2 u2) = <span class="nottickedoff">term t1 t2 &amp;&amp; term u1 u2</span></span>
+<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 &amp;&amp; term u1 u2</span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">termf (LocalVar i1) (LocalVar i2) = i1 == i2</span>
+<span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">termf (Constant x1) (Constant x2) = x1 == x2</span>
+<span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">termf (Variable x1) (Variable x2) = x1 == x2</span>
+<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">termf FTermF{}   _ = False</span>
+<span class="lineno">  480 </span><span class="spaces">    </span><span class="istickedoff">termf App{}      _ = False</span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">termf Lambda{}   _ = False</span>
+<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">termf Pi{}       _ = <span class="nottickedoff">False</span></span>
+<span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">termf LocalVar{} _ = False</span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">termf Constant{} _ = False</span>
+<span class="lineno">  485 </span><span class="spaces">    </span><span class="istickedoff">termf Variable{} _ = False</span>
+<span class="lineno">  486 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
+<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">ftermf ftf1 ftf2 = case zipWithFlatTermF <span class="nottickedoff">term</span> ftf1 ftf2 of</span>
+<span class="lineno">  489 </span><span class="spaces">                         </span><span class="istickedoff">Nothing -&gt; False</span>
+<span class="lineno">  490 </span><span class="spaces">                         </span><span class="istickedoff">Just ftf3 -&gt; <span class="nottickedoff">Foldable.and ftf3</span></span></span>
+<span class="lineno">  491 </span>
+<span class="lineno">  492 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Term</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  493 </span>  <span class="decl"><span class="istickedoff">compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | <span class="tickonlytrue">i == j</span> = EQ</span>
+<span class="lineno">  494 </span><span class="spaces">  </span><span class="istickedoff">compare STApp{} Unshared{} = <span class="nottickedoff">LT</span> -- matches what we'd get from derived Ord instance</span>
+<span class="lineno">  495 </span><span class="spaces">  </span><span class="istickedoff">compare Unshared{} STApp{} = <span class="nottickedoff">GT</span></span>
+<span class="lineno">  496 </span><span class="spaces">  </span><span class="istickedoff">compare x y = <span class="nottickedoff">compare (unwrapTermF x) (unwrapTermF y)</span></span></span>
+<span class="lineno">  497 </span>
+<span class="lineno">  498 </span>instance Net.Pattern Term where
+<span class="lineno">  499 </span>  <span class="decl"><span class="istickedoff">toPat = termToPat</span></span>
+<span class="lineno">  500 </span>
+<span class="lineno">  501 </span>termToPat :: Term -&gt; Net.Pat
+<span class="lineno">  502 </span><span class="decl"><span class="istickedoff">termToPat t =</span>
+<span class="lineno">  503 </span><span class="spaces">    </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno">  504 </span><span class="spaces">      </span><span class="istickedoff">Constant nm               -&gt; Net.Atom (toShortName (nameInfo nm))</span>
+<span class="lineno">  505 </span><span class="spaces">      </span><span class="istickedoff">App t1 t2                 -&gt; Net.App (termToPat t1) (termToPat t2)</span>
+<span class="lineno">  506 </span><span class="spaces">      </span><span class="istickedoff">FTermF (Sort s _)         -&gt; Net.Atom (Text.pack ('*' : show s))</span>
+<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff">FTermF (NatLit _)         -&gt; Net.Var</span>
+<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff">_                         -&gt; Net.Var</span></span>
+<span class="lineno">  509 </span>
+<span class="lineno">  510 </span>unwrapTermF :: Term -&gt; TermF Term
+<span class="lineno">  511 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{stAppTermF = tf} = tf</span>
+<span class="lineno">  512 </span><span class="spaces"></span><span class="istickedoff">unwrapTermF (Unshared tf) = tf</span></span>
+<span class="lineno">  513 </span>
+<span class="lineno">  514 </span>
+<span class="lineno">  515 </span>-- Free de Bruijn Variables ----------------------------------------------------
+<span class="lineno">  516 </span>
+<span class="lineno">  517 </span>-- | A @BitSet@ represents a set of natural numbers.
+<span class="lineno">  518 </span>-- Bit n is a 1 iff n is in the set.
+<span class="lineno">  519 </span>newtype BitSet = BitSet Integer deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  520 </span>
+<span class="lineno">  521 </span>-- | The empty 'BitSet'
+<span class="lineno">  522 </span>emptyBitSet :: BitSet
+<span class="lineno">  523 </span><span class="decl"><span class="istickedoff">emptyBitSet = BitSet 0</span></span>
+<span class="lineno">  524 </span>
+<span class="lineno">  525 </span>-- | The singleton 'BitSet'
+<span class="lineno">  526 </span>singletonBitSet :: Int -&gt; BitSet
+<span class="lineno">  527 </span><span class="decl"><span class="istickedoff">singletonBitSet = BitSet . bit</span></span>
+<span class="lineno">  528 </span>
+<span class="lineno">  529 </span>-- | Test if a number is in a 'BitSet'
+<span class="lineno">  530 </span>inBitSet :: Int -&gt; BitSet -&gt; Bool
+<span class="lineno">  531 </span><span class="decl"><span class="istickedoff">inBitSet i (BitSet j) = testBit j i</span></span>
+<span class="lineno">  532 </span>
+<span class="lineno">  533 </span>-- | Union two 'BitSet's
+<span class="lineno">  534 </span>unionBitSets :: BitSet -&gt; BitSet -&gt; BitSet
+<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)</span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>-- | Intersect two 'BitSet's
+<span class="lineno">  538 </span>intersectBitSets :: BitSet -&gt; BitSet -&gt; BitSet
+<span class="lineno">  539 </span><span class="decl"><span class="istickedoff">intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&amp;. i2)</span></span>
+<span class="lineno">  540 </span>
+<span class="lineno">  541 </span>-- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
+<span class="lineno">  542 </span>-- set. This is useful for moving a 'BitSet' out of the scope of a variable.
+<span class="lineno">  543 </span>decrBitSet :: BitSet -&gt; BitSet
+<span class="lineno">  544 </span><span class="decl"><span class="istickedoff">decrBitSet (BitSet i) = BitSet (shiftR i 1)</span></span>
+<span class="lineno">  545 </span>
+<span class="lineno">  546 </span>-- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
+<span class="lineno">  547 </span>-- removing any value less than @N@. This is the same as calling 'decrBitSet'
+<span class="lineno">  548 </span>-- @N@ times.
+<span class="lineno">  549 </span>multiDecrBitSet :: Int -&gt; BitSet -&gt; BitSet
+<span class="lineno">  550 </span><span class="decl"><span class="nottickedoff">multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)</span></span>
+<span class="lineno">  551 </span>
+<span class="lineno">  552 </span>-- | The 'BitSet' containing all elements less than a given index @i@
+<span class="lineno">  553 </span>completeBitSet :: Int -&gt; BitSet
+<span class="lineno">  554 </span><span class="decl"><span class="istickedoff">completeBitSet i = BitSet (bit i - 1)</span></span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>-- | Compute the smallest element of a 'BitSet', if any
+<span class="lineno">  557 </span>smallestBitSetElem :: BitSet -&gt; Maybe Int
+<span class="lineno">  558 </span><span class="decl"><span class="nottickedoff">smallestBitSetElem (BitSet 0) = Nothing</span>
+<span class="lineno">  559 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) | i &lt; 0 = error &quot;smallestBitSetElem&quot;</span>
+<span class="lineno">  560 </span><span class="spaces"></span><span class="nottickedoff">smallestBitSetElem (BitSet i) = Just $ go 0 i where</span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; Integer -&gt; Int</span>
+<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">go !shft !x</span>
+<span class="lineno">  563 </span><span class="spaces">    </span><span class="nottickedoff">| xw == 0   = go (shft+64) (shiftR x 64)</span>
+<span class="lineno">  564 </span><span class="spaces">    </span><span class="nottickedoff">| otherwise = shft + countTrailingZeros xw</span>
+<span class="lineno">  565 </span><span class="spaces">    </span><span class="nottickedoff">where xw :: Word64</span>
+<span class="lineno">  566 </span><span class="spaces">          </span><span class="nottickedoff">xw = fromInteger x</span></span>
+<span class="lineno">  567 </span>
+<span class="lineno">  568 </span>-- | Compute the list of all elements of a 'BitSet'
+<span class="lineno">  569 </span>bitSetElems :: BitSet -&gt; [Int]
+<span class="lineno">  570 </span><span class="decl"><span class="nottickedoff">bitSetElems = go 0 where</span>
+<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">-- Return the addition of shft to all elements of a BitSet</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="nottickedoff">go :: Int -&gt; BitSet -&gt; [Int]</span>
+<span class="lineno">  573 </span><span class="spaces">  </span><span class="nottickedoff">go shft bs = case smallestBitSetElem bs of</span>
+<span class="lineno">  574 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; []</span>
+<span class="lineno">  575 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt;</span>
+<span class="lineno">  576 </span><span class="spaces">      </span><span class="nottickedoff">shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)</span></span>
+<span class="lineno">  577 </span>
+<span class="lineno">  578 </span>-- | Return the smallest non-negative integer greater than every
+<span class="lineno">  579 </span>-- element of the 'BitSet'.
+<span class="lineno">  580 </span>bitSetBound :: BitSet -&gt; Int
+<span class="lineno">  581 </span><span class="decl"><span class="nottickedoff">bitSetBound b = length $ takeWhile (/= emptyBitSet) $ iterate decrBitSet b</span></span>
+<span class="lineno">  582 </span>
+<span class="lineno">  583 </span>-- | Compute the loose de Bruijn indices of a term given the loose
+<span class="lineno">  584 </span>-- indices for its immediate subterms.
+<span class="lineno">  585 </span>looseTermF :: TermF BitSet -&gt; BitSet
+<span class="lineno">  586 </span><span class="decl"><span class="istickedoff">looseTermF tf =</span>
+<span class="lineno">  587 </span><span class="spaces">    </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  588 </span><span class="spaces">      </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' unionBitSets emptyBitSet ftf</span>
+<span class="lineno">  589 </span><span class="spaces">      </span><span class="istickedoff">App l r -&gt; unionBitSets l r</span>
+<span class="lineno">  590 </span><span class="spaces">      </span><span class="istickedoff">Lambda _name tp rhs -&gt; unionBitSets tp (decrBitSet rhs)</span>
+<span class="lineno">  591 </span><span class="spaces">      </span><span class="istickedoff">Pi _name lhs rhs -&gt; unionBitSets lhs (decrBitSet rhs)</span>
+<span class="lineno">  592 </span><span class="spaces">      </span><span class="istickedoff">LocalVar i -&gt; singletonBitSet i</span>
+<span class="lineno">  593 </span><span class="spaces">      </span><span class="istickedoff">Constant {} -&gt; emptyBitSet -- assume type is a closed term</span>
+<span class="lineno">  594 </span><span class="spaces">      </span><span class="istickedoff">Variable ec -&gt; ecType ec</span></span>
+<span class="lineno">  595 </span>
+<span class="lineno">  596 </span>-- | Return a bitset containing indices of all loose de Bruijn indices.
+<span class="lineno">  597 </span>looseVars :: Term -&gt; BitSet
+<span class="lineno">  598 </span><span class="decl"><span class="istickedoff">looseVars STApp{ stAppLooseVars = x } = x</span>
+<span class="lineno">  599 </span><span class="spaces"></span><span class="istickedoff">looseVars (Unshared f) = looseTermF (fmap <span class="nottickedoff">looseVars</span> f)</span></span>
+<span class="lineno">  600 </span>
+<span class="lineno">  601 </span>-- | Compute the value of the smallest variable in the term, if any.
+<span class="lineno">  602 </span>smallestLooseVar :: Term -&gt; Maybe Int
+<span class="lineno">  603 </span><span class="decl"><span class="nottickedoff">smallestLooseVar = smallestBitSetElem . looseVars</span></span>
+<span class="lineno">  604 </span>
+<span class="lineno">  605 </span>-- | Test whether a 'Term' is closed, i.e., has no loose de Bruijn indices.
+<span class="lineno">  606 </span>termIsClosed :: Term -&gt; Bool
+<span class="lineno">  607 </span><span class="decl"><span class="istickedoff">termIsClosed t = looseVars t == emptyBitSet</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  610 </span>
+<span class="lineno">  611 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+<span class="lineno">  612 </span>-- variables of a term, given the free variables for its immediate
+<span class="lineno">  613 </span>-- subterms.
+<span class="lineno">  614 </span>freesTermF :: TermF IntSet -&gt; IntSet
+<span class="lineno">  615 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  617 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
+<span class="lineno">  619 </span><span class="spaces">    </span><span class="istickedoff">Lambda _name tp rhs -&gt; IntSet.union tp rhs</span>
+<span class="lineno">  620 </span><span class="spaces">    </span><span class="istickedoff">Pi _name lhs rhs -&gt; IntSet.union lhs rhs</span>
+<span class="lineno">  621 </span><span class="spaces">    </span><span class="istickedoff">LocalVar _ -&gt; IntSet.empty</span>
+<span class="lineno">  622 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; IntSet.empty</span>
+<span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">Variable ec -&gt; IntSet.singleton (ecVarIndex ec)</span></span>
+<span class="lineno">  624 </span>
+<span class="lineno">  625 </span>-- | Return an 'IntSet' containing the 'VarIndex' of all free
+<span class="lineno">  626 </span>-- variables in the 'Term'.
+<span class="lineno">  627 </span>freeVars :: Term -&gt; IntSet
+<span class="lineno">  628 </span><span class="decl"><span class="istickedoff">freeVars STApp{ stAppFreeVars = s } = s</span>
+<span class="lineno">  629 </span><span class="spaces"></span><span class="istickedoff">freeVars (Unshared tf) = freesTermF (fmap <span class="nottickedoff">freeVars</span> tf)</span></span>
+
+</pre>
+</body>
+</html>
