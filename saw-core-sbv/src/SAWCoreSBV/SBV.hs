@@ -526,14 +526,14 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SPrim
 streamGetOp =
-  Prims.tvalFun   $ \tp ->
+  Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
   Prims.Prim $ case ix of
     VNat n -> lookupSStream xs n
     VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> panic "streamGetOp" ["Expected Nat value; got " <> Text.pack (show v)]
 
 
@@ -606,17 +606,16 @@ svIntMod a b = svSymbolicMerge KUnbounded True p (svRem a b) (svUNeg (svRem (svU
 ------------------------------------------------------------
 -- Ite ops
 
-muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
+muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
+muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
-                  muxBVal tp c xi yi
+                  muxBVal c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
-muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch; found " <> Text.pack (show tp)]
 
 ------------------------------------------------------------
 -- External interface

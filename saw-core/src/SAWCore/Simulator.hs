@@ -111,7 +111,7 @@ data SimulatorConfig l =
   --   this is just an error condition; for others, sensible action can
   --   be taken.
   , simModMap :: ModuleMap
-  , simLazyMux :: TValue l -> VBool l -> MValue l -> MValue l -> MValue l
+  , simLazyMux :: VBool l -> MValue l -> MValue l -> MValue l
   }
 
 ------------------------------------------------------------
@@ -299,7 +299,7 @@ evalTermF cfg lam recEval tf env =
     combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
     combineAlts _ [] = panic "evalTermF / combineAlts" ["no alternatives"]
     combineAlts _ [(_, x)] = x
-    combineAlts tp ((p, x) : alts) = simLazyMux cfg tp p x (combineAlts tp alts)
+    combineAlts tp ((p, x) : alts) = simLazyMux cfg p x (combineAlts tp alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _tv _ps args) =
@@ -375,7 +375,7 @@ processRecArgs _ _ ty _ =
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   (Name -> TValue (WithM Id l) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  (TValueIn Id l -> VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
+  (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
@@ -385,7 +385,7 @@ processRecArgs _ _ ty _ =
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   (Name -> TValue (WithM IO l) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  (TValueIn IO l -> VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
+  (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap ->
@@ -394,7 +394,7 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
               (Env l -> NeutralTerm -> MValue l) ->
               (Name -> TValue l -> Text -> Env l -> TValue l -> MValue l) ->
-              (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
+              (VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
   evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral primHandler lazymux
@@ -407,7 +407,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
   (TermF Term -> Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   (Name -> TValue (WithM Id l) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  (TValue (WithM Id l) -> VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
+  (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -417,7 +417,7 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
   (TermF Term -> Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   (Name -> TValue (WithM IO l) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  (TValueIn IO l -> VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
+  (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -435,7 +435,7 @@ evalGlobal' ::
   -- | Handler for stuck primitives
   (Name -> TValue l -> Text -> Env l -> TValue l -> MValue l) ->
   -- | Lazy mux operation
-  (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
+  (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns constant neutral primHandler lazymux =
   do checkPrimitives modmap prims

@@ -149,7 +149,7 @@ prims =
   , Prims.bpMuxWord  = pure3 ite
   , Prims.bpMuxInt   = pure3 ite
   , Prims.bpMuxArray = unsupportedConcretePrimitive "bpMuxArray"
-  , Prims.bpMuxExtra = \_tp -> pure3 ite
+  , Prims.bpMuxExtra = pure3 ite
     -- Booleans
   , Prims.bpTrue   = True
   , Prims.bpFalse  = False

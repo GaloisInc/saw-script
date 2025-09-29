@@ -188,7 +188,7 @@ data BasePrims l =
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
   , bpMuxArray :: VBool l -> VArray l -> VArray l -> MArray l
-  , bpMuxExtra :: TValue l -> VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
+  , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
   , bpTrue   :: VBool l
   , bpFalse  :: VBool l
@@ -819,7 +819,7 @@ tailOp bp =
 atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 atWithDefaultOp bp =
   natFun $ \n ->
-  tvalFun $ \tp ->
+  tvalFun $ \_tp ->
   primFun $ \d ->
   strictFun $ \x ->
   strictFun $ \idx ->
@@ -834,9 +834,9 @@ atWithDefaultOp bp =
         iv <- lift (toBits (bpUnpack bp) i)
         case x of
           VVector xv ->
-            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
+            lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
+            lift $ selectV (lazyMuxValue bp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
           _ -> throwE "atOp: expected vector"
 
       VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "atWithDefault" ["Got symbolic integer:  TODO"]
@@ -864,7 +864,7 @@ bpBvAtWithDefault bp w d vw i
 updOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 updOp bp =
   natFun $ \n ->
-  tvalFun $ \tp ->
+  tvalFun $ \_tp ->
   vectorFun (bpUnpack bp) $ \xv ->
   strictFun $ \idx ->
   primFun $ \y ->
@@ -878,13 +878,13 @@ updOp bp =
         do let f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
                         if wsize < 64 && toInteger i >= 2 ^ wsize
                           then return (xv V.! i)
-                          else delay (lazyMuxValue bp tp b (force y) (force (xv V.! i)))
+                          else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))
            yv <- V.generateM (V.length xv) f
            return (VVector yv)
       VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -> lift $
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
-           selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
+           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
 
       VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "updOp" ["Got symbolic integer: TODO"]
 
@@ -994,7 +994,7 @@ vZipOp unpack =
 -- primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
 expByNatOp :: (MonadLazy (EvalM l), VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 expByNatOp bp =
-  tvalFun   $ \tp ->
+  tvalFun   $ \_tp ->
   strictFun $ \one ->
   strictFun $ \mul ->
   strictFun $ \x   ->
@@ -1014,7 +1014,7 @@ expByNatOp bp =
                | otherwise
                = do sq   <- applyAll mul [ ready acc, ready acc ]
                     sq_x <- applyAll mul [ ready sq, ready x ]
-                    acc' <- muxValue bp tp b sq_x sq
+                    acc' <- muxValue bp b sq_x sq
                     loop acc' bs
 
          loop one . V.toList =<< toBits (bpUnpack bp) w
@@ -1070,7 +1070,7 @@ shiftOp :: forall l.
   Prim l
 shiftOp bp vecOp wordIntOp wordOp =
   natFun $ \n ->
-  tvalFun $ \tp ->
+  tvalFun $ \_tp ->
   primFun $ \z ->
   strictFun $ \xs ->
   strictFun $ \y ->
@@ -1086,7 +1086,7 @@ shiftOp bp vecOp wordIntOp wordOp =
       VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -> do
         bs <- lift (V.toList <$> traverse (fmap toBool . force) iv)
         case xs of
-          VVector xv -> VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp z v i)) xv bs
+          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
           VWord xw -> lift $ do
             zb <- toBool <$> force z
             VWord <$> shifter (bpMuxWord bp) (wordIntOp zb) xw bs
@@ -1095,7 +1095,7 @@ shiftOp bp vecOp wordIntOp wordOp =
         case xs of
           VVector xv -> do
             bs <- lift (V.toList <$> bpUnpack bp iw)
-            VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp z v i)) xv bs
+            VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
           VWord xw -> lift $ do
             zb <- toBool <$> force z
             VWord <$> wordOp zb xw iw
@@ -1106,12 +1106,12 @@ shiftOp bp vecOp wordIntOp wordOp =
 
       _ -> throwE $ "shiftOp: " <> Text.pack (show y)
   where
-    muxVector :: Natural -> TValue l -> VBool l ->
+    muxVector :: VBool l ->
       Vector (Thunk l) -> Vector (Thunk l) -> ExceptT Text (EvalM l) (Vector (Thunk l))
-    muxVector n tp b v1 v2 = toVector (bpUnpack bp) =<< muxVal (VVecType n tp) b (VVector v1) (VVector v2)
+    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
 
-    muxVal :: TValue l -> VBool l -> Value l -> Value l -> ExceptT Text (EvalM l) (Value l)
-    muxVal tv p x y = lift (muxValue bp tv p x y)
+    muxVal :: VBool l -> Value l -> Value l -> ExceptT Text (EvalM l) (Value l)
+    muxVal p x y = lift (muxValue bp p x y)
 
 -- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 rotateOp :: forall l.
@@ -1123,8 +1123,8 @@ rotateOp :: forall l.
   (VWord l -> VWord l -> MWord l) ->
   Prim l
 rotateOp bp vecOp wordIntOp wordOp =
-  natFun $ \n ->
-  tvalFun $ \tp ->
+  natFun $ \_n ->
+  tvalFun $ \_tp ->
   strictFun $ \xs ->
   strictFun $ \y ->
   PrimExcept $
@@ -1137,14 +1137,14 @@ rotateOp bp vecOp wordIntOp wordOp =
       VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -> do
         bs <- lift (V.toList <$> traverse (fmap toBool . force) iv)
         case xs of
-          VVector xv -> VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp v i)) xv bs
+          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
           VWord xw -> lift (VWord <$> shifter (bpMuxWord bp) wordIntOp xw bs)
           _ -> throwE $ "rotateOp: " <> Text.pack (show xs)
       VBVToNat _sz (VWord iw) | bpIsSymbolicEvaluator bp ->
         case xs of
           VVector xv -> do
             bs <- lift (V.toList <$> bpUnpack bp iw)
-            VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp v i)) xv bs
+            VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
           VWord xw -> lift (VWord <$> wordOp xw iw)
           _ -> throwE $ "rotateOp: " <> Text.pack (show xs)
 
@@ -1153,9 +1153,9 @@ rotateOp bp vecOp wordIntOp wordOp =
 
       _ -> throwE $ "rotateOp: " <> Text.pack (show y)
   where
-    muxVector :: HasCallStack => Natural -> TValue l -> VBool l ->
+    muxVector :: HasCallStack => VBool l ->
       Vector (Thunk l) -> Vector (Thunk l) -> ExceptT Text (EvalM l) (Vector (Thunk l))
-    muxVector n tp b v1 v2 = toVector (bpUnpack bp) =<< lift (muxValue bp (VVecType n tp) b (VVector v1) (VVector v2))
+    muxVector b v1 v2 = toVector (bpUnpack bp) =<< lift (muxValue bp b (VVector v1) (VVector v2))
 
 vRotateL :: Vector a -> Integer -> Vector a
 vRotateL xs i
@@ -1290,7 +1290,7 @@ iteDepOp bp =
 
 iteOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 iteOp bp =
-  tvalFun $ \tp ->
+  tvalFun $ \_tp ->
   boolFun $ \b ->
   primFun $ \x ->
   primFun $ \y ->
@@ -1299,100 +1299,95 @@ iteOp bp =
       Just True  -> lift (force x)
       Just False -> lift (force y)
       Nothing
-        | bpIsSymbolicEvaluator bp -> lift (lazyMuxValue bp tp b (force x) (force y))
+        | bpIsSymbolicEvaluator bp -> lift (lazyMuxValue bp b (force x) (force y))
         | otherwise -> throwE "iteOp"
 
 lazyMuxValue ::
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
-  TValue l ->
   VBool l ->
   EvalM l (Value l) ->
   EvalM l (Value l) ->
   EvalM l (Value l)
-lazyMuxValue bp tp b x y =
+lazyMuxValue bp b x y =
   case bpAsBool bp b of
     Just True  -> x
     Just False -> y
     Nothing ->
       do x' <- x
          y' <- y
-         muxValue bp tp b x' y'
+         muxValue bp b x' y'
 
 muxValue :: forall l.
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
-  TValue l ->
   VBool l -> Value l -> Value l -> EvalM l (Value l)
-muxValue bp tp0 b = value tp0
+muxValue bp b = value
   where
-    value :: TValue l -> Value l -> Value l -> EvalM l (Value l)
-    value _ (VNat m)  (VNat n)      | m == n = return $ VNat m
-    value _ (VString x) (VString y) | x == y = return $ VString x
+    value :: Value l -> Value l -> EvalM l (Value l)
+    value (VNat m)  (VNat n)      | m == n = return $ VNat m
+    value (VString x) (VString y) | x == y = return $ VString x
 
-    value (VPiType _ _tp body) (VFun nm f) (VFun _ g) =
+    value (VFun nm f) (VFun _ g) =
         return $ VFun nm $ \a ->
-           do tp' <- applyPiBody body a
-              x <- f a
+           do x <- f a
               y <- g a
-              value tp' x y
+              value x y
 
-    value VUnitType VUnit VUnit = return VUnit
-    value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =
-      VPair <$> thunk t1 x1 y1 <*> thunk t2 x2 y2
+    value VUnit VUnit = return VUnit
+    value (VPair x1 x2) (VPair y1 y2) =
+      VPair <$> thunk x1 y1 <*> thunk x2 y2
 
-    value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =
-      do let em1 = Map.fromList elems1
-         let em2 = Map.fromList elems2
-         let build (f,tp) = case (Map.lookup f em1, Map.lookup f em2) of
-                              (Just v1, Just v2) ->
-                                 do v <- thunk tp v1 v2
-                                    pure (f,v)
-                              _ -> panic "muxValue" ["Record field missing: " <> f]
-         VRecordValue <$> traverse build fs
+    value (VRecordValue elems1) (VRecordValue elems2) =
+      do let em2 = Map.fromList elems2
+         let build (fname, v1) =
+               case Map.lookup fname em2 of
+                 Just v2 -> do v <- thunk v1 v2
+                               pure (fname, v)
+                 Nothing -> panic "muxValue" ["Record field missing: " <> fname]
+         VRecordValue <$> traverse build elems1
 
-    value (VDataType _nm _k _ps _ixs) (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
+    value (VCtorApp i itv ps xv) (VCtorApp j jtv _ yv)
       | i == j = VCtorApp i itv ps <$> ctorArgs itv ps xv yv
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux ps $ IntMap.fromList $
              [(nameIndex i, (b, i, itv, xv)), (nameIndex j, (b', j, jtv, yv))]
-    value (VDataType _nm _k _ps _ixs) (VCtorApp i tv ps xv) (VCtorMux _ ym) =
+    value (VCtorApp i tv ps xv) (VCtorMux _ ym) =
       do let xm = IntMap.singleton (nameIndex i) (bpTrue bp, i, tv, xv)
          VCtorMux ps <$> branches ps xm ym
-    value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorApp j tv _ yv) =
+    value (VCtorMux ps xm) (VCtorApp j tv _ yv) =
       do let ym = IntMap.singleton (nameIndex j) (bpTrue bp, j, tv, yv)
          VCtorMux ps <$> branches ps xm ym
-    value (VDataType _nm _k _ps _ixs) (VCtorMux ps xm) (VCtorMux _ ym) =
+    value (VCtorMux ps xm) (VCtorMux _ ym) =
       do VCtorMux ps <$> branches ps xm ym
 
-    value (VVecType _ tp) (VVector xv) (VVector yv) =
-      VVector <$> thunks tp xv yv
+    value (VVector xv) (VVector yv) =
+      VVector <$> thunks xv yv
 
-    value tp (VExtra x) (VExtra y) =
-      VExtra <$> bpMuxExtra bp tp b x y
+    value (VExtra x) (VExtra y) =
+      VExtra <$> bpMuxExtra bp b x y
 
-    value _ (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
-    value _ (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
-    value _ (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
-    value _ (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
-    value _ (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
+    value (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
+    value (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
+    value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
+    value (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
+    value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
 
-    value tp x@(VWord _)       y                = do xv <- toVector' x
-                                                     value tp (VVector xv) y
-    value tp x                 y@(VWord _)      = do yv <- toVector' y
-                                                     value tp x (VVector yv)
+    value x@(VWord _)       y                 = do xv <- toVector' x
+                                                   value (VVector xv) y
+    value x                 y@(VWord _)       = do yv <- toVector' y
+                                                   value x (VVector yv)
 
-    value _ x@(VNat _)        y                 = nat x y
-    value _ x@(VBVToNat _ _)  y                 = nat x y
-    value _ x@(VIntToNat _)   y                 = nat x y
+    value x@(VNat _)        y                 = nat x y
+    value x@(VBVToNat _ _)  y                 = nat x y
+    value x@(VIntToNat _)   y                 = nat x y
 
-    value _ (TValue x)        (TValue y)        = TValue <$> tvalue x y
+    value (TValue x)        (TValue y)        = TValue <$> tvalue x y
 
-    value tp x                y                 =
+    value x                 y                 =
       panic "muxValue / value" [
-         "Malformed arguments: " <> Text.pack (show x) <> " " <> Text.pack (show y),
-         "Type: " <> Text.pack (show tp)
+         "Malformed arguments: " <> Text.pack (show x) <> " " <> Text.pack (show y)
       ]
 
     branches ::
@@ -1424,8 +1419,8 @@ muxValue bp tp0 b = value tp0
 
     -- mux the arguments one at a time, as long as the constructor type is not
     -- a dependent function
-    ctorArgs (VPiType _nm t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
-      do z  <- thunk t1 x y
+    ctorArgs (VPiType _nm _t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
+      do z  <- thunk x y
          zs <- ctorArgs t2 [] xs ys
          pure (z:zs)
     ctorArgs _ [] [] [] = pure []
@@ -1454,23 +1449,22 @@ muxValue bp tp0 b = value tp0
       let err msg = unsupportedPrimitive "muxValue: expected vector" (Text.unpack msg)
        in runExceptT (toVector (bpUnpack bp) v) >>= either err pure
 
-    thunks :: TValue l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
-    thunks tp xv yv
-      | V.length xv == V.length yv = V.zipWithM (thunk tp) xv yv
+    thunks :: Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    thunks xv yv
+      | V.length xv == V.length yv = V.zipWithM thunk xv yv
       | otherwise =
           panic "muxValue / thunks" [
               "Malformed arguments",
               "Length of xv: " <> Text.pack (show $ length xv),
               "Length of yv: " <> Text.pack (show $ length yv),
-              "Type is: " <> Text.pack (show tp),
               "(sorry, cannot show xv and yv themselves)"
           ]
 
-    thunk :: TValue l -> Thunk l -> Thunk l -> EvalM l (Thunk l)
-    thunk tp x y = delay $
+    thunk :: Thunk l -> Thunk l -> EvalM l (Thunk l)
+    thunk x y = delay $
       do x' <- force x
          y' <- force y
-         value tp x' y'
+         value x' y'
 
     nat :: Value l -> Value l -> MValue l
     nat v1 v2 =
