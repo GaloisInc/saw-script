@@ -246,7 +246,7 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d _k ps nixs _motive _motiveTy ps_fs _ty) =
+    evalRecursor vrec@(VRecursor d _k _ps nixs _motive _motiveTy ps_fs _ty) =
       vFunList nixs $ \_ix_thunks ->
       pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
@@ -254,8 +254,7 @@ evalTermF cfg lam recEval tf env =
          case evalConstructor argv of
            Just (ctor, args)
              | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-             -> do ctorTy <- toTValue <$> lam (ctorType ctor) []
-                   allArgs <- processRecArgs ps args ctorTy [elim, r_thunk]
+             -> do allArgs <- processRecArgs args [elim, r_thunk]
                    lam (ctorIotaTemplate ctor) allArgs
 
              | otherwise ->
@@ -274,14 +273,14 @@ evalTermF cfg lam recEval tf env =
       VRecursor l ->
       (VBool l, Name, TValue l, [Thunk l]) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (p, c, ct, args) =
+    evalCtorMuxBranch r (p, c, _ct, args) =
       case r of
-        VRecursor _d _k ps _nixs _motive _motiveTy ps_fs _ty ->
+        VRecursor _d _k _ps _nixs _motive _motiveTy ps_fs _ty ->
           do let i = nameIndex c
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
                (Just (ResolvedCtor ctor), Just elim) ->
-                 do allArgs <- processRecArgs ps args ct [elim, r_thunk]
+                 do allArgs <- processRecArgs args [elim, r_thunk]
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
@@ -338,23 +337,12 @@ vStrictFunList n0 k = go n0 []
 
 processRecArgs ::
   (VMonadLazy l, Show (Extra l)) =>
-  [Value l] ->
   [Thunk l] ->
-  TValue l ->
   Env l ->
   EvalM l (Env l)
-processRecArgs (p:ps) args (VPiType _ body) env =
-  do tp' <- applyPiBody body (ready p)
-     processRecArgs ps args tp' env
-processRecArgs [] (x:xs) (VPiType _tp body) env =
-  do tp' <- applyPiBody body x
-     processRecArgs [] xs tp' (x : env)
-processRecArgs [] [] _ env = pure env
-processRecArgs _ _ ty _ =
-  panic "processRegArgs" [
-     "Expected Pi type!",
-     "Found: " <> Text.pack (show ty) 
-  ]
+processRecArgs (x : xs) env =
+  processRecArgs xs (x : env)
+processRecArgs [] env = pure env
 
 
 {-# SPECIALIZE evalGlobal ::
