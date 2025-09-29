@@ -174,7 +174,7 @@ evalTermF cfg lam recEval tf env =
                                         ResolvedCtor ctor ->
                                           ctorValue nm ty' (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
-                                          dtValue nm ty' (dtNumParams dt) (dtNumIndices dt)
+                                          dtValue nm (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -308,11 +308,11 @@ evalTermF cfg lam recEval tf env =
       vFunList j $ \args ->
       pure $ VCtorApp nm tv params args
 
-    dtValue :: Name -> TValue l -> Int -> Int -> MValue l
-    dtValue nm tv i j =
+    dtValue :: Name -> Int -> Int -> MValue l
+    dtValue nm i j =
       vStrictFunList i $ \params ->
       vStrictFunList j $ \idxs ->
-      pure $ TValue $ VDataType nm tv params idxs
+      pure $ TValue $ VDataType nm params idxs
 
 -- | Create a 'Value' for a lazy multi-argument function.
 vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l

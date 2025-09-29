@@ -95,7 +95,7 @@ data TValue l
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !Name !(TValue l) ![Value l] ![Value l]
+  | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VTyTerm !Sort !Term
@@ -205,7 +205,7 @@ instance Show (Extra l) => Show (TValue l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s _ ps vs
+      VDataType s ps vs
         | null (ps++vs) -> shows s
         | otherwise  -> shows s . showList (ps++vs)
       VRecordType [] -> showString "{}"
