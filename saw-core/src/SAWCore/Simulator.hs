@@ -246,8 +246,8 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs _ty) =
-      vFunList nixs $ \ix_thunks ->
+    evalRecursor vrec@(VRecursor d _k ps nixs _motive _motiveTy ps_fs _ty) =
+      vFunList nixs $ \_ix_thunks ->
       pure $ VFun $ \arg_thunk ->
       do argv <- force arg_thunk
          r_thunk <- delay (evalRecursor vrec)
@@ -265,10 +265,7 @@ evalTermF cfg lam recEval tf env =
              case argv of
                VCtorMux _ps branches ->
                  do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
-                    -- compute return type of recursor application
-                    ixvs <- traverse force ix_thunks
-                    retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
-                    combineAlts retTy alts
+                    combineAlts alts
                _ ->
                  panic "evalTermF / evalRecursor"
                  ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
@@ -289,10 +286,10 @@ evalTermF cfg lam recEval tf env =
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
 
-    combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
-    combineAlts _ [] = panic "evalTermF / combineAlts" ["no alternatives"]
-    combineAlts _ [(_, x)] = x
-    combineAlts tp ((p, x) : alts) = simLazyMux cfg p x (combineAlts tp alts)
+    combineAlts :: [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
+    combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]
+    combineAlts [(_, x)] = x
+    combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _tv _ps args) =
