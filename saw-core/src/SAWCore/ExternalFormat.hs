@@ -212,13 +212,12 @@ scReadExternal sc input =
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
 
-    readElimsMap :: String -> ReadM (Map VarIndex (Term,Term))
+    readElimsMap :: String -> ReadM (Map VarIndex Term)
     readElimsMap str =
-      do (ls :: [(VarIndex,(Int,Int))]) <- readM str
-         elims  <- forM ls (\(c,(e,ty)) ->
+      do (ls :: [(VarIndex, Int)]) <- readM str
+         elims  <- forM ls (\(c, e) ->
                     do e'  <- getTerm e
-                       ty' <- getTerm ty
-                       pure (c, (e',ty')))
+                       pure (c, e'))
          pure (Map.fromList elims)
 
     readCtorList :: String -> ReadM [Name]

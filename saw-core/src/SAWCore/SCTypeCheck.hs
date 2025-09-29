@@ -52,7 +52,7 @@ module SAWCore.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad (foldM, forM, forM_, mapM, unless, void)
+import Control.Monad (foldM, forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
@@ -660,13 +660,11 @@ compileRecursor ::
   TCM (CompiledRecursor SCTypedTerm)
 compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
-     cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
-                                    pure (e,ety))
      let d = dtName dt
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
      let ctorVarIxs = map nameIndex ctorOrder
-     let elims = Map.fromList (zip ctorVarIxs cs_fs')
+     let elims = Map.fromList (zip ctorVarIxs cs_fs)
      ty <- typeInferComplete =<<
        liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
      let crec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
@@ -690,7 +688,7 @@ compileRecursor dt params motive cs_fs =
        case Map.lookup (nameIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just (f,_fty) -> checkSubtype f req_tp
+         Just f -> checkSubtype f req_tp
 
      return crec
 

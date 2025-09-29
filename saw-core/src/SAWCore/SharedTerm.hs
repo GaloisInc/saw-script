@@ -1161,7 +1161,7 @@ scReduceRecursor sc r crec c args =
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
-         ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
+         ctorIotaReduction ctor r (recursorElims crec) args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
@@ -1179,11 +1179,11 @@ scReduceNatRecursor ::
 scReduceNatRecursor sc r crec n
   | n == 0 =
      do ctor <- scRequireCtor sc preludeZeroIdent
-        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) []
+        ctorIotaReduction ctor r (recursorElims crec) []
 
   | otherwise =
      do ctor <- scRequireCtor sc preludeSuccIdent
-        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
+        ctorIotaReduction ctor r (recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form

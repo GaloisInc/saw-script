@@ -201,7 +201,7 @@ evalTermF cfg lam recEval tf env =
         Recursor r ->
           do let dname = recursorDataType r
              let nixs = recursorNumIxs r
-             es  <- traverse (recEvalDelay . fst) (recursorElims r)
+             es <- traverse recEvalDelay (recursorElims r)
              let vrec = VRecursor dname nixs es
              evalRecursor vrec
 
