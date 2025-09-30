@@ -228,7 +228,7 @@ span.spaces    { background: white }
 <span class="lineno">  209 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)</span>
 <span class="lineno">  210 </span><span class="spaces">     </span><span class="istickedoff">typed_args &lt;- mapM typeInferCompleteUTerm args</span>
 <span class="lineno">  211 </span><span class="spaces">     </span><span class="istickedoff">crec &lt;- lift $ TC.compileRecursor dt s</span>
-<span class="lineno">  212 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- typeInferComplete (Recursor crec)</span>
+<span class="lineno">  212 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- typeInferComplete (Recursor crec :: FlatTermF SCTypedTerm)</span>
 <span class="lineno">  213 </span><span class="spaces">     </span><span class="istickedoff">inferApplyAll r typed_args</span>
 <span class="lineno">  214 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff">typeInferCompleteTerm (Un.Recursor _ _) =</span>
