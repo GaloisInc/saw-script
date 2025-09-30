@@ -1212,12 +1212,15 @@ scReduceNatRecursor ::
   Term {- ^ eliminator function for @Succ@ -} ->
   Natural {- ^ Concrete natural value to eliminate -} ->
   IO Term
-scReduceNatRecursor sc f1 f2 n
-  | n == 0 = pure f1
-  | otherwise =
-     do x <- scReduceNatRecursor sc f1 f2 (pred n)
-        n' <- scNat sc (pred n)
-        scApplyAll sc f2 [n', x]
+scReduceNatRecursor sc f1 f2 = go
+  where
+    go :: Natural -> IO Term
+    go n
+      | n == 0 = pure f1
+      | otherwise =
+          do x <- go (pred n)
+             n' <- scNat sc (pred n)
+             scApplyAll sc f2 [n', x]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
