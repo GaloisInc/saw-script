@@ -311,32 +311,60 @@ inputs and outputs are immediately apparent. The function takes two integer
 arguments, always uses both of them, and returns a single integer value,
 making no other changes to the program state.</p>
 <p>In cases like this, a direct translation is possible, given only an
-identification of which code to execute. Two functions exist to handle
-such simple code. The first, for LLVM is the more stable of the two:</p>
+identification of which code to execute.
+Three functions exist to handle such simple code. The functions for LLVM and
+JVM are the more stable of the three:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">llvm_extract</span> <span class="pre">:</span> <span class="pre">LLVMModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
-</ul>
-<p>A similar function exists for Java, but is more experimental.</p>
-<ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">jvm_extract</span> <span class="pre">:</span> <span class="pre">JavaClass</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
 </ul>
-<p>Because of its lack of maturity, it (and later Java-related commands)
-must be enabled by running the <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code> command beforehand.</p>
+<p>A similar function exists for MIR, but is more experimental.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_extract</span> <span class="pre">:</span> <span class="pre">MIRModule</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">Term</span></code></p></li>
+</ul>
+<p>Because of its lack of maturity, it (and later MIR-related commands) must be
+enabled by running the <code class="docutils literal notranslate"><span class="pre">enable_experimental</span></code> command beforehand.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">enable_experimental</span> <span class="pre">:</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code></p></li>
 </ul>
-<p>The structure of these two extraction functions is essentially
-identical. The first argument describes where to look for code (in
-either a Java class or an LLVM module, loaded as described in the
-previous section). The second argument is the name of the method or
-function to extract.</p>
+<p>The structure of these extraction functions is essentially identical.
+The first argument describes where to look for code (in an LLVM module, Java
+class, or MIR module, loaded as described in the previous section).
+The second argument is the name of the method or function to extract.</p>
 <p>When the extraction functions complete, they return a <code class="docutils literal notranslate"><span class="pre">Term</span></code>
 corresponding to the value returned by the function or method as a
 function of its arguments.</p>
-<p>These functions currently work only for code that takes some fixed
-number of integral parameters, returns an integral result, and does not
-access any dynamically-allocated memory (although temporary memory
-allocated during execution is allowed).</p>
+<p>These functions currently work only for code that has specific argument and
+result types:</p>
+<ul class="simple">
+<li><p>For <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code>, the extracted function must take some fixed
+number of integral parameters and return an integral result.</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code>, the extracted function’s argument and result types must
+be scalar types (i.e., not classes or arrays).</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">mir_extract</span></code>, the extracted function’s argument and result types must be
+a primitive integer type (e.g., <code class="docutils literal notranslate"><span class="pre">u8</span></code> or <code class="docutils literal notranslate"><span class="pre">i8</span></code>), a <code class="docutils literal notranslate"><span class="pre">bool</span></code>, a <code class="docutils literal notranslate"><span class="pre">char</span></code>, an array,
+or a tuple.</p></li>
+</ul>
+<p>Although it is disallowed to extract functions that use pointers, classes, or
+references in the extracted function’s type signature, the implementation of
+the extracted function is allowed to allocate memory during execution.
+Also note the following requirements for interacting with global variables:</p>
+<ul class="simple">
+<li><p>For <code class="docutils literal notranslate"><span class="pre">llvm_extract</span></code>, the extracted function is allowed to read from immutable
+global variables during execution, but it is not allowed to read or write
+from mutable global variables during execution.</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code>, the extracted function is allowed to read from or write
+to any class field or static field (regardless of mutability) during
+execution.
+The class and static fields will be given their initial values during
+extraction (unless they are overwritten during execution).</p></li>
+<li><p>For <code class="docutils literal notranslate"><span class="pre">mir_extract</span></code>, the extracted function is allowed to read from immutable
+static items during execution, and it is allowed to write to mutable static
+items during execution.
+The extracted function is not allowed to read from a mutable static item
+during execution unless the function has written another value to the static
+item earlier during execution.</p></li>
+</ul>
 </section>
 <section id="notes-on-c-analysis">
 <h2>Notes on C++ Analysis<a class="headerlink" href="#notes-on-c-analysis" title="Link to this heading"></a></h2>
