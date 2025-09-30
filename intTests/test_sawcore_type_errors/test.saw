@@ -30,8 +30,8 @@ parse "#(Bool, 5)";
 print "Not a sort (record type)";
 parse "#{ foo : Bool, bar : False }";
 
-print "Not a sort (recursor)";
-parse "\\(v : Void) -> Void#rec (\\ (_ : Void) -> True) v";
+print "Disallowed propositional elimination";
+parse "IsLeNat#rec";
 
 print "Function application with non-function type";
 parse "True True";

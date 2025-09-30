@@ -113,21 +113,18 @@ While typechecking term:
 Not a sort
   Prelude.Bool
 
- Not a sort (recursor)
+ Disallowed propositional elimination
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
    test.saw:4:36-4:50 in (callback)
    (builtin) in fails
    test.saw:4:17-4:54 in parse
-   test.saw:34:1-34:59 (at top level)
-.:1:15:
-While typechecking term:
-  (arg : Prelude.Void)
-  -> (\(_ : Prelude.Void) -> Prelude.True) arg
-.:1:15:
-Not a sort
-  Prelude.Bool
+   test.saw:34:1-34:20 (at top level)
+.:1:0:
+Malformed recursor
+  Prelude.IsLeNat#rec
+Disallowed propositional elimination
 
  Function application with non-function type
 == Anticipated failure message ==
