@@ -418,7 +418,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
-    -- TODO: support this next!
     Recursor crec ->
       do let d = recursorDataType crec
          maybe_d_trans <-
