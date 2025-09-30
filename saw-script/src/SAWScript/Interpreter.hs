@@ -3897,7 +3897,7 @@ primitives = Map.fromList
     [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
     , "given list of names as uninterpreted."
     ]
-  
+
   , prim "w4_unint_rme" "[String] -> ProofScript ()"
     (pureVal w4_unint_rme)
     Current
@@ -5813,6 +5813,17 @@ primitives = Map.fromList
     , "section (after mir_execute_func). The effects of some MIRSetup"
     , "statements depend on whether they occur in the pre-state or post-state"
     , "section."
+    ]
+
+  , prim "mir_extract" "MIRModule -> String -> TopLevel Term"
+    (pureVal mir_extract)
+    Experimental
+    [ "Translate a MIR function directly to a Term. The parameters of the"
+    , "Term will be the parameters of the MIR function, and the return"
+    , "value will be the return value of the function. Only functions with"
+    , "the following argument and return types are currently supported:"
+    , "primitive integer types (e.g., u8 or i8), bool, char, arrays, and"
+    , "tuples."
     ]
 
   , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"

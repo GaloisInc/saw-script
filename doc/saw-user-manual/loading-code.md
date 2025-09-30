@@ -211,34 +211,65 @@ arguments, always uses both of them, and returns a single integer value,
 making no other changes to the program state.
 
 In cases like this, a direct translation is possible, given only an
-identification of which code to execute. Two functions exist to handle
-such simple code. The first, for LLVM is the more stable of the two:
+identification of which code to execute.
+Three functions exist to handle such simple code. The functions for LLVM and
+JVM are the more stable of the three:
 
 - `llvm_extract : LLVMModule -> String -> TopLevel Term`
-
-A similar function exists for Java, but is more experimental.
-
 - `jvm_extract : JavaClass -> String -> TopLevel Term`
 
-Because of its lack of maturity, it (and later Java-related commands)
-must be enabled by running the `enable_experimental` command beforehand.
+A similar function exists for MIR, but is more experimental.
+
+- `mir_extract : MIRModule -> String -> TopLevel Term`
+
+Because of its lack of maturity, it (and later MIR-related commands) must be
+enabled by running the `enable_experimental` command beforehand.
 
 - `enable_experimental : TopLevel ()`
 
-The structure of these two extraction functions is essentially
-identical. The first argument describes where to look for code (in
-either a Java class or an LLVM module, loaded as described in the
-previous section). The second argument is the name of the method or
-function to extract.
+The structure of these extraction functions is essentially identical.
+The first argument describes where to look for code (in an LLVM module, Java
+class, or MIR module, loaded as described in the previous section).
+The second argument is the name of the method or function to extract.
 
 When the extraction functions complete, they return a `Term`
 corresponding to the value returned by the function or method as a
 function of its arguments.
 
-These functions currently work only for code that takes some fixed
-number of integral parameters, returns an integral result, and does not
-access any dynamically-allocated memory (although temporary memory
-allocated during execution is allowed).
+These functions currently work only for code that has specific argument and
+result types:
+
+- For `llvm_extract`, the extracted function must take some fixed
+  number of integral parameters and return an integral result.
+
+- For `jvm_extract`, the extracted function's argument and result types must
+  be scalar types (i.e., not classes or arrays).
+
+- For `mir_extract`, the extracted function's argument and result types must be
+  a primitive integer type (e.g., `u8` or `i8`), a `bool`, a `char`, an array,
+  or a tuple.
+
+Although it is disallowed to extract functions that use pointers, classes, or
+references in the extracted function's type signature, the implementation of
+the extracted function is allowed to allocate memory during execution.
+Also note the following requirements for interacting with global variables:
+
+- For `llvm_extract`, the extracted function is allowed to read from immutable
+  global variables during execution, but it is not allowed to read or write
+  from mutable global variables during execution.
+
+- For `jvm_extract`, the extracted function is allowed to read from or write
+  to any class field or static field (regardless of mutability) during
+  execution.
+  The class and static fields will be given their initial values during
+  extraction (unless they are overwritten during execution).
+
+- For `mir_extract`, the extracted function is allowed to read from immutable
+  static items during execution, and it is allowed to write to mutable static
+  items during execution.
+  The extracted function is not allowed to read from a mutable static item
+  during execution unless the function has written another value to the static
+  item earlier during execution.
 
 ## Notes on C++ Analysis
 
