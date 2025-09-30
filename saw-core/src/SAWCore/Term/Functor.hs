@@ -192,8 +192,9 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | A recursor, which is specified by giving the datatype name
-    -- and elimination sort for the recursor.
+    -- | A recursor, which is specified by a 'CompiledRecursor'
+    -- comprising the datatype name, elimination sort, and other data
+    -- about the recursor.
   | Recursor CompiledRecursor
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
@@ -223,9 +224,9 @@ data FlatTermF e
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
--- Capture more type information here so we can
---  use it during evaluation time to remember the
---  types of the parameters, motive and eliminator functions.
+-- | A 'CompiledRecursor' comprises the datatype name and elimination
+-- sort of a recursor, along with some other data derived from details
+-- of the datatype definition.
 data CompiledRecursor =
   CompiledRecursor
   { recursorDataType  :: Name
