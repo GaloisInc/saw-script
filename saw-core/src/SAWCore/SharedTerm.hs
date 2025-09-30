@@ -1140,7 +1140,7 @@ scRecursorAppType sc dt params motive =
 -- with elimination to sort @s@.
 -- This type has the form
 --
--- > (p1:pt1) -> .. -> (pk::ptn) ->
+-- > (p1:pt1) -> .. -> (pn::ptn) ->
 -- > (motive : (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s) ->
 -- > (elim1 : ..) -> .. (elimk : ..) ->
 -- > (i1:ix1) -> .. -> (im:ixm) ->
