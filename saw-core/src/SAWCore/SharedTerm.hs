@@ -1182,7 +1182,7 @@ scRecursorType sc dt s =
 scReduceRecursor ::
   SharedContext ->
   Term {- ^ recursor term -} ->
-  CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
+  CompiledRecursor {- ^ concrete data included in the recursor term -} ->
   [Term] {- ^ datatype parameters -} ->
   Term {- ^ motive function -} ->
   [Term] {- ^ eliminator functions -} ->
@@ -1227,7 +1227,7 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor Term (CompiledRecursor Term) [Term] Term [Term] [Term]
+  | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
     -- ^ recursor, compiled recursor, params, motive, eliminators, indices
 
 -- | Test if a term is a constructor application that should be converted to a
@@ -1325,7 +1325,7 @@ scWhnf sc t0 =
     resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
-    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], Term, [Term], [Term], [WHNFElim])
+    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor, [Term], Term, [Term], [Term], [WHNFElim])
     asArgsRec (ElimRecursor r crec params motive elims _ixs : xs) = Just (r, crec, params, motive, elims, [], xs)
     asArgsRec (ElimApp x : xs) =
       case asArgsRec xs of
@@ -1515,8 +1515,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
         Recursor crec ->
-          pure $ recursorType crec
-
+          do mm <- liftIO $ scGetModuleMap sc
+             let d = recursorDataType crec
+             case lookupVarIndexInMap (nameIndex d) mm of
+               Just (ResolvedDataType dt) ->
+                 liftIO $ scRecursorType sc dt (recursorSort crec)
+               _ -> fail $ "scTypeOf: Could not find datatype: " ++ show d
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s

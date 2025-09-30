@@ -453,7 +453,7 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    Recursor (CompiledRecursor d s _params _nixs _ctorOrder _ty) ->
+    Recursor (CompiledRecursor d s _params _nixs _ctorOrder) ->
       do nm <- ppBestName d
          let suffix =
                case s of

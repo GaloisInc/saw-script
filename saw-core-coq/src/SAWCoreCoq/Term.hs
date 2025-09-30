@@ -419,8 +419,9 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d _s _nparams _nixs _elimOrder _ty) ->
-      do maybe_d_trans <-
+    Recursor crec ->
+      do let d = recursorDataType crec
+         maybe_d_trans <-
            case nameInfo d of
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing

@@ -513,10 +513,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
                   lhs' <- adjust lhs
 
                   r'  <- adjust r
-                  crec' <- traverse adjust crec
                   more' <- traverse adjust more
 
-                  rhs1 <- scReduceRecursor sc r' crec' params motive elims (ctorName ctor) args
+                  rhs1 <- scReduceRecursor sc r' crec params motive elims (ctorName ctor) args
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs

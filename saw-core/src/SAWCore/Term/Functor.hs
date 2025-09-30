@@ -192,12 +192,9 @@ data FlatTermF e
   | PairLeft e
   | PairRight e
 
-    -- | A recursor, which is specified by giving the datatype name,
-    --   the parameters to the datatype, a motive and elimination functions
-    --   for each constructor. A recursor can be used with the special
-    --   @RecursorApp@ term, which provides the datatype indices and
-    --   actual argument to the eliminator.
-  | Recursor (CompiledRecursor e)
+    -- | A recursor, which is specified by giving the datatype name
+    -- and elimination sort for the recursor.
+  | Recursor CompiledRecursor
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -229,18 +226,17 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 -- Capture more type information here so we can
 --  use it during evaluation time to remember the
 --  types of the parameters, motive and eliminator functions.
-data CompiledRecursor e =
+data CompiledRecursor =
   CompiledRecursor
   { recursorDataType  :: Name
   , recursorSort      :: Sort
   , recursorNumParams :: Int
   , recursorNumIxs    :: Int
   , recursorCtorOrder :: [Name]
-  , recursorType      :: e
   }
- deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+ deriving (Eq, Ord, Show, Generic)
 
-instance Hashable e => Hashable (CompiledRecursor e) -- automatically derived
+instance Hashable CompiledRecursor -- automatically derived
 
 -- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
 -- precisely the given field names and no more. If so, return the values
@@ -262,8 +258,8 @@ zipName x y
   | x == y = Just x
   | otherwise = Nothing
 
-zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 s1 ps1 n1 ord1 ty1) (CompiledRecursor d2 s2 _ n2 ord2 ty2)
+zipRec :: CompiledRecursor -> CompiledRecursor -> Maybe CompiledRecursor
+zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)
   | n1 == n2 && s1 == s2
   = do d <- zipName d1 d2
        ord <- sequence (zipWith zipName ord1 ord2)
@@ -273,8 +269,6 @@ zipRec f (CompiledRecursor d1 s1 ps1 n1 ord1 ty1) (CompiledRecursor d2 s2 _ n2 o
               ps1
               n1
               ord
-              (f ty1 ty2)
-
   | otherwise = Nothing
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
@@ -292,7 +286,7 @@ zipWithFlatTermF f = go
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
     go (Recursor rec1) (Recursor rec2) =
-      Recursor <$> zipRec f rec1 rec2
+      Recursor <$> zipRec rec1 rec2
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =

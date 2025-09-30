@@ -209,7 +209,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (str, s, args)) =
        Nothing -> throwTCError $ NoSuchDataType (ModuleIdentifier dt_ident)
      typed_args <- mapM typeInferCompleteUTerm args
      crec <- lift $ TC.compileRecursor dt s
-     r <- typeInferComplete (Recursor crec)
+     r <- typeInferComplete (Recursor crec :: FlatTermF SCTypedTerm)
      inferApplyAll r typed_args
 
 typeInferCompleteTerm (Un.Recursor _ _) =

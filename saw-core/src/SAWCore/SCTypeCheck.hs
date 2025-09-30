@@ -74,6 +74,7 @@ import SAWCore.Module
   , resolvedNameType
   , Ctor(..)
   , DataType(..)
+  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.Parser.Position
@@ -611,14 +612,13 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 compileRecursor ::
   DataType ->
   Sort          {- ^ elimination sort -} ->
-  TCM (CompiledRecursor SCTypedTerm)
+  TCM CompiledRecursor
 compileRecursor dt s =
   do let d = dtName dt
      let nparams = length (dtParams dt)
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
-     ty <- typeInferComplete =<< liftTCM scRecursorType dt s
-     let crec = CompiledRecursor d s nparams nixs ctorOrder ty
+     let crec = CompiledRecursor d s nparams nixs ctorOrder
 
      -- Check that the parameters are correct for the given datatype
      let err =
@@ -629,12 +629,15 @@ compileRecursor dt s =
      unless (allowedElimSort dt s) $ throwTCError err
      return crec
 
-
 inferRecursor ::
-  CompiledRecursor SCTypedTerm ->
-  TCM Term
+  CompiledRecursor -> TCM Term
 inferRecursor r =
-  pure (typedVal (recursorType r))
+  do mm <- liftTCM scGetModuleMap
+     let d = recursorDataType r
+     let s = recursorSort r
+     case lookupVarIndexInMap (nameIndex d) mm of
+       Just (ResolvedDataType dt) -> liftTCM scRecursorType dt s
+       _ -> throwTCError $ NoSuchDataType (nameInfo d)
 
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
