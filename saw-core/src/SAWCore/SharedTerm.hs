@@ -1160,11 +1160,10 @@ scRecursorType sc dt s =
      -- Compute the types of the elimination functions
      elims_tps <- scRecursorElimTypes sc d param_vars motive_var
 
-     ty1 <- scRecursorAppType sc dt param_vars motive_var
-     ty2 <- scFunAll sc (map snd elims_tps) ty1
-     ty3 <- scGeneralizeExts sc [motive_ec] ty2
-     ty4 <- scGeneralizeExts sc (dtParams dt) ty3
-     pure ty4
+     scGeneralizeExts sc (dtParams dt) =<<
+       scGeneralizeExts sc [motive_ec] =<<
+       scFunAll sc (map snd elims_tps) =<<
+       scRecursorAppType sc dt param_vars motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
