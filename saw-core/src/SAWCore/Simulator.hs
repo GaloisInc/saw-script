@@ -200,10 +200,15 @@ evalTermF cfg lam recEval tf env =
 
         Recursor r ->
           do let dname = recursorDataType r
+             let nparams = recursorNumParams r
              let nixs = recursorNumIxs r
-             es  <- traverse (recEvalDelay . fst) (recursorElims r)
-             let vrec = VRecursor dname nixs es
-             evalRecursor vrec
+             let cnames = recursorCtorOrder r
+             vFunList nparams $ \_ps_thunks ->
+               pure $ VFun $ \_motive ->
+               vFunList (length cnames) $ \elim_thunks ->
+               do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
+                  let vrec = VRecursor dname nixs es
+                  evalRecursor vrec
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps

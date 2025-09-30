@@ -108,7 +108,7 @@ RecordType__rec
   (f1 : (x:a) -> (y:b) -> p (RecordValue s a b x y))
   (r : RecordType s a b)
   : p r
-  = RecordType#rec s a b p f1 r;
+  = RecordType#rec1 s a b p f1 r;
 
 
 --------------------------------------------------------------------------------
@@ -118,7 +118,7 @@ data Void : sort 0 where { }
 
 -- Eliminate a Void to any type
 elimVoid : (a:sort 1) -> Void -> a;
-elimVoid a v = Void#rec (\ (_:Void) -> a) v;
+elimVoid a v = Void#rec1 (\ (_:Void) -> a) v;
 
 
 --------------------------------------------------------------------------------
@@ -132,7 +132,7 @@ data Eq (t : sort 1) (x : t) : t -> Prop where {
 -- structure of the Eq type
 Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
            p x (Refl t x) -> (y : t) -> (pf : Eq t x y) -> p y pf;
-Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
+Eq__rec t x p f1 y pf = Eq#rec1 t x p f1 y pf;
 
 -- Uniqueness of Identity Proofs, a core logical principle of, e.g., Coq
 axiom uip : (t : sort 1) -> (x : t) -> (y : t) -> (pf1 pf2 : Eq t x y) ->
@@ -806,7 +806,7 @@ Nat__rec : (p : Nat -> sort 1) ->
            ((n:Nat) -> p n -> p (Succ n)) ->
            (n:Nat) ->
            p n;
-Nat__rec p f1 f2 n = Nat#rec p f1 f2 n;
+Nat__rec p f1 f2 n = Nat#rec1 p f1 f2 n;
 
 Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
 Nat_cases a f1 f2 n = Nat__rec (\ (n:Nat) -> a) f1 f2 n;
@@ -854,7 +854,7 @@ IsLeNat__rec :
   (Hbase : p n (IsLeNat_base n)) ->
   (Hstep : (x : Nat) -> (H : IsLeNat n x) -> p x H -> p (Succ x) (IsLeNat_succ n x H)) ->
   (m : Nat) -> (Hm : IsLeNat n m) -> p m Hm;
-IsLeNat__rec n p Hbase Hstep m Hm = IsLeNat#rec n p Hbase Hstep m Hm;
+IsLeNat__rec n p Hbase Hstep m Hm = IsLeNat#ind n p Hbase Hstep m Hm;
 
 -- | Test if m < n or n <= m
 -- FIXME: implement this!
@@ -1689,7 +1689,7 @@ List__rec :
   (a : sort 0) -> (P : List a -> sort 1) -> P (Nil a) ->
   ((x : a) -> (l : List a) -> P l -> P (Cons a x l)) ->
   (l : List a) -> P l;
-List__rec a P f1 f2 l = List#rec a P f1 f2 l;
+List__rec a P f1 f2 l = List#rec1 a P f1 f2 l;
 
 unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
 unfoldList a l =
@@ -1718,7 +1718,7 @@ ListSort__rec : (P : ListSort -> sort 1) ->
                 ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l)) ->
                 (l:ListSort) ->
                 P l;
-ListSort__rec P f1 f2 l = ListSort#rec P f1 f2 l;
+ListSort__rec P f1 f2 l = ListSort#rec1 P f1 f2 l;
 
 -- The sort at the given index in a ListSort or `Eq Bool True False` if
 --  the index is out of bounds
@@ -1829,7 +1829,7 @@ FunsTo__rec : (a:sort 0) -> (P : FunsTo a -> sort 1) -> P (FunsTo_Nil a) ->
               ((tp:sort 0) -> (f:tp -> a) -> (es:FunsTo a) ->
                P es -> P (FunsTo_Cons a tp f es)) ->
               (es:FunsTo a) -> P es;
-FunsTo__rec a P f1 f2 es = FunsTo#rec a P f1 f2 es;
+FunsTo__rec a P f1 f2 es = FunsTo#rec1 a P f1 f2 es;
 
 -- Extract the input types of the functions in a FunsTo list
 FunsToIns : (a:sort 0) -> FunsTo a -> ListSort;
@@ -1890,7 +1890,7 @@ arrowsType as b =
 -- Form the type a1 -> ... -> an -> sort 0 of a type-level function over the as
 arrowsSort : ListSort -> sort 1;
 arrowsSort as =
-  ListSort#rec (\ (_:ListSort) -> sort 1) (sort 0)
+  ListSort#rec2 (\ (_:ListSort) -> sort 1) (sort 0)
     (\ (a:sort 0) (_:ListSort) (rec:sort 1) -> a -> rec)
     as;
 

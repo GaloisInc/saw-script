@@ -89,6 +89,7 @@ import SAWCore.Parser.Lexer
   '_'           { PosPair _ (TIdent "_") }
   rawident      { PosPair _ (TIdent _) }
   rawidentrec   { PosPair _ (TRecursor _) }
+  rawidentind   { PosPair _ (TInductor _) }
   string        { PosPair _ (TString _) }
 
 %%
@@ -191,7 +192,8 @@ AtomTerm :: { UTerm } :
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
   | Ident                                       { Name $1 }
-  | IdentRec                                    { Recursor $1 }
+  | IdentRec                                    { Recursor (fmap fst $1) (mkSort (snd (val $1))) }
+  | IdentInd                                    { Recursor $1 propSort }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
   | Sort nat                                   { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
@@ -208,8 +210,12 @@ Ident :: { PosPair Text } :
   rawident                                      { fmap (Text.pack . tokIdent) $1 }
 
 -- Recursor identifier (wrapper to extract the text)
-IdentRec :: { PosPair Text } :
-  rawidentrec                                   { fmap (Text.pack . tokRecursor) $1 }
+IdentRec :: { PosPair (Text, Natural) } :
+  rawidentrec                                   { fmap ((\(s, n) -> (Text.pack s, n)) . tokRecursor) $1 }
+
+-- Inductor identifier
+IdentInd :: { PosPair Text } :
+  rawidentind                                   { fmap (Text.pack . tokInductor) $1 }
 
 -- Sort keywords
 Sort :: { PosPair SortFlags } :

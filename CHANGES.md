@@ -6,6 +6,12 @@ This release supports [version
 
 ## Changes
 
+* In SAWCore syntax (as used by `parse_core`, `prove_core`, and
+  `read_core`) partially-applied recursors are no longer an error.
+  Elimination sorts for recursors are now specified by suffix:
+  `TypeName#ind` eliminates to `Prop`, `TypeName#rec` eliminates
+  to `sort 0`, and `TypeName#rec<n>` eliminates to `sort n`.
+
 * The experimental command `extract_uninterp` has been removed.
 
 * The `normalize_term_opaque` and `goal_normalize` commands have been

@@ -37,7 +37,7 @@ data Num : sort 0 where {
 
 Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
            (n:Num) -> p n;
-Num_rec p f1 f2 n = Num#rec p f1 f2 n;
+Num_rec p f1 f2 n = Num#rec1 p f1 f2 n;
 
 -- Check whether a 'Num' is finite
 tcFin : Num -> Bool;
@@ -54,7 +54,7 @@ getFinNat n =
 finNumRec : (p: Num -> isort 1) -> ((n:Nat) -> p (TCNum n)) ->
              (n:Num) -> p n;
 finNumRec p f n =
-  Num#rec p f (error (p TCInf) "Unexpected Fin constraint violation!") n;
+  Num#rec1 p f (error (p TCInf) "Unexpected Fin constraint violation!") n;
 
 -- Helper function: destruct two Nums that we expect to be finite
 finNumRec2 : (p: Num -> Num -> isort 1) ->
@@ -219,7 +219,7 @@ tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
 seq : Num -> sort 0 -> sort 0;
 seq num a =
-  Num#rec (\ (num:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream a) num;
+  Num#rec1 (\ (num:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream a) num;
 
 -- FIXME: this rule should be derived by scDefRewriteRules
 seq_TCNum : (n:Nat) -> (a:sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
@@ -233,7 +233,7 @@ seqMap a b num f =
 
 seqConst : (n : Num) -> (a : sort 0) -> a -> seq n a;
 seqConst n =
-  Num#rec (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst n;
+  Num#rec1 (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst n;
 
 seqInhabited : (n:Num) -> (a: sort 0) -> (x:a) -> seq n a;
 seqInhabited =
@@ -249,7 +249,7 @@ injectCode "Coq"
 
 IntModNum : (num : Num) -> sort 0;
 IntModNum num =
-  Num#rec (\ (n : Num) -> sort 0) IntMod Integer num;
+  Num#rec1 (\ (n : Num) -> sort 0) IntMod Integer num;
 
 -------------------------------------------------------------------------------
 -- Rationals (TODO)
@@ -561,27 +561,27 @@ PEqIntMod n = { eq = intModEq n };
 
 PEqIntModNum : (num : Num) -> PEq (IntModNum num);
 PEqIntModNum num =
-  Num#rec (\ (n : Num) -> PEq (IntModNum n)) PEqIntMod PEqInteger num;
+  Num#rec1 (\ (n : Num) -> PEq (IntModNum n)) PEqIntMod PEqInteger num;
 
 PEqVec : (n : Nat) -> (a : isort 0) -> PEq a -> PEq (Vec n a);
 PEqVec n a pa = { eq = vecEq n a pa.eq };
 
 PEqSeq : (n : Num) -> (a : isort 0) -> PEq a -> PEq (seq n a);
 PEqSeq n =
-  Num#rec (\ (n:Num) -> (a : isort 0) -> PEq a -> PEq (seq n a))
-          (\ (n:Nat) -> PEqVec n)
-          (\ (a:isort 0) (pa : PEq a) -> error (PEq (Stream a)) "invalid Eq instance")
-          n;
+  Num#rec1 (\ (n:Num) -> (a : isort 0) -> PEq a -> PEq (seq n a))
+           (\ (n:Nat) -> PEqVec n)
+           (\ (a:isort 0) (pa : PEq a) -> error (PEq (Stream a)) "invalid Eq instance")
+           n;
 
 PEqWord : (n : Nat) -> PEq (Vec n Bool);
 PEqWord n = { eq = bvEq n };
 
 PEqSeqBool : (n : Num) -> PEq (seq n Bool);
 PEqSeqBool n =
-  Num#rec (\ (n : Num) -> PEq (seq n Bool))
-          (\ (n:Nat) -> PEqWord n)
-          (error (PEq (Stream Bool)) "invalid Eq instance")
-          n;
+  Num#rec1 (\ (n : Num) -> PEq (seq n Bool))
+           (\ (n:Nat) -> PEqWord n)
+           (error (PEq (Stream Bool)) "invalid Eq instance")
+           n;
 
 PEqUnit : PEq #();
 PEqUnit = { eq = \ (x y : #()) -> True };
@@ -620,20 +620,20 @@ PCmpVec n a pa =
 
 PCmpSeq : (n : Num) -> (a : isort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq n =
-  Num#rec (\ (n:Num) -> (a : isort 0) -> PCmp a -> PCmp (seq n a))
-          (\ (n:Nat) -> PCmpVec n)
-          (\ (a:isort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
-          n;
+  Num#rec1 (\ (n:Num) -> (a : isort 0) -> PCmp a -> PCmp (seq n a))
+           (\ (n:Nat) -> PCmpVec n)
+           (\ (a:isort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
+           n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
 PCmpWord n = { cmpEq = PEqWord n, cmp = bvCmp n, le = bvule n, lt = bvult n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool n =
-  Num#rec (\ (n : Num) -> PCmp (seq n Bool))
-          (\ (n:Nat) -> PCmpWord n)
-          (error (PCmp (Stream Bool)) "invalid Cmp instance")
-          n;
+  Num#rec1 (\ (n : Num) -> PCmp (seq n Bool))
+           (\ (n:Nat) -> PCmpWord n)
+           (error (PCmp (Stream Bool)) "invalid Cmp instance")
+           n;
 
 PCmpUnit : PCmp #();
 PCmpUnit = { cmpEq = PEqUnit, cmp = unitCmp, le = unitLe, lt = unitLt };
@@ -667,20 +667,20 @@ PSignedCmpVec n a pa =
 
 PSignedCmpSeq : (n : Num) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
 PSignedCmpSeq n =
-  Num#rec (\ (n:Num) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (seq n a))
-          (\ (n:Nat) -> PSignedCmpVec n)
-          (\ (a:isort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
-          n;
+  Num#rec1 (\ (n:Num) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (seq n a))
+           (\ (n:Nat) -> PSignedCmpVec n)
+           (\ (a:isort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
+           n;
 
 PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
 PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n, sle = bvsle n, slt = bvslt n };
 
 PSignedCmpSeqBool : (n : Num) -> PSignedCmp (seq n Bool);
 PSignedCmpSeqBool n =
-  Num#rec (\ (n : Num) -> PSignedCmp (seq n Bool))
-          (\ (n:Nat) -> PSignedCmpWord n)
-          (error (PSignedCmp (Stream Bool)) "invalid SignedCmp instance")
-          n;
+  Num#rec1 (\ (n : Num) -> PSignedCmp (seq n Bool))
+           (\ (n:Nat) -> PSignedCmpWord n)
+           (error (PSignedCmp (Stream Bool)) "invalid SignedCmp instance")
+           n;
 
 PSignedCmpUnit : PSignedCmp #();
 PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp, sle = unitLe, slt = unitLt };
@@ -712,17 +712,17 @@ PZeroRational : PZero Rational;
 PZeroRational = integerToRational (natToInt 0);
 
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
-PZeroIntModNum num = Num#rec (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
+PZeroIntModNum num = Num#rec1 (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
 
 PZeroSeq : (n : Num) -> (a : sort 0) -> PZero a -> PZero (seq n a);
 PZeroSeq n a pa = seqConst n a pa;
 
 PZeroSeqBool : (n : Num) -> PZero (seq n Bool);
 PZeroSeqBool n =
-  Num#rec (\ (n:Num) -> PZero (seq n Bool))
-          (\ (n:Nat) -> bvNat n 0)
-          (streamConst Bool False)
-          n;
+  Num#rec1 (\ (n:Num) -> PZero (seq n Bool))
+           (\ (n:Nat) -> bvNat n 0)
+           (streamConst Bool False)
+           n;
 
 PZeroFun : (a b : sort 0) -> PZero b -> PZero (a -> b);
 PZeroFun a b pb = (\(_ : a) -> pb);
@@ -767,10 +767,10 @@ PLogicStream a pa =
 
 PLogicSeq : (n : Num) -> (a : isort 0) -> PLogic a -> PLogic (seq n a);
 PLogicSeq n =
-  Num#rec (\ (n:Num) -> (a:isort 0) -> PLogic a -> PLogic (seq n a))
-          (\ (n:Nat) -> PLogicVec n)
-	  (\ (a:isort 0) -> PLogicStream a)
-	  n;
+  Num#rec1 (\ (n:Num) -> (a:isort 0) -> PLogic a -> PLogic (seq n a))
+           (\ (n:Nat) -> PLogicVec n)
+	   (\ (a:isort 0) -> PLogicStream a)
+	   n;
 
 PLogicWord : (n : Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
@@ -783,8 +783,8 @@ PLogicWord n =
 
 PLogicSeqBool : (n : Num) -> PLogic (seq n Bool);
 PLogicSeqBool n =
-  Num#rec (\ (n:Num) -> PLogic (seq n Bool))
-          (\ (n:Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit) n;
+  Num#rec1 (\ (n:Num) -> PLogic (seq n Bool))
+           (\ (n:Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit) n;
 
 PLogicFun : (a b : sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
@@ -847,7 +847,7 @@ PRingIntMod n =
 
 PRingIntModNum : (num : Num) -> PRing (IntModNum num);
 PRingIntModNum num =
-  Num#rec (\ (n : Num) -> PRing (IntModNum n)) PRingIntMod PRingInteger num;
+  Num#rec1 (\ (n : Num) -> PRing (IntModNum n)) PRingIntMod PRingInteger num;
 
 PRingRational : PRing Rational;
 PRingRational =
@@ -881,10 +881,10 @@ PRingStream a pa =
 
 PRingSeq : (n : Num) -> (a : isort 0) -> PRing a -> PRing (seq n a);
 PRingSeq n =
-  Num#rec (\ (n : Num) -> (a : isort 0) -> PRing a -> PRing (seq n a))
-          (\ (n:Nat) -> PRingVec n)
-          (\ (a:isort 0) -> PRingStream a)
-          n;
+  Num#rec1 (\ (n : Num) -> (a : isort 0) -> PRing a -> PRing (seq n a))
+           (\ (n:Nat) -> PRingVec n)
+           (\ (a:isort 0) -> PRingStream a)
+           n;
 
 PRingWord : (n : Nat) -> PRing (Vec n Bool);
 PRingWord n =
@@ -898,10 +898,10 @@ PRingWord n =
 
 PRingSeqBool : (n : Num) -> PRing (seq n Bool);
 PRingSeqBool n =
-  Num#rec (\ (n:Num) -> PRing (seq n Bool))
-          (\ (n:Nat) -> PRingWord n)
-          (error (PRing (Stream Bool)) "PRingSeqBool: no instance for streams")
-          n;
+  Num#rec1 (\ (n:Num) -> PRing (seq n Bool))
+           (\ (n:Nat) -> PRingWord n)
+           (error (PRing (Stream Bool)) "PRingSeqBool: no instance for streams")
+           n;
 
 PRingFun : (a b : sort 0) -> PRing b -> PRing (a -> b);
 PRingFun a b pb =
@@ -971,10 +971,10 @@ PIntegralWord n =
 
 PIntegralSeqBool : (n : Num) -> PIntegral (seq n Bool);
 PIntegralSeqBool n =
-  Num#rec (\ (n:Num) -> PIntegral (seq n Bool))
-          (\ (n:Nat) -> PIntegralWord n)
-          (error (PIntegral (Stream Bool)) "PIntegralSeqBool: no instance for streams")
-          n;
+  Num#rec1 (\ (n:Num) -> PIntegral (seq n Bool))
+           (\ (n:Nat) -> PIntegralWord n)
+           (error (PIntegral (Stream Bool)) "PIntegralSeqBool: no instance for streams")
+           n;
 
 
 -- Field class
@@ -1003,7 +1003,7 @@ PFieldIntMod n =
 
 PFieldIntModNum : (n : Num) -> PField (IntModNum n);
 PFieldIntModNum num =
-  Num#rec (\ (n : Num) -> PField (IntModNum n))
+  Num#rec1 (\ (n : Num) -> PField (IntModNum n))
     PFieldIntMod
     (error (PField (IntModNum TCInf)) "PFieldIntModNum: no instance for inf")
     num;
@@ -1047,8 +1047,8 @@ PLiteralLessThan a = Nat -> a;
 
 PLiteralSeqBool : (n : Num) -> PLiteral (seq n Bool);
 PLiteralSeqBool n =
-  Num#rec (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
-          (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
+  Num#rec1 (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
+           (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
 
 PLiteralBit : PLiteral Bool;
 PLiteralBit = Nat_cases Bool False (\ (n:Nat) -> \ (b:Bool) -> True);
@@ -1061,7 +1061,7 @@ PLiteralIntMod n = \ (x : Nat) -> toIntMod n (natToInt x);
 
 PLiteralIntModNum : (num : Num) -> PLiteral (IntModNum num);
 PLiteralIntModNum num =
-  Num#rec (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
+  Num#rec1 (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
 
 PLiteralRational : PLiteral Rational;
 PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
@@ -1226,7 +1226,7 @@ ecFraction a = error a "Unimplemented: fraction";
 ecShiftL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
             seq m a -> ix -> seq m a;
 ecShiftL m =
-  Num#rec
+  Num#rec1
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
 
     -- Case for (TCNum m)
@@ -1246,7 +1246,7 @@ ecShiftL m =
 ecShiftR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
             seq m a -> ix -> seq m a;
 ecShiftR m =
-  Num#rec
+  Num#rec1
     (\ (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
 
     -- Case for (TCNum m)
@@ -1343,7 +1343,7 @@ ecDrop =
 
 ecJoin : (m n : Num) -> (a : isort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin m =
-  Num#rec
+  Num#rec1
     (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq m (seq n a) ->
        seq (tcMul m n) a)
     (\ (m:Nat) ->
@@ -1371,7 +1371,7 @@ ecJoin m =
 ecSplit : (m n : Num) -> (a : isort 0) -> seq (tcMul m n) a ->
            seq m (seq n a);
 ecSplit m =
-  Num#rec
+  Num#rec1
     (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq (tcMul m n) a ->
        seq m (seq n a))
     (\ (m:Nat) ->
@@ -1432,7 +1432,7 @@ ecTranspose m n a =
 
 ecAt : (n : Num) -> (a : isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a;
 ecAt n =
-  Num#rec
+  Num#rec1
     (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a)
     (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
           pix.posNegCases a
@@ -1770,7 +1770,7 @@ fpSqrt e p r x = error (TCFloat e p) "Unimplemented: fpSqrt";
 -- Array update
 ecUpdate : (n : Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a;
 ecUpdate n =
-  Num#rec
+  Num#rec1
     (\ (n:Num) -> (a:isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
     (\ (n:Nat) -> \ (a:isort 0) -> \ (ix : sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Vec n a) ->
        -- Case for (TCNum n, TCNum w)
