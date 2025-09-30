@@ -256,7 +256,7 @@ span.spaces    { background: white }
 <span class="lineno">  237 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorParams</span></span></span>    :: [e]
 <span class="lineno">  238 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorNumIxs</span></span></span>    :: Int
 <span class="lineno">  239 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorMotive</span></span></span>    :: e
-<span class="lineno">  240 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorMotiveTy</span></span></span>  :: e
+<span class="lineno">  240 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">recursorMotiveTy</span></span></span>  :: e
 <span class="lineno">  241 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorElims</span></span></span>     :: Map VarIndex (e, e) -- eliminator functions and their types
 <span class="lineno">  242 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">recursorCtorOrder</span></span></span> :: [Name]
 <span class="lineno">  243 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">recursorType</span></span></span>      :: e
@@ -497,7 +497,7 @@ span.spaces    { background: white }
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">termf (Variable x1) (Variable x2) = x1 == x2</span>
 <span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">termf FTermF{}   _ = False</span>
 <span class="lineno">  480 </span><span class="spaces">    </span><span class="istickedoff">termf App{}      _ = False</span>
-<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">termf Lambda{}   _ = <span class="nottickedoff">False</span></span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">termf Lambda{}   _ = False</span>
 <span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">termf Pi{}       _ = <span class="nottickedoff">False</span></span>
 <span class="lineno">  483 </span><span class="spaces">    </span><span class="istickedoff">termf LocalVar{} _ = False</span>
 <span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">termf Constant{} _ = False</span>

@@ -652,7 +652,7 @@ span.spaces    { background: white }
 <span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">do (x, i) &lt;- R.asRecordSelector t</span>
 <span class="lineno">  634 </span><span class="spaces">       </span><span class="istickedoff">ts &lt;- R.asRecordValue x</span>
 <span class="lineno">  635 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup i ts of</span>
-<span class="lineno">  636 </span><span class="spaces">         </span><span class="istickedoff">Just t' -&gt; <span class="nottickedoff">return t'</span></span>
+<span class="lineno">  636 </span><span class="spaces">         </span><span class="istickedoff">Just t' -&gt; return t'</span>
 <span class="lineno">  637 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; fail <span class="nottickedoff">&quot;Record field not found&quot;</span></span></span>
 <span class="lineno">  638 </span>
 <span class="lineno">  639 </span>-- | An iota redex whose argument is a concrete nautral number; specifically,
@@ -717,7 +717,7 @@ span.spaces    { background: white }
 <span class="lineno">  698 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (asNatIotaRedex -&gt; Just (r, crec, n)) =</span>
 <span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">Just &lt;$&gt; scReduceNatRecursor sc r crec n</span>
 <span class="lineno">  700 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc (R.asApp -&gt; Just (R.asApplyAll -&gt; (R.asRecursorApp -&gt; Just (r, crec), ixs), arg))</span>
-<span class="lineno">  701 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">recursorNumIxs crec == length ixs</span> =</span>
+<span class="lineno">  701 </span><span class="spaces">  </span><span class="istickedoff">| recursorNumIxs crec == length ixs =</span>
 <span class="lineno">  702 </span><span class="spaces">  </span><span class="istickedoff">do let (f, args) = R.asApplyAll arg</span>
 <span class="lineno">  703 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
 <span class="lineno">  704 </span><span class="spaces">     </span><span class="istickedoff">case R.asConstant f of</span>
@@ -901,7 +901,7 @@ span.spaces    { background: white }
 <span class="lineno">  882 </span><span class="spaces">        </span><span class="istickedoff">Just t' -&gt; return t'</span>
 <span class="lineno">  883 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  884 </span><span class="spaces">          </span><span class="istickedoff">case asRecordRedex t of</span>
-<span class="lineno">  885 </span><span class="spaces">            </span><span class="istickedoff">Just t' -&gt; <span class="nottickedoff">return t'</span></span>
+<span class="lineno">  885 </span><span class="spaces">            </span><span class="istickedoff">Just t' -&gt; return t'</span>
 <span class="lineno">  886 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; apply (Net.match_term ss t) t</span>
 <span class="lineno">  887 </span><span class="spaces">      </span><span class="istickedoff">where t = Unshared tf</span>
 <span class="lineno">  888 </span><span class="spaces"></span><span class="istickedoff"></span>
