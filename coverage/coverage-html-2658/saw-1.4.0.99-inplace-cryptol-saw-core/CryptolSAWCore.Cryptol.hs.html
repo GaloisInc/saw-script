@@ -1604,7 +1604,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1585 </span><span class="spaces">               </span><span class="istickedoff">case declOpts of</span>
 <span class="lineno"> 1586 </span><span class="spaces">                 </span><span class="istickedoff">TopLevelDeclGroup _ -&gt;</span>
 <span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff">do nmi &lt;- importName (C.dName d)</span>
-<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r <span class="nottickedoff">t</span></span>
+<span class="lineno"> 1588 </span><span class="spaces">                      </span><span class="istickedoff">scConstant' sc nmi r t</span>
 <span class="lineno"> 1589 </span><span class="spaces">                 </span><span class="istickedoff">NestedDeclGroup -&gt; <span class="nottickedoff">return r</span></span>
 <span class="lineno"> 1590 </span><span class="spaces">      </span><span class="istickedoff">rhss &lt;- sequence (Map.intersectionWith mkRhs dm tm)</span>
 <span class="lineno"> 1591 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -2017,14 +2017,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 2000 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) _ [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
 <span class="lineno"> 2002 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
 <span class="lineno"> 2003 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
 <span class="lineno"> 2004 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) _ [] [] -&gt;</span>
+<span class="lineno"> 2005 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
 <span class="lineno"> 2006 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
 <span class="lineno"> 2007 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType _ _ _ _ -&gt; Nothing</span>
+<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType {} -&gt; Nothing</span>
 <span class="lineno"> 2009 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">SC.VUnitType -&gt; return (Right (C.tTuple []))</span>
 <span class="lineno"> 2011 </span><span class="spaces">      </span><span class="istickedoff">SC.VPairType v1 v2 -&gt; do</span>
@@ -2034,7 +2034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2015 </span><span class="spaces">          </span><span class="istickedoff">Just ts -&gt; return (Right <span class="nottickedoff">(C.tTuple (t1 : ts))</span>)</span>
 <span class="lineno"> 2016 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return (Right (C.tTuple [t1, t2]))</span>
 <span class="lineno"> 2017 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm v1 (SC.VNondependentPi v2) -&gt;</span>
+<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
 <span class="lineno"> 2019 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
 <span class="lineno"> 2020 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 2021 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
@@ -2044,7 +2044,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2025 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
 <span class="lineno"> 2026 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2027 </span><span class="spaces">      </span><span class="istickedoff">-- TODO?</span>
-<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _nm _v1 (SC.VDependentPi _) -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType _v1 (SC.VDependentPi _) -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2029 </span><span class="spaces">      </span><span class="istickedoff">SC.VStringType -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2030 </span><span class="spaces">      </span><span class="istickedoff">SC.VRecordType{} -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 2031 </span><span class="spaces">      </span><span class="istickedoff">SC.VTyTerm{} -&gt; <span class="nottickedoff">Nothing</span></span></span>
