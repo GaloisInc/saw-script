@@ -608,25 +608,6 @@ areConvertible :: Term -> Term -> TCM Bool
 areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
-inferRecursorType ::
-  DataType      {- ^ data type -} ->
-  Sort          {- ^ elimination sort -} ->
-  Int           {- ^ number of indexes -} ->
-  SCTypedTerm   {- ^ type of the recursor as a function -} ->
-  TCM ()
-inferRecursorType dt motive_srt nixs ty =
-  do let d = dtName dt
-     let nparams = length (dtParams dt)
-     let mk_err str =
-           MalformedRecursor
-           (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d motive_srt nparams nixs [] ty))
-            str
-
-     unless (allowedElimSort dt motive_srt)  $
-       throwTCError $ mk_err "Disallowed propositional elimination"
-
-
 compileRecursor ::
   DataType ->
   Sort          {- ^ elimination sort -} ->
@@ -659,8 +640,12 @@ compileRecursor dt s =
      let crec = CompiledRecursor d s nparams nixs ctorOrder ty
 
      -- Check that the parameters are correct for the given datatype
-     inferRecursorType dt s nixs ty
+     let err =
+           MalformedRecursor
+           (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
+           "Disallowed propositional elimination"
 
+     unless (allowedElimSort dt s) $ throwTCError err
      return crec
 
 
