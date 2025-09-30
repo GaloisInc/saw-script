@@ -9,8 +9,8 @@ parse "false";
 print "No such data type";
 parse "String#rec Bool True False";
 
-// Partially-applied recursors are permitted
-// print (parse_core "Either#rec Bool Nat (\\ (_ : Either Bool Nat) -> Bool) (id Bool)");
+print "Partially-applied recursors are permitted";
+print_term (parse_core "Either#rec Nat");
 
 print "Not a sort (lambda)";
 parse "\\(x : True) -> x";

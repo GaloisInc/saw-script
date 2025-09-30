@@ -21,6 +21,8 @@ Stack trace:
 .:1:0:
 No such data type: ModuleIdentifier Cryptol.String
 
+ Partially-applied recursors are permitted
+ Either#rec Nat
  Not a sort (lambda)
 == Anticipated failure message ==
 Stack trace:
