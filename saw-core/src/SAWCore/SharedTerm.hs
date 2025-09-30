@@ -68,6 +68,7 @@ module SAWCore.SharedTerm
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scRecursorAppType
+  , scRecursorType
   , scReduceRecursor
   , scReduceNatRecursor
   , allowedElimSort
@@ -1134,6 +1135,36 @@ scRecursorAppType sc dt params motive =
      ty <- scGeneralizeExts sc (dtIndices dt ++ [arg_ec]) ret
      let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
      scInstantiateExt sc subst ty
+
+-- | Build the full type of an unapplied recursor for datatype @d@
+-- with elimination to sort @s@.
+-- This type has the form
+--
+-- > (p1:pt1) -> .. -> (pk::ptn) ->
+-- > (motive : (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s) ->
+-- > (elim1 : ..) -> .. (elimk : ..) ->
+-- > (i1:ix1) -> .. -> (im:ixm) ->
+-- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
+scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
+scRecursorType sc dt s =
+  do let d = dtName dt
+
+     param_vars <- traverse (scVariable sc) (dtParams dt)
+
+     -- Compute the type of the motive function, which has the form
+     -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
+     motive_ty <- scRecursorRetTypeType sc dt param_vars s
+     motive_ec <- scFreshEC sc "p" motive_ty
+     motive_var <- scVariable sc motive_ec
+
+     -- Compute the types of the elimination functions
+     elims_tps <- scRecursorElimTypes sc d param_vars motive_var
+
+     ty1 <- scRecursorAppType sc dt param_vars motive_var
+     ty2 <- scFunAll sc (map snd elims_tps) ty1
+     ty3 <- scGeneralizeExts sc [motive_ec] ty2
+     ty4 <- scGeneralizeExts sc (dtParams dt) ty3
+     pure ty4
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call

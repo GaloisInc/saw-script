@@ -617,26 +617,7 @@ compileRecursor dt s =
      let nparams = length (dtParams dt)
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
-
-     param_vars <- traverse (liftTCM scVariable) (dtParams dt)
-
-     -- Compute the type of the motive function, which has the form
-     --
-     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
-     --
-     -- for the given sort s, where the Ix are the indices of of dt
-     motive_ty <- liftTCM scRecursorRetTypeType dt param_vars s
-     motive_ec <- liftTCM scFreshEC "p" motive_ty
-     motive_var <- liftTCM scVariable motive_ec
-
-     -- Compute the types of the elimination functions [(Name, Term)]
-     elims_tps <- liftTCM scRecursorElimTypes d param_vars motive_var
-
-     ty1 <- liftTCM scRecursorAppType dt param_vars motive_var
-     ty2 <- liftTCM scFunAll (map snd elims_tps) ty1
-     ty3 <- liftTCM scGeneralizeExts [motive_ec] ty2
-     ty4 <- liftTCM scGeneralizeExts (dtParams dt) ty3
-     ty <- typeInferComplete ty4
+     ty <- typeInferComplete =<< liftTCM scRecursorType dt s
      let crec = CompiledRecursor d s nparams nixs ctorOrder ty
 
      -- Check that the parameters are correct for the given datatype
