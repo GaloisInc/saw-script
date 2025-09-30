@@ -9,16 +9,22 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module CryptolSAWCore.CryptolEnv
   ( ImportVisibility(..)
   , CryptolEnv(..)
+
+  , ExtCryptolModule(..)
+  , showExtCryptolModule
   , initCryptolEnv
   , loadCryptolModule
-  , bindCryptolModule
-  , extractDefFromCryptolModule
+  , loadExtCryptolModule
+  , bindExtCryptolModule
+
+  , extractDefFromExtCryptolModule
   , combineCryptolEnv
-  , importModule
+  , importCryptolModule
   , bindTypedTerm
   , bindType
   , bindInteger
@@ -42,7 +48,6 @@ module CryptolSAWCore.CryptolEnv
   )
   where
 
---import qualified Control.Exception as X
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import Data.Map (Map)
@@ -103,6 +108,9 @@ import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 
+
+---- Key Types -----------------------------------------------------------------
+
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
   { inpText :: Text   -- ^ Parse this
@@ -111,11 +119,7 @@ data InputText = InputText
   , inpCol  :: Int    -- ^ On this column number
   }
 
-
-
---------------------------------------------------------------------------------
-
--- | 'ImportVisibility' - Should a given import (see 'importModule')
+-- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
 -- result in all symbols being visible (as they are for focused
 -- modules in the Cryptol REPL) or only public symbols?  Making all
 -- symbols visible is useful for verification and code generation.
@@ -126,7 +130,8 @@ data InputText = InputText
 --
 data ImportVisibility
   = OnlyPublic       -- ^ behaves like a normal Cryptol "import"
-  | PublicAndPrivate -- ^ allows viewing of both "private" sections and (arbitrarily nested) submodules.
+  | PublicAndPrivate -- ^ allows viewing of both "private" sections
+                     --   and (arbitrarily nested) submodules.
   deriving (Eq, Show)
 
 
@@ -183,6 +188,7 @@ nameMatcher xs =
                     in last cs == identText (C.ogName og) &&
                        init cs == C.modNameChunksText top ++ map identText ns
 
+
 -- Initialize ------------------------------------------------------------------
 
 -- | initCryptolEnv - Create initial CryptolEnv, this involves loading
@@ -222,7 +228,7 @@ initCryptolEnv sc = do
          _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
          return ()
 
-  -- Load Cryptol reference implementations
+  -- Load Cryptol reference implementation
   ((_,refTop), modEnv3) <-
     liftModuleM modEnv2 $
       MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
@@ -241,15 +247,16 @@ initCryptolEnv sc = do
   termEnv <- genTermEnv sc modEnv3 cryEnv0
 
   -- The module names in P.Import are now Located, so give them an empty position.
-  let preludeName' = P.Located P.emptyRange preludeName
-      preludeReferenceName' = P.Located P.emptyRange preludeReferenceName
-      arrayName' = P.Located P.emptyRange arrayName
+  let preludeName'          = locatedUnknown preludeName
+      preludeReferenceName' = locatedUnknown preludeReferenceName
+      arrayName'            = locatedUnknown arrayName
 
   return CryptolEnv
-    { eImports    = [ (OnlyPublic, P.Import preludeName' Nothing Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import preludeReferenceName' (Just preludeReferenceName) Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import arrayName' Nothing Nothing Nothing Nothing)
-                    ]
+    { eImports    =
+        [ mkImport OnlyPublic preludeName'          Nothing Nothing
+        , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
+        , mkImport OnlyPublic arrayName'            Nothing Nothing
+        ]
     , eModuleEnv  = modEnv3
     , eExtraNames = mempty
     , eExtraTypes = Map.empty
@@ -260,9 +267,10 @@ initCryptolEnv sc = do
     , eFFITypes   = Map.empty
     }
 
+
 -- | Translate all declarations in all loaded modules to SAWCore terms
 --   NOTE: used only for initialization code.
-
+--
 genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
 genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
@@ -304,8 +312,8 @@ ioParseResult res = case res of
 
 -- NamingEnv and Related -------------------------------------------------------
 
--- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all the 'eImports'
-
+-- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all
+-- the 'eImports'
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
@@ -362,6 +370,7 @@ runInferOutput out =
       do MM.typeCheckWarnings nm warns
          MM.typeCheckingFailed nm errs
 
+
 -- Translate -------------------------------------------------------------------
 
 mkCryEnv ::
@@ -408,14 +417,12 @@ translateDeclGroups sc env dgs =
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     return env
-           { eExtraNames = foldr addName (eExtraNames env) names
-           , eExtraTypes = Map.union (eExtraTypes env) newTypes
-           , eTermEnv    = C.envE cryEnv'
-           }
+     return env{ eExtraNames = foldr addName (eExtraNames env) names
+               , eExtraTypes = Map.union (eExtraTypes env) newTypes
+               , eTermEnv    = C.envE cryEnv'
+               }
 
---------------------------------------------------------------------------------
-
+---- Misc Exports --------------------------------------------------------------
 
 combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
 combineCryptolEnv chkEnv newEnv =
@@ -425,136 +432,268 @@ combineCryptolEnv chkEnv newEnv =
      return chkEnv{ eModuleEnv = menv' }
 
 
-checkNotParameterized :: T.Module -> IO ()
-checkNotParameterized m =
-  when (T.isParametrizedModule m) $
-    fail $ unlines [ "Cannot load parameterized modules directly."
-                   , "Either use a ` import, or make a module instantiation."
-                   ]
+---- Types and functions for CryptolModule & ExtCryptolModule ------------------
 
--- FIXME: Code duplication, these two functions are highly similar:
---   - loadCryptolModule
---   - importModule
--- - TODO: "common up" the common code per #2569.
 
--- | loadCryptolModule - load a cryptol module and return a handle to
--- the `CryptolModule`.  The contents of the module are not imported.
+-- | ExtCryptolModule - Extended CryptolModule; we keep track of
+--   whether this module came directly from a constructed
+--   `CryptolModule` or whether it came from parsing a Cryptol module
+--   from filesystem (in which case it is loaded).
+data ExtCryptolModule =
+    -- | source is parsed/loaded
+    ECM_LoadedModule
+        { ecm_name :: P.Located C.ModName
+        , ecm_show :: String -- ^ how we show this on SAWScript CLI,
+                             --   We can't look at state to compute show,
+                             --   thus this (albeit adhoc).
+        }
+
+    -- | source is internal/constructed (e.g., via cryptol_prims)
+  | ECM_CryptolModule {ecm_cm :: CryptolModule}
+
+showExtCryptolModule :: ExtCryptolModule -> String
+showExtCryptolModule =
+  \case
+    ECM_LoadedModule name s ->
+      unlines ["Loaded module '" ++ show(pp (P.thing name)) ++ "':"
+              , s
+              ]
+    ECM_CryptolModule cm  ->
+      unlines  [ "Internal module:"
+               , showCryptolModule cm
+               ]
+
+-- | loadCryptolModule - load a cryptol module and returns the
+-- `ExtCryptolModule`.  The contents of the module are not directly
+-- imported into the environment.
 --
 -- This is used to implement the "cryptol_load" primitive in which a
 -- handle to the module is returned and can be bound to a SAWScript
 -- variable.
+--
+-- NOTE: Bringing the module into {{-}} scope is not handled
+--       here; it is done rather in `bindExtCryptolModule`, ONLY if the
+--       user binds the `cryptolModule` returned here at the SAW
+--       command line.
+loadExtCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext ->
+  CryptolEnv ->
+  FilePath ->
+  IO (ExtCryptolModule, CryptolEnv)
+loadExtCryptolModule sc env path =
+  do
+  (m, env') <- loadAndTranslateModule sc env (Left path)
+  let s = showCryptolModule (mkCryptolModule m env')
+          -- how to show, need to compute this here.
+          -- FIXME: this only shows public names, not internal.
+  return (ECM_LoadedModule (locatedUnknown (T.mName m)) s, env')
 
+
+-- | loadCryptolModule
+--
+-- NOTE RE CALLS TO:
+--  - the path to this function from the command line is only via
+--    the experimental "write_coq_cryptol_module" command.
+--
+-- This function (note `mkCryptolModule`) returns the public types and values
+-- of the module in a `CryptolModule` structure.
+--
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
   CryptolEnv ->
   FilePath ->
   IO (CryptolModule, CryptolEnv)
-loadCryptolModule sc env path = do
-  let modEnv = eModuleEnv env
-  (mtop, modEnv') <- liftModuleM modEnv $
-                       MB.loadModuleByPath True path
-  m <- case mtop of
-         T.TCTopModule mod' -> pure mod'
-         T.TCTopSignature {} ->
-             fail $
-               "Expected a module, but " ++ show path ++ " is an interface."
-
-  checkNotParameterized m
-
-  -- NOTE: unclear what's happening here!
-  --   - FIXME: understand and doc.
-  --   - `m` not used (directly) but translating the modEnv'
-  --   - this behavior is not in `importModule`
-
-  let ifaceDecls = getAllIfaceDecls modEnv'
-  (types, modEnv'') <- liftModuleM modEnv' $ do
-    do prims <- MB.getPrimMap
-                  -- generate the primitive map; a monad reader
-       TM.inpVars `fmap`
-         MB.genInferInput P.emptyRange prims NoParams ifaceDecls
-
-         -- NOTE: inpVars are the variables that are in scope.
-         -- FIXME: we are possibly doing unnecessary computation here (see
-         --        source code for MB.getPrimMap and MB.genInferInput.)
-
-     -- FIXME: it appears (need to verify) that modEnv'' == modEnv'
-     --   if this true, we can simplify and move this section
-     --   into `mkCryptolModule`.
-
-  -- Regenerate SharedTerm environment:
-  let oldModNames = map ME.lmName
-                  $ ME.lmLoadedModules
-                  $ ME.meLoadedModules modEnv
-      isNew m'    = T.mName m' `notElem` oldModNames
-      newModules  = filter isNew
-                  $ map ME.lmModule
-                  $ ME.lmLoadedModules
-                  $ ME.meLoadedModules modEnv''
-      newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
-                                     (ME.loadedNominalTypes modEnv)
-
-  newTermEnv <-
-    do oldCryEnv <- mkCryEnv env
-       cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-       newCryEnv <- C.importTopLevelDeclGroups
-                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
-       return (C.envE newCryEnv)
-
-  cryptolModule <- mkCryptolModule m types newTermEnv
-
-  -- NOTE: Bringing the module-handle into {{-}} scope is not handled
-  --       here; it is done rather in `bindCryptolModule`, ONLY if the
-  --       user binds the `cryptolModule` returned here at the saw
-  --       command line.
-
-  return ( cryptolModule
-         , env { eModuleEnv = modEnv''
-               , eTermEnv   = newTermEnv
-               , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-               }
-             -- NOTE here the difference between this function and
-             -- `importModule`:
-             --  1. the `eImports` field is not updated, as
-             --     this module (as a whole) is not being
-             --     brought into scope inside {{ }} constructs.
-             --  2. modEnv'' vs modEnv' (which may not be different, see
-             --     notes above).
-         )
-
--- | mkCryptolModule
---
--- FIXME:
---   - This incorrectly excludes both submodules and their contents from
---     the NamingEnvs in `CryptolModule`
-
---   - Regarding the CLI API: the `CryptolModule` type is exposed to
---     the SAWScript CLI, is this necessary?
-
-mkCryptolModule :: T.Module
-                -> Map MN.Name T.Schema
-                -> Map MN.Name Term
-                -> IO CryptolModule
-mkCryptolModule m types newTermEnv =
+loadCryptolModule sc env path =
   do
-  let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
-  return $
-    CryptolModule
-      -- create type synonym Map, keep only the exports:
-      (Map.filterWithKey
-         (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
-         (T.mTySyns m)
-      )
-        -- FIXME: TODO: ensure type synonym in submodule is included.
+  (mod', env') <- loadAndTranslateModule sc env (Left path)
+  return (mkCryptolModule mod' env', env')
 
-      -- create the map of symbols:
-      ( Map.filterWithKey (\k _ -> Set.member k names)
-      $ Map.intersectionWith
-           (\t x -> TypedTerm (TypedTermSchema t) x)
-           types          -- NOTE: only use of this variable.
-           newTermEnv
-      )
+
+-- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
+--
+-- This function returns the public types and values of the module `m`
+-- as a `CryptolModule` structure.
+mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
+mkCryptolModule m env =
+  let
+      ifaceDecls = getAllIfaceDecls (eModuleEnv env)
+      types = Map.map MI.ifDeclSig (MI.ifDecls ifaceDecls)
+      -- we're keeping only the exports of `m`:
+      vNameSet = MEx.exported C.NSValue (T.mExports m)
+      tNameSet = MEx.exported C.NSType  (T.mExports m)
+  in
+      CryptolModule
+        -- create Map of type synonyms
+        (Map.filterWithKey
+           (\k _ -> Set.member k tNameSet)
+           (T.mTySyns m)
+        )
+
+        -- create Map of the `TypedTerm` s:
+        ( Map.filterWithKey (\k _ -> Set.member k vNameSet)
+        $ Map.intersectionWith
+             (\t x -> TypedTerm (TypedTermSchema t) x)
+             types
+             (eTermEnv env)
+        )
+
+-- | bindExtCryptolModule - ad hoc function/hook that allows for
+--   extending the Cryptol environment with the names in a Cryptol
+--   module, represented here by a `ExtCryptolModule`.
+--
+--   NOTE RE CALLS TO: Three command line variants get us here:
+--      > D <- cryptol_load "PATH"
+--      > x <- return (cryptol_prims ())
+--      > let x = cryptol_prims ()
+--
+bindExtCryptolModule ::
+  (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
+bindExtCryptolModule (modName, ecm) =
+  case ecm of
+    ECM_CryptolModule cm   -> bindCryptolModule (modName, cm)
+    ECM_LoadedModule  nm _ -> bindLoadedModule  (modName, nm)
+
+bindLoadedModule ::
+  (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
+bindLoadedModule (asName, origName) env =
+  env{eImports= mkImport PublicAndPrivate origName (Just asName) Nothing
+              : eImports env
+     }
+
+-- | bindCryptolModule - binding when we have the ECM_CryptolModule side.
+--
+-- NOTE:
+--  - this code is duplicating functionality that we already have with
+--    `importCryptolModule`.  We would like to have just one piece of
+--    code that computes the names (i.e., have just "one source of
+--    truth" here).
+--
+bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
+bindCryptolModule (modName, CryptolModule sm tm) env =
+  env { eExtraNames = flip (foldr addName) (Map.keys tm') $
+                      flip (foldr addTSyn) (Map.keys sm) $
+                      eExtraNames env
+      , eExtraTSyns = Map.union sm (eExtraTSyns env)
+      , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
+      , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
+      }
+  where
+    -- | `tm'` is the typed terms from `tm` that have Cryptol schemas
+    tm' = Map.mapMaybe f tm
+          where
+          f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
+          f _                                 = Nothing
+
+    addName name =
+      MN.shadowing
+       (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
+
+    addTSyn name =
+      MN.shadowing
+        (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
+
+
+-- | extractDefFromExtCryptolModule sc en ecm name - interpret `name` as a definition in
+--   the module `ecm`, return the TypedTerm.
+--
+--  NOTE RE CALLS TO: this is (only) used for the "cryptol_extract" primitive.
+--
+extractDefFromExtCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
+extractDefFromExtCryptolModule sc env ecm name =
+  case ecm of
+    ECM_LoadedModule loadedModName _ ->
+        do let localMN = C.packModName
+                           [ "INTERNAL_EXTRACT_MODNAME"
+                           , C.modNameToText (P.thing loadedModName)
+                           ]
+               env'    = bindLoadedModule (localMN, loadedModName) env
+               expr    = noLoc (C.modNameToText localMN <> "::" <> name)
+           parseTypedTerm sc env' expr
+
+           -- FIXME: error message for bad `name` exposes the
+           --   `localMN` to user.  Fixing locally is challenging, as
+           --   the error is not an exception we can handle here.
+    ECM_CryptolModule (CryptolModule _ tm) ->
+        case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
+          Just t  -> return t
+          Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
+
+        -- NOTE RE CALLS TO:
+        --   - currently we can only get to this branch when CryptolModule
+        --     is the one created with `cryptol_prims` (Haskell function and
+        --     SAWScript function).  E.g.,
+        --
+        --     > cryptol_extract (cryptol_prims ()) "trunc"
+        --
+        -- FIXME: this code is somewhat ad hoc, might we rather invoke
+        -- parse for name, or the like?  However, this code becomes
+        -- unnecessary after addressing Issue #2645 (turning
+        -- cryptol_prims into a built-in Cryptol module).
+
+---- Core functions for loading and Translating Modules ------------------------
+
+loadAndTranslateModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext             {- ^ Shared context for creating terms -} ->
+  CryptolEnv                {- ^ Extend this environment -} ->
+  Either FilePath P.ModName {- ^ Where to find the module -} ->
+  IO (T.Module, CryptolEnv)
+loadAndTranslateModule sc env src =
+  do let modEnv = eModuleEnv env
+     (mtop, modEnv') <- liftModuleM modEnv $
+       case src of
+         Left path -> MB.loadModuleByPath True path
+         Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
+     m <- case mtop of
+            T.TCTopModule mod'  -> pure mod'
+            T.TCTopSignature {} ->
+              fail $
+                "Expected a module, but "
+                ++ (case src of
+                      Left  path -> show path
+                      Right mn   -> show mn
+                   )
+                ++ " is an interface."
+
+     checkNotParameterized m
+
+     -- Regenerate SharedTerm environment:
+     let oldModNames   = map ME.lmName
+                       $ ME.lmLoadedModules
+                       $ ME.meLoadedModules modEnv
+         isNew m'      = T.mName m' `notElem` oldModNames
+         newModules    = filter isNew
+                       $ map ME.lmModule
+                       $ ME.lmLoadedModules
+                       $ ME.meLoadedModules modEnv'
+         newDeclGroups = concatMap T.mDecls newModules
+         newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+                                        (ME.loadedNominalTypes modEnv)
+
+     newTermEnv <-
+       do oldCryEnv <- mkCryEnv env
+          cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
+          newCryEnv <- C.importTopLevelDeclGroups
+                        sc C.defaultPrimitiveOptions cEnv newDeclGroups
+          return (C.envE newCryEnv)
+
+     return ( m
+            , env{ eModuleEnv = modEnv'
+                 , eTermEnv   = newTermEnv
+                 , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
+                 }
+            )
+
+checkNotParameterized :: T.Module -> IO ()
+checkNotParameterized m =
+  when (T.isParametrizedModule m) $
+    fail $ unlines [ "Cannot load parameterized modules directly."
+                   , "Either use a ` import, or make a module instantiation."
+                   ]
 
 updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
 updateFFITypes m eTermEnv' eFFITypes' =
@@ -578,62 +717,18 @@ updateFFITypes m eTermEnv' eFFITypes' =
             "Cannot find foreign function in term environment: " <> Text.pack (show nm)
         ]
 
--- | bindCryptolModule - ad hoc function called when `D <-cryptol_load` is seen
---     on the command line.
---
---   FIXME:
---    - submodules are not handled correctly below.
---    - the code is duplicating functionality that we have with `importModule`
---   TODO:
---    - new design in PR #2593 (addressing issue #2569) should replace
---      this function so that the fundamental work is done via `importModule`.
 
-bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
-bindCryptolModule (modName, CryptolModule sm tm) env =
-  env { eExtraNames = flip (foldr addName) (Map.keys tm') $
-                      flip (foldr addTSyn) (Map.keys sm) $
-                      flip (foldr addSubModule) (Map.keys tm') $
-                      eExtraNames env
-      , eExtraTSyns = Map.union sm (eExtraTSyns env)
-      , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
-      , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
-      }
-  where
-    -- | `tm'` is the typed terms from `tm` that have Cryptol schemas
-    tm' = Map.mapMaybe f tm
-          where
-          f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
-          f _                                 = Nothing
+---- import --------------------------------------------------------------------
 
-    addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-
-    addSubModule name = MN.shadowing (MN.singletonNS C.NSModule (P.mkQual modName (MN.nameIdent name)) name)
-
-    addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
-
--- | NOTE: this is only used in the "cryptol_extract" primitive.
-extractDefFromCryptolModule :: CryptolModule -> Text -> IO TypedTerm
-extractDefFromCryptolModule (CryptolModule _ tm) name =
-  case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-    Just t  -> return t
-    Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
-               -- FIXME: unfortunate we have lost the name of the module.
-
-    -- FIXME: bug: we can't access definitions in submodules.
-    -- FIXME: this is ad hoc, somehow invoke parse for name, or the like?
-
-
---------------------------------------------------------------------------------
-
--- | @'importModule' sc env src as vis imps@ - extend the Cryptol
+-- | @'importCryptolModule' sc env src as vis imps@ - extend the Cryptol
 --   environment with a module.  Closely mirrors the sawscript command "import".
 --
 -- NOTE:
---  - the module can be qualified or not (per 'as' argument).  per
---  - 'vis' we can import public definitions or *all* (i.e., internal
+--  - the module can be qualified or not (per 'as' argument).
+--  - per 'vis' we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
 
-importModule ::
+importCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
@@ -642,56 +737,28 @@ importModule ::
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importModule sc env src as vis imps = do
-  let modEnv = eModuleEnv env
-  (mtop, modEnv') <- liftModuleM modEnv $
-    case src of
-      Left path -> MB.loadModuleByPath True path
-      Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
-  m <- case mtop of
-         T.TCTopModule mod'  -> pure mod'
-         T.TCTopSignature {} ->
-           fail "Expected a module but found an interface."
+importCryptolModule sc env src as vis imps =
+  do
+  (mod', env') <- loadAndTranslateModule sc env src
+  return $ env'{ eImports = mkImport vis (locatedUnknown (T.mName mod')) as imps
+                            : eImports env
+               }
 
-  checkNotParameterized m
+mkImport :: ImportVisibility
+         -> P.Located C.ModName
+         -> Maybe C.ModName
+         -> Maybe T.ImportSpec
+         -> (ImportVisibility, T.Import)
+mkImport vis nm as imps = (vis, P.Import { T.iModule= nm
+                                         , T.iAs    = as
+                                         , T.iSpec  = imps
+                                         , T.iInst  = Nothing
+                                         , T.iDoc   = Nothing
+                                         }
+                          )
 
-  -- Regenerate SharedTerm environment:
-  let oldModNames   = map ME.lmName
-                    $ ME.lmLoadedModules
-                    $ ME.meLoadedModules modEnv
-      isNew m'      = T.mName m' `notElem` oldModNames
-      newModules    = filter isNew
-                    $ map ME.lmModule
-                    $ ME.lmLoadedModules
-                    $ ME.meLoadedModules modEnv'
-      newDeclGroups = concatMap T.mDecls newModules
-      newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
-                                     (ME.loadedNominalTypes modEnv)
 
-  newTermEnv <-
-    do oldCryEnv <- mkCryEnv env
-       cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-       newCryEnv <- C.importTopLevelDeclGroups
-                      sc C.defaultPrimitiveOptions cEnv newDeclGroups
-       return (C.envE newCryEnv)
-
-  let newImport = (vis, P.Import { T.iModule= locate $ T.mName m
-                                 , T.iAs    = as
-                                 , T.iSpec  = imps
-                                 , T.iInst  = Nothing
-                                 , T.iDoc   = Nothing
-                                 }
-                  )
-      -- XXX: it would be better to have the real position, but it
-      -- seems to have been thrown away on the Cryptol side.
-      locate x = P.Located P.emptyRange x
-
-  return $
-    env{ eModuleEnv = modEnv'
-       , eTermEnv   = newTermEnv
-       , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-       , eImports   = newImport : eImports env
-       }
+---- Binding -------------------------------------------------------------------
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -743,6 +810,7 @@ bindInteger (ident, n) env =
     (name, env') = bindIdent ident env
     tysyn = T.TySyn name [] [] (T.tNum n) Nothing
 
+
 --------------------------------------------------------------------------------
 
 meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
@@ -779,7 +847,6 @@ resolveIdentifier env nm =
        case res of
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
-
 
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
@@ -847,7 +914,7 @@ parseDecls sc env input = do
     (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
 
     -- Create a Module to contain the declarations
-    let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
+    let rmodule = P.Module { P.mName = locatedUnknown interactiveName
                            , P.mDef  = P.NormalModule rdecls
                            , P.mInScope = mempty
                            , P.mDocTop = Nothing
@@ -928,19 +995,35 @@ declareName env mname input = do
 typeNoUser :: T.Type -> T.Type
 typeNoUser t =
   case t of
-    T.TCon tc ts   -> T.TCon tc (map typeNoUser ts)
-    T.TVar {}      -> t
-    T.TUser _ _ ty -> typeNoUser ty
-    T.TRec fields  -> T.TRec (fmap typeNoUser fields)
+    T.TCon tc ts     -> T.TCon tc (map typeNoUser ts)
+    T.TVar {}        -> t
+    T.TUser _ _ ty   -> typeNoUser ty
+    T.TRec fields    -> T.TRec (fmap typeNoUser fields)
     T.TNominal nt ts -> T.TNominal nt (fmap typeNoUser ts)
 
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 
-------------------------------------------------------------
+
+---- Local Utility Functions ---------------------------------------------------
+
+noLoc :: Text -> InputText
+noLoc x = InputText
+            { inpText = x
+            , inpFile = "(internalUse)"
+            , inpLine = 1
+            , inpCol  = 1
+            }
+
+
+locatedUnknown :: a -> P.Located a
+locatedUnknown x = P.Located P.emptyRange x
+  -- XXX: it would be better to have the real position, but it
+  -- seems to have been thrown away on the Cryptol side in the uses
+  -- of this function.
 
 liftModuleM ::
-  (?fileReader :: FilePath -> IO ByteString) =>
+ (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp solver = MM.ModuleInput {

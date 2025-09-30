@@ -27,15 +27,15 @@ main =
      let ?fileReader = BS.readFile
      cenv0 <- CEnv.initCryptolEnv sc
      putStrLn "Translated Cryptol.cry!"
-     cenv1 <- CEnv.importModule sc cenv0 (Right N.floatName) Nothing CEnv.OnlyPublic Nothing
+     cenv1 <- CEnv.importCryptolModule sc cenv0 (Right N.floatName) Nothing CEnv.OnlyPublic Nothing
      putStrLn "Translated Float.cry!"
-     cenv2 <- CEnv.importModule sc cenv1 (Right N.arrayName) Nothing CEnv.OnlyPublic Nothing
+     cenv2 <- CEnv.importCryptolModule sc cenv1 (Right N.arrayName) Nothing CEnv.OnlyPublic Nothing
      putStrLn "Translated Array.cry!"
-     cenv3 <- CEnv.importModule sc cenv2 (Right N.suiteBName) Nothing CEnv.OnlyPublic Nothing
+     cenv3 <- CEnv.importCryptolModule sc cenv2 (Right N.suiteBName) Nothing CEnv.OnlyPublic Nothing
      putStrLn "Translated SuiteB.cry!"
-     cenv4 <- CEnv.importModule sc cenv3 (Right N.primeECName) Nothing CEnv.OnlyPublic Nothing
+     cenv4 <- CEnv.importCryptolModule sc cenv3 (Right N.primeECName) Nothing CEnv.OnlyPublic Nothing
      putStrLn "Translated PrimeEC.cry!"
-     cenv5 <- CEnv.importModule sc cenv4 (Right N.preludeReferenceName) Nothing CEnv.OnlyPublic Nothing
+     cenv5 <- CEnv.importCryptolModule sc cenv4 (Right N.preludeReferenceName) Nothing CEnv.OnlyPublic Nothing
      putStrLn "Translated Reference.cry!"
      cenv6 <- CEnv.parseDecls sc cenv5 (CEnv.InputText superclassContents "superclass.cry" 1 1)
      putStrLn "Translated superclass.cry!"

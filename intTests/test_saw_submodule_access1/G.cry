@@ -1,0 +1,6 @@
+submodule M where
+  x = 0x02
+
+import submodule M as Q::R
+
+y = Q::R::x
