@@ -65,7 +65,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorElimTypes
   , scRecursorRetTypeType
   , scRecursorAppType
   , scRecursorType
@@ -1070,32 +1069,6 @@ ctxReduceRecursor_ sc r fi args0_argCtx =
          body <- scRecursorApp sc r ixs x_zs
          scAbstractExts sc zs_ctx body
 
--- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
--- function @p_ret@ of type
---
--- > (x1::ix1) -> .. -> (xm::ixm) -> d p1 .. pn x1 .. xm -> Type i
---
--- that computes a return type from type indices for @d@ and an element of @d@
--- for those indices, return the requires types of elimination functions for
--- each constructor of @d@. See the documentation of the 'Ctor' type and/or the
--- 'ctxCtorElimType' function for more details.
-scRecursorElimTypes ::
-  SharedContext ->
-  Name ->
-  [Term] ->
-  Term ->
-  IO [(Name, Term)]
-scRecursorElimTypes sc d params p_ret =
-  do mm <- scGetModuleMap sc
-     case lookupVarIndexInMap (nameIndex d) mm of
-       Just (ResolvedDataType dt) ->
-         do forM (dtCtors dt) $ \ctor ->
-              do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-                 return (ctorName ctor, elim_type)
-       _ ->
-         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
-
-
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
 --
@@ -1147,9 +1120,7 @@ scRecursorAppType sc dt params motive =
 -- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
 scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
-  do let d = dtName dt
-
-     param_vars <- traverse (scVariable sc) (dtParams dt)
+  do param_vars <- traverse (scVariable sc) (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
@@ -1158,11 +1129,13 @@ scRecursorType sc dt s =
      motive_var <- scVariable sc motive_ec
 
      -- Compute the types of the elimination functions
-     elims_tps <- scRecursorElimTypes sc d param_vars motive_var
+     elims_tps <-
+       forM (dtCtors dt) $ \ctor ->
+       ctorElimTypeFun ctor param_vars motive_var >>= scWhnf sc
 
      scGeneralizeExts sc (dtParams dt) =<<
        scGeneralizeExts sc [motive_ec] =<<
-       scFunAll sc (map snd elims_tps) =<<
+       scFunAll sc elims_tps =<<
        scRecursorAppType sc dt param_vars motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
