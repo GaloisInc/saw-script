@@ -840,7 +840,6 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
     -- constructor argument variables
@@ -873,7 +872,6 @@ scBuildCtor sc d c arg_struct =
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorElimTypeFun = \ps p_ret -> elim_tp_fun ps p_ret
       , ctorIotaTemplate  = iota_red
       , ctorIotaReduction = iota_fun
       }
@@ -949,30 +947,6 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
               appliedCtor <- scConstApply sc c (params ++ prevs)
               scApply sc p_ret_ixs appliedCtor
      helper [] ctorArgs
-
--- | Build a function that substitutes parameters and a @p_ret@ return type
--- function into the type of an eliminator, as returned by 'ctxCtorElimType',
--- for the given constructor. We return the substitution function in the monad
--- so that we only call 'ctxCtorElimType' once but can call the function many
--- times, in order to amortize the overhead of 'ctxCtorElimType'.
-mkCtorElimTypeFun ::
-  SharedContext ->
-  Name {- ^ data type name -} ->
-  Name {- ^ constructor name -} ->
-  CtorArgStruct ->
-  IO ([Term] -> Term -> IO Term)
-mkCtorElimTypeFun sc d c argStruct =
-  do -- Use de Bruijn variable for p_ret so we can instantiate it later
-     -- NOTE: This is kind of gross, because the p_ret in the callback
-     -- argument below does not always have the same type (it is as
-     -- computed by scRecursorRetTypeType, but the return sort may vary)
-     p_ret_var <- scLocalVar sc 0
-     ctxElimType <- ctxCtorElimType sc d c p_ret_var argStruct
-     let vs = map ecVarIndex (ctorParams argStruct)
-     return $ \params p_ret ->
-       do t <- instantiateVarList sc 0 [p_ret] ctxElimType
-          let subst = IntMap.fromList (zip vs params)
-          scWhnf sc =<< scInstantiateExt sc subst t
 
 -- | Zip two lists of equal length, but return 'Nothing' if the
 -- lengths are different.
@@ -1120,7 +1094,9 @@ scRecursorAppType sc dt params motive =
 -- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
 scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
 scRecursorType sc dt s =
-  do param_vars <- traverse (scVariable sc) (dtParams dt)
+  do let d = dtName dt
+
+     param_vars <- traverse (scVariable sc) (dtParams dt)
 
      -- Compute the type of the motive function, which has the form
      -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
@@ -1131,7 +1107,7 @@ scRecursorType sc dt s =
      -- Compute the types of the elimination functions
      elims_tps <-
        forM (dtCtors dt) $ \ctor ->
-       ctorElimTypeFun ctor param_vars motive_var >>= scWhnf sc
+       ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
      scGeneralizeExts sc (dtParams dt) =<<
        scGeneralizeExts sc [motive_ec] =<<
