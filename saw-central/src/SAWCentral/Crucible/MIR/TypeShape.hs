@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 -- | The 'TypeShape' data type and related utilities.
 module SAWCentral.Crucible.MIR.TypeShape
@@ -385,27 +386,28 @@ fieldShapeMirTy (OptField shp) = shapeMirTy shp
 -- type.  For example, if a Cryptol function expects [3][8], we could map
 -- it to a Rust function that either expects `[u8;3]`, or `&[u8]` with a
 -- dynamic check that it has 3 elements.
-data CryTermAdaptor =
-    NoAdapt                      -- ^ Use default translation
-  | AdaptTuple [CryTermAdaptor]  -- ^ Adapt a tuple
-  | AdaptArray CryTermAdaptor    -- ^ Adapt an array
-  | AdaptDerefSlice Integer
+data CryTermAdaptor a =
+    NoAdapt                        -- ^ Use default translation
+  | AdaptTuple [CryTermAdaptor a]  -- ^ Adapt a tuple
+  | AdaptArray (CryTermAdaptor a)  -- ^ Adapt an array
+  | AdaptDerefSlice a
     -- ^ A reference to a slice.  At the moment we only support slices of
     -- primitve types (i.e., no further references in the elements)
     -- so we don't need further adaptors.
+    deriving (Functor, Foldable, Traversable)
 
-isCryNoAdapt :: CryTermAdaptor -> Bool
+isCryNoAdapt :: CryTermAdaptor a -> Bool
 isCryNoAdapt ada =
   case ada of
     NoAdapt -> True
     _       -> False
 
-adaptTuple :: [CryTermAdaptor] -> CryTermAdaptor
+adaptTuple :: [CryTermAdaptor a] -> CryTermAdaptor a
 adaptTuple as
   | all isCryNoAdapt as = NoAdapt
   | otherwise = AdaptTuple as
 
-adaptArray :: CryTermAdaptor -> CryTermAdaptor
+adaptArray :: CryTermAdaptor a -> CryTermAdaptor a
 adaptArray a
   | isCryNoAdapt a = NoAdapt
   | otherwise = AdaptArray a
@@ -424,12 +426,12 @@ shapeToTerm sc = shapeToTerm' sc NoAdapt
 shapeToTerm' :: forall tp m.
     (MonadIO m, MonadFail m) =>
     SAW.SharedContext ->
-    CryTermAdaptor ->
+    CryTermAdaptor Integer ->
     TypeShape tp ->
     m SAW.Term
 shapeToTerm' sc = go
   where
-    go :: forall tp'. CryTermAdaptor -> TypeShape tp' -> m SAW.Term
+    go :: forall tp'. CryTermAdaptor Integer -> TypeShape tp' -> m SAW.Term
     go NoAdapt (UnitShape _) = liftIO $ SAW.scUnitType sc
     go NoAdapt (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
     go NoAdapt (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
@@ -461,7 +463,7 @@ shapeToTerm' sc = go
         n' <- SAW.scNat sc (fromIntegral n)
         SAW.scVecType sc n' ty
 
-    goAgElem :: CryTermAdaptor -> AgElemShape -> m SAW.Term
+    goAgElem :: CryTermAdaptor Integer -> AgElemShape -> m SAW.Term
     goAgElem ada (AgElemShape _ _ shp) = go ada shp
 
 

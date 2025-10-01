@@ -26,6 +26,7 @@ import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Set as Set
+import Data.Functor.Const
 
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
@@ -34,8 +35,11 @@ import Data.Parameterized.TraversableFC
 
 import qualified What4.Expr.Builder as W4
 import qualified What4.Partial as W4
+import qualified What4.Interface as W4
+import qualified Data.BitVector.Sized as BV
 
 import Cryptol.TypeCheck.AST as Cry
+import qualified Cryptol.TypeCheck.Subst as Cry
 import Cryptol.Utils.Ident as Cry
 import Cryptol.Utils.PP as Cry
 
@@ -244,14 +248,14 @@ loadCryptolFunc col sig modulePath name = do
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
         SAW.InputText name "<string>" 1 1
 
-    adapt <-
-      case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
+    args <-
+      case typecheckFnSig sig argShps (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
-        Right adapt -> pure adapt
+        Right ok -> pure ok
 
     let fnName = "cryptol_" <> modulePath <> "_" <> name
     return $ LoadedCryptolFunc argShps retShp $
-        cryptolRun (Text.unpack fnName) adapt argShps retShp (SAW.ttTerm tt)
+        cryptolRun (Text.unpack fnName) args retShp (SAW.ttTerm tt)
 
   where
     listToCtx :: forall k0 (f0 :: k0 -> Kind.Type). [Some f0] -> Some (Assignment f0)
@@ -274,37 +278,63 @@ cryptolRun ::
     forall sym p t fs rtp r args ret .
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     String ->
-    [CryTermAdaptor] ->
-    Assignment TypeShape args ->
+    CryFunArgs args ->
     TypeShape ret ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
-cryptolRun name argAdapt argShps retShp funcTerm = do
+cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm = do
+    let tpArgsSize      = Ctx.size tpArgs
+        normArgsSize    = Ctx.size normArgs
+
     sym <- getSymInterface
 
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
     let sc = mirSharedContext (sym ^. W4.userState)
-        
-        -- The length of the adaptors is assumes to match the lenghts of the
-        -- other arguments.
-        doArgs ::
-          forall ctx.
-          [CryTermAdaptor] ->
-          Assignment TypeShape ctx ->
-          Assignment (RegEntry sym) ctx ->
-          [SAW.Term] ->
-          OverrideSim (p sym) sym MIR rtp args r [SAW.Term]
-        doArgs ada shpA valA args =
-          case (ada, Ctx.viewAssign shpA, Ctx.viewAssign valA) of
-            (a : as, Ctx.AssignExtend moreShps shp, Ctx.AssignExtend moreVals (RegEntry _ val)) ->
-                do t <- regToTermWithAdapt sym sc name w4VarMapRef a shp val
-                   doArgs as moreShps moreVals (t : args)
-            _ -> pure args
-    argTerms <- doArgs argAdapt argShps argsCtx []
-    appTerm  <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
-    w4VarMap <- liftIO $ readIORef w4VarMapRef
+    let
+      getSizeArg ::
+        forall ty. CryFunTArg ty -> RegEntry sym ty ->
+        OverrideSim (p sym) sym MIR rtp args r (Const ((Cry.TParam, Cry.Type), SAW.Term) ty)
+      getSizeArg (CryFunTArg tp) (RegEntry _ val) =
+        case BV.asUnsigned <$> W4.asBV val of
+          Just conc ->
+            liftIO $
+              do
+                i    <- SAW.scNat sc (fromInteger conc)
+                term <- SAW.scGlobalApply sc "Cryptol.TCNum" [i]
+                pure (Const ((tp, Cry.tNum conc), term))
+          Nothing ->
+            do
+              let nm = show (maybe "?" pp (Cry.tpName tp)) -- the "?" shouldn't happen
+              fail ("Size parameter " ++ nm ++ " is not a concrete number")
+
+    (tpBinds,tpTerms) <-
+      unzip . toListFC getConst <$>
+      Ctx.zipWithM getSizeArg tpArgs (Ctx.take tpArgsSize normArgsSize argsCtx)
+    let su     = Cry.listParamSubst tpBinds
+        bad    = filter (not . Cry.pIsTrue . Cry.apSubst su) ctrs
+    unless (null bad) $ fail $ unlines $
+      "Unsatisfied size parameter constraints:" :
+      [ "  " ++ show (pp b) | b <- bad ]
+
+    let 
+      getNormArg ::
+        forall ty. CryFunArg ty -> RegEntry sym ty ->
+        OverrideSim (p sym) sym MIR rtp args r (Const SAW.Term ty)
+      getNormArg (CryFunArg ada shp) (RegEntry _ val) =
+        case traverse (Cry.tIsNum . Cry.apSubst su) ada of
+          Just adaI -> Const <$> regToTermWithAdapt sym sc name w4VarMapRef adaI shp val
+          Nothing   -> fail "Invalid size parameter" -- Shouldn't happen
+
+    argTerms <-
+      toListFC getConst <$>
+      Ctx.zipWithM getNormArg normArgs (Ctx.drop tpArgsSize normArgsSize argsCtx)
+
+
+    let allTerms = tpTerms ++ argTerms
+    appTerm  <- liftIO (SAW.scApplyAll sc funcTerm allTerms)
+    w4VarMap <- liftIO (readIORef w4VarMapRef)
     liftIO $ termToReg sym w4VarMap appTerm retShp
 
 munge :: forall sym t fs tp0.
@@ -382,32 +412,147 @@ munge sym shp0 rv0 = do
     go shp0 rv0
 
 
+-- | Information about a typechecked Cyrptol import
+data CryFunArgs args where
+  CryFunArgs :: CryFunArgs' tps ps -> CryFunArgs (tps <+> ps)
 
--- | Check if the Rust type macthes the Cryptol override.
--- If successful, returns a list of "adaptors" which contain
--- information about dynamic checking we might need to do on the
--- arguments to match them up with the Cryptol.
+-- | Information about a typechecked Cyrptol import
+data CryFunArgs' tps ps where
+  CryFunArgs' ::
+    Assignment CryFunTArg tps {- ^ Size polymorphic parameters needed by the function -} ->
+    [Cry.Prop] {- ^ Constraints on the parameters -} ->
+    Assignment CryFunArg ps {- ^ Dynamic checks to perform on the ordinary function arguments -} ->
+    CryFunArgs' tps ps
+
+
+noCryFunArgs :: [Cry.Prop] -> CryFunArgs' EmptyCtx EmptyCtx
+noCryFunArgs ctrs = CryFunArgs' Ctx.empty ctrs Ctx.empty
+
+addCryFunTArg ::
+  CryFunArgs' tps ps -> CryFunTArg t -> CryFunArgs' (tps ::> t) ps
+addCryFunTArg (CryFunArgs' tps cs as) tp = CryFunArgs' (tps :> tp) cs as
+
+addCryFunArg :: CryFunArgs' tps ps -> CryFunArg t -> CryFunArgs' tps (ps ::> t)
+addCryFunArg (CryFunArgs' tps cs as) a = CryFunArgs' tps cs (as :> a)
+
+data CryFunTArg t where
+  CryFunTArg :: 1 <= n => Cry.TParam -> CryFunTArg (BVType n)
+
+data CryFunArg t = CryFunArg (CryTermAdaptor Cry.Type) (TypeShape t)
+
+data SplitAssign f ctx where
+  SplitAssign :: Assignment f a -> Assignment f b -> SplitAssign f (a <+> b) 
+
+-- | Split an assignment into two parts.  The @Int@ is the length of
+-- of the *right* component
+splitAssign :: Int -> Assignment f ctx -> Maybe (SplitAssign f ctx)
+splitAssign n asgn
+  | n < 0  = Nothing
+  | n == 0 = Just (SplitAssign asgn Ctx.empty)
+  | otherwise =
+    do
+      Ctx.AssignExtend more a <- pure (Ctx.viewAssign asgn)
+      SplitAssign left right  <- splitAssign (n-1) more
+      pure (SplitAssign left (right Ctx.:> a))
+      
+
+
+-- | Check if the Rust type matches the Cryptol override.
 typecheckFnSig ::
+    forall args.
     M.FnSig ->
-    [Some TypeShape] ->
+    Assignment TypeShape args ->
     Some TypeShape ->
     SAW.TypedTermType ->
-    Either String [CryTermAdaptor]
-typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] ty0)) =
-    go 0 argShps0 ty0
-  where
-    go :: Int -> [Some TypeShape] -> Cry.Type -> Either String [CryTermAdaptor]
-    go _ [] ty | Some retShp' <- retShp = [] <$ goOne False "return value" retShp' ty
-    go i (Some argShp : argShps) (Cry.tNoUser -> Cry.TCon (Cry.TC Cry.TCFun) [argTy, ty']) = do
-        arg <- goOne True ("argument " ++ show i) argShp argTy
-        as <- go (i + 1) argShps ty'
-        pure (arg : as)
-    go i argShps _ = Left $
-        "not enough arguments: Cryptol function signature " ++ show (Cry.pp sch) ++
-        " has " ++ show i ++ " arguments, but Rust signature " ++ M.fmt fnSig ++
-        " requires " ++ show (i + length argShps)
+    Either String (CryFunArgs args)
+typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
+  | not (null badTPs) =
+    Left $ unlines [
+      "Cryptol functions with non-numeric generic arguments are not supported:",
+      "Cryptol type:",
+      "  " ++ show (pp sch)
+      ]
 
-    goOne :: forall tp. Bool -> String -> TypeShape tp -> Cry.Type -> Either String CryTermAdaptor
+  | Just (SplitAssign tpShps normArgShps) <- splitAssign normArgNum argShps0 =
+    case cryArgs normArgNum [] ty0 of
+      Left as ->
+        Left $ unlines [
+          "Too many arguments:", 
+          "  Expected: " ++ show (length as),
+          "  Provided: " ++ show normArgNum ++ 
+             (case tpArgNum of
+                0 -> ""
+                1 -> " (and 1 size argument)"
+                _ -> " (and " ++ show tpArgNum ++ " size arguments)"
+              ),
+          "Cryptol type:",
+          "  " ++ show (Cry.pp sch),
+          "Rust type:",
+          "  " ++ M.fmt fnSig
+        ]
+      Right (as,b) ->
+        CryFunArgs <$> go (reverse sizePs) tpShps normArgNum as normArgShps b
+  
+  | otherwise =
+    Left $ unlines [
+      "Not enough size arguments:",
+      "  Expected: " ++ show tpArgNum,
+      "  Provided: " ++ show haveArgNum,
+      "Cryptol type:",
+      "  " ++ show (Cry.pp sch),
+      "Rust type:",
+      "  " ++ M.fmt fnSig
+    ]
+
+
+  where
+    badTPs      = filter ((Cry.KNum /=) . Cry.kindOf) sizePs
+    tpArgNum    = length sizePs
+    haveArgNum  = Ctx.sizeInt (Ctx.size argShps0)
+    normArgNum  = haveArgNum - tpArgNum
+
+    cryArgs n args ty
+      | n < 0  = Left args
+      | n == 0 = Right (args,ty)
+      | Just (a,b) <- Cry.tIsFun ty = cryArgs (n-1) (a : args) b
+      | otherwise = Left args   
+
+    go ::
+      forall tpNum normNum.
+      [Cry.TParam] ->
+      Assignment TypeShape tpNum ->
+      Int ->
+      [Cry.Type] ->
+      Assignment TypeShape normNum ->
+      Cry.Type ->
+      Either String (CryFunArgs' tpNum normNum)
+    go tps tpArgs argNum normsR normArgs retTy =
+      case Ctx.viewAssign tpArgs of
+        Ctx.AssignEmpty ->
+          case Ctx.viewAssign normArgs of
+            Ctx.AssignEmpty ->
+              noCryFunArgs ps <$ goOne False "return value" retShp retTy
+            Ctx.AssignExtend normArgs' tyShp ->
+              case normsR of
+                ty : normsR' ->
+                    do ada <- goOne True ("argument " ++ show argNum) tyShp ty
+                       rest <- go tps tpArgs (argNum - 1) normsR' normArgs' retTy
+                       pure (addCryFunArg rest (CryFunArg ada tyShp))
+                _ -> error "Bug: assignment/type mismatch for normal arguments"
+        
+        Ctx.AssignExtend tpArgs' tpShp ->
+          case (tpShp, tps) of
+            (PrimShape _ (BaseBVRepr _), tp : tps') ->
+              do
+                rest <- go tps' tpArgs' argNum normsR normArgs retTy
+                pure (addCryFunTArg rest (CryFunTArg tp))
+            _ -> Left $ unlines [
+              "Invalid size argument:",
+              "  Expected: an unsigned numeric type",
+              "  Actual: " ++ M.fmt (shapeMirTy tpShp)
+              ] 
+    
+    goOne :: forall tp. Bool -> String -> TypeShape tp -> Cry.Type -> Either String (CryTermAdaptor Cry.Type)
     goOne isArg desc shp ty = case (shp, ty) of
         (_, Cry.TUser _ _ ty') -> goOne isArg desc shp ty'
         (UnitShape _, Cry.TCon (Cry.TC (Cry.TCTuple 0)) []) -> Right NoAdapt
@@ -435,24 +580,19 @@ typecheckFnSig fnSig argShps0 retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] 
             "array length " ++ show n' ++ " does not match " ++ show n
         (SliceShape _refTy elTy M.Immut elTyRepr, _)
            | not isArg -> typeErr desc shp ty "Slice references may appear only in parameters"
-           | Just (len,cryEl) <- Cry.tIsSeq ty
-           , Just n <- Cry.tIsNum len ->
+           | Just (len,cryEl) <- Cry.tIsSeq ty ->
             case asBaseType elTyRepr of
-              AsBaseType bt -> AdaptDerefSlice n <$ goOne isArg desc (PrimShape elTy bt) cryEl
+              AsBaseType bt -> AdaptDerefSlice len <$ goOne isArg desc (PrimShape elTy bt) cryEl
               _ -> typeErr desc shp ty
                    "slices to references only support elements of base types"
 
         _ -> typeErr desc shp ty ""
 
-    typeErr :: forall tp. String -> TypeShape tp -> Cry.Type -> String -> Either String CryTermAdaptor
+    typeErr :: forall tp. String -> TypeShape tp -> Cry.Type -> String -> Either String (CryTermAdaptor Cry.Type)
     typeErr desc shp ty extra = Left $
             "type mismatch in " ++ desc ++ ": Cryptol type " ++ show (Cry.pp ty) ++
             " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
-
-typecheckFnSig _ _ _ (SAW.TypedTermSchema sch) = Left $
-    "polymorphic Cryptol functions are not supported (got signature: " ++
-        show (Cry.pp sch) ++ ")"
 
 typecheckFnSig _ _ _ ttt = Left $
     "internal error: unsupported TypedTermType variant: " ++ show ttt

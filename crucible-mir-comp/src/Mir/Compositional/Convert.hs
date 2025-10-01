@@ -322,14 +322,14 @@ regToTermWithAdapt :: forall m p sym t fs tp0 rtp args ret.
     SAW.SharedContext ->
     String ->
     IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
-    CryTermAdaptor ->
+    CryTermAdaptor Integer ->
     TypeShape tp0 ->
     RegValue sym tp0 ->
     m SAW.Term
 regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
   where
     go :: forall tp.
-        CryTermAdaptor ->
+        CryTermAdaptor Integer ->
         TypeShape tp ->
         RegValue sym tp ->
         m SAW.Term
@@ -375,7 +375,7 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
 
     goVector :: forall tp.
-        CryTermAdaptor ->
+        CryTermAdaptor Integer ->
         TypeShape tp ->
         MirVector sym tp ->
         m [SAW.Term]
