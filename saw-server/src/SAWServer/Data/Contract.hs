@@ -17,6 +17,9 @@ module SAWServer.Data.Contract
 
 import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?), (.!=))
+import Data.Bifoldable (Bifoldable(..))
+import Data.Bifunctor (Bifunctor(..))
+import Data.Bitraversable (Bitraversable(..), bifoldMapDefault, bimapDefault)
 import Data.Text (Text)
 
 import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
@@ -50,12 +53,36 @@ data Contract ty cryptolExpr =
     }
     deriving stock (Functor, Foldable, Traversable)
 
+instance Bifoldable Contract where
+  bifoldMap = bifoldMapDefault
+
+instance Bifunctor Contract where
+  bimap = bimapDefault
+
+instance Bitraversable Contract where
+  bitraverse f g (Contract x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14) =
+    Contract x0
+      <$> traverse (traverse f) x1
+      <*> traverse g x2
+      <*> traverse (traverse f) x3
+      <*> traverse (traverse g) x4
+      <*> traverse (bitraverse f g) x5
+      <*> traverse (bitraverse f g) x6
+      <*> traverse (bitraverse f g) x7
+      <*> traverse (traverse f) x8
+      <*> traverse g x9
+      <*> traverse (traverse f) x10
+      <*> traverse (traverse g) x11
+      <*> traverse (bitraverse f g) x12
+      <*> traverse (bitraverse f g) x13
+      <*> traverse (bitraverse f g) x14
+
 data ContractVar ty =
   ContractVar
     { contractVarServerName :: ServerName
     , contractVarName       :: Text
     , contractVarType       :: ty
-    }
+    } deriving stock (Functor, Foldable, Traversable)
 
 data Allocated ty =
   Allocated
@@ -63,7 +90,7 @@ data Allocated ty =
     , allocatedType       :: ty
     , allocatedMutable    :: Bool
     , allocatedAlignment  :: Maybe Int
-    }
+    } deriving stock (Functor, Foldable, Traversable)
 
 data PointsTo ty cryptolExpr =
   PointsTo
@@ -73,12 +100,39 @@ data PointsTo ty cryptolExpr =
     , condition         :: Maybe cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
+instance Bifoldable PointsTo where
+  bifoldMap = bifoldMapDefault
+
+instance Bifunctor PointsTo where
+  bimap = bimapDefault
+
+instance Bitraversable PointsTo where
+  bitraverse f g (PointsTo x0 x1 x2 x3) =
+    PointsTo
+      <$> bitraverse f g x0
+      <*> bitraverse f g x1
+      <*> traverse (traverse f) x2
+      <*> traverse g x3
+
 data PointsToBitfield ty cryptolExpr =
   PointsToBitfield
     { bfPointer   :: CrucibleSetupVal ty cryptolExpr
     , bfFieldName :: Text
     , bfPointsTo  :: CrucibleSetupVal ty cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
+
+instance Bifoldable PointsToBitfield where
+  bifoldMap = bifoldMapDefault
+
+instance Bifunctor PointsToBitfield where
+  bimap = bimapDefault
+
+instance Bitraversable PointsToBitfield where
+  bitraverse f g (PointsToBitfield x0 x1 x2) =
+    PointsToBitfield
+      <$> bitraverse f g x0
+      <*> pure x1
+      <*> bitraverse f g x2
 
 data CheckAgainstTag
   = TagCheckAgainstPointerType
