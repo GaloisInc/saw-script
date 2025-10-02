@@ -1535,32 +1535,6 @@ instantiateLocalVars sc f initialLevel t0 =
     go' _ tf@(Constant {}) = scTermF sc tf
     go' _ tf@(Variable {}) = scTermF sc tf
 
-instantiateVars :: SharedContext
-                -> ((Term -> IO Term) -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term)
-                -> DeBruijnIndex -> Term -> IO Term
-instantiateVars sc f initialLevel t0 =
-    do cache <- newCache
-       let ?cache = cache in go initialLevel t0
-  where
-    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-          DeBruijnIndex -> Term -> IO Term
-    go l (Unshared tf) =
-            go' l tf
-    go l (STApp{ stAppIndex = tidx, stAppTermF = tf}) =
-            useCache ?cache (tidx, l) (go' l tf)
-
-    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-           DeBruijnIndex -> TermF Term -> IO Term
-    go' l (Variable nm tp)  = f (go l) l (Left (EC nm tp))
-    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
-    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
-    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go l rhs)
-    go' l (LocalVar i)
-      | i < l     = scTermF sc (LocalVar i)
-      | otherwise = f (go l) l (Right i)
-    go' _ tf@(Constant {}) = scTermF sc tf
-
 -- | @incVars k j t@ increments free variables at least @k@ by @j@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
 incVars :: SharedContext
@@ -2783,26 +2757,13 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
         Constant (Name vidx n) -> (idxs, Map.insert vidx n names)
         _ -> foldl' go acc tf
 
--- | Instantiate some of the external constants.
---   Note: this replacement is _not_ applied recursively
---   to the terms in the replacement map; so external constants
---   in those terms will not be replaced.
+-- | Instantiate some of the named variables in the term.
+-- The 'IntMap' is keyed by 'VarIndex'.
+-- Note: The replacement is _not_ applied recursively
+-- to the terms in the substitution map.
 scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExt sc vmap
-  | all termIsClosed vmap = scInstantiateExtClosed sc vmap
-  | otherwise = instantiateVars sc fn 0
-  where fn r l (Left ec) =
-            case IntMap.lookup (ecVarIndex ec) vmap of
-               Just t  -> incVars sc 0 l t
-               Nothing -> scVariable sc =<< traverse r ec
-        fn _ _ (Right i) = scLocalVar sc i
-
--- | Internal variant of 'scInstantiateExt' that requires the
--- substituted terms to all be closed, i.e. they must not have any
--- loose de Bruijn indices.
-scInstantiateExtClosed :: SharedContext -> IntMap Term -> Term -> IO Term
-scInstantiateExtClosed sc vmap t0 =
-  do -- let vs = IntMap.keysSet vmap
+scInstantiateExt sc vmap t0 =
+  do let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
      let memo :: Term -> IO Term
          memo t =
@@ -2816,14 +2777,38 @@ scInstantiateExtClosed sc vmap t0 =
              case unwrapTermF t of
                FTermF ftf     -> scFlatTermF sc =<< traverse memo ftf
                App t1 t2      -> scTermF sc =<< App <$> memo t1 <*> memo t2
-               Lambda x t1 t2 -> scTermF sc =<< Lambda x <$> memo t1 <*> memo t2
-               Pi x t1 t2     -> scTermF sc =<< Pi x <$> memo t1 <*> memo t2
+               Lambda x t1 t2 ->
+                 do t1' <- memo t1
+                    (x', t2') <- goBinder x t1' t2
+                    scLambda sc x' t1' t2'
+               Pi x t1 t2 ->
+                 do t1' <- memo t1
+                    (x', t2') <- goBinder x t1' t2
+                    scPi sc x' t1' t2'
                LocalVar {} -> pure t
                Constant {} -> pure t
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
                    Nothing -> scVariable sc =<< traverse memo (EC nm tp)
+         goBinder :: VarName -> Term -> Term -> IO (VarName, Term)
+         goBinder x@(vnIndex -> i) t body
+           | IntSet.member i rangeVars =
+               -- Possibility of capture; rename bound variable.
+               do x' <- scFreshVarName sc (vnName x)
+                  var <- scVariable sc (EC x' t)
+                  let vmap' = IntMap.insert i var vmap
+                  body' <- scInstantiateExt sc vmap' body
+                  pure (x', body')
+           | IntMap.member i vmap =
+               -- Shadowing; remove entry from substitution.
+               do let vmap' = IntMap.delete i vmap
+                  body' <- scInstantiateExt sc vmap' body
+                  pure (x, body')
+           | otherwise =
+               -- No possibility of shadowing or capture.
+               do body' <- memo body
+                  pure (x, body')
      go t0
 
 -- | Abstract over the given list of external constants by wrapping
