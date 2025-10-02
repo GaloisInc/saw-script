@@ -484,7 +484,7 @@ typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall
     case cryArgs normArgNum [] ty0 of
       Left as ->
         Left $ unlines [
-          "Too many arguments:", 
+          "Too many Rust arguments:", 
           "  Expected: " ++ show (length as),
           "  Provided: " ++ show normArgNum ++ 
              (case tpArgNum of

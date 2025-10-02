@@ -5,7 +5,7 @@ failures:
 ---- size_poly_err3/<DISAMB>::test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/cryptol/size_poly_err3.rs:6:42: 6:81: error: in size_poly_err3/<DISAMB>::test[0]
-[Crux]   error loading "sum`{_,[8]}": Too many arguments:
+[Crux]   error loading "sum`{_,[8]}": Too many Rust arguments:
 [Crux]     Expected: 1
 [Crux]     Provided: 2 (and 1 size argument)
 [Crux]   Cryptol type:
