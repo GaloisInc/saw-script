@@ -390,13 +390,13 @@ fieldShapeMirTy (OptField shp) = shapeMirTy shp
 -- type checking, or `Intgeger`, once we instantiate a schema at a concrete
 -- type.
 data CryTermAdaptor a =
-    NoAdapt                        -- ^ Use default translation
-  | AdaptTuple [CryTermAdaptor a]  -- ^ Adapt a tuple
-  | AdaptArray (CryTermAdaptor a)  -- ^ Adapt an array
-  | AdaptDerefSlice a
-    -- ^ A reference to a slice.  At the moment we only support slices of
-    -- primitive types (i.e., no further references in the elements)
-    -- so we don't need further adaptors.
+    NoAdapt                               -- ^ Use default translation
+  | AdaptTuple [CryTermAdaptor a]         -- ^ Adapt a tuple
+  | AdaptArray (CryTermAdaptor a)         -- ^ Adapt an array
+  | AdaptDerefSlice M.Collection a (CryTermAdaptor a)
+    -- ^ A reference to a slice.
+    -- We also store the collection here so that we can convert MIR types
+    -- to typeshapes when we need to.
     deriving (Functor, Foldable, Traversable)
 
 isCryNoAdapt :: CryTermAdaptor a -> Bool
@@ -452,12 +452,9 @@ shapeToTerm' sc = go
                  _ -> fail "Expected an array Cryptol adaptor"
         ty <- go sub shp
         liftIO (mkVec n ty)
-    go (AdaptDerefSlice n) (SliceShape _ elT M.Immut tpr) =
-      case asBaseType tpr of
-        AsBaseType bt ->
-          do et <- go NoAdapt (PrimShape elT bt)
-             liftIO (mkVec n et)
-        NotBaseType -> fail "We only support reference to slices with base type elements"
+    go (AdaptDerefSlice col n ada) (SliceShape _ elT M.Immut tpr) =
+      do et <- go ada (tyToShapeEq col elT tpr) 
+         liftIO (mkVec n et)
     go _ada shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
 
     mkVec :: Integral a => a -> SAW.Term -> IO SAW.Term

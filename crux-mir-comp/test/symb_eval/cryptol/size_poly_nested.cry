@@ -1,0 +1,4 @@
+module test::symb_eval::cryptol::size_poly_nested where
+
+f: {m,n} (fin m, fin n) => [m][n][8] -> [8]
+f xs = sum (join xs)

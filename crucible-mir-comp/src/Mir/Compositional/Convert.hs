@@ -343,31 +343,30 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
             terms <- goVector a shp' vec
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
-        (AdaptDerefSlice n, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
+        (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
           case BV.asUnsigned <$> W4.asBV lenExpr of
             Nothing ->
               fail "Slice length is not statically known"
 
             Just n1
-              | AsBaseType baseT <- asBaseType tpr ->
+              | n /= n1 ->
+                fail (unlines [
+                  "Slice length mismatch:",
+                  "  Expected: " ++ show n,
+                  "  Actual  : " ++ show n1
+                ])
+              | otherwise ->
                 do
-                  unless (n == n1) (
-                    fail (unlines [
-                      "Slice length mismatch:",
-                      "  Expected: " ++ show n,
-                      "  Actual  : " ++ show n1
-                    ]))
+                  let elShp = tyToShapeEq col elT tpr
                   vals <-
                     forM [ 0 .. n - 1 ] $ \i ->
                       do
                         iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
                         elemPtr <- mirRef_offsetWrapSim mirPtr iExpr
                         r       <- readMirRefSim tpr elemPtr
-                        go NoAdapt (PrimShape elT baseT) r
-                  elTyTerm <- shapeToTerm' sc NoAdapt (PrimShape elT baseT)
+                        go elAda elShp r
+                  elTyTerm <- shapeToTerm' sc elAda elShp
                   liftIO (SAW.scVector sc elTyTerm vals)
-
-              | otherwise -> fail "Unsupported reference to slice, we only support base types"
 
             
                 

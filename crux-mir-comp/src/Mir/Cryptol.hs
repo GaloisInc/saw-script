@@ -250,7 +250,7 @@ loadCryptolFunc col sig modulePath name = do
         SAW.InputText name "<string>" 1 1
 
     args <-
-      case typecheckFnSig sig argShps (Some retShp) (SAW.ttType tt) of
+      case typecheckFnSig col sig argShps (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
         Right ok -> pure ok
 
@@ -461,12 +461,13 @@ splitAssign n asgn
 -- | Check if the Rust type matches the Cryptol override.
 typecheckFnSig ::
     forall args.
+    M.Collection ->
     M.FnSig ->
     Assignment TypeShape args ->
     Some TypeShape ->
     SAW.TypedTermType ->
     Either String (CryFunArgs args)
-typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
+typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
   | not (null badTPs) =
     Left $ unlines $ [
       "Cryptol functions with non-numeric type parameters are not supported:",
@@ -588,10 +589,7 @@ typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall
         (SliceShape _refTy elTy M.Immut elTyRepr, _)
            | not isArg -> typeErr desc shp ty "Slice references may appear only in parameters"
            | Just (len,cryEl) <- Cry.tIsSeq ty ->
-            case asBaseType elTyRepr of
-              AsBaseType bt -> AdaptDerefSlice len <$ goOne isArg desc (PrimShape elTy bt) cryEl
-              _ -> typeErr desc shp ty
-                   "slices to references only support elements of base types"
+             AdaptDerefSlice col len <$> goOne isArg desc (tyToShapeEq col elTy elTyRepr) cryEl
 
         _ -> typeErr desc shp ty ""
 
@@ -601,5 +599,5 @@ typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall
             " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
 
-typecheckFnSig _ _ _ ttt = Left $
+typecheckFnSig _ _ _ _ ttt = Left $
     "internal error: unsupported TypedTermType variant: " ++ show ttt
