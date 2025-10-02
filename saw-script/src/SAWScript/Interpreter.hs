@@ -3013,26 +3013,6 @@ primitives = Map.fromList
     , "for the function."
     ]
 
-  , prim "extract_uninterp" "[String] -> [String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
-    (pureVal extract_uninterp)
-    Experimental
-    [ "Given a list of names of functions to treat as uninterpreted and a term, find all occurrences"
-    , "of the named functions and extract them."
-    , ""
-    , "The first argument is the list of \'uninterpreted\' functions to extract."
-    , "The second argument is a list of values to treat as opaque; they will not be unfolded during evaluation."
-    , "The third argument is the term to extract from."
-    , ""
-    , "This operation will return a pair, consisting of a rewritten term and a list of replacements."
-    , "The rewritten term will have each fully-applied occurrence of the named functions replaced"
-    , "by a fresh constant of the return type of the function. The list of replacements consists"
-    , "of pairs (one for each named function) giving the name of that function and the replacement"
-    , "values for that function. The replacement values are a list of pairs of terms, one for each"
-    , "occurence that was replaced.  The first term in each  pair gives the fresh constant appearing"
-    , "in the rewritten term.  The second term will be a tuple containing the arguments to the"
-    , "replaced function."
-    ]
-
   , prim "is_convertible"  "Term -> Term -> TopLevel Bool"
     (pureVal isConvertiblePrim)
     Current
@@ -3917,7 +3897,7 @@ primitives = Map.fromList
     [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
     , "given list of names as uninterpreted."
     ]
-  
+
   , prim "w4_unint_rme" "[String] -> ProofScript ()"
     (pureVal w4_unint_rme)
     Current
@@ -5833,6 +5813,17 @@ primitives = Map.fromList
     , "section (after mir_execute_func). The effects of some MIRSetup"
     , "statements depend on whether they occur in the pre-state or post-state"
     , "section."
+    ]
+
+  , prim "mir_extract" "MIRModule -> String -> TopLevel Term"
+    (pureVal mir_extract)
+    Experimental
+    [ "Translate a MIR function directly to a Term. The parameters of the"
+    , "Term will be the parameters of the MIR function, and the return"
+    , "value will be the return value of the function. Only functions with"
+    , "the following argument and return types are currently supported:"
+    , "primitive integer types (e.g., u8 or i8), bool, char, arrays, and"
+    , "tuples."
     ]
 
   , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"

@@ -284,7 +284,7 @@ flattenSValue nm v = do
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        VFun _ _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
+        VFun {} -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
         _ -> fail $ "Cannot create uninterpreted function " ++ show nm ++ " with argument " ++ show v
 
 vWord :: SWord -> SValue
@@ -526,14 +526,14 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SPrim
 streamGetOp =
-  Prims.tvalFun   $ \tp ->
+  Prims.tvalFun   $ \_tp ->
   Prims.strictFun $ \xs ->
   Prims.strictFun $ \ix ->
   Prims.Prim $ case ix of
     VNat n -> lookupSStream xs n
     VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> panic "streamGetOp" ["Expected Nat value; got " <> Text.pack (show v)]
 
 
@@ -606,17 +606,16 @@ svIntMod a b = svSymbolicMerge KUnbounded True p (svRem a b) (svUNeg (svRem (svU
 ------------------------------------------------------------
 -- Ite ops
 
-muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
+muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") _ [TValue tp] []) c x y =
+muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
-                  muxBVal tp c xi yi
+                  muxBVal c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
-muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch; found " <> Text.pack (show tp)]
 
 ------------------------------------------------------------
 -- External interface
@@ -632,18 +631,17 @@ sbvSolveBasic sc addlPrims unintSet t = do
         | Set.member (nameIndex nm) unintSet =
           let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (extcns (EC vn ty))
         | otherwise                          = Nothing
-  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler mux
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType fnm _ body)
+    (VPiType _ body)
       -> return $
-         VFun fnm $ \x ->
+         VFun $ \x ->
            do x' <- force x
               (cws', suffix) <- flattenSValue nm x'
               t2 <- applyPiBody body (ready x')
@@ -724,11 +722,10 @@ sbvSATQuery sc addlPrims query =
                   let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
                   in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
-          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
           let primHandler = Sim.defaultPrimHandler
           let mux = Prims.lazyMuxValue prims
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler mux)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted primHandler mux)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

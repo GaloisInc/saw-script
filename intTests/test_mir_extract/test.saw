@@ -1,0 +1,49 @@
+enable_experimental;
+
+l <- mir_load_module "test.linked-mir.json";
+
+///// Basics
+
+example_unsigned <- mir_extract l "test::example_unsigned";
+prove_print z3 {{ \(x : [8]) -> example_unsigned x == zext (2 * x) }};
+
+example_signed <- mir_extract l "test::example_signed";
+prove_print z3 {{ \(x : [8]) -> example_signed x == sext (-(2 * x)) }};
+
+example_char <- mir_extract l "test::example_char";
+prove_print z3 {{ \(x : [32]) -> example_char x == x }};
+
+example_bool <- mir_extract l "test::example_bool";
+prove_print z3 {{ \(x : Bit) -> example_bool x == ~x }};
+
+example_array <- mir_extract l "test::example_array";
+prove_print z3 {{ \(x : [4][32]) -> example_array x == reverse x }};
+
+example_unit <- mir_extract l "test::example_unit";
+prove_print z3 {{ \(x : ()) -> example_unit x == x }};
+
+example_tuple <- mir_extract l "test::example_tuple";
+prove_print z3 {{ \(x : ([8], [16])) -> example_tuple x == (x.1, x.0) }};
+
+///// FFS
+
+ffs_ref <- mir_extract l "test::ffs_ref";
+ffs_imp <- mir_extract l "test::ffs_imp";
+ffs_musl <- mir_extract l "test::ffs_musl";
+ffs_bug <- mir_extract l "test::ffs_bug";
+
+print "Proving equivalence: ffs_ref == ffs_imp";
+let thm1 = {{ \x -> ffs_ref x == ffs_imp x }};
+prove_print z3 thm1;
+
+print "Proving equivalence: ffs_ref == ffs_musl";
+let thm2 = {{ \x -> ffs_ref x == ffs_musl x }};
+prove_print z3 thm2;
+
+print "Finding bug via sat search: ffs_ref != ffs_bug";
+let thm3 = {{ \x -> ffs_ref x != ffs_bug x }};
+sat_print z3 thm3;
+
+print "Finding bug via failed proof: ffs_ref == ffs_bug";
+let thm4 = {{ \x -> ffs_ref x == ffs_bug x }};
+fails (prove_print z3 thm4);

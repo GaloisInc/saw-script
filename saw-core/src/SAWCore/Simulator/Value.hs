@@ -35,8 +35,6 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
-
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
@@ -54,7 +52,7 @@ instantiation.
 The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
-  = VFun !LocalName !(Thunk l -> MValue l)
+  = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
@@ -81,13 +79,8 @@ data Value l
 data VRecursor l
   = VRecursor
      !Name -- data type name
-     !(TValue l) -- data type kind
-     ![Value l]  -- data type parameters
      !Int        -- number of index parameters
-     !(Value l)  -- motive function
-     !(TValue l) -- type of motive
-     !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
-     !(TValue l) -- type of recursor function
+     !(Map VarIndex (Thunk l)) -- constructor eliminators
 
 -- | The subset of values that represent types.
 data TValue l
@@ -96,11 +89,11 @@ data TValue l
   | VIntType
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
-  | VPiType LocalName !(TValue l) !(PiBody l)
+  | VPiType !(TValue l) !(PiBody l)
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !Name !(TValue l) ![Value l] ![Value l]
+  | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VTyTerm !Sort !Term
@@ -108,19 +101,6 @@ data TValue l
 data PiBody l
   = VDependentPi !(Thunk l -> EvalM l (TValue l))
   | VNondependentPi !(TValue l)
-
--- | Neutral terms represent computations that are blocked
---   because some internal term cannot be evaluated
---   (e.g., because it is a variable, because it's definition
---   is being hidden, etc.)
-data NeutralTerm
-  = NeutralBox Term -- the thing blocking evaluation
-  | NeutralPairLeft NeutralTerm   -- left pair projection
-  | NeutralPairRight NeutralTerm  -- right pair projection
-  | NeutralRecordProj NeutralTerm FieldName -- record projection
-  | NeutralApp NeutralTerm Term -- function application
-  | NeutralConstant -- A constant value with no definition
-      Name
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -206,11 +186,11 @@ instance Show (Extra l) => Show (TValue l) where
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
-      VPiType _ t _    -> showParen True
+      VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s _ ps vs
+      VDataType s ps vs
         | null (ps++vs) -> shows s
         | otherwise  -> shows s . showList (ps++vs)
       VRecordType [] -> showString "{}"
@@ -264,8 +244,8 @@ valRecordProj v _ =
   panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
-apply (VFun _ f) x = f x
-apply (TValue (VPiType _ _ body)) x = TValue <$> applyPiBody body x
+apply (VFun f) x = f x
+apply (TValue (VPiType _ body)) x = TValue <$> applyPiBody body x
 
 apply v _x = panic "apply" ["Not a function value: " <> Text.pack (show v)]
 
@@ -350,7 +330,7 @@ suffixTValue tv =
       do a' <- suffixTValue a
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
-    VPiType _ _ _ -> Nothing
+    VPiType _ _ -> Nothing
     VUnitType -> Just "_Unit"
     VPairType a b ->
       do a' <- suffixTValue a
@@ -362,43 +342,3 @@ suffixTValue tv =
     VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing
-
-
-neutralToTerm :: NeutralTerm -> Term
-neutralToTerm = loop
-  where
-  loop (NeutralBox tm) = tm
-  loop (NeutralPairLeft nt) =
-    Unshared (FTermF (PairLeft (loop nt)))
-  loop (NeutralPairRight nt) =
-    Unshared (FTermF (PairRight (loop nt)))
-  loop (NeutralRecordProj nt f) =
-    Unshared (FTermF (RecordProj (loop nt) f))
-  loop (NeutralApp nt arg) =
-    Unshared (App (loop nt) arg)
-  loop (NeutralConstant nm) =
-    Unshared (Constant nm)
-
-neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
-neutralToSharedTerm sc = loop
-  where
-  loop (NeutralBox tm) = pure tm
-  loop (NeutralPairLeft nt) =
-    scFlatTermF sc . PairLeft =<< loop nt
-  loop (NeutralPairRight nt) =
-    scFlatTermF sc . PairRight =<< loop nt
-  loop (NeutralRecordProj nt f) =
-    do tm <- loop nt
-       scFlatTermF sc (RecordProj tm f)
-  loop (NeutralApp nt arg) =
-    do tm <- loop nt
-       scApply sc tm arg
-  loop (NeutralConstant nm) =
-    do scConst sc nm
-
-ppNeutral :: PPS.Opts -> NeutralTerm -> PPS.Doc
-ppNeutral opts = ppTerm opts . neutralToTerm
-
--- XXX this shouldn't be a Show instance
-instance Show NeutralTerm where
-  show = PPS.render PPS.defaultOpts . ppNeutral PPS.defaultOpts

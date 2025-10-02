@@ -103,13 +103,17 @@ $whitechar+;
 "0b"[0-1]+  { TBitvector . readBinBV . drop 2 }
 @key        { TKey }
 @ident      { TIdent }
-@ident "#rec" { TRecursor . dropRecSuffix }
+@ident "#rec" [0-9]*
+            { TRecursor . parseRecursor }
+@ident "#ind"
+            { TInductor . dropIndSuffix }
 .           { TIllegal }
 
 {
 data Token
   = TIdent { tokIdent :: String }   -- ^ Identifier
-  | TRecursor { tokRecursor :: String }   -- ^ Recursor
+  | TRecursor { tokRecursor :: (String, Natural) }   -- ^ Recursor
+  | TInductor { tokInductor :: String }   -- ^ Recursor at sort Prop
   | TNat { tokNat :: Natural }  -- ^ Natural number literal
   | TBitvector { tokBits :: [Bool] } -- ^ Bitvector literal
   | TString { tokString :: String } -- ^ String literal
@@ -130,9 +134,22 @@ type AlexInput = PosPair Buffer
 -- Wrap the input type for export, in case we end up wanting other state
 type LexerState = AlexInput
 
--- | Remove the "#rec" suffix of a recursor string
-dropRecSuffix :: String -> String
-dropRecSuffix str = take (length str - 4) str
+-- | Parse a recursor identifier with "#rec" followed by a Natural.
+-- A missing number is treated as 0.
+parseRecursor :: String -> (String, Natural)
+parseRecursor str =
+  case span (/= '#') str of
+    (name, rest) -> (name, parseNatural (drop 4 rest))
+
+-- | Parse a string of decimal digits as a Natural.
+-- The empty string maps to 0.
+parseNatural :: String -> Natural
+parseNatural "" = 0
+parseNatural str = read str
+
+-- | Remove the "#ind" suffix of an inductor string
+dropIndSuffix :: String -> String
+dropIndSuffix str = take (length str - 4) str
 
 -- | Convert a hexadecimal string to a big endian list of bits
 readHexBV :: String -> [Bool]

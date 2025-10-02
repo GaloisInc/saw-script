@@ -22,7 +22,7 @@ Stability   : provisional
 module SAWCentral.Builtins where
 
 import Control.Lens (view)
-import Control.Monad (foldM, forM, unless)
+import Control.Monad (foldM, unless)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (asks)
@@ -31,10 +31,8 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.IntMap as IntMap
-import Data.IORef
 import Data.List (isPrefixOf, isInfixOf, sort)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -88,7 +86,6 @@ import qualified SAWCore.Simulator.Concrete as Concrete
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
-import qualified SAWCore.Simulator.TermModel as TM
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.CryptolEnv as CEnv
@@ -573,10 +570,9 @@ normalize_term tt = normalize_term_opaque [] tt
 normalize_term_opaque :: [Text] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
-     modmap <- io (scGetModuleMap sc)
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
-     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
+     tm' <- io (scTypeCheckWHNF sc =<< scUnfoldConstantSet sc False opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
@@ -584,9 +580,8 @@ goal_normalize opaque =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
-       modmap <- io (scGetModuleMap sc)
        let opaqueSet = Set.fromList idxs
-       sqt' <- io $ traverseSequentWithFocus (normalizeProp sc modmap opaqueSet) (goalSequent goal)
+       sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
 
 unfocus :: ProofScript ()
@@ -716,61 +711,6 @@ goal_eval unints =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sqt' <- traverseSequentWithFocus (io . evalProp sc what4PushMuxOps unintSet) (goalSequent goal)
      return (sqt', EvalEvidence unintSet)
-
-extract_uninterp ::
-  [Text] {- ^ uninterpred identifiers -} ->
-  [Text] {- ^ opaque identifiers -} ->
-  TypedTerm ->
-  TopLevel (TypedTerm, [(Text, [(TypedTerm,TypedTerm)])])
-extract_uninterp unints opaques tt =
-  do sc <- getSharedContext
-     idxs <- mconcat <$> mapM (resolveName sc) unints
-     let unintSet = Set.fromList idxs
-     mmap <- io (scGetModuleMap sc)
-
-     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
-
-     boundECRef <- io (newIORef Set.empty)
-     let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
-     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet opaqueSet (ttTerm tt))
-     boundECSet <- io (readIORef boundECRef)
-     let tt' = tt{ ttTerm = tm }
-
-     let f = traverse $ \(ec,vs) ->
-               do ectm <- scVariable sc ec
-                  vs'  <- filterCryTerms sc vs
-                  pure (ectm, vs')
-     repls' <- io (traverse f repls)
-
-     usedECRef <- io (newIORef Set.empty)
-     replList <- io $
-        forM (zip unints idxs) $ \(nm,idx) ->
-           do let ls = fromMaybe [] (Map.lookup idx repls')
-              xs <- forM ls $ \(e,vs) ->
-                      do e'  <- mkTypedTerm sc e
-                         vs' <- tupleTypedTerm sc vs
-                         modifyIORef usedECRef (Set.union (getAllExtSet (ttTerm vs')))
-                         pure (e',vs')
-              pure (nm,xs)
-     usedECSet <- io (readIORef usedECRef)
-
-     let boundAndUsed = Set.intersection boundECSet usedECSet
-     unless (Set.null boundAndUsed)
-       (do ppOpts <- getTopLevelPPOpts
-           vs <- io $ forM (Set.toList boundAndUsed) $ \ec ->
-                              do pptm <- scPrettyTerm ppOpts <$> scVariable sc ec
-                                 let ppty = scPrettyTerm ppOpts (ecType ec)
-                                 return (pptm <> " : " <> ppty)
-           printOutLnTop Warn $ unlines $
-             [ "WARNING: extracted arguments reference captured variables!"
-             , "This usually means one of functions you extracted was used in a higher-order way"
-             , "that could not be fully unrolled, or the expression depends on lambda-bound variables."
-             , "The results of reasoning about this extraction may be unexpected."
-             , "The affected variables are:"
-             ] ++ (map ("  "++) vs))
-
-     pure (tt', replList)
-
 
 congruence_for :: TypedTerm -> TopLevel TypedTerm
 congruence_for tt =

@@ -162,7 +162,6 @@ library saw-core
     SAWCore.SCTypeCheck
     SAWCore.Simulator
     SAWCore.Simulator.Concrete
-    SAWCore.Simulator.TermModel
     SAWCore.Simulator.MonadLazy
     SAWCore.Simulator.Prims
     SAWCore.Simulator.RME
@@ -993,7 +992,6 @@ test-suite saw-core-tests
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
-    Tests.Simulator
 
 
 -- The cryptol-saw-core library has its own small test suite.

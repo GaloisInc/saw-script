@@ -248,7 +248,7 @@ asRecordSelector t = do
   RecordProj u s <- asFTermF t
   return (u, s)
 
-asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term)
+asRecursorApp :: Recognizer Term (Term, CompiledRecursor)
 asRecursorApp t =
   do Recursor crec <- asFTermF t
      pure (t, crec)

@@ -52,7 +52,7 @@ module SAWCore.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad (foldM, forM, forM_, mapM, unless, void)
+import Control.Monad (forM_, mapM, unless, void)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), asks, runReader)
@@ -74,6 +74,7 @@ import SAWCore.Module
   , resolvedNameType
   , Ctor(..)
   , DataType(..)
+  , ResolvedName(..)
   )
 import SAWCore.Name
 import SAWCore.Parser.Position
@@ -608,98 +609,35 @@ areConvertible :: Term -> Term -> TCM Bool
 areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
-inferRecursorType ::
-  DataType      {- ^ data type -} ->
-  [SCTypedTerm] {- ^ data type parameters -} ->
-  Int           {- ^ number of indexes -} ->
-  SCTypedTerm   {- ^ elimination motive -} ->
-  SCTypedTerm   {- ^ type of the elimination motive -} ->
-  SCTypedTerm   {- ^ type of the recursor as a function -} ->
-  TCM Sort
-inferRecursorType dt params nixs motive motiveTy ty =
-  do let d = dtName dt
-     let mk_err str =
-           MalformedRecursor
-           (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params nixs motive motiveTy mempty [] ty))
-            str
-
-     -- Check that the params have the correct types by making sure
-     -- they correspond to the input types of dt
-     unless (length params == length (dtParams dt)) $
-       throwTCError $ mk_err "Incorrect number of parameters"
-     _ <- foldM (applyPiTyped (mk_err "Incorrect data type signature"))
-                (dtType dt) params
-
-     -- Get the type of p_ret and make sure that it is of the form
-     --
-     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
-     --
-     -- for some allowed sort s, where the Ix are the indices of of dt
-     motive_srt <-
-       case asPiList (typedType motive) of
-         (_, (asSort -> Just s)) -> return s
-         _ -> throwTCError $ mk_err "Motive function should return a sort"
-     motive_req <-
-       liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt
-     -- Technically this is an equality test, not a subtype test, but we
-     -- use the precise sort used in the motive, so they are the same, and
-     -- checkSubtype is handy...
-     checkSubtype motive motive_req
-     unless (allowedElimSort dt motive_srt)  $
-       throwTCError $ mk_err "Disallowed propositional elimination"
-
-     return motive_srt
-
-
 compileRecursor ::
   DataType ->
-  [SCTypedTerm] {- ^ datatype parameters -} ->
-  SCTypedTerm   {- ^ elimination motive -} ->
-  [SCTypedTerm] {- ^ constructor eliminators -} ->
-  TCM (CompiledRecursor SCTypedTerm)
-compileRecursor dt params motive cs_fs =
-  do motiveTy <- typeInferComplete (typedType motive)
-     cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
-                                    pure (e,ety))
-     let d = dtName dt
+  Sort          {- ^ elimination sort -} ->
+  TCM CompiledRecursor
+compileRecursor dt s =
+  do let d = dtName dt
+     let nparams = length (dtParams dt)
      let nixs = length (dtIndices dt)
      let ctorOrder = map ctorName (dtCtors dt)
-     let ctorVarIxs = map nameIndex ctorOrder
-     let elims = Map.fromList (zip ctorVarIxs cs_fs')
-     ty <- typeInferComplete =<<
-       liftTCM scRecursorAppType dt (map typedVal params) (typedVal motive)
-     let crec = CompiledRecursor d params nixs motive motiveTy elims ctorOrder ty
-     let mk_err str =
+     let crec = CompiledRecursor d s nparams nixs ctorOrder
+
+     -- Check that the parameters are correct for the given datatype
+     let err =
            MalformedRecursor
-            (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
-            str
+           (Unshared $ fmap typedVal $ FTermF $ Recursor crec)
+           "Disallowed propositional elimination"
 
-     unless (length cs_fs == length (dtCtors dt)) $
-       throwTCError $ mk_err "Extra constructors"
-
-     -- Check that the parameters and motive are correct for the given datatype
-     _s <- inferRecursorType dt params nixs motive motiveTy ty
-
-     -- Check that the elimination functions each have the right types, and
-     -- that we have exactly one for each constructor of dt
-     elims_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
-
-     forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup (nameIndex c) elims of
-         Nothing ->
-           throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just (f,_fty) -> checkSubtype f req_tp
-
+     unless (allowedElimSort dt s) $ throwTCError err
      return crec
 
-
 inferRecursor ::
-  CompiledRecursor SCTypedTerm ->
-  TCM Term
+  CompiledRecursor -> TCM Term
 inferRecursor r =
-  pure (typedVal (recursorType r))
+  do mm <- liftTCM scGetModuleMap
+     let d = recursorDataType r
+     let s = recursorSort r
+     case lookupVarIndexInMap (nameIndex d) mm of
+       Just (ResolvedDataType dt) -> liftTCM scRecursorType dt s
+       _ -> throwTCError $ NoSuchDataType (nameInfo d)
 
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm

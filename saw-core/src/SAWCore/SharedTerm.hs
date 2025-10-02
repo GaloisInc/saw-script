@@ -68,6 +68,7 @@ module SAWCore.SharedTerm
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scRecursorAppType
+  , scRecursorType
   , scReduceRecursor
   , scReduceNatRecursor
   , allowedElimSort
@@ -1135,12 +1136,41 @@ scRecursorAppType sc dt params motive =
      let subst = IntMap.fromList (zip (map ecVarIndex (dtParams dt)) params)
      scInstantiateExt sc subst ty
 
+-- | Build the full type of an unapplied recursor for datatype @d@
+-- with elimination to sort @s@.
+-- This type has the form
+--
+-- > (p1:pt1) -> .. -> (pn::ptn) ->
+-- > (motive : (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s) ->
+-- > (elim1 : ..) -> .. (elimk : ..) ->
+-- > (i1:ix1) -> .. -> (im:ixm) ->
+-- >   (arg : d p1 .. pn i1 .. im) -> motive i1 .. im arg
+scRecursorType :: SharedContext -> DataType -> Sort -> IO Term
+scRecursorType sc dt s =
+  do let d = dtName dt
+
+     param_vars <- traverse (scVariable sc) (dtParams dt)
+
+     -- Compute the type of the motive function, which has the form
+     -- (i1:ix1) -> .. -> (im:ixm) -> d p1 .. pn i1 .. im -> s
+     motive_ty <- scRecursorRetTypeType sc dt param_vars s
+     motive_ec <- scFreshEC sc "p" motive_ty
+     motive_var <- scVariable sc motive_ec
+
+     -- Compute the types of the elimination functions
+     elims_tps <- scRecursorElimTypes sc d param_vars motive_var
+
+     scGeneralizeExts sc (dtParams dt) =<<
+       scGeneralizeExts sc [motive_ec] =<<
+       scFunAll sc (map snd elims_tps) =<<
+       scRecursorAppType sc dt param_vars motive_var
+
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
 --
 -- > scReduceRecursor sc rec crec ci [x1, .., xk]
 --
--- reduces the term @(RecursorApp r ixs (CtorApp ci ps xs))@ to
+-- reduces the term @(Recursor r elims ixs (CtorApp ci ps xs))@ to
 --
 -- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
@@ -1150,18 +1180,23 @@ scRecursorAppType sc dt params motive =
 -- 'ctorIotaReduction' field for more details.
 scReduceRecursor ::
   SharedContext ->
-  Term {- ^ recusor term -} ->
-  CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
+  Term {- ^ recursor term -} ->
+  CompiledRecursor {- ^ concrete data included in the recursor term -} ->
+  [Term] {- ^ datatype parameters -} ->
+  Term {- ^ motive function -} ->
+  [Term] {- ^ eliminator functions -} ->
   Name {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
-scReduceRecursor sc r crec c args =
+scReduceRecursor sc r crec params motive elims c args =
   do mres <- lookupVarIndexInMap (nameIndex c) <$> scGetModuleMap sc
+     let cs_fs = Map.fromList (zip (map nameIndex (recursorCtorOrder crec)) elims)
+     r_applied <- scApplyAll sc r (params ++ motive : elims)
      case mres of
        Just (ResolvedCtor ctor) ->
          -- The ctorIotaReduction field caches the result of iota reduction, which
          -- we just substitute into to perform the reduction
-         ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
+         ctorIotaReduction ctor r_applied cs_fs args
        _ ->
          panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
 
@@ -1172,18 +1207,19 @@ scReduceRecursor sc r crec c args =
 --   the concrete value of the @Nat@.
 scReduceNatRecursor ::
   SharedContext ->
-  Term {- ^ recusor term -} ->
-  CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
+  Term {- ^ eliminator function for @Zero@ -} ->
+  Term {- ^ eliminator function for @Succ@ -} ->
   Natural {- ^ Concrete natural value to eliminate -} ->
   IO Term
-scReduceNatRecursor sc r crec n
-  | n == 0 =
-     do ctor <- scRequireCtor sc preludeZeroIdent
-        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) []
-
-  | otherwise =
-     do ctor <- scRequireCtor sc preludeSuccIdent
-        ctorIotaReduction ctor r (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
+scReduceNatRecursor sc f1 f2 = go
+  where
+    go :: Natural -> IO Term
+    go n
+      | n == 0 = pure f1
+      | otherwise =
+          do x <- go (pred n)
+             n' <- scNat sc (pred n)
+             scApplyAll sc f2 [n', x]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -1193,7 +1229,8 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor Term (CompiledRecursor Term) [Term]
+  | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
+    -- ^ recursor, compiled recursor, params, motive, eliminators, indices
 
 -- | Test if a term is a constructor application that should be converted to a
 -- natural number literal. Specifically, test if a term is not already a natural
@@ -1233,10 +1270,12 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor r crec _ : xs)
-                              (asNat -> Just n)                 = scReduceNatRecursor sc r crec n >>= go xs
-    go xs                     (asRecursorApp -> Just (r, crec)) | Just (ixs, x, xs') <- splitApps (recursorNumIxs crec) xs
-                                                                = go (ElimRecursor r crec ixs : xs') x
+    go (ElimRecursor _r _params _crec _motive [f1, f2] [] : xs)
+                              (asNat -> Just n)                 = scReduceNatRecursor sc f1 f2 n >>= go xs
+    go xs                     (asRecursorApp -> Just (r, crec)) | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
+                                                                , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
+                                                                , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
+                                                                = go (ElimRecursor r crec params motive elims ixs : xs') x
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -1261,9 +1300,9 @@ scWhnf sc t0 =
                                                                        ResolvedCtor ctor ->
                                                                          case asArgsRec xs of
                                                                            Nothing -> foldM reapply t xs
-                                                                           Just (rt, crec, args, xs') ->
+                                                                           Just (rt, crec, params, motive, elims, args, xs') ->
                                                                              do let args' = drop (ctorNumParams ctor) args
-                                                                                scReduceRecursor sc rt crec nm args' >>= go xs'
+                                                                                scReduceRecursor sc rt crec params motive elims nm args' >>= go xs'
                                                                        ResolvedDataType _ ->
                                                                          foldM reapply t xs
 
@@ -1280,28 +1319,28 @@ scWhnf sc t0 =
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor r _crec ixs) =
-      do f <- scApplyAll sc r ixs
+    reapply t (ElimRecursor r _crec params motive elims ixs) =
+      do f <- scApplyAll sc r (params ++ motive : elims ++ ixs)
          scApply sc f t
 
     resolveConstant :: Name -> IO ResolvedName
     resolveConstant nm = requireNameInMap nm <$> scGetModuleMap sc
 
     -- look for a prefix of ElimApps followed by an ElimRecursor
-    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor Term, [Term], [WHNFElim])
-    asArgsRec (ElimRecursor r crec _ : xs) = Just (r, crec, [], xs)
+    asArgsRec :: [WHNFElim] -> Maybe (Term, CompiledRecursor, [Term], Term, [Term], [Term], [WHNFElim])
+    asArgsRec (ElimRecursor r crec params motive elims _ixs : xs) = Just (r, crec, params, motive, elims, [], xs)
     asArgsRec (ElimApp x : xs) =
       case asArgsRec xs of
-        Just (r, crec, args, xs') -> Just (r, crec, x : args, xs')
+        Just (r, crec, params, motive, elims, args, xs') -> Just (r, crec, params, motive, elims, x : args, xs')
         Nothing -> Nothing
     asArgsRec _ = Nothing
 
-    -- look for a prefix of n ElimApps, followed by one more ElimApp
-    splitApps :: Int -> [WHNFElim] -> Maybe ([Term], Term, [WHNFElim])
-    splitApps 0 (ElimApp t : xs) = Just ([], t, xs)
-    splitApps n (ElimApp i : xs) =
-       do (is, t, xs') <- splitApps (n-1) xs
-          Just (i : is, t, xs')
+    -- look for a prefix of n ElimApps
+    splitApps :: Int -> [WHNFElim] -> Maybe ([Term], [WHNFElim])
+    splitApps 0 xs = Just ([], xs)
+    splitApps n (ElimApp t : xs) =
+       do (ts, xs') <- splitApps (n-1) xs
+          Just (t : ts, xs')
     splitApps _ _ = Nothing
 
 
@@ -1478,8 +1517,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
         Recursor crec ->
-          pure $ recursorType crec
-
+          do mm <- liftIO $ scGetModuleMap sc
+             let d = recursorDataType crec
+             case lookupVarIndexInMap (nameIndex d) mm of
+               Just (ResolvedDataType dt) ->
+                 liftIO $ scRecursorType sc dt (recursorSort crec)
+               _ -> fail $ "scTypeOf: Could not find datatype: " ++ show d
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s

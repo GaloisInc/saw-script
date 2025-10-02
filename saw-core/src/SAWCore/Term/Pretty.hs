@@ -32,7 +32,6 @@ module SAWCore.Term.Pretty
 
 import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
-import Control.Monad (forM)
 import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
 import Control.Monad.State.Strict (MonadState(..), State, evalState, execState, get, modify)
 import qualified Data.Foldable as Fold
@@ -454,19 +453,15 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    Recursor (CompiledRecursor d params _nixs motive _motiveTy cs_fs ctorOrder _ty) ->
-      do params_pp <- mapM (ppTerm' PrecArg) params
-         motive_pp <- ppTerm' PrecArg motive
-         fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
-         nm <- ppBestName d
-         f_pps <- forM ctorOrder $ \c ->
-                    do cnm <- ppBestName c
-                       case Map.lookup (nameIndex c) fs_pp of
-                         Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
-                         Nothing -> panic "ppFlatTermF" ["missing constructor in recursor: " <> Text.pack (show cnm)]
+    Recursor (CompiledRecursor d s _params _nixs _ctorOrder) ->
+      do nm <- ppBestName d
+         let suffix =
+               case s of
+                 TypeSort 0 -> "#rec"
+                 TypeSort n -> "#rec" <> pretty n
+                 PropSort -> "#ind"
          return $
-           ppAppList prec (annotate PPS.RecursorStyle (nm <> "#rec"))
-             (params_pp ++ [motive_pp, tupled f_pps])
+           annotate PPS.RecursorStyle (nm <> suffix)
 
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
@@ -593,9 +588,7 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
-            FTermF (Recursor crec)         -> recursorParams crec ++
-                                              [recursorMotive crec] ++
-                                              map fst (Map.elems (recursorElims crec))
+            FTermF (Recursor _)            -> []
             tf                             -> Fold.toList tf
 
 

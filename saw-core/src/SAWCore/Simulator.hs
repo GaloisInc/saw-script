@@ -66,7 +66,6 @@ import SAWCore.Module
   , requireNameInMap
   , Ctor(..)
   , Def(..)
-  , DefQualifier(..)
   , ModuleMap
   , ResolvedName(..)
   )
@@ -93,7 +92,7 @@ type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
 
 data SimulatorConfig l =
   SimulatorConfig
-  { simPrimitive :: Name -> TValue l -> MValue l
+  { simPrimitive :: Name -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
   , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
   -- ^ Interpretation of 'ExtCns' terms.
@@ -105,19 +104,14 @@ data SimulatorConfig l =
   -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
-  , simNeutral :: Env l -> NeutralTerm -> MValue l
-  -- ^ Handler that fires if the simulator encounters a term that it
-  --   cannot otherwise evaluate because it is blocked. For some simulators,
-  --   this is just an error condition; for others, sensible action can
-  --   be taken.
   , simModMap :: ModuleMap
-  , simLazyMux :: TValue l -> VBool l -> MValue l -> MValue l -> MValue l
+  , simLazyMux :: VBool l -> MValue l -> MValue l -> MValue l
   }
 
 ------------------------------------------------------------
 -- Evaluation of terms
 
-type Env l = [(Thunk l, TValue l)]
+type Env l = [Thunk l]
 type EnvIn m l = Env (WithM m l)
 
 -- | Meaning of an open term, parameterized by environment of bound variables
@@ -148,24 +142,22 @@ evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
 evalTermF cfg lam recEval tf env =
   case tf of
     App t1 t2               -> recEval t1 >>= \case
-                                 VFun _ f ->
+                                 VFun f ->
                                    do x <- recEvalDelay t2
                                       f x
-                                 _ -> simNeutral cfg env (NeutralApp (NeutralBox t1) t2)
-    Lambda nm tp t          -> do v <- evalType tp
-                                  return $ VFun nm (\x -> lam t ((x,v) : env))
-    Pi nm t1 t2             -> do v <- evalType t1
+                                 _ -> panic "evalTermF" ["Expected VFun"]
+    Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
+    Pi _nm t1 t2            -> do v <- evalType t1
                                   body <-
                                     if inBitSet 0 (looseVars t2) then
-                                      pure (VDependentPi (\x -> toTValue <$> lam t2 ((x,v) : env)))
+                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (x : env)))
                                     else
                                       do -- put dummy values in the environment; the term should never reference them
                                          let val = ready VUnit
-                                         let tp  = VUnitType
-                                         VNondependentPi . toTValue <$> lam t2 ((val,tp):env)
-                                  return $ TValue $ VPiType nm v body
+                                         VNondependentPi . toTValue <$> lam t2 (val : env)
+                                  return $ TValue $ VPiType v body
 
-    LocalVar i              -> force (fst (env !! i))
+    LocalVar i              -> force (env !! i)
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
@@ -176,15 +168,11 @@ evalTermF cfg lam recEval tf env =
                                         ResolvedCtor ctor ->
                                           ctorValue nm ty' (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
-                                          dtValue nm ty' (dtNumParams dt) (dtNumIndices dt)
+                                          dtValue nm (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
                                           case defBody d of
                                             Just t -> recEval t
-                                            Nothing ->
-                                              case defQualifier d of
-                                                NoQualifier -> simNeutral cfg env (NeutralConstant nm)
-                                                PrimQualifier -> simPrimitive cfg nm ty'
-                                                AxiomQualifier -> simPrimitive cfg nm ty'
+                                            Nothing -> simPrimitive cfg nm
 
     Variable ec             -> do ec' <- traverse evalType ec
                                   simExtCns cfg tf ec'
@@ -204,26 +192,23 @@ evalTermF cfg lam recEval tf env =
 
         PairLeft x          -> recEval x >>= \case
                                  VPair l _r -> force l
-                                 _ -> simNeutral cfg env (NeutralPairLeft (NeutralBox x))
+                                 _ -> panic "evalTermF" ["Expected VPair"]
 
         PairRight x         -> recEval x >>= \case
                                  VPair _l r -> force r
-                                 _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
+                                 _ -> panic "evalTermF" ["Expected VPair"]
 
         Recursor r ->
-          do let f (e,ety) = do v  <- recEvalDelay e
-                                ty <- evalType ety
-                                pure (v,ty)
-             let dname = recursorDataType r
+          do let dname = recursorDataType r
+             let nparams = recursorNumParams r
              let nixs = recursorNumIxs r
-             dty <- evalType (resolvedNameType (requireNameInMap dname (simModMap cfg)))
-             ps  <- traverse recEval (recursorParams r)
-             m   <- recEval (recursorMotive r)
-             mty <- evalType (recursorMotiveTy r)
-             es  <- traverse f (recursorElims r)
-             ty  <- evalType (recursorType r)
-             let vrec = VRecursor dname dty ps nixs m mty es ty
-             evalRecursor vrec
+             let cnames = recursorCtorOrder r
+             vFunList nparams $ \_ps_thunks ->
+               pure $ VFun $ \_motive ->
+               vFunList (length cnames) $ \elim_thunks ->
+               do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
+                  let vrec = VRecursor dname nixs es
+                  evalRecursor vrec
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps
@@ -233,7 +218,7 @@ evalTermF cfg lam recEval tf env =
 
         RecordProj t fld    -> recEval t >>= \case
                                  v@VRecordValue{} -> valRecordProj v fld
-                                 _ -> simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)
+                                 _ -> panic "evalTermF" ["Expected VRecordValue"]
 
         Sort s _h           -> return $ TValue (VSort s)
 
@@ -251,18 +236,14 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d _k ps nixs motive _motiveTy ps_fs ty) =
-      vFunList [ "i" <> Text.pack (show n) | n <- [1 .. nixs] ] $ \ix_thunks ->
-      pure $ VFun "arg" $ \arg_thunk ->
-      do argv <- force arg_thunk
-         r_thunk <- delay (evalRecursor vrec)
+    evalRecursor vrec@(VRecursor d nixs ps_fs) =
+      vFunList nixs $ \_ix_thunks ->
+      pure $ vStrictFun $ \argv ->
+      do r_thunk <- delay (evalRecursor vrec)
          case evalConstructor argv of
            Just (ctor, args)
-             | Just (elim,elimTy) <- Map.lookup (nameIndex (ctorName ctor)) ps_fs
-             -> do let rTy = ty
-                   ctorTy <- toTValue <$> lam (ctorType ctor) []
-                   allArgs <- processRecArgs ps args ctorTy [(elim, elimTy), (r_thunk, rTy)]
-                   lam (ctorIotaTemplate ctor) allArgs
+             | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
+                 lam (ctorIotaTemplate ctor) (reverse (r_thunk : elim : args))
 
              | otherwise ->
                  panic "evalTermF / evalRecursor"
@@ -271,10 +252,7 @@ evalTermF cfg lam recEval tf env =
              case argv of
                VCtorMux _ps branches ->
                  do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
-                    -- compute return type of recursor application
-                    ixvs <- traverse force ix_thunks
-                    retTy <- toTValue <$> applyAll motive (map ready (ixvs ++ [argv]))
-                    combineAlts retTy alts
+                    combineAlts alts
                _ ->
                  panic "evalTermF / evalRecursor"
                  ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
@@ -283,23 +261,22 @@ evalTermF cfg lam recEval tf env =
       VRecursor l ->
       (VBool l, Name, TValue l, [Thunk l]) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (p, c, ct, args) =
+    evalCtorMuxBranch r (p, c, _ct, args) =
       case r of
-        VRecursor _d _k ps _nixs _motive _motiveTy ps_fs ty ->
+        VRecursor _d _nixs ps_fs ->
           do let i = nameIndex c
-             let rTy = ty
              r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
-               (Just (ResolvedCtor ctor), Just (elim, elimTy)) ->
-                 do allArgs <- processRecArgs ps args ct [(elim, elimTy), (r_thunk, rTy)]
+               (Just (ResolvedCtor ctor), Just elim) ->
+                 do let allArgs = reverse (r_thunk : elim : args)
                     pure (p, lam (ctorIotaTemplate ctor) allArgs)
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
 
-    combineAlts :: TValue l -> [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
-    combineAlts _ [] = panic "evalTermF / combineAlts" ["no alternatives"]
-    combineAlts _ [(_, x)] = x
-    combineAlts tp ((p, x) : alts) = simLazyMux cfg tp p x (combineAlts tp alts)
+    combineAlts :: [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
+    combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]
+    combineAlts [(_, x)] = x
+    combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
     evalConstructor (VCtorApp c _tv _ps args) =
@@ -320,51 +297,35 @@ evalTermF cfg lam recEval tf env =
 
     ctorValue :: Name -> TValue l -> Int -> Int -> MValue l
     ctorValue nm tv i j =
-      vFunList (replicate i "_") $ \params ->
-      vFunList (replicate j "_") $ \args ->
+      vFunList i $ \params ->
+      vFunList j $ \args ->
       pure $ VCtorApp nm tv params args
 
-    dtValue :: Name -> TValue l -> Int -> Int -> MValue l
-    dtValue nm tv i j =
-      vStrictFunList (replicate i "_") $ \params ->
-      vStrictFunList (replicate j "_") $ \idxs ->
-      pure $ TValue $ VDataType nm tv params idxs
+    dtValue :: Name -> Int -> Int -> MValue l
+    dtValue nm i j =
+      vStrictFunList i $ \params ->
+      vStrictFunList j $ \idxs ->
+      pure $ TValue $ VDataType nm params idxs
+
+-- | Create a 'Value' for a strict function.
+vStrictFun :: VMonad l => (Value l -> MValue l) -> Value l
+vStrictFun k = VFun $ \x -> force x >>= k
 
 -- | Create a 'Value' for a lazy multi-argument function.
-vFunList :: forall l. VMonad l => [LocalName] -> ([Thunk l] -> MValue l) -> MValue l
-vFunList names k = go [] names
+vFunList :: forall l. VMonad l => Int -> ([Thunk l] -> MValue l) -> MValue l
+vFunList n0 k = go n0 []
   where
-    go :: [Thunk l] -> [LocalName] -> MValue l
-    go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> go (x : args) ns)
+    go :: Int -> [Thunk l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ VFun (\x -> go (n - 1) (x : args))
 
 -- | Create a 'Value' for a strict multi-argument function.
-vStrictFunList :: forall l. VMonad l => [LocalName] -> ([Value l] -> MValue l) -> MValue l
-vStrictFunList names k = go [] names
+vStrictFunList :: forall l. VMonad l => Int -> ([Value l] -> MValue l) -> MValue l
+vStrictFunList n0 k = go n0 []
   where
-    go :: [Value l] -> [LocalName] -> MValue l
-    go args [] = k (reverse args)
-    go args (n : ns) = pure $ VFun n (\x -> force x >>= \v -> go (v : args) ns)
-
-processRecArgs ::
-  (VMonadLazy l, Show (Extra l)) =>
-  [Value l] ->
-  [Thunk l] ->
-  TValue l ->
-  Env l ->
-  EvalM l (Env l)
-processRecArgs (p:ps) args (VPiType _ _ body) env =
-  do tp' <- applyPiBody body (ready p)
-     processRecArgs ps args tp' env
-processRecArgs [] (x:xs) (VPiType _ tp body) env =
-  do tp' <- applyPiBody body x
-     processRecArgs [] xs tp' ((x,tp):env)
-processRecArgs [] [] _ env = pure env
-processRecArgs _ _ ty _ =
-  panic "processRegArgs" [
-     "Expected Pi type!",
-     "Found: " <> Text.pack (show ty) 
-  ]
+    go :: Int -> [Value l] -> MValue l
+    go 0 args = k (reverse args)
+    go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
 
 {-# SPECIALIZE evalGlobal ::
@@ -373,9 +334,8 @@ processRecArgs _ _ ty _ =
   Map Ident (PrimIn Id l) ->
   (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
-  (Name -> TValue (WithM Id l) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  (TValueIn Id l -> VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
+  (Name -> Text -> EnvIn Id l -> MValueIn Id l) ->
+  (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
@@ -383,21 +343,19 @@ processRecArgs _ _ ty _ =
   Map Ident (PrimIn IO l) ->
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
-  (Name -> TValue (WithM IO l) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  (TValueIn IO l -> VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
+  (Name -> Text -> EnvIn IO l -> MValueIn IO l) ->
+  (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap ->
               Map Ident (Prims.Prim l) ->
               (ExtCns (TValue l) -> MValue l) ->
               (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
-              (Env l -> NeutralTerm -> MValue l) ->
-              (Name -> TValue l -> Text -> Env l -> TValue l -> MValue l) ->
-              (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
+              (Name -> Text -> Env l -> MValue l) ->
+              (VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
-  evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral primHandler lazymux
+evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
+  evalGlobal' modmap prims (const extcns) (const uninterpreted) primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -405,9 +363,8 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
   Map Ident (PrimIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (TermF Term -> Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
-  (Name -> TValue (WithM Id l) -> Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  (TValue (WithM Id l) -> VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
+  (Name -> Text -> EnvIn Id l -> MValueIn Id l) ->
+  (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -415,9 +372,8 @@ evalGlobal modmap prims extcns uninterpreted neutral primHandler lazymux =
   Map Ident (PrimIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (TermF Term -> Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
-  (Name -> TValue (WithM IO l) -> Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  (TValueIn IO l -> VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
+  (Name -> Text -> EnvIn IO l -> MValueIn IO l) ->
+  (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -430,16 +386,14 @@ evalGlobal' ::
   (TermF Term -> ExtCns (TValue l) -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (TermF Term -> Name -> TValue l -> Maybe (MValue l)) ->
-  -- | Handler for neutral terms
-  (Env l -> NeutralTerm -> MValue l) ->
   -- | Handler for stuck primitives
-  (Name -> TValue l -> Text -> Env l -> TValue l -> MValue l) ->
+  (Name -> Text -> Env l -> MValue l) ->
   -- | Lazy mux operation
-  (TValue l -> VBool l -> MValue l -> MValue l -> MValue l) ->
+  (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns constant neutral primHandler lazymux =
+evalGlobal' modmap prims extcns constant primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' ctors neutral modmap lazymux)
+     return (SimulatorConfig primitive extcns constant' ctors modmap lazymux)
   where
     constant' :: TermF Term -> Name -> TValue l -> Maybe (MValue l)
     constant' tf nm tv =
@@ -448,24 +402,24 @@ evalGlobal' modmap prims extcns constant neutral primHandler lazymux =
         Nothing ->
           case nameInfo nm of
             ModuleIdentifier ident ->
-              evalPrim (primHandler nm tv) nm tv <$> Map.lookup ident prims
+              evalPrim (primHandler nm) <$> Map.lookup ident prims
             ImportedName{} -> Nothing
 
     ctors :: Name -> TValue l -> Maybe (MValue l)
-    ctors nm tv =
+    ctors nm _tv =
       case nameInfo nm of
         ModuleIdentifier ident ->
-          evalPrim (primHandler nm tv) nm tv <$> Map.lookup ident prims
+          evalPrim (primHandler nm) <$> Map.lookup ident prims
         ImportedName{} -> Nothing
 
-    primitive :: Name -> TValue l -> MValue l
-    primitive nm tv =
+    primitive :: Name -> MValue l
+    primitive nm =
       case nameInfo nm of
         ImportedName {} ->
           panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameInfo nm)]
         ModuleIdentifier ident ->
           case Map.lookup ident prims of
-            Just v  -> evalPrim (primHandler nm tv) nm tv v
+            Just v  -> evalPrim (primHandler nm) v
             Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
 
 -- | Check that all the primitives declared in the given module
@@ -700,65 +654,50 @@ evalOpen cfg memoClosed t env = do
 
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
-  (Text -> EnvIn Id l -> TValue (WithM Id l) -> MValueIn Id l) ->
-  Name ->
-  TValue (WithM Id l) ->
+  (Text -> EnvIn Id l -> MValueIn Id l) ->
   PrimIn Id l ->
   MValueIn Id l
  #-}
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
-  (Text -> EnvIn IO l -> TValue (WithM IO l) -> MValueIn IO l) ->
-  Name ->
-  TValue (WithM IO l) ->
+  (Text -> EnvIn IO l -> MValueIn IO l) ->
   PrimIn IO l ->
   MValueIn IO l
  #-}
 evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
-  (Text -> Env l -> TValue l -> MValue l) ->
-  Name ->
-  TValue l ->
+  (Text -> Env l -> MValue l) ->
   Prims.Prim l ->
   MValue l
-evalPrim fallback p tv = loop [] tv
+evalPrim fallback = loop []
   where
-    loop :: Env l -> TValue l -> Prims.Prim l -> MValue l
-    loop env (VPiType nm t body) (Prims.PrimFun f) =
-      pure $ VFun nm $ \x ->
-        do tp' <- applyPiBody body x
-           loop ((x,t):env) tp' (f x)
+    loop :: Env l -> Prims.Prim l -> MValue l
+    loop env (Prims.PrimFun f) =
+      pure $ VFun $ \x ->
+        loop (x : env) (f x)
 
-    loop env (VPiType nm t body) (Prims.PrimStrict f) =
-      pure $ VFun nm $ \x ->
-        do tp' <- applyPiBody body x
-           x'  <- force x
-           loop ((ready x',t):env) tp' (f x')
+    loop env (Prims.PrimStrict f) =
+      pure $ vStrictFun $ \x ->
+        loop (ready x : env) (f x)
 
-    loop env (VPiType nm t body) (Prims.PrimFilterFun msg r f) =
-      pure $ VFun nm $ \x ->
-        do tp' <- applyPiBody body x
-           x'  <- force x
-           runMaybeT (r x') >>= \case
-             Just v -> loop ((ready x',t):env) tp' (f v)
-             _ -> fallback msg ((ready x',t):env) tp'
+    loop env (Prims.PrimFilterFun msg r f) =
+      pure $ vStrictFun $ \x ->
+        runMaybeT (r x) >>= \case
+          Just v -> loop (ready x : env) (f v)
+          _ -> fallback msg (ready x : env)
 
-    loop env tp (Prims.PrimExcept m) =
+    loop env (Prims.PrimExcept m) =
       runExceptT m >>= \case
         Right v  -> pure v
-        Left msg -> fallback msg env tp
+        Left msg -> fallback msg env
 
-    loop _env _tp (Prims.Prim m) = m
-    loop _env _tp (Prims.PrimValue v) = pure v
-
-    loop _env _tp _p =
-      panic "evalPrim" [
-          "Type mismatch in primitive: " <> toAbsoluteName (nameInfo p)]
+    loop _env (Prims.Prim m) = m
+    loop _env (Prims.PrimValue v) = pure v
 
 -- | A basic handler for stuck primitives.
 defaultPrimHandler ::
   (VMonadLazy l, MonadFail (EvalM l)) =>
-  Name -> TValue l -> Text -> Env l -> TValue l -> MValue l
-defaultPrimHandler nm _ msg env _tv =
+  Name -> Text -> Env l -> MValue l
+defaultPrimHandler nm msg env =
   fail $ unlines
   [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
   , "On argument " ++ show (length env)

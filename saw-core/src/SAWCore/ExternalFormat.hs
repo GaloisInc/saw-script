@@ -16,14 +16,12 @@ module SAWCore.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Control.Monad (forM)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Data.List (elemIndex)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
 import Text.URI
@@ -34,19 +32,6 @@ import SAWCore.Term.Functor
 
 --------------------------------------------------------------------------------
 -- External text format
-
--- | A string to use to separate parameters from normal arguments of datatypes
--- and constructors
-argsep :: String
-argsep = "|"
-
--- | Separate a list of arguments into parameters and normal arguments by
--- finding the occurrence of 'argSep' in the list
-separateArgs :: [String] -> Maybe ([String], [String])
-separateArgs args =
-  case elemIndex argsep args of
-    Just i -> Just (take i args, drop (i+1) args)
-    Nothing -> Nothing
 
 type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
 
@@ -143,16 +128,13 @@ scWriteExternal t0 =
             PairLeft e          -> pure $ unwords ["ProjL", show e]
             PairRight e         -> pure $ unwords ["ProjR", show e]
 
-            Recursor (CompiledRecursor d ps nixs motive motive_ty cs_fs ctorOrder ty) ->
+            Recursor (CompiledRecursor d s nps nixs ctorOrder) ->
               do stashName d
                  mapM_ stashName ctorOrder
+                 let show_s = if s == propSort then "Prop" else drop 5 (show s)
                  pure $ unwords
-                      (["Recursor" , show (nameIndex d), show nixs] ++
-                       map show ps ++
-                       [ argsep, show motive, show motive_ty
-                       , show (Map.toList cs_fs)
+                      (["Recursor", show (nameIndex d), show_s, show nps, show nixs
                        , show (map nameIndex ctorOrder)
-                       , show ty
                        ])
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
@@ -211,15 +193,6 @@ scReadExternal sc input =
 
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
-
-    readElimsMap :: String -> ReadM (Map VarIndex (Term,Term))
-    readElimsMap str =
-      do (ls :: [(VarIndex,(Int,Int))]) <- readM str
-         elims  <- forM ls (\(c,(e,ty)) ->
-                    do e'  <- getTerm e
-                       ty' <- getTerm ty
-                       pure (c, (e',ty')))
-         pure (Map.fromList elims)
 
     readCtorList :: String -> ReadM [Name]
     readCtorList str =
@@ -287,18 +260,13 @@ scReadExternal sc input =
         ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
         ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
 
-        ("Recursor" : i : nixs :
-         (separateArgs ->
-          Just (ps, [motive, motiveTy, elims, ctorOrder, ty]))) ->
+        ["Recursor", i, s, nps, nixs, ctorOrder] ->
             do crec <- CompiledRecursor <$>
                         readName i <*>
-                        traverse readIdx ps <*>
+                        (if s == "Prop" then pure propSort else mkSort <$> readM s) <*>
+                        pure (read nps) <*>
                         pure (read nixs) <*>
-                        readIdx motive <*>
-                        readIdx motiveTy <*>
-                        readElimsMap elims <*>
-                        readCtorList ctorOrder <*>
-                        readIdx ty
+                        readCtorList ctorOrder
                pure (FTermF (Recursor crec))
 
         ["RecordType", elem_tps] ->

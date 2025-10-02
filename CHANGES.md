@@ -6,6 +6,20 @@ This release supports [version
 
 ## Changes
 
+* In SAWCore syntax (as used by `parse_core`, `prove_core`, and
+  `read_core`) partially-applied recursors are no longer an error.
+  Elimination sorts for recursors are now specified by suffix:
+  `TypeName#ind` eliminates to `Prop`, `TypeName#rec` eliminates
+  to `sort 0`, and `TypeName#rec<n>` eliminates to `sort n`.
+
+* The experimental command `extract_uninterp` has been removed.
+
+* The `normalize_term_opaque` and `goal_normalize` commands have been
+  reimplemented using a different normalization strategy which is more
+  conservative about type safety.
+  They may produce different outputs than before; in particular, fewer
+  applications of primitive functions are reduced.
+
 * The deprecated Heapster, MRSolver, and Monadify features have been
   removed.
   The following SAW commands and types are no longer available:
@@ -100,6 +114,10 @@ This release supports [version
 
 * Adds `w4_unint_rme` proof script for using RME extended with uninterpreted
   functions to resolve goals.
+
+* Add a `mir_extract : MIRModule -> String -> TopLevel Term` command, which
+  allows extracting a MIR function to a term. See the SAW manual for details on
+  what types of MIR functions are supported for extraction.
 
 # Version 1.4 -- date still TBD
 
