@@ -1,0 +1,12 @@
+test size_poly_err2/<DISAMB>::test[0]: FAILED
+
+failures:
+
+---- size_poly_err2/<DISAMB>::test[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   test/symb_eval/cryptol/size_poly_err2.rs:6:30: 6:69: error: in size_poly_err2/<DISAMB>::test[0]
+[Crux]   error loading "sum`{_,[8]}": Invalid size argument:
+[Crux]     Expected: an unsigned numeric type
+[Crux]     Actual: &[u8]
+
+[Crux] Overall status: Invalid.

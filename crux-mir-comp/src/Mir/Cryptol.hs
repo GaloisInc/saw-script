@@ -40,6 +40,7 @@ import qualified Data.BitVector.Sized as BV
 
 import Cryptol.TypeCheck.AST as Cry
 import qualified Cryptol.TypeCheck.Subst as Cry
+import qualified Cryptol.TypeCheck.PP as Cry
 import Cryptol.Utils.Ident as Cry
 import Cryptol.Utils.PP as Cry
 
@@ -306,8 +307,8 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
                 pure (Const ((tp, Cry.tNum conc), term))
           Nothing ->
             do
-              let nm = show (maybe "?" pp (Cry.tpName tp)) -- the "?" shouldn't happen
-              fail ("Size parameter " ++ nm ++ " is not a concrete number")
+              let nm = show (maybe "" (\x -> pp x <+> " ") (Cry.tpName tp))
+              fail ("Size parameter" ++ nm ++ " is not a concrete number")
 
     (tpBinds,tpTerms) <-
       unzip . toListFC getConst <$>
@@ -412,11 +413,11 @@ munge sym shp0 rv0 = do
     go shp0 rv0
 
 
--- | Information about a typechecked Cyrptol import
+-- | Information about the arguments of an imported Cryptol function
 data CryFunArgs args where
   CryFunArgs :: CryFunArgs' tps ps -> CryFunArgs (tps <+> ps)
 
--- | Information about a typechecked Cyrptol import
+-- | Information about a typechecked Cryptol import
 data CryFunArgs' tps ps where
   CryFunArgs' ::
     Assignment CryFunTArg tps {- ^ Size polymorphic parameters needed by the function -} ->
@@ -467,11 +468,17 @@ typecheckFnSig ::
     Either String (CryFunArgs args)
 typecheckFnSig fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
   | not (null badTPs) =
-    Left $ unlines [
-      "Cryptol functions with non-numeric generic arguments are not supported:",
+    Left $ unlines $ [
+      "Cryptol functions with non-numeric type parameters are not supported:",
       "Cryptol type:",
-      "  " ++ show (pp sch)
-      ]
+      "  " ++ show (pp sch),
+      "Unsupported parameters:"
+      ] ++ 
+      (let
+         ns = Cry.addTNames Cry.defaultPPCfg sizePs Cry.emptyNameMap
+       in
+        [ "  " ++ show (Cry.ppWithNames ns b <.> ":" <+> Cry.pp (Cry.kindOf b) ) | b <- badTPs ]
+      )
 
   | Just (SplitAssign tpShps normArgShps) <- splitAssign normArgNum argShps0 =
     case cryArgs normArgNum [] ty0 of

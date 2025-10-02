@@ -385,14 +385,17 @@ fieldShapeMirTy (OptField shp) = shapeMirTy shp
 -- | This is to accomodate multiple Rust types mapping to the same Cryptol
 -- type.  For example, if a Cryptol function expects [3][8], we could map
 -- it to a Rust function that either expects `[u8;3]`, or `&[u8]` with a
--- dynamic check that it has 3 elements.
+-- dynamic check that it has 3 elements.  The type parameter `a` is for the
+-- the lengths of the slices---it will be either Cryptol's `Type` during
+-- type checking, or `Intgeger`, once we instantiate a schema at a concrete
+-- type.
 data CryTermAdaptor a =
     NoAdapt                        -- ^ Use default translation
   | AdaptTuple [CryTermAdaptor a]  -- ^ Adapt a tuple
   | AdaptArray (CryTermAdaptor a)  -- ^ Adapt an array
   | AdaptDerefSlice a
     -- ^ A reference to a slice.  At the moment we only support slices of
-    -- primitve types (i.e., no further references in the elements)
+    -- primitive types (i.e., no further references in the elements)
     -- so we don't need further adaptors.
     deriving (Functor, Foldable, Traversable)
 
