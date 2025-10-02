@@ -1756,12 +1756,9 @@ eval_bool t = do
 eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
-  cenv <- SV.getCryptolEnv
-  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
-  opts <- getOptions
-  t' <- io $ defaultTypedTerm opts sc cfg t
+  t' <- default_typed_term t
   case ttType t' of
     TypedTermSchema (C.Forall [] [] (isInteger -> True)) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
