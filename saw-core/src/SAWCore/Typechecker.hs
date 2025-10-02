@@ -31,7 +31,6 @@ module SAWCore.Typechecker
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
-import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -132,23 +131,19 @@ inferApplyAll t (arg:args) =
 -- | Resolve a name in the current module and apply it to some arguments
 inferResolveNameApp :: Text -> [SCTypedTerm] -> CheckM SCTypedTerm
 inferResolveNameApp n args =
-  do ctx <- lift $ TC.askCtx
-     nctx <- askCtxEC
+  do nctx <- askCtxEC
      mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
-     case (findIndex ((== n) . fst) ctx, Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just i, _, _) ->
-         do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
-            inferApplyAll t args
-       (_, Just ec, _) ->
+     case (Map.lookup n nctx, resolveNameInMap mm ident) of
+       (Just ec, _) ->
          do t <- typeInferComplete (Variable (ecName ec) (ecType ec))
             inferApplyAll t args
-       (_, _, Just rn) ->
+       (_, Just rn) ->
          do let c = resolvedNameName rn
             t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
-       (Nothing, Nothing, Nothing) ->
+       (Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
 -- | Match an untyped term as a name applied to 0 or more arguments

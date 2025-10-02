@@ -32,8 +32,6 @@ module SAWCore.SharedTerm
     -- * Shared terms
   , Term(..)
   , TermIndex
-  , looseVars
-  , smallestLooseVar
   , scSharedTerm
   , unshare
   , scImport
@@ -98,7 +96,6 @@ module SAWCore.SharedTerm
   , scISort
   , scSortWithFlags
     -- *** Variables and constants
-  , scLocalVar
   , scConst
   , scConstApply
     -- *** Functions and function application
@@ -238,15 +235,11 @@ module SAWCore.SharedTerm
     -- ** Utilities
 --  , scTrue
 --  , scFalse
-   , scOpenTerm
-   , scCloseTerm
   , scAsLambda
   , scAsLambdaList
   , scAsPi
   , scAsPiList
     -- ** Variable substitution
-  , instantiateVar
-  , instantiateVarList
   , betaNormalize
   , getAllExts
   , getAllExtSet
@@ -257,7 +250,6 @@ module SAWCore.SharedTerm
   , scAbstractExtsEtaCollapse
   , scGeneralizeExts
   , scGeneralizeTerms
-  , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
   , scUnfoldConstantSet
@@ -758,7 +750,6 @@ getTerm cache termF =
         i <- getUniqueInt
         let term = STApp { stAppIndex = i
                          , stAppHash = hash termF
-                         , stAppLooseVars = looseTermF (fmap looseVars termF)
                          , stAppFreeVars = freesTermF (fmap freeVars termF)
                          , stAppTermF = termF
                          }
@@ -1300,8 +1291,6 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
                  Nothing -> return False
                  Just zipped -> Fold.and <$> traverse id zipped
 
-       goF _c _vm (LocalVar i) (LocalVar j) = return (i == j)
-
        goF c vm (App f1 x1) (App f2 x2) =
               pure (&&) <*> go c vm f1 f2 <*> go c vm x1 x2
 
@@ -1401,9 +1390,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           let srt = if rtp == propSort then propSort else max ltp rtp
 
           lift $ scSort sc srt
-        LocalVar i
-          | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
         Constant nm ->
           do mm <- liftIO $ scGetModuleMap sc
              case lookupVarIndexInMap (nameIndex nm) mm of
@@ -1499,105 +1485,6 @@ scImport sc t0 =
           Unshared <$> traverse (go cache) tf
     go cache (STApp{ stAppIndex = idx, stAppTermF = tf}) =
           useCache cache idx (scTermF sc =<< traverse (go cache) tf)
-
---------------------------------------------------------------------------------
--- Instantiating variables
-
--- | The second argument is a function that takes the number of
--- enclosing lambdas and the de Bruijn index of the variable,
--- returning the new term to replace it with.
-instantiateLocalVars ::
-  SharedContext ->
-  (DeBruijnIndex -> DeBruijnIndex -> IO Term) ->
-  DeBruijnIndex -> Term -> IO Term
-instantiateLocalVars sc f initialLevel t0 =
-  do cache <- newCache
-     let ?cache = cache in go initialLevel t0
-  where
-    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-          DeBruijnIndex -> Term -> IO Term
-    go l t =
-      case t of
-        Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppTermF = tf }
-          | termIsClosed t -> return t -- closed terms map to themselves
-          | otherwise -> useCache ?cache (tidx, l) (go' l tf)
-
-    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
-           DeBruijnIndex -> TermF Term -> IO Term
-    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
-    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
-    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go l rhs)
-    go' l (LocalVar i)
-      | i < l     = scTermF sc (LocalVar i)
-      | otherwise = f l i
-    go' _ tf@(Constant {}) = scTermF sc tf
-    go' _ tf@(Variable {}) = scTermF sc tf
-
--- | @incVars k j t@ increments free variables at least @k@ by @j@.
--- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVars :: SharedContext
-        -> DeBruijnIndex -> DeBruijnIndex -> Term -> IO Term
-incVars sc initialLevel j
-  | j == 0    = return
-  | otherwise = instantiateLocalVars sc fn initialLevel
-  where
-    fn _ i = scTermF sc (LocalVar (i+j))
-
--- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
--- dangling variables.
-instantiateVar :: SharedContext
-               -> DeBruijnIndex -> Term -> Term -> IO Term
-instantiateVar sc k t0 t =
-    do cache <- newCache
-       let ?cache = cache in instantiateLocalVars sc fn k t
-  where -- Use map reference to memoize instantiated versions of t.
-        term :: (?cache :: Cache IO DeBruijnIndex Term) =>
-                DeBruijnIndex -> IO Term
-        term i = useCache ?cache i (incVars sc 0 i t0)
-        -- Instantiate variable 0.
-        fn :: (?cache :: Cache IO DeBruijnIndex Term) =>
-              DeBruijnIndex -> DeBruijnIndex -> IO Term
-        fn i j | j  > i     = scTermF sc (LocalVar (j - 1))
-               | j == i     = term i
-               | otherwise  = scTermF sc (LocalVar j)
-
--- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and decrement all
--- higher deBruijn indices by @length ts@. Assume that deBruijn index 0 in @ts@
--- refers to deBruijn index @k + length ts@ in the current term; i.e., this
--- substitution lifts terms in @ts@ by @k@ (plus any additional binders).
---
--- For example, @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of
---
--- > Lam (Lam (Lam t)) `App` z `App` y `App` x
---
--- Note that the first element of the @ts@ list corresponds to @x@, which is the
--- outermost, or last, application. In terms of 'instantiateVar', we can write
--- this as:
---
--- > instantiateVarList 0 [x,y,z] t ==
--- >    instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
--- >                       (instantiateVar 2 (incVars 0 2 z) t))
-instantiateVarList :: SharedContext
-                   -> DeBruijnIndex -> [Term] -> Term -> IO Term
-instantiateVarList _ _ [] t = return t
-instantiateVarList sc k ts t =
-    do caches <- mapM (const newCache) ts
-       instantiateLocalVars sc (fn (zip caches ts)) k t
-  where
-    l = length ts
-    -- Memoize instantiated versions of ts.
-    term :: (Cache IO DeBruijnIndex Term, Term)
-         -> DeBruijnIndex -> IO Term
-    term (cache, x) i = useCache cache i (incVars sc 0 (i-k) x)
-    -- Instantiate variables [k .. k+l-1].
-    fn :: [(Cache IO DeBruijnIndex Term, Term)]
-       -> DeBruijnIndex -> DeBruijnIndex -> IO Term
-    fn rs i j | j >= i + l     = scTermF sc (LocalVar (j - l))
-              | j >= i         = term (rs !! (j - i)) i
-              | otherwise      = scTermF sc (LocalVar j)
-
 
 --------------------------------------------------------------------------------
 -- Beta Normalization
@@ -1833,12 +1720,6 @@ scPiList :: SharedContext
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
--- | Create a local variable term from a 'DeBruijnIndex'.
-scLocalVar :: SharedContext
-           -> DeBruijnIndex
-           -> IO Term
-scLocalVar sc i = scTermF sc (LocalVar i)
-
 -- | Create an abstract constant with the specified name, body, and
 -- type. The term for the body must not have any loose de Bruijn
 -- indices. If the body contains any ExtCns variables, they will be
@@ -1849,7 +1730,7 @@ scConstant :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant sc name rhs ty =
-  do unless (termIsClosed rhs) $
+  do unless (closedTerm rhs) $
        fail "scConstant: term contains loose variables"
      unless (null (getAllExts rhs)) $
        fail $ unlines
@@ -1878,7 +1759,7 @@ scConstant' :: SharedContext
             -> Term   -- ^ The type
             -> IO Term
 scConstant' sc nmi rhs ty =
-  do unless (termIsClosed rhs) $
+  do unless (closedTerm rhs) $
        fail "scConstant': term contains loose variables"
      unless (null (getAllExts rhs)) $
        fail $ unlines
@@ -2795,7 +2676,6 @@ scInstantiateExt sc vmap t0 =
                  do t1' <- memo t1
                     (x', t2') <- goBinder x t1' t2
                     scPi sc x' t1' t2'
-               LocalVar {} -> pure t
                Constant {} -> pure t
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
@@ -3026,33 +2906,6 @@ scTreeSizeAux = go
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
 
-
--- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
---   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
-scOpenTerm :: SharedContext
-         -> Text
-         -> Term
-         -> DeBruijnIndex
-         -> Term
-         -> IO (ExtCns Term, Term)
-scOpenTerm sc nm tp idx body = do
-    ec <- scFreshEC sc nm tp
-    ec_term <- scVariable sc ec
-    body' <- instantiateVar sc idx ec_term body
-    return (ec, body')
-
--- | `closeTerm close sc ec body` replaces the external constant `ec` in `body` by
---   a new deBruijn variable and binds it using the binding form given by 'close'.
---   The name and type of the new bound variable are given by the name and type of `ec`.
-scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
-          -> SharedContext
-          -> ExtCns Term
-          -> Term
-          -> IO Term
-scCloseTerm close sc ec body = do
-    lv <- scLocalVar sc 0
-    body' <- scInstantiateExt sc (IntMap.singleton (ecVarIndex ec) lv) =<< incVars sc 0 1 body
-    close sc (ecShortName ec) (ecType ec) body'
 
 -- | Deconstruct a lambda term into a bound variable and a body, using
 -- a fresh 'ExtCns' for the bound variable.

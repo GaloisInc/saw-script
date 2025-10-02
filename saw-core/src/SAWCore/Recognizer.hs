@@ -49,7 +49,6 @@ module SAWCore.Recognizer
   , asLambdaList
   , asPi
   , asPiList
-  , asLocalVar
   , asConstant
   , asVariable
   , asSort
@@ -328,10 +327,6 @@ asPiList :: Term -> ([(VarName, Term)], Term)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
-
-asLocalVar :: Recognizer Term DeBruijnIndex
-asLocalVar (unwrapTermF -> LocalVar i) = return i
-asLocalVar _ = Nothing
 
 asConstant :: Recognizer Term Name
 asConstant (unwrapTermF -> Constant nm) = pure nm

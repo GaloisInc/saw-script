@@ -137,6 +137,7 @@ import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import           Data.List (genericDrop, genericLength, genericSplitAt)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -156,7 +157,7 @@ import SAWCore.Prelude (scApplyPrelude_False)
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
-import SAWCore.Name (DisplayNameEnv, ecShortName)
+import SAWCore.Name (DisplayNameEnv, VarName(..), ecShortName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
@@ -295,8 +296,8 @@ splitImpl sc (Prop p)
        return (Just (Prop h', Prop c'))
 
   -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
-  | Just (_nm, arg, c) <- asPi p
-  , termIsClosed c -- make sure this is a nondependent Pi (AKA arrow type)
+  | Just (nm, arg, c) <- asPi p
+  , IntSet.notMember (vnIndex nm) (freeVars c) -- make sure this is a nondependent Pi (AKA arrow type)
   = termToMaybeProp sc arg >>= \case
       Nothing -> return Nothing
       Just h  -> return (Just (h, Prop c))
@@ -1465,9 +1466,9 @@ normalizeConcl sc p =
        _ ->
          -- handle the case of (H1 -> H2), where H1 and H2 are in Prop
          case asPi t of
-           Just (_nm, arg, body)
+           Just (nm, arg, body)
              -- check that this is non-dependent Pi (AKA arrow type)
-             | termIsClosed body ->
+             | IntSet.notMember (vnIndex nm) (freeVars body) ->
              termToMaybeProp sc arg >>= \case
                Nothing -> return (RawSequent [] [p])
                Just h  ->
@@ -1532,8 +1533,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
     checkApply nenv mkSqt (Prop p) (Right e:es)
-      | Just (_lnm, tp, body) <- asPi p
-      , termIsClosed body
+      | Just (lnm, tp, body) <- asPi p
+      , IntSet.notMember (vnIndex lnm) (freeVars body)
       = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
            (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
@@ -1958,7 +1959,7 @@ sequentToSATQuery sc unintSet sqt =
                   Just fot ->
                     processUnivAssert mmap ((ec, fot) : vars) xs body
                   Nothing
-                    | termIsClosed body ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map (ecVarIndex . fst) vars)) ->
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->
@@ -1989,7 +1990,7 @@ sequentToSATQuery sc unintSet sqt =
                   Just fot ->
                     processConcl mmap (Map.insert ec fot vars, xs) body
                   Nothing
-                    | termIsClosed body ->
+                    | IntSet.null (foldr IntSet.delete (freeVars body) (map ecVarIndex (Map.keys vars))) ->
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise ->

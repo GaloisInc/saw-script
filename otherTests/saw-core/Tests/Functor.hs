@@ -50,7 +50,6 @@ shared :: TermIndex -> TermF Term -> Term
 shared ix t = STApp {
     stAppIndex = ix,
     stAppHash = hash t,
-    stAppLooseVars = emptyBitSet,
     stAppFreeVars = mempty,
     stAppTermF = t
  }
@@ -175,7 +174,7 @@ instance TestIt Term where
         let depth' = depth + 1
             unit = Unshared $ FTermF $ UnitValue
             zero = Unshared $ FTermF $ NatLit 0
-            localvar = Unshared $ LocalVar 0
+            localvar = Unshared $ Variable vnBar t
         testOne depth' $ PairValue t t
         testOne depth' $ PairValue t zero
         testOne depth' $ PairValue unit t

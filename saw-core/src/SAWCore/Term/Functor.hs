@@ -30,7 +30,6 @@ module SAWCore.Term.Functor
   , identText
   , identPieces
     -- * Data types and definitions
-  , DeBruijnIndex
   , FieldName
   , LocalName
   , ExtCns(..)
@@ -45,7 +44,6 @@ module SAWCore.Term.Functor
   , TermF(..)
   , FlatTermF(..)
   , zipWithFlatTermF
-  , looseTermF
   , unwrapTermF
   , termToPat
   , alphaEquiv
@@ -54,16 +52,10 @@ module SAWCore.Term.Functor
   , Sort(..), mkSort, propSort, sortOf, maxSort
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
     -- * Sets of free variables
-  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
-  , smallestBitSetElem
-  , bitSetBound
-  , looseVars, smallestLooseVar, termIsClosed
   , freesTermF, freeVars
   , closedTerm
   ) where
 
-import Data.Bits
 import qualified Data.Foldable as Foldable (and, foldl')
 import Data.Hashable
 import Data.IntMap (IntMap)
@@ -75,7 +67,6 @@ import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Data.Word
 import GHC.Generics (Generic)
 import Numeric.Natural
 
@@ -85,13 +76,8 @@ import Instances.TH.Lift () -- for instance TH.Lift Text
 import SAWCore.Name
 import qualified SAWCore.TermNet as Net
 
-type DeBruijnIndex = Int
 type FieldName = Text
 type LocalName = Text
-  -- ^ 'LocalName' is used for pretty printing purposes, but does not affect the semantics of SAWCore terms,
-  -- rather, the 'DeBruijnIndex'-s are what is used to reference variables.
-  -- FIXME: Verify the above statement
-  -- FIXME: Possibly, change to a name that suggests this use.
 
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)
@@ -340,8 +326,6 @@ data TermF e
       -- ^ Function abstractions
     | Pi !VarName !e !e
       -- ^ The type of a (possibly) dependent function
-    | LocalVar !DeBruijnIndex
-      -- ^ Local variables are referenced by deBruijn index.
     | Constant !Name
       -- ^ A global constant identified by its name.
     | Variable !VarName !e
@@ -381,9 +365,6 @@ data Term
        -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
        -- with this 'Term'. This should be as unique as a hash can be, but is
        -- not guaranteed unique as 'stAppIndex' is.
-     , stAppLooseVars :: !BitSet
-       -- ^ A set containing the 'DeBruijnIndex' of each of the loose
-       -- de Bruijn indices from 'LocalVar' constructors in the term.
      , stAppFreeVars :: !IntSet
        -- ^ A set containing the 'VarIndex' of each of the free named
        -- variables from 'Variable' constructors in the term.
@@ -444,7 +425,7 @@ equalTerm (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
   -- inequality.
 
 -- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
--- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
+-- 'VarName's in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
 -- 'Unshared' expressions).
 alphaEquiv :: Term -> Term -> Bool
 alphaEquiv = term IntMap.empty
@@ -467,7 +448,6 @@ alphaEquiv = term IntMap.empty
     termf vm (Pi (vnIndex -> i1) t1 u1) (Pi (vnIndex -> i2) t2 u2) =
       let vm' = if i1 == i2 then vm else IntMap.insert i1 i2 vm
       in term vm t1 t2 && term vm' u1 u2
-    termf _vm (LocalVar i1) (LocalVar i2) = i1 == i2
     termf _vm (Constant x1) (Constant x2) = x1 == x2
     termf vm (Variable x1 _t1) (Variable x2 _t2) =
       case IntMap.lookup (vnIndex x1) vm of
@@ -477,7 +457,6 @@ alphaEquiv = term IntMap.empty
     termf _ App{}      _ = False
     termf _ Lambda{}   _ = False
     termf _ Pi{}       _ = False
-    termf _ LocalVar{} _ = False
     termf _ Constant{} _ = False
     termf _ Variable{} _ = False
 
@@ -510,100 +489,6 @@ unwrapTermF STApp{stAppTermF = tf} = tf
 unwrapTermF (Unshared tf) = tf
 
 
--- Free de Bruijn Variables ----------------------------------------------------
-
--- | A @BitSet@ represents a set of natural numbers.
--- Bit n is a 1 iff n is in the set.
-newtype BitSet = BitSet Integer deriving (Eq, Ord, Show)
-
--- | The empty 'BitSet'
-emptyBitSet :: BitSet
-emptyBitSet = BitSet 0
-
--- | The singleton 'BitSet'
-singletonBitSet :: Int -> BitSet
-singletonBitSet = BitSet . bit
-
--- | Test if a number is in a 'BitSet'
-inBitSet :: Int -> BitSet -> Bool
-inBitSet i (BitSet j) = testBit j i
-
--- | Union two 'BitSet's
-unionBitSets :: BitSet -> BitSet -> BitSet
-unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)
-
--- | Intersect two 'BitSet's
-intersectBitSets :: BitSet -> BitSet -> BitSet
-intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&. i2)
-
--- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
--- set. This is useful for moving a 'BitSet' out of the scope of a variable.
-decrBitSet :: BitSet -> BitSet
-decrBitSet (BitSet i) = BitSet (shiftR i 1)
-
--- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
--- removing any value less than @N@. This is the same as calling 'decrBitSet'
--- @N@ times.
-multiDecrBitSet :: Int -> BitSet -> BitSet
-multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)
-
--- | The 'BitSet' containing all elements less than a given index @i@
-completeBitSet :: Int -> BitSet
-completeBitSet i = BitSet (bit i - 1)
-
--- | Compute the smallest element of a 'BitSet', if any
-smallestBitSetElem :: BitSet -> Maybe Int
-smallestBitSetElem (BitSet 0) = Nothing
-smallestBitSetElem (BitSet i) | i < 0 = error "smallestBitSetElem"
-smallestBitSetElem (BitSet i) = Just $ go 0 i where
-  go :: Int -> Integer -> Int
-  go !shft !x
-    | xw == 0   = go (shft+64) (shiftR x 64)
-    | otherwise = shft + countTrailingZeros xw
-    where xw :: Word64
-          xw = fromInteger x
-
--- | Compute the list of all elements of a 'BitSet'
-bitSetElems :: BitSet -> [Int]
-bitSetElems = go 0 where
-  -- Return the addition of shft to all elements of a BitSet
-  go :: Int -> BitSet -> [Int]
-  go shft bs = case smallestBitSetElem bs of
-    Nothing -> []
-    Just i ->
-      shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)
-
--- | Return the smallest non-negative integer greater than every
--- element of the 'BitSet'.
-bitSetBound :: BitSet -> Int
-bitSetBound b = length $ takeWhile (/= emptyBitSet) $ iterate decrBitSet b
-
--- | Compute the loose de Bruijn indices of a term given the loose
--- indices for its immediate subterms.
-looseTermF :: TermF BitSet -> BitSet
-looseTermF tf =
-    case tf of
-      FTermF ftf -> Foldable.foldl' unionBitSets emptyBitSet ftf
-      App l r -> unionBitSets l r
-      Lambda _name tp rhs -> unionBitSets tp rhs
-      Pi _name lhs rhs -> unionBitSets lhs rhs
-      LocalVar i -> singletonBitSet i
-      Constant {} -> emptyBitSet -- assume type is a closed term
-      Variable _name tp -> tp
-
--- | Return a bitset containing indices of all loose de Bruijn indices.
-looseVars :: Term -> BitSet
-looseVars STApp{ stAppLooseVars = x } = x
-looseVars (Unshared f) = looseTermF (fmap looseVars f)
-
--- | Compute the value of the smallest variable in the term, if any.
-smallestLooseVar :: Term -> Maybe Int
-smallestLooseVar = smallestBitSetElem . looseVars
-
--- | Test whether a 'Term' is closed, i.e., has no loose de Bruijn indices.
-termIsClosed :: Term -> Bool
-termIsClosed t = looseVars t == emptyBitSet
-
 -- Free Named Variables --------------------------------------------------------
 
 -- | Compute an 'IntSet' containing the 'VarIndex' of the free
@@ -616,7 +501,6 @@ freesTermF tf =
     App l r -> IntSet.union l r
     Lambda nm tp rhs -> IntSet.union tp (IntSet.delete (vnIndex nm) rhs)
     Pi nm lhs rhs -> IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)
-    LocalVar _ -> IntSet.empty
     Constant {} -> IntSet.empty
     Variable nm tp -> IntSet.insert (vnIndex nm) tp
 

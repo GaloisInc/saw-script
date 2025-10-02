@@ -161,8 +161,6 @@ evalTermF cfg lam recEval tf env env' =
                                       VNondependentPi . toTValue <$> lam t2 env env'
                                   return $ TValue $ VPiType v body
 
-    LocalVar i              -> force (env !! i)
-
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
                                   case simConstant cfg tf nm ty' of
@@ -624,7 +622,6 @@ mkMemoLocal cfg memoClosed t env env' = go mempty t
                               go memo' t2
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
-        LocalVar _      -> pure memo
         Constant{}      -> pure memo
         Variable _nm tp -> go memo tp
 

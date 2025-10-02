@@ -59,10 +59,9 @@ module SAWCore.Rewriter
   , hoistIfs
   ) where
 
-import Control.Monad (MonadPlus(..), (>=>), guard, unless)
+import Control.Monad (MonadPlus(..), (>=>), guard)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
-import Data.Either (partitionEithers)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
@@ -231,7 +230,7 @@ scMatch ::
 scMatch sc ctxt pat term =
   runMaybeT $
   do -- lift $ putStrLn $ "********** scMatch **********"
-     MatchState inst cs <- match 0 [] IntSet.empty pat term emptyMatchState
+     MatchState inst cs <- match IntSet.empty pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
   where
@@ -254,67 +253,42 @@ scMatch sc ctxt pat term =
 
     -- Check if a term is a higher-order variable pattern, i.e., a free variable
     -- (meaning one that can match anything) applied to 0 or more bound variable
-    -- arguments. Depth is the number of variables bound by lambdas or pis since
-    -- the top of the current pattern, so "bound" means less than the current depth
-    asVarPat :: Int -> IntSet -> Term -> Maybe (VarIndex, [Either DeBruijnIndex (ExtCns Term)])
-    asVarPat depth locals = go []
+    -- arguments.
+    asVarPat :: IntSet -> Term -> Maybe (VarIndex, [ExtCns Term])
+    asVarPat locals = go []
       where
         go js x =
           case unwrapTermF x of
             Variable nm _tp
               | IntSet.member (vnIndex nm) ixs -> Just (vnIndex nm, js)
               | otherwise  -> Nothing
-            App t (unwrapTermF -> LocalVar j)
-              | j < depth -> go (Left j : js) t
             App t (unwrapTermF -> Variable nm tp)
-              | IntSet.member (vnIndex nm) locals -> go (Right (EC nm tp) : js) t
+              | IntSet.member (vnIndex nm) locals -> go (EC nm tp : js) t
             _ -> Nothing
 
     -- Test if term y matches pattern x, meaning whether there is a substitution
-    -- to the free variables of x to make it equal to y. Depth is the number of
-    -- bound variables, so a "free" variable is a deBruijn index >= depth. Env
-    -- saves the names associated with those bound variables.
+    -- to the free variables of x to make it equal to y.
     -- The IntSet contains the VarIndexes named variables that are locally bound.
-    match :: Int -> [(LocalName, Term)] -> IntSet -> Term -> Term -> MatchState ->
-             MaybeT IO MatchState
-    match _ _ _ t@(STApp{stAppIndex = i}) (STApp{stAppIndex = j}) s
-      | termIsClosed t && i == j = return s
-    match depth env locals x y s@(MatchState m cs) =
+    match :: IntSet -> Term -> Term -> MatchState -> MaybeT IO MatchState
+    match _ t@(STApp{stAppIndex = i}) (STApp{stAppIndex = j}) s
+      | closedTerm t && i == j = return s
+    match locals x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm PPS.defaultOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm PPS.defaultOpts y) >>
-      case asVarPat depth locals x of
+      case asVarPat locals x of
         -- If the lhs pattern is of the form (?u b1..bk) where ?u is a
         -- unification variable and b1..bk are all locally bound
         -- variables: First check whether the rhs contains any locally
         -- bound variables *not* in the list b1..bk. If it contains any
         -- others, then there is no match. If it only uses a subset of
         -- b1..bk, then we can instantiate ?u to (\b1..bk -> rhs).
-        Just (i, jvs) ->
+        Just (i, vs) ->
           do -- ensure parameter variables are distinct
-             guard (Set.size (Set.fromList jvs) == length jvs)
-             let (js, vs) = partitionEithers jvs
-             -- ensure y mentions only variables that are in js
-             let fvj = foldl unionBitSets emptyBitSet (map singletonBitSet js)
-             let fvy = looseVars y `intersectBitSets` (completeBitSet depth)
-             guard (fvy `unionBitSets` fvj == fvj)
+             guard (Set.size (Set.fromList vs) == length vs)
+             -- ensure y mentions only variables that are in vs
              let vset = IntSet.fromList (map ecVarIndex vs)
              guard (IntSet.disjoint (IntSet.difference locals vset) (freeVars y))
-             let fixVar t (nm, ty) =
-                   do ec <- scFreshEC sc nm ty
-                      v <- scVariable sc ec
-                      t' <- instantiateVar sc 0 v t
-                      return (t', ec)
-             let fixVars t [] = return (t, [])
-                 fixVars t (ty : tys) =
-                   do (t', ec) <- fixVar t ty
-                      (t'', ecs) <- fixVars t' tys
-                      return (t'', ec : ecs)
-             -- replace local bound variables with global ones
-             -- this also decrements loose variables in y by `depth`
-             (y1, ecs) <- lift $ fixVars y env
-             -- replace global variables with reindexed bound vars
-             -- y2 should have no more of the newly-created ExtCns vars
-             y2 <- lift $ scAbstractExts sc (map (either (ecs !!) id) jvs) y1
+             y2 <- lift $ scAbstractExts sc vs y
              let (my3, m') = insertLookup i y2 m
              case my3 of
                Nothing -> return (MatchState m' cs)
@@ -325,18 +299,18 @@ scMatch sc ctxt pat term =
               | Just [x'] <- R.asGlobalApply preludeSuccIdent x
               , n > 0 ->
                 do y' <- lift $ scNat sc (n-1)
-                   match depth env locals x' y' s
+                   match locals x' y' s
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
-              case zipWithFlatTermF (match depth env locals) xf yf of
+              case zipWithFlatTermF (match locals) xf yf of
                 Nothing -> mzero
                 Just zf -> Foldable.foldl (>=>) return zf s
             (App x1 x2, App y1 y2) ->
-              match depth env locals x1 y1 s >>= match depth env locals x2 y2
+              match locals x1 y1 s >>= match locals x2 y2
             (Lambda nm t1 x1, Lambda _ t2 x2) ->
-              match depth env locals t1 t2 s >>= match depth env (IntSet.insert (vnIndex nm) locals) x1 x2
+              match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
             (Pi nm t1 x1, Pi _ t2 x2) ->
-              match depth env locals t1 t2 s >>= match depth env (IntSet.insert (vnIndex nm) locals) x1 x2
+              match locals t1 t2 s >>= match (IntSet.insert (vnIndex nm) locals) x1 x2
             (App _ _, FTermF (NatLit n)) ->
               -- add deferred constraint
               return (MatchState m ((x, n) : cs))
@@ -835,7 +809,9 @@ rewriteSharedTermTypeSafe sc ss t0 =
                  case unwrapTermF t1 of
                    -- We only rewrite e2 if type of e1 is not a dependent type.
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi _ _ t | inBitSet 0 (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
+                   Pi x _ t
+                     | IntSet.notMember (vnIndex x) (freeVars t) ->
+                         App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           Constant{}     -> return tf
@@ -933,8 +909,6 @@ replaceTerm :: Ord a =>
   Term         {- ^ the term in which to perform the replacement -} ->
   IO (Set a, Term)
 replaceTerm sc ss (pat, repl) t = do
-    unless (termIsClosed pat) $ fail $ unwords
-       [ "replaceTerm: term to replace has free variables!", scPrettyTerm PPS.defaultOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
     rewriteSharedTerm sc ss' t
@@ -1037,7 +1011,6 @@ doHoistIfs sc ss hoistCache = go
 
        goF :: Term -> TermF Term -> IO (HoistIfs s)
 
-       goF t (LocalVar _)  = return (t, [])
        goF t (Constant {}) = return (t, [])
        goF t (Variable {}) = return (t, [])
 

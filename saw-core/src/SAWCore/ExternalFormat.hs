@@ -116,7 +116,6 @@ scWriteExternal t0 =
         Pi s t e       ->
           do stashVarName s
              pure $ unwords ["Pi", show (vnIndex s), show t, show e]
-        LocalVar i     -> pure $ unwords ["Var", show i]
         Constant nm    ->
             do stashName nm
                pure $ unwords ["Constant", show (nameIndex nm)]
@@ -253,7 +252,6 @@ scReadExternal sc input =
         ["App", e1, e2]     -> App <$> readIdx e1 <*> readIdx e2
         ["Lam", s, t, e]    -> Lambda <$> readVarName s <*> readIdx t <*> readIdx e
         ["Pi", s, t, e]     -> Pi <$> readVarName s <*> readIdx t <*> readIdx e
-        ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i]      -> Constant <$> readName i
         ["ConstantOpaque",i]  -> Constant <$> readName i
         ["Unit"]            -> pure $ FTermF UnitValue

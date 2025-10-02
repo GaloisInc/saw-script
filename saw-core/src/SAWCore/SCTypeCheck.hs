@@ -468,16 +468,6 @@ instance TypeInfer (TermF SCTypedTerm) where
        -- when b is a Prop (this is a forall proposition), otherwise it is a
        -- (Type (max (sortOf a) (sortOf b)))
        liftTCM scSort $ if s2 == propSort then propSort else max s1 s2
-  typeInfer (LocalVar i) =
-    do ctx <- askCtx
-       if i < length ctx then
-         -- The ith type in the current variable typing context is well-typed
-         -- relative to the suffix of the context after it, so we have to lift it
-         -- (i.e., call incVars) to make it well-typed relative to all of ctx
-         liftTCM incVars 0 (i+1) (snd (ctx !! i))
-         else
-         error ("Context = " ++ show ctx)
-         -- throwTCError (DanglingVar (i - length ctx))
   typeInfer (Constant nm) = typeInferConstant nm
   typeInfer (Variable _nm tp) =
     -- FIXME: should we check that the type of ecType is a sort?
@@ -654,9 +644,7 @@ inferRecursor r =
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
 scTypeOfTypedTerm sc (SCTypedTerm _tm tp ctx) =
   do tp_tp <- scTypeOf' sc ctx tp
-     -- Shrink de Bruijn context if possible
-     let ctx' = take (bitSetBound (looseVars tp_tp)) ctx
-     pure (SCTypedTerm tp tp_tp ctx')
+     pure (SCTypedTerm tp tp_tp ctx)
 
 -- | Reduce an 'SCTypedTerm' to WHNF (see also 'scTypeCheckWHNF').
 scTypedTermWHNF :: SharedContext -> SCTypedTerm -> IO SCTypedTerm

@@ -272,10 +272,10 @@ replacePrim pat replace t = do
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
-  unless (termIsClosed tpat) $ fail $ unlines
+  unless (closedTerm tpat) $ fail $ unlines
     [ "pattern term is not closed", show tpat ]
 
-  unless (termIsClosed trepl) $ fail $ unlines
+  unless (closedTerm trepl) $ fail $ unlines
     [ "replacement term is not closed", show trepl ]
 
   io $ do
@@ -732,13 +732,13 @@ build_congruence sc tm =
      case asPiList ty of
        ([],_) -> fail "congruence_for: Term is not a function"
        (pis, body) ->
-         if termIsClosed body then
+         if closedTerm body then
            loop pis []
          else
            fail "congruence_for: cannot build congruence for dependent functions"
  where
   loop ((nm,tp):pis) vars =
-    if termIsClosed tp then
+    if closedTerm tp then
       do l <- scFreshEC sc (vnName nm <> "_1") tp
          r <- scFreshEC sc (vnName nm <> "_2") tp
          loop pis ((l,r):vars)

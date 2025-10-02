@@ -24,11 +24,11 @@ checkDef :: Def -> Assertion
 checkDef d = do
   let sym = nameInfo (defName d)
   let tp = defType d
-  assertBool (namedMsg sym "Type is not ground.") (termIsClosed tp)
+  assertBool (namedMsg sym "Type is not ground.") (closedTerm tp)
   case defBody d of
     Nothing -> return ()
     Just body ->
-      assertBool (namedMsg sym "Body is not ground.") (termIsClosed body)
+      assertBool (namedMsg sym "Body is not ground.") (closedTerm body)
 
 checkPrelude :: Assertion
 checkPrelude =

@@ -204,7 +204,7 @@ withSharedTerm :: TermTranslationMonad m => TermIndex -> Term ->
                   (Coq.Ident -> m a) -> m a
 withSharedTerm idx t f =
   do ident <- (view nextSharedName <$> askTR) >>= freshVariant
-     let sh_nm = SharedName ident $ termIsClosed t
+     let sh_nm = SharedName ident $ closedTerm t
      localTR (set nextSharedName (nextVariant ident) .
               over sharedNames (IntMap.insert idx sh_nm)) $
        withUsedCoqIdent ident $ f ident
@@ -694,12 +694,8 @@ translateTerm t =
 
 -- | Translate a SAW core 'Term' to Coq without using sharing
 translateTermUnshared :: TermTranslationMonad m => Term -> m Coq.Term
-translateTermUnshared t = do
+translateTermUnshared t =
   -- traceTerm "translateTerm" t $
-  -- NOTE: env is in innermost-first order
-  env <- view localEnvironment <$> askTR
-  -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
-  -- case t' of
   case unwrapTermF t of
 
     FTermF ftf -> flatTermFToExpr ftf
@@ -750,10 +746,6 @@ translateTermUnshared t = do
         _ -> translateIdentWithArgs i args
       _ -> Coq.App <$> translateTerm f <*> traverse translateTerm args
 
-    LocalVar n
-      | n < length env -> Coq.Var <$> pure (env !! n)
-      | otherwise -> Except.throwError $ LocalVarOutOfBounds t
-
     -- Constants
     Constant n -> translateConstant n
 
@@ -796,7 +788,7 @@ defaultTermForType typ = do
 
     (asPiList -> (bs,body))
       | not (null bs)
-      , looseVars body == emptyBitSet ->
+      , closedTerm body ->
       do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder "_" . Just <$> translateTerm ty
          body' <- defaultTermForType body
          return $ Coq.Lambda bs' body'

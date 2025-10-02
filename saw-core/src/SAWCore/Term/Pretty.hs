@@ -169,7 +169,6 @@ termVarNames t0 = evalState (go t0) IntMap.empty
         App e1 e2 -> Set.union e1 e2
         Lambda x e1 e2 -> Set.union e1 (Set.delete x e2)
         Pi x e1 e2 -> Set.union e1 (Set.delete x e2)
-        LocalVar _ -> Set.empty
         Constant _ -> Set.empty
         Variable vn e1 -> Set.insert vn e1
 
@@ -503,7 +502,6 @@ ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
-ppTermF _ (LocalVar x) = pure $ annotate PPS.LocalVarStyle $ pretty ("!" ++ show x)
 ppTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> ppBestName nm
 ppTermF _ (Variable vn _tp) = annotate PPS.ExtCnsStyle <$> ppVarName vn
 
@@ -578,7 +576,6 @@ shouldMemoizeTerm t =
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False
     Constant{} -> False
-    LocalVar{} -> False
     Variable{} -> False
     _ -> True
 
@@ -600,7 +597,7 @@ filterOccurenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then termIsClosed t else True))
+        (if global_p then closedTerm t else True))
 
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
