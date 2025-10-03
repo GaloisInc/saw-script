@@ -395,8 +395,9 @@ data CryTermAdaptor a =
   | AdaptArray (CryTermAdaptor a)         -- ^ Adapt an array
   | AdaptDerefSlice M.Collection a (CryTermAdaptor a)
     -- ^ A reference to a slice.
-    -- We also store the collection here so that we can convert MIR types
-    -- to typeshapes when we need to.
+    -- We also store the 'M.Collection' here so that we can convert the
+    -- element type's 'TypeRepr' to a 'TypeShape' when we need to (see,
+    -- for instance, the implementation of `shapeToTerm'`).
     deriving (Functor, Foldable, Traversable)
 
 isCryNoAdapt :: CryTermAdaptor a -> Bool
