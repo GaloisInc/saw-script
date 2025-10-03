@@ -177,7 +177,7 @@ with the type of the declared Rust functions, according to the following
 rules:
 
   * The Cryptol type may have only numeric type parameters
-  * The first parameters of the Rust functction should correspond to the
+  * The first parameters of the Rust function should correspond to the
     numeric type parameters of the Cryptol expression; they should be
     of basic Rust numeric types (e.g., `usize`)
   * Symbolic expressions may *not* be used as arguments corresponding to
