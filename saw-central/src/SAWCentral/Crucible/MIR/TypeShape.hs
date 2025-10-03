@@ -387,7 +387,7 @@ fieldShapeMirTy (OptField shp) = shapeMirTy shp
 -- it to a Rust function that either expects `[u8;3]`, or `&[u8]` with a
 -- dynamic check that it has 3 elements.  The type parameter `a` is for the
 -- the lengths of the slices---it will be either Cryptol's `Type` during
--- type checking, or `Intgeger`, once we instantiate a schema at a concrete
+-- type checking, or `Integer`, once we instantiate a schema at a concrete
 -- type.
 data CryTermAdaptor a =
     NoAdapt                               -- ^ Use default translation
