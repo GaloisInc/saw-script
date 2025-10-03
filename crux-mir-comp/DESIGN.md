@@ -157,7 +157,7 @@ import a Cryptol function `myCryFun` defined in Cryptol module `SomeCryMod`,
 and bind it as the Rust function `myRustFun`:
 
 ```Cryptol
-module SomeCyMod where
+module SomeCryMod where
   f: [8] -> [32]
   f x = 0 # x
 ```
