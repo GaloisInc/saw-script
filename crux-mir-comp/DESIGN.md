@@ -187,7 +187,7 @@ rules:
       * Cryptol's `Bit` is represented as Rust's `bool`
       * A Cryptol sequence of length `n` may be represented as a Rust
         array of length `n`.
-      * In the parmeters of the Rust function, Cryptol sequences may also
+      * In the parameters of the Rust function, Cryptol sequences may also
         be represented as reference to slices.  The length of the slice should
         match the length of the Cryptol sequence, which is checked dynamically.
       * Cryptol `Bit` sequences of lengths corresponding to Rust's basic
