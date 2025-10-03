@@ -173,7 +173,7 @@ generic parameters in curly braces (literal curly braces need to be escaped
 as a double curly brace).
 
 It is important that the type of the Cryptol expression is compatible
-with the type of the declared Rust functions, according to the following
+with the type of the declared Rust function, according to the following
 rules:
 
   * The Cryptol type may have only numeric type parameters
