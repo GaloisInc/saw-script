@@ -561,6 +561,7 @@ scTermCountAux doBinders = go
             Lambda _ t1 _ | not doBinders  -> [t1]
             Pi _ t1 _     | not doBinders  -> [t1]
             Constant{}                     -> []
+            Variable{}                     -> []
             FTermF (Recursor _)            -> []
             tf                             -> Fold.toList tf
 
