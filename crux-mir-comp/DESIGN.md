@@ -167,7 +167,7 @@ cryptol! {
 Тhe `path` component of the macro specifies a Cryptol module,
 the string after the `=` is a Cryptol expression, and the rest of the
 declaration specifies how to invoke evaluating the Cryptol expression from
-Rust.  If the declaration contains `const` generics, than the Cryptol expression
+Rust.  If the declaration contains `const` generics, then the Cryptol expression
 is specified as a format string which may refer to the values of the const
 generic parameters in curly braces (literal curly braces need to be escaped
 as a double curly brace).
