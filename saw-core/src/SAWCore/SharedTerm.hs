@@ -2726,23 +2726,33 @@ getAllExts t = Set.toList (getAllExtSet t)
 -- | Return a set of all ExtCns subterms in the given term.
 --   Does not traverse the unfoldings of @Constant@ terms.
 getAllExtSet :: Term -> Set.Set (ExtCns Term)
-getAllExtSet t = snd $ go (IntSet.empty, Set.empty) t
+getAllExtSet t = State.evalState (go t) IntMap.empty
   where
-    go acc@(is, a) (STApp{ stAppIndex = i, stAppTermF = tf})
-      | IntSet.member i is = acc
-      | otherwise = termf (IntSet.insert i is, a) tf
-    go acc (Unshared tf) = termf acc tf
-
-    termf acc@(is, a) tf =
+    go :: Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    go (Unshared tf) = termf tf
+    go STApp{ stAppIndex = i, stAppTermF = tf, stAppFreeVars = fvs }
+      | IntSet.null fvs = pure Set.empty
+      | otherwise =
+        do memo <- State.get
+           case IntMap.lookup i memo of
+             Just ecs -> pure ecs
+             Nothing ->
+               do ecs <- termf tf
+                  State.modify' (IntMap.insert i ecs)
+                  pure ecs
+    termf :: TermF Term -> State.State (IntMap (Set.Set (ExtCns Term))) (Set.Set (ExtCns Term))
+    termf tf =
       case tf of
-        Variable nm tp -> (is, Set.insert (EC nm tp) a)
-        Pi nm tp body ->
-          let (is', a') = go (go acc tp) body
-          in (is', Set.delete (EC nm tp) a')
-        Lambda nm tp body ->
-          let (is', a') = go (go acc tp) body
-          in (is', Set.delete (EC nm tp) a')
-        _ -> foldl' go acc tf
+        Variable x tp -> pure (Set.singleton (EC x tp))
+        Lambda x t1 t2 ->
+          do ecs1 <- go t1
+             ecs2 <- go t2
+             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+        Pi x t1 t2 ->
+          do ecs1 <- go t1
+             ecs2 <- go t2
+             pure (ecs1 <> Set.delete (EC x t1) ecs2)
+        _ -> Fold.fold <$> traverse go tf
 
 getConstantSet :: Term -> Map VarIndex NameInfo
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
