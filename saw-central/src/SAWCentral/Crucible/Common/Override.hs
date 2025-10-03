@@ -108,7 +108,7 @@ import           Data.Parameterized.TraversableFC (toListFC)
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
 
-import           SAWCore.Name (ecShortName)
+import           SAWCore.Name (VarName(..), ecShortName)
 import           SAWCore.Prelude as SAWVerifier (scEq)
 import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCore.Term.Functor (unwrapTermF)
@@ -723,9 +723,9 @@ matchTerm sc md prepost real expect =
   do let loc = MS.conditionLoc md
      free <- OM (use osFree)
      case unwrapTermF expect of
-       Variable ec
-         | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc md prepost (ecVarIndex ec) real
+       Variable vn _tp
+         | Set.member (vnIndex vn) free ->
+         do assignTerm sc md prepost (vnIndex vn) real
 
        _ ->
          do t <- liftIO $ scEq sc real expect

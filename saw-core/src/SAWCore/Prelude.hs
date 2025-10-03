@@ -119,12 +119,12 @@ scDecEq sc fot args = case fot of
       Just (x,y) ->
            mkRecordEqBody (Map.toList fs) x y
 
-      Nothing -> 
-        do x <- scLocalVar sc 1
-           y <- scLocalVar sc 0
-           tp   <- scFirstOrderType sc fot
-           body <-  mkRecordEqBody (Map.toList fs) x y
-           scLambdaList sc [("x",tp),("y",tp)] body
+      Nothing ->
+        do tp <- scFirstOrderType sc fot
+           x <- scFreshVariable sc "x" tp
+           y <- scFreshVariable sc "y" tp
+           body <- mkRecordEqBody (Map.toList fs) x y
+           scAbstractTerms sc [x, y] body
 
  where
   mkRecordEqBody [] _x _y = scBool sc True
