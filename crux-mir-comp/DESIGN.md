@@ -193,7 +193,7 @@ rules:
       * Cryptol `Bit` sequences of lengths corresponding to Rust's basic
         numeric types may also be represented with those types
         (e.g., `[8]` may be represented with `u8` or `i8`).
-      * Cryptol tuples are presented as Rust tuples.
+      * Cryptol tuples are represented as Rust tuples.
 
 
 ## Current limitations
