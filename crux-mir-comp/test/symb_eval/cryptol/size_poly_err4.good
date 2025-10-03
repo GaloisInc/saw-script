@@ -1,0 +1,14 @@
+test size_poly_err4/<DISAMB>::test[0]: FAILED
+
+failures:
+
+---- size_poly_err4/<DISAMB>::test[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   test/symb_eval/cryptol/size_poly_err4.rs:6:42: 6:73: error: in size_poly_err4/<DISAMB>::test[0]
+[Crux]   error loading "sum": Cryptol functions with non-numeric type parameters are not supported:
+[Crux]   Cryptol type:
+[Crux]     {n, a} (fin n, Eq a, Ring a) => [n]a -> a
+[Crux]   Unsupported parameters:
+[Crux]     a: *
+
+[Crux] Overall status: Invalid.

@@ -40,6 +40,9 @@ library
     parameterized-utils >= 1.0.8,
     what4,
 
+    -- galois packages from hackage
+    bv-sized,
+
     -- internal subpackages/sublibraries in the saw tree
     crucible-mir-comp,
     saw:saw-core,

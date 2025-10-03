@@ -1,0 +1,16 @@
+test size_poly_err1/<DISAMB>::test[0]: FAILED
+
+failures:
+
+---- size_poly_err1/<DISAMB>::test[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   test/symb_eval/cryptol/size_poly_err1.rs:6:25: 6:64: error: in size_poly_err1/<DISAMB>::test[0]
+[Crux]   error loading "sum`{_,[8]}": Not enough size arguments:
+[Crux]     Expected: 1
+[Crux]     Provided: 0
+[Crux]   Cryptol type:
+[Crux]     {n} (fin n) => [n][8] -> [8]
+[Crux]   Rust type:
+[Crux]     () -> u8 [RustAbi]
+
+[Crux] Overall status: Invalid.

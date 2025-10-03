@@ -1,0 +1,4 @@
+module test::symb_eval::cryptol::SliceArg where
+
+f: [3][8] -> [32]
+f [x,y,z] = 0 # (x+y+z)
