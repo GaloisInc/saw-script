@@ -156,6 +156,11 @@ defined in the `crucible` crate.  Here's an example illustrating how to
 import a Cryptol function `myCryFun` defined in Cryptol module `SomeCryMod`,
 and bind it as the Rust function `myRustFun`:
 
+```Cryptol
+module SomeCyMod where
+  f: [8] -> [32]
+  f x = 0 # x
+```
 ```Rust
 use crucible::*;
 cryptol! {
@@ -170,7 +175,21 @@ declaration specifies how to invoke evaluating the Cryptol expression from
 Rust.  If the declaration contains `const` generics, then the Cryptol expression
 is specified as a format string which may refer to the values of the const
 generic parameters in curly braces (literal curly braces need to be escaped
-as a double curly brace).
+as a double curly brace).  Here's an example of how to use a function with
+const genereics:
+```Cryptol``
+module Cryptol where
+  sum : {n, a} (fin n, Eq a, Ring a) => [n]a -> a
+  sum = foldl (+) zero
+```
+```Rust
+extern crate crucible;
+use crucible::*;
+cryptol! {
+    path "Cryptol";
+    pub fn f<const N: usize>(x: &[u8]) -> u8 = r"sum`{{{N},[8]}}";
+}
+```
 
 It is important that the type of the Cryptol expression is compatible
 with the type of the declared Rust function, according to the following
