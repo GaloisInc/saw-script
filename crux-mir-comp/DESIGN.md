@@ -176,7 +176,7 @@ Rust.  If the declaration contains `const` generics, then the Cryptol expression
 is specified as a format string which may refer to the values of the const
 generic parameters in curly braces (literal curly braces need to be escaped
 as a double curly brace).  Here's an example of how to use a function with
-const genereics:
+const generics:
 ```Cryptol``
 module Cryptol where
   sum : {n, a} (fin n, Eq a, Ring a) => [n]a -> a
