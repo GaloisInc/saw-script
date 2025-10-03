@@ -151,7 +151,7 @@ immutable and thus always retain their initial values.
 
 It is possible to import Cryptol expressions into symbolic Rust test cases to
 help write specifications (e.g., if you want to check that a Rust implementation
-matches a Cryptol specifications).  This is done by using the `cryptol!` macro
+matches a Cryptol specification).  This is done by using the `cryptol!` macro
 defined in the `crucible` package.  Here's an example illustrating how to
 import a Cryptol function `myCryFun` defined in Cryptol module `SomeCryMod`,
 and bind it as the Rust function `myRustFun`:
