@@ -60,6 +60,7 @@ module SAWCore.Term.Functor
   , bitSetBound
   , looseVars, smallestLooseVar, termIsClosed
   , freesTermF, freeVars
+  , closedTerm
   ) where
 
 import Data.Bits
@@ -613,3 +614,7 @@ freesTermF tf =
 freeVars :: Term -> IntSet
 freeVars STApp{ stAppFreeVars = s } = s
 freeVars (Unshared tf) = freesTermF (fmap freeVars tf)
+
+-- | Test whether a 'Term' is closed, i.e., it has no free variables.
+closedTerm :: Term -> Bool
+closedTerm t = IntSet.null (freeVars t)
