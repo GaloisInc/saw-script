@@ -188,7 +188,7 @@ rules:
       * A Cryptol sequence of length `n` may be represented as a Rust
         array of length `n`.
       * In the parmeters of the Rust function, Cryptol sequences may also
-        be representd as reference to slices.  The lenght of the slice should
+        be represented as reference to slices.  The length of the slice should
         match the length of the Cryptol sequence, which is checked dynamically.
       * Cryptol `Bit` sequences of lengths corresponding to Rust's basic
         numeric types may also be represented with those types
