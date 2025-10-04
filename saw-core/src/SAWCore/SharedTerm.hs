@@ -846,8 +846,7 @@ scBuildCtor sc d c arg_struct =
     elim_var <- scLocalVar sc num_args
     rec_var  <- scLocalVar sc (num_args+1)
 
-    -- Step 3: pass these variables to ctxReduceRecursor to build the
-    -- ctorIotaTemplate field
+    -- Step 3: pass these variables to ctxReduceRecursor to build a template
     iota_red <- ctxReduceRecursor sc rec_var elim_var vars arg_struct
 
     -- Step 4: build the API function that shuffles the terms around in the
@@ -867,7 +866,6 @@ scBuildCtor sc d c arg_struct =
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorIotaTemplate  = iota_red
       , ctorIotaReduction = iota_fun
       }
 
