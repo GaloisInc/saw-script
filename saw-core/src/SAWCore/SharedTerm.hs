@@ -948,13 +948,6 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
               scApply sc p_ret_ixs appliedCtor
      helper [] ctorArgs
 
--- | Zip two lists of equal length, but return 'Nothing' if the
--- lengths are different.
-zipSameLength :: [a] -> [b] -> Maybe [(a, b)]
-zipSameLength xs ys
-  | length xs == length ys = Just (zip xs ys)
-  | otherwise = Nothing
-
 -- | Reduce an application of a recursor to a particular constructor.
 -- This is known in the Coq literature as an iota reduction. More specifically,
 -- the call
@@ -987,27 +980,12 @@ ctxReduceRecursor ::
   [Term] {- ^ constructor arguments -} ->
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
   IO Term
-ctxReduceRecursor sc r elimf c_args CtorArgStruct{..} =
-  case zipSameLength c_args ctorArgs of
-     Just argsCtx_ctorArgs ->
-       ctxReduceRecursor_ sc r elimf argsCtx_ctorArgs
-     Nothing ->
-       error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
-
-
--- | This operation does the real work of building the iota reduction
--- for @ctxReduceRecursor@.
-ctxReduceRecursor_ ::
-  SharedContext ->
-  Term     {- ^ recursor value eliminatiting data type d -}->
-  Term     {- ^ eliminator function for the constructor -} ->
-  [(Term, (VarName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
-  IO Term
-ctxReduceRecursor_ sc r fi args0_argCtx =
-  do args <- mk_args IntMap.empty args0_argCtx
-     scWhnf sc =<< scApplyAll sc fi args
-
- where
+ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
+  | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
+  | otherwise =
+    do args <- mk_args IntMap.empty (zip c_args ctorArgs)
+       scWhnf sc =<< scApplyAll sc elimf args
+  where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (VarName, CtorArg))] ->
                  -- remaining actual arguments to process, with
