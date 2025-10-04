@@ -65,7 +65,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorElimTypes
   , scRecursorRetTypeType
   , scRecursorAppType
   , scRecursorType
@@ -841,7 +840,6 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
     -- constructor argument variables
@@ -874,7 +872,6 @@ scBuildCtor sc d c arg_struct =
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorElimTypeFun = \ps p_ret -> elim_tp_fun ps p_ret
       , ctorIotaTemplate  = iota_red
       , ctorIotaReduction = iota_fun
       }
@@ -950,30 +947,6 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
               appliedCtor <- scConstApply sc c (params ++ prevs)
               scApply sc p_ret_ixs appliedCtor
      helper [] ctorArgs
-
--- | Build a function that substitutes parameters and a @p_ret@ return type
--- function into the type of an eliminator, as returned by 'ctxCtorElimType',
--- for the given constructor. We return the substitution function in the monad
--- so that we only call 'ctxCtorElimType' once but can call the function many
--- times, in order to amortize the overhead of 'ctxCtorElimType'.
-mkCtorElimTypeFun ::
-  SharedContext ->
-  Name {- ^ data type name -} ->
-  Name {- ^ constructor name -} ->
-  CtorArgStruct ->
-  IO ([Term] -> Term -> IO Term)
-mkCtorElimTypeFun sc d c argStruct =
-  do -- Use de Bruijn variable for p_ret so we can instantiate it later
-     -- NOTE: This is kind of gross, because the p_ret in the callback
-     -- argument below does not always have the same type (it is as
-     -- computed by scRecursorRetTypeType, but the return sort may vary)
-     p_ret_var <- scLocalVar sc 0
-     ctxElimType <- ctxCtorElimType sc d c p_ret_var argStruct
-     let vs = map ecVarIndex (ctorParams argStruct)
-     return $ \params p_ret ->
-       do t <- instantiateVarList sc 0 [p_ret] ctxElimType
-          let subst = IntMap.fromList (zip vs params)
-          scWhnf sc =<< scInstantiateExt sc subst t
 
 -- | Zip two lists of equal length, but return 'Nothing' if the
 -- lengths are different.
@@ -1070,32 +1043,6 @@ ctxReduceRecursor_ sc r fi args0_argCtx =
          body <- scRecursorApp sc r ixs x_zs
          scAbstractExts sc zs_ctx body
 
--- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
--- function @p_ret@ of type
---
--- > (x1::ix1) -> .. -> (xm::ixm) -> d p1 .. pn x1 .. xm -> Type i
---
--- that computes a return type from type indices for @d@ and an element of @d@
--- for those indices, return the requires types of elimination functions for
--- each constructor of @d@. See the documentation of the 'Ctor' type and/or the
--- 'ctxCtorElimType' function for more details.
-scRecursorElimTypes ::
-  SharedContext ->
-  Name ->
-  [Term] ->
-  Term ->
-  IO [(Name, Term)]
-scRecursorElimTypes sc d params p_ret =
-  do mm <- scGetModuleMap sc
-     case lookupVarIndexInMap (nameIndex d) mm of
-       Just (ResolvedDataType dt) ->
-         do forM (dtCtors dt) $ \ctor ->
-              do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-                 return (ctorName ctor, elim_type)
-       _ ->
-         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
-
-
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
 --
@@ -1158,11 +1105,13 @@ scRecursorType sc dt s =
      motive_var <- scVariable sc motive_ec
 
      -- Compute the types of the elimination functions
-     elims_tps <- scRecursorElimTypes sc d param_vars motive_var
+     elims_tps <-
+       forM (dtCtors dt) $ \ctor ->
+       ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
      scGeneralizeExts sc (dtParams dt) =<<
        scGeneralizeExts sc [motive_ec] =<<
-       scFunAll sc (map snd elims_tps) =<<
+       scFunAll sc elims_tps =<<
        scRecursorAppType sc dt param_vars motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
