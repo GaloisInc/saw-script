@@ -836,20 +836,7 @@ scBuildCtor sc d c arg_struct =
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
 
-    -- Step 2: build free variables for rec, elim and the
-    -- constructor argument variables
-    let num_args =
-          case arg_struct of
-            CtorArgStruct {..} -> length ctorArgs
-
-    vars <- reverse <$> mapM (scLocalVar sc) (take num_args [0 ..])
-    elim_var <- scLocalVar sc num_args
-    rec_var  <- scLocalVar sc (num_args+1)
-
-    -- Step 3: pass these variables to ctxReduceRecursor to build a template
-    iota_red <- ctxReduceRecursor sc rec_var elim_var vars arg_struct
-
-    -- Step 4: build the API function that shuffles the terms around in the
+    -- Step 2: build the API function that shuffles the terms around in the
     -- correct way.
     let iota_fun r cs_fs args =
           do let elim = case Map.lookup (nameIndex cname) cs_fs of
@@ -858,7 +845,7 @@ scBuildCtor sc d c arg_struct =
                      panic "ctorIotaReduction" [
                          "no eliminator for constructor " <> Text.pack (show c)
                      ]
-             instantiateVarList sc 0 (reverse ([r, elim] ++ args)) iota_red
+             ctxReduceRecursor sc r elim args arg_struct
 
     -- Finally, return the required Ctor record
     return $ Ctor
