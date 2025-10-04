@@ -970,7 +970,7 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
 
 ctxReduceRecursor ::
   SharedContext ->
-  Term {- ^ abstracted recursor -} ->
+  Term {- ^ recursor applied to params, motive, and eliminator functions -} ->
   Term {- ^ constructor eliminator function -} ->
   [Term] {- ^ constructor arguments -} ->
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
@@ -1004,6 +1004,8 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
+    -- The resulting term has the form
+    -- > \(z1:Z1) .. (zk:Zk) -> r ixs (x z1 .. zk)
     mk_rec_arg ::
       [ExtCns Term] ->                -- telescope describing the zs
       [Term] ->                        -- actual values for the indices, shifted under zs
