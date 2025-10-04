@@ -65,6 +65,8 @@ import SAWCore.Module
   , resolvedNameType
   , requireNameInMap
   , Ctor(..)
+  , CtorArg(..)
+  , CtorArgStruct(..)
   , Def(..)
   , ModuleMap
   , ResolvedName(..)
@@ -208,7 +210,7 @@ evalTermF cfg lam recEval tf env =
                vFunList (length cnames) $ \elim_thunks ->
                do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
                   let vrec = VRecursor dname nixs es
-                  evalRecursor vrec
+                  vFunList nixs (\_ixs -> pure (evalRecursor vrec))
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse evalType) elem_tps
@@ -235,27 +237,26 @@ evalTermF cfg lam recEval tf env =
     toTValue (TValue x) = x
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
-    evalRecursor :: VRecursor l -> MValue l
-    evalRecursor vrec@(VRecursor d nixs ps_fs) =
-      vFunList nixs $ \_ix_thunks ->
-      pure $ vStrictFun $ \argv ->
-      do r_thunk <- delay (evalRecursor vrec)
-         case evalConstructor argv of
-           Just (ctor, args)
-             | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
-                 lam (ctorIotaTemplate ctor) (reverse (r_thunk : elim : args))
+    evalRecursor :: VRecursor l -> Value l
+    evalRecursor vrec@(VRecursor d _nixs ps_fs) =
+      vStrictFun $ \argv ->
+      case evalConstructor argv of
+        Just (ctor, args)
+          | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
+              do elimv <- force elim
+                 reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)
 
-             | otherwise ->
-                 panic "evalTermF / evalRecursor"
-                 ["Could not find info for constructor: " <> Text.pack (show ctor)]
-           Nothing ->
-             case argv of
-               VCtorMux _ps branches ->
-                 do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
-                    combineAlts alts
-               _ ->
-                 panic "evalTermF / evalRecursor"
-                 ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
+          | otherwise ->
+              panic "evalTermF / evalRecursor"
+              ["Could not find info for constructor: " <> Text.pack (show ctor)]
+        Nothing ->
+          case argv of
+            VCtorMux _ps branches ->
+              do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.elems branches)
+                 combineAlts alts
+            _ ->
+              panic "evalTermF / evalRecursor"
+              ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
 
     evalCtorMuxBranch ::
       VRecursor l ->
@@ -265,11 +266,10 @@ evalTermF cfg lam recEval tf env =
       case r of
         VRecursor _d _nixs ps_fs ->
           do let i = nameIndex c
-             r_thunk <- delay (evalRecursor r)
              case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
                (Just (ResolvedCtor ctor), Just elim) ->
-                 do let allArgs = reverse (r_thunk : elim : args)
-                    pure (p, lam (ctorIotaTemplate ctor) allArgs)
+                 do elimv <- force elim
+                    pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
                _ -> panic "evalTermF / evalCtorMuxBranch"
                     ["could not find info for constructor: " <> toAbsoluteName (nameInfo c)]
 
@@ -326,6 +326,38 @@ vStrictFunList n0 k = go n0 []
     go :: Int -> [Value l] -> MValue l
     go 0 args = k (reverse args)
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
+
+-- | Evaluate a recursor applied to a specific data constructor.
+reduceRecursor ::
+  forall l. (VMonadLazy l, Show (Extra l)) =>
+  Value l {- ^ recursor function expecting datatype argument -} ->
+  Value l {- ^ constructor eliminator function -} ->
+  [Thunk l] {- ^ constructor arguments -} ->
+  CtorArgStruct {- ^ constructor formal argument descriptor -} ->
+  MValue l
+reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argstruct))
+  where
+    go :: Value l -> [Thunk l] -> [CtorArg] -> MValue l
+    go e [] [] = pure e
+    go e (x : xs) (arg : args) =
+      case arg of
+        ConstArg _ ->
+          do e' <- apply e x
+             go e' xs args
+        RecursiveArg zs _ixs ->
+          do e1 <- apply e x
+             recx <- delay (mk_rec_arg (length zs) x)
+             e2 <- apply e1 recx
+             go e2 xs args
+    go _ _ _ = panic "reduceRecursor" ["Wrong number of constructor arguments"]
+
+    -- For a recursive argument, we need a value of the form
+    -- > \z1 .. zk -> r (x z1 .. zk)
+    mk_rec_arg :: Int -> Thunk l -> MValue l
+    mk_rec_arg k x =
+      vFunList k $ \zs ->
+      do x_zs <- delay (force x >>= \v -> applyAll v zs)
+         apply r x_zs
 
 
 {-# SPECIALIZE evalGlobal ::
