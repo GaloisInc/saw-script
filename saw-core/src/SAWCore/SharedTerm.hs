@@ -769,11 +769,6 @@ getTerm cache termF =
 --------------------------------------------------------------------------------
 -- Recursors
 
-scRecursorApp :: SharedContext -> Term -> [Term] -> Term -> IO Term
-scRecursorApp sc r ixs arg =
-  do t <- scApplyAll sc r ixs
-     scApply sc t arg
-
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
 -- sort, unless your propositional data type is the empty type. This differs
@@ -1015,10 +1010,11 @@ ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
       Term ->                         -- actual value in recursive position
       IO Term
     mk_rec_arg zs_ctx ixs x =
-      -- eta expand over the zs and apply the RecursorApp form
+      -- eta expand over the zs and apply the Recursor form
       do zs <- traverse (scVariable sc) zs_ctx
          x_zs <- scApplyAll sc x zs
-         body <- scRecursorApp sc r ixs x_zs
+         r_ixs <- scApplyAll sc r ixs
+         body <- scApply sc r_ixs x_zs
          scAbstractExts sc zs_ctx body
 
 -- | Build the type of the @p_ret@ function, also known as the "motive"
