@@ -1671,9 +1671,12 @@ scApplyAll sc = foldlM (scApply sc)
 
 -- | Apply a function to an argument, beta-reducing if the function is a lambda
 scApplyBeta :: SharedContext -> Term -> Term -> IO Term
-scApplyBeta sc (asLambda -> Just (_, _, body)) arg =
-  instantiateVar sc 0 arg body
-scApplyBeta sc f arg = scApply sc f arg
+scApplyBeta sc f arg =
+  case asLambda f of
+    Just (name, _, body) ->
+      scInstantiateExt sc (IntMap.singleton (vnIndex name) arg) body
+    Nothing ->
+      scApply sc f arg
 
 -- | Apply a function 'Term' to zero or more arguments, beta reducing any time
 -- the function is a lambda
