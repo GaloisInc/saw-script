@@ -141,7 +141,8 @@ data ImportVisibility
 data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, P.Import)]
                                         -- ^ Declarations of imported Cryptol modules
-  , eModuleEnv  :: ME.ModuleEnv         -- ^ Imported modules, and state for the ModuleM monad
+  , eModuleEnv  :: ME.ModuleEnv         -- ^ Loaded & imported modules, and
+                                        --   state for the ModuleM monad
   , eExtraNames :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
@@ -318,33 +319,37 @@ getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNames env
   `MR.shadowing`
-  (mconcat $ map
-               (importToNamingEnv (eModuleEnv env))
+  (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
                (eImports env)
   )
 
-importToNamingEnv :: ME.ModuleEnv
+getNamingEnvForImport :: ME.ModuleEnv
                   -> (ImportVisibility, T.Import)
                   -> MR.NamingEnv
-importToNamingEnv modEnv (vis,imprt) =
+getNamingEnvForImport modEnv (vis, imprt) =
     MN.interpImportEnv imprt -- adjust for qualified imports
   $ adjustVisible            -- adjust if OnlyPublic names
   $ ME.mctxNames mctx        -- namingEnv for PublicAndPrivate
+      -- FIXME: this does not do what we want: ...!
+      --  - PublicAndPrivate: doesn't work
+      --  - OnlyPublic really work??
 
   where
-  mctx = modContextOf' (P.ImpTop $ P.thing $ T.iModule imprt)
+  mctx = case ME.modContextOf impNm modEnv of
+           Just c  -> c
+           Nothing -> panic "getNamingEnvForImport"
+                        ["expecting module to be loaded: "
+                         <> Text.pack (show (pp impNm))]
+         where
+         -- | fm - name of a 'top level' import:
+         impNm :: P.ImpName MN.Name
+         impNm = P.ImpTop $ P.thing $ T.iModule imprt
 
+  adjustVisible :: MR.NamingEnv -> MR.NamingEnv
   adjustVisible = case vis of
     PublicAndPrivate -> id
     OnlyPublic       ->
       \env' -> MN.filterUNames (`Set.member` ME.mctxExported mctx) env'
-
-  modContextOf' fm =
-    case ME.modContextOf fm modEnv of
-      Just c  -> c
-      Nothing -> panic "getNamingEnv"
-                   ["expecting module to be loaded: "
-                    <> Text.pack (show (pp fm))]
 
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
@@ -471,7 +476,7 @@ showExtCryptolModule =
                , showCryptolModule cm
                ]
 
--- | loadCryptolModule - load a cryptol module and returns the
+-- | loadCryptolModule - load a cryptol module and return the
 -- `ExtCryptolModule`.  The contents of the module are not directly
 -- imported into the environment.
 --
@@ -500,9 +505,10 @@ loadExtCryptolModule sc env path =
 
 -- | loadCryptolModule
 --
--- NOTE RE CALLS TO:
---  - the path to this function from the command line is only via
---    the experimental "write_coq_cryptol_module" command.
+-- NOTE RE CALLS TO THIS:
+--  - There is only the path to this function from the command line,
+--    and it is only via the experimental command,
+--      "write_coq_cryptol_module".
 --
 -- This function (note `mkCryptolModule`) returns the public types and values
 -- of the module in a `CryptolModule` structure.
@@ -533,7 +539,7 @@ mkCryptolModule m env =
       tNameSet = MEx.exported C.NSType  (T.mExports m)
   in
       CryptolModule
-        -- create Map of type synonyms
+        -- create Map of type synonyms:
         (Map.filterWithKey
            (\k _ -> Set.member k tNameSet)
            (T.mTySyns m)
@@ -551,7 +557,7 @@ mkCryptolModule m env =
 --   extending the Cryptol environment with the names in a Cryptol
 --   module, represented here by a `ExtCryptolModule`.
 --
---   NOTE RE CALLS TO: Three command line variants get us here:
+--   NOTE RE CALLS TO THIS: Three command line variants get us here:
 --      > D <- cryptol_load "PATH"
 --      > x <- return (cryptol_prims ())
 --      > let x = cryptol_prims ()
@@ -606,7 +612,8 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 -- | extractDefFromExtCryptolModule sc en ecm name - interpret `name` as a definition in
 --   the module `ecm`, return the TypedTerm.
 --
---  NOTE RE CALLS TO: this is (only) used for the "cryptol_extract" primitive.
+--  NOTE RE CALLS TO THIS: this is (only) used for the
+--  "cryptol_extract" primitive.
 --
 extractDefFromExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -630,15 +637,15 @@ extractDefFromExtCryptolModule sc env ecm name =
           Just t  -> return t
           Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
-        -- NOTE RE CALLS TO:
+        -- NOTE RE CALLS TO THIS:
         --   - currently we can only get to this branch when CryptolModule
         --     is the one created with `cryptol_prims` (Haskell function and
         --     SAWScript function).  E.g.,
         --
         --     > cryptol_extract (cryptol_prims ()) "trunc"
         --
-        -- FIXME: this code is somewhat ad hoc, might we rather invoke
-        -- parse for name, or the like?  However, this code becomes
+        -- FIXME: this code is somewhat ad hoc; might we rather invoke
+        -- parse for name or the like?  However, this code should become
         -- unnecessary after addressing Issue #2645 (turning
         -- cryptol_prims into a built-in Cryptol module).
 
