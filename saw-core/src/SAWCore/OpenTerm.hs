@@ -52,7 +52,7 @@ SAW core 'Term'.
 
 module SAWCore.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
+  OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
   closedOpenTerm, openOpenTerm, failOpenTerm,
   bindTCMOpenTerm, bindPPOpenTerm, openTermType,
@@ -80,19 +80,12 @@ module SAWCore.OpenTerm (
   pairTermLike, pairTypeTermLike, pairLeftTermLike, pairRightTermLike,
   tupleTermLike, tupleTypeTermLike, projTupleTermLike,
   letTermLike, sawLetTermLike,
-  -- * Other exported helper functions
-  sawLetMinimize
   ) where
 
 import qualified Data.Vector as V
-import Control.Monad.State
-import Control.Monad.Writer
 import Control.Monad.Reader
 import Data.Text (Text)
 import Numeric.Natural
-
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
 
 import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
 
@@ -106,7 +99,6 @@ import SAWCore.Module
   ( ctorName
   , dtName
   )
-import SAWCore.Recognizer
 
 
 -- | An open term is represented as a type-checking computation that computes a
@@ -119,11 +111,6 @@ completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedVal <$> termM) sc []
-
--- | \"Complete\" an 'OpenTerm' to a closed term and 'betaNormalize' the result
-completeNormOpenTerm :: SharedContext -> OpenTerm -> IO Term
-completeNormOpenTerm sc m =
-  completeOpenTerm sc m >>= sawLetMinimize sc >>= betaNormalize sc
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
@@ -628,104 +615,3 @@ sawLetTermLike :: OpenTermLike t => LocalName -> t -> t -> t -> (t -> t) -> t
 sawLetTermLike x tp tp_ret rhs body_f =
   applyTermLikeMulti (globalTermLike "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaTermLike x tp body_f]
-
-
---------------------------------------------------------------------------------
--- sawLet-minimization
-
--- | A map from each deBruijn index to a count of its occurrences in a term
-newtype VarOccs = VarOccs [Integer]
-
--- | Make a 'VarOccs' with a single occurrence of a deBruijn index
-varOccs1 :: DeBruijnIndex -> VarOccs
-varOccs1 i = VarOccs (take i (repeat 0) ++ [1])
-
--- | Move a 'VarOccs' out of a binder by returning the number of occurrences of
--- deBruijn index 0 along with the result of subtracting 1 from all other indices
-unconsVarOccs :: VarOccs -> (Integer, VarOccs)
-unconsVarOccs (VarOccs []) = (0, VarOccs [])
-unconsVarOccs (VarOccs (cnt:occs)) = (cnt, VarOccs occs)
-
--- | Multiply every index in a 'VarOccs' by a constant
-multVarOccs :: Integer -> VarOccs -> VarOccs
-multVarOccs i (VarOccs occs) = VarOccs $ map (* i) occs
-
--- | The infinite list of zeroes
-zeroes :: [Integer]
-zeroes = 0:zeroes
-
-instance Semigroup VarOccs where
-  (VarOccs occs1) <> (VarOccs occs2)
-    | length occs1 < length occs2
-    = VarOccs (zipWith (+) (occs1 ++ zeroes) occs2)
-  (VarOccs occs1) <> (VarOccs occs2)
-    = VarOccs (zipWith (+) occs1 (occs2 ++ zeroes))
-
-instance Monoid VarOccs where
-  mempty = VarOccs []
-
--- | 'listen' to the output of a writer computation and return that output but
--- drop it from the writer output of the computation
-listenDrop :: MonadWriter w m => m a -> m (a, w)
-listenDrop m = pass (listen m >>= \aw -> return (aw, const mempty))
-
--- | The monad for sawLet minimization
-type SLMinM = StateT (IntMap (Term, VarOccs)) (WriterT VarOccs IO)
-
--- | Find every subterm of the form @sawLet a b rhs (\ x -> body)@ and, whenever
--- @x@ occurs at most once in @body@, unfold the @sawLet@ by substituting @rhs@
--- into @body@
-sawLetMinimize :: SharedContext -> Term -> IO Term
-sawLetMinimize sc t_top =
-  fst <$> runWriterT (evalStateT (slMinTerm t_top) IntMap.empty) where
-  slMinTerm :: Term -> SLMinM Term
-  slMinTerm (Unshared tf) = slMinTermF tf
-  slMinTerm t@(STApp { stAppIndex = i }) =
-    do memo_table <- get
-       case IntMap.lookup i memo_table of
-         Just (t', occs) ->
-           -- NOTE: the fact that we explicitly tell occs here means that we are
-           -- going to double-count variable occurrences for multiple
-           -- occurrences of the same subterm. That is, a variable occurence
-           -- counts for each copy of a shared subterm.
-           tell occs >> return t'
-         Nothing ->
-           do (t', occs) <- listen $ slMinTermF (unwrapTermF t)
-              modify $ IntMap.insert i (t', occs)
-              return t'
-
-  slMinTermF :: TermF Term -> SLMinM Term
-  slMinTermF tf@(App (asApplyAll ->
-                      (isGlobalDef "Prelude.sawLet" -> Just _, [_a, _b, rhs]))
-                 (asLambda -> Just (_, _, body))) =
-    do (body', (unconsVarOccs ->
-                (x_cnt, body_occs))) <- listenDrop $ slMinTerm body
-       if x_cnt > 1 then slMinTermF' tf else
-         do (rhs', rhs_occs) <- listenDrop $ slMinTerm rhs
-            tell (multVarOccs x_cnt rhs_occs <> body_occs)
-            liftIO $ instantiateVar sc 0 rhs' body'
-  slMinTermF tf = slMinTermF' tf
-
-  slMinTermF' :: TermF Term -> SLMinM Term
-  slMinTermF' (FTermF ftf) = slMinFTermF ftf
-  slMinTermF' (App f arg) =
-    do f' <- slMinTerm f
-       arg' <- slMinTerm arg
-       liftIO $ scTermF sc (App f' arg')
-  slMinTermF' (Lambda x tp body) =
-    do tp' <- slMinTerm tp
-       (body', body_occs) <- listenDrop $ slMinTerm body
-       tell $ snd $ unconsVarOccs body_occs
-       liftIO $ scTermF sc (Lambda x tp' body')
-  slMinTermF' (Pi x tp body) =
-    do tp' <- slMinTerm tp
-       (body', body_occs) <- listenDrop $ slMinTerm body
-       tell $ snd $ unconsVarOccs body_occs
-       liftIO $ scTermF sc (Pi x tp' body')
-  slMinTermF' tf@(LocalVar i) =
-    tell (varOccs1 i) >> liftIO (scTermF sc tf)
-  slMinTermF' tf@(Constant _) = liftIO (scTermF sc tf)
-  slMinTermF' tf@(Variable {}) = liftIO (scTermF sc tf)
-
-  slMinFTermF :: FlatTermF Term -> SLMinM Term
-  slMinFTermF ftf = traverse slMinTerm ftf >>= liftIO . scFlatTermF sc
