@@ -155,7 +155,7 @@ validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
                       SC.Term -> SC.Term -> m ()
 validateTermAtType sc msg trm tp =
   liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
-                         SC.TC.checkSubtype tp_trm tp) sc []) >>= \case
+                         SC.TC.checkSubtype tp_trm tp) sc mempty) >>= \case
   Right _ -> return ()
   Left err ->
     throw

@@ -1953,7 +1953,7 @@ parseCoreMod mnm_str input =
      let mnm =
            mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
-     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) [] uterm
+     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) mempty uterm
      case err_or_t of
        Left err -> fail (show err)
        Right x -> pure x

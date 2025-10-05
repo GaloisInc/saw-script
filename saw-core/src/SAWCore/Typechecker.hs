@@ -31,6 +31,8 @@ module SAWCore.Typechecker
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -67,12 +69,12 @@ import Debug.Trace
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
                      IO (Either PPS.Doc Term)
-inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
+inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm IntMap.empty t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
 inferCompleteTermCtx ::
-  SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  SharedContext -> Maybe ModuleName -> IntMap Term ->
   Un.UTerm -> IO (Either PPS.Doc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runCheckM (typeInferCompleteUTerm t) sc mnm ctx
@@ -94,7 +96,7 @@ data CheckEnv =
 type CheckM = ReaderT CheckEnv TC.TCM
 
 runCheckM ::
-  CheckM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  CheckM a -> SharedContext -> Maybe ModuleName -> IntMap Term ->
   IO (Either TC.TCError a)
 runCheckM m sc mnm ctx =
   TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc ctx
@@ -467,7 +469,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
        scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
-  decls_res <- runCheckM (processDecls decls) sc (Just mnm) []
+  decls_res <- runCheckM (processDecls decls) sc (Just mnm) IntMap.empty
   case decls_res of
     Left err -> fail $ unlines $ TC.prettyTCError err
     Right _ -> return ()

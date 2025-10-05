@@ -110,20 +110,20 @@ newtype OpenTerm = OpenTerm { unOpenTerm :: TCM SCTypedTerm }
 completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedVal <$> termM) sc []
+  runTCM (typedVal <$> termM) sc mempty
 
 -- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
-  runTCM (typedType <$> termM) sc []
+  runTCM (typedType <$> termM) sc mempty
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
 closedOpenTerm t = OpenTerm $ typeInferComplete t
 
 -- | Embed a 'Term' in the given typing context into an 'OpenTerm'
-openOpenTerm :: [(LocalName, Term)] -> Term -> OpenTerm
+openOpenTerm :: [(VarName, Term)] -> Term -> OpenTerm
 openOpenTerm ctx t =
   -- Extend the local type-checking context, wherever this OpenTerm gets used,
   -- by appending ctx to the end, so that variables 0..length ctx-1 all get
