@@ -150,7 +150,7 @@ data CryptolEnv = CryptolEnv
   , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
   , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   , eFFITypes   :: Map NameInfo T.FFI
-    -- ^ FFI info for SAWCore names of Cryptol foreign functions
+                  -- ^ FFI info for SAWCore names of Cryptol foreign functions
   }
 
 
@@ -320,12 +320,12 @@ getNamingEnv env =
   eExtraNames env
   `MR.shadowing`
   (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
-               (eImports env)
+                 (eImports env)
   )
 
 getNamingEnvForImport :: ME.ModuleEnv
-                  -> (ImportVisibility, T.Import)
-                  -> MR.NamingEnv
+                      -> (ImportVisibility, T.Import)
+                      -> MR.NamingEnv
 getNamingEnvForImport modEnv (vis, imprt) =
     MN.interpImportEnv imprt -- adjust for qualified imports
   $ adjustVisible            -- adjust if OnlyPublic names
@@ -755,9 +755,8 @@ importCryptolModule ::
 importCryptolModule sc env src as vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
-  return $ env'{ eImports = mkImport vis (locatedUnknown (T.mName mod')) as imps
-                            : eImports env
-               }
+  let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
+  return $ env' {eImports= import' : eImports env }
 
 mkImport :: ImportVisibility
          -> P.Located C.ModName
