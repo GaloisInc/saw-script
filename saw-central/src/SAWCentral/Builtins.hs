@@ -1396,8 +1396,8 @@ proveByBVInduction script t =
   -- and the width of the bitvector we are doing induction on.
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
-       scAsPi sc ty' >>= \case
-         Just (ec, body) -> checkInductionScheme sc opts (ec : pis) body
+       case asPi ty' of
+         Just (nm, tp, body) -> checkInductionScheme sc opts (EC nm tp : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->

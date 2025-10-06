@@ -353,11 +353,12 @@ intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
 
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
-ruleOfTerm :: SharedContext -> Term -> Maybe a -> IO (RewriteRule a)
-ruleOfTerm sc t ann =
-  do (ecs, body) <- scAsPiList sc t
+ruleOfTerm :: Term -> Maybe a -> RewriteRule a
+ruleOfTerm t ann =
+  do let (vars, body) = R.asPiList t
+     let ecs = map (uncurry EC) vars
      case R.asGlobalApply eqIdent body of
-       Just [_, x, y] -> pure $ mkRewriteRule ecs x y False ann
+       Just [_, x, y] -> mkRewriteRule ecs x y False ann
        _ -> panic "ruleOfTerm" ["Illegal argument"]
 
 -- Test whether a rewrite rule is permutative
@@ -391,15 +392,15 @@ ruleOfTerms l r = mkRewriteRule [] l r False Nothing
 -- returning 'Nothing' if the predicate is not an equation.
 ruleOfProp :: SharedContext -> Term -> Maybe a -> IO (Maybe (RewriteRule a))
 ruleOfProp sc term ann =
-  scAsPi sc term >>= \case
-  Just (ec, body) ->
+  case R.asPi term of
+  Just (nm, tp, body) ->
     do rule <- ruleOfProp sc body ann
-       pure $ (\r -> r { ctxt = ec : ctxt r}) <$> rule
+       pure $ (\r -> r { ctxt = EC nm tp : ctxt r}) <$> rule
   Nothing ->
-    scAsLambda sc term >>= \case
-    Just (ec, body) ->
+    case R.asLambda term of
+    Just (nm, tp, body) ->
       do rule <- ruleOfProp sc body ann
-         pure $ (\r -> r { ctxt = ec : ctxt r}) <$> rule
+         pure $ (\r -> r { ctxt = EC nm tp : ctxt r}) <$> rule
     Nothing ->
       case term of
         (R.asGlobalApply ecEqIdent -> Just [_, _, x, y]) -> eqRule x y
@@ -432,9 +433,7 @@ ruleOfProp sc term ann =
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
 scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)
-scEqRewriteRule sc i =
-  do ty <- scTypeOfIdent sc i
-     ruleOfTerm sc ty Nothing
+scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfIdent sc i <*> pure Nothing
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule a]
@@ -448,9 +447,10 @@ scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 -- * If the rhs is a record, then split into a separate rule for each accessor.
 scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule a])
 scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
-  scAsLambda sc rhs >>= \case
-  Just (ec, body) ->
-    do let ctxt' = ctxt ++ [ec]
+  case R.asLambda rhs of
+  Just (nm, tp, body) ->
+    do let ec = EC nm tp
+       let ctxt' = ctxt ++ [ec]
        var0 <- scVariable sc ec
        lhs' <- scApply sc lhs var0
        pure $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
@@ -478,7 +478,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
          let ctorRule ctor =
                do -- Compute the argument types @argTs@.
                   ctorT <- piAppType (ctorType ctor) params1
-                  argECs <- fst <$> scAsPiList sc ctorT
+                  let argECs = map (uncurry EC) $ fst $ R.asPiList ctorT
                   -- Build a fully-applied constructor @c@.
                   args <- traverse (scVariable sc) argECs
                   c <- scConstApply sc (ctorName ctor) (params1 ++ args)
@@ -579,11 +579,11 @@ delRule rule = Net.delete_term (lhs rule, Left rule)
 addRules :: [RewriteRule a] -> Simpset a -> Simpset a
 addRules rules ss = foldr addRule ss rules
 
-addSimp :: SharedContext -> Term -> Maybe a -> Simpset a -> IO (Simpset a)
-addSimp sc prop ann ss = flip addRule ss <$> ruleOfTerm sc prop ann
+addSimp :: Term -> Maybe a -> Simpset a -> Simpset a
+addSimp prop ann = addRule (ruleOfTerm prop ann)
 
-delSimp :: SharedContext -> Term -> Simpset a -> IO (Simpset a)
-delSimp sc prop ss = flip delRule ss <$> ruleOfTerm sc prop Nothing
+delSimp :: Term -> Simpset a -> Simpset a
+delSimp prop = delRule (ruleOfTerm prop Nothing)
 
 addConv :: Conversion -> Simpset a -> Simpset a
 addConv conv = Net.insert_term (conv, Right conv)
@@ -929,7 +929,7 @@ hoistIfs :: SharedContext
 hoistIfs sc t = do
    cache <- newCache
 
-   rules <- mapM (\i -> scTypeOfIdent sc i >>= \rt -> ruleOfTerm sc rt Nothing)
+   rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
               [ "Prelude.ite_true"
               , "Prelude.ite_false"
               , "Prelude.ite_not"

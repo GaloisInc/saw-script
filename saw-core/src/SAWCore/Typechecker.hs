@@ -447,7 +447,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                    "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
                ]
        let tp = typedVal typed_tp
-       result <- lift $ TC.liftTCM mkCtorArgStruct pn dtParams dtIndices tp
+       let result = mkCtorArgStruct pn dtParams dtIndices tp
        case result of
          Just arg_struct ->
            lift $ TC.liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct

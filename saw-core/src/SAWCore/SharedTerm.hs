@@ -232,13 +232,6 @@ module SAWCore.SharedTerm
   , scArrayCopy
   , scArraySet
   , scArrayRangeEq
-    -- ** Utilities
---  , scTrue
---  , scFalse
-  , scAsLambda
-  , scAsLambdaList
-  , scAsPi
-  , scAsPiList
     -- ** Variable substitution
   , betaNormalize
   , getAllExts
@@ -2908,46 +2901,3 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
-
-
--- | Deconstruct a lambda term into a bound variable and a body, using
--- a fresh 'ExtCns' for the bound variable.
-scAsLambda :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
-scAsLambda _sc t =
-  case asLambda t of
-    Nothing -> pure Nothing
-    Just (nm, tp, body) -> pure $ Just (EC nm tp, body)
-
--- | Deconstruct a nested lambda term with 0 or more binders into a
--- list of bound variables and a body, using a fresh 'ExtCns' for each
--- bound variable.
-scAsLambdaList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
-scAsLambdaList _sc = loop []
-  where
-    loop ecs t =
-      case asLambda t of
-        Nothing ->
-          pure (reverse ecs, t)
-        Just (nm, tp, body) ->
-          loop (EC nm tp : ecs) body
-
--- | Deconstruct a pi term into a bound variable and a body, using
--- a fresh 'ExtCns' for the bound variable.
-scAsPi :: SharedContext -> Term -> IO (Maybe (ExtCns Term, Term))
-scAsPi _sc t =
-  case asPi t of
-    Nothing -> pure Nothing
-    Just (nm, tp, body) -> pure $ Just (EC nm tp, body)
-
--- | Deconstruct a nested pi term with 0 or more binders into a list
--- of bound variables and a body, using a fresh 'ExtCns' for each
--- bound variable.
-scAsPiList :: SharedContext -> Term -> IO ([ExtCns Term], Term)
-scAsPiList _sc = loop []
-  where
-    loop ecs t =
-      case asPi t of
-        Nothing ->
-          pure (reverse ecs, t)
-        Just (nm, tp, body) ->
-          loop (EC nm tp : ecs) body
