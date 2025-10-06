@@ -2650,7 +2650,8 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 -- to the terms in the substitution map.
 scInstantiateExt :: SharedContext -> IntMap Term -> Term -> IO Term
 scInstantiateExt sc vmap t0 =
-  do let rangeVars = foldMap freeVars vmap
+  do let domainVars = IntMap.keysSet vmap
+     let rangeVars = foldMap freeVars vmap
      tcache <- newCacheIntMap
      let memo :: Term -> IO Term
          memo t =
@@ -2659,7 +2660,7 @@ scInstantiateExt sc vmap t0 =
              STApp {stAppIndex = i} -> useCache tcache i (go t)
          go :: Term -> IO Term
          go t
-           -- - | IntSet.disjoint vs (freeVars t) = pure t
+           | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise =
              case unwrapTermF t of
                FTermF ftf     -> scFlatTermF sc =<< traverse memo ftf
