@@ -180,13 +180,6 @@ data Ctor =
     --   The arguments to this function are the recusor value, the
     --   the map from the recursor that maps constructors to eliminator
     --   functions, and the arguments to the constructor.
-
-  , ctorIotaTemplate :: Term
-    -- ^ Cached term used for computing iota reductions.  It has free variables
-    --   @rec@, @elim@ and @args@, in that order so that the last @arg@ is the
-    --   most recently-bound variable with deBruijn index 0.  The @rec@ variable
-    --   represents the recursor value, @elim@ represents the eliminator function
-    --   for the constructor, and @args@ represent the arguments to this constructor.
   }
 
 -- | Return the number of parameters of a constructor

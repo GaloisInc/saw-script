@@ -475,17 +475,14 @@ bitBlastExtCns ecMap (EC (VarName idx name) _v) =
       "SAWCoreAIG.BitBlast: can't translate variable " ++
       show name ++ "(index: " ++ show idx ++ ")"
 
-asAIGType :: SharedContext -> Term -> IO [(String, Term)]
-asAIGType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asPi -> Just (n, t1, t2)) -> ((Text.unpack n, t1) :) <$> asAIGType sc t2
-    (R.asBoolType -> Just ())    -> return []
-    (R.asVecType -> Just _)      -> return []
-    (R.asTupleType -> Just _)    -> return []
-    (R.asRecordType -> Just _)   -> return []
-    _                            -> fail $ "SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: "
-                                    ++ scPrettyTerm PPS.defaultOpts t'
+asPiTypes :: SharedContext -> Term -> IO ([(String, Term)], Term)
+asPiTypes sc t =
+  do t' <- scWhnf sc t
+     case R.asPi t' of
+       Nothing -> pure ([], t)
+       Just (n, t1, t2) ->
+         do (args, ret) <- asPiTypes sc t2
+            pure ((Text.unpack n, t1) : args, ret)
 
 bitBlastTerm ::
   AIG.IsAIG l g =>
@@ -496,10 +493,11 @@ bitBlastTerm ::
   IO (BValue (l s), [(String, FiniteType)])
 bitBlastTerm be sc addlPrims t = do
   ty <- scTypeOf sc t
-  args <- asAIGType sc ty
+  (args, ret) <- asPiTypes sc ty
   let ecs = getAllExts t
   argShapes <- traverse (asFiniteType sc) (map snd args)
   ecShapes <- traverse (asFiniteType sc) (map ecType ecs)
+  _retShape <- asFiniteType sc ret -- ensure return type is valid
   argVars <- traverse (newVars' be) argShapes
   ecVars <- traverse (newVars be) ecShapes
   let ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars
@@ -527,7 +525,8 @@ asFiniteType sc t =
   case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty Map.empty t) of
     Just ft -> return ft
     Nothing ->
-      fail $ "asFiniteType: unsupported type " ++ scPrettyTerm PPS.defaultOpts t
+      fail $ "SAWCoreAIG.BitBlast.bitBlastTerm: invalid AIG type: " ++
+             scPrettyTerm PPS.defaultOpts t
 
 processVar ::
   (ExtCns Term, FirstOrderType) ->
