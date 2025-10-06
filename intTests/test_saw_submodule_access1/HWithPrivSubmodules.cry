@@ -1,0 +1,29 @@
+module H where
+
+a = 1 : [32]
+
+private
+  b : [32]
+  b = 2
+
+submodule H2 where
+
+  c : [32]
+  c = 2 + d
+
+  private
+    d : [32]
+    d = 1
+
+private submodule H3 where
+
+  e : [32]
+  e = 3 + f
+
+  private
+    f : [32]
+    f = 1
+    
+t1 = a + b + H2::c + H3::e
+
+// t2 = H2::d + H3::f
