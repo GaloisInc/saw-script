@@ -126,16 +126,6 @@ run-tests() {
         fi
 
         # Prune the timestamps from the log since they'll never match.
-        # We also need to shorten pathnames that contain the current
-        # directory, because saw feels the need to expand pathnames
-        # (see also saw-script #2082).
-        #
-        # In addition to that we also need to remove the current
-        # directory when it appears in double quotes, at least for
-        # now, because many error prints at the saw-core level seem to
-        # use default Show instances and the saw-core positions carry
-        # the directory and filename separately. This becomes
-        # "interesting" from a quoting perspective...
         #
         # Furthermore, prune the line number from the results of
         # hitting the Haskell "error" function. SAW isn't supposed to
@@ -147,8 +137,6 @@ run-tests() {
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
-            s,'"$CURDIR"'/,,g
-            s,"'"$CURDIR"'",".",g
             /^  error, called at [^ :]*\.hs:[0-9:]* in saw-/s/\.hs:.*/.hs/
         ' | (
             # If there's a custom postprocess script for this test,
@@ -159,24 +147,58 @@ run-tests() {
                 cat
             fi
         ) | (
-
-            # If we are on Windows, insert carriage returns into the
-            # output file. The reference files grow carriage returns
-            # when checked out because git thinks they're text files;
-            # however, ghc binaries apparently do not create output
-            # with carriage returns so if we want the output to match
-            # we need to insert them.
+            # If we are on Windows, patch up the output file. The
+            # reference files grow carriage returns when checked out
+            # because git thinks they're text files; however, ghc
+            # binaries apparently do not create output with carriage
+            # returns so if we want the output to match we need to
+            # insert them.
+            #
+            # Also, some pathnames get printed with backslashes or a
+            # mixture of backslashes and forward slashes. Fix those
+            # up. Try to match enough context to not just substitute
+            # all backslashes willy-nilly, as that would probably
+            # cause other problems. In certain cases we even get "D:\\",
+            # and for things to match that needs to be changed to "/d/".
             #
             # MSYS_NT is what the GH Windows runners produce. The
             # other patterns are precautionary.
             case "$(uname -s)" in
                 MSYS_NT-*|[Ww]indows*|*[Cc]ygwin*|*[Ii]nterix*)
-                    sed '/[^\r]$/s/$/\r/;/^$/s/$/\r/'
+                    sed '
+                        /error, called at/s,\\,/,g
+                        /at.*\.cry:[0-9]/s,\\,/,g
+                        /PosPair.*posBase =/s,\\\\,/,g
+                        /PosPair.*posBase =/s,"C:,"/c,
+                        /PosPair.*posBase =/s,"D:,"/d,
+                        /PosPair.*posBase =/s,"E:,"/e,
+                        /PosPair.*posBase =/s,"F:,"/f,
+                        /[^\r]$/s/$/\r/;/^$/s/$/\r/
+                    '
                     ;;
                 *)
                     cat
                     ;;
             esac
+        ) | (
+            # We also need to shorten pathnames that contain the
+            # current directory, because saw feels the need to expand
+            # pathnames (see also saw-script #2082).
+            #
+            # In addition to that we also need to remove the current
+            # directory when it appears in double quotes, at least for
+            # now, because many error prints at the saw-core level
+            # seem to use default Show instances and the saw-core
+            # positions carry the directory and filename separately.
+            # This becomes "interesting" from a quoting perspective...
+            #
+            # This transform must come after the Windows-specific
+            # processing because the latter needs to be able to change
+            # pathnames so they'll match $CURDIR.
+            sed '
+                s,'"$CURDIR"'/,,g
+                s,"'"$CURDIR"'",".",g
+            '
         ) > $TEST.log 
 
         # Check the output against the expected version.
