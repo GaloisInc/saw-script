@@ -65,7 +65,6 @@ module SAWCore.SharedTerm
   , scGlobalDef
   , scFreshenGlobalIdent
     -- ** Recursors and datatypes
-  , scRecursorElimTypes
   , scRecursorRetTypeType
   , scRecursorAppType
   , scRecursorType
@@ -770,11 +769,6 @@ getTerm cache termF =
 --------------------------------------------------------------------------------
 -- Recursors
 
-scRecursorApp :: SharedContext -> Term -> [Term] -> Term -> IO Term
-scRecursorApp sc r ixs arg =
-  do t <- scApplyAll sc r ixs
-     scApply sc t arg
-
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
 -- are that you can only eliminate propositional datatypes to the proposition
 -- sort, unless your propositional data type is the empty type. This differs
@@ -841,7 +835,6 @@ scBuildCtor sc d c arg_struct =
     -- Step 1: build the types for the constructor and the type required
     -- of its eliminator functions
     tp <- ctxCtorType sc d arg_struct
-    elim_tp_fun <- mkCtorElimTypeFun sc d cname arg_struct
 
     -- Step 2: build free variables for rec, elim and the
     -- constructor argument variables
@@ -874,7 +867,6 @@ scBuildCtor sc d c arg_struct =
       , ctorArgStruct = arg_struct
       , ctorDataType = d
       , ctorType = tp
-      , ctorElimTypeFun = \ps p_ret -> elim_tp_fun ps p_ret
       , ctorIotaTemplate  = iota_red
       , ctorIotaReduction = iota_fun
       }
@@ -951,37 +943,6 @@ ctxCtorElimType sc d c p_ret (CtorArgStruct{..}) =
               scApply sc p_ret_ixs appliedCtor
      helper [] ctorArgs
 
--- | Build a function that substitutes parameters and a @p_ret@ return type
--- function into the type of an eliminator, as returned by 'ctxCtorElimType',
--- for the given constructor. We return the substitution function in the monad
--- so that we only call 'ctxCtorElimType' once but can call the function many
--- times, in order to amortize the overhead of 'ctxCtorElimType'.
-mkCtorElimTypeFun ::
-  SharedContext ->
-  Name {- ^ data type name -} ->
-  Name {- ^ constructor name -} ->
-  CtorArgStruct ->
-  IO ([Term] -> Term -> IO Term)
-mkCtorElimTypeFun sc d c argStruct =
-  do -- Use de Bruijn variable for p_ret so we can instantiate it later
-     -- NOTE: This is kind of gross, because the p_ret in the callback
-     -- argument below does not always have the same type (it is as
-     -- computed by scRecursorRetTypeType, but the return sort may vary)
-     p_ret_var <- scLocalVar sc 0
-     ctxElimType <- ctxCtorElimType sc d c p_ret_var argStruct
-     let vs = map ecVarIndex (ctorParams argStruct)
-     return $ \params p_ret ->
-       do t <- instantiateVarList sc 0 [p_ret] ctxElimType
-          let subst = IntMap.fromList (zip vs params)
-          scWhnf sc =<< scInstantiateExt sc subst t
-
--- | Zip two lists of equal length, but return 'Nothing' if the
--- lengths are different.
-zipSameLength :: [a] -> [b] -> Maybe [(a, b)]
-zipSameLength xs ys
-  | length xs == length ys = Just (zip xs ys)
-  | otherwise = Nothing
-
 -- | Reduce an application of a recursor to a particular constructor.
 -- This is known in the Coq literature as an iota reduction. More specifically,
 -- the call
@@ -1009,32 +970,17 @@ zipSameLength xs ys
 
 ctxReduceRecursor ::
   SharedContext ->
-  Term {- ^ abstracted recursor -} ->
+  Term {- ^ recursor applied to params, motive, and eliminator functions -} ->
   Term {- ^ constructor eliminator function -} ->
   [Term] {- ^ constructor arguments -} ->
   CtorArgStruct {- ^ constructor formal argument descriptor -} ->
   IO Term
-ctxReduceRecursor sc r elimf c_args CtorArgStruct{..} =
-  case zipSameLength c_args ctorArgs of
-     Just argsCtx_ctorArgs ->
-       ctxReduceRecursor_ sc r elimf argsCtx_ctorArgs
-     Nothing ->
-       error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
-
-
--- | This operation does the real work of building the iota reduction
--- for @ctxReduceRecursor@.
-ctxReduceRecursor_ ::
-  SharedContext ->
-  Term     {- ^ recursor value eliminatiting data type d -}->
-  Term     {- ^ eliminator function for the constructor -} ->
-  [(Term, (VarName, CtorArg))] {- ^ constructor actual arguments plus argument descriptions -} ->
-  IO Term
-ctxReduceRecursor_ sc r fi args0_argCtx =
-  do args <- mk_args IntMap.empty args0_argCtx
-     scWhnf sc =<< scApplyAll sc fi args
-
- where
+ctxReduceRecursor sc r elimf c_args CtorArgStruct{..}
+  | length c_args /= length ctorArgs = panic "ctxReduceRecursor" ["Wrong number of constructor arguments"]
+  | otherwise =
+    do args <- mk_args IntMap.empty (zip c_args ctorArgs)
+       scWhnf sc =<< scApplyAll sc elimf args
+  where
     mk_args :: IntMap Term ->  -- already processed parameters/arguments
                [(Term, (VarName, CtorArg))] ->
                  -- remaining actual arguments to process, with
@@ -1058,43 +1004,20 @@ ctxReduceRecursor_ sc r fi args0_argCtx =
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
+    -- The resulting term has the form
+    -- > \(z1:Z1) .. (zk:Zk) -> r ixs (x z1 .. zk)
     mk_rec_arg ::
       [ExtCns Term] ->                -- telescope describing the zs
       [Term] ->                        -- actual values for the indices, shifted under zs
       Term ->                         -- actual value in recursive position
       IO Term
     mk_rec_arg zs_ctx ixs x =
-      -- eta expand over the zs and apply the RecursorApp form
+      -- eta expand over the zs and apply the Recursor form
       do zs <- traverse (scVariable sc) zs_ctx
          x_zs <- scApplyAll sc x zs
-         body <- scRecursorApp sc r ixs x_zs
+         r_ixs <- scApplyAll sc r ixs
+         body <- scApply sc r_ixs x_zs
          scAbstractExts sc zs_ctx body
-
--- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
--- function @p_ret@ of type
---
--- > (x1::ix1) -> .. -> (xm::ixm) -> d p1 .. pn x1 .. xm -> Type i
---
--- that computes a return type from type indices for @d@ and an element of @d@
--- for those indices, return the requires types of elimination functions for
--- each constructor of @d@. See the documentation of the 'Ctor' type and/or the
--- 'ctxCtorElimType' function for more details.
-scRecursorElimTypes ::
-  SharedContext ->
-  Name ->
-  [Term] ->
-  Term ->
-  IO [(Name, Term)]
-scRecursorElimTypes sc d params p_ret =
-  do mm <- scGetModuleMap sc
-     case lookupVarIndexInMap (nameIndex d) mm of
-       Just (ResolvedDataType dt) ->
-         do forM (dtCtors dt) $ \ctor ->
-              do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-                 return (ctorName ctor, elim_type)
-       _ ->
-         panic "scRecursorElimTypes" ["Could not find datatype: " <> toAbsoluteName (nameInfo d)]
-
 
 -- | Build the type of the @p_ret@ function, also known as the "motive"
 -- function, of a recursor on datatype @d@. This type has the form
@@ -1158,11 +1081,13 @@ scRecursorType sc dt s =
      motive_var <- scVariable sc motive_ec
 
      -- Compute the types of the elimination functions
-     elims_tps <- scRecursorElimTypes sc d param_vars motive_var
+     elims_tps <-
+       forM (dtCtors dt) $ \ctor ->
+       ctxCtorElimType sc d (ctorName ctor) motive_var (ctorArgStruct ctor)
 
      scGeneralizeExts sc (dtParams dt) =<<
        scGeneralizeExts sc [motive_ec] =<<
-       scFunAll sc (map snd elims_tps) =<<
+       scFunAll sc elims_tps =<<
        scRecursorAppType sc dt param_vars motive_var
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
