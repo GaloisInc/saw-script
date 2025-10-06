@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  | App UTerm UTerm
 <span class="lineno">   66 </span>  | Lambda Pos UTermCtx UTerm
 <span class="lineno">   67 </span>  | Pi Pos UTermCtx UTerm
-<span class="lineno">   68 </span>  | Recursor (PosPair Text)
+<span class="lineno">   68 </span>  | Recursor (PosPair Text) Sort
 <span class="lineno">   69 </span>  | UnitValue Pos
 <span class="lineno">   70 </span>  | UnitType Pos
 <span class="lineno">   71 </span>    -- | New-style records
@@ -134,7 +134,7 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">Lambda p _ _         -&gt; p</span>
 <span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">App x _              -&gt; pos x</span>
 <span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">Pi p _ _             -&gt; p</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">Recursor i           -&gt; pos i</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">Recursor i _         -&gt; pos i</span>
 <span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">UnitValue p          -&gt; <span class="nottickedoff">p</span></span>
 <span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">UnitType p           -&gt; <span class="nottickedoff">p</span></span>
 <span class="lineno">  121 </span><span class="spaces">      </span><span class="istickedoff">RecordValue p _      -&gt; p</span>
