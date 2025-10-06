@@ -640,7 +640,7 @@ inferRecursor r =
 -- | Compute the type of an 'SCTypedTerm'.
 scTypeOfTypedTerm :: SharedContext -> SCTypedTerm -> IO SCTypedTerm
 scTypeOfTypedTerm sc (SCTypedTerm _tm tp ctx) =
-  do tp_tp <- scTypeOf' sc [] tp
+  do tp_tp <- scTypeOf' sc ctx tp
      pure (SCTypedTerm tp tp_tp ctx)
 
 -- | Reduce an 'SCTypedTerm' to WHNF (see also 'scTypeCheckWHNF').

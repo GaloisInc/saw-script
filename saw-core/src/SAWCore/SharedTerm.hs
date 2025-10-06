@@ -1346,10 +1346,10 @@ scTypeOfIdent sc ident =
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: SharedContext -> Term -> IO Term
-scTypeOf sc t0 = scTypeOf' sc [] t0
+scTypeOf sc t0 = scTypeOf' sc IntMap.empty t0
 
--- | A version for open terms; the list argument encodes the type environment.
-scTypeOf' :: SharedContext -> [Term] -> Term -> IO Term
+-- | A version for open terms; the map argument encodes the type environment.
+scTypeOf' :: SharedContext -> IntMap Term -> Term -> IO Term
 scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: Term -> State.StateT (Map TermIndex Term) IO Term
@@ -1377,25 +1377,28 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
-        Lambda name tp rhs -> do
-          rtp <- lift $ scTypeOf' sc env rhs
-          lift $ scPi sc name tp rtp
-        Pi _ tp rhs -> do
-          ltp <- sort tp
-          rtp <- toSort =<< lift (scTypeOf' sc env rhs)
-
-          -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
-          -- when b is a Prop (this is a forall proposition), otherwise it is a
-          -- (Type (max (sortOf a) (sortOf b)))
-          let srt = if rtp == propSort then propSort else max ltp rtp
-
-          lift $ scSort sc srt
+        Lambda x tp rhs ->
+          do let env' = IntMap.insert (vnIndex x) tp env
+             rtp <- lift $ scTypeOf' sc env' rhs
+             lift $ scPi sc x tp rtp
+        Pi x tp rhs ->
+          do ltp <- sort tp
+             let env' = IntMap.insert (vnIndex x) tp env
+             rtp <- toSort =<< lift (scTypeOf' sc env' rhs)
+             -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
+             -- when b is a Prop (this is a forall proposition), otherwise it is a
+             -- (Type (max (sortOf a) (sortOf b)))
+             let srt = if rtp == propSort then propSort else max ltp rtp
+             lift $ scSort sc srt
         Constant nm ->
           do mm <- liftIO $ scGetModuleMap sc
              case lookupVarIndexInMap (nameIndex nm) mm of
                Just r -> pure $ resolvedNameType r
                _ -> panic "scTypeOf'" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-        Variable _nm tp -> pure tp
+        Variable x tp ->
+          case IntMap.lookup (vnIndex x) env of
+            Just tx -> pure tx
+            Nothing -> pure tp
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
