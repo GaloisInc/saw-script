@@ -80,10 +80,6 @@ data TranslationReader = TranslationReader
   { _currentModule  :: Maybe ModuleName
     -- ^ The current Coq module for the translation
 
-  , _localEnvironment  :: [Coq.Ident]
-    -- ^ The list of Coq identifiers associated with the current SAW core
-    -- Bruijn-indexed local variables in scope, innermost (index 0) first
-
   , _namedEnvironment  :: Map.Map VarName Coq.Ident
     -- ^ The map of Coq identifiers associated with the SAW core named
     -- variables in scope
@@ -269,7 +265,6 @@ runTermTranslationMonad configuration mname mm globalDecls localEnv =
   runTranslationMonad configuration
   (TranslationReader {
       _currentModule = mname
-      , _localEnvironment = localEnv
       , _namedEnvironment = Map.empty
       , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
       , _sharedNames        = IntMap.empty
@@ -482,7 +477,6 @@ withTopTranslationState m =
   localTR (\r ->
             TranslationReader {
               _currentModule     = view currentModule r,
-              _localEnvironment  = [],
               _namedEnvironment  = Map.empty,
               _unavailableIdents = reservedIdents,
               _sharedNames       = IntMap.empty,
