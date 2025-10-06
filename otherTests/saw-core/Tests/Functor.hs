@@ -50,15 +50,14 @@ shared :: TermIndex -> TermF Term -> Term
 shared ix t = STApp {
     stAppIndex = ix,
     stAppHash = hash t,
-    stAppLooseVars = emptyBitSet,
     stAppFreeVars = mempty,
     stAppTermF = t
  }
 
--- | Some LocalNames (LocalName is just Text)
-lnFoo, lnBar :: LocalName
-lnFoo = "foo"
-lnBar = "bar"
+-- | Some variable names
+vnFoo, vnBar :: VarName
+vnFoo = VarName 2 "foo"
+vnBar = VarName 3 "bar"
 
 -- | An external constant
 nmFoo :: Name
@@ -75,7 +74,7 @@ nmFoo = Name {
 type Failure = (String, String, String)
 type Result = Either Failure ()
 
--- | Check a result. 
+-- | Check a result.
 check :: Failure -> Bool -> Result
 check _ True = Right ()
 check f False = Left f
@@ -175,19 +174,19 @@ instance TestIt Term where
         let depth' = depth + 1
             unit = Unshared $ FTermF $ UnitValue
             zero = Unshared $ FTermF $ NatLit 0
-            localvar = Unshared $ LocalVar 0
+            localvar = Unshared $ Variable vnBar t
         testOne depth' $ PairValue t t
         testOne depth' $ PairValue t zero
         testOne depth' $ PairValue unit t
         testOne depth' $ App t t
         testOne depth' $ App t zero
         testOne depth' $ App unit t
-        testOne depth' $ Lambda lnFoo t t
-        testOne depth' $ Lambda lnBar t localvar
-        testOne depth' $ Pi lnFoo t t
-        testOne depth' $ Pi lnBar t localvar
-        testTwo depth' GT (Lambda lnFoo t t) (Lambda lnBar t t)
-        testTwo depth' GT (Pi lnFoo t t) (Pi lnBar t t)
+        testOne depth' $ Lambda vnFoo t t
+        testOne depth' $ Lambda vnBar t localvar
+        testOne depth' $ Pi vnFoo t t
+        testOne depth' $ Pi vnBar t localvar
+        testTwo depth' LT (Lambda vnFoo t t) (Lambda vnBar t t)
+        testTwo depth' LT (Pi vnFoo t t) (Pi vnBar t t)
         testTwo depth' EQ (Constant nmFoo :: TermF Term) (Constant nmFoo :: TermF Term)
 
   testTwo depth comp t1 t2 = do
@@ -197,12 +196,12 @@ instance TestIt Term where
       when (depth < 2 && comp /= EQ) $ do
         let depth' = depth + 1
         -- check that the variable name affects the comparison
-        testTwo depth' comp (Lambda lnFoo t1 t1) (Lambda lnFoo t2 t2)
-        testTwo depth' GT (Lambda lnFoo t1 t1) (Lambda lnBar t2 t2)
-        testTwo depth' LT (Lambda lnBar t1 t1) (Lambda lnFoo t2 t2)
-        testTwo depth' comp (Pi lnFoo t1 t1) (Pi lnFoo t2 t2)
-        testTwo depth' GT (Pi lnFoo t1 t1) (Pi lnBar t2 t2)
-        testTwo depth' LT (Pi lnBar t1 t1) (Pi lnFoo t2 t2)
+        testTwo depth' comp (Lambda vnFoo t1 t1) (Lambda vnFoo t2 t2)
+        testTwo depth' LT (Lambda vnFoo t1 t1) (Lambda vnBar t2 t2)
+        testTwo depth' GT (Lambda vnBar t1 t1) (Lambda vnFoo t2 t2)
+        testTwo depth' comp (Pi vnFoo t1 t1) (Pi vnFoo t2 t2)
+        testTwo depth' LT (Pi vnFoo t1 t1) (Pi vnBar t2 t2)
+        testTwo depth' GT (Pi vnBar t1 t1) (Pi vnFoo t2 t2)
         pure ()
 
 -- | Run some tests

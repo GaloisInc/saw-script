@@ -81,58 +81,55 @@ asCtorDTApp _ _ _ _ = Nothing
 
 -- | Check that an argument for a constructor has one of the allowed forms
 asCtorArg ::
-  SharedContext ->
   Name ->
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe CtorArg)
-asCtorArg _ d _ _ tp
+  Maybe CtorArg
+asCtorArg d _ _ tp
   | not (usesDataType d tp)
-  = pure $ Just (ConstArg tp)
-asCtorArg sc d params dt_ixs tp =
-  do (zs, ret) <- scAsPiList sc tp
+  = Just (ConstArg tp)
+asCtorArg d params dt_ixs tp =
+  do let (zs, ret) = asPiList tp
      case asCtorDTApp d params dt_ixs ret of
        Just ixs
-         | not (any (usesDataType d . ecType) zs) ->
-           pure $ Just (RecursiveArg zs ixs)
+         | not (any (usesDataType d . snd) zs) ->
+           Just (RecursiveArg (map (uncurry EC) zs) ixs)
        _ ->
-         pure Nothing
+         Nothing
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
 asPiCtorArg ::
-  SharedContext ->
   Name ->
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe (VarName, CtorArg, Term))
-asPiCtorArg sc d params dt_ixs t =
-  scAsPi sc t >>= \case
-    Nothing -> pure Nothing
-    Just (ec, rest) ->
-      asCtorArg sc d params dt_ixs (ecType ec) >>= \case
-        Nothing -> pure Nothing
-        Just arg -> pure $ Just (ecName ec, arg, rest)
+  Maybe (VarName, CtorArg, Term)
+asPiCtorArg d params dt_ixs t =
+  case asPi t of
+    Nothing -> Nothing
+    Just (nm, tp, rest) ->
+      case asCtorArg d params dt_ixs tp of
+        Nothing -> Nothing
+        Just arg -> Just (nm, arg, rest)
 
 -- | Helper function for 'mkCtorArgStruct'
 mkCtorArgsIxs ::
-  SharedContext ->
   Name ->
   [ExtCns Term] ->
   [index] ->
   Term ->
-  IO (Maybe ([(VarName, CtorArg)], [Term]))
-mkCtorArgsIxs _sc d params dt_ixs (asCtorDTApp d params dt_ixs -> Just ixs) =
-  pure $ Just ([], ixs)
-mkCtorArgsIxs sc d params dt_ixs ty =
-  asPiCtorArg sc d params dt_ixs ty >>= \case
-    Nothing -> pure Nothing
+  Maybe ([(VarName, CtorArg)], [Term])
+mkCtorArgsIxs d params dt_ixs (asCtorDTApp d params dt_ixs -> Just ixs) =
+  Just ([], ixs)
+mkCtorArgsIxs d params dt_ixs ty =
+  case asPiCtorArg d params dt_ixs ty of
+    Nothing -> Nothing
     Just (x, arg, rest) ->
-      mkCtorArgsIxs sc d params dt_ixs rest >>= \case
-        Nothing -> pure Nothing
-        Just (args, ixs) -> pure $ Just ((x, arg) : args, ixs)
+      case mkCtorArgsIxs d params dt_ixs rest of
+        Nothing -> Nothing
+        Just (args, ixs) -> Just ((x, arg) : args, ixs)
 
 -- | Take in a datatype and bindings lists for its parameters and indices, and
 -- also a prospective type of a constructor for that datatype, where the
@@ -140,14 +137,13 @@ mkCtorArgsIxs sc d params dt_ixs ty =
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
 mkCtorArgStruct ::
-  SharedContext ->
   Name ->
   [ExtCns Term] ->
   [ExtCns Term] ->
   Term ->
-  IO (Maybe CtorArgStruct)
-mkCtorArgStruct sc d params dt_ixs ctor_tp =
-  mkCtorArgsIxs sc d params dt_ixs ctor_tp >>= \case
-    Nothing -> pure Nothing
+  Maybe CtorArgStruct
+mkCtorArgStruct d params dt_ixs ctor_tp =
+  case mkCtorArgsIxs d params dt_ixs ctor_tp of
+    Nothing -> Nothing
     Just (args, ctor_ixs) ->
-      pure $ Just (CtorArgStruct params args ctor_ixs)
+      Just (CtorArgStruct params args ctor_ixs)

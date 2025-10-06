@@ -54,7 +54,6 @@ module SAWCore.Conversion
   , asAnyNatLit
   , asAnyVecLit
   , asVariable
-  , asLocalVar
     -- ** Prelude matchers
   , asBoolType
   , asSuccLit
@@ -282,10 +281,6 @@ asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 -- | Match any named variable.
 asVariable :: Matcher (ExtCns Term)
 asVariable = asVar R.asVariable
-
--- | Returns index of local var if any.
-asLocalVar :: Matcher DeBruijnIndex
-asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
 -- Prelude matchers

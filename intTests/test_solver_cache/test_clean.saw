@@ -3,7 +3,7 @@
 set_solver_cache_path "test_solver_cache.cache";
 
 // The cache still has entries from prior runs
-test_solver_cache_stats 6 0 0 0 0;
+test_solver_cache_stats 8 0 0 0 0;
 
 // After cleaning, all SBV entries should be removed (see test.sh)
 clean_mismatched_versions_solver_cache;
@@ -13,4 +13,4 @@ test_solver_cache_stats 4 0 0 0 0;
 // as many insertions as there were SBV entries, and as many usages as there
 // were in test_path_second less the number of SBV entries
 include "test_ops.saw";
-test_solver_cache_stats 6 6 0 2 0;
+test_solver_cache_stats 8 4 0 4 0;

@@ -71,7 +71,7 @@ import SAWCore.FiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import SAWCore.Name (ecShortName)
+import SAWCore.Name (VarName(..), ecShortName)
 import SAWCore.SATQuery
 import SAWCore.SCTypeCheck
 import SAWCore.Recognizer
@@ -272,10 +272,10 @@ replacePrim pat replace t = do
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
-  unless (termIsClosed tpat) $ fail $ unlines
+  unless (closedTerm tpat) $ fail $ unlines
     [ "pattern term is not closed", show tpat ]
 
-  unless (termIsClosed trepl) $ fail $ unlines
+  unless (closedTerm trepl) $ fail $ unlines
     [ "replacement term is not closed", show trepl ]
 
   io $ do
@@ -732,15 +732,15 @@ build_congruence sc tm =
      case asPiList ty of
        ([],_) -> fail "congruence_for: Term is not a function"
        (pis, body) ->
-         if termIsClosed body then
+         if closedTerm body then
            loop pis []
          else
            fail "congruence_for: cannot build congruence for dependent functions"
  where
   loop ((nm,tp):pis) vars =
-    if termIsClosed tp then
-      do l <- scFreshEC sc (nm <> "_1") tp
-         r <- scFreshEC sc (nm <> "_2") tp
+    if closedTerm tp then
+      do l <- scFreshEC sc (vnName nm <> "_1") tp
+         r <- scFreshEC sc (vnName nm <> "_2") tp
          loop pis ((l,r):vars)
      else
        fail "congruence_for: cannot build congruence for dependent functions"
@@ -1396,8 +1396,8 @@ proveByBVInduction script t =
   -- and the width of the bitvector we are doing induction on.
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
-       scAsPi sc ty' >>= \case
-         Just (ec, body) -> checkInductionScheme sc opts (ec : pis) body
+       case asPi ty' of
+         Just (nm, tp, body) -> checkInductionScheme sc opts (EC nm tp : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->
@@ -1953,7 +1953,7 @@ parseCoreMod mnm_str input =
      let mnm =
            mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
-     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) [] uterm
+     err_or_t <- io $ inferCompleteTermCtx sc (Just mnm) mempty uterm
      case err_or_t of
        Left err -> fail (show err)
        Right x -> pure x

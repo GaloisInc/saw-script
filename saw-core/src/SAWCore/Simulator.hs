@@ -46,6 +46,8 @@ import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntMap as IMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable
@@ -113,7 +115,7 @@ data SimulatorConfig l =
 ------------------------------------------------------------
 -- Evaluation of terms
 
-type Env l = [Thunk l]
+type Env l = IntMap (Thunk l) -- indexed by VarIndex
 type EnvIn m l = Env (WithM m l)
 
 -- | Meaning of an open term, parameterized by environment of bound variables
@@ -148,18 +150,14 @@ evalTermF cfg lam recEval tf env =
                                    do x <- recEvalDelay t2
                                       f x
                                  _ -> panic "evalTermF" ["Expected VFun"]
-    Lambda _nm _tp t        -> pure $ VFun (\x -> lam t (x : env))
-    Pi _nm t1 t2            -> do v <- evalType t1
+    Lambda nm _tp t         -> pure $ VFun (\x -> lam t (IntMap.insert (vnIndex nm) x env))
+    Pi nm t1 t2             -> do v <- evalType t1
                                   body <-
-                                    if inBitSet 0 (looseVars t2) then
-                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (x : env)))
+                                    if IntSet.member (vnIndex nm) (freeVars t2) then
+                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (IntMap.insert (vnIndex nm) x env)))
                                     else
-                                      do -- put dummy values in the environment; the term should never reference them
-                                         let val = ready VUnit
-                                         VNondependentPi . toTValue <$> lam t2 (val : env)
+                                      VNondependentPi . toTValue <$> lam t2 env
                                   return $ TValue $ VPiType v body
-
-    LocalVar i              -> force (env !! i)
 
     Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
                                   ty' <- evalType (resolvedNameType r)
@@ -176,8 +174,10 @@ evalTermF cfg lam recEval tf env =
                                             Just t -> recEval t
                                             Nothing -> simPrimitive cfg nm
 
-    Variable ec             -> do ec' <- traverse evalType ec
-                                  simExtCns cfg tf ec'
+    Variable nm tp          -> do tp' <- evalType tp
+                                  case IntMap.lookup (vnIndex nm) env of
+                                    Nothing -> simExtCns cfg tf (EC nm tp')
+                                    Just x -> force x
     FTermF ftf              ->
       case ftf of
         UnitValue           -> return VUnit
@@ -366,7 +366,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn Id l) ->
   (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (Name -> Text -> EnvIn Id l -> MValueIn Id l) ->
+  (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
@@ -375,7 +375,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn IO l) ->
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (Name -> Text -> EnvIn IO l -> MValueIn IO l) ->
+  (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
@@ -383,7 +383,7 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               Map Ident (Prims.Prim l) ->
               (ExtCns (TValue l) -> MValue l) ->
               (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
-              (Name -> Text -> Env l -> MValue l) ->
+              (Name -> Text -> [Thunk l] -> MValue l) ->
               (VBool l -> MValue l -> MValue l -> MValue l) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
@@ -395,7 +395,7 @@ evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
   Map Ident (PrimIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (TermF Term -> Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (Name -> Text -> EnvIn Id l -> MValueIn Id l) ->
+  (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
@@ -404,7 +404,7 @@ evalGlobal modmap prims extcns uninterpreted primHandler lazymux =
   Map Ident (PrimIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (TermF Term -> Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (Name -> Text -> EnvIn IO l -> MValueIn IO l) ->
+  (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
@@ -419,7 +419,7 @@ evalGlobal' ::
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (TermF Term -> Name -> TValue l -> Maybe (MValue l)) ->
   -- | Handler for stuck primitives
-  (Name -> Text -> Env l -> MValue l) ->
+  (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
@@ -508,7 +508,7 @@ evalSharedTerm :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
                   SimulatorConfig l -> Term -> MValue l
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
-  evalOpen cfg memoClosed t []
+  evalOpen cfg memoClosed t IntMap.empty
 
 {-# SPECIALIZE mkMemoClosed ::
   Show (Extra l) =>
@@ -525,9 +525,9 @@ mkMemoClosed cfg t =
   where
     -- | Map of all closed subterms of t.
     subterms :: IntMap (TermF Term)
-    subterms = fmap fst $ IMap.filter ((== emptyBitSet) . snd) $ State.execState (go t) IMap.empty
+    subterms = fmap fst $ IMap.filter (IntSet.null . snd) $ State.execState (go t) IMap.empty
 
-    go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
+    go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     go (Unshared tf) = termf tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) =
       do memo <- State.get
@@ -538,7 +538,7 @@ mkMemoClosed cfg t =
                 State.modify (IMap.insert i (tf, b))
                 pure b
 
-    termf :: TermF Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
+    termf :: TermF Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
     termf tf =
       do -- if tf is a defined constant, traverse the definition body and type
          case tf of
@@ -549,7 +549,7 @@ mkMemoClosed cfg t =
                   ResolvedDef (defBody -> Just body) -> void $ go body
                   _ -> pure ()
            _ -> pure ()
-         looseTermF <$> traverse go tf
+         freesTermF <$> traverse go tf
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
@@ -569,10 +569,10 @@ evalClosedTermF :: (VMonadLazy l, Show (Extra l)) =>
                    SimulatorConfig l
                 -> IntMap (Thunk l)
                 -> TermF Term -> MValue l
-evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
+evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty
   where
     lam = evalOpen cfg memoClosed
-    recEval (Unshared tf') = evalTermF cfg lam recEval tf' []
+    recEval (Unshared tf') = evalTermF cfg lam recEval tf' IntMap.empty
     recEval (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -602,7 +602,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
     go memo (Unshared tf) = goTermF memo tf
     go memo (t'@STApp{ stAppIndex = i, stAppTermF = tf })
-      | termIsClosed t' = pure memo
+      | closedTerm t' = pure memo
       | otherwise =
         case IMap.lookup i memo of
           Just _ -> pure memo
@@ -618,9 +618,8 @@ mkMemoLocal cfg memoClosed t env = go mempty t
                               go memo' t2
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
-        LocalVar _      -> pure memo
         Constant{}      -> pure memo
-        Variable ec     -> go memo (ecType ec)
+        Variable _nm tp -> go memo tp
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
@@ -649,7 +648,7 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
       case IMap.lookup i memo of
         Just x -> force x
         Nothing -> evalTermF cfg lam recEval tf env
-      where memo = if termIsClosed t then memoClosed else memoLocal
+      where memo = if closedTerm t then memoClosed else memoLocal
 
 {-# SPECIALIZE evalOpen ::
   Show (Extra l) =>
@@ -678,7 +677,7 @@ evalOpen cfg memoClosed t env = do
         case IMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf
-        where memo = if termIsClosed t' then memoClosed else memoLocal
+        where memo = if closedTerm t' then memoClosed else memoLocal
       evalF :: TermF Term -> MValue l
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t
@@ -686,23 +685,23 @@ evalOpen cfg memoClosed t env = do
 
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
-  (Text -> EnvIn Id l -> MValueIn Id l) ->
+  (Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   PrimIn Id l ->
   MValueIn Id l
  #-}
 {-# SPECIALIZE evalPrim ::
   Show (Extra l) =>
-  (Text -> EnvIn IO l -> MValueIn IO l) ->
+  (Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   PrimIn IO l ->
   MValueIn IO l
  #-}
 evalPrim :: forall l. (VMonadLazy l, Show (Extra l)) =>
-  (Text -> Env l -> MValue l) ->
+  (Text -> [Thunk l] -> MValue l) ->
   Prims.Prim l ->
   MValue l
 evalPrim fallback = loop []
   where
-    loop :: Env l -> Prims.Prim l -> MValue l
+    loop :: [Thunk l] -> Prims.Prim l -> MValue l
     loop env (Prims.PrimFun f) =
       pure $ VFun $ \x ->
         loop (x : env) (f x)
@@ -728,7 +727,7 @@ evalPrim fallback = loop []
 -- | A basic handler for stuck primitives.
 defaultPrimHandler ::
   (VMonadLazy l, MonadFail (EvalM l)) =>
-  Name -> Text -> Env l -> MValue l
+  Name -> Text -> [Thunk l] -> MValue l
 defaultPrimHandler nm msg env =
   fail $ unlines
   [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))

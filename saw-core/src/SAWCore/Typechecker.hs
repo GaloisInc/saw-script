@@ -31,7 +31,8 @@ module SAWCore.Typechecker
 import Control.Monad (forM, forM_, void, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), asks, lift, local)
-import Data.List (findIndex)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -52,6 +53,7 @@ import SAWCore.Module
   , DefQualifier(..)
   )
 import qualified SAWCore.Parser.AST as Un
+import SAWCore.Name
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.CtxTerm
@@ -67,12 +69,12 @@ import Debug.Trace
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.UTerm ->
                      IO (Either PPS.Doc Term)
-inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
+inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm IntMap.empty t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
 inferCompleteTermCtx ::
-  SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  SharedContext -> Maybe ModuleName -> IntMap Term ->
   Un.UTerm -> IO (Either PPS.Doc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runCheckM (typeInferCompleteUTerm t) sc mnm ctx
@@ -94,7 +96,7 @@ data CheckEnv =
 type CheckM = ReaderT CheckEnv TC.TCM
 
 runCheckM ::
-  CheckM a -> SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  CheckM a -> SharedContext -> Maybe ModuleName -> IntMap Term ->
   IO (Either TC.TCError a)
 runCheckM m sc mnm ctx =
   TC.runTCM (runReaderT m (CheckEnv mnm Map.empty)) sc ctx
@@ -131,23 +133,19 @@ inferApplyAll t (arg:args) =
 -- | Resolve a name in the current module and apply it to some arguments
 inferResolveNameApp :: Text -> [SCTypedTerm] -> CheckM SCTypedTerm
 inferResolveNameApp n args =
-  do ctx <- lift $ TC.askCtx
-     nctx <- askCtxEC
+  do nctx <- askCtxEC
      mnm <- getModuleName
      mm <- lift $ TC.liftTCM scGetModuleMap
      let ident = mkIdent mnm n
-     case (findIndex ((== n) . fst) ctx, Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just i, _, _) ->
-         do t <- typeInferComplete (LocalVar i :: TermF SCTypedTerm)
+     case (Map.lookup n nctx, resolveNameInMap mm ident) of
+       (Just ec, _) ->
+         do t <- typeInferComplete (Variable (ecName ec) (ecType ec))
             inferApplyAll t args
-       (_, Just ec, _) ->
-         do t <- typeInferComplete (Variable ec)
-            inferApplyAll t args
-       (_, _, Just rn) ->
+       (_, Just rn) ->
          do let c = resolvedNameName rn
             t <- typeInferComplete (Constant c :: TermF SCTypedTerm)
             inferApplyAll t args
-       (Nothing, Nothing, Nothing) ->
+       (Nothing, Nothing) ->
          throwTCError $ UnboundName n
 
 -- | Match an untyped term as a name applied to 0 or more arguments
@@ -226,10 +224,11 @@ typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- context in withVar, but we do not want to normalize this type in the
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
-     tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
-     body <- withVar x tp_whnf $
+     -- tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
+     vn <- lift $ TC.liftTCM scFreshVarName x
+     body <- withVar x (EC vn (typedVal tp_trm)) $
        typeInferCompleteUTerm $ Un.Lambda p ctx t
-     typeInferComplete (Lambda x tp_trm body)
+     typeInferComplete (Lambda vn tp_trm body)
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferCompleteUTerm t
 typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
   do tp_trm <- typeInferCompleteUTerm tp
@@ -238,9 +237,11 @@ typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
      -- output, as the contract for typeInferComplete only normalizes the type,
      -- so we use the unnormalized tp_trm in the return
      tp_whnf <- lift $ TC.typeCheckWHNF $ typedVal tp_trm
-     body <- withVar x tp_whnf $
+     vn <- lift $ TC.liftTCM scFreshVarName x
+     body <- withVar x (EC vn tp_whnf) $
        typeInferCompleteUTerm $ Un.Pi p ctx t
-     typeInferComplete (Pi x tp_trm body)
+     result <- typeInferComplete (Pi vn tp_trm body)
+     pure result
 
 -- Non-dependent records
 typeInferCompleteTerm (Un.RecordValue _ elems) =
@@ -352,7 +353,8 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
        withCtx ctx $
        do typed_body <- typeInferCompleteUTerm body
           lift $ TC.checkSubtype typed_body req_body_tp
-          lift $ TC.liftTCM scLambdaList ctx (typedVal typed_body)
+          result <- lift $ TC.liftTCM scAbstractExts (map snd ctx) (typedVal typed_body)
+          pure result
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
@@ -445,7 +447,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                    "Type of that type: " <> Text.pack (showTerm $ typedType typed_tp)
                ]
        let tp = typedVal typed_tp
-       result <- lift $ TC.liftTCM mkCtorArgStruct pn dtParams dtIndices tp
+       let result = mkCtorArgStruct pn dtParams dtIndices tp
        case result of
          Just arg_struct ->
            lift $ TC.liftTCM scBuildCtor pn (mkIdent mnm c) arg_struct
@@ -467,7 +469,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
        unless i_exists $ fail $ "Imported module not found: " ++ show imn
        scImportModule sc (Un.nameSatsConstraint (Un.importConstraints imp) . Text.unpack) imn mnm
   -- Finally, process all the decls
-  decls_res <- runCheckM (processDecls decls) sc (Just mnm) []
+  decls_res <- runCheckM (processDecls decls) sc (Just mnm) IntMap.empty
   case decls_res of
     Left err -> fail $ unlines $ TC.prettyTCError err
     Right _ -> return ()
@@ -479,11 +481,11 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 
 -- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
 -- far as the supplied list of variables, and use them as the new names
-matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, Term)], Term)
+matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, ExtCns Term)], Term)
 matchPiWithNames [] tp = return ([], tp)
-matchPiWithNames (var:vars) (asPi -> Just (_, arg_tp, body_tp)) =
+matchPiWithNames (var : vars) (asPi -> Just (nm, arg_tp, body_tp)) =
   do (ctx,body) <- matchPiWithNames vars body_tp
-     return ((var,arg_tp):ctx,body)
+     return ((var, EC nm arg_tp) : ctx,body)
 matchPiWithNames _ _ = Nothing
 
 -- | Run a type-checking computation in a typing context extended with a new
@@ -493,24 +495,16 @@ matchPiWithNames _ _ = Nothing
 --
 -- NOTE: the type given for the variable should be in WHNF, so that we do not
 -- have to normalize the types of variables each time we see them.
-withVar :: LocalName -> Term -> CheckM a -> CheckM a
-withVar x tp m = ReaderT $ \env -> TC.withVar x tp (runReaderT m env)
-
-withEC :: LocalName -> ExtCns Term -> CheckM a -> CheckM a
-withEC x ec m =
+withVar :: LocalName -> ExtCns Term -> CheckM a -> CheckM a
+withVar x ec m =
   TC.rethrowTCError (ErrorCtx x (ecType ec)) $
   TC.withEmptyTCState $
   local (\env -> env { tcCtxEC = Map.insert x ec (tcCtxEC env) }) m
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.
-withCtx :: [(LocalName, Term)] -> CheckM a -> CheckM a
+withCtx :: [(LocalName, ExtCns Term)] -> CheckM a -> CheckM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
-
--- | Run a type-checking computation in a typing context extended by a list of
--- variables and their types. See 'withEC'.
-withCtxEC :: [(LocalName, ExtCns Term)] -> CheckM a -> CheckM a
-withCtxEC = flip (foldr (\(x,ec) -> withEC x ec))
 
 -- | Perform type inference on a context, i.e., a list of variable names and
 -- their associated types. This will give us 'Term's for each type, as
@@ -522,14 +516,14 @@ typeInferCompleteCtxEC ((x, tp) : ctx) =
   do typed_tp <- typeInferCompleteUTerm tp
      s <- lift $ TC.ensureSort (typedType typed_tp)
      ec <- lift $ TC.liftTCM scFreshEC x (typedVal typed_tp)
-     ((x, ec, s) :) <$> withEC x ec (typeInferCompleteCtxEC ctx)
+     ((x, ec, s) :) <$> withVar x ec (typeInferCompleteCtxEC ctx)
 
 -- | Perform type inference on a context via 'typeInferCompleteCtxEC', and then
--- run a computation in that context via 'withCtxEC', also passing in that context
+-- run a computation in that context via 'withCtx', also passing in that context
 -- to the computation
 typeInferCompleteInCtxEC ::
   [(LocalName, Un.UTerm)] ->
   ([(LocalName, ExtCns Term, Sort)] -> CheckM a) -> CheckM a
 typeInferCompleteInCtxEC ctx f =
   do typed_ctx <- typeInferCompleteCtxEC ctx
-     withCtxEC (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
+     withCtx (map (\(x,ec,_) -> (x,ec)) typed_ctx) (f typed_ctx)
