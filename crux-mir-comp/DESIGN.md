@@ -147,6 +147,74 @@ implementations of some cryptographic algorithms) are usually declared as
 immutable and thus always retain their initial values.
 
 
+## Cryptol
+
+It is possible to import Cryptol expressions into symbolic Rust test cases to
+help write specifications (e.g., if you want to check that a Rust implementation
+matches a Cryptol specification).  This is done by using the `cryptol!` macro
+defined in the `crucible` crate.  Here's an example illustrating how to
+import a Cryptol function `myCryFun` defined in Cryptol module `SomeCryMod`,
+and bind it as the Rust function `myRustFun`:
+
+```Cryptol
+module SomeCryMod where
+  f: [8] -> [32]
+  f x = 0 # x
+```
+```Rust
+use crucible::*;
+cryptol! {
+    path "SomeCryMod";
+    pub fn myRustFun(x: u8) -> u32 = r"myCryFun";
+}
+```
+
+Тhe `path` component of the macro specifies a Cryptol module,
+the string after the `=` is a Cryptol expression, and the rest of the
+declaration specifies how to invoke evaluating the Cryptol expression from
+Rust.  If the declaration contains `const` generics, then the Cryptol expression
+is specified as a format string which may refer to the values of the const
+generic parameters in curly braces (literal curly braces need to be escaped
+as a double curly brace).  Here's an example of how to use a function with
+const generics:
+```Cryptol``
+module Cryptol where
+  sum : {n, a} (fin n, Eq a, Ring a) => [n]a -> a
+  sum = foldl (+) zero
+```
+```Rust
+extern crate crucible;
+use crucible::*;
+cryptol! {
+    path "Cryptol";
+    pub fn f<const N: usize>(x: &[u8]) -> u8 = r"sum`{{{N},[8]}}";
+}
+```
+
+It is important that the type of the Cryptol expression is compatible
+with the type of the declared Rust function, according to the following
+rules:
+
+  * The Cryptol type may have only numeric type parameters
+  * The first parameters of the Rust function should correspond to the
+    numeric type parameters of the Cryptol expression; they should be
+    of basic Rust numeric types (e.g., `usize`)
+  * Symbolic expressions may *not* be used as arguments corresponding to
+    numeric type parameters.
+  * The remaining parameters to the Rust function should correspond to the
+    parameters in the Cryptol type as follows:
+      * Cryptol's `Bit` is represented as Rust's `bool`
+      * A Cryptol sequence of length `n` may be represented as a Rust
+        array of length `n`.
+      * In the parameters of the Rust function, Cryptol sequences may also
+        be represented as reference to slices.  The length of the slice should
+        match the length of the Cryptol sequence, which is checked dynamically.
+      * Cryptol `Bit` sequences of lengths corresponding to Rust's basic
+        numeric types may also be represented with those types
+        (e.g., `[8]` may be represented with `u8` or `i8`).
+      * Cryptol tuples are represented as Rust tuples.
+
+
 ## Current limitations
 
 * Only one specification can be provided at a time for each function.  There is

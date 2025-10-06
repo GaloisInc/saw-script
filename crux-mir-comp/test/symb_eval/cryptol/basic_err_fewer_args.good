@@ -5,6 +5,12 @@ failures:
 ---- basic_err_fewer_args/<DISAMB>::test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
 [Crux]   test/symb_eval/cryptol/basic_err_fewer_args.rs:8:35: 8:65: error: in basic_err_fewer_args/<DISAMB>::test[0]
-[Crux]   error loading "addByte": not enough arguments: Cryptol function signature [8] -> [8] -> [8] has 2 arguments, but Rust signature (u8, u8, u8) -> u8 [RustAbi] requires 3
+[Crux]   error loading "addByte": Too many Rust arguments:
+[Crux]     Expected: 2
+[Crux]     Provided: 3
+[Crux]   Cryptol type:
+[Crux]     [8] -> [8] -> [8]
+[Crux]   Rust type:
+[Crux]     (u8, u8, u8) -> u8 [RustAbi]
 
 [Crux] Overall status: Invalid.

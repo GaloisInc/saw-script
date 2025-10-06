@@ -1,0 +1,12 @@
+test size_poly_err_dyn1/<DISAMB>::test[0]: FAILED
+
+failures:
+
+---- size_poly_err_dyn1/<DISAMB>::test[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   test/symb_eval/cryptol/size_poly_err_dyn1.rs:8:5: 8:19: error: in size_poly_err_dyn1/<DISAMB>::test[0]
+[Crux]   Slice length mismatch:
+[Crux]     Expected: 2
+[Crux]     Actual  : 3
+
+[Crux] Overall status: Invalid.
