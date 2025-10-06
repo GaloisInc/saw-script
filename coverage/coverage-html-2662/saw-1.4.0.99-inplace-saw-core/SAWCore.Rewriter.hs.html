@@ -565,7 +565,7 @@ span.spaces    { background: white }
 <span class="lineno">  546 </span><span class="spaces">          </span><span class="istickedoff">do f' &lt;- betaReduce f</span>
 <span class="lineno">  547 </span><span class="spaces">             </span><span class="istickedoff">case R.asLambda f' of</span>
 <span class="lineno">  548 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; scApply sc f' arg</span>
-<span class="lineno">  549 </span><span class="spaces">               </span><span class="istickedoff">Just (_, _, body) -&gt; instantiateVar sc 0 arg body</span></span>
+<span class="lineno">  549 </span><span class="spaces">               </span><span class="istickedoff">Just (_, _, body) -&gt; <span class="nottickedoff">instantiateVar sc 0 arg body</span></span></span>
 <span class="lineno">  550 </span>
 <span class="lineno">  551 </span>-- | Repeatedly apply the rule transformations in 'scExpandRewriteRule'.
 <span class="lineno">  552 </span>scExpandRewriteRules :: SharedContext -&gt; [RewriteRule a] -&gt; IO [RewriteRule a]

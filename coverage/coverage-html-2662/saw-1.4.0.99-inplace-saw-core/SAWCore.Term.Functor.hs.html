@@ -279,17 +279,17 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
 <span class="lineno">  261 </span>
 <span class="lineno">  262 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
-<span class="lineno">  263 </span><span class="decl"><span class="nottickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
-<span class="lineno">  264 </span><span class="spaces">  </span><span class="nottickedoff">| n1 == n2 &amp;&amp; s1 == s2</span>
-<span class="lineno">  265 </span><span class="spaces">  </span><span class="nottickedoff">= do d &lt;- zipName d1 d2</span>
-<span class="lineno">  266 </span><span class="spaces">       </span><span class="nottickedoff">ord &lt;- sequence (zipWith zipName ord1 ord2)</span>
-<span class="lineno">  267 </span><span class="spaces">       </span><span class="nottickedoff">pure $ CompiledRecursor</span>
-<span class="lineno">  268 </span><span class="spaces">              </span><span class="nottickedoff">d</span>
-<span class="lineno">  269 </span><span class="spaces">              </span><span class="nottickedoff">s1</span>
-<span class="lineno">  270 </span><span class="spaces">              </span><span class="nottickedoff">ps1</span>
-<span class="lineno">  271 </span><span class="spaces">              </span><span class="nottickedoff">n1</span>
-<span class="lineno">  272 </span><span class="spaces">              </span><span class="nottickedoff">ord</span>
-<span class="lineno">  273 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
+<span class="lineno">  263 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
+<span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">n1 == n2 &amp;&amp; s1 == s2</span></span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do d &lt;- zipName d1 d2</span></span>
+<span class="lineno">  266 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">ord &lt;- sequence (zipWith zipName ord1 ord2)</span></span>
+<span class="lineno">  267 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
+<span class="lineno">  268 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
+<span class="lineno">  269 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">s1</span></span>
+<span class="lineno">  270 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
+<span class="lineno">  271 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
+<span class="lineno">  272 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
 <span class="lineno">  274 </span>
 <span class="lineno">  275 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 <span class="lineno">  276 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
@@ -306,7 +306,7 @@ span.spaces    { background: white }
 <span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">go (PairRight x) (PairRight y) = <span class="nottickedoff">Just (PairLeft (f x y))</span></span>
 <span class="lineno">  288 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">go (Recursor rec1) (Recursor rec2) =</span>
-<span class="lineno">  290 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Recursor &lt;$&gt; zipRec rec1 rec2</span></span>
+<span class="lineno">  290 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">Recursor</span> &lt;$&gt; zipRec rec1 rec2</span>
 <span class="lineno">  291 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">go (RecordType elems1) (RecordType elems2)</span>
 <span class="lineno">  293 </span><span class="spaces">      </span><span class="istickedoff">| Just vals2 &lt;- alistAllFields (map fst elems1) elems2 =</span>
