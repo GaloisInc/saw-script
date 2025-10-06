@@ -6,15 +6,15 @@ E.g.,
   2. SAWScript manual describing imports/loads
   3. New Issue for further extending/simplifying import/load
 
-** TODO thk re scope; terminology
+** TODO Thinking re scope; terminology
 
 - notions/terms
   - scope :: the scope of variable (in terms of
     - per four namespaces
-    - what's in scope at a point in cryptol module
-      - point in sawscript module
+    - what's in scope at a point in Cryptol module
+      - point in SAWScript module
   - ? :: the set of (qualified) names we add to scope with binders
-    - let, bind, import, magic-cryptolmodule-bind
+    - let, bind, import, magic-Cryptolmodule-bind
   - context/? ::
     - ? the env at the top-level of a module
     - ? : the env at a given point of a module
@@ -26,9 +26,9 @@ E.g.,
 - non-standard scoping concepts in Cryptol
   - submodules are special, reference to can be private/public
     - if we have reference to a submodule, we can import it (in
-      Cryptol, in sawscript)
+      Cryptol, in SAWScript)
       
-** Explaining scope in sawscript
+** Explaining scope in SAWScript
 
 Note that at the Cryptol command line, one cannot create an
 environment that does not correspond to a point in the source code,
@@ -37,10 +37,10 @@ in focus.
 
 - Alternatives
   
-  A. sawscript works like Cryptol *command line*:
+  A. SAWScript works like Cryptol *command line*:
      - one module/submodule is *the* focus (not two)
        
-  B. sawscript imports work exactly the same as in Cryptol *code*
+  B. SAWScript imports work exactly the same as in Cryptol *code*
      - we have access to public submodules
      - we can access *public* elements of these submodules with =::=
      - we can extend the Env with =import submodule SM=
@@ -63,11 +63,11 @@ in focus.
           B. As A, but =import submodule= might have "PRIVATE TOO"
        C. we have a different mechanism for referencing private vars
 
-Sawscript is different /by design/:
+SAWScript is different /by design/:
  - Two values may not overlap in their scope at any one place in the
    code.  But we may want to use or relate these values together in
-   sawscript.  Sawscript allows use to do this /without/ having to
-   create an ad hoc cryptol module for creating a scope where both
+   SAWScript.  SAWScript allows use to do this /without/ having to
+   create an ad hoc Cryptol module for creating a scope where both
    values are in scope.
 
  - Thus the simplicity of Cryptol's =:focus <MODULE>= is not desirable.  
@@ -76,7 +76,7 @@ We choose alternative C, design choice A.
 
 ** Current (new branch) behavior
 
-- In SAWScript there are two ways to bring cryptol modules into scope:
+- In SAWScript there are two ways to bring Cryptol modules into scope:
   the =import= command and the =cryptol_load= command.
 
   - =import=
@@ -89,10 +89,10 @@ We choose alternative C, design choice A.
         - private definitions (and submodules) at top-level are visible
         - private definitions inside submodules are *not* visible,
           unless we change to focus to that submodule with =:focus=
-    - is a sawscript construct, not a CLI command
+    - is a SAWScript construct, not a CLI command
       - the syntax is *TODO...*
       - can only appear at the top-level
-    - as with cryptol
+    - as with Cryptol
       - we can qualify multiple modules to the same name
       - we can import duplicate [qualified] names without error (the error only
         comes when we try to reference one of those names)
@@ -119,10 +119,10 @@ We choose alternative C, design choice A.
 
       - This will
         - bind "M" as a SAWScript value of type `CryptolModule` (of course)
-        - Extend the cryptol environment with the given module
+        - Extend the Cryptol environment with the given module
           where the contents of the module are all qualified with "M".
           - i.e., *TODO...*
-      - Using the =M : CryptolModule= SawScript value
+      - Using the =M : CryptolModule= SAWScript value
         - you can view the public names of "M.cry" with print
           (i.e., the default show function for `CryptolModule`
         - you can `cryptol_extract` the definitions in it thus
@@ -133,10 +133,10 @@ We choose alternative C, design choice A.
 
 ** Current (branch) compared to previous behavior (on master)
 
-- new :: we can access definitions in sub-modules, they are referenced
+- New :: we can access definitions in sub-modules, they are referenced
   via =::= qualifiers, just as is done in Cryptol code.
 
-- chg :: =cryptol_load=:
+- Changes :: =cryptol_load=:
   - *Previously*
     - given this
       : A <- cryptol_load "A.cry"  -- A::** are added to {{A::**}}
@@ -145,7 +145,7 @@ We choose alternative C, design choice A.
     - for each symbol 's' from A2.cry:
       - 's' may shadow any duplicate symbol 's' from `A.cry`
     - and it would also
-      - leave symbols from A.cry in the cryptol environment, i.e.,
+      - leave symbols from A.cry in the Cryptol environment, i.e.,
         {{A::*}}.
   - *NOW*,
     - given this
@@ -159,9 +159,9 @@ We choose alternative C, design choice A.
         - importing ambiguous symbols is allowed
         - referring to ambiguous (qualified) symbols is an error.
      -  : A <- cryptol_load "A2.cry"  --
-      - accessing =A= in SAWscript gives us "A2.cry"
+      - accessing =A= in SAWScript gives us "A2.cry"
 
-- chg ::
+- Changes ::
   - cryptol_export is defined in terms of ={{A::name}}=, thus no more
     gratuitous differences.
 
@@ -172,7 +172,7 @@ We choose alternative C, design choice A.
     - [ ] =cryptol_load= did not put top-level privates in scope (?)
     - [ ] =cryptol_export= could not access privates (?)
 
-** Issues, 2025-09-29
+** Issues, 2025-10-06
 
 - [ ] Assume we want to immediately update semantics of =cryptol_load=
   (i.e., that we don't try to support old code that relies on old ad
@@ -180,9 +180,10 @@ We choose alternative C, design choice A.
   - warn on let/bind shadowing would help for this (and other errors)
 
 - [ ] private's in submodules are inaccessible
-  - and issues with private submodules too!
-  - as we *now* use cryptol code, and cryptol code leaves these
-    inacessible!
+  - ditto with private submodules
+  - bug in code, privates at top-level are accessible
+    - wrongly using Cryptol code, and Cryptol code leaves these
+      inacessible!
   - [ ] clarify what we *really* want before implementing
 
 - [ ] print CryptolModule with submodules
