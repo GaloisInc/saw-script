@@ -577,7 +577,7 @@ span.spaces    { background: white }
 <span class="lineno">  558 </span>subNat_NatLit :: Conversion
 <span class="lineno">  559 </span><span class="decl"><span class="istickedoff">subNat_NatLit = Conversion $</span>
 <span class="lineno">  560 </span><span class="spaces">  </span><span class="istickedoff">thenMatcher (asGlobalDef &quot;Prelude.subNat&quot; &lt;:&gt; asAnyNatLit &lt;:&gt; asAnyNatLit)</span>
-<span class="lineno">  561 </span><span class="spaces">    </span><span class="istickedoff">(\(_ :*: x :*: y) -&gt; if <span class="tickonlytrue">x &gt;= y</span> then Just (mkNatLit (x - y)) else <span class="nottickedoff">Nothing</span>)</span></span>
+<span class="lineno">  561 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(\(_ :*: x :*: y) -&gt; if x &gt;= y then Just (mkNatLit (x - y)) else Nothing)</span></span></span>
 <span class="lineno">  562 </span>
 <span class="lineno">  563 </span>mulNat_NatLit :: Conversion
 <span class="lineno">  564 </span><span class="decl"><span class="istickedoff">mulNat_NatLit = globalConv &quot;Prelude.mulNat&quot; ((*) :: Natural -&gt; Natural -&gt; Natural)</span></span>
@@ -713,11 +713,11 @@ span.spaces    { background: white }
 <span class="lineno">  694 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
 <span class="lineno">  695 </span>
 <span class="lineno">  696 </span>remove_ident_unsafeCoerce :: Conversion
-<span class="lineno">  697 </span><span class="decl"><span class="istickedoff">remove_ident_unsafeCoerce = Conversion $ thenMatcher pat action</span>
+<span class="lineno">  697 </span><span class="decl"><span class="istickedoff">remove_ident_unsafeCoerce = Conversion $ thenMatcher pat <span class="nottickedoff">action</span></span>
 <span class="lineno">  698 </span><span class="spaces">  </span><span class="istickedoff">where pat = asGlobalDef &quot;Prelude.unsafeCoerce&quot; &lt;:&gt; asAny &lt;:&gt; asAny &lt;:&gt; asAny</span>
-<span class="lineno">  699 </span><span class="spaces">        </span><span class="istickedoff">action (() :*: t :*: f :*: x)</span>
-<span class="lineno">  700 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">alphaEquiv t f</span> = return (return x)</span>
-<span class="lineno">  701 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  699 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">action (() :*: t :*: f :*: x)</span></span>
+<span class="lineno">  700 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| alphaEquiv t f = return (return x)</span></span>
+<span class="lineno">  701 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise = Nothing</span></span></span>
 
 </pre>
 </body>

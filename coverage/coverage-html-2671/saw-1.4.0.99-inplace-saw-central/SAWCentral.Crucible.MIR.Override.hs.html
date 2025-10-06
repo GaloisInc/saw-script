@@ -604,7 +604,7 @@ span.spaces    { background: white }
 <span class="lineno">  585 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- OM (use setupValueSub)</span>
 <span class="lineno">  586 </span><span class="spaces">  </span><span class="istickedoff">globals &lt;- OM (use overrideGlobals)</span>
 <span class="lineno">  587 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
-<span class="lineno">  588 </span><span class="spaces">  </span><span class="istickedoff">pt' &lt;- liftIO $ instantiateMirPointsTo sc sub pt</span>
+<span class="lineno">  588 </span><span class="spaces">  </span><span class="istickedoff">pt' &lt;- liftIO $ instantiateMirPointsTo <span class="nottickedoff">sc</span> sub pt</span>
 <span class="lineno">  589 </span><span class="spaces">  </span><span class="istickedoff">globals' &lt;- liftIO $ doPointsTo <span class="nottickedoff">spec</span> cc env globals pt'</span>
 <span class="lineno">  590 </span><span class="spaces">  </span><span class="istickedoff">OM (overrideGlobals .= globals')</span></span>
 <span class="lineno">  591 </span>
@@ -620,7 +620,7 @@ span.spaces    { background: white }
 <span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">do refreshTerms sc ss</span>
 <span class="lineno">  602 </span><span class="spaces">     </span><span class="istickedoff">F.traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))</span>
 <span class="lineno">  603 </span><span class="spaces">     </span><span class="istickedoff">checkMutableAllocPostconds <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc cs</span>
-<span class="lineno">  604 </span><span class="spaces">     </span><span class="istickedoff">F.traverse_ (executePointsTo <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">cs</span>) (ss ^. MS.csPointsTos)</span>
+<span class="lineno">  604 </span><span class="spaces">     </span><span class="istickedoff">F.traverse_ (executePointsTo <span class="nottickedoff">opts</span> <span class="nottickedoff">sc</span> cc <span class="nottickedoff">cs</span>) (ss ^. MS.csPointsTos)</span>
 <span class="lineno">  605 </span><span class="spaces">     </span><span class="istickedoff">F.traverse_ (executeSetupCondition <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">cs</span>) (ss ^. MS.csConditions)</span></span>
 <span class="lineno">  606 </span>
 <span class="lineno">  607 </span>-- | Process a &quot;mir_equal&quot; statement from the postcondition
@@ -906,7 +906,7 @@ span.spaces    { background: white }
 <span class="lineno">  887 </span><span class="spaces">    </span><span class="istickedoff">instantiateMirPointsToTarget (CrucibleMirCompPointsToTarget referents) =</span>
 <span class="lineno">  888 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">CrucibleMirCompPointsToTarget &lt;$&gt; traverse (instantiateSetupValue sc s) referents</span></span>
 <span class="lineno">  889 </span><span class="spaces">    </span><span class="istickedoff">instantiateMirPointsToTarget (MirPointsToSingleTarget referent) =</span>
-<span class="lineno">  890 </span><span class="spaces">      </span><span class="istickedoff">MirPointsToSingleTarget &lt;$&gt; instantiateSetupValue sc s referent</span>
+<span class="lineno">  890 </span><span class="spaces">      </span><span class="istickedoff">MirPointsToSingleTarget &lt;$&gt; instantiateSetupValue <span class="nottickedoff">sc</span> s referent</span>
 <span class="lineno">  891 </span><span class="spaces">    </span><span class="istickedoff">instantiateMirPointsToTarget (MirPointsToMultiTarget referentArray) =</span>
 <span class="lineno">  892 </span><span class="spaces">      </span><span class="istickedoff">MirPointsToMultiTarget &lt;$&gt; instantiateSetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">s</span> referentArray</span></span>
 <span class="lineno">  893 </span>
@@ -923,7 +923,7 @@ span.spaces    { background: white }
 <span class="lineno">  904 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupVar _                     -&gt; return v</span>
 <span class="lineno">  905 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupTerm tt                   -&gt; MS.SetupTerm &lt;$&gt; doTerm tt</span>
 <span class="lineno">  906 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupArray elemTy vs           -&gt; MS.SetupArray elemTy &lt;$&gt; mapM <span class="nottickedoff">(instantiateSetupValue sc s)</span> vs</span>
-<span class="lineno">  907 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupStruct did vs             -&gt; MS.SetupStruct did &lt;$&gt; mapM (instantiateSetupValue sc s) vs</span>
+<span class="lineno">  907 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupStruct did vs             -&gt; MS.SetupStruct did &lt;$&gt; mapM (instantiateSetupValue <span class="nottickedoff">sc</span> s) vs</span>
 <span class="lineno">  908 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupEnum enum_                -&gt; MS.SetupEnum &lt;$&gt; instantiateSetupEnum enum_</span>
 <span class="lineno">  909 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupTuple x vs                -&gt; <span class="nottickedoff">MS.SetupTuple x</span> &lt;$&gt; mapM <span class="nottickedoff">(instantiateSetupValue sc s)</span> vs</span>
 <span class="lineno">  910 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupSlice slice               -&gt; <span class="nottickedoff">MS.SetupSlice &lt;$&gt; instantiateSetupSlice slice</span></span>
