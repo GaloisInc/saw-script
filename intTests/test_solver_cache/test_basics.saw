@@ -10,32 +10,32 @@ test_solver_cache_stats 0 0 0 0 0;
 prove_print z3 {{ \(x:[64]) -> x == x }};
 test_solver_cache_stats 1 0 0 1 0;
 
-// Testing that cached results do not depend on variable names - thus, the
-// cache should now have one more usage, but not a new entry or insertion
+// Testing that cached results depend on variable names - thus, the cache
+// should now have one more entry and one more insertion, but not a new usage
 prove_print z3 {{ \(new_name:[64]) -> new_name == new_name }};
-test_solver_cache_stats 1 1 0 1 0;
+test_solver_cache_stats 2 0 0 2 0;
 
 // Testing that cached results depend on the backend used - thus, the cache
 // should now have one more entry and one more insertion, but not a new usage
 prove_print (w4_unint_z3 []) {{ \(x:[64]) -> x == x }};
-test_solver_cache_stats 2 1 0 2 0;
+test_solver_cache_stats 3 0 0 3 0;
 
 // Testing that cached results depend on the options passed to the given
 // backend - thus, the cache should now have one more entry and one more
 // insertion, but not a new usage
 prove_print (w4_unint_z3_using "qfnia" []) {{ \(x:[64]) -> x == x }};
-test_solver_cache_stats 3 1 0 3 0;
+test_solver_cache_stats 4 0 0 4 0;
 
 // Same as the above but for sat results
 
 fails (prove_print z3 {{ \(x:[64])(y:[64]) -> x == y }});
-test_solver_cache_stats 4 1 0 4 0;
+test_solver_cache_stats 5 0 0 5 0;
 
 fails (prove_print z3 {{ \(new_name_1:[64])(new_name_2:[64]) -> new_name_1 == new_name_2 }});
-test_solver_cache_stats 4 2 0 4 0;
+test_solver_cache_stats 6 0 0 6 0;
 
 fails (prove_print w4 {{ \(x:[64])(y:[64]) -> x == y }});
-test_solver_cache_stats 5 2 0 5 0;
+test_solver_cache_stats 7 0 0 7 0;
 
 fails (prove_print (w4_unint_z3_using "qfnia" []) {{ \(x:[64])(y:[64]) -> x == y }});
-test_solver_cache_stats 6 2 0 6 0;
+test_solver_cache_stats 8 0 0 8 0;

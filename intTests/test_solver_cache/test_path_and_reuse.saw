@@ -3,10 +3,10 @@
 set_solver_cache_path "test_solver_cache.cache";
 
 // The cache still has entries from the last run
-test_solver_cache_stats 6 0 0 0 0;
+test_solver_cache_stats 8 0 0 0 0;
 
 // After running test_path_ops, we should have the same number of entries, but
 // no insertions and and as many usages as there were insertions plus usages
 // the first time
 include "test_ops.saw";
-test_solver_cache_stats 6 8 0 0 0;
+test_solver_cache_stats 8 8 0 0 0;
